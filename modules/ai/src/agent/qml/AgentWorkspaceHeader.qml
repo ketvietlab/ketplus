@@ -220,7 +220,8 @@ Item {
             visible: header.tags.length > 0 && header.showTags
             spacing: KetTheme.px(4, KetTheme.zoom)
             Repeater {
-                model: header.tags.slice(0, 2)
+                // Every tag, as the mock: they show together when they fit and leave together.
+                model: header.tags
                 Kit.KetTag {
                     required property var modelData
                     objectName: "conversationTag_" + modelData.label

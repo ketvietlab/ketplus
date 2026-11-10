@@ -1265,8 +1265,16 @@ Item {
                 sidebar.unscaledWidth = Math.max(188, Math.min(320, sidebar.width / KetTheme.zoom));
         }
         handle: Item {
+            id: sidebarHandle
             objectName: "sidebarResizeHandle"
-            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? KetTheme.px(6, KetTheme.zoom) : 0
+            // One pixel of layout, as the mock's divider; the grab area is wider.
+            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? 1 : 0
+            containmentMask: Item {
+                objectName: "sidebarResizeGrabArea"
+                width: sidebarHandle.implicitWidth > 0 ? KetTheme.px(6, KetTheme.zoom) : 0
+                height: sidebarHandle.height
+                x: (sidebarHandle.width - width) / 2
+            }
             readonly property color dividerColor: SplitHandle.pressed ? KetTheme.t.accent
                                                  : SplitHandle.hovered ? KetTheme.t.borderStrong : KetTheme.t.panelBorder
             Rectangle {

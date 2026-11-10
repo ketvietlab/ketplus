@@ -1,7 +1,9 @@
 #include "remote/RemoteActivitySection.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "DaemonClient.h"
 #include "ui/ChromeGeometry.h"
@@ -108,7 +110,8 @@ namespace {
 
 // Semantic symbol names for the kinds of request.
 constexpr auto sendIcon = "send";
-constexpr auto stopIcon = "square";
+constexpr auto stopIcon = "stop-circle";
+constexpr auto shieldIcon = "shield";
 constexpr auto branchIcon = "git-branch";
 constexpr auto trashIcon = "trash-2";
 constexpr auto slidersIcon = "sliders-horizontal";
@@ -168,7 +171,9 @@ class ElidedLabel final : public QLabel {
     [[nodiscard]] bool elided() const { return text() != full_; }
     // As wide as the whole text, and able to shrink to nothing.
     [[nodiscard]] QSize sizeHint() const override {
-        return {fontMetrics().horizontalAdvance(full_), QLabel::sizeHint().height()};
+        // With the style sheet's font: the unpolished one is narrower and cut the title short.
+        const_cast<ElidedLabel*>(this)->ensurePolished();
+        return {fontMetrics().horizontalAdvance(full_) + 1, QLabel::sizeHint().height()};
     }
     [[nodiscard]] QSize minimumSizeHint() const override {
         return {0, QLabel::minimumSizeHint().height()};
@@ -256,6 +261,16 @@ class ActivityRow final : public QFrame {
     [[nodiscard]] QString fullText() const { return full_; }
 
   protected:
+    // The mock's separator: between rows, inset 18 px from both ends.
+    void paintEvent(QPaintEvent* event) override {
+        QFrame::paintEvent(event);
+        if (property("remoteFirst").toBool())
+            return;
+        QPainter painter(this);
+        const qreal inset = ket::Appearance::instance().scaled(18);
+        painter.fillRect(QRectF(inset, 0, width() - 2 * inset, 1),
+                         ket::Tokens::color(u"panel-border", ket::Appearance::instance().theme()));
+    }
     void resizeEvent(QResizeEvent* event) override {
         QFrame::resizeEvent(event);
         setToolTip(cut() ? full_ : QString());
@@ -330,7 +345,7 @@ RemoteActivitySection::RemoteActivitySection(remote::DaemonClient* daemon, QWidg
     setObjectName(QStringLiteral("remoteActivitySection"));
     auto* layout = new QVBoxLayout(this);
     chrome_geometry::margins(layout, 0, 0, 0, 0);
-    chrome_geometry::spacing(layout, 12);
+    chrome_geometry::spacing(layout, 18); // the page's rhythm
     auto* header = new QHBoxLayout;
     header->addWidget(label(QStringLiteral("Activity from paired devices"), "sectionTitle"));
     header->addStretch();
@@ -346,19 +361,31 @@ RemoteActivitySection::RemoteActivitySection(remote::DaemonClient* daemon, QWidg
     chrome_geometry::spacing(rows_, 0);
     layout->addWidget(panel);
 
-    auto* footer = new QHBoxLayout;
+    // As tall as Show all whether or not it shows, as the mock.
+    auto* footerRow = new QWidget(this);
+    chrome_geometry::minimumHeight(footerRow, 28);
+    auto* footer = new QHBoxLayout(footerRow);
+    chrome_geometry::margins(footer, 0, 0, 0, 0);
+    chrome_geometry::spacing(footer, 8);
+    // The mock's shield before the note.
+    auto* shield = new GlyphLabel(shieldIcon, this);
+    shield->setProperty("remoteRole", QStringLiteral("activityIcon"));
+    chrome_geometry::fixedSize(shield, 13, 13);
+    footer->addWidget(shield);
     auto* note = label(QStringLiteral("Recorded on this Mac as each request finishes. Reading "
                                       "files and transcripts is not listed."),
                        "trustNote");
     note->setWordWrap(true);
     footer->addWidget(note, 1);
-    showAll_ = new ket::Button(QStringLiteral("Show all"), ket::ButtonVariant::Ghost, this);
+    auto* showAll = new ket::Button(QStringLiteral("Show all"), ket::ButtonVariant::Ghost, this);
+    showAll->setControlSize(ket::ControlSize::Small);
+    showAll_ = showAll;
     showAll_->setObjectName(QStringLiteral("remoteActivityShowAll"));
     showAll_->setProperty("remoteTertiary", true);
     showAll_->hide();
     connect(showAll_, &QAbstractButton::clicked, this, &RemoteActivitySection::showAll);
     footer->addWidget(showAll_);
-    layout->addLayout(footer);
+    layout->addWidget(footerRow);
     render({});
 }
 

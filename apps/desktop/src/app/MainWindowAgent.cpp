@@ -411,6 +411,9 @@ void MainWindow::ensureAgentWorkspace() {
                 switchToWorktree(path);
                 if (forConversation && agentManager_ != nullptr)
                     agentManager_->markActiveConversationOwnsWorktree(path);
+                // "Start a conversation in it": leave the Worktrees page for the new worktree.
+                if (std::exchange(openCreatedWorktree_, false) && !forConversation)
+                    setAgentWorkspaceVisible(true);
                 git_->scheduleRefresh(0);
             });
     connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this, [this] {
@@ -421,6 +424,7 @@ void MainWindow::ensureAgentWorkspace() {
     connect(agentWorktreeCreator_, &AgentWorktreeCreator::failed, this,
             [this](const QString& error) {
                 pendingConversationWorktree_ = false;
+                openCreatedWorktree_ = false;
                 if (worktreesWorkspace_ != nullptr)
                     worktreesWorkspace_->setPruning(false);
                 if (!pendingDeleteConversationPath_.isEmpty() ||
@@ -654,6 +658,7 @@ void MainWindow::createAgentWorktree() {
         // The folder can change while the card is open.
         if (workspaceRoot_ != repositoryPath)
             return;
+        openCreatedWorktree_ = form->startConversation();
         agentWorktreeCreator_->create(repositoryPath, primaryWorktreePath(), form->branchName(),
                                       form->baseBranch());
     });

@@ -42,8 +42,8 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
                            QUrl(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL)), this)) {
     setObjectName(QStringLiteral("linuxMachinesSection"));
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 6, 0, 0);
-    outer->setSpacing(10);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(18); // the page's rhythm
     // The mock's section: "Linux machines · N trusted"; the page's Add menu starts pairing.
     auto* heading = new QHBoxLayout;
     auto* title = new QLabel(tr("Linux machines"), this);
@@ -63,11 +63,23 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     outer->addWidget(notice_);
     auto* surface = new QFrame(this);
     surface->setObjectName(QStringLiteral("linuxMachinesSurface"));
-    surface->setProperty("remoteRole", QStringLiteral("devicePanel"));
+    // One card for each machine, as the mock; a message is a card of its own.
     rows_ = new QVBoxLayout(surface);
     rows_->setContentsMargins(0, 0, 0, 0);
-    rows_->setSpacing(0);
+    rows_->setSpacing(18);
     outer->addWidget(surface);
+    auto* footnoteRow = new QHBoxLayout;
+    footnoteRow->setSpacing(8);
+    auto* shield = new QLabel(this);
+    shield->setFixedSize(13, 13);
+    const auto inkShield = [this, shield] {
+        shield->setPixmap(ket::Icons::pixmap(
+            QStringLiteral("shield"), 13, devicePixelRatioF(),
+            ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme())));
+    };
+    inkShield();
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, shield, inkShield);
+    footnoteRow->addWidget(shield, 0, Qt::AlignTop);
     auto* footnote =
         new QLabel(tr("Linux machines connect through an authenticated outbound relay. "
                       "Compare the identity shown here with ketplusctl on Linux."),
@@ -75,7 +87,8 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     footnote->setObjectName(QStringLiteral("linuxMachinesFootnote"));
     footnote->setProperty("remoteRole", QStringLiteral("trustNote"));
     footnote->setWordWrap(true);
-    outer->addWidget(footnote);
+    footnoteRow->addWidget(footnote, 1);
+    outer->addLayout(footnoteRow);
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
         setNotice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,
                   !error.isEmpty());
@@ -120,7 +133,8 @@ void LinuxMachinesSection::render() {
     }
     count_->setText(tr("%1 trusted").arg(machineIds_.size()));
     const auto message = [this](const QString& text) {
-        auto* box = new QWidget(this);
+        auto* box = new QFrame(this);
+        box->setProperty("remoteRole", QStringLiteral("surface"));
         auto* layout = new QVBoxLayout(box);
         layout->setContentsMargins(22, 20, 22, 20);
         layout->setSpacing(12);
@@ -169,7 +183,8 @@ void LinuxMachinesSection::render() {
         row->setObjectName(QStringLiteral("linuxMachineRow"));
         row->setProperty("remoteRole", QStringLiteral("deviceRow"));
         auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(22, 24, 22, 24);
+        row->setFixedHeight(94);
+        layout->setContentsMargins(22, 0, 22, 0);
         layout->setSpacing(18);
         auto* iconSurface = new QFrame(row);
         iconSurface->setProperty("remoteRole", QStringLiteral("deviceIconSurface"));
@@ -177,32 +192,42 @@ void LinuxMachinesSection::render() {
         auto* iconLayout = new QVBoxLayout(iconSurface);
         iconLayout->setContentsMargins(10, 10, 10, 10);
         auto* icon = new QLabel(iconSurface);
-        icon->setPixmap(ket::Icons::pixmap(ket::Icons::codeForLucide(u"terminal"), 20,
+        icon->setPixmap(ket::Icons::pixmap(ket::Icons::codeForLucide(u"terminal"), 18,
                                            devicePixelRatioF(),
-                                           ket::Tokens::color(u"text-main", theme)));
+                                           ket::Tokens::color(u"text-secondary", theme)));
         iconLayout->addWidget(icon, 0, Qt::AlignCenter);
         layout->addWidget(iconSurface);
         auto* copy = new QVBoxLayout;
-        copy->setSpacing(2);
+        copy->setSpacing(6);
+        copy->addStretch(1);
+        // The name with its state and how it connects, as the mock's badges.
+        auto* nameLine = new QHBoxLayout;
+        nameLine->setSpacing(8);
         auto* name = new QLabel(id, row);
         name->setProperty("remoteRole", QStringLiteral("deviceName"));
         name->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        copy->addWidget(name);
-        auto* meta = new QLabel(tr("Linux · KetPlus Relay · Trusted"), row);
-        meta->setProperty("remoteRole", QStringLiteral("deviceMeta"));
-        copy->addWidget(meta);
-        layout->addLayout(copy, 1);
+        nameLine->addWidget(name);
         auto* status = new QLabel(tr("Available"), row);
         status->setProperty("remoteRole", QStringLiteral("badge"));
         status->setProperty("remoteTone", QStringLiteral("positive"));
         status->setAccessibleName(tr("Machine %1 is available").arg(id));
-        layout->addWidget(status);
+        nameLine->addWidget(status);
+        auto* via = new QLabel(tr("Relay"), row);
+        via->setProperty("remoteRole", QStringLiteral("badge"));
+        nameLine->addWidget(via);
+        nameLine->addStretch(1);
+        copy->addLayout(nameLine);
+        auto* meta = new QLabel(tr("Linux · Trusted"), row);
+        meta->setProperty("remoteRole", QStringLiteral("deviceMeta"));
+        copy->addWidget(meta);
+        copy->addStretch(1);
+        layout->addLayout(copy, 1);
         rows_->addWidget(row);
     }
     if (pairingEntryShown_) {
         auto* footer = new QWidget(this);
         auto* layout = new QHBoxLayout(footer);
-        layout->setContentsMargins(22, 14, 22, 14);
+        layout->setContentsMargins(0, 0, 0, 0);
         addConnectButton(layout);
         rows_->addWidget(footer);
     }

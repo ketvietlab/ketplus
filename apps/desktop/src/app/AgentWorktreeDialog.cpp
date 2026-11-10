@@ -1,6 +1,7 @@
 #include "app/AgentWorktreeDialog.h"
 #include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetChoice.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetRecipes.h"
@@ -14,6 +15,7 @@
 #include <QComboBox>
 #include <QCompleter>
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFontMetrics>
 #include <QFormLayout>
@@ -114,6 +116,46 @@ QString canonicalPath(const QString& path) {
     const QString canonical = info.canonicalFilePath();
     return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
 }
+
+// ket::Select paints its own value, and an editable combo lays a line edit over it. The style
+// sheet style leaves a combo's line edit unpainted, so the value showed twice: this fills the
+// line edit before it paints and puts its text where the kit draws the value.
+class SelectValueCover final : public QObject {
+  public:
+    SelectValueCover(ket::Select* select, QLineEdit* edit)
+        : QObject(edit), select_(select), edit_(edit) {
+        edit->setFrame(false);
+        align();
+    }
+
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched != edit_)
+            return false;
+        if (event->type() == QEvent::Paint) {
+            QPainter painter(edit_);
+            painter.fillRect(edit_->rect(), select_->recipe().background);
+        } else if (event->type() == QEvent::Move || event->type() == QEvent::Show) {
+            align();
+        }
+        return false;
+    }
+
+  private:
+    void align() {
+        const ket::FieldRecipe recipe = select_->recipe();
+        const ket::Appearance& kit = ket::Appearance::instance();
+        QFont font = select_->font();
+        font.setPixelSize(qRound(kit.scaled(recipe.fontPixels)));
+        edit_->setFont(font);
+        // QLineEdit insets its text by 2 px of its own.
+        edit_->setTextMargins(
+            std::max(0, qRound(kit.scaled(recipe.paddingInline)) - edit_->x() - 2), 0, 0, 0);
+    }
+
+    ket::Select* select_;
+    QLineEdit* edit_;
+};
 
 } // namespace
 
@@ -246,6 +288,13 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
                                             tr("A new folder next to the repository: %1-<name>.")
                                                 .arg(QFileInfo(primaryWorktreePath_).fileName())));
         layout->addWidget(new ket::FieldRow(tr("Start from"), base_));
+        startConversation_ = new ket::Choice(tr("Start a conversation in it"),
+                                             tr("Opens Agent Workspace on the new worktree"),
+                                             ket::ToggleKind::Checkbox, this);
+        startConversation_->setObjectName(QStringLiteral("worktreeStartConversation"));
+        startConversation_->setCheckable(true);
+        startConversation_->setChecked(true);
+        layout->addWidget(startConversation_);
         status_->setText(tr("Local and remote-tracking branches; no automatic fetch."));
         layout->addWidget(status_);
         layout->addWidget(error_);
@@ -314,6 +363,8 @@ void AgentWorktreeDialog::makeSearchable(QComboBox* combo) {
         completer->setCaseSensitivity(Qt::CaseInsensitive);
         completer->setCompletionMode(QCompleter::PopupCompletion);
     }
+    if (auto* select = dynamic_cast<ket::Select*>(combo))
+        combo->lineEdit()->installEventFilter(new SelectValueCover(select, combo->lineEdit()));
 }
 
 bool AgentWorktreeDialog::creatingWorktree() const {
@@ -508,6 +559,10 @@ void AgentWorktreeDialog::tryAccept() {
     }
     if (card_ != nullptr)
         card_->accept();
+}
+
+bool AgentWorktreeDialog::startConversation() const {
+    return startConversation_ != nullptr && startConversation_->isChecked();
 }
 
 QString AgentWorktreeDialog::branchName() const { return branch_->text().trimmed(); }

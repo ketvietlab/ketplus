@@ -1,7 +1,9 @@
 #include "remote/RemoteControlView.h"
 #include "KetAppearance.h"
+#include "KetAvatar.h"
 #include "KetButton.h"
 #include "KetDialog.h"
+#include "KetEmptyState.h"
 #include "KetIcons.h"
 #include "KetProfile.h"
 #include "KetRecipes.h"
@@ -50,8 +52,7 @@ namespace {
 // Semantic Két Symbol names used by Connections.
 constexpr auto monitorIcon = "monitor";
 constexpr auto phoneIcon = "smartphone";
-constexpr auto shieldIcon = "shield";
-constexpr auto unplugIcon = "unplug";
+constexpr auto unplugIcon = "wifi-off"; // the mock's Revoke access
 constexpr auto plusIcon = "plus";
 constexpr auto logOutIcon = "log-out";
 
@@ -61,19 +62,25 @@ QIcon symbolIcon(const QByteArray& body, const QColor& color, const int size = 1
 
 class SymbolIconLabel final : public QLabel {
   public:
-    SymbolIconLabel(QByteArray body, int size, QWidget* parent = nullptr)
-        : QLabel(parent), body_(std::move(body)) {
+    // `token` names the ink; without one the icon takes the accent.
+    SymbolIconLabel(QByteArray body, int size, QWidget* parent = nullptr, QStringView token = {})
+        : QLabel(parent), body_(std::move(body)), token_(token.toString()) {
         setFixedSize(size, size);
     }
 
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        symbol_icon::paint(painter, body_, palette().color(QPalette::Highlight), rect());
+        symbol_icon::paint(painter, body_,
+                           token_.isEmpty()
+                               ? palette().color(QPalette::Highlight)
+                               : ket::Tokens::color(token_, ket::Appearance::instance().theme()),
+                           rect());
     }
 
   private:
     QByteArray body_;
+    QString token_;
 };
 
 QLabel* label(const QString& text, const char* role, QWidget* parent = nullptr) {
@@ -233,7 +240,7 @@ QLabel[remoteRole="introSection"] { color:@text@; font-size:{{title}}px; font-we
 QLabel[remoteRole="introStepTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
 QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"@mono@"; font-size:{{body}}px; }
 QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
-QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
+QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{px:22}}px; font-weight:500; }
 QLabel#linuxMachinesNotice { color:@secondary@; font-size:{{body}}px; }
 QLabel#linuxMachinesNotice[remoteTone="danger"] { color:@danger@; }
 QFrame[remoteRole="surface"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
@@ -249,18 +256,19 @@ QLabel[remoteRole="statusValue"] { color:@secondary@; font-size:{{body}}px; font
 QLabel[remoteRole="statusValue"][remoteTone="positive"] { color:@positive@; }
 QLabel[remoteRole="statusValue"][remoteTone="warning"] { color:@warning@; }
 QLabel[remoteRole="statusValue"][remoteTone="danger"] { color:@danger@; }
-QLabel[remoteRole="badge"] { min-height:20px; padding:0 8px; border:1px solid @border@; border-radius:10px; background:@raised@; color:@secondary@; font-size:{{micro}}px; font-weight:600; }
+QLabel[remoteRole="badge"] { min-height:{{px:20}}px; padding:0 7px; border:1px solid @border@; border-radius:4px; background:@panel@; color:@secondary@; font-size:{{px:12}}px; font-weight:400; }
 QLabel[remoteRole="badge"][remoteTone="positive"] { border-color:@positiveBorder@; background:@positiveBg@; color:@positive@; }
 QLabel[remoteRole="badge"][remoteTone="warning"] { border-color:@warningBorder@; background:@warningBg@; color:@warning@; }
 QLabel[remoteRole="badge"][remoteTone="danger"] { border-color:@dangerBorder@; background:@dangerBg@; color:@danger@; }
 QFrame[remoteRole="activityList"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
 QScrollArea#remoteActivityDialogScroll QFrame[remoteRole="activityList"] { border-radius:7px; }
-QFrame[remoteRole="activityRow"] { border:0; border-top:1px solid @border@; background:transparent; }
+QFrame[remoteRole="activityRow"] { border:0; background:transparent; }
 QFrame[remoteRole="activityRow"][remoteFirst="true"] { border-top:0; }
 QFrame[remoteRole="activityRow"]:focus { border:2px solid @accent@; border-radius:5px; }
 QLabel[remoteRole="activityIcon"] { color:@muted@; }
-QLabel[remoteRole="activityTitle"] { color:@text@; font-size:{{body}}px; font-weight:500; }
-QLabel[remoteRole="activityTime"], QLabel[remoteRole="activityDetail"] { color:@muted@; font-size:{{caption}}px; }
+QLabel[remoteRole="activityTitle"] { color:@text@; font-size:{{px:13}}px; font-weight:500; }
+QLabel[remoteRole="activityTime"] { color:@muted@; font-size:{{px:12}}px; }
+QLabel[remoteRole="activityDetail"] { color:@secondary@; font-size:{{px:12}}px; }
 QFrame[remoteRole="routeNode"] { border:1px solid @border@; border-radius:5px; background:@raised@; }
 QLabel[remoteRole="routeIcon"] { color:@accentText@; font-size:{{glyphSmall}}px; font-weight:600; }
 QLabel[remoteRole="routeTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
@@ -268,18 +276,18 @@ QLabel[remoteRole="routeDetail"], QLabel[remoteRole="routeArrow"] { color:@muted
 QLabel[remoteRole="emptyIcon"] { color:@accentText@; font-size:{{glyphLarge}}px; font-weight:500; }
 QLabel[remoteRole="emptyTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="emptyText"] { color:@muted@; font-size:{{body}}px; }
-QLabel[remoteRole="sectionTitle"] { color:@text@; font-size:{{reading}}px; font-weight:600; }
-QLabel[remoteRole="sectionCount"] { color:@muted@; font-size:{{caption}}px; }
+QLabel[remoteRole="sectionTitle"] { min-height:{{px:28}}px; color:@text@; font-size:{{px:17}}px; font-weight:500; }
+QLabel[remoteRole="sectionCount"] { color:@secondary@; font-size:{{px:13}}px; }
 QLabel[remoteRole="tabActive"] { padding:8px 12px; border-radius:7px; background:@raised@; color:@text@; font-size:{{body}}px; font-weight:500; }
 QFrame[remoteRole="devicePanel"] { border:1px solid @strong@; border-radius:12px; background:@panel@; }
-QFrame[remoteRole="deviceRow"] { border:0; border-top:1px solid @border@; background:transparent; }
+QFrame[remoteRole="deviceRow"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
 QLabel[remoteRole="deviceIcon"] { color:@text@; font-size:{{heading}}px; }
-QFrame[remoteRole="deviceIconSurface"] { border:1px solid @border@; border-radius:7px; background:@raised@; }
-QLabel[remoteRole="deviceName"] { color:@text@; font-size:{{reading}}px; font-weight:500; }
-QLabel[remoteRole="deviceMeta"] { color:@muted@; font-size:{{caption}}px; }
-QLabel[remoteRole="accountName"] { color:@text@; font-size:{{body}}px; font-weight:600; }
-QLabel[remoteRole="accountMeta"] { color:@muted@; font-size:{{caption}}px; }
-QLabel[remoteRole="trustNote"] { color:@muted@; font-size:{{caption}}px; }
+QFrame[remoteRole="deviceIconSurface"] { border:1px solid @border@; border-radius:7px; background:@subtle@; }
+QLabel[remoteRole="deviceName"] { color:@text@; font-size:{{px:14}}px; font-weight:500; }
+QLabel[remoteRole="deviceMeta"] { color:@secondary@; font-size:{{px:13}}px; }
+QLabel[remoteRole="accountName"] { color:@text@; font-size:{{px:13}}px; font-weight:500; }
+QLabel[remoteRole="accountMeta"] { color:@secondary@; font-size:{{px:12}}px; }
+QLabel[remoteRole="trustNote"] { color:@secondary@; font-size:{{px:12}}px; }
 QLabel[remoteRole="feature"] { color:@secondary@; font-size:{{body}}px; }
 QDialog[remoteRole="modal"] { background:@panel@; }
 QFrame[remoteRole="modalHeader"] { border:0; border-bottom:1px solid @border@; background:@panel@; }
@@ -348,6 +356,9 @@ QLabel[remoteRole="qr"] { background:white; border:10px solid white; border-radi
     for (const auto& replacement : replacements)
         css.replace(replacement.first, replacement.second);
     css.replace(QStringLiteral("@mono@"), ket::Profile::current().monoFamily());
+    css.replace(QStringLiteral("@subtle@"),
+                ket::Tokens::color(u"panel-bg-subtle", ket::Appearance::instance().theme())
+                    .name(QColor::HexRgb));
     return css;
 }
 
@@ -468,7 +479,7 @@ QWidget* RemoteControlView::createControlPage() {
     auto* page = new QWidget;
     page->setProperty("remoteRole", QStringLiteral("page"));
     auto* content = new QVBoxLayout(page);
-    chrome_geometry::margins(content, 42, 36, 42, 38);
+    chrome_geometry::margins(content, 42, 38, 42, 38);
     chrome_geometry::spacing(content, 0);
 
     auto* context = new QFrame;
@@ -483,10 +494,10 @@ QWidget* RemoteControlView::createControlPage() {
     pageHeader_ = new QFrame;
     pageHeader_->setProperty("remoteRole", QStringLiteral("pageHeader"));
     auto* header = new QHBoxLayout(pageHeader_);
-    chrome_geometry::margins(header, 0, 0, 0, 27);
+    chrome_geometry::margins(header, 0, 0, 0, 44); // 64 px to This Mac, as the mock
     chrome_geometry::spacing(header, 18);
     auto* heading = new QVBoxLayout;
-    chrome_geometry::spacing(heading, 7);
+    chrome_geometry::spacing(heading, 8);
     auto* pageTitle = label(QStringLiteral("Connections"), "connectionsTitle");
     pageTitle->setObjectName(QStringLiteral("remotePageTitle"));
     heading->addWidget(pageTitle);
@@ -517,7 +528,12 @@ QWidget* RemoteControlView::createControlPage() {
         else if (chosen == linux && linuxMachines_)
             linuxMachines_->beginPairing();
     });
-    header->addWidget(pairButton_, 0, Qt::AlignTop);
+    // The mock's heading action sits 12 px down.
+    auto* headerActions = new QVBoxLayout;
+    chrome_geometry::margins(headerActions, 0, 12, 0, 0);
+    headerActions->addWidget(pairButton_);
+    headerActions->addStretch(1);
+    header->addLayout(headerActions);
     signOutButton_ = new ket::Button(QStringLiteral("Sign out"), ket::ButtonVariant::Ghost);
     signOutButton_->setObjectName(QStringLiteral("remoteSignOutButton"));
     signOutButton_->setProperty("remoteTertiary", true);
@@ -535,7 +551,7 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::margins(headerHostLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(headerHostLayout, 0);
     headerHostLayout->addStretch(1);
-    headerHostLayout->addWidget(pageHeader_, 22);
+    headerHostLayout->addWidget(pageHeader_, 10000);
     headerHostLayout->addStretch(1);
     content->addWidget(headerHost);
 
@@ -545,7 +561,7 @@ QWidget* RemoteControlView::createControlPage() {
     body->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* bodyLayout = new QVBoxLayout(body);
     chrome_geometry::margins(bodyLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(bodyLayout, 16);
+    chrome_geometry::spacing(bodyLayout, 18);
 
     notice_ = label({}, "noticeText");
     notice_->setObjectName(QStringLiteral("remoteNotice"));
@@ -576,24 +592,26 @@ QWidget* RemoteControlView::createControlPage() {
     linkedContent_->hide();
     auto* linkedLayout = new QVBoxLayout(linkedContent_);
     chrome_geometry::margins(linkedLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(linkedLayout, 16);
+    chrome_geometry::spacing(linkedLayout, 18);
 
     auto* overview = new QFrame(linkedContent_);
     overview->setObjectName(QStringLiteral("remoteConnectionOverview"));
     overview->setProperty("remoteRole", QStringLiteral("connectionOverview"));
     auto* overviewLayout = new QHBoxLayout(overview);
-    chrome_geometry::margins(overviewLayout, 0, 20, 0, 34);
+    chrome_geometry::margins(overviewLayout, 0, 20, 0, 18);
     chrome_geometry::spacing(overviewLayout, 38);
     auto* computer = new QFrame(overview);
     computer->setProperty("remoteRole", QStringLiteral("deviceIllustration"));
-    chrome_geometry::fixedSize(computer, 83, 68);
+    chrome_geometry::fixedSize(computer, 84, 84);
     auto* computerLayout = new QVBoxLayout(computer);
-    auto* computerIcon = new SymbolIconLabel(monitorIcon, 44, computer);
+    chrome_geometry::margins(computerLayout, 0, 0, 0, 0);
+    auto* computerIcon = new SymbolIconLabel(monitorIcon, 40, computer);
     computerIcon->setAlignment(Qt::AlignCenter);
-    computerLayout->addWidget(computerIcon);
+    computerLayout->addWidget(computerIcon, 0, Qt::AlignCenter);
     overviewLayout->addWidget(computer);
     auto* overviewCopy = new QVBoxLayout;
-    chrome_geometry::spacing(overviewCopy, 8);
+    chrome_geometry::spacing(overviewCopy, 10);
+    overviewCopy->addStretch(1);
     overviewCopy->addWidget(label(QStringLiteral("This Mac"), "overviewTitle"));
     overviewDescription_ = label(QStringLiteral("Ready for your connected devices"), "description");
     overviewDescription_->setObjectName(QStringLiteral("remoteOverviewDescription"));
@@ -605,6 +623,7 @@ QWidget* RemoteControlView::createControlPage() {
     statusRow->addWidget(overviewStatus_);
     statusRow->addStretch();
     overviewCopy->addLayout(statusRow);
+    overviewCopy->addStretch(1);
     overviewLayout->addLayout(overviewCopy, 1);
     linkedLayout->addWidget(overview);
 
@@ -617,14 +636,11 @@ QWidget* RemoteControlView::createControlPage() {
 
     auto* devices = new QFrame;
     devices->setObjectName(QStringLiteral("remoteDevicesPanel"));
-    devices->setProperty("remoteRole", QStringLiteral("surface"));
+    // One card for each device, as the mock.
     devicesLayout_ = new QVBoxLayout(devices);
     chrome_geometry::margins(devicesLayout_, 0, 0, 0, 0);
-    chrome_geometry::spacing(devicesLayout_, 0);
-    devicesEmpty_ = label(QStringLiteral("No devices connected yet."), "emptyText");
-    devicesEmpty_->setObjectName(QStringLiteral("remoteDevicesEmpty"));
-    devicesEmpty_->setAlignment(Qt::AlignCenter);
-    chrome_geometry::minimumHeight(devicesEmpty_, 118);
+    chrome_geometry::spacing(devicesLayout_, 18);
+    devicesEmpty_ = devicesEmptyState();
     devicesLayout_->addWidget(devicesEmpty_);
     linkedLayout->addWidget(devices);
     // What paired devices did on this Mac (#86).
@@ -641,17 +657,20 @@ QWidget* RemoteControlView::createControlPage() {
     auto* account = new QWidget(linkedFooter_);
     account->setObjectName(QStringLiteral("remoteAccountStrip"));
     auto* accountLayout = new QHBoxLayout(account);
-    chrome_geometry::margins(accountLayout, 2, 21, 2, 21);
-    chrome_geometry::spacing(accountLayout, 11);
-    auto* avatar = badge(QStringLiteral("AN"), QStringLiteral("positive"));
+    chrome_geometry::fixedHeight(account, 64);
+    chrome_geometry::margins(accountLayout, 0, 0, 0, 0);
+    chrome_geometry::spacing(accountLayout, 12);
+    auto* avatar = new ket::Avatar(QStringLiteral("An Nguyen"), account);
     accountLayout->addWidget(avatar);
     auto* accountCopy = new QVBoxLayout;
     chrome_geometry::spacing(accountCopy, 2);
+    accountCopy->addStretch(1);
     accountCopy->addWidget(label(QStringLiteral("An Nguyen"), "accountName"));
     auto* accountMeta =
         label(QStringLiteral("an@example.test · Personal workspace"), "accountMeta");
     accountMeta->setWordWrap(false); // one line, as the mock
     accountCopy->addWidget(accountMeta);
+    accountCopy->addStretch(1);
     accountLayout->addLayout(accountCopy);
     accountLayout->addStretch();
     accountLayout->addWidget(signOutButton_);
@@ -660,13 +679,12 @@ QWidget* RemoteControlView::createControlPage() {
     auto* historyLayout = new QVBoxLayout(history);
     chrome_geometry::margins(historyLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(historyLayout, 7);
-    auto* historyButton =
-        new ket::Button(QStringLiteral("About your history"), ket::ButtonVariant::Ghost, history);
+    // The mock's disclosure: a small ghost button with the arrow in its text.
+    auto* historyButton = new ket::Button(QStringLiteral("▸  About your history"),
+                                          ket::ButtonVariant::Ghost, history);
     historyButton->setObjectName(QStringLiteral("remoteHistoryButton"));
+    historyButton->setControlSize(ket::ControlSize::Small);
     historyButton->setProperty("remoteTertiary", true);
-    historyButton->setIcon(symbolIcon(
-        shieldIcon, ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme()), 14));
-    chrome_geometry::iconSize(historyButton, QSize(14, 14));
     historyButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     historyLayout->addWidget(historyButton, 0, Qt::AlignLeft);
     auto* historyCopy =
@@ -679,8 +697,11 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::maximumWidth(historyCopy, 620);
     historyCopy->hide();
     historyLayout->addWidget(historyCopy);
-    connect(historyButton, &QAbstractButton::clicked, historyCopy,
-            [historyCopy] { historyCopy->setVisible(!historyCopy->isVisible()); });
+    connect(historyButton, &QAbstractButton::clicked, historyCopy, [historyCopy, historyButton] {
+        historyCopy->setVisible(!historyCopy->isVisible());
+        historyButton->setText(historyCopy->isVisible() ? QStringLiteral("▾  About your history")
+                                                        : QStringLiteral("▸  About your history"));
+    });
     footerLayout->addWidget(history);
 
     pairingPanel_ = new QFrame;
@@ -852,7 +873,7 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::margins(bodyHostLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(bodyHostLayout, 0);
     bodyHostLayout->addStretch(1);
-    bodyHostLayout->addWidget(body, 22);
+    bodyHostLayout->addWidget(body, 10000);
     bodyHostLayout->addStretch(1);
     content->addWidget(bodyHost, 1);
     scroll->setWidget(page);
@@ -1054,19 +1075,35 @@ void RemoteControlView::refreshDevices() {
     }
     devicesRequestInFlight_ = true;
     if (devicesEmpty_)
-        devicesEmpty_->setText(QStringLiteral("Refreshing devices…"));
+        devicesEmpty_->setMessage(QStringLiteral("Refreshing devices…"));
     daemon_->call(QStringLiteral("remote.devices"), {}, {}, -1,
                   [this](const QJsonObject& result, const QString& error) {
                       devicesRequestInFlight_ = false;
                       if (!error.isEmpty()) {
                           if (devicesEmpty_)
-                              devicesEmpty_->setText(
+                              devicesEmpty_->setMessage(
                                   QStringLiteral("Devices are temporarily unavailable."));
                           return;
                       }
                       devicesLoaded_ = true;
                       renderDevices(result.value(QStringLiteral("devices")).toArray());
                   });
+}
+
+ket::EmptyState* RemoteControlView::devicesEmptyState() {
+    // The mock's empty Phones & tablets: what pairing gives, and the way to start it.
+    auto* empty = new ket::EmptyState(
+        QStringLiteral("smartphone"), tr("No phone paired"),
+        tr("Pair the KetPlus App to follow and steer conversations from your phone."));
+    empty->setObjectName(QStringLiteral("remoteDevicesEmpty"));
+    auto* pair = empty->setAction(tr("Pair a phone"));
+    pair->setObjectName(QStringLiteral("remoteDevicesEmptyPair"));
+    // As the Add menu: phones wait for this Mac's relay.
+    connect(pair, &QAbstractButton::clicked, this, [this] {
+        if (!offline_)
+            createPairing();
+    });
+    return empty;
 }
 
 void RemoteControlView::renderDevices(const QJsonArray& devices) {
@@ -1086,10 +1123,7 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
     }
     activity_->setDeviceNames(names);
     if (devices.isEmpty()) {
-        devicesEmpty_ = label(QStringLiteral("No devices connected yet."), "emptyText");
-        devicesEmpty_->setObjectName(QStringLiteral("remoteDevicesEmpty"));
-        devicesEmpty_->setAlignment(Qt::AlignCenter);
-        chrome_geometry::minimumHeight(devicesEmpty_, 118);
+        devicesEmpty_ = devicesEmptyState();
         devicesLayout_->addWidget(devicesEmpty_);
         return;
     }
@@ -1098,19 +1132,22 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
         auto* row = new QFrame;
         row->setProperty("remoteRole", QStringLiteral("deviceRow"));
         auto* rowLayout = new QHBoxLayout(row);
-        chrome_geometry::margins(rowLayout, 22, 24, 22, 24);
-        chrome_geometry::spacing(rowLayout, 18);
+        chrome_geometry::fixedHeight(row, 94);
+        chrome_geometry::margins(rowLayout, 22, 0, 22, 0);
+        chrome_geometry::spacing(rowLayout, 8);
         auto* iconSurface = new QFrame(row);
         iconSurface->setProperty("remoteRole", QStringLiteral("deviceIconSurface"));
         chrome_geometry::fixedSize(iconSurface, 40, 40);
         auto* iconLayout = new QVBoxLayout(iconSurface);
         chrome_geometry::margins(iconLayout, 10, 10, 10, 10);
-        auto* icon = new SymbolIconLabel(phoneIcon, 20, iconSurface);
+        auto* icon = new SymbolIconLabel(phoneIcon, 18, iconSurface, u"text-secondary");
         icon->setAlignment(Qt::AlignCenter);
         iconLayout->addWidget(icon);
         rowLayout->addWidget(iconSurface);
+        chrome_geometry::addSpacing(rowLayout, 10); // 18 px from the icon to the text
         auto* copy = new QVBoxLayout;
-        chrome_geometry::spacing(copy, 2);
+        chrome_geometry::spacing(copy, 6);
+        copy->addStretch(1);
         const QString name =
             device.value(QStringLiteral("displayName")).toString(QStringLiteral("KetPlus Remote"));
         copy->addWidget(label(name, "deviceName"));
@@ -1119,6 +1156,7 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
                                   ? QStringLiteral("KetPlus App · Paired")
                                   : QStringLiteral("KetPlus App · Paired · %1").arg(platform),
                               "deviceMeta"));
+        copy->addStretch(1);
         rowLayout->addLayout(copy, 1);
         auto* details = new ket::Button(QStringLiteral("Details"), ket::ButtonVariant::Ghost);
         details->setProperty("remoteTertiary", true);
