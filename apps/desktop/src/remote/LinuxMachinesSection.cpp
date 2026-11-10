@@ -1,7 +1,9 @@
 #include "remote/LinuxMachinesSection.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "KetPlusProductVersion.h"
 #include "control/ControlV2Client.h"
@@ -34,18 +36,17 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 6, 0, 0);
     outer->setSpacing(10);
+    // The mock's section: "Linux machines · N trusted"; the page's Add menu starts pairing.
     auto* heading = new QHBoxLayout;
     auto* title = new QLabel(tr("Linux machines"), this);
     title->setObjectName(QStringLiteral("linuxMachinesTitle"));
+    title->setProperty("remoteRole", QStringLiteral("sectionTitle"));
     heading->addWidget(title);
-    count_ = new QLabel(tr("0 available"), this);
-    count_->setObjectName(QStringLiteral("linuxMachinesCount"));
-    heading->addWidget(count_);
     heading->addStretch();
-    add_ = new ket::Button(tr("Connect Linux machine"), ket::ButtonVariant::Secondary, this);
-    add_->setObjectName(QStringLiteral("linuxMachinesAdd"));
-    connect(add_, &QAbstractButton::clicked, this, &LinuxMachinesSection::startPairing);
-    heading->addWidget(add_);
+    count_ = new QLabel(tr("0 trusted"), this);
+    count_->setObjectName(QStringLiteral("linuxMachinesCount"));
+    count_->setProperty("remoteRole", QStringLiteral("sectionCount"));
+    heading->addWidget(count_);
     outer->addLayout(heading);
     notice_ = new QLabel(this);
     notice_->setObjectName(QStringLiteral("linuxMachinesNotice"));
@@ -54,16 +55,17 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     outer->addWidget(notice_);
     auto* surface = new QFrame(this);
     surface->setObjectName(QStringLiteral("linuxMachinesSurface"));
-    surface->setProperty("remoteRole", QStringLiteral("surface"));
+    surface->setProperty("remoteRole", QStringLiteral("devicePanel"));
     rows_ = new QVBoxLayout(surface);
-    rows_->setContentsMargins(12, 12, 12, 12);
-    rows_->setSpacing(8);
+    rows_->setContentsMargins(0, 0, 0, 0);
+    rows_->setSpacing(0);
     outer->addWidget(surface);
     auto* footnote =
         new QLabel(tr("Linux machines connect through an authenticated outbound relay. "
                       "Compare the identity shown here with ketplusctl on Linux."),
                    this);
     footnote->setObjectName(QStringLiteral("linuxMachinesFootnote"));
+    footnote->setProperty("remoteRole", QStringLiteral("trustNote"));
     footnote->setWordWrap(true);
     outer->addWidget(footnote);
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
@@ -98,41 +100,70 @@ void LinuxMachinesSection::render() {
         delete item->widget();
         delete item;
     }
-    count_->setText(tr("%1 available").arg(machineIds_.size()));
-    add_->setVisible(client_->signedIn());
+    count_->setText(tr("%1 trusted").arg(machineIds_.size()));
+    const auto message = [this](const QString& text) {
+        auto* box = new QWidget(this);
+        auto* layout = new QVBoxLayout(box);
+        layout->setContentsMargins(22, 20, 22, 20);
+        layout->setSpacing(12);
+        auto* label = new QLabel(text, box);
+        label->setProperty("remoteRole", QStringLiteral("emptyText"));
+        label->setWordWrap(true);
+        layout->addWidget(label);
+        rows_->addWidget(box);
+        return layout;
+    };
     if (!client_->signedIn()) {
-        auto* description = new QLabel(tr("Sign in with the same KetSuite account used by the "
-                                          "headless Linux daemon."),
-                                       this);
-        description->setWordWrap(true);
-        rows_->addWidget(description);
+        auto* layout = message(tr("Sign in with the same KetSuite account used by the headless "
+                                  "Linux daemon."));
         auto* signInButton = new ket::Button(tr("Sign in to connect a Linux machine"),
                                              ket::ButtonVariant::Primary, this);
         connect(signInButton, &QAbstractButton::clicked, this, &LinuxMachinesSection::signIn);
-        rows_->addWidget(signInButton, 0, Qt::AlignLeft);
+        layout->addWidget(signInButton, 0, Qt::AlignLeft);
         return;
     }
     if (loading_) {
-        rows_->addWidget(new QLabel(tr("Loading trusted machines…"), this));
+        message(tr("Loading trusted machines…"));
         return;
     }
     if (machineIds_.isEmpty()) {
-        auto* empty = new QLabel(tr("No Linux machines yet. Start pairing on the Linux daemon, "
-                                    "then paste its one-time pairing link here."),
-                                 this);
-        empty->setWordWrap(true);
-        rows_->addWidget(empty);
+        message(tr("No Linux machines yet. Start pairing on the Linux daemon, then choose Add › "
+                   "Connect a Linux machine and paste its one-time pairing link."));
         return;
     }
+    // A device row as the phones above: icon, name, how it connects, and its state.
+    const auto theme = ket::Appearance::instance().theme();
     for (const auto& id : machineIds_) {
-        auto* row = new QWidget(this);
+        auto* row = new QFrame(this);
         row->setObjectName(QStringLiteral("linuxMachineRow"));
+        row->setProperty("remoteRole", QStringLiteral("deviceRow"));
         auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(6, 8, 6, 8);
+        layout->setContentsMargins(22, 24, 22, 24);
+        layout->setSpacing(18);
+        auto* iconSurface = new QFrame(row);
+        iconSurface->setProperty("remoteRole", QStringLiteral("deviceIconSurface"));
+        iconSurface->setFixedSize(40, 40);
+        auto* iconLayout = new QVBoxLayout(iconSurface);
+        iconLayout->setContentsMargins(10, 10, 10, 10);
+        auto* icon = new QLabel(iconSurface);
+        icon->setPixmap(ket::Icons::pixmap(ket::Icons::codeForLucide(u"terminal"), 20,
+                                           devicePixelRatioF(),
+                                           ket::Tokens::color(u"text-main", theme)));
+        iconLayout->addWidget(icon, 0, Qt::AlignCenter);
+        layout->addWidget(iconSurface);
+        auto* copy = new QVBoxLayout;
+        copy->setSpacing(2);
         auto* name = new QLabel(id, row);
+        name->setProperty("remoteRole", QStringLiteral("deviceName"));
         name->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(name, 1);
+        copy->addWidget(name);
+        auto* meta = new QLabel(tr("Linux · KetPlus Relay · Trusted"), row);
+        meta->setProperty("remoteRole", QStringLiteral("deviceMeta"));
+        copy->addWidget(meta);
+        layout->addLayout(copy, 1);
         auto* status = new QLabel(tr("Available"), row);
+        status->setProperty("remoteRole", QStringLiteral("badge"));
+        status->setProperty("remoteTone", QStringLiteral("positive"));
         status->setAccessibleName(tr("Machine %1 is available").arg(id));
         layout->addWidget(status);
         rows_->addWidget(row);

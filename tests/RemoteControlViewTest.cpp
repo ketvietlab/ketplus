@@ -3,6 +3,8 @@
 #include "remote/RemoteConnectionsIntro.h"
 #include "ui/InterfaceZoom.h"
 
+#include "KetAppearance.h"
+
 #include <QAccessible>
 #include <QJsonArray>
 #include <QTimeZone>
@@ -11,12 +13,16 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDialog>
+#include <QDir>
 #include <QGridLayout>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPixmap>
+#include <QScrollArea>
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
@@ -28,7 +34,9 @@ class RemoteControlViewTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase();
     void opensOnSignInPrompt();
+    void sectionsFollowTheMock();
     void signedOutIntroFollowsTheMockAtEveryWidth();
     void signInFormIsAnExplicitSecondaryFlow();
     void demoSignInOpensAddDeviceQr();
@@ -39,6 +47,17 @@ class RemoteControlViewTest final : public QObject {
     void activityRowsAreReadableFromTheKeyboardAndScreenReaders();
     void activityDropsRepliesFromBeforeSignOut();
 };
+
+// The view reads the account, host pins and daemon socket under the daemon's data directory.
+// A temporary one keeps a signed-in Mac's own account and daemon out of these tests.
+void RemoteControlViewTest::initTestCase() {
+    static QTemporaryDir data;
+    QVERIFY(data.isValid());
+    qputenv("KETPLUS_DAEMON_DATA_DIR", data.path().toUtf8());
+    qputenv("KETPLUS_DAEMON_SOCKET", data.filePath(QStringLiteral("no-daemon")).toUtf8());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, data.path());
+}
 
 namespace {
 QJsonObject auditEntry(const QString& id, const QString& kind, const QString& device,
@@ -302,6 +321,35 @@ void RemoteControlViewTest::pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTic
     QVERIFY(view.pairingCode_->text().isEmpty());
 }
 
+void RemoteControlViewTest::sectionsFollowTheMock() {
+    RemoteControlView view;
+    view.resize(840, 720);
+    view.show();
+    QStringList titles;
+    for (auto* label : view.findChildren<QLabel*>())
+        if (label->property("remoteRole").toString() == QStringLiteral("sectionTitle"))
+            titles.append(label->text());
+    QVERIFY(titles.contains(QStringLiteral("Phones & tablets")));
+    QVERIFY(titles.contains(QStringLiteral("Linux machines")));
+    QVERIFY(!titles.contains(QStringLiteral("Your devices")));
+
+    // Linux machines read "N trusted", and only the page's Add menu starts pairing.
+    auto* linux = view.findChild<QWidget*>(QStringLiteral("linuxMachinesSection"));
+    QVERIFY(linux);
+    QCOMPARE(linux->findChild<QLabel*>(QStringLiteral("linuxMachinesCount"))->text(),
+             QStringLiteral("0 trusted"));
+    for (auto* button : linux->findChildren<QAbstractButton*>())
+        QVERIFY2(!button->text().contains(QStringLiteral("Connect Linux machine")),
+                 qPrintable(button->text()));
+    // The account and history close the page, below Linux machines.
+    auto* footer = view.findChild<QWidget*>(QStringLiteral("remoteLinkedFooter"));
+    QVERIFY(footer);
+    auto* body = linux->parentWidget();
+    QCOMPARE(footer->parentWidget(), body);
+    QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(linux));
+    QVERIFY(footer->isAncestorOf(view.findChild<QWidget*>(QStringLiteral("remoteAccountStrip"))));
+}
+
 void RemoteControlViewTest::opensOnSignInPrompt() {
     RemoteControlView view;
     view.resize(840, 720);
@@ -451,6 +499,16 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
             pairHelp && pairTimer && pairSteps && pairCode && pairAction && pairCancel);
     QCOMPARE(add->text(), QStringLiteral("Add"));
     QCOMPARE(qr->size(), QSize(204, 204));
+    // Chooses the Add menu's first entry once it opens. The menu is found through its button,
+    // since an offscreen platform reports no active popup, and Return closes it as a click does.
+    const auto chooseFirstAdd = [add] {
+        QTimer::singleShot(0, add, [add] {
+            auto* menu = add->findChild<QMenu*>();
+            QVERIFY(menu && menu->isVisible());
+            menu->setActiveAction(menu->actions().first());
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+    };
 
     QTest::mouseClick(prompt, Qt::LeftButton);
     QTest::mouseClick(signIn, Qt::LeftButton);
@@ -475,12 +533,25 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     QVERIFY(devices);
     QVERIFY(devices->width() >= 650);
     QVERIFY(devices->width() < view.width());
+    // KETPLUS_CONNECTIONS_CAPTURE=<dir> saves the signed-in page in both themes, at the mock's
+    // 1280 × 820, for the side by side with `KetPlusMock --screen=connections`.
+    if (const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE"); !dir.isEmpty()) {
+        const QSize size = view.size();
+        view.resize(1280 - 248, 820);
+        for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
+            ket::Appearance::instance().setMode(mode);
+            QTest::qWait(50);
+            // The whole page, not the scrolled viewport.
+            auto* page = view.findChild<QScrollArea*>()->widget();
+            page->grab().save(QDir(dir).filePath(mode == ket::Appearance::Mode::Light
+                                                     ? QStringLiteral("connections-light.png")
+                                                     : QStringLiteral("connections-dark.png")));
+        }
+        ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+        view.resize(size);
+    }
 
-    QTimer::singleShot(0, &view, [] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        QVERIFY(menu);
-        menu->actions().first()->trigger();
-    });
+    chooseFirstAdd();
     QTest::mouseClick(add, Qt::LeftButton);
     QVERIFY(dialog->isVisible());
     QCOMPARE(dialog->width(), 500);
@@ -500,11 +571,7 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     QTRY_VERIFY(!dialog->isVisible());
     QTest::mouseClick(close, Qt::LeftButton);
     QVERIFY(!dialog->isVisible());
-    QTimer::singleShot(0, &view, [] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        QVERIFY(menu);
-        menu->actions().first()->trigger();
-    });
+    chooseFirstAdd();
     QTest::mouseClick(add, Qt::LeftButton);
     QVERIFY(dialog->isVisible());
     QCOMPARE(pairCancel->text(), QStringLiteral("Expire code"));

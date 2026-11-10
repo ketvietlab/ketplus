@@ -35,7 +35,6 @@ class LinuxMachinesSection final : public QWidget {
     QLabel* count_;
     QLabel* notice_;
     QVBoxLayout* rows_;
-    QAbstractButton* add_;
     QStringList machineIds_;
     bool loading_{false};
 };
