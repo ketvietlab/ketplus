@@ -338,7 +338,7 @@ Item {
             for (let index = 0; index < count; ++index) {
                 const item = itemAt(index);
                 if (item && item.tagLabel)
-                    item.checked = header.tags.some(tag => tag.label === item.tagLabel);
+                    item.checked = header.tags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
             }
         }
         Instantiator {

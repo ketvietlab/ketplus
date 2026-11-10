@@ -56,7 +56,8 @@ QVariantList AgentSessionManager::listedTags(const SessionPtr& session) const {
 }
 
 // The daemon owns the labels: the list changes here only once it has stored the new one, so
-// every client and the next start agree.
+// every client and the next start agree. Changes made while a request is on its way add up in
+// tagsWanted and go out as one list afterwards, so a second change cannot undo the first.
 void AgentSessionManager::setConversationTag(const QString& worktreePath,
                                              const QString& conversationId, const QString& label,
                                              const bool tagged) {
@@ -65,38 +66,53 @@ void AgentSessionManager::setConversationTag(const QString& worktreePath,
     for (const SessionPtr& session : conversationsByPath_.value(path)) {
         if (session->id != conversationId)
             continue;
-        if (name.isEmpty() || session->tags.contains(name, Qt::CaseInsensitive) == tagged)
+        QStringList tags = session->tagSyncPending ? session->tagsWanted : session->tags;
+        if (name.isEmpty() || tags.contains(name, Qt::CaseInsensitive) == tagged)
             return;
         if (session->threadId.isEmpty() || !server_->hasTagSupport()) {
             emit errorOccurred(
                 QStringLiteral("Tags can be set once the conversation has started."));
             return;
         }
-        QStringList tags = session->tags;
         if (tagged)
             tags.append(name);
         else
             tags.removeIf([&name](const QString& existing) {
                 return existing.compare(name, Qt::CaseInsensitive) == 0;
             });
-        server_->setDaemonSessionTags(
-            session->threadId, tags,
-            [this, tags, weak = std::weak_ptr<Session>(session)](const QJsonObject& result,
-                                                                 const QString& error) {
-                const SessionPtr current = weak.lock();
-                if (!current)
-                    return;
-                if (!error.isEmpty()) {
-                    emit errorOccurred(
-                        QStringLiteral("The tags could not be saved: %1").arg(error));
-                    return;
-                }
-                const QJsonValue stored = result.value(QStringLiteral("tags"));
-                current->tags = stored.isArray() ? stored.toVariant().toStringList() : tags;
-                emit conversationsChanged(current->path, conversations(current->path));
-            });
+        session->tagsWanted = tags;
+        syncTags(session);
         return;
     }
+}
+
+void AgentSessionManager::syncTags(const SessionPtr& session) {
+    if (session->tagSyncPending)
+        return;
+    session->tagSyncPending = true;
+    const QStringList sent = session->tagsWanted;
+    server_->setDaemonSessionTags(
+        session->threadId, sent,
+        [this, sent, weak = std::weak_ptr<Session>(session)](const QJsonObject& result,
+                                                             const QString& error) {
+            const SessionPtr current = weak.lock();
+            if (!current)
+                return;
+            current->tagSyncPending = false;
+            if (!error.isEmpty()) {
+                // Later changes were built on the list that failed; drop them with it.
+                current->tagsWanted.clear();
+                emit errorOccurred(QStringLiteral("The tags could not be saved: %1").arg(error));
+                return;
+            }
+            const QJsonValue stored = result.value(QStringLiteral("tags"));
+            current->tags = stored.isArray() ? stored.toVariant().toStringList() : sent;
+            emit conversationsChanged(current->path, conversations(current->path));
+            if (current->tagsWanted != sent)
+                syncTags(current);
+            else
+                current->tagsWanted.clear();
+        });
 }
 
 } // namespace ketplus
