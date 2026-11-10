@@ -1,5 +1,6 @@
 #include "remote/RemoteControlView.h"
 #include "KetAppearance.h"
+#include "KetAvatar.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetIcons.h"
@@ -640,15 +641,19 @@ QWidget* RemoteControlView::createControlPage() {
     auto* accountLayout = new QHBoxLayout(account);
     chrome_geometry::margins(accountLayout, 2, 21, 2, 21);
     chrome_geometry::spacing(accountLayout, 11);
-    auto* avatar = badge(QStringLiteral("AN"), QStringLiteral("positive"));
-    accountLayout->addWidget(avatar);
+    // The account that signed this Mac in, from remote.status (ADR 0109).
+    accountAvatar_ = badge({}, QStringLiteral("positive"));
+    accountAvatar_->setObjectName(QStringLiteral("remoteAccountAvatar"));
+    accountLayout->addWidget(accountAvatar_);
     auto* accountCopy = new QVBoxLayout;
     chrome_geometry::spacing(accountCopy, 2);
-    accountCopy->addWidget(label(QStringLiteral("An Nguyen"), "accountName"));
-    auto* accountMeta =
-        label(QStringLiteral("an@example.test · Personal workspace"), "accountMeta");
-    accountMeta->setWordWrap(false); // one line, as the mock
-    accountCopy->addWidget(accountMeta);
+    accountName_ = label({}, "accountName");
+    accountName_->setObjectName(QStringLiteral("remoteAccountName"));
+    accountCopy->addWidget(accountName_);
+    accountMeta_ = label({}, "accountMeta");
+    accountMeta_->setObjectName(QStringLiteral("remoteAccountMeta"));
+    accountMeta_->setWordWrap(false); // one line, as the mock
+    accountCopy->addWidget(accountMeta_);
     accountLayout->addLayout(accountCopy);
     accountLayout->addStretch();
     accountLayout->addWidget(signOutButton_);
@@ -876,6 +881,15 @@ void RemoteControlView::setBusy(const bool busy) {
     approveButton_->setEnabled(!busy && !ticketId_.isEmpty() && actionable);
 }
 
+void RemoteControlView::requestSignOut() {
+    if (configured_ && !requestInFlight_) {
+        signOut();
+        return;
+    }
+    signOutRequested_ = true;
+    refreshStatus();
+}
+
 void RemoteControlView::signOut() {
     if (requestInFlight_ || !configured_)
         return;
@@ -940,7 +954,11 @@ void RemoteControlView::signIn() {
     if (demoMode_) {
         setSignInNotice({});
         signInDialog_->accept();
-        applyStatus({{QStringLiteral("configured"), true}});
+        // The demo's synthetic account, as the mock shows it.
+        applyStatus({{QStringLiteral("configured"), true},
+                     {QStringLiteral("account"),
+                      QJsonObject{{QStringLiteral("display_name"), QStringLiteral("An Nguyen")},
+                                  {QStringLiteral("username"), QStringLiteral("an")}}}});
         return;
     }
     setBusy(true);
@@ -1014,6 +1032,20 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
     linkedContent_->setVisible(configured_);
     linkedFooter_->setVisible(configured_);
     signOutButton_->setVisible(configured_);
+    {
+        const QJsonObject account = status.value(QStringLiteral("account")).toObject();
+        const QString username = account.value(QStringLiteral("username")).toString();
+        QString name = account.value(QStringLiteral("display_name")).toString();
+        if (name.isEmpty())
+            name = username;
+        // Enrollments from before ADR 0109 have no name until the next sign-in.
+        accountName_->setText(name.isEmpty() ? QStringLiteral("Signed in") : name);
+        accountMeta_->setText(!username.isEmpty() && username != name
+                                  ? QStringLiteral("%1 · KétPlus Pro").arg(username)
+                                  : QStringLiteral("KétPlus Pro"));
+        accountAvatar_->setText(ket::Avatar::initialsOf(name));
+        accountAvatar_->setVisible(!name.isEmpty());
+    }
     const QString lastError = status.value(QStringLiteral("last_error")).toString();
     offline_ = configured_ && !lastError.isEmpty();
     pairButton_->setEnabled(configured_);
@@ -1034,6 +1066,8 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         setNotice({});
     if (configured_ && (!wasConfigured || !devicesLoaded_))
         refreshDevices();
+    if (std::exchange(signOutRequested_, false) && configured_)
+        QTimer::singleShot(0, this, &RemoteControlView::signOut);
     // Demo data has no audit; a real sign-in shows it, signing out forgets it.
     if (configured_ && !demoMode_)
         activity_->refresh(!wasConfigured);

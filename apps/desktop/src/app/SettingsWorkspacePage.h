@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/SettingsAccountPage.h"
 #include "app/SettingsProvidersPage.h"
 #include "app/SettingsStoragePage.h"
 #include "app/SettingsWorkspace.h"
@@ -21,12 +22,21 @@ class SettingsWorkspacePage final : public SettingsWorkspace {
                                    SettingsClaudeCredentials::Requester credentials = {},
                                    SettingsStoragePage::Requester storage = {});
 
+    // Reads remote.status for Account & devices.
+    void setAccountStatusReader(SettingsAccountPage::StatusReader reader) {
+        account_->setStatusReader(std::move(reader));
+    }
+    void refreshAccount() { account_->refresh(); }
+
   signals:
     void accountDevicesRequested();
+    void accountSignOutRequested();
     void agentModelsRequested();
 
   private:
     void addConversationWidth();
+
+    SettingsAccountPage* account_{nullptr};
 };
 
 } // namespace ketplus

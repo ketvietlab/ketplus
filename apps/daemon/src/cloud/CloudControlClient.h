@@ -92,8 +92,9 @@ class CloudControlClient final : public QObject {
     void redeemSignIn(quint64 signInEpoch, const QString& code, const QString& verifier,
                       const QString& redirectUri, const QString& installationId,
                       const QJsonObject& keys);
-    void enrollMachine(quint64 signInEpoch, const QString& access, const QString& installationId,
-                       const QJsonObject& keys, LocalCallback callback);
+    void enrollMachine(quint64 signInEpoch, const QString& access, const QJsonObject& subject,
+                       const QString& installationId, const QJsonObject& keys,
+                       LocalCallback callback);
     void signOut(LocalCallback callback);
     void listDevices(LocalCallback callback);
     void createPairing(LocalCallback callback);
@@ -219,6 +220,9 @@ class CloudControlClient final : public QObject {
     transport::Signaling* signaling_{nullptr};
     QString machineId_;
     QString workspaceId_;
+    // Who signed this Mac in, from the user session that enrolled it (ADR 0109).
+    QString accountName_;
+    QString accountUsername_;
     QString daemonToken_;
     QString lastError_;
     QPointer<BrowserSignIn> browserSignIn_;

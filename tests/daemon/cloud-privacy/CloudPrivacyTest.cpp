@@ -2910,6 +2910,50 @@ class CloudPrivacyTest final : public QObject {
     }
 
     // #84: what the credential file keeps for each conversation is bounded by the journal.
+    // Settings and Connections name the account that signed this Mac in (ADR 0109).
+    void statusNamesTheSignedInAccountUntilSignOut() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+        c.transport.responseForPath.insert(
+            "/v2/machines:enroll",
+            R"({"id":"machine-synthetic","workspaceId":"workspace-synthetic","keyVersion":1})");
+        bool answered = false;
+        Access::enroll(
+            *c.client, [&answered](const QJsonObject&, const QString&) { answered = true; },
+            QJsonObject{{"id", "subject-synthetic"},
+                        {"username", "synthetic.user"},
+                        {"displayName", "Synthetic User"}});
+        QTRY_VERIFY(answered);
+        const QString service = QStringLiteral("dev.ketplus.daemon.control/");
+        QCOMPARE(r03::credentials.value(service + "account-name"), QByteArray("Synthetic User"));
+        QJsonObject status;
+        c.client->handleLocal(
+            "remote.status", {},
+            [&status](const QJsonObject& value, const QString&) { status = value; });
+        const QJsonObject account = status.value("account").toObject();
+        QCOMPARE(account.value("display_name").toString(), QStringLiteral("Synthetic User"));
+        QCOMPARE(account.value("username").toString(), QStringLiteral("synthetic.user"));
+        // The relay's subject id and tokens are not reported.
+        QVERIFY(!QJsonDocument(status).toJson().contains("subject-synthetic"));
+
+        // Stored with the enrollment, so a restart reads it back.
+        QCOMPARE(r03::credentials.value(service + "account-username"),
+                 QByteArray("synthetic.user"));
+
+        QString error = "unanswered";
+        c.client->handleLocal("remote.sign_out", {},
+                              [&](const QJsonObject& value, const QString& detail) {
+                                  error = detail;
+                                  status = value;
+                              });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(!status.contains("account"));
+        QVERIFY(!r03::credentials.contains(service + "account-name"));
+        QVERIFY(!r03::credentials.contains(service + "account-username"));
+    }
+
     void signingOutRemovesTheEnrollmentAndEveryCursorInOneRewrite() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
@@ -2922,7 +2966,15 @@ class CloudPrivacyTest final : public QObject {
             r03::credentials.insert(
                 service + QStringLiteral("uploaded-cursor-gone-%1-1").arg(session), "9");
         r03::credentials.insert(service + "uploaded-cursor-session-synthetic-1", "42");
+        r03::credentials.insert(service + "account-name", "Synthetic User");
+        r03::credentials.insert(service + "account-username", "synthetic.user");
         CloudControlClient client(&c.journal, &c.host);
+        // A restart reads the account back with the enrollment (ADR 0109).
+        QJsonObject status;
+        client.handleLocal("remote.status", {},
+                           [&status](const QJsonObject& value, const QString&) { status = value; });
+        QCOMPARE(status.value("account").toObject().value("display_name").toString(),
+                 QStringLiteral("Synthetic User"));
         r03::rewrites = 0;
         QString error = "unanswered";
         client.handleLocal("remote.sign_out", {},
@@ -2936,6 +2988,7 @@ class CloudPrivacyTest final : public QObject {
         };
         QVERIFY(!stored("uploaded-cursor-"));
         QVERIFY(!stored("machine-id"));
+        QVERIFY(!stored("account-"));
         // The workspace its content keys were made in outlives the enrollment.
         QCOMPARE(r03::credentials.value(service + "session-keys-workspace"),
                  QByteArray("workspace-synthetic"));

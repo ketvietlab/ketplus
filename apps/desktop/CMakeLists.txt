@@ -117,6 +117,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowSearch.cpp
     src/app/MainWindowWorkspace.cpp
     src/app/MainWindowWorktrees.cpp
+    src/app/SettingsAccountPage.cpp
+    src/app/SettingsAccountPage.h
     src/app/SettingsBrowserPage.cpp
     src/app/SettingsBrowserPage.h
     src/app/SettingsClaudeAnalytics.cpp

@@ -151,11 +151,12 @@ class CloudPrivacyTestAccess {
                               std::move(done));
     }
     // Enrolls with the relay as a completed sign-in does.
-    static void enroll(CloudControlClient& client, CloudControlClient::LocalCallback done) {
+    static void enroll(CloudControlClient& client, CloudControlClient::LocalCallback done,
+                       const QJsonObject& subject = {}) {
         QString error;
         const QJsonObject keys = client.crypto_.publicKeys(&error);
-        client.enrollMachine(client.accountEpoch_, "synthetic-user-token", "host_synthetic", keys,
-                             std::move(done));
+        client.enrollMachine(client.accountEpoch_, "synthetic-user-token", subject,
+                             "host_synthetic", keys, std::move(done));
     }
     // Asks for a fresh daemon credential, as an expired token does.
     static void credential(CloudControlClient& client, CloudControlClient::ReadyCallback done) {

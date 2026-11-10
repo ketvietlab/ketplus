@@ -34,6 +34,9 @@ class RemoteControlView final : public QWidget {
     explicit RemoteControlView(QWidget* parent = nullptr);
     ~RemoteControlView() override;
     void activate();
+    // Sign out as the account strip's button does, asking first (Settings → Account). A view
+    // that has not read the daemon's status yet does it once the status arrives.
+    void requestSignOut();
     void applyDesignSystemStyle();
 
   signals:
@@ -87,6 +90,10 @@ class RemoteControlView final : public QWidget {
     QLabel* overviewStatus_{nullptr};
     QAbstractButton* pairButton_{nullptr};
     QAbstractButton* signOutButton_{nullptr};
+    QLabel* accountAvatar_{nullptr};
+    QLabel* accountName_{nullptr};
+    QLabel* accountMeta_{nullptr};
+    bool signOutRequested_{false};
     // In-window cards (#422) hosting pages built as the mock's modal. They are children of
     // the window, so the view styles, zooms and deletes them itself.
     QPointer<ket::Dialog> pairingDialog_;
