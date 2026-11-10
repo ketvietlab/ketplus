@@ -20,7 +20,7 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/new", "teams/empty",
+        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/empty",
         "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -71,9 +71,14 @@ Basic.ApplicationWindow {
         screen = "teams"
         teams.startNewTeam(repositoryName)
     }
+    // With a number, that conversation joins as a developer; without, Add a member opens.
     function addTeamMember(id, number) {
+        if (number) {
+            teams.join(id, number)
+            return
+        }
         screen = "teams"
-        teams.startAddMember(id, number)
+        teams.startAddMember(id)
     }
     function deleteTeam(id) {
         screen = "teams"
@@ -332,7 +337,7 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
-        else if (["repo-menu", "team-menu", "row-menu"].includes(Mock.initialPanel))
+        else if (["repo-menu", "team-menu", "row-menu", "drag-member"].includes(Mock.initialPanel))
             Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
         else if (screen === "teams" && Mock.initialPanel)
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))

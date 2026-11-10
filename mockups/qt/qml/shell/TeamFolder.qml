@@ -19,6 +19,9 @@ Column {
     // The repository's conversations, to draw each member's own row.
     required property var conversations
     property bool expanded: true
+    // A dragged conversation is over the folder (`dropPreview` draws it for a capture).
+    property bool dropPreview: false
+    readonly property bool dropping: drop.containsDrag || dropPreview
     readonly property bool selected: window.screen === "teams" && window.currentTeam === team.id
     readonly property bool hot: hover.hovered || fold.visualFocus || name.visualFocus
     readonly property var recipe: KetTheme.groupHeaderRecipe(
@@ -55,6 +58,13 @@ Column {
         height: folder.recipe.height
 
         HoverHandler { id: hover }
+        // A conversation of the repository dropped here joins the team as a developer.
+        DropArea {
+            id: drop
+            anchors.fill: parent
+            keys: ["conversation"]
+            onDropped: drag => folder.window.addTeamMember(folder.team.id, drag.source.number)
+        }
         TapHandler {
             acceptedButtons: Qt.RightButton
             onTapped: folder.menuRequested(null)
@@ -63,7 +73,9 @@ Column {
         Rectangle {
             anchors.fill: parent
             radius: folder.px(KetTheme.t.radiusSm)
-            color: folder.selected ? KetTheme.t.navSelected : "transparent"
+            color: folder.selected || folder.dropping ? KetTheme.t.navSelected : "transparent"
+            border.width: folder.dropping ? 1 : 0
+            border.color: KetTheme.t.focusBorder
         }
 
         Basic.AbstractButton {

@@ -13,6 +13,10 @@ Rectangle {
     required property var window
     property var expanded: ({})
     property var showAll: ({})
+    // The conversation being dragged to a team's folder, and where the pointer holds it.
+    property var dragged: null
+    property point dragPoint
+    property bool dragPreview: false
     readonly property real inset: KetTheme.px(6, KetTheme.zoom)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
@@ -27,6 +31,11 @@ Rectangle {
         } else if (name === "team-menu" && team) {
             teamMenu.team = team
             teamMenu.popup(sidebar, px(150), px(326))
+        } else if (name === "drag-member") {
+            // A conversation held over the first team's folder.
+            dragged = repository.conversations.find(c => c.number === "9410")
+            dragPoint = Qt.point(px(96), px(318))
+            dragPreview = true
         } else if (name === "row-menu") {
             sidebar.window.repository = repository.name
             sidebar.window.conversation = repository.conversations.find(c => c.number === "9410")
@@ -309,12 +318,14 @@ Rectangle {
 
                             TeamFolder {
                                 required property var modelData
+                                required property int index
                                 // A child of its repository: one step in from the repository's name.
                                 x: sidebar.inset + sidebar.px(12)
                                 width: repo.width - sidebar.inset - x
                                 window: sidebar.window
                                 team: modelData
                                 conversations: repo.modelData.conversations
+                                dropPreview: sidebar.dragPreview && index === 0
                                 onContextMenuRequested: conversation => {
                                     sidebar.window.conversation = conversation
                                     rowMenu.popup()
@@ -359,6 +370,20 @@ Rectangle {
                                 }
                                 onClicked: sidebar.window.openConversation(repo.modelData.name,
                                                                            modelData)
+                                // Dragged onto a team's folder, the conversation joins that team.
+                                DragHandler {
+                                    target: null
+                                    enabled: repo.teams.length > 0
+                                    onActiveChanged: {
+                                        if (active) {
+                                            sidebar.dragged = row.modelData
+                                        } else {
+                                            ghost.Drag.drop()
+                                            sidebar.dragged = null
+                                        }
+                                    }
+                                    onCentroidChanged: if (active) sidebar.dragPoint = sidebar.mapFromItem(null, centroid.scenePosition)
+                                }
                                 TapHandler {
                                     acceptedButtons: Qt.RightButton
                                     onTapped: {
@@ -524,25 +549,68 @@ Rectangle {
         id: rowMenu
         // The conversation's team, and the teams of its repository it could join.
         readonly property var team: sidebar.window.teamOf(sidebar.window.conversation.number)
-        readonly property bool leads: !!team && team.members.some(m => m.number === sidebar.window.conversation.number && m.role === "leader")
+        // A team keeps its leader and its reviewer.
+        readonly property bool leads: !!team && team.members.some(m => m.number === sidebar.window.conversation.number && m.role !== "developer")
         readonly property var joinable: sidebar.window.teamList.filter(t => t.repository === sidebar.window.repository)
         KetMenuItem { text: "Rename…"; iconName: "edit"; onTriggered: sidebar.window.renameDialog.open() }
         KetMenuItem { text: "Fork conversation"; iconName: "branch"; onTriggered: sidebar.window.notify("Forked into a new conversation") }
         KetMenuItem { text: "Change worktree…"; iconName: "branch"; onTriggered: sidebar.window.picker.open() }
         KetMenuItem { text: "Copy reference"; iconName: "copy"; shortcut: "@agent/" + sidebar.window.conversation.number; onTriggered: sidebar.window.notify("Copied @agent/" + sidebar.window.conversation.number) }
         KetMenuItem {
-            text: rowMenu.team ? "Remove from " + rowMenu.team.name + "…" : "Add to a team…"
+            visible: !!rowMenu.team
+            height: visible ? implicitHeight : 0
+            text: rowMenu.team ? "Remove from " + rowMenu.team.name + "…" : ""
             iconName: "bot"
-            enabled: rowMenu.team ? !rowMenu.leads : rowMenu.joinable.length > 0
-            onTriggered: {
-                if (rowMenu.team)
-                    sidebar.window.removeTeamMember(rowMenu.team.id, sidebar.window.conversation.number)
-                else
-                    sidebar.window.addTeamMember(rowMenu.joinable[0].id, sidebar.window.conversation.number)
+            enabled: !rowMenu.leads
+            onTriggered: sidebar.window.removeTeamMember(rowMenu.team.id, sidebar.window.conversation.number)
+        }
+        // One entry for each team of the repository; the conversation joins as a developer.
+        // Inserted in order: a Repeater inside a Menu misplaces its items.
+        Instantiator {
+            model: rowMenu.team ? [] : rowMenu.joinable
+            onObjectAdded: (index, object) => rowMenu.insertItem(5 + index, object)
+            onObjectRemoved: (index, object) => rowMenu.removeItem(object)
+            KetMenuItem {
+                required property var modelData
+                text: "Add to " + modelData.name
+                description: "Joins as a developer"
+                iconName: "bot"
+                onTriggered: sidebar.window.addTeamMember(modelData.id, sidebar.window.conversation.number)
             }
         }
         KetMenuSeparator {}
         KetMenuItem { text: "Archive"; iconName: "archive"; onTriggered: sidebar.window.notify("Conversation archived") }
         KetMenuItem { text: "Delete…"; iconName: "trash"; danger: true; onTriggered: sidebar.window.deleteDialog.open() }
+    }
+
+    // What follows the pointer while a conversation is dragged.
+    Rectangle {
+        id: ghost
+        visible: !!sidebar.dragged
+        x: sidebar.dragPoint.x - sidebar.px(12)
+        y: sidebar.dragPoint.y - height / 2
+        z: 10
+        width: Math.min(sidebar.width - sidebar.px(24), ghostText.implicitWidth + sidebar.px(20))
+        height: sidebar.px(28)
+        radius: sidebar.px(6)
+        color: KetTheme.t.panelBg
+        border.color: KetTheme.t.focusBorder
+        opacity: 0.95
+        readonly property string number: sidebar.dragged ? sidebar.dragged.number : ""
+        Drag.active: !!sidebar.dragged && !sidebar.dragPreview
+        Drag.keys: ["conversation"]
+        Drag.source: ghost
+        Drag.hotSpot: Qt.point(sidebar.px(12), height / 2)
+        Text {
+            id: ghostText
+            anchors.verticalCenter: parent.verticalCenter
+            x: sidebar.px(10)
+            width: parent.width - sidebar.px(20)
+            text: sidebar.dragged ? sidebar.dragged.title : ""
+            color: KetTheme.t.textMain
+            font.family: KetTheme.fontFamily
+            font.pixelSize: sidebar.px(13)
+            elide: Text.ElideRight
+        }
     }
 }
