@@ -69,6 +69,24 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
    `develop`, and `main` is production, updated only by an explicit release
    (`docs/release-process.md`).
 
+## Két UI migration (#402)
+
+The compatibility stylesheet in `core/src/ui/Theme.cpp` (`styleSheetFor`) and
+`ThemePalette` are being retired in favour of Két kit widgets, recipes, and
+tokens. Do not grow either one. When a change touches a widget or screen that
+still takes colours or metrics from that stylesheet or from `ThemePalette`:
+
+1. Move that surface onto kit widgets, recipes, or `ket::Tokens` in the same
+   change. A component the kit lacks goes to ket-qt first; until it lands,
+   leave the surface as is and say so on #402.
+2. Delete each selector and palette field that nothing reads anymore.
+3. Keep light, dark, follow system, and every zoom step switching live, and run
+   the tests listed in #402 that cover the surface.
+4. Update #402 when the pull request merges: comment with the surface, the
+   selectors and fields removed, and what still depends on them there; tick
+   the surface in the issue's progress list and any acceptance item that now
+   holds.
+
 ## Source structure
 
 - `core/`: editor, documents, workspace, Git, preview, terminal, settings, and
