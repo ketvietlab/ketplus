@@ -24,6 +24,8 @@ add_library(ketplus_desktop_support STATIC
     src/app/WaitingBadge.h
     src/workspace/ActivityBar.cpp
     src/workspace/ActivityBarAppearance.cpp
+    src/workspace/SidebarControls.cpp
+    src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp

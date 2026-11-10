@@ -628,9 +628,9 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(sidebar->width(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->minimumWidth(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->maximumWidth(), ketplus::ActivityBar::kWidth);
-        const auto nav = ket::navItemRecipe(false, {}, ket::Appearance::instance().theme());
+        // The mock's Quick search is a 28 px field, not a navigation row.
         QCOMPARE(search->height(),
-                 qRound(ket::Appearance::scale(nav.height, ket::Appearance::instance().zoom())));
+                 qRound(ket::Appearance::scale(28, ket::Appearance::instance().zoom())));
         QVERIFY(window.findChild<QWidget*>(QStringLiteral("productTopBar")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productBranchButton")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productTerminalButton")) == nullptr);
