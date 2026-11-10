@@ -66,8 +66,11 @@ class Journal {
     void event(const QString& type, const QJsonObject& payload) {
         append(type, payload, {}, turn_);
     }
-    void steer(const QString& text) {
-        append("turn.steered", {{"text", text}, {"provider", provider_}}, {}, turn_);
+    // A message that joined the running turn: the user's steer, or another agent's reply.
+    void steer(const QString& text, QJsonObject extra = {}) {
+        extra.insert("text", text);
+        extra.insert("provider", provider_);
+        append("turn.steered", extra, {}, turn_);
     }
     // The usage the provider reported during the turn: its context and the session estimate.
     void usage(qint64 contextTokens, double sessionUsd) {
@@ -193,6 +196,61 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       {"aggregatedOutput", "1/2 Test #31: sidebar_rows ........   Passed\n"
                                            "2/2 Test #32: sidebar_spin ........***Failed\n"
                                            "50% tests passed, 1 tests failed out of 2"}});
+        // The mock's answered question.
+        journal.event(
+            "approval.requested",
+            {{"approval_id", "spinner-question"},
+             {"kind", "input"},
+             {"questions",
+              QJsonArray{QJsonObject{
+                  {"id", "spinner"},
+                  {"header", "Spinner"},
+                  {"question", "How should a working row animate?"},
+                  {"options",
+                   QJsonArray{QJsonObject{{"label", "Step on a shared clock (Recommended)"}},
+                              QJsonObject{{"label", "Keep the 60 fps animation"}}}}}}}});
+        journal.event(
+            "question.answered",
+            {{"approval_id", "spinner-question"},
+             {"answers", QJsonObject{{"spinner", "Step on a shared clock (Recommended)"}}}});
+        // The mock's browser group: six ketplus_browser steps, one failed, one with captures.
+        const auto browser = [&](const QString& tool, const QJsonObject& arguments,
+                                 QJsonObject extra = {}) {
+            extra.insert("type", "mcpToolCall");
+            extra.insert("server", "ketplus_browser");
+            extra.insert("tool", tool);
+            extra.insert("arguments", arguments);
+            journal.tool(extra);
+        };
+        browser("browser_open", {{"url", "http://localhost:5173/sidebar"}});
+        browser("browser_observe", {{"detail", "summary"}},
+                {{"result", QJsonObject{{"structuredContent",
+                                         QJsonObject{{"page", QJsonObject{{"title", "Sidebar"}}},
+                                                     {"visibleNodeCount", 142}}}}}});
+        browser("browser_act", {{"action", QJsonObject{{"type", "click"}}}},
+                {{"result",
+                  QJsonObject{{"structuredContent",
+                               QJsonObject{{"target",
+                                            QJsonObject{{"name", "Review the startup flow"}}}}}}}});
+        browser("browser_wait", {{"condition", QJsonObject{{"type", "text"}, {"text", "Working"}}}},
+                {{"status", "failed"},
+                 {"error", QJsonObject{{"message", "browser_wait: timed out after 10 s"}}}});
+        browser("browser_capture", {{"viewport", "1440x900"}, {"theme", "light"}});
+        browser("visual_compare", {{"reference", "sidebar"}});
+        // The mock's third group: web, tools and a skill.
+        const auto claudeTool = [&](const QString& tool, const QJsonObject& arguments,
+                                    const QString& result = {}) {
+            QJsonObject item{{"type", "dynamicToolCall"}, {"tool", tool}, {"arguments", arguments}};
+            if (!result.isEmpty())
+                item.insert("result", text(result));
+            journal.tool(item);
+        };
+        claudeTool("WebSearch", {{"query", "Qt Quick RotationAnimator render loop CPU"}},
+                   "Qt Quick Scene Graph\nAnimator QML Type");
+        claudeTool("WebFetch", {{"url", "https://doc.qt.io/qt-6/qml-qtquick-frameanimation.html"},
+                                {"prompt", "How does FrameAnimation tick?"}});
+        claudeTool("ToolSearch", {{"query", "select:Monitor,ScheduleWakeup"}});
+        claudeTool("Skill", {{"skill", "enterprise-grade"}});
         // The mock's request to the design conversation, which its reply below answers.
         journal.event("agent_message.state", {{"message_id", "request-8941"},
                                               {"kind", "request"},
@@ -205,11 +263,11 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                                               {"peer_provider", "claude"},
                                               {"text", "Is the stepped spinner fine at 20 steps "
                                                        "a second?"}});
-        journal.user(today.addSecs(120),
-                     "20 steps a second reads as smooth at 14 px. Keep 4 behind another app.",
-                     fromAgent("8941", "DS Icon", "claude",
-                               "20 steps a second reads as smooth at 14 px. Keep 4 behind "
-                               "another app."));
+        // The reply reaches the turn that is still running, as a steer does.
+        journal.steer("20 steps a second reads as smooth at 14 px. Keep 4 behind another app.",
+                      fromAgent("8941", "DS Icon", "claude",
+                                "20 steps a second reads as smooth at 14 px. Keep 4 behind "
+                                "another app."));
         // The mock's compaction between the reply and the steer.
         journal.tool({{"type", "contextCompaction"}});
         journal.steer("Also check dark mode before you finish.");
@@ -234,6 +292,23 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
              {"arguments", QJsonObject{{"file_path", "modules/ai/src/agent/qml/SpinClock.qml"},
                                        {"content", spinClock.join('\n')}}},
              {"result", text("The file was created.")}});
+        // The mock's last steps: a wait on the build, the tests again and a stopped task.
+        journal.tool({{"type", "dynamicToolCall"},
+                      {"tool", "Monitor"},
+                      {"arguments", QJsonObject{{"description", "Wait for the build"},
+                                                {"command", "cmake --build build"}}},
+                      {"durationMs", 72000}});
+        journal.tool({{"type", "commandExecution"},
+                      {"tool", "Bash"},
+                      {"command", "ctest --test-dir build -R sidebar"},
+                      {"description", "Run tests"},
+                      {"exitCode", 0},
+                      {"durationMs", 9800},
+                      {"aggregatedOutput", "100% tests passed, 0 tests failed out of 2"}});
+        journal.tool({{"type", "dynamicToolCall"},
+                      {"tool", "TaskStop"},
+                      {"arguments", QJsonObject{{"task_id", "dev-server"}}},
+                      {"result", text("Stopped dev server on port 5173")}});
         journal.agent("final_answer", QString::fromUtf8(claudeAnswer));
         journal.usage(182000, 3.32);
         journal.finish("completed", 252);
@@ -251,10 +326,11 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.tool({{"type", "commandExecution"},
                       {"command", "sed -n 1,80p services/tenant/src/create.ts"},
                       {"exitCode", 0}});
-        journal.tool({{"type", "collabAgentToolCall"},
+        // Cursor's Task tool: a subagent, not a collaboration with another conversation.
+        journal.tool({{"type", "dynamicToolCall"},
                       {"tool", "Task"},
-                      {"prompt", "Trace the staging tenant flow"},
-                      {"description", "Trace the staging tenant flow"}});
+                      {"arguments", QJsonObject{{"description", "Trace the staging tenant flow"},
+                                                {"prompt", "Trace the staging tenant flow"}}}});
         journal.tool({{"type", "mcpToolCall"},
                       {"server", "ketplus_browser"},
                       {"tool", "browser_observe"},

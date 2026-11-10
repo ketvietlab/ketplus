@@ -589,6 +589,66 @@ void AgentWorkspaceViewTest::streamingCodeWaitsForCopyChromeBehindASteer() {
     QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
 }
 
+// A steer joins the running turn, so the text above it is not the turn's answer; and an
+// answer whose turn was stopped says so above its Copy button.
+void AgentWorkspaceViewTest::steerDoesNotEndTheAnswerAndAStoppedAnswerSaysSo() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+
+    QVariantMap steer = textRow("s", "user", "Also check dark mode");
+    steer.insert("eventType", "turn.steered");
+    QVariantMap end{{"kind", "system"},        {"category", "system"},     {"subtype", "turnEnd"},
+                    {"status", "interrupted"}, {"body", "stopped by you"}, {"messageKey", "end"},
+                    {"meta", "Turn"},          {"filePath", QString()}};
+    view.resetMessages({textRow("u", "user", "Fix the spinner"),
+                        textRow("a1", "assistant", "I will read the sidebar first."), steer,
+                        textRow("a2", "assistant", "The spinner now steps on one clock."), end},
+                       "workspace:steered-answer");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QTRY_VERIFY(delegateAt(transcript, 3));
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyMessageButton"));
+    // Copy answer takes what the agent wrote on both sides of the steer, not the steer.
+    QVERIFY(clickButton(childNamed(delegateAt(transcript, 3), "copyMessageButton")));
+    QCOMPARE(
+        QGuiApplication::clipboard()->text(),
+        QStringLiteral("I will read the sidebar first.\n\nThe spinner now steps on one clock."));
+    auto* stopped = childNamed(delegateAt(transcript, 3), "answerStoppedNote");
+    QVERIFY(stopped);
+    QTRY_VERIFY(stopped->isVisible());
+    auto* earlier = childNamed(delegateAt(transcript, 1), "answerStoppedNote");
+    QVERIFY(earlier);
+    QVERIFY(!earlier->isVisible());
+
+    // A failure draws closer to its turn end; that holds when the row under it becomes the
+    // turn end in place, with no row added or removed.
+    QVariantMap error{{"kind", "error"},          {"category", "system"}, {"status", "failed"},
+                      {"body", "The CLI exited"}, {"messageKey", "err"},  {"meta", "Agent · error"},
+                      {"filePath", QString()}};
+    QVariantMap event{{"kind", "system"},        {"category", "system"}, {"subtype", "event"},
+                      {"body", "Model changed"}, {"messageKey", "next"}, {"meta", "Event"},
+                      {"filePath", QString()}};
+    view.resetMessages({textRow("u", "user", "Fix the spinner"), error, event},
+                       "workspace:failed-turn");
+    QTRY_VERIFY(delegateAt(transcript, 2));
+    QTest::qWait(100);
+    const qreal apart = delegateAt(transcript, 1)->height();
+    QVERIFY(!delegateAt(transcript, 1)->property("errorBeforeTurnEnd").toBool());
+    QVariantMap failedEnd = end;
+    failedEnd.insert("status", "failed");
+    failedEnd.insert("messageKey", "next");
+    view.updateMessage(2, failedEnd);
+    QTRY_VERIFY(delegateAt(transcript, 1)->property("errorBeforeTurnEnd").toBool());
+    QTRY_VERIFY(delegateAt(transcript, 1)->height() < apart);
+}
+
 void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

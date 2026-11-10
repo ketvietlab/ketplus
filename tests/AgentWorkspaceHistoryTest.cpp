@@ -730,6 +730,28 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
         true);
     QCOMPARE(read.value("subtype").toString(), QStringLiteral("fileRead"));
     QCOMPARE(read.value("title").toString(), QStringLiteral("Read: CursorAdapter.cpp L1–240"));
+    // A tool's own read and search name their lines and their place the same way.
+    const auto toolRead = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "tool-read"},
+                    {"type", "dynamicToolCall"},
+                    {"tool", "Read"},
+                    {"arguments", QJsonObject{{"file_path", "modules/ai/src/Sidebar.qml"},
+                                              {"offset", 540},
+                                              {"limit", 61}}},
+                    {"status", "completed"}},
+        true);
+    QCOMPARE(toolRead.value("title").toString(),
+             QStringLiteral("Read: modules/ai/src/Sidebar.qml L540–600"));
+    const auto toolSearch = ketplus::agent_message::activityMessage(
+        QJsonObject{
+            {"id", "tool-search"},
+            {"type", "dynamicToolCall"},
+            {"tool", "Grep"},
+            {"arguments", QJsonObject{{"pattern", "Animation.Infinite"}, {"path", "modules/ai"}}},
+            {"status", "completed"}},
+        true);
+    QCOMPARE(toolSearch.value("title").toString(),
+             QStringLiteral("Searched code: “Animation.Infinite” in modules/ai"));
     QVERIFY(read.value("target").toString().isEmpty());
     QCOMPARE(read.value("command").toString(),
              QStringLiteral("/bin/zsh -lc \"sed -n '1,240p' modules/ai/src/CursorAdapter.cpp\""));

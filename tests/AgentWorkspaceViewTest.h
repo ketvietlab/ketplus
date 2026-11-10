@@ -186,6 +186,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void activityGroupCopyIncludesMembers();
     void copiesMessageSourcesAndCodeBlocks();
     void streamingCodeWaitsForCopyChromeBehindASteer();
+    void steerDoesNotEndTheAnswerAndAStoppedAnswerSaysSo();
     void copiesMouseSelectionWithShortcut();
     void listCodeBlocksStayInTheirItem();
     void fencedCodeBlockSources();

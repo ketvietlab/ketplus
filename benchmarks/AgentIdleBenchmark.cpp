@@ -6,6 +6,7 @@
 #include "ui/Theme.h"
 
 #include "AgentTranscriptFixture.h"
+#include <QAbstractItemModel>
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDateTime>
@@ -327,6 +328,23 @@ int main(int argc, char** argv) {
                     self(self, child);
             };
             open(open, view.quickView()->rootObject());
+            // Groups further down have no delegate yet; open them through the transcript.
+            if (auto* list = findItem(view.quickView()->rootObject(), "agentTranscript")) {
+                auto* model = list->property("messageModel").value<QAbstractItemModel*>();
+                const int role = model ? model->roleNames().key("groupKey", -1) : -1;
+                for (int row = 0; role >= 0 && row < model->rowCount(); ++row) {
+                    const QString key = model->index(row, 0).data(role).toString();
+                    QVariant expanded;
+                    if (key.isEmpty() ||
+                        !QMetaObject::invokeMethod(list, "groupExpanded",
+                                                   Q_RETURN_ARG(QVariant, expanded),
+                                                   Q_ARG(QVariant, key)) ||
+                        expanded.toBool())
+                        continue;
+                    QMetaObject::invokeMethod(list, "setGroupExpanded", Q_ARG(QVariant, key),
+                                              Q_ARG(QVariant, true));
+                }
+            }
             // The mock opens the first file of a multi-file edit on its diff.
             QTimer::singleShot(200, &view, [&view] {
                 const auto first = [](const auto& self, QQuickItem* item) -> QQuickItem* {

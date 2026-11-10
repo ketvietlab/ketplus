@@ -2,14 +2,16 @@ import Ket
 import QtQuick
 import Ket as Kit
 
-// The mock's note for a message this conversation sent to another agent: who it went to, its
-// state, and the start of what it said.
+// The mock's bordered note in the flow: a message this conversation sent to another agent (who
+// it went to, its state, and the start of what it said) or a question that is closed.
 Rectangle {
     id: note
     required property string label
     required property string details
     required property string message
     required property string state
+    property string iconName: "send"
+    property color iconColor: state === "failed" ? KetTheme.t.danger : KetTheme.t.accentText
 
     objectName: "transcriptAgentNote"
     implicitHeight: noteRow.implicitHeight + KetTheme.px(20, KetTheme.zoom)
@@ -31,9 +33,9 @@ Rectangle {
         spacing: KetTheme.px(8, KetTheme.zoom)
         Kit.KetIcon {
             y: Math.max(0, (noteMetrics.height - height) / 2)
-            name: "send"
+            name: note.iconName
             box: KetTheme.px(14, KetTheme.zoom)
-            color: note.state === "failed" ? KetTheme.t.danger : KetTheme.t.accentText
+            color: note.iconColor
         }
         Text {
             objectName: "transcriptAgentNoteText"

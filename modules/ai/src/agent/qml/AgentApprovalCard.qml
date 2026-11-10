@@ -49,7 +49,9 @@ Item {
         });
     }
 
-    implicitHeight: open ? card.implicitHeight : note.implicitHeight
+    // The settled note keeps the mock's block spacing from the activity around it.
+    readonly property real noteLead: KetTheme.px(12, KetTheme.zoom)
+    implicitHeight: open ? card.implicitHeight : note.implicitHeight + noteLead + KetTheme.px(8, KetTheme.zoom)
 
     Kit.KetQuestionCard {
         id: card
@@ -87,6 +89,8 @@ Item {
     Rectangle {
         id: note
         objectName: "approvalOutcome"
+        y: root.noteLead
+        height: implicitHeight
         readonly property string label: root.outcome === "denied" ? "Denied" : root.outcome === "expired" ? "Approval expired" : root.outcome === "approved" ? "Approved" : "Approval closed"
         width: parent.width
         visible: !root.open
