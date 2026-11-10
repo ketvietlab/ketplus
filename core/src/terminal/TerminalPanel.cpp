@@ -103,6 +103,12 @@ void TerminalPanel::typeText(const QString& text) {
         tab->typeText(text);
 }
 
+void TerminalPanel::typeTextInNewTab(const QString& text) {
+    if (currentTab() != nullptr)
+        addTab(true);
+    typeText(text);
+}
+
 void TerminalPanel::focusTerminal() {
     auto* tab = currentTab();
     if (!tab)

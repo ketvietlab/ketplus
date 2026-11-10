@@ -25,6 +25,9 @@ class TerminalPanel final : public QWidget {
     [[nodiscard]] bool isSessionRunning() const;
     // Types `text` into the current tab without running it (TerminalTab::typeText).
     void typeText(const QString& text);
+    // The same in a new tab, since the current one may be running vim or another program. A
+    // panel with no tab yet types into its first.
+    void typeTextInNewTab(const QString& text);
 
   signals:
     void closeRequested();

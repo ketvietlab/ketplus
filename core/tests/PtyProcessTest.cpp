@@ -194,12 +194,17 @@ void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
     panel.resize(640, 240);
     panel.show();
     panel.start(QDir::tempPath());
-    panel.typeText(QStringLiteral("echo __KETPLUS_TYPED__"));
+    // A line break would run it, so it is dropped (#449 review).
+    panel.typeText(QStringLiteral("echo __KETPLUS_TYPED__\r\n"));
     auto* view = panel.findChild<TerminalView*>();
     QVERIFY(view != nullptr);
     QTRY_VERIFY_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"), 5000);
     QTest::qWait(500);
     QCOMPARE(view->visibleText().count(QStringLiteral("__KETPLUS_TYPED__")), 1);
+    // Another command goes to a new tab, never into the program running in the open one.
+    panel.typeTextInNewTab(QStringLiteral("echo __KETPLUS_SECOND__"));
+    QCOMPARE(panel.findChildren<TerminalView*>().size(), 2);
+    QVERIFY(!view->visibleText().contains(QStringLiteral("__KETPLUS_SECOND__")));
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif

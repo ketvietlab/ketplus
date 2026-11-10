@@ -391,12 +391,19 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
 void MainWindow::typeInTerminal(const QString& command) {
     // Beside the conversation in Agent Workspace, below the page elsewhere. The command is typed,
     // never run: the user presses Return.
+    // Settings covers the workspace, so the terminal opens beside the conversation instead.
+    if (settingsWorkspaceMode_)
+        setAgentWorkspaceVisible(true);
     TerminalPanel* panel = nullptr;
     if (agentWorkspaceMode_) {
         panel = openAgentTerminalTab();
     } else {
         setTerminalVisible(true);
-        panel = terminal_;
+        if (terminal_ == nullptr)
+            return;
+        terminal_->typeTextInNewTab(command);
+        terminal_->focusTerminal();
+        return;
     }
     if (panel == nullptr)
         return;
