@@ -256,6 +256,10 @@ foreach(theme light dark)
         PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-${theme}.svg"
     )
 endforeach()
+set_source_files_properties(
+    "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
+    PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-tile.svg"
+)
 
 set_source_files_properties(
     "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
@@ -349,4 +353,5 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
 
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
 )

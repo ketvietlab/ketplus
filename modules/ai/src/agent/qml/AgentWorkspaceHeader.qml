@@ -29,6 +29,22 @@ Item {
     }
     readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
     readonly property string scopeBranch: agentHost.executionBranch || selectedWorktree.branch || "workspace"
+    // The header gives way from the right as it narrows, in the mock's order: the tags and Add
+    // tag first, then the Reviewer label, then the title and the worktree elide, then Compact
+    // window and New conversation leave (the sidebar and the menus have both). Each step is
+    // measured from implicit widths, so hiding an item cannot feed back into its own test.
+    readonly property real gap: titleRow.spacing
+    readonly property real statusWidth: Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth)
+    readonly property real fixedWidth: (conversationNumber.visible ? conversationNumber.implicitWidth + gap : 0) + Math.min(conversationTitle.implicitWidth, maximumTitleWidth) + gap + statusWidth + gap + (scopeChip.visible ? scopeChip.implicitWidth + gap : 0)
+    // The row layout rounds every item to whole pixels, so a fit needs that much to spare.
+    readonly property real slack: KetTheme.px(8, KetTheme.zoom)
+    readonly property bool fullReviewer: titleRow.width >= fixedWidth + reviewerProbe.implicitWidth + gap + slack
+    readonly property bool tagsEditable: !agentHost.compactWindow && selectedConversation.tagsEditable === true
+    readonly property real tagGroupWidth: (tags.length > 0 ? conversationTags.implicitWidth + gap : 0) + (tagsEditable ? addTagButton.implicitWidth + gap : 0)
+    readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
+    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : 4)
+    readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
+    readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.Layout.minimumWidth + gap : 0) + KetTheme.px(80, KetTheme.zoom) + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
     readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
@@ -66,7 +82,7 @@ Item {
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
             // Everything else at its narrowest, each with its spacing; the trailing filler adds one more.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - (addTagButton.visible ? addTagButton.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
             text: agentHost.sessionTitle
             color: KetTheme.t.textMain
             elide: Text.ElideRight
@@ -181,9 +197,7 @@ Item {
             // ADR 0067: the conversation that reviews each finished turn and replies here.
             readonly property var assigned: agentHost.reviewerState.reviewer || null
             readonly property string name: assigned ? "@agent/" + assigned.number : ""
-            // As in the mock, the Reviewer label collapses before the title or scope elide. It
-            // counts every visible item and the spacing before the trailing filler.
-            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) + (addTagButton.visible ? addTagButton.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 3
+            readonly property bool full: header.fullReviewer
             readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
             readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
             visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
@@ -203,7 +217,7 @@ Item {
         }
         Row {
             id: conversationTags
-            visible: header.tags.length > 0 && header.width > KetTheme.px(760, KetTheme.zoom)
+            visible: header.tags.length > 0 && header.showTags
             spacing: KetTheme.px(4, KetTheme.zoom)
             Repeater {
                 model: header.tags.slice(0, 2)
@@ -222,7 +236,7 @@ Item {
             id: addTagButton
             objectName: "headerAddTagButton"
             // The daemon stores a conversation's tags, so there is none to tag before it starts.
-            visible: !agentHost.compactWindow && header.selectedConversation.tagsEditable === true && header.width > KetTheme.px(760, KetTheme.zoom)
+            visible: header.tagsEditable && header.showTags
             controlSize: Kit.KetTheme.ControlSize.Small
             iconName: "plus"
             text: "Add tag"
@@ -236,24 +250,29 @@ Item {
     Row {
         id: headerActions
         anchors.right: parent.right
-        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
+        anchors.rightMargin: KetTheme.px(10, KetTheme.zoom)
         anchors.verticalCenter: parent.verticalCenter
         spacing: KetTheme.px(2, KetTheme.zoom)
 
         Kit.KetIconButton {
             objectName: "headerCompactWindowButton"
-            visible: !agentHost.compactMode
-            controlSize: Kit.KetTheme.ControlSize.Small
+            visible: !agentHost.compactMode && header.globalActions
             iconName: agentHost.compactWindow ? "fullscreen" : "panel-left"
             text: agentHost.compactWindow ? "Leave compact window" : "Compact window"
             onClicked: agentHost.requestCompactWindow()
         }
         Kit.KetIconButton {
+            objectName: "headerNewConversationButton"
+            visible: !agentHost.compactMode && !agentHost.compactWindow && header.globalActions
+            iconName: "compose"
+            text: "New conversation"
+            onClicked: agentHost.requestNewSession()
+        }
+        Kit.KetIconButton {
             id: atlasButton
             objectName: "headerAtlasButton"
             visible: !agentHost.compactWindow
-            controlSize: Kit.KetTheme.ControlSize.Small
-            iconName: Kit.KetTheme.iconForLucide("network")
+            iconName: "layers"
             text: agentHost.atlasRunningCount > 0 ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees" : "Atlases"
             onClicked: agentHost.requestProductNavigation("atlas")
             Text {
@@ -267,25 +286,22 @@ Item {
             }
         }
         Kit.KetIconButton {
-            objectName: "headerNewConversationButton"
+            objectName: "headerChangesButton"
             visible: !agentHost.compactMode && !agentHost.compactWindow
-            controlSize: Kit.KetTheme.ControlSize.Small
-            iconName: Kit.KetTheme.iconForLucide("square-pen")
-            text: "New conversation"
-            onClicked: agentHost.requestNewSession()
+            iconName: "compare"
+            text: "Changes"
+            onClicked: agentHost.requestProductNavigation("source-control")
         }
         Kit.KetIconButton {
             objectName: "headerTerminalButton"
             visible: !agentHost.compactMode && !agentHost.compactWindow
-            controlSize: Kit.KetTheme.ControlSize.Small
-            iconName: Kit.KetTheme.iconForLucide("square-terminal")
+            iconName: "terminal"
             text: "Open terminal"
             onClicked: agentHost.requestTerminal()
         }
         Kit.KetIconButton {
             objectName: "headerWorkReportButton"
             visible: !agentHost.compactMode && !agentHost.compactWindow
-            controlSize: Kit.KetTheme.ControlSize.Small
             iconName: "view-list"
             text: "Work report"
             onClicked: agentHost.requestWorkReport()
@@ -299,6 +315,14 @@ Item {
         controlSize: Kit.KetTheme.ControlSize.Small
         iconName: "eye"
         text: reviewerButton.fullText
+    }
+
+    Kit.KetButton {
+        id: collapsedReviewerProbe
+        visible: false
+        controlSize: Kit.KetTheme.ControlSize.Small
+        iconName: "eye"
+        text: "▾"
     }
 
     function openReviewerMenu() {

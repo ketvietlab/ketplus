@@ -1309,7 +1309,7 @@ void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
     QVERIFY(newConversation);
     QVERIFY(terminal);
     const auto headerRecipe =
-        ket::iconButtonRecipe(ket::ControlSize::Small, {}, ket::Appearance::instance().theme());
+        ket::iconButtonRecipe(ket::ControlSize::Medium, {}, ket::Appearance::instance().theme());
     const auto headerSize =
         ket::Appearance::scale(headerRecipe.height, ket::Appearance::instance().zoom());
     QCOMPARE(newConversation->size(), QSizeF(headerSize, headerSize));

@@ -1287,6 +1287,27 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // The mock's header actions, in its order and with its symbols.
+    const QList<std::pair<const char*, const char*>> actions{
+        {"headerCompactWindowButton", "panel-left"},
+        {"headerNewConversationButton", "compose"},
+        {"headerAtlasButton", "layers"},
+        {"headerChangesButton", "compare"},
+        {"headerTerminalButton", "terminal"},
+        {"headerWorkReportButton", "view-list"}};
+    qreal previousX = -1;
+    for (const auto& [name, icon] : actions) {
+        auto* action = root->findChild<QQuickItem*>(name);
+        QVERIFY2(action && action->isVisible(), name);
+        QCOMPARE(action->property("iconName").toString(), QLatin1StringView(icon));
+        QVERIFY2(action->x() > previousX, name);
+        previousX = action->x();
+    }
+    QSignalSpy navigated(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    QVERIFY(
+        QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
+    QCOMPARE(navigated.count(), 1);
+    QCOMPARE(navigated.first().first().toString(), QStringLiteral("source-control"));
     QTRY_VERIFY(placeholder->isVisible());
     QTest::qWait(30);
     QRectF caret;
