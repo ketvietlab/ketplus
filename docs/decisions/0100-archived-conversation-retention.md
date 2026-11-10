@@ -24,7 +24,8 @@ the history, could not tell an archived conversation from a visible one, so
     that support this advertise the `session.archive/1` feature.
 - A fork starts unarchived: it never inherits the source's `archived_at`.
 - Retention: an archived conversation is deleted once it has been archived for
-  30 days (`SessionHost::archivedHistoryDays`).
+  30 days at first. ADR 0108 makes it the `archived_history_days` Storage option: 30 days,
+  90 (the default), 1 year or Never.
   - The idle maintenance pass (`DaemonService::reclaimJournalSpace`, which
     runs only while no session is active) deletes at most one per pass, oldest
     first.

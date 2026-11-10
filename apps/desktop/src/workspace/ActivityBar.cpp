@@ -14,6 +14,7 @@
 #include "ui/TypeScale.h"
 #include "workspace/SymbolIcons.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QButtonGroup>
 #include <QComboBox>
@@ -37,6 +38,27 @@
 
 namespace ketplus {
 namespace {
+// The sidebar's journal banner opens Settings → Storage when clicked, as in the mock; the
+// banner draws itself and lets the clicks through to this button.
+class StorageNoticeButton final : public QAbstractButton {
+  public:
+    explicit StorageNoticeButton(QWidget* parent) : QAbstractButton(parent) {
+        // A button's Button role would make the banner's labels draw in ButtonText rather
+        // than in the banner's tone.
+        setBackgroundRole(QPalette::Window);
+    }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {}
+    [[nodiscard]] QSize sizeHint() const override {
+        return layout() != nullptr ? layout()->sizeHint() : QAbstractButton::sizeHint();
+    }
+};
+QString journalSize(qint64 bytes) {
+    return bytes >= 1'000'000'000LL
+               ? ActivityBar::tr("%1 GB").arg(double(bytes) / 1e9, 0, 'f', 1)
+               : ActivityBar::tr("%1 MB").arg((qMax<qint64>(0, bytes) + 500'000) / 1'000'000);
+}
 
 constexpr int kResizeHandleWidth = 5;
 const auto kWidthSetting = QStringLiteral("sidebar/width");
@@ -243,13 +265,15 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     storageNotice_->setObjectName(QStringLiteral("sidebarStorageWarning"));
     auto* storageLayout = new QVBoxLayout(storageNotice_);
     storageLayout->setContentsMargins(0, 0, 0, 0);
-    storageLayout->setSpacing(4);
-    storageBanner_ =
-        new ket::Banner(ket::BannerTone::Warning, tr("Journal almost full"), {}, storageNotice_);
-    storageLayout->addWidget(storageBanner_);
-    auto* storageSettings =
-        new ket::Button(tr("Storage settings"), ket::ButtonVariant::Ghost, storageNotice_);
+    auto* storageSettings = new StorageNoticeButton(storageNotice_);
     storageSettings->setObjectName(QStringLiteral("sidebarStorageSettings"));
+    storageSettings->setCursor(Qt::PointingHandCursor);
+    storageSettings->setFocusPolicy(Qt::StrongFocus);
+    auto* bannerLayout = new QVBoxLayout(storageSettings);
+    bannerLayout->setContentsMargins(0, 0, 0, 0);
+    storageBanner_ = new ket::Banner(ket::BannerTone::Warning, {}, {}, storageSettings);
+    storageBanner_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    bannerLayout->addWidget(storageBanner_);
     connect(storageSettings, &QAbstractButton::clicked, this,
             [this] { emit settingsSectionRequested(QStringLiteral("storage")); });
     storageLayout->addWidget(storageSettings);
@@ -317,16 +341,33 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
 
 void ActivityBar::setStorageStatus(const QVariantMap& result) {
     const auto status = result.value("status").toMap();
-    const bool warning = result.value("ok").toBool() && status.value("warning").toBool();
-    storageNotice_->setVisible(warning);
-    if (!warning)
+    const bool ok = result.value("ok").toBool();
+    const bool warning = ok && status.value("warning").toBool();
+    const bool lowDisk = ok && status.value("low_disk").toBool();
+    storageNotice_->setVisible(warning || lowDisk);
+    if (!warning && !lowDisk)
         return;
-    storageBanner_->setTitle(status.value("over_limit").toBool() ? tr("Journal limit reached")
-                                                                 : tr("Journal almost full"));
-    storageBanner_->setMessage(
-        status.value("pressure_enabled").toBool()
-            ? tr("Older tool details can be trimmed. Messages stay available.")
-            : tr("Review the size limit and detail retention in Settings."));
+    // The mock's "Journal is 9.0 GB · Over its 5 GB limit" (ADR 0108).
+    const auto bytes = status.value("database_page_bytes").toLongLong();
+    const auto limit = status.value("limit_bytes").toLongLong() / 1'000'000'000LL;
+    const QString free = journalSize(status.value("filesystem_available_bytes").toLongLong());
+    QString title, message;
+    if (warning) {
+        title = bytes > 0 ? tr("Journal is %1").arg(journalSize(bytes)) : tr("Journal almost full");
+        message = limit <= 0                            ? tr("Review its size in Settings")
+                  : status.value("over_limit").toBool() ? tr("Over its %1 GB limit").arg(limit)
+                                                        : tr("Near its %1 GB limit").arg(limit);
+        if (lowDisk)
+            message += tr(" · %1 free on disk").arg(free);
+    } else {
+        title = tr("Disk space is low");
+        message = tr("%1 free · journal writes may fail").arg(free);
+    }
+    storageBanner_->setTitle(title);
+    storageBanner_->setMessage(message);
+    auto* button = storageNotice_->findChild<QAbstractButton*>("sidebarStorageSettings");
+    button->setAccessibleName(title + QStringLiteral(". ") + message +
+                              tr(". Opens storage settings."));
 }
 
 void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded) {

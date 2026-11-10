@@ -554,6 +554,11 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = storageSize(type, request.value("payload").toObject());
     } else if (type.startsWith("storage.retention.")) {
         result = storageRetention(type, request.value("payload").toObject());
+    } else if (type.startsWith("storage.options.")) {
+        result = storageOptions(type, request.value("payload").toObject());
+    } else if (type.startsWith("storage.compaction.") || type.startsWith("storage.breakdown.") ||
+               type.startsWith("storage.export.")) {
+        result = storageJobs().handle(type, request.value("payload").toObject());
     } else if (type == QStringLiteral("session.list")) {
         result = listSessions(request);
     } else if (type == QStringLiteral("session.attach") ||
@@ -2547,6 +2552,9 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||
            messageType == QStringLiteral("storage.retention.apply") ||
+           messageType == QStringLiteral("storage.options.apply") ||
+           messageType == QStringLiteral("storage.compaction.start") ||
+           messageType == QStringLiteral("storage.export.start") ||
            messageType == QStringLiteral("session.worktree.switch") ||
            messageType == QStringLiteral("session.start_turn") ||
            messageType == QStringLiteral("session.rename") ||

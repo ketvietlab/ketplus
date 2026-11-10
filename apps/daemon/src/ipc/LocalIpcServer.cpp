@@ -288,28 +288,35 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                   {QStringLiteral("maximum_frame_bytes"),
                    static_cast<qint64>(protocol::maximumFrameBytes)},
                   {QStringLiteral("capabilities"),
-                   QJsonArray{
-                       QStringLiteral("storage.size.read"), QStringLiteral("storage.size.apply"),
-                       QStringLiteral("storage.retention.read"),
-                       QStringLiteral("storage.retention.apply"), QStringLiteral("session.read"),
-                       QStringLiteral("session.control"), QStringLiteral("session.delete"),
-                       QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
-                       QStringLiteral("session.agent_messages.read"),
-                       QStringLiteral("session.agent_messages.release"),
-                       QStringLiteral("session.reviewer.get"),
-                       QStringLiteral("session.reviewer.set"),
-                       QStringLiteral("session.work_report.read"),
-                       QStringLiteral("session.configuration.read"),
-                       QStringLiteral("session.configuration.apply"),
-                       QStringLiteral("session.execution_policy.apply"),
-                       QStringLiteral("session.mode.apply"),
-                       QStringLiteral("attachment.stage.begin"),
-                       QStringLiteral("attachment.stage.chunk"),
-                       QStringLiteral("attachment.stage.commit"),
-                       QStringLiteral("attachment.stage.cancel"),
-                       // MCP media is journaled as media_ref blocks resolved from the
-                       // owner-only <state dir>/media store (same user; no IPC bytes).
-                       QStringLiteral("media.local_store")}}}));
+                   QJsonArray{QStringLiteral("storage.size.read"),
+                              QStringLiteral("storage.size.apply"),
+                              QStringLiteral("storage.retention.read"),
+                              QStringLiteral("storage.retention.apply"),
+                              QStringLiteral("storage.options.read"),
+                              QStringLiteral("storage.options.apply"),
+                              QStringLiteral("storage.compaction.start"),
+                              QStringLiteral("storage.compaction.read"),
+                              QStringLiteral("storage.breakdown.read"),
+                              QStringLiteral("storage.export.start"),
+                              QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
+                              QStringLiteral("session.control"), QStringLiteral("session.delete"),
+                              QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
+                              QStringLiteral("session.agent_messages.read"),
+                              QStringLiteral("session.agent_messages.release"),
+                              QStringLiteral("session.reviewer.get"),
+                              QStringLiteral("session.reviewer.set"),
+                              QStringLiteral("session.work_report.read"),
+                              QStringLiteral("session.configuration.read"),
+                              QStringLiteral("session.configuration.apply"),
+                              QStringLiteral("session.execution_policy.apply"),
+                              QStringLiteral("session.mode.apply"),
+                              QStringLiteral("attachment.stage.begin"),
+                              QStringLiteral("attachment.stage.chunk"),
+                              QStringLiteral("attachment.stage.commit"),
+                              QStringLiteral("attachment.stage.cancel"),
+                              // MCP media is journaled as media_ref blocks resolved from the
+                              // owner-only <state dir>/media store (same user; no IPC bytes).
+                              QStringLiteral("media.local_store")}}}));
         return;
     }
     if (type == QStringLiteral("daemon.hello")) {

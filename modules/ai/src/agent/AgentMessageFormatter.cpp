@@ -12,6 +12,7 @@
 #include "agent/TranscriptPresentationGrouper.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QImage>
 #include <QImageReader>
 #include <QJsonDocument>
@@ -318,6 +319,31 @@ QString itemSummary(const QJsonObject& item) {
     return type;
 }
 
+// "· Output trimmed · 1.2 MB · older than 30 days" for an item history retention compacted
+// (#128). Size pressure trims with the current time as its cutoff, so it has no age.
+QString compactedSuffix(const QJsonObject& item, const QStringList& policies, const QString& what) {
+    const auto info = item.value(QStringLiteral("compacted")).toObject();
+    if (!policies.contains(info.value(QStringLiteral("policy")).toString()))
+        return {};
+    QStringList parts{what + QStringLiteral(" trimmed")};
+    const auto bytes = info.value(QStringLiteral("original_bytes")).toInteger();
+    if (bytes >= 1024 * 1024)
+        parts.append(QStringLiteral("%1 MB").arg(double(bytes) / (1024 * 1024), 0, 'f', 1));
+    else if (bytes >= 1024)
+        parts.append(QStringLiteral("%1 KB").arg((bytes + 512) / 1024));
+    const auto at =
+        QDateTime::fromString(info.value(QStringLiteral("at")).toString(), Qt::ISODateWithMs);
+    const auto cutoff =
+        QDateTime::fromString(info.value(QStringLiteral("cutoff")).toString(), Qt::ISODateWithMs);
+    if (at.isValid() && cutoff.isValid()) {
+        const auto days = cutoff.daysTo(at);
+        if (days > 0)
+            parts.append(days == 1 ? QStringLiteral("older than 1 day")
+                                   : QStringLiteral("older than %1 days").arg(days));
+    }
+    return QStringLiteral(" · ") + parts.join(QStringLiteral(" · "));
+}
+
 QString retainedTextSuffix(const QJsonObject& item) {
     const auto info = item.value(QStringLiteral("compacted")).toObject();
     const bool text = info.value(QStringLiteral("policy")) == QStringLiteral("tool-result-text-v1");
@@ -539,6 +565,11 @@ QVariantMap commandMessage(const QJsonObject& item, const bool completed) {
         completed ? item.value(QStringLiteral("status")).toString() : QStringLiteral("running");
     QVariantMap entry = commandMessage(item.value(QStringLiteral("command")).toString(), state,
                                        item.value(QStringLiteral("id")).toString());
+    if (const auto trimmed =
+            compactedSuffix(item, {QStringLiteral("command-output-v1")}, QStringLiteral("Output"));
+        !trimmed.isEmpty())
+        entry.insert(QStringLiteral("title"),
+                     entry.value(QStringLiteral("title")).toString() + trimmed);
     const QString cwd = sanitizedText(item.value(QStringLiteral("cwd")).toString());
     const QString output = boundedCommandOutput(
         sanitizedText(item.value(QStringLiteral("aggregatedOutput")).toString()));
@@ -641,8 +672,12 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
             mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
         if (images.isEmpty() && !path.isEmpty())
             images.append(QUrl::fromLocalFile(path).toString());
-        const QString title = completed ? QStringLiteral("Generated an image")
-                                        : QStringLiteral("Generating an image");
+        const QString title =
+            (completed ? QStringLiteral("Generated an image")
+                       : QStringLiteral("Generating an image")) +
+            compactedSuffix(item,
+                            {QStringLiteral("image-pixels-v1"), QStringLiteral("image-preview-v1")},
+                            QStringLiteral("Full image"));
         const QString resource = images.isEmpty() ? QString{} : images.first().toString();
         // The mock's "1024 × 1024 · transparent", read from the image's header only.
         QString size;

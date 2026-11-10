@@ -142,6 +142,9 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
          static_cast<qint64>(protocol::maximumReplayPayloadBytes)}};
     for (auto it = live.begin(); it != live.end(); ++it)
         catalog.insert(it.key(), it.value());
+    // Remote clients cannot read storage.*; they get the sidebar's warning state (ADR 0108).
+    if (const auto storage = storageStatus(); !storage.isEmpty())
+        catalog.insert(QStringLiteral("journal_storage"), storage);
     return finish(catalog);
 }
 

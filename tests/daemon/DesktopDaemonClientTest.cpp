@@ -1136,7 +1136,8 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(writeFakeCodex(executable, log));
         CodexAppServer server(executable);
         for (const auto& method : {"daemon/storageRetention/read", "daemon/storageSize/read",
-                                   "daemon/storageSize/apply", "daemon/storageUnknown/read"}) {
+                                   "daemon/storageSize/apply", "daemon/storageCompaction/start",
+                                   "daemon/storageExport/start", "daemon/storageUnknown/read"}) {
             bool rejected = false;
             server.call(method, {}, [&](const QJsonObject&, const QString& error) {
                 rejected = error.contains("local KetPlus daemon");
@@ -1150,11 +1151,12 @@ class DesktopDaemonClientTest final : public QObject {
         QTest::addColumn<QString>("family");
         QTest::newRow("retention") << QString("retention");
         QTest::newRow("size") << QString("size");
+        QTest::newRow("options") << QString("options"); // ADR 0108
     }
     void storageBridgeRefusesOldDaemonAndForwardsLocalOperations() {
         QFETCH(QString, family);
         const QString wire = "storage." + family + ".";
-        const QString ui = family == "size" ? "daemon/storageSize/" : "daemon/storageRetention/";
+        const QString ui = "daemon/storage" + family.left(1).toUpper() + family.mid(1) + "/";
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
         const auto restore = qScopeGuard(stopUsingFakeDaemon);

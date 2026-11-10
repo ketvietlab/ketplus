@@ -3,12 +3,14 @@
 #include "storage/ReplayDetailCompactor.h"
 #include <QCryptographicHash>
 #include <QDateTime>
-
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
+
+#include <optional>
 
 namespace ketplus::daemon {
 namespace {
@@ -154,6 +156,7 @@ struct Row {
     QString session;
     qint64 generation;
     QString type;
+    qint64 turn;
 };
 } // namespace
 
@@ -180,8 +183,9 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     // makes progress without rescanning all its history on each timer tick. A restart or
     // a completed sweep starts again; recent/unacknowledged rows are reconsidered later.
     QSqlQuery scan(database_);
-    scan.prepare(QStringLiteral("SELECT rowid, session_id, generation, event_type FROM "
-                                "replay_events WHERE rowid > ? ORDER BY rowid LIMIT ?"));
+    scan.prepare(QStringLiteral("SELECT rowid, session_id, generation, event_type, "
+                                "turn_sequence FROM replay_events WHERE rowid > ? "
+                                "ORDER BY rowid LIMIT ?"));
     scan.addBindValue(detailRetentionScanRow_);
     scan.addBindValue(maximumRows);
     if (!scan.exec())
@@ -189,7 +193,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     QList<Row> rows;
     while (scan.next())
         rows.append({scan.value(0).toLongLong(), scan.value(1).toString(),
-                     scan.value(2).toLongLong(), scan.value(3).toString()});
+                     scan.value(2).toLongLong(), scan.value(3).toString(),
+                     scan.value(4).toLongLong()});
     if (scan.lastError().isValid())
         return fail(scan.lastError().text());
     scan.finish();
@@ -217,13 +222,41 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "AND NOT EXISTS (SELECT 1 FROM replay_events t WHERE t.session_id = r.session_id "
         "AND t.generation = r.generation AND t.turn_sequence = r.turn_sequence "
         "AND (t.event_type LIKE 'approval.%' OR t.event_type LIKE 'question.%')) ");
-    const QString eligible = turnEligible + "AND json_type(r.payload, '$.large_event') IS NULL ";
+    // turnEligible depends only on the row's turn. A batch's rows mostly share a few turns, so
+    // the gate below evaluates it once per turn, and the lanes run only for rows that passed
+    // it: evaluating it per row and per lane made a sweep of a million-row journal take many
+    // minutes. Nothing in this transaction changes a turn's eligibility (rows removed here
+    // always have a later row in the same turn, and turn, question and approval rows stay),
+    // so the lanes check only the row itself.
+    const QString rowEligible = QStringLiteral("r.rowid = ? ");
+    const QString eligible = rowEligible + "AND json_type(r.payload, '$.large_event') IS NULL ";
+    QSqlQuery turnGate(database_);
+    turnGate.prepare(QStringLiteral("SELECT 1 FROM replay_events AS r WHERE ") + turnEligible);
+    QHash<QPair<QString, QPair<qint64, qint64>>, bool> turnEligibility;
+    std::optional<QString> gateError;
+    const auto turnIsEligible = [&](const Row& row) {
+        if (row.turn <= 0)
+            return false;
+        const auto key = qMakePair(row.session, qMakePair(row.generation, row.turn));
+        if (const auto known = turnEligibility.constFind(key); known != turnEligibility.cend())
+            return *known;
+        turnGate.bindValue(0, row.rowid);
+        turnGate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
+        if (!turnGate.exec()) {
+            gateError = turnGate.lastError().text();
+            return false;
+        }
+        const bool result = turnGate.next();
+        turnGate.finish();
+        turnEligibility.insert(key, result);
+        return result;
+    };
     QSqlQuery largeCandidate(database_);
     largeCandidate.prepare(
         "SELECT r.payload,p.total_bytes FROM replay_events r JOIN large_event_payloads p ON "
         "p.session_id=r.session_id AND p.generation=r.generation AND p.item_id=r.item_id AND "
         "p.transfer_id=json_extract(r.payload,'$.large_event.transfer_id') WHERE " +
-        turnEligible +
+        rowEligible +
         "AND p.total_bytes>0 AND p.total_bytes<=1048576 AND length(CAST(r.payload AS BLOB))<=16384 "
         // Requiring the whole session to be acknowledged keeps orphan cleanup bounded even
         // when another turn has a huge raw backlog. This lane deliberately defers that session.
@@ -238,7 +271,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "SELECT r.payload,p.total_bytes FROM replay_events r JOIN large_event_payloads p ON "
         "p.session_id=r.session_id AND p.generation=r.generation AND p.item_id=r.item_id AND "
         "p.transfer_id=json_extract(r.payload,'$.large_event.transfer_id') WHERE " +
-        turnEligible +
+        rowEligible +
         "AND p.total_bytes>0 AND p.total_bytes<=? AND length(CAST(r.payload AS BLOB))<=16384 "
         "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id=r.session_id AND "
         "e.generation=r.generation) "
@@ -317,9 +350,19 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     qint64 removed = 0;
     for (; processed < rows.size(); ++processed) {
         const Row& row = rows.at(processed);
+        if (row.type != QStringLiteral("item.started") &&
+            row.type != QStringLiteral("item.completed") &&
+            row.type != QStringLiteral("usage.context") &&
+            row.type != QStringLiteral("usage.limits") &&
+            row.type != QStringLiteral("usage.session"))
+            continue;
+        if (!turnIsEligible(row)) {
+            if (gateError)
+                return fail(*gateError);
+            continue;
+        }
         if (row.type == QStringLiteral("item.started")) {
             startCandidate.bindValue(0, row.rowid);
-            startCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
             if (!startCandidate.exec())
                 return fail(startCandidate.lastError().text());
             if (!startCandidate.next()) {
@@ -349,7 +392,6 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         }
         if (row.type == QStringLiteral("item.completed")) {
             candidate.bindValue(0, row.rowid);
-            candidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
             if (!candidate.exec())
                 return fail(candidate.lastError().text());
             QByteArray bytes;
@@ -363,7 +405,6 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                     return fail(candidate.lastError().text());
                 candidate.finish();
                 largeCandidate.bindValue(0, row.rowid);
-                largeCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
                 if (!largeCandidate.exec())
                     return fail(largeCandidate.lastError().text());
                 QSqlQuery* lane = &largeCandidate;
@@ -372,8 +413,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                         return fail(largeCandidate.lastError().text());
                     largeCandidate.finish();
                     imageCandidate.bindValue(0, row.rowid);
-                    imageCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
-                    imageCandidate.bindValue(2, maximumImagePayloadBytes);
+                    imageCandidate.bindValue(1, maximumImagePayloadBytes);
                     if (!imageCandidate.exec())
                         return fail(imageCandidate.lastError().text());
                     if (!imageCandidate.next()) {
@@ -392,6 +432,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 if (image) {
                     const auto manifest = QJsonDocument::fromJson(manifestBytes).object();
                     const bool tool = manifest.value("item_type") != "imageGeneration";
+                    if (!tool && generatedImages_ == JournalStorageOptions::GeneratedImages::Full)
+                        continue; // "Keep full image": do not even read the pixels
                     // A tool payload may be probed and then read: both must fit. The first
                     // candidate always fits, so every pass makes progress.
                     if (imageRead ||
@@ -445,6 +487,13 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             }
             auto payload = QJsonDocument::fromJson(bytes).object();
             const auto original = payload.value(QStringLiteral("item")).toObject();
+            // "Keep full image" leaves generated pictures alone; tool results are unaffected.
+            if (generatedImages_ == JournalStorageOptions::GeneratedImages::Full &&
+                original.value(QStringLiteral("type")) == QStringLiteral("imageGeneration"))
+                continue;
+            const bool previews =
+                imagePreview_ &&
+                generatedImages_ != JournalStorageOptions::GeneratedImages::Caption;
             // A preview decodes the whole picture, so its cost does not follow the stored size.
             // Once one item has decoded, a later item that wants a preview waits for the next
             // pass; an item's own images (at most four) are decoded together.
@@ -452,7 +501,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             bool deferred = false;
             const auto item = compactCompletedReplayItem(
                 original, olderThan,
-                imagePreview_ ? ImagePreview([&, session = row.session](const QByteArray& image) {
+                previews ? ImagePreview([&, session = row.session](const QByteArray& image) {
                     if (previewDecoded && !decodedHere) {
                         deferred = true;
                         return QJsonObject();
@@ -460,7 +509,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                     decodedHere = true;
                     return imagePreview_(image, session);
                 })
-                              : ImagePreview());
+                         : ImagePreview());
             if (deferred)
                 break; // the next pass takes it
             previewDecoded = previewDecoded || decodedHere;
@@ -491,7 +540,6 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             row.type != QStringLiteral("usage.session"))
             continue;
         remove.bindValue(0, row.rowid);
-        remove.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
         if (!remove.exec())
             return fail(remove.lastError().text());
         if (remove.numRowsAffected() > 0) {

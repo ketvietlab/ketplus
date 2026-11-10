@@ -54,6 +54,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void readRowTitleOpensTheFileAtItsLine();
     void retainedCommandNoticeRemainsVisible();
     void retainedFileDiffNoticeRemainsVisible();
+    void compactedItemsSayWhatWasTrimmed();
     void retainedToolTextNoticeRemainsVisible_data();
     void retainedToolTextNoticeRemainsVisible();
     void transcriptRendererInteractionMatrix();

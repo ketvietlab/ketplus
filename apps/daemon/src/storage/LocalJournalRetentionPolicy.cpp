@@ -77,7 +77,8 @@ bool LocalJournal::setRetentionPolicy(const JournalRetentionPolicy& policy,
     detailRetentionScanRow_ = 0; // new settings apply to a fresh bounded sweep
     return true;
 }
-std::optional<qint64> LocalJournal::pruneConfiguredReplayDetails(const QDateTime& now) {
+std::optional<qint64> LocalJournal::pruneConfiguredReplayDetails(const QDateTime& now,
+                                                                 const int maximumRows) {
     if (!now.isValid()) {
         setError("Invalid detail-retention time.");
         return std::nullopt;
@@ -90,8 +91,13 @@ std::optional<qint64> LocalJournal::pruneConfiguredReplayDetails(const QDateTime
         // Forever/off remain a preservation promise even above the size target.
         sizePressureRecent_ = false;
         sizePressureActive_ = false;
+        ++completedDetailSweeps_; // nothing to sweep
         return 0;
     }
+    // Unreadable options must not cost pixels: keep generated images whole until repaired.
+    const auto options = storageOptions();
+    generatedImages_ =
+        options ? options->generatedImages : JournalStorageOptions::GeneratedImages::Full;
     const auto size = sizePolicy();
     const auto usage = space();
     if (!size || !usage)
@@ -107,9 +113,20 @@ std::optional<qint64> LocalJournal::pruneConfiguredReplayDetails(const QDateTime
     // while already-free pages can still bring the database closer to its target.
     if (pressure && usage->freePages >= minimumReclaimPages)
         return 0;
-    const auto changed = pruneReplayDetails(sizePressureRecent_ ? now : *boundary);
+    const auto changed = pruneReplayDetails(sizePressureRecent_ ? now : *boundary, maximumRows);
+    if (changed && detailRetentionScanRow_ == 0)
+        ++completedDetailSweeps_;
     if (changed && pressure && detailRetentionScanRow_ == 0)
         sizePressureRecent_ = !sizePressureRecent_; // complete expired sweep before recent detail
     return changed;
+}
+double LocalJournal::detailSweepProgress() const {
+    if (detailRetentionScanRow_ <= 0)
+        return 0;
+    QSqlQuery query(database_);
+    if (!query.exec("SELECT MAX(rowid) FROM replay_events") || !query.next() ||
+        query.value(0).toLongLong() <= 0)
+        return 0;
+    return qBound(0.0, double(detailRetentionScanRow_) / query.value(0).toDouble(), 1.0);
 }
 } // namespace ketplus::daemon

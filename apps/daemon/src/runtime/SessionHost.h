@@ -2,6 +2,7 @@
 
 #include "agents/AgentBroker.h"
 #include "agents/AgentToolLaunch.h"
+#include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
@@ -63,10 +64,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     // validating their advertised snapshot head in one journal read transaction.
     [[nodiscard]] QJsonObject restoreTranscriptWindow(const QJsonObject& request) const;
     [[nodiscard]] bool hasActiveSessions() const;
-    // Archived conversations keep their history this long, then are deleted (#128).
-    static constexpr int archivedHistoryDays = 30;
-    // Deletes at most one conversation archived before now minus archivedHistoryDays, through
-    // the same guards as session.delete. Returns whether one was deleted.
+    // Deletes at most one conversation archived longer than the Storage option
+    // `archived_history_days` (ADR 0108; Never keeps them), through the same guards as
+    // session.delete. Returns whether one was deleted.
     bool expireArchivedSessions(const QDateTime& now);
     [[nodiscard]] QJsonObject configuration(const QJsonObject& request,
                                             const QJsonArray& providerModels) const;
@@ -171,6 +171,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject storageSize(const QString& type, const QJsonObject& payload);
+    [[nodiscard]] QJsonObject storageOptions(const QString& type, const QJsonObject& payload);
+    // Warning, over-limit and low-disk state for the sidebar and remote clients (ADR 0108).
+    [[nodiscard]] QJsonObject storageStatus() const;
+    static constexpr qint64 lowDiskBytes = 5'000'000'000LL;
+    JournalStorageJobs& storageJobs();
+    std::unique_ptr<JournalStorageJobs> storageJobs_;
     QJsonObject workspaceCatalog(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject eventsAfter(const QJsonObject& request) const;
     [[nodiscard]] QJsonObject transcriptPage(const QJsonObject& request) const;

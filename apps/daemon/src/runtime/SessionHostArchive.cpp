@@ -56,7 +56,11 @@ QJsonObject SessionHost::setSessionArchived(const QJsonObject& request) {
 bool SessionHost::expireArchivedSessions(const QDateTime& now) {
     if (!now.isValid())
         return false;
-    const QDateTime cutoff = now.toUTC().addDays(-archivedHistoryDays);
+    // Unreadable options keep everything: expiry deletes history and cannot be undone.
+    const auto options = journal_->storageOptions();
+    if (!options || options->archivedHistoryDays <= 0)
+        return false;
+    const QDateTime cutoff = now.toUTC().addDays(-options->archivedHistoryDays);
     QList<std::pair<QDateTime, std::pair<QString, qint64>>> expired;
     for (const Session& session : std::as_const(sessions_)) {
         if (session.stored.archivedAt.isEmpty())

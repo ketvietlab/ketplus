@@ -104,6 +104,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
     src/runtime/SessionHostDeltas.cpp
@@ -143,6 +144,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/ReplayDetailCompactor.cpp
     src/storage/JournalSizePolicy.cpp
     src/storage/LocalJournalSizePolicy.cpp
+    src/storage/JournalStorageOptions.cpp
+    src/storage/LocalJournalStorageOptions.cpp
+    src/storage/JournalStorageReader.cpp
     src/storage/JournalRetentionPolicy.cpp
     src/storage/JournalRetentionPolicy.h
     src/storage/LocalJournalRetentionPolicy.cpp

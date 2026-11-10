@@ -948,16 +948,30 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             agents->appServer()->call(QStringLiteral("provider/claudeCredentials/") + operation,
                                       payload, std::move(reply));
         },
-        [agents](const QString& operation, const QJsonObject& payload,
-                 SettingsStoragePage::Reply reply) {
+        [agents, sidebar = QPointer<ActivityBar>(activityBar_)](const QString& operation,
+                                                                const QJsonObject& payload,
+                                                                SettingsStoragePage::Reply reply) {
             if (!agents || !agents->appServer()) {
                 reply({}, SettingsStoragePage::tr("Agents are not available."));
                 return;
             }
-            agents->appServer()->call(operation.startsWith("size.")
-                                          ? QStringLiteral("daemon/storageSize/") + operation.mid(5)
-                                          : QStringLiteral("daemon/storageRetention/") + operation,
-                                      payload, std::move(reply));
+            // The sidebar banner follows what the Storage page reads, so it clears as soon as
+            // a compaction or a new limit brings the journal back under it.
+            if (operation.startsWith(QStringLiteral("size.")))
+                reply = [sidebar, reply = std::move(reply)](const QJsonObject& result,
+                                                            const QString& error) {
+                    if (sidebar && error.isEmpty() && result.value("ok").toBool())
+                        sidebar->setStorageStatus(result.toVariantMap());
+                    reply(result, error);
+                };
+            // "read" is the detail policy; "size.read", "compaction.start" and the like are
+            // the other storage areas (ADR 0108).
+            const QString area = operation.contains('.') ? operation.section('.', 0, 0)
+                                                         : QStringLiteral("retention");
+            agents->appServer()->call(
+                QStringLiteral("daemon/storage%1%2/%3")
+                    .arg(area.left(1).toUpper(), area.mid(1), operation.section('.', -1)),
+                payload, std::move(reply));
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);

@@ -91,8 +91,10 @@ core target. The local slice includes:
   `last_seen_cursor` so Desktop can restore unread completed conversations);
 - archiving through `session.set_archived` (`archived_at` in the journal and in
   `session.list`, feature `session.archive/1`). The idle pass deletes one
-  conversation archived for more than 30 days per pass, through `session.delete`
-  and its guards ([ADR 0100](decisions/0100-archived-conversation-retention.md));
+  conversation archived for longer than the Storage option (30 days, 90 by default,
+  1 year or Never) per pass, through `session.delete` and its guards
+  ([ADR 0100](decisions/0100-archived-conversation-retention.md),
+  [ADR 0108](decisions/0108-storage-page-controls.md));
 - conversation tags through `session.tags.set` (`tags` in the journal and in
   `session.list`, feature `session.tags/1`): at most 8 labels of up to 64 bytes,
   one per case-insensitive name
@@ -215,8 +217,22 @@ structured tool results also support sanitized display-only excerpts sharing the
 text allowance; error/resource-bearing results stay intact
 ([ADR 0044](decisions/0044-structured-result-retention.md)). The full-detail period is configurable locally (7/30/90 days or Forever),
 with a separate automatic-detail-retention switch and revisioned saves; see
-[ADR 0042](decisions/0042-detail-retention-policy.md). Size pressure, archive/media
-policies, complete Storage UI and remaining compaction are still tracked in #128.
+[ADR 0042](decisions/0042-detail-retention-policy.md).
+
+The 5 GB size target applies by default: over it, the idle pass finishes the expired sweep,
+then trims eligible recent detail, with the same guards (ADR 0046 as changed by
+[ADR 0108](decisions/0108-storage-page-controls.md)). The Storage options choose how long
+archived conversations are kept and what older generated images keep (the full image, a
+512 px preview or the caption), and whether the near-limit warning shows. `storage.size.read`,
+`storage.options.read` and `session.list` (`journal_storage`) report the warning, over-limit
+and low-disk (under 5 GB free) state. **Compact now** (`storage.compaction.start`/`read`)
+runs the idle pass back to back while no session is active, until a whole sweep after the
+last change finds nothing to trim or return, and records the run. `storage.breakdown.read`
+measures the parts (conversation history, generated images, activity index, free pages) and
+the five largest conversations on a worker thread through a read-only connection, and
+`storage.export.start`/`read` writes one owner-only JSON file per conversation into a
+folder the user chose. Desktop's transcript labels compacted commands and images with what
+went ("Output trimmed · 1.2 MB · older than 30 days").
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the
 next pass, and wraps at the end (restart begins a fresh scan). Deletion and the
@@ -429,8 +445,8 @@ After that, once a minute while no session is active, up to 4,096 free pages
 then copies the smaller size into the file. It never waits for a reader: if a
 reader holds frames back, the next run finishes it. Emptying the log runs
 without the busy timeout. It is skipped while someone still reads the log: the
-file has already shrunk, and the next write reuses the log. Compacting old detail,
-the size limit and the storage warning are still to come (the rest of #128).
+file has already shrunk, and the next write reuses the log. Compact now uses the same
+reclaim with batches of 32,768 pages (128 MB) (ADR 0108).
 
 Before an event enters the cloud encryption and retry path, the daemon projects
 command lifecycle payloads to the full command text plus identity, status and

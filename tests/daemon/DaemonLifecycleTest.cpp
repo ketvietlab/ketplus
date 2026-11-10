@@ -451,6 +451,12 @@ class DaemonLifecycleTest final : public QObject {
                    (!archivedAt.isValid() ||
                     journal.setSessionArchived(id, 1, archivedAt.toString(Qt::ISODateWithMs)));
         };
+        // The default keeps archived history for 90 days; this test uses the 30-day option.
+        QCOMPARE(JournalStorageOptions{}.archivedHistoryDays, 90);
+        JournalStorageOptions thirtyDays;
+        thirtyDays.archivedHistoryDays = 30;
+        QVERIFY(journal.setStorageOptions(thirtyDays, 0));
+        QVERIFY(!journal.setStorageOptions(thirtyDays, 0)); // stale revision
         QVERIFY(add(QStringLiteral("older"), now.addDays(-45)));
         QVERIFY(add(QStringLiteral("old"), now.addDays(-31)));
         QVERIFY(add(QStringLiteral("recent"), now.addDays(-29)));
@@ -477,6 +483,13 @@ class DaemonLifecycleTest final : public QObject {
         QVERIFY(!host.expireArchivedSessions(now.addDays(400)));
         QCOMPARE(ids(), QStringList{QStringLiteral("visible")});
         QVERIFY(!host.expireArchivedSessions(QDateTime()));
+        // Never keeps an archived conversation however old it is.
+        QVERIFY(add(QStringLiteral("kept"), now.addDays(-400)));
+        JournalStorageOptions never = thirtyDays;
+        never.archivedHistoryDays = 0;
+        QVERIFY(journal.setStorageOptions(never, 1));
+        QVERIFY(!host.expireArchivedSessions(now));
+        QCOMPARE(ids(), (QStringList{QStringLiteral("kept"), QStringLiteral("visible")}));
     }
 
     void busyArchivedConversationWaitsWithoutBlockingOthers() {
@@ -485,7 +498,7 @@ class DaemonLifecycleTest final : public QObject {
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         const QDateTime now = QDateTime::currentDateTimeUtc();
         for (const auto& [id, age] :
-             {std::pair{QStringLiteral("busy"), 60}, std::pair{QStringLiteral("idle"), 40}}) {
+             {std::pair{QStringLiteral("busy"), 160}, std::pair{QStringLiteral("idle"), 140}}) {
             StoredSession session;
             session.id = id;
             session.worktreePath = directory.path();

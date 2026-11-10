@@ -112,6 +112,15 @@ bool LocalJournal::initialize() {
             "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
             "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
             "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS journal_storage_options ("
+            "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+            "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
+            "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_compaction_state ("
+                       "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                       "completed_at TEXT NOT NULL, before_bytes INTEGER NOT NULL, "
+                       "after_bytes INTEGER NOT NULL)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS journal_attachment_gc ("
                        "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
                        "manifest_row INTEGER NOT NULL DEFAULT 0 CHECK(manifest_row>=0), "

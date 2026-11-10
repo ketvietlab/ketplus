@@ -10,6 +10,8 @@ namespace ketplus::settings_rows {
 // at the mock's 200 px.
 [[nodiscard]] QWidget* field(const QString& title, const QString& help, QWidget* control,
                              QWidget* parent);
+// The mock's status line: a 180 px label column, then the value (which the row adopts).
+[[nodiscard]] QWidget* info(const QString& title, QWidget* value, QWidget* parent);
 // The hairline between a page's sections.
 [[nodiscard]] QFrame* divider(QWidget* parent);
 

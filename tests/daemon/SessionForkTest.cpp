@@ -141,7 +141,7 @@ class SessionForkTest final : public QObject {
         QVERIFY(journal.upsertSession(source));
         const auto now = QDateTime::currentDateTimeUtc();
         QVERIFY(
-            journal.setSessionArchived("source", 1, now.addDays(-40).toString(Qt::ISODateWithMs)));
+            journal.setSessionArchived("source", 1, now.addDays(-100).toString(Qt::ISODateWithMs)));
         CodexAdapter adapter(executable);
         SessionHost host(&journal, &adapter);
         const auto result = fork(host, "fork-archived", "source", {{"fork_session_id", "target"}});
