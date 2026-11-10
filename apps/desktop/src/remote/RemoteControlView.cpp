@@ -1070,6 +1070,7 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
                                   : QStringLiteral("KétPlus Pro"));
         accountAvatar_->setName(name);
         accountAvatar_->setVisible(!name.isEmpty());
+        emit accountChanged(configured_ ? name : QString());
     }
     const QString lastError = status.value(QStringLiteral("last_error")).toString();
     offline_ = configured_ && !lastError.isEmpty();

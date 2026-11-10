@@ -998,7 +998,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     });
     // Account & devices reads the remote.status Connections reads, through its own client;
     // signing out happens in Connections, which asks first.
-    auto* accountDaemon = new remote::DaemonClient(settingsWorkspace_);
+    auto* accountDaemon = this->accountDaemon(); // shared with the sidebar identity
     settingsWorkspace_->setAccountStatusReader(
         [accountDaemon](std::function<void(const QJsonObject&)> reply) {
             if (!accountDaemon->isReady())
