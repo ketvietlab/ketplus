@@ -12,7 +12,8 @@ Rectangle {
     required property var window
     required property var conversation
     property bool detailsOpen: false
-    readonly property int status: conversation.status
+    property var planRun: null
+    property int status: conversation.status
 
     // The agent that reviews each finished turn and replies here, by conversation number.
     // A reviewer never merges. The running conversation starts with one, for the mock.
@@ -65,10 +66,20 @@ Rectangle {
 
     // The header gives way from the right as the conversation narrows (the details pane takes
     // half the workspace): tags first, then the Reviewer label, then the title elides to its
-    // minimum, then the worktree keeps only its icon, then the number (the sidebar shows it).
+    // minimum, then the worktree keeps only its icon, then the number (the sidebar shows it),
+    // then Compact window and New conversation (the sidebar and the menus have both). With the
+    // pane open, its Open content menu replaces the Changes, Terminal and Report openers.
     readonly property real gap: px(8)
     readonly property real room: width - px(16) - actions.width - px(10) - px(24)
     readonly property real minimumTitle: px(80)
+    // Measured from the buttons, not the row, so hiding the global pair cannot feed back.
+    readonly property int iconActions: 2 + (window.compact ? 0 : 1) + (detailsOpen ? 0 : 3)
+    readonly property real fullActionsWidth: iconActions * compactButton.implicitWidth
+        + (planButton.visible ? planButton.implicitWidth + actions.spacing : 0)
+        + (iconActions - 1) * actions.spacing
+    readonly property bool globalActions: window.compact
+        || width - px(16) - fullActionsWidth - px(10) - px(24) >= statusBadge.implicitWidth
+           + compactWorktreeProbe.implicitWidth + minimumTitle + compactReviewerProbe.implicitWidth + 3 * gap
     readonly property bool fullWorktree: numberLabel.implicitWidth + statusBadge.implicitWidth
                                          + worktreeProbe.implicitWidth + minimumTitle
                                          + compactReviewerProbe.implicitWidth + 4 * gap <= room
@@ -227,11 +238,15 @@ Rectangle {
         spacing: header.px(2)
 
         KetIconButton {
+            id: compactButton
+            visible: header.globalActions
             iconName: header.window.compact ? "fullscreen" : "panel-left"
             text: header.window.compact ? "Leave compact window" : "Compact window"
             onClicked: header.window.setCompact(!header.window.compact)
         }
         KetIconButton {
+            id: newButton
+            visible: header.globalActions
             iconName: "compose"
             text: "New conversation"
             onClicked: header.window.showScreen("workspace/welcome")
@@ -244,7 +259,12 @@ Rectangle {
             checked: header.detailsOpen
             onClicked: header.toggleDetails("atlas")
         }
-        // With the pane open its own tab row switches tabs, so the header keeps only the toggle.
+        PlanProgressButton {
+            id: planButton
+            visible: !!header.conversation.hasPlan
+            run: header.planRun
+            onClicked: header.toggleDetails("plan")
+        }
         KetIconButton {
             visible: !header.detailsOpen
             iconName: "compare"
@@ -259,7 +279,7 @@ Rectangle {
         }
         KetIconButton {
             visible: !header.detailsOpen
-            iconName: "check-all"
+            iconName: "view-list"
             text: "Report"
             onClicked: header.toggleDetails("report")
         }

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
-//   --open=model|mode|limits|reviewer|composer|images|mermaid   a composer panel, the image viewer or diagrams
-//   --scroll=0.5                                   scroll the transcript or the Connections intro (0 top, 1 end)
+//   --open=model|mode|limits|reviewer|composer|images|mermaid   a composer panel, the image viewer
+//   or diagrams; plan presses the Plan ring, atlas-toggle presses Atlas twice
+//   --scroll=0.5                                   scroll the transcript or the Connections intro
+//   (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 //   --edition=lite --chrome=windows|linux       KétPlus instead of Pro, with that platform's chrome
@@ -12,10 +14,10 @@
 #include "KetProfile.h"
 #include "MockController.h"
 
+#include <QApplication>
 #include <QCommandLineParser>
 #include <QDirIterator>
 #include <QFontDatabase>
-#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QScreen>
@@ -53,9 +55,11 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption state(QStringLiteral("state"),
                                    QStringLiteral("Screen state, e.g. running or welcome."),
                                    QStringLiteral("state"));
-    const QCommandLineOption open(QStringLiteral("open"),
-                                  QStringLiteral("Open a panel: model, mode, limits, reviewer, or activity, device and device-focus on connections."),
-                                  QStringLiteral("panel"));
+    const QCommandLineOption open(
+        QStringLiteral("open"),
+        QStringLiteral("Open a panel: model, mode, limits, reviewer, or activity, device and "
+                       "device-focus on connections."),
+        QStringLiteral("panel"));
     const QCommandLineOption dark(QStringLiteral("dark"), QStringLiteral("Start in dark mode."));
     const QCommandLineOption light(QStringLiteral("light"), QStringLiteral("Start in light mode."));
     const QCommandLineOption zoom(QStringLiteral("zoom"), QStringLiteral("Interface zoom."),
@@ -137,6 +141,16 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    // Fail reproducible captures if a child initialization resets the requested plan state.
+    if (controller.edition != QLatin1String("lite") &&
+        controller.initialScreen == QLatin1String("workspace") &&
+        controller.initialState.startsWith(QLatin1String("plan-"))) {
+        const QString expected = controller.initialState.mid(5);
+        if (window->property("planningState").toString() != expected) {
+            std::fprintf(stderr, "Planning startup state does not match --state\n");
+            return 1;
+        }
+    }
     if (parser.isSet(display)) {
         const QList<QScreen*> screens = QGuiApplication::screens();
         QScreen* target = nullptr;
@@ -185,7 +199,8 @@ int main(int argc, char* argv[]) {
                 QTest::keyClick(window, Qt::Key_F10);
                 for (int i = 0; i < 4; ++i)
                     QTest::keyClick(window, Qt::Key_Right);
-                for (const Qt::Key key : {Qt::Key_Down, Qt::Key_Down, Qt::Key_Down, Qt::Key_Return}) {
+                for (const Qt::Key key :
+                     {Qt::Key_Down, Qt::Key_Down, Qt::Key_Down, Qt::Key_Return}) {
                     QTest::qWait(50);
                     QTest::keyClick(window, key);
                 }
@@ -195,7 +210,8 @@ int main(int argc, char* argv[]) {
                     },
                     1000);
                 if (!opened) {
-                    std::fprintf(stderr, "QML keyboard check: View > Search in Files did not open it\n");
+                    std::fprintf(stderr,
+                                 "QML keyboard check: View > Search in Files did not open it\n");
                     ++qmlProblems;
                 } else {
                     std::fprintf(stderr, "Keyboard check: View > Search in Files opened Search\n");

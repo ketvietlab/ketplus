@@ -283,7 +283,7 @@ Rectangle {
                                 text: modelData.title
                                 number: modelData.number
                                 tags: modelData.tags
-                                status: modelData.status
+                                status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
                                 // The worktree hint waits for a resting pointer, and a press hides it
