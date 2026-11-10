@@ -139,7 +139,8 @@ A concept, not built in the app: several conversations that share one goal. Agen
   required name. A conversation that already exists joins without a dialog, as a developer:
   dragged onto the team's folder, or from its menu's Add to *team*. The role is the
   conversation's first tag, in the sidebar and in its header; the team sets it, so the tag menu
-  lists it locked and cannot remove it. A team folder shows Add member and its menu (Open team,
+  lists it locked and cannot remove it. A member's header has no Reviewer choice: its
+  team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to a team… or Remove from *team*…. The page repeats them: Add member, a member's Remove
   from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the

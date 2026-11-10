@@ -95,10 +95,12 @@ Rectangle {
     readonly property real fixedWidth: (numberLabel.visible ? numberLabel.implicitWidth + gap : 0)
                                        + statusBadge.implicitWidth
                                        + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + gap
+    // A team's member is reviewed by its team's reviewer, so it has no Reviewer choice.
+    readonly property real reviewerRoom: membership ? 0 : reviewerProbe.implicitWidth
     readonly property bool fullReviewer: fixedWidth + titleButton.implicitWidth + gap
-                                         + reviewerProbe.implicitWidth <= room
+                                         + reviewerRoom <= room
     readonly property bool showTags: fullReviewer && fixedWidth + titleButton.implicitWidth + gap
-                                     + reviewerProbe.implicitWidth + tagsProbe.implicitWidth <= room
+                                     + reviewerRoom + tagsProbe.implicitWidth <= room
 
     // Off-screen measures of the full Reviewer button and the tag group.
     Row {
@@ -198,7 +200,7 @@ Rectangle {
 
         KetButton {
             id: reviewerButton
-            visible: !header.window.compact
+            visible: !header.window.compact && !header.membership
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             variant: header.reviewer ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
