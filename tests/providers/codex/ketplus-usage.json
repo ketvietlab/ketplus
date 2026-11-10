@@ -43,6 +43,10 @@
         "account/rateLimits/read": {
             "params": []
         },
+        "account/read": {
+            "params": ["refreshToken"],
+            "response": ["account", "account.email", "account.type", "requiresOpenaiAuth"]
+        },
         "mcpServer/tool/call": {
             "params": ["arguments", "server", "threadId", "tool"],
             "response": ["isError"]
