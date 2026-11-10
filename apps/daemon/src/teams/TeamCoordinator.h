@@ -96,6 +96,13 @@ class TeamHostPort {
         (void)task;
         return std::nullopt;
     }
+    // Paths changed in the task's worktree against its base, committed or not (ADR 0112 §4).
+    [[nodiscard]] virtual std::optional<QStringList> changedPaths(const Team& team,
+                                                                  const Task& task) const {
+        (void)team;
+        (void)task;
+        return std::nullopt;
+    }
     virtual QString postTeamMessage(const TeamMessage& message) {
         (void)message;
         return {};
@@ -234,6 +241,14 @@ class TeamCoordinator : public QObject {
     virtual void wake(const Team& team, const TeamMessage& message);
     // Sends the messages held while paused, in order, once the team runs again.
     void releaseHeld(qint64 teamId);
+    // ADR 0112 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
+    // open tasks changed with its lane and the shared paths.
+    void checkLanes(qint64 teamId, const QString& developer);
+    // After a lane or the shared paths changed: clears the flagged paths they now cover.
+    void recheckLanes(Team& team, QList<Update>& updates);
+    // Sets a task's outside paths and records the change; false when nothing changed.
+    bool flagOutside(Team& team, Task& task, const QStringList& outside, const QString& why,
+                     QList<Update>& updates);
     // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp).
     void pumpReviews(qint64 teamId);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,

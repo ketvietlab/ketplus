@@ -160,8 +160,11 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId) {
     if (!team)
         return;
     const Member* member = team->member(sessionId);
-    if (member && member->role == role::leader)
-        sendDigest(team->id);
+    const qint64 teamId = team->id;
+    if (member && member->role == role::developer)
+        checkLanes(teamId, sessionId);
+    else if (member && member->role == role::leader)
+        sendDigest(teamId);
 }
 
 } // namespace ketplus::daemon::teams

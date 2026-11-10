@@ -41,6 +41,11 @@ class FakeHost final : public TeamHostPort {
         return TaskDiff{.diff = QStringLiteral("+++ b/web/%1.txt\n+change of %1").arg(task.id),
                         .files = {QStringLiteral("web/%1.txt").arg(task.id)}};
     }
+    std::optional<QStringList> changedPaths(const Team& team, const Task& task) const override {
+        (void)team;
+        const auto it = changed.constFind(task.id);
+        return it == changed.cend() ? std::nullopt : std::optional(it.value());
+    }
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
         return {};
@@ -72,6 +77,7 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, QString> heads;
     QSet<QString> dirty;
     QSet<QString> unreadable;
+    QHash<QString, QStringList> changed;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
 };

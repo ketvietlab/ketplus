@@ -48,6 +48,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go
   back to the owner with round + 1, and past `max_rounds` the task is Blocked.
+  Lanes (#461): after a developer's turn the daemon compares the files its open tasks
+  changed (committed or not) with its prefixes and the shared paths; outside paths are
+  flagged on the task, actionable in the digest, and cleared when reverted or covered
+  by a lane change.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
