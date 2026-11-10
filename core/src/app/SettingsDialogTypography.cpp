@@ -267,7 +267,7 @@ QWidget* SettingsDialog::createTypographyCard() {
             updateDirtyState();
         });
     }
-    connect(editorFontBox_, &QComboBox::currentTextChanged, this, [this] {
+    connect(editorFontBox_, &QComboBox::currentIndexChanged, this, [this] {
         editorFontFamily_ = settings_fonts::selectedFamily(editorFontBox_);
         updatePreview();
         updateDirtyState();

@@ -191,6 +191,20 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QVERIFY(code);
         QCOMPARE(code->font().family(), QStringLiteral("KET Sans Mono"));
         QCOMPARE(QFontInfo(code->font()).family(), QStringLiteral("KET Sans Mono"));
+        // The mock's rows: a 200 px select at the end, and the font named in the help line.
+        page.resize(1440, 900);
+        page.showSection("typography");
+        auto* interfaceFont = page.findChild<QComboBox*>("settingsInterfaceFont");
+        QVERIFY(interfaceFont);
+        QCOMPARE(interfaceFont->width(), family->width());
+        QVERIFY(interfaceFont->width() < 260);
+        QTRY_VERIFY(interfaceFont->mapTo(&page, QPoint(interfaceFont->width(), 0)).x() >
+                    page.width() / 2 + 300);
+        bool help = false;
+        for (auto* label : page.findChildren<QLabel*>())
+            help = help || label->text() ==
+                               QString::fromUtf8("KetPlus uses KÉT Sans throughout the interface.");
+        QVERIFY(help);
     }
     // Every section opens a page; with KETPLUS_SETTINGS_CAPTURE_DIR set, each is saved for the
     // side-by-side with the mock's settings/<state> captures.
