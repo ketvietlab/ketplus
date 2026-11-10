@@ -13,9 +13,11 @@ Basic.ApplicationWindow {
 
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
+        "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
+        "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
-        "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
+        "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
@@ -27,6 +29,8 @@ Basic.ApplicationWindow {
         "workspace/setup-key-rejected", "workspace/setup-limit", "workspace/setup-capacity",
         "workspace/setup-plan-blocked", "settings/providers-setup"
     ]
+    readonly property string planningState: workspace.planState
+    function planStatus(number, fallback) { return workspace.planStatus(number, fallback) }
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
     property bool editorTerminal: false
@@ -164,6 +168,20 @@ Basic.ApplicationWindow {
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
+        if (name === "workspace" && ["content-tabs", "content-terminal", "content-file"].includes(state)) {
+            setCompact(false)
+            const repo = Fixtures.repositories[0]
+            openConversation(repo.name, repo.conversations.find(c => c.number === "4821"))
+            workspace.openContentDemo(state.slice(8))
+            return
+        }
+        if (name === "workspace" && state.startsWith("plan-")) {
+            setCompact(false)
+            const repo = Fixtures.repositories[0]
+            openConversation(repo.name, repo.conversations.find(c => c.number === "4821"))
+            workspace.openPlan(state.slice(5))
+            return
+        }
         if (name === "workspace" && state.startsWith("setup-")) {
             setCompact(false)
             workspace.detailsOpen = false
@@ -197,6 +215,7 @@ Basic.ApplicationWindow {
                 }
             }
             workspace.detailsOpen = state === "details"
+            if (state === "details") workspace.openContent("changes")
         }
         if (name === "settings")
             settingsTab = state || "appearance"

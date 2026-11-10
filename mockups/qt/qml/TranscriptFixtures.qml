@@ -45,6 +45,29 @@ QtObject {
         + "+        && Qt.application.state === Qt.ApplicationActive\n"
         + "     visible: animating\n"
 
+    // Marketing sample: an honest end-of-turn report, not a claim about a real release.
+    readonly property var turnReport: [
+        { type: "user", text: "Get the release ready. Tell me what is verified, what is blocked, and who owns the next step." },
+        { type: "activity", summary: "Reviewed changes · ran tests · checked release readiness", expanded: false, steps: [
+            { kind: "read", title: "Reviewed", detail: "Release checklist and pull request changes" },
+            { kind: "command", title: "Ran regression tests", detail: "48 passed · 0 failed", duration: "12.4 s",
+              command: "npm test", output: "Tests: 48 passed, 48 total" },
+            { kind: "read", title: "Checked signing access", detail: "Release key unavailable on the build runner" }
+        ] },
+        { type: "answer", markdown: "**The fix is verified. The release is waiting on signing access.**\n\n"
+            + "The code review and regression tests are complete. The package is built, but signing and device checks are still open.\n\n"
+            + "| Task | Status | Evidence / remaining work | Next step & owner |\n"
+            + "| --- | --- | --- | --- |\n"
+            + "| Code review | 🟢 Complete | Changes reviewed; no open findings. | None. |\n"
+            + "| Regression tests | 🟢 Verified | 48 tests passed; 0 failed. | None. |\n"
+            + "| Release package | 🟢 Built | Package generated; not signed yet. | Agent: sign after access is restored. |\n"
+            + "| Release signing | 🔴 Blocked | Build runner cannot access the release key. | Release owner: grant signing access. |\n"
+            + "| Device checks | 🟡 Waiting | Signed build required; not tested on device. | Agent: install and verify after signing. |\n\n"
+            + "**Next:** the release owner restores signing access. Then I sign the package and run device checks."
+        },
+        { type: "turn", status: "completed", text: "Turn complete · Release checks still open" }
+    ]
+
     readonly property var claude: [
         { type: "day", text: "Thursday, 24 September" },
         { type: "user", text: "Profile why the sidebar keeps the CPU busy when nothing happens." },
