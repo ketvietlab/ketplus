@@ -406,6 +406,28 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     view.setExecutionBranch("fix/short");
     QTRY_VERIFY(label->property("text").toString().endsWith("fix/short"));
     QTRY_VERIFY(label->width() > 40);
+    // Narrower still, as the mock: the worktree keeps its icon, then the number leaves.
+    QTRY_VERIFY(qAbs(chip->width() - chip->implicitWidth()) < 1); // settled on the short branch
+    const qreal fullChip = chip->width();
+    QVERIFY(number->isVisible());
+    int iconOnlyAt = 0;
+    int numberGoneAt = 0;
+    for (int width = 900; width >= 420; width -= 10) {
+        view.resize(width, 700);
+        QTest::qWait(20);
+        if (iconOnlyAt == 0 && !label->isVisible())
+            iconOnlyAt = width;
+        if (numberGoneAt == 0 && !number->isVisible())
+            numberGoneAt = width;
+    }
+    QVERIFY2(iconOnlyAt > 0, "the worktree never gave up its label");
+    QVERIFY2(numberGoneAt > 0, "the number never left");
+    QVERIFY2(iconOnlyAt > numberGoneAt, "the worktree gives way before the number");
+    QVERIFY(chip->isVisible());
+    QVERIFY(chip->width() < fullChip && chip->width() >= 30);
+    view.resize(1200, 700);
+    QTRY_VERIFY(label->isVisible() && number->isVisible());
+    QTRY_COMPARE(chip->width(), fullChip);
     const auto capture = qEnvironmentVariable("KETPLUS_HEADER_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(100);
