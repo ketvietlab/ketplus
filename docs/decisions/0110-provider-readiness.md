@@ -94,6 +94,19 @@ than the work:
   message. "MCP server github: authentication required" is about the work, not
   the account.
 
+### The setup guide in the desktop app
+
+- `provider_setup::guide` (modules/ai) turns a runtime_status entry, or a coded
+  `runtime.error` with its model, into the mock's guide: id, badge, tone, the
+  provider's own words, numbered steps with the daemon's commands, and the
+  primary action. Settings, the composer and the transcript share it.
+- Settings → Providers shows the guide's badge and rows, then the guide card, for
+  each provider that cannot start a turn. A capacity or plan error concerns one
+  model and stays in the conversation.
+- A command is copied, or typed into a terminal without Return. KetPlus never
+  runs it. The card's Check again sends `recheck: true`; when the same guide comes
+  back, it shows the guide's `still` text.
+
 ## Consequences
 
 - Settings, the composer and the transcript can show the setup guide before a

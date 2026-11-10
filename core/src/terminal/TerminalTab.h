@@ -26,6 +26,9 @@ class TerminalTab final : public QWidget {
     [[nodiscard]] bool isRunning() const { return session_.isRunning(); }
     bool restart();
     void stop();
+    // Types `text` at the prompt as a paste, without Return, so the user decides to run it. Text
+    // typed before the shell starts waits for it.
+    void typeText(const QString& text);
     void applyTheme(const ThemePalette& palette);
     void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
 
@@ -41,6 +44,7 @@ class TerminalTab final : public QWidget {
     TerminalView* terminal_{nullptr};
     QString workingDirectory_;
     QString pendingCommandPath_;
+    QString pendingTypedText_;
     QString title_;
     bool started_{false};
 };

@@ -102,6 +102,8 @@ add_library(ketplus_ai STATIC
     src/agent/CodexRateLimits.h
     src/agent/ProviderRuntimeStatus.cpp
     src/agent/ProviderRuntimeStatus.h
+    src/agent/ProviderSetupGuide.cpp
+    src/agent/ProviderSetupGuide.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp

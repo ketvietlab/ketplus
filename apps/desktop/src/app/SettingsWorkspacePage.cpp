@@ -67,8 +67,13 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
     addSection(tr("Computer use"), QStringLiteral("computer"),
                new SettingsComputerPage({}, {}, this));
-    addSection(tr("Providers"), QStringLiteral("providers"),
-               new SettingsProvidersPage(std::move(providers), this, std::move(credentials)));
+    auto* providersPage =
+        new SettingsProvidersPage(std::move(providers), this, std::move(credentials));
+    connect(providersPage, &SettingsProvidersPage::typeInTerminalRequested, this,
+            &SettingsWorkspacePage::typeInTerminalRequested);
+    connect(providersPage, &SettingsProvidersPage::sectionRequested, this,
+            [this](const QString& id) { showSection(id); });
+    addSection(tr("Providers"), QStringLiteral("providers"), providersPage);
     // Archived conversations are a page of the dialog (DesktopSettingsPages); it moves here.
     auto* publicNavigation = dialog->findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     auto* publicPages = dialog->findChild<QStackedWidget*>(QStringLiteral("settingsPages"));

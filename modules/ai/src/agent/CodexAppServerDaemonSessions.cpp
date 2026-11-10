@@ -171,7 +171,8 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
             callback({}, QStringLiteral("KetPlus Daemon does not support %1 yet.").arg(method));
             return;
         }
-        daemon_->call(QStringLiteral("provider.runtime_status"), {}, {}, -1, std::move(callback));
+        daemon_->call(QStringLiteral("provider.runtime_status"), params, {}, -1,
+                      std::move(callback));
         return;
     }
     if (method == QStringLiteral("thread/start")) {

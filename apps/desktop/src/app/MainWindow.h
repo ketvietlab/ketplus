@@ -265,6 +265,8 @@ class MainWindow final : public QMainWindow {
     bool showAgentFile(const QString& filePath);
     bool showAgentDiff(const QString& filePath, GitDiffMode mode, const QString& diff);
     void setTerminalVisible(bool visible);
+    // Type in Terminal (#170): opens a terminal with `command` typed for the user to run.
+    void typeInTerminal(const QString& command);
     void focusTerminal();
     void ensureAgentWorkspace();
     void syncAgentWorkspaceContext(bool loadTranscript);
