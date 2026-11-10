@@ -69,14 +69,14 @@ QWidget* SettingsDialog::createThemeCard() {
     followSystem_ = new ket::Checkbox(QStringLiteral("Follow system appearance"), card);
     followSystem_->setObjectName(QStringLiteral("followSystemTheme"));
     followSystem_->setToolTip(
-        QStringLiteral("Use Két Light or Két Dark with the operating system appearance"));
+        QStringLiteral("Use Light or Dark with the operating system appearance"));
     layout->addWidget(followSystem_);
 
     auto* themes = new QHBoxLayout;
     themes->setSpacing(12);
     for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
         const bool light = mode == ThemeManager::Mode::Light;
-        auto* preview = new ket::ThemeCard(light ? tr("Két Light") : tr("Két Dark"),
+        auto* preview = new ket::ThemeCard(light ? tr("Light") : tr("Dark"),
                                            light ? ket::Theme::Light : ket::Theme::Dark, card);
         preview->setObjectName(light ? QStringLiteral("lightThemeCard")
                                      : QStringLiteral("darkThemeCard"));

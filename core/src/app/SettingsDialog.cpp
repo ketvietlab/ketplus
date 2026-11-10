@@ -170,6 +170,9 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     setAppearanceSettings(initialSettings_);
     navigation_->setCurrentRow(0);
     updateThemePreview();
+    // The system can switch appearance while the dialog follows it.
+    if (theme_ != nullptr)
+        connect(theme_, &ThemeManager::themeChanged, this, &SettingsDialog::updateThemePreview);
     updateDirtyState();
 }
 
@@ -366,12 +369,17 @@ void SettingsDialog::updateThemePreview() {
         followSystem_->setChecked(followsSystem);
     }
     followSystem_->setEnabled(theme_ != nullptr);
-    for (auto* card : themeCards_) {
-        card->setEnabled(theme_ != nullptr);
-        card->setChecked(card->property("themeMode").toInt() == selectedThemeMode_);
-    }
     if (theme_ != nullptr)
         theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
+    // While following the system, the card of the theme in use stays marked.
+    const int shownMode =
+        followsSystem ? static_cast<int>(currentThemePalette().dark ? ThemeManager::Mode::Dark
+                                                                    : ThemeManager::Mode::Light)
+                      : selectedThemeMode_;
+    for (auto* card : themeCards_) {
+        card->setEnabled(theme_ != nullptr);
+        card->setChecked(card->property("themeMode").toInt() == shownMode);
+    }
 }
 
 void SettingsDialog::selectThemeMode(const int mode) {

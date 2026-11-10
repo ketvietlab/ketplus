@@ -1,3 +1,4 @@
+#include "app/SettingsAppearancePreview.h"
 #include "app/SettingsClaudeAnalytics.h"
 #include "app/SettingsClaudeCredentials.h"
 #include "app/SettingsDialog.h"
@@ -187,10 +188,10 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QCOMPARE(family->currentData().toString(), QStringLiteral("KET Sans Mono"));
         QCOMPARE(family->currentText(), QString::fromUtf8("KÉT Sans Mono"));
         QCOMPARE(dialog->settings().fontFamily, QStringLiteral("KET Sans Mono"));
-        auto* code = page.findChild<QLabel*>("settingsPreviewCode");
+        auto* code = page.findChild<ketplus::WorkspacePreview*>("settingsWorkspacePreview");
         QVERIFY(code);
-        QCOMPARE(code->font().family(), QStringLiteral("KET Sans Mono"));
-        QCOMPARE(QFontInfo(code->font()).family(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(code->codeFamily(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(QFontInfo(code->codeFont()).family(), QStringLiteral("KET Sans Mono"));
         // The mock's rows: a 200 px select at the end, and the font named in the help line.
         page.resize(1440, 900);
         page.showSection("typography");

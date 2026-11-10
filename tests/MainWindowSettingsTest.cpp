@@ -563,13 +563,27 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QVERIFY(sectionTitle != nullptr);
     QCOMPARE(settingsTitle->font().pixelSize(), 30);
     QCOMPARE(sectionTitle->font().pixelSize(), 22);
-    QVERIFY(settingsPage->findChild<QFrame*>(QStringLiteral("settingsWorkspacePreview")) !=
+    QVERIFY(settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspacePreview")) !=
             nullptr);
+    QCOMPARE(lightTheme->text(), QStringLiteral("Light"));
+    QCOMPARE(darkTheme->text(), QStringLiteral("Dark"));
+    QCOMPARE(lightTheme->width(), darkTheme->width());
+    QVERIFY(lightTheme->width() >= 264);
     QVERIFY(darkTheme->isVisible());
     darkTheme->click();
     QTRY_VERIFY(theme.palette().dark);
     lightTheme->click();
     QTRY_VERIFY(!theme.palette().dark);
+    // Following the system keeps the card of the theme in use marked.
+    auto* followSystem =
+        settingsPage->findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"));
+    QVERIFY(followSystem != nullptr);
+    followSystem->click();
+    QVERIFY(followSystem->isChecked());
+    QCOMPARE(lightTheme->isChecked(), !theme.palette().dark);
+    QCOMPARE(darkTheme->isChecked(), theme.palette().dark);
+    followSystem->click();
+    QVERIFY(!followSystem->isChecked());
     settingsNavigation->setCurrentRow(1);
     auto* zoom = window.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"));
     QVERIFY(zoom != nullptr);
