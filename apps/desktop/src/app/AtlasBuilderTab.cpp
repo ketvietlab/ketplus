@@ -51,8 +51,8 @@ QString builderStyle(const QPalette& palette, const int zoomPercent) {
     auto sheet = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasBuilderTab, QWidget#atlasBuilderPlaceholder { background:%1; color:%4; }
 QWidget#atlasBuilderToolbar { min-height:44px; max-height:44px; background:%2; border-bottom:1px solid %6; }
-QLabel#atlasBuilderToolbarTitle { color:%4; font-size:13px; font-weight:600; }
-QLabel#atlasBuilderToolbarSubtitle { color:%5; font-size:11px; }
+QLabel#atlasBuilderToolbarTitle { color:%4; font-size:{{px:13}}px; font-weight:600; }
+QLabel#atlasBuilderToolbarSubtitle { color:%5; font-size:{{px:11}}px; }
 QFrame#atlasBuilderChatFrame { background:%2; border:0; border-left:1px solid %6; }
 QLabel#atlasBuilderPlaceholderIcon { color:%8; font-size:{{glyphLarge}}px; }
 QLabel#atlasBuilderPlaceholderEyebrow { color:%8; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
