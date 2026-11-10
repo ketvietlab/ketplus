@@ -200,7 +200,9 @@ void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
     panel.typeText(QStringLiteral("echo __KETPLUS_TYPED__\r\n"));
     auto* view = panel.findChild<TerminalView*>();
     QVERIFY(view != nullptr);
-    QTRY_VERIFY_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"), 5000);
+    // On failure, show what the terminal held, so a runner's shell can be told apart.
+    QTRY_VERIFY2_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"),
+                              qPrintable(view->visibleText()), 5000);
     QTest::qWait(500);
     QCOMPARE(view->visibleText().count(QStringLiteral("__KETPLUS_TYPED__")), 1);
     // Another command goes to a new tab, never into the program running in the open one.
@@ -380,7 +382,8 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
     QTest::keyClicks(&terminal, QStringLiteral("ketplus_live_echo"));
 
     // A slow runner's shell can still be starting after its first output; echo is what is checked.
-    QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 5000);
+    QTRY_VERIFY2_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"),
+                              qPrintable(terminal.visibleText()), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
     session.sendBytes(QByteArray(1, '\x03'));
     QTest::qWait(100);
