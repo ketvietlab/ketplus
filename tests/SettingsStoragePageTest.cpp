@@ -552,7 +552,6 @@ class SettingsStoragePageTest final : public QObject {
                                             value.insert("size_policy_supported", true);
                                         reply(value, {});
                                     });
-        shell.applyPalette(theme.palette());
         shell.resize(1100, 760);
         shell.show();
         shell.showSection("storage");

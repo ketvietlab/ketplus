@@ -348,8 +348,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         applyThemeToEditors();
         if (worktreesWorkspace_ != nullptr)
             worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
-        if (settingsWorkspace_ != nullptr)
-            settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     });
     connect(git_, &GitService::snapshotChanged, this, &MainWindow::updateGitSnapshot);
     connect(git_, &GitService::worktreesChanged, this, &MainWindow::updateWorktrees);

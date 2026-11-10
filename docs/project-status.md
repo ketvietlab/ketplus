@@ -52,7 +52,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   file tabs show a kit breadcrumb outside the Scintilla document viewport. The
   Explorer, activity bar, tab strip, breadcrumb View diff, terminal placement and
   the single status bar follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
-  offscreen review captures (`docs/design-system.md`).
+  offscreen review captures (`docs/design-system.md`). Settings opens as a page of
+  the window, shared with Pro through `core/src/app/SettingsWorkspace` (#155).
 
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at

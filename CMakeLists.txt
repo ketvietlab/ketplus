@@ -116,8 +116,6 @@ if(KETPLUS_BUILD_DESKTOP)
     # Private chrome typography (KET Sans, then platform fallbacks). Defined before modules/ai
     # so Agent Workspace and the desktop shell resolve one family.
     add_library(ketplus_typography STATIC
-        apps/desktop/src/ui/ChromeGeometry.cpp
-        apps/desktop/src/ui/ChromeGeometry.h
         apps/desktop/src/ui/InterfaceFont.cpp
         apps/desktop/src/ui/InterfaceFont.h
         apps/desktop/src/ui/SymbolIcon.cpp

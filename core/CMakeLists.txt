@@ -36,6 +36,8 @@ include(cmake/KetFonts.cmake)
 include(cmake/Warnings.cmake)
 
 add_library(ketplus_ui STATIC
+    src/ui/ChromeGeometry.cpp
+    src/ui/ChromeGeometry.h
     src/ui/MessageDialog.cpp
     src/ui/MessageDialog.h
     src/ui/FindReplaceBar.cpp
@@ -43,6 +45,7 @@ add_library(ketplus_ui STATIC
     src/ui/Theme.cpp
     src/ui/Theme.h
     src/ui/InterfaceZoom.h
+    src/ui/TypeScale.h
     src/ui/KetFonts.cpp
     src/ui/KetFonts.h
 )
@@ -245,7 +248,11 @@ add_library(ketplus_settings_ui STATIC
     src/app/SettingsDialogTypography.cpp
     src/app/PixelSelect.cpp
     src/app/PixelSelect.h
+    src/app/SettingsAppearancePreview.cpp
+    src/app/SettingsAppearancePreview.h
     src/app/SettingsDialog.h
+    src/app/SettingsWorkspace.cpp
+    src/app/SettingsWorkspace.h
     src/app/SettingsFontNames.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)

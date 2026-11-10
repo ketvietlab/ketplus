@@ -951,7 +951,6 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);
-    settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(settingsWorkspace_, &SettingsWorkspacePage::saved, this, [this] {
         auto* previous = settingsWorkspace_;
         settingsWorkspace_ = nullptr;

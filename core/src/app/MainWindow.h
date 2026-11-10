@@ -214,6 +214,7 @@ class MainWindow final : public QMainWindow {
     QStackedWidget* chromePages_{nullptr};
     QWidget* activityBar_{nullptr};
     QWidget* editorColumn_{nullptr};
+    QWidget* settingsPage_{nullptr};
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};

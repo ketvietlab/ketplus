@@ -194,6 +194,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     setStatusBar(statusHost);
     auto* status = statusHost->content;
     statusBar()->showMessage(QStringLiteral("Ready"));
+    // The welcome page has no status bar; the editor surface shows it.
+    statusHost->hide();
     // The status bar keeps Git status actions; switching worktrees stays in the Git menu.
     auto* statusGitMenu = new QMenu(this);
     connect(statusGitMenu, &QMenu::aboutToShow, this, [this, statusGitMenu] {

@@ -87,7 +87,6 @@ class ClaudeCredentialsSettingsTest : public QObject {
         for (const bool dark : {false, true}) {
             theme.previewMode(dark ? ketplus::ThemeManager::Mode::Dark
                                    : ketplus::ThemeManager::Mode::Light);
-            page.applyPalette(theme.palette());
             page.resize(dark ? 960 : 1220, 900);
             page.show();
             auto* key = page.findChild<QLineEdit*>("claudeApiKey");
@@ -222,7 +221,6 @@ class ClaudeCredentialsSettingsTest : public QObject {
         ketplus::ThemeManager theme(*qApp);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
         ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
-        page.applyPalette(theme.palette());
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
         auto* family = page.findChild<QComboBox*>("editorFontFamily");
@@ -256,7 +254,6 @@ class ClaudeCredentialsSettingsTest : public QObject {
         theme.previewMode(ketplus::ThemeManager::Mode::Light);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
         ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
-        page.applyPalette(theme.palette());
         page.resize(1440, 900);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));

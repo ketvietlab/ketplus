@@ -7,6 +7,7 @@
 #include "KetAppearance.h"
 #include "KetChrome.h"
 #include "KetFileRow.h"
+#include "KetNavItem.h"
 #include "KetTokens.h"
 
 #include <QAbstractButton>
@@ -17,6 +18,7 @@
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTemporaryDir>
@@ -247,6 +249,41 @@ class LiteWindowTest final : public QObject {
         window.openFile(repository.filePath(QStringLiteral("clean.txt")));
         QVERIFY(viewDiff() != nullptr);
         QTRY_VERIFY(!viewDiff()->isVisibleTo(tabs));
+    }
+
+    void settingsIsAPageOfTheWindow() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* settings = activityButton(window, QStringLiteral("Settings"));
+        QVERIFY(!marked(settings));
+        settings->click();
+        auto* pages = window.findChild<QStackedWidget*>(QStringLiteral("liteWorkspacePages"));
+        auto* page = window.findChild<QWidget*>(QStringLiteral("settingsWorkspacePage"));
+        QVERIFY(page != nullptr);
+        QCOMPARE(pages->currentWidget(), page);
+        QVERIFY(marked(settings));
+        QVERIFY(!window.statusBar()->isVisible());
+        QVERIFY(page->findChild<ket::Kbd*>(QStringLiteral("settingsWorkspaceShortcut")) != nullptr);
+
+        // Lite's sections, and Typography without Pro's Conversation width.
+        QStringList sections;
+        for (auto* item : page->findChildren<ket::NavItem*>())
+            if (item->isVisibleTo(page))
+                sections.append(item->text());
+        QCOMPARE(sections,
+                 (QStringList{QStringLiteral("Appearance"), QStringLiteral("Typography")}));
+        QVERIFY(page->findChild<QWidget*>(QStringLiteral("agentConversationWidth")) == nullptr);
+        QVERIFY(page->findChild<QWidget*>(QStringLiteral("interfaceZoom"))->isVisibleTo(page));
+
+        // The Explorer's button returns to the editor.
+        activityButton(window, QStringLiteral("Explorer"))->click();
+        QCOMPARE(pages->currentWidget(),
+                 window.findChild<QWidget*>(QStringLiteral("editorColumn"))->parentWidget());
+        QVERIFY(!marked(settings));
+        QVERIFY(window.statusBar()->isVisible());
     }
 
     void reviewCaptureRunsItsSteps() {

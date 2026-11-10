@@ -94,9 +94,10 @@ Qt application shell
   process transport. `PtyProcess` isolates platform process creation from the
   renderer so a ConPTY backend can be added without changing terminal UI code.
 - `core/src/app/SettingsDialog` owns the reusable settings shell and
-  public appearance persistence. The Pro desktop recomposes its live theme
-  and typography controls inside the non-modal, full-page Két settings
-  workspace, while the hidden public host continues to own preview, validation,
+  public appearance persistence. `core/src/app/SettingsWorkspace` recomposes its
+  live theme and typography controls as the non-modal, full-page Két settings
+  page that both editions show inside the window; the Pro
+  `SettingsWorkspacePage` derives from it and adds its own sections, while the hidden public host continues to own preview, validation,
   reset, and save behavior. Both editions embed KÉT Sans and fall back to the
   platform UI face. Agent Workspace uses `KetTheme.fontFamily`, `KetTheme.t` and
   component recipe typography directly; it does not receive a host palette/type
