@@ -267,7 +267,13 @@ Ln/Col, encoding, line endings, language); the window's status bar below everyth
 keeps messages, Git and the product name. The window status bar composes
 `ket::StatusBar` and `StatusItem` inside a small QStatusBar host, so existing message
 timeouts, format menus and visibility APIs stay intact while the kit paints/scales the
-bar. `ketplus_lite_window_tests` builds the Lite window and checks this layout. Settings list delegates are transparent
+bar. `ketplus_lite_window_tests` builds the Lite window and checks this layout.
+
+Core confirmations, messages and number prompts (Go to Line) use `ui/MessageDialog`, a
+synchronous adapter over `ket::Dialog`; the KétPlus Terminal About box uses it too.
+Status-bar messages also show as a `ket::Toast`, inline failures use `ket::Banner`, and
+menus, context menus and tooltips are drawn by `ket::Style`. Core opens no `QMessageBox`
+or `QInputDialog`; file pickers stay native. Settings list delegates are transparent
 beneath their kit NavItems, preventing duplicate labels in unselected rows.
 
 Application font and palette defaults are set on QApplication, not a global

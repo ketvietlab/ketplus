@@ -2,6 +2,7 @@
 
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
+#include "ui/MessageDialog.h"
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
@@ -23,7 +24,6 @@
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QPainter>
 #include <QSettings>
 #include <QTabBar>
@@ -301,14 +301,11 @@ void TerminalWindow::createMenus() {
     QAction* aboutAction = helpMenu->addAction(QStringLiteral("About KétPlus Terminal"));
     aboutAction->setMenuRole(QAction::AboutRole);
     connect(aboutAction, &QAction::triggered, this, [this] {
-        QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("About KétPlus Terminal"));
-        box.setIconPixmap(windowIcon().pixmap(64, 64));
-        box.setText(
-            QStringLiteral("KétPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
-        box.setInformativeText(QStringLiteral("A lightweight native terminal for macOS.\n\n"
-                                              "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0."));
-        box.exec();
+        message_dialog::information(
+            this, QStringLiteral("About KétPlus Terminal"),
+            QStringLiteral("KétPlus Terminal %1\n\nA lightweight native terminal for macOS.\n\n"
+                           "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0.")
+                .arg(QCoreApplication::applicationVersion()));
     });
 }
 
