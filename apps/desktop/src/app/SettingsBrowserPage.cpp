@@ -1,20 +1,21 @@
 #include "app/SettingsBrowserPage.h"
 #include "KetButton.h"
+#include "KetChoice.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
 
 #include "ToolPackageRegistry.h"
+#include "app/SettingsRows.h"
 
 #include <QButtonGroup>
 
 #include <QAbstractButton>
 #include <QCoreApplication>
 #include <QFutureWatcher>
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
-#include <QRadioButton>
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -66,73 +67,75 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     layout->setSpacing(0);
     layout->addWidget(
         textLabel(tr("Browser"), QStringLiteral("settingsWorkspaceSectionTitle"), this));
-    layout->addSpacing(7);
-    layout->addWidget(textLabel(tr("Agents can open websites in a browser to check what they "
-                                   "build, fill in forms and capture screenshots."),
-                                QStringLiteral("settingsWorkspaceIntro"), this));
-    layout->addSpacing(24);
+    layout->addSpacing(20);
 
+    // The mock's layout: the runtime state beside its recheck button, the switch and the
+    // website modes as choices, and each field at the end of a titled row.
+    auto* runtime = new QWidget(this);
+    auto* runtimeRow = new QHBoxLayout(runtime);
+    runtimeRow->setContentsMargins(0, 0, 0, 0);
+    runtimeRow->setSpacing(12);
     status_ =
         textLabel(tr("Checking the browser runtime…"), QStringLiteral("browserToolsStatus"), this);
     if (!settings_.loadError.isEmpty())
         status_->setText(tr("Browser settings could not be read: %1").arg(settings_.loadError));
-    layout->addWidget(status_);
-    layout->addSpacing(8);
+    // One line beside the button, as in the mock; a long error is clipped, and setStatus()
+    // keeps the whole text in the tooltip.
+    status_->setWordWrap(false);
+    status_->setMinimumWidth(1);
+    status_->setToolTip(status_->text());
+    runtimeRow->addWidget(status_);
     auto* recheck = new ket::Button(tr("Check again"), ket::ButtonVariant::Secondary, this);
     recheck->setObjectName(QStringLiteral("browserToolsRecheck"));
-    layout->addWidget(recheck, 0, Qt::AlignLeft);
-    layout->addSpacing(20);
+    runtimeRow->addWidget(recheck, 0, Qt::AlignVCenter);
+    runtimeRow->addStretch(1);
+    layout->addWidget(runtime);
+    layout->addSpacing(14);
 
-    enabled_ = new ket::Checkbox(tr("Let agents use a browser"), this);
+    enabled_ =
+        new ket::Choice(tr("Let agents use a browser"),
+                        tr("Chromium in its own profile; pages, captures and visual comparison"),
+                        ket::ToggleKind::Checkbox, this);
     enabled_->setObjectName(QStringLiteral("browserToolsEnabled"));
     enabled_->setChecked(settings_.enabled);
     layout->addWidget(enabled_);
-    layout->addSpacing(16);
+    layout->addSpacing(14);
+    layout->addWidget(settings_rows::divider(this));
+    layout->addSpacing(14);
 
     layout->addWidget(
         textLabel(tr("Websites"), QStringLiteral("settingsWorkspaceSubheading"), this));
-    layout->addSpacing(10);
-    allOrigins_ = new QRadioButton(tr("Public websites and this computer"), this);
+    layout->addSpacing(14);
+    allOrigins_ = new ket::Choice(tr("All websites"), {}, ket::ToggleKind::Radio, this);
     allOrigins_->setObjectName(QStringLiteral("browserToolsAllOrigins"));
-    onlyOrigins_ = new QRadioButton(tr("Only these origins"), this);
+    onlyOrigins_ = new ket::Choice(tr("Only these origins"), {}, ket::ToggleKind::Radio, this);
     onlyOrigins_->setObjectName(QStringLiteral("browserToolsOnlyOrigins"));
     auto* originMode = new QButtonGroup(this);
     originMode->addButton(allOrigins_);
     originMode->addButton(onlyOrigins_);
     (isAllOrigins(settings_.allowedOrigins) ? allOrigins_ : onlyOrigins_)->setChecked(true);
     layout->addWidget(allOrigins_);
-    layout->addSpacing(6);
+    layout->addSpacing(14);
     layout->addWidget(onlyOrigins_);
-    layout->addSpacing(8);
+    layout->addSpacing(14);
 
-    auto* fields = new QWidget(this);
-    auto* grid = new QGridLayout(fields);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(20);
-    grid->setVerticalSpacing(13);
-    grid->setColumnMinimumWidth(0, 145);
-    grid->setColumnStretch(1, 1);
-    origins_ = new ket::TextField(fields);
+    origins_ = new ket::TextField(this);
     origins_->setText(isAllOrigins(settings_.allowedOrigins) ? QString()
                                                              : settings_.allowedOrigins);
     origins_->setObjectName(QStringLiteral("browserToolsOrigins"));
-    origins_->setPlaceholderText(QStringLiteral("loopback, https://staging.example.com"));
-    appPath_ = new ket::TextField(fields);
+    origins_->setPlaceholderText(QStringLiteral("https://staging.example.com"));
+    appPath_ = new ket::TextField(this);
     appPath_->setText(settings_.browserAppPath);
     appPath_->setObjectName(QStringLiteral("browserToolsAppPath"));
     const QString detected = browser_tools::detectBrowserAppPath(searchStart_);
-    appPath_->setPlaceholderText(detected.isEmpty() ? tr("Only needed for a source checkout")
-                                                    : detected);
-    grid->addWidget(
-        textLabel(tr("Allowed origins"), QStringLiteral("settingsWorkspaceFieldLabel"), fields), 0,
-        0);
-    grid->addWidget(origins_, 0, 1);
-    grid->addWidget(textLabel(tr("Source checkout path"),
-                              QStringLiteral("settingsWorkspaceFieldLabel"), fields),
-                    1, 0);
-    grid->addWidget(appPath_, 1, 1);
-    layout->addWidget(fields);
-    layout->addSpacing(12);
+    appPath_->setPlaceholderText(detected.isEmpty() ? QStringLiteral("~/dev/ketplus") : detected);
+    layout->addWidget(settings_rows::field(
+        tr("Allowed origins"), tr("Separate origins with commas. localhost is always allowed."),
+        origins_, this));
+    layout->addSpacing(14);
+    layout->addWidget(settings_rows::field(
+        tr("Source checkout path"), tr("Only needed for a source checkout"), appPath_, this));
+    layout->addSpacing(20);
 
     layout->addWidget(textLabel(
         tr("Every browser session uses a temporary profile: it never sees your own browser's "
@@ -143,7 +146,8 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     layout->addStretch(1);
 
     connect(enabled_, &QAbstractButton::toggled, this, &SettingsBrowserPage::setEnabledByUser);
-    connect(allOrigins_, &QRadioButton::toggled, this, &SettingsBrowserPage::setAllOriginsByUser);
+    connect(allOrigins_, &QAbstractButton::toggled, this,
+            &SettingsBrowserPage::setAllOriginsByUser);
     connect(origins_, &QLineEdit::editingFinished, this, &SettingsBrowserPage::saveOriginsByUser);
     connect(appPath_, &QLineEdit::editingFinished, this, [this] {
         saveAppPathByUser();
@@ -154,6 +158,11 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     QTimer::singleShot(0, this, &SettingsBrowserPage::refresh);
 }
 
+void SettingsBrowserPage::setStatus(const QString& text) {
+    status_->setText(text);
+    status_->setToolTip(text);
+}
+
 void SettingsBrowserPage::updateOriginControls() {
     origins_->setEnabled(onlyOrigins_->isChecked());
 }
@@ -162,7 +171,7 @@ bool SettingsBrowserPage::saveFields(const std::function<void(browser_tools::Set
     browser_tools::Settings latest = browser_tools::loadSettings(settingsPath_);
     edit(latest);
     if (!browser_tools::saveSettings(latest, settingsPath_)) {
-        status_->setText(tr("Could not save browser settings."));
+        setStatus(tr("Could not save browser settings."));
         return false;
     }
     settings_ = latest;
@@ -199,7 +208,7 @@ void SettingsBrowserPage::saveOriginsByUser() {
     QString error;
     const QString origins = browser_tools::normalizeAllowedOrigins(origins_->text(), &error);
     if (!error.isEmpty()) {
-        status_->setText(tr("Allowed origins not saved: %1").arg(error));
+        setStatus(tr("Allowed origins not saved: %1").arg(error));
         return;
     }
     if (isAllOrigins(origins)) {
@@ -234,7 +243,7 @@ void SettingsBrowserPage::refresh() {
     } else {
         prerequisites_ = {};
         runtimeSource_.clear();
-        status_->setText(tr("Checking the browser runtime…"));
+        setStatus(tr("Checking the browser runtime…"));
     }
     auto* watcher = new QFutureWatcher<Check>(this);
     const QPointer<SettingsBrowserPage> guard(this);
@@ -267,19 +276,18 @@ void SettingsBrowserPage::applyCheck(const Check& check) {
     if (!loadError.isEmpty()) {
         // The damaged file is not rewritten by a refresh (no node path save): it stays off
         // until the user saves a choice.
-        status_->setText(tr("Browser settings could not be read: %1").arg(loadError));
+        setStatus(tr("Browser settings could not be read: %1").arg(loadError));
         return;
     }
     if (runtimeSource_ == QLatin1String(browser_tools::SourceCheckoutProvider::sourceName)) {
-        status_->setText(tr("Ready · source checkout · Node %1 · %2")
-                             .arg(prerequisites_.nodeVersion, prerequisites_.browserAppPath));
+        setStatus(tr("Ready · source checkout · Node %1 · %2")
+                      .arg(prerequisites_.nodeVersion, prerequisites_.browserAppPath));
     } else if (!runtimeSource_.isEmpty()) {
-        status_->setText(tr("Ready · %1 browser runtime").arg(runtimeSource_));
+        setStatus(tr("Ready · %1 browser runtime").arg(runtimeSource_));
     } else {
-        status_->setText(tr("Browser unavailable: %1")
-                             .arg(prerequisites_.reason.isEmpty()
-                                      ? tr("no browser runtime was found.")
-                                      : prerequisites_.reason));
+        setStatus(tr("Browser unavailable: %1")
+                      .arg(prerequisites_.reason.isEmpty() ? tr("no browser runtime was found.")
+                                                           : prerequisites_.reason));
     }
     if (prerequisites_.ok()) {
         // Only the detected Node path is written on refresh (the launch reads it); user fields
