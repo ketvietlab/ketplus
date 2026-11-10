@@ -29,6 +29,7 @@
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -1394,6 +1395,9 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(agentRoundTrip(agent, "daemon.hello", {{"agent_token", agentToken}})
                     .value("agent")
                     .toBool());
+        // The Report tab follows the conversation live.
+        QSignalSpy reports(&desktop, &AgentSessionManager::workReportChanged);
+        const QString conversation = desktop.activeConversationId(worktree);
         const QJsonObject reported =
             agentRoundTrip(agent, "agents.work_report",
                            {{"title", "Live"},
@@ -1431,6 +1435,19 @@ class DesktopDaemonClientTest final : public QObject {
         const QVariantMap report = reportedEnd();
         QCOMPARE(report.value(QStringLiteral("title")).toString(), QStringLiteral("Live"));
         QCOMPARE(report.value(QStringLiteral("items")).toList().size(), 1);
+        QVERIFY(!reports.isEmpty());
+        QCOMPARE(reports.first().at(1).toString(), conversation);
+        QCOMPARE(reports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Live"));
+
+        // Opening the tab reads the stored ledger.
+        reports.clear();
+        desktop.readWorkReport(worktree);
+        QTRY_VERIFY_WITH_TIMEOUT(!reports.isEmpty(), 5000);
+        QCOMPARE(reports.last().at(1).toString(), conversation);
+        QVERIFY2(reports.last().at(3).toString().isEmpty(),
+                 qPrintable(reports.last().at(3).toString()));
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toInt(), 1);
     }
 
     void forksConversationThroughDaemon() {

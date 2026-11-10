@@ -431,6 +431,18 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
                       std::move(callback));
         return;
     }
+    if (method == "workReport/read") {
+        // ADR 0106: the conversation's current ledger for the Report tab.
+        const QString sessionId = params.value("threadId").toString();
+        const auto found = daemonSessions_.constFind(sessionId);
+        const QString operation = QStringLiteral("session.work_report.read");
+        if (found == daemonSessions_.cend() || !daemon_->hasCapability(operation)) {
+            callback({}, QStringLiteral("Update the daemon to see the work report."));
+            return;
+        }
+        daemon_->call(operation, {}, sessionId, found->generation, std::move(callback));
+        return;
+    }
     if (method == QStringLiteral("task/stop") || method == QStringLiteral("task/output")) {
         const QString sessionId = params.value(QStringLiteral("threadId")).toString();
         auto found = daemonSessions_.find(sessionId);

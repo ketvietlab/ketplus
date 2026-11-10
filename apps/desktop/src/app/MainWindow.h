@@ -245,6 +245,10 @@ class MainWindow final : public QMainWindow {
     void applyTerminalTypography(TerminalPanel* terminal);
     QTabWidget* ensureAgentDetailTabs();
     TerminalPanel* openAgentTerminalTab();
+    // ADR 0106: one Report tab that follows the active conversation (MainWindowWorkReport.cpp).
+    void connectAgentWorkReport();
+    void openAgentWorkReportTab();
+    void refreshAgentWorkReport(bool force);
     void closeAgentDetailTab(int index);
     void closeOtherAgentDetailTabs(int keepIndex);
     void closeAllAgentDetailTabs();

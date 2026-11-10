@@ -272,6 +272,14 @@ Item {
             text: "Open terminal"
             onClicked: agentHost.requestTerminal()
         }
+        Kit.KetIconButton {
+            objectName: "headerWorkReportButton"
+            visible: !agentHost.compactMode && !agentHost.compactWindow
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: "view-list"
+            text: "Work report"
+            onClicked: agentHost.requestWorkReport()
+        }
     }
 
     // Off-screen measure of the full Reviewer button.

@@ -111,6 +111,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowLayout.cpp
     src/app/MainWindowNavigation.cpp
     src/app/MainWindowPanels.cpp
+    src/app/MainWindowWorkReport.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
     src/app/MainWindowSearch.cpp
