@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption open(
         QStringLiteral("open"),
         QStringLiteral("Open a panel: model, mode, limits, reviewer, picker, or activity, device "
-                       "and device-focus on connections."),
+                       "device-focus, pair, linux and signin on connections."),
         QStringLiteral("panel"));
     const QCommandLineOption dark(QStringLiteral("dark"), QStringLiteral("Start in dark mode."));
     const QCommandLineOption light(QStringLiteral("light"), QStringLiteral("Start in light mode."));

@@ -480,7 +480,7 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     auto* headerLayout = new QHBoxLayout(header);
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
+    auto* close = new ket::IconButton(ket::Icons::icon(u"close"), QStringLiteral("Close"), header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     close->setIcon(QIcon(
