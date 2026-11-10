@@ -36,7 +36,7 @@ Screens and states (`--screen` / `--state`):
 
 | Screen | States | Covers |
 |---|---|---|
-| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), details pane (changes, Atlas, terminal) |
+| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `report`, `report-running`, `report-details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), work report at the end of a turn (counted by the app from the agent's items; live activity while running), details pane (changes, Atlas, terminal, report) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |

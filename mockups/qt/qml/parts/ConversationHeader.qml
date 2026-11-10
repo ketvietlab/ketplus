@@ -64,11 +64,20 @@ Rectangle {
     }
 
     // The header gives way from the right as the conversation narrows (the details pane takes
-    // half the workspace): tags first, then the Reviewer label, then the title elides.
+    // half the workspace): tags first, then the Reviewer label, then the title elides to its
+    // minimum, then the worktree keeps only its icon, then the number (the sidebar shows it).
     readonly property real gap: px(8)
     readonly property real room: width - px(16) - actions.width - px(10) - px(24)
-    readonly property real fixedWidth: numberLabel.implicitWidth + statusBadge.implicitWidth
-                                       + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + 2 * gap
+    readonly property real minimumTitle: px(80)
+    readonly property bool fullWorktree: numberLabel.implicitWidth + statusBadge.implicitWidth
+                                         + worktreeProbe.implicitWidth + minimumTitle
+                                         + compactReviewerProbe.implicitWidth + 4 * gap <= room
+    readonly property bool showNumber: numberLabel.implicitWidth + statusBadge.implicitWidth
+                                       + compactWorktreeProbe.implicitWidth + minimumTitle
+                                       + compactReviewerProbe.implicitWidth + 4 * gap <= room
+    readonly property real fixedWidth: (numberLabel.visible ? numberLabel.implicitWidth + gap : 0)
+                                       + statusBadge.implicitWidth
+                                       + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + gap
     readonly property bool fullReviewer: fixedWidth + titleButton.implicitWidth + gap
                                          + reviewerProbe.implicitWidth <= room
     readonly property bool showTags: fullReviewer && fixedWidth + titleButton.implicitWidth + gap
@@ -77,6 +86,24 @@ Rectangle {
     // Off-screen measures of the full Reviewer button and the tag group.
     Row {
         visible: false
+        KetButton {
+            id: worktreeProbe
+            controlSize: KetTheme.ControlSize.Small
+            iconName: "branch"
+            text: worktreeButton.fullText
+        }
+        KetButton {
+            id: compactWorktreeProbe
+            controlSize: KetTheme.ControlSize.Small
+            iconName: "branch"
+            text: "▾"
+        }
+        KetButton {
+            id: compactReviewerProbe
+            controlSize: KetTheme.ControlSize.Small
+            iconName: "eye"
+            text: "▾"
+        }
         KetButton {
             id: reviewerProbe
             controlSize: KetTheme.ControlSize.Small
@@ -102,6 +129,7 @@ Rectangle {
 
         Text {
             id: numberLabel
+            visible: header.showNumber
             anchors.verticalCenter: parent.verticalCenter
             text: "@agent/" + header.conversation.number
             color: KetTheme.t.textMuted
@@ -112,7 +140,7 @@ Rectangle {
         Basic.AbstractButton {
             id: titleButton
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(header.px(80), Math.min(implicitWidth, header.room - header.fixedWidth - header.gap
+            width: Math.max(header.minimumTitle, Math.min(implicitWidth, header.room - header.fixedWidth - header.gap
                             - (reviewerButton.visible ? reviewerButton.implicitWidth : 0)))
             hoverEnabled: true
             text: header.conversation.title
@@ -142,8 +170,13 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             iconName: "branch"
-            text: header.conversation.worktree + "  ▾"
+            readonly property string fullText: header.conversation.worktree + "  ▾"
+            text: header.fullWorktree ? fullText : "▾"
             onClicked: header.window.picker.open()
+            KetToolTip {
+                visible: worktreeButton.hovered && !header.fullWorktree
+                text: "Worktree: " + header.conversation.worktree
+            }
         }
 
         KetButton {
@@ -211,15 +244,24 @@ Rectangle {
             checked: header.detailsOpen
             onClicked: header.toggleDetails("atlas")
         }
+        // With the pane open its own tab row switches tabs, so the header keeps only the toggle.
         KetIconButton {
+            visible: !header.detailsOpen
             iconName: "compare"
             text: "Changes"
             onClicked: header.toggleDetails("changes")
         }
         KetIconButton {
+            visible: !header.detailsOpen
             iconName: "terminal"
             text: "Terminal"
             onClicked: header.toggleDetails("terminal")
+        }
+        KetIconButton {
+            visible: !header.detailsOpen
+            iconName: "check-all"
+            text: "Report"
+            onClicked: header.toggleDetails("report")
         }
     }
 

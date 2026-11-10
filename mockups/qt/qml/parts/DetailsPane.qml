@@ -6,13 +6,13 @@ import Ket
 import KetPlusMock
 
 // The right detail pane of Agent Workspace. It owns its top tab row: the conversation's
-// changes, its Atlases and its terminal.
+// changes, its Atlases, its terminal and its work report.
 Rectangle {
     id: pane
 
     required property var window
     property string tab: "changes"
-    readonly property var tabs: ["changes", "atlas", "terminal"]
+    readonly property var tabs: ["changes", "atlas", "terminal", "report"]
 
     signal tabChosen(string tab)
     signal closeRequested()
@@ -32,7 +32,7 @@ Rectangle {
             KetSegmentedControl {
                 x: pane.px(12)
                 anchors.verticalCenter: parent.verticalCenter
-                options: ["Changes", "Atlas", "Terminal"]
+                options: ["Changes", "Atlas", "Terminal", "Report"]
                 currentIndex: pane.tabs.indexOf(pane.tab)
                 onActivated: index => pane.tabChosen(pane.tabs[index])
             }
@@ -61,6 +61,13 @@ Rectangle {
                 width: scroll.availableWidth - 2 * x
                 spacing: pane.px(14)
 
+                // The whole ledger: every item reported in this conversation, by group.
+                TurnReportCard {
+                    visible: pane.tab === "report"
+                    width: parent.width
+                    report: Fixtures.turnReport
+                    ledger: true
+                }
                 KetChangedFiles {
                     visible: pane.tab === "changes"
                     width: parent.width
