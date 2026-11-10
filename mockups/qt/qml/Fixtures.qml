@@ -292,16 +292,6 @@ QtObject {
         + "and click the diagram to open it in the image viewer.\n\n"
         + "```mermaid\n" + mermaid.agentTurn + "\n```\n"
 
-    // Manage worktrees.
-    readonly property var worktrees: [
-        { name: "develop", conversations: 3, working: 1, state: "Uncommitted changes", dirty: true,
-          path: "/workspace/ketplus-desktop" },
-        { name: "feature-onboarding", conversations: 2, working: 1, state: "Clean", dirty: false,
-          path: "/workspace/ketplus-desktop-onboarding" },
-        { name: "fix-scroll-anchor", conversations: 2, working: 1, state: "Clean", dirty: false,
-          path: "/workspace/ketplus-desktop-scroll" }
-    ]
-
     // Repository & worktree picker.
     readonly property var pickerRepositories: [
         { name: "ketplus-desktop", count: 2, worktrees: [
@@ -343,9 +333,7 @@ QtObject {
             { id: "go:settings", title: "Open Settings", detail: "⌘ ,", iconName: "settings",
               screen: "settings" },
             { id: "go:connections", title: "Connect a phone", detail: "Connections",
-              iconName: "display", screen: "connections" },
-            { id: "go:worktrees", title: "Manage worktrees", detail: "Workspace",
-              iconName: "branch", screen: "worktrees" }] }
+              iconName: "display", screen: "connections" }] }
     ]
 
     // Background tasks above the composer.

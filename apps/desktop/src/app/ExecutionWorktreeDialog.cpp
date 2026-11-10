@@ -144,7 +144,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                                  std::function<void(const QString&)> selected,
                                  const QString& fileContextPath, const QStringList& repositories,
                                  const QString& currentRepository,
-                                 std::function<void()> createWorktree) {
+                                 std::function<void(const QString&, qint64)> createWorktree) {
     // The mock's Repository & worktree picker: choose a repository, then one of its worktrees,
     // and "Use this repository" moves the conversation's next turn there (ADR 0105).
     // An in-window card as the mock's KetDialog (`width: px(800)`): title and close button in
@@ -480,10 +480,12 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         confirm();
     });
     QObject::connect(use, &QAbstractButton::clicked, dialog, confirm);
-    QObject::connect(create, &QAbstractButton::clicked, dialog, [dialog, createWorktree] {
+    QObject::connect(create, &QAbstractButton::clicked, dialog, [dialog, createWorktree, state] {
+        const QString repository = state->listed.isEmpty() ? state->repository : state->listed;
+        const qint64 revision = state->revision;
         dialog->reject();
         if (createWorktree)
-            createWorktree();
+            createWorktree(repository, revision);
     });
     dialog->open();
     renderRepos();

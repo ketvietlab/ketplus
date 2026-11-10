@@ -33,7 +33,8 @@ exact Git worktree root.
     sends `session.worktree.switch` with the context revision fence.
   - After the acknowledgement, the picker closes and shows "Next turn: <repository> ·
     <branch>".
-  - **Create worktree…** opens the Worktrees page.
+  - **Create worktree…** opens the Create worktree card in place (ADR 0111 removed
+    the Worktrees page).
   - A failure keeps the picker open with the error; Use retries.
 
 The project version moves to 0.1.51 for the daemon change.

@@ -69,8 +69,6 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
-class WorktreeStateProbe;
-class WorktreesWorkspacePage;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -138,10 +136,8 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
-    void setWorktreesWorkspaceVisible(bool visible);
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
-    void refreshWorktreesWorkspace();
     void setShellMode(ActivityBar::Mode mode);
     void closeAtlasTab(int index);
     void openAtlas(const AtlasDescriptor& atlas, AtlasTab* picker = nullptr);
@@ -271,6 +267,10 @@ class MainWindow final : public QMainWindow {
     void ensureAgentWorkspace();
     void syncAgentWorkspaceContext(bool loadTranscript);
     void createAgentWorktree();
+    // Create worktree… in a conversation's picker: creates in `repository` and moves that
+    // conversation to it, checked against the picker's context `revision`.
+    void createConversationWorktree(const QString& repository, qint64 revision);
+    void moveConversationToCreatedWorktree(const QString& worktreePath, const QString& branch);
     void startNewAgentConversation();
     [[nodiscard]] QString primaryWorktreePath() const;
     void showAgentWorktreeContextMenu(const QString& path);
@@ -358,7 +358,6 @@ class MainWindow final : public QMainWindow {
     QAction* viewDiffAction_{nullptr};
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
-    QAction* manageWorktreesAction_{nullptr};
     QMenu* recentFoldersMenu_{nullptr};
     QMenu* recentFilesMenu_{nullptr};
     QAction* reopenClosedTabAction_{nullptr};
@@ -425,8 +424,6 @@ class MainWindow final : public QMainWindow {
     remote::DaemonClient* accountDaemon_{nullptr};
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
-    WorktreesWorkspacePage* worktreesWorkspace_{nullptr};
-    WorktreeStateProbe* worktreeStateProbe_{nullptr};
     // The Create worktree card asked to open Agent Workspace on what it creates.
     bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};
@@ -446,6 +443,10 @@ class MainWindow final : public QMainWindow {
     QString repositoryDisplayRoot_;
     QString promotedWorktreePath_;
     bool pendingConversationWorktree_{false};
+    // The conversation whose picker asked for the worktree being created.
+    QString pickerWorktreeAgentPath_;
+    QString pickerWorktreeConversation_;
+    qint64 pickerWorktreeRevision_{0};
     QString pendingDeleteConversationPath_;
     QStringList pendingDeleteWorktreePaths_;
     QString pendingDeleteWorktreeRepository_;
@@ -472,7 +473,6 @@ class MainWindow final : public QMainWindow {
     QSet<QString> agentDiffRequests_;
     bool atlasWorkspaceMode_{false};
     bool remoteWorkspaceMode_{false};
-    bool worktreesWorkspaceMode_{false};
     bool settingsWorkspaceMode_{false};
     bool restoringWorkspaceState_{false};
     bool suppressWorkspaceRestore_{false};

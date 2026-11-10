@@ -15,7 +15,6 @@
 #include "app/SettingsDialog.h"
 #include "app/SettingsProvidersPage.h"
 #include "app/SettingsWorkspacePage.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
@@ -125,7 +124,7 @@ class MainWindowSettingsTest final : public QObject {
   private slots:
     void appliesSavedAppearanceToPublicAndPrivateSurfaces();
     void archivedPageStopsRunningTurnAndRestoresInPlace();
-    void settingsAndWorktreesUseWorkspacePages();
+    void settingsUsesWorkspacePage();
     void themeSwitchRecoloursAnOpenDiff();
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
@@ -705,7 +704,7 @@ void MainWindowSettingsTest::themeSwitchRecoloursAnOpenDiff() {
     QTRY_COMPARE(contextBackground(), QColor(ket::Tokens::color(u"panel-bg", ket::Theme::Light)));
 }
 
-void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
+void MainWindowSettingsTest::settingsUsesWorkspacePage() {
     QTemporaryDir settingsDirectory;
     QTemporaryDir workspace;
     QVERIFY(settingsDirectory.isValid());
@@ -722,13 +721,12 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
 
     auto* activity = window.findChild<ketplus::ActivityBar*>();
     QVERIFY(activity != nullptr);
-    auto* manageWorktrees = window.findChild<QAction*>(QStringLiteral("manageWorktreesAction"));
-    QVERIFY(manageWorktrees != nullptr);
-    manageWorktrees->trigger();
-    ketplus::WorktreesWorkspacePage* worktreesPage = nullptr;
-    QTRY_VERIFY((worktreesPage = window.findChild<ketplus::WorktreesWorkspacePage*>()) != nullptr &&
-                worktreesPage->isVisible());
-    QVERIFY(!window.statusBar()->isVisible());
+    // Worktrees have no page of their own; they are managed from a conversation.
+    QVERIFY(window.findChild<QAction*>(QStringLiteral("manageWorktreesAction")) == nullptr);
+    auto* agentButton =
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+    QVERIFY(agentButton != nullptr);
+    agentButton->click();
     QCOMPARE(activity->mode(), ketplus::ActivityBar::Mode::AgentWorkspace);
 
     auto* settingsAction = window.findChild<QAction*>(QStringLiteral("productSettingsAction"));
@@ -737,7 +735,6 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     ketplus::SettingsWorkspacePage* settingsPage = nullptr;
     QTRY_VERIFY((settingsPage = window.findChild<ketplus::SettingsWorkspacePage*>()) != nullptr &&
                 settingsPage->isVisible());
-    QTRY_VERIFY(worktreesPage->isHidden());
     QTRY_VERIFY(settingsPage->width() >= 320);
     QTRY_VERIFY(settingsPage->height() >= 240);
     QCOMPARE(activity->mode(), ketplus::ActivityBar::Mode::Settings);
@@ -908,7 +905,7 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     window.resize(1100, 720);
     window.show();
     window.openFolder(workspace.path());
-    window.findChild<QAction*>(QStringLiteral("manageWorktreesAction"))->trigger();
+    window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
     ketplus::AgentWorkspaceView* agent = nullptr;
     QTRY_VERIFY((agent = window.findChild<ketplus::AgentWorkspaceView*>()) != nullptr);
     QCOMPARE(agent->conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);

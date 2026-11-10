@@ -432,8 +432,6 @@ void MainWindow::prioritizeWorktree(QVector<GitWorktree>& worktrees) const {
 
 void MainWindow::rebuildWorktreeMenu() {
     worktreeMenu_->clear();
-    worktreeMenu_->addAction(manageWorktreesAction_);
-    worktreeMenu_->addSeparator();
     if (worktrees_.isEmpty()) {
         auto* emptyAction = worktreeMenu_->addAction(QStringLiteral("No linked worktrees"));
         emptyAction->setEnabled(false);

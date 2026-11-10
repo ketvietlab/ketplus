@@ -109,6 +109,10 @@ class AgentSessionManager final : public QObject {
                                       const QVariantMap& changes = {});
     void newSession(const QString& worktreePath);
     void markActiveConversationOwnsWorktree(const QString& worktreePath);
+    // A worktree the user created for this conversation from its picker; deleting the
+    // conversation offers to remove it.
+    void claimConversationWorktree(const QString& worktreePath, const QString& conversationId,
+                                   const QString& ownedPath);
     [[nodiscard]] bool conversationOwnsWorktree(const QString& worktreePath,
                                                 const QString& conversationId) const;
     [[nodiscard]] QStringList conversationOwnedWorktreePaths(const QString& worktreePath,
