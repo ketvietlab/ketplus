@@ -120,7 +120,7 @@ Rectangle {
                     }
                     Kit.KetMenuItem {
                         objectName: "forkConversationMenuItem"
-                        text: "Fork this conversation"
+                        text: "Fork conversation"
                         iconName: "branch"
                         enabled: modelData.forkable === true
                         onTriggered: Qt.callLater(() => agentHost.requestForkConversation(conversationId))
@@ -128,8 +128,21 @@ Rectangle {
                     Kit.KetMenuItem {
                         objectName: "changeConversationWorktreeMenuItem"
                         text: "Change worktree…"
-                        iconName: "folder"
+                        iconName: "branch"
                         onTriggered: Qt.callLater(() => agentHost.requestConversationWorktree(conversationId))
+                    }
+                    // The reference other conversations use to message this one.
+                    Kit.KetMenuItem {
+                        objectName: "copyConversationReferenceMenuItem"
+                        readonly property string reference: modelData.number ? "@agent/" + modelData.number : ""
+                        // Hidden and disabled together: menu keys skip disabled items only.
+                        visible: reference.length > 0
+                        enabled: visible
+                        height: visible ? implicitHeight : 0
+                        text: "Copy reference"
+                        iconName: "copy"
+                        shortcut: reference
+                        onTriggered: agentHost.copyText(reference)
                     }
                     Kit.KetMenuSeparator {}
                     Kit.KetMenuItem {
