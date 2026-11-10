@@ -8,6 +8,7 @@
 
 #include "KetAppearance.h"
 #include "KetDialog.h"
+#include "KetFieldRow.h"
 #include "KetRecipes.h"
 
 #include <QAccessible>
@@ -414,9 +415,21 @@ void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
     auto* pairing = view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog"));
     QVERIFY(pairing && pairing->isOpen());
     QCOMPARE(pairing->parentWidget(), view.window());
-    QCOMPARE(pairing->title(), QStringLiteral("Pair a Linux machine"));
-    QCOMPARE(pairing->card()->width(), 470);
+    QCOMPARE(pairing->title(), QStringLiteral("Connect a Linux machine"));
+    // The link field sits in the kit's field row, as the mock's dialog.
+    auto* pairingRow = pairing->findChild<ket::FieldRow*>(QStringLiteral("linuxPairingRow"));
+    QVERIFY(pairingRow);
+    QCOMPARE(pairingRow->control()->objectName(), QStringLiteral("linuxPairingLink"));
+    // The feedback line takes no room until there is something to say.
+    auto* pairingFeedback = pairing->findChild<QLabel*>(QStringLiteral("linuxPairingFeedback"));
+    QVERIFY(pairingFeedback && pairingFeedback->isHidden());
+    QCOMPARE(pairing->card()->width(), 500); // the mock's dialog width
     captureWindow(view, QStringLiteral("linux-pairing"));
+    for (auto* button : pairing->findChildren<QAbstractButton*>())
+        if (button->text() == QStringLiteral("Check link"))
+            button->click();
+    QVERIFY(!pairingFeedback->isHidden());
+    QVERIFY(pairingFeedback->text().contains(QStringLiteral("pairing link")));
     pairing->reject();
     QTRY_VERIFY(!view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog")));
 
