@@ -699,9 +699,14 @@ class ReplayDetailCompactorTest final : public QObject {
         QVERIFY(!compactCompletedReplayItem(*item, cutoff(), [](const QByteArray&) {
             return QJsonObject{{"media_ref", "again"}};
         }));
-        // Without a preview every image becomes a placeholder, as before.
-        const auto plain = compactCompletedReplayItem(
-            call, cutoff(), [](const QByteArray&) { return QJsonObject(); });
+        // Without a preview every image becomes a placeholder, as before, and a preview that
+        // keeps failing is tried no more than four times.
+        int attempts = 0;
+        const auto plain = compactCompletedReplayItem(call, cutoff(), [&](const QByteArray&) {
+            ++attempts;
+            return QJsonObject();
+        });
+        QCOMPARE(attempts, 4);
         QVERIFY(plain);
         QVERIFY(!plain->value("compacted")
                      .toObject()

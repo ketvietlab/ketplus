@@ -287,11 +287,13 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
     qint64 removed = 0;
     qint64 retained = 0;
     int previews = 0;
+    // Failed decodes or media writes cost as much as successful ones, so attempts are capped.
+    int attempts = 0;
     // A result image may keep a bounded preview as a media reference, the form the media store
     // gives current results; at most four per call, as clients draw. Input images have no
     // rendering, so they always become placeholders.
     const auto previewOf = [&](const QString& data) -> QJsonObject {
-        if (!preview || previews >= 4)
+        if (!preview || attempts >= 4)
             return {};
         auto encoded = data.toLatin1();
         if (encoded.startsWith("data:")) {
@@ -302,6 +304,7 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
             QByteArray::fromBase64Encoding(encoded, QByteArray::AbortOnBase64DecodingErrors);
         if (!decoded || decoded.decoded.isEmpty())
             return {};
+        ++attempts;
         auto block = preview(decoded.decoded);
         if (!block.isEmpty())
             ++previews;

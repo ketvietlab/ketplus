@@ -29,7 +29,8 @@ image (`McpMediaStore::encodePreview`: at most the requested side, at most
 - Tool results (ADR 0099) use the same callback. In `mcpToolCall` and
   `dynamicToolCall` items, an inline `result.content` image becomes a media
   reference block in its place, up to four per call (`maximumImagesPerCall`,
-  what clients draw). Further images, and every `contentItems` `inputImage`
+  what clients draw). The callback is tried at most four times per call, so
+  failed decodes or media writes cost no more than successful ones. Further images, and every `contentItems` `inputImage`
   (which no client draws), stay `history_retention` placeholders. The
   `inline_images` marker keeps policy `tool-inline-images-v1` and gains
   `previews` (the count kept), and `retained_bytes` is the size of the kept
