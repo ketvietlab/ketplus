@@ -1,4 +1,5 @@
 #include "workspace/ExplorerPanel.h"
+#include "KetBanner.h"
 #include "KetConversationRow.h"
 #include "KetProfile.h"
 #include "workspace/ActivityBar.h"
@@ -541,9 +542,21 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
         QVERIFY(row->isVisible());
     auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
     QVERIFY(warning && !warning->isVisible());
-    bar.setStorageStatus(
-        {{"ok", true}, {"status", QVariantMap{{"warning", true}, {"over_limit", true}}}});
+    bar.setStorageStatus({{"ok", true},
+                          {"status", QVariantMap{{"warning", true},
+                                                 {"over_limit", true},
+                                                 {"database_page_bytes", 9'000'000'000LL},
+                                                 {"limit_bytes", 5'000'000'000LL}}}});
     QVERIFY(warning->isVisible());
+    // The mock's banner text; the banner itself opens Settings → Storage.
+    auto* banner = warning->findChild<ket::Banner*>();
+    QCOMPARE(banner->title(), QString("Journal is 9.0 GB"));
+    QCOMPARE(banner->message(), QString("Over its 5 GB limit"));
+    QSignalSpy opened(&bar, &ketplus::ActivityBar::settingsSectionRequested);
+    QTest::mouseClick(warning->findChild<QAbstractButton*>("sidebarStorageSettings"),
+                      Qt::LeftButton);
+    QCOMPARE(opened.size(), 1);
+    QCOMPARE(opened.first().first().toString(), QString("storage"));
     const auto capture = qEnvironmentVariable("KETPLUS_STORAGE_SIDEBAR_CAPTURE");
     if (!capture.isEmpty()) {
         QCoreApplication::processEvents();
@@ -553,6 +566,20 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
     QVERIFY(!warning->isVisible());
     bar.setStorageStatus({{"ok", true}, {"status", QVariantMap{{"warning", false}}}});
     QVERIFY(!warning->isVisible());
+    // Under 5 GB free on the disk warns on its own.
+    bar.setStorageStatus(
+        {{"ok", true},
+         {"status", QVariantMap{{"warning", false},
+                                {"low_disk", true},
+                                {"filesystem_available_bytes", 3'200'000'000LL}}}});
+    QVERIFY(warning->isVisible());
+    QCOMPARE(banner->title(), QString("Disk space is low"));
+    QCOMPARE(banner->message(), QString("3.2 GB free · journal writes may fail"));
+    bar.setStorageStatus({{"ok", true},
+                          {"status", QVariantMap{{"warning", true},
+                                                 {"database_page_bytes", 4'100'000'000LL},
+                                                 {"limit_bytes", 5'000'000'000LL}}}});
+    QCOMPARE(banner->message(), QString("Near its 5 GB limit"));
 }
 
 void ExplorerPanelTest::scalesSidebarTypeWithInterfaceZoom() {

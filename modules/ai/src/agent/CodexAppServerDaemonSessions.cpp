@@ -13,6 +13,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
@@ -118,14 +119,18 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
         return;
     }
     if (method.startsWith(QStringLiteral("daemon/storage"))) {
-        const bool retention = method.startsWith(QStringLiteral("daemon/storageRetention/"));
-        const bool size = method.startsWith(QStringLiteral("daemon/storageSize/"));
+        // daemon/storage<Area>/<operation> → storage.<area>.<operation> (ADRs 0042, 0046, 0108).
+        static const QHash<QString, QStringList> operations{
+            {QStringLiteral("Retention"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Size"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Options"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Compaction"), {QStringLiteral("start"), QStringLiteral("read")}},
+            {QStringLiteral("Breakdown"), {QStringLiteral("read")}},
+            {QStringLiteral("Export"), {QStringLiteral("start"), QStringLiteral("read")}}};
+        const QString area = method.section('/', 1, 1).mid(7); // after "storage"
         const QString operation = method.section('/', -1);
-        const QString capability =
-            (retention ? QStringLiteral("storage.retention.") : QStringLiteral("storage.size.")) +
-            operation;
-        if ((!retention && !size) || method.count('/') != 2 ||
-            (operation != QStringLiteral("read") && operation != QStringLiteral("apply")) ||
+        const QString capability = QStringLiteral("storage.%1.%2").arg(area.toLower(), operation);
+        if (method.count('/') != 2 || !operations.value(area).contains(operation) ||
             !daemon_->isReady() || !daemon_->hasCapability(capability)) {
             callback(
                 {},

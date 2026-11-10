@@ -779,6 +779,31 @@ sweeps before recent detail, and existing free-page priority. Agent-token denial
 and disconnected-request tests include both storage API families. Shared headers
 require full Pro build/CTest. No installed journal or live provider is used.
 
+### Storage options, Compact now, breakdown and export (#128, ADR 0108)
+
+`ketplus_daemon_storage_jobs_tests` covers the revisioned storage options (kept apart
+from the detail and size policies, local-owner only), the warning and its option,
+Compact now clearing an over-limit journal, Compact now waiting for a running turn,
+the breakdown measured off the event loop, and export writing one owner-only file per
+conversation. Run it with `ketplus_daemon_usage_retention_tests` (generated-image
+option), `ketplus_daemon_size_policy_tests`, `ketplus_daemon_lifecycle_tests`
+(archive period), `ketplus_settings_storage_page_tests`, `ketplus_workspace_tests`
+(sidebar banner) and `ketplus_desktop_daemon_client_tests`. No provider is started.
+
+The real-size check is opt-in. Copy the installed journal with SQLite's backup API (never
+copy the live WAL files, and never start the full daemon on the copy, because its cloud
+client would connect as the same device), then run:
+
+```sh
+python3 -c 'import sqlite3,sys; s=sqlite3.connect(f"file:{sys.argv[1]}?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d)' \
+  "<journal.sqlite3>" "$HOME/KetPlus-journal-size-check/journal.sqlite3"
+KETPLUS_JOURNAL_SIZE_CHECK="$HOME/KetPlus-journal-size-check/journal.sqlite3" \
+  QTEST_FUNCTION_TIMEOUT=3600000 QT_QPA_PLATFORM=offscreen ./ketplus_daemon_storage_jobs_tests journalCopyShrinksOnFirstCompaction
+```
+
+It migrates the copy to incremental vacuum, runs Compact now twice and requires the file
+under 4 GB and under its limit. Delete the copy afterwards; it holds real transcripts.
+
 The usage-retention suite also exercises bounded large-tool manifests: real
 fragment storage, the shared byte budget, latest-twenty and ACK/session guards,
 corrupt/oversize chunks, identity/digest mismatches, unknown manifests, shared

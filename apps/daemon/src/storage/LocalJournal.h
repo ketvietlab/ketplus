@@ -5,6 +5,7 @@
 #include "storage/JournalRetentionPolicy.h"
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
+#include "storage/JournalStorageOptions.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -343,7 +344,16 @@ class LocalJournal final {
     [[nodiscard]] std::optional<JournalSizePolicy> sizePolicy() const;
     bool setSizePolicy(const JournalSizePolicy& policy, qint64 expectedRevision);
     bool setRetentionPolicy(const JournalRetentionPolicy& policy, qint64 expectedRevision);
-    std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now);
+    [[nodiscard]] std::optional<JournalStorageOptions> storageOptions() const;
+    bool setStorageOptions(const JournalStorageOptions& options, qint64 expectedRevision);
+    // The last Compact now run (ADR 0108): an empty object when none has finished.
+    [[nodiscard]] std::optional<QJsonObject> lastCompaction() const;
+    bool recordCompaction(const QDateTime& completedAt, qint64 beforeBytes, qint64 afterBytes);
+    std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now, int maximumRows = 128);
+    // Counts detail sweeps that reached the end of the replay rows (or had nothing to scan
+    // because detail is kept forever), and how far the current one has come, from 0 to 1.
+    [[nodiscard]] qint64 completedDetailSweeps() const { return completedDetailSweeps_; }
+    [[nodiscard]] double detailSweepProgress() const;
     // Scan at most maximumRows replay rows per idle pass, retaining the last usage sample
     // of each type in old, acknowledged completed turns outside the newest 20 turns.
     // Also trim eligible completed command output to UTF-8 head/tail with an explicit marker.
@@ -547,6 +557,9 @@ class LocalJournal final {
     ImagePreviewWriter imagePreview_;
     bool sizePressureRecent_{false};
     bool sizePressureActive_{false};
+    qint64 completedDetailSweeps_{0};
+    JournalStorageOptions::GeneratedImages generatedImages_{
+        JournalStorageOptions::GeneratedImages::Preview};
 };
 
 } // namespace ketplus::daemon

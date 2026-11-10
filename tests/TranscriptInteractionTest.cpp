@@ -1271,6 +1271,44 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible_data() {
         << QString("dynamicToolCall") << QString("synthetic") << true;
 }
 
+// #128: a compacted command or picture says what went, how large it was and how old.
+void AgentWorkspaceViewTest::compactedItemsSayWhatWasTrimmed() {
+    const auto marker = [](const QString& policy, qint64 bytes, int days) {
+        const auto at = QDateTime::fromString("2026-11-10T08:00:00.000Z", Qt::ISODateWithMs);
+        return QJsonObject{{"policy", policy},
+                           {"original_bytes", bytes},
+                           {"at", at.toString(Qt::ISODateWithMs)},
+                           {"cutoff", at.addDays(-days).toString(Qt::ISODateWithMs)}};
+    };
+    const auto command = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "old-command"},
+                    {"type", "commandExecution"},
+                    {"command", "make test"},
+                    {"status", "completed"},
+                    {"aggregatedOutput", "head…tail"},
+                    {"compacted", marker("command-output-v1", 1258291, 30)}},
+        true);
+    QCOMPARE(command.value("title").toString(),
+             QString("Ran: make test · Output trimmed · 1.2 MB · older than 30 days"));
+    // Size pressure trims with the current time as the cutoff: no age to state.
+    const auto image = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "old-image"},
+                    {"type", "imageGeneration"},
+                    {"status", "completed"},
+                    {"savedPath", "/missing/kite.png"},
+                    {"compacted", marker("image-preview-v1", 40 * 1024, 0)}},
+        true);
+    QCOMPARE(image.value("title").toString(),
+             QString("Generated an image · Full image trimmed · 40 KB"));
+    const auto untouched =
+        ketplus::agent_message::activityMessage(QJsonObject{{"id", "new-command"},
+                                                            {"type", "commandExecution"},
+                                                            {"command", "make test"},
+                                                            {"status", "completed"}},
+                                                true);
+    QCOMPARE(untouched.value("title").toString(), QString("Ran: make test"));
+}
+
 void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QFETCH(QString, type);
     QFETCH(QString, server);

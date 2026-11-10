@@ -1,6 +1,6 @@
 # ADR 0046: Bounded SQLite-page pressure policy
 
-Status: accepted; opt-in backend for #128, not a release or complete storage limit.
+Status: accepted; opt-in backend for #128. ADR 0108 makes the target apply by default.
 
 Persist a separate revisioned size policy (`journal_size_settings`) so older clients
 saving the two-field detail policy cannot overwrite it. `limit_bytes` accepts 0

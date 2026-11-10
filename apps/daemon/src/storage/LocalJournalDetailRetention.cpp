@@ -392,6 +392,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 if (image) {
                     const auto manifest = QJsonDocument::fromJson(manifestBytes).object();
                     const bool tool = manifest.value("item_type") != "imageGeneration";
+                    if (!tool && generatedImages_ == JournalStorageOptions::GeneratedImages::Full)
+                        continue; // "Keep full image": do not even read the pixels
                     // A tool payload may be probed and then read: both must fit. The first
                     // candidate always fits, so every pass makes progress.
                     if (imageRead ||
@@ -445,6 +447,13 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             }
             auto payload = QJsonDocument::fromJson(bytes).object();
             const auto original = payload.value(QStringLiteral("item")).toObject();
+            // "Keep full image" leaves generated pictures alone; tool results are unaffected.
+            if (generatedImages_ == JournalStorageOptions::GeneratedImages::Full &&
+                original.value(QStringLiteral("type")) == QStringLiteral("imageGeneration"))
+                continue;
+            const bool previews =
+                imagePreview_ &&
+                generatedImages_ != JournalStorageOptions::GeneratedImages::Caption;
             // A preview decodes the whole picture, so its cost does not follow the stored size.
             // Once one item has decoded, a later item that wants a preview waits for the next
             // pass; an item's own images (at most four) are decoded together.
@@ -452,7 +461,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             bool deferred = false;
             const auto item = compactCompletedReplayItem(
                 original, olderThan,
-                imagePreview_ ? ImagePreview([&, session = row.session](const QByteArray& image) {
+                previews ? ImagePreview([&, session = row.session](const QByteArray& image) {
                     if (previewDecoded && !decodedHere) {
                         deferred = true;
                         return QJsonObject();
@@ -460,7 +469,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                     decodedHere = true;
                     return imagePreview_(image, session);
                 })
-                              : ImagePreview());
+                         : ImagePreview());
             if (deferred)
                 break; // the next pass takes it
             previewDecoded = previewDecoded || decodedHere;

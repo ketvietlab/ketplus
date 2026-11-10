@@ -389,6 +389,55 @@ class JournalUsageRetentionTest final : public QObject {
         }
     }
 
+    // The Storage page's "Generated images" option (ADR 0108), through the configured pass.
+    void generatedImagesFollowTheStorageOption() {
+        const auto configuredSweep = [](LocalJournal& journal) {
+            for (int pass = 0; pass < 32; ++pass)
+                if (!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc(), 256))
+                    return false;
+            return true;
+        };
+        {
+            QTemporaryDir directory;
+            const auto path = directory.filePath("journal.sqlite");
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, path, true, 24, QString(1500 * 1024, 'A'), false, true));
+            JournalStorageOptions full;
+            full.generatedImages = JournalStorageOptions::GeneratedImages::Full;
+            QVERIFY(journal.setStorageOptions(full, 0));
+            Database database(path);
+            QVERIFY(configuredSweep(journal));
+            // Keep full image: every picture stays, though older usage samples still go.
+            QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), 24);
+            QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                     "json_extract(payload,'$.item.compacted') IS NOT NULL"),
+                     0);
+        }
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter("/nonexistent/codex");
+        SessionHost host(&journal, &adapter); // installs the preview writer
+        QImage picture(1024, 768, QImage::Format_RGB32);
+        picture.fill(QColor(40, 160, 40));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"));
+        QVERIFY(seed(journal, path, true, 24, QString::fromLatin1(png.toBase64()), false, true));
+        JournalStorageOptions caption;
+        caption.generatedImages = JournalStorageOptions::GeneratedImages::Caption;
+        QVERIFY(journal.setStorageOptions(caption, 0));
+        Database database(path);
+        QVERIFY(configuredSweep(journal));
+        // Caption only: no preview, even though the host could write one.
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-pixels-v1'"),
+                 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-preview-v1'"),
+                 0);
+    }
+
     void toolResultImagesKeepAPreview() {
         QTemporaryDir directory;
         const auto path = directory.filePath("journal.sqlite");
