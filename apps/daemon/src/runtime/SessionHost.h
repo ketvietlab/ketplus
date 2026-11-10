@@ -4,6 +4,7 @@
 #include "agents/AgentToolLaunch.h"
 #include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
+#include "runtime/ProviderReadiness.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 
@@ -273,6 +274,10 @@ class SessionHost final : public QObject, private AgentHostPort {
                      const QJsonObject& options);
     // ADR 0015: installed provider CLI versions and their support status.
     void providerRuntimeStatus(std::function<void(const QJsonObject&, const QString&)> callback);
+    // Codex readiness from account/read (#170); answers within codexAccountReadTimeoutMs.
+    void codexReadiness(const compat::Runtime& runtime,
+                        std::function<void(const QJsonObject&)> callback);
+    static constexpr int codexAccountReadTimeoutMs = 5000;
     // Journals `provider.runtime` once when a session's CLI is untested or unreadable.
     void noteProviderRuntime(const QString& sessionId, qint64 generation);
     void beginTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
@@ -400,6 +405,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QString handoffDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;
     McpMediaStore mediaStore_;
+    // Whether each provider can start a turn (#170); observed failures persist next to the journal.
+    ProviderReadiness readiness_;
     AgentBroker* agents_{nullptr};
     QString agentSocket_;
     QString agentExecutable_;

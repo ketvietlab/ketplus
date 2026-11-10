@@ -640,6 +640,52 @@ class ProviderCompatibilityTest final : public QObject {
         const QJsonObject cursor = providers.at(2).toObject();
         QCOMPARE(cursor.value(QStringLiteral("provider")).toString(), QStringLiteral("cursor"));
         QCOMPARE(cursor.value(QStringLiteral("status")).toString(), QStringLiteral("missing"));
+
+        // #170: every provider says whether it can start a turn, and how to fix it.
+        const auto readiness = [](const QJsonObject& provider) {
+            return provider.value(QStringLiteral("readiness")).toObject();
+        };
+        QCOMPARE(readiness(codex).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("ready"));
+        QCOMPARE(readiness(codex).value(QStringLiteral("account")).toString(),
+                 QStringLiteral("dev@example.com"));
+        QCOMPARE(readiness(providers.at(1).toObject()).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("runtime_missing"));
+        QCOMPARE(readiness(cursor).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("missing"));
+        QVERIFY(!readiness(cursor).value(QStringLiteral("install_command")).toString().isEmpty());
+        QCOMPARE(readiness(cursor).value(QStringLiteral("login_command")).toString(),
+                 QStringLiteral("agent login"));
+    }
+
+    void reportsASignedOutCodex() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
+        qputenv("KETPLUS_FAKE_CODEX_SIGNED_OUT", "1");
+        const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_SIGNED_OUT"); });
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+
+        std::optional<QJsonObject> answer;
+        host.handleProviderQuery(
+            request(QStringLiteral("provider.runtime_status"), QStringLiteral("signed-out")),
+            [&answer](const QJsonObject& result, const QString&) { answer = result; });
+        QTRY_VERIFY(answer.has_value());
+        const QJsonObject codex =
+            answer->value(QStringLiteral("providers")).toArray().at(0).toObject();
+        const QJsonObject readiness = codex.value(QStringLiteral("readiness")).toObject();
+        QCOMPARE(readiness.value(QStringLiteral("state")).toString(), QStringLiteral("signed_out"));
+        QCOMPARE(readiness.value(QStringLiteral("login_command")).toString(),
+                 QStringLiteral("codex login"));
+        QVERIFY(!readiness.contains(QStringLiteral("account")));
+        // Reading readiness starts no turn.
+        QFile log(directory.filePath(QStringLiteral("provider.log")));
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QVERIFY(!log.readAll().contains("turn-start:"));
     }
 };
 

@@ -65,6 +65,14 @@ for line in sys.stdin:
         emit({'id': message_id, 'result': {'rateLimits': {
             'limitId': 'codex', 'secondary': {'usedPercent': 42,
             'windowDurationMins': 10080, 'resetsAt': int(time.time()) + 3600}}}})
+    elif method == 'account/read':
+        # #170 readiness: KETPLUS_FAKE_CODEX_SIGNED_OUT reports no account.
+        if os.environ.get('KETPLUS_FAKE_CODEX_SIGNED_OUT'):
+            emit({'id': message_id, 'result': {'account': None, 'requiresOpenaiAuth': True}})
+        else:
+            emit({'id': message_id, 'result': {'account': {
+                'type': 'chatgpt', 'email': 'dev@example.com', 'planType': 'plus'},
+                'requiresOpenaiAuth': True}})
     elif method == 'thread/delete':
         log('delete:' + message['params']['threadId'])
         emit({'id': message_id, 'result': {}})
