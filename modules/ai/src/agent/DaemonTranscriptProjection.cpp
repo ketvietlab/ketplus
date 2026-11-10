@@ -144,6 +144,14 @@ QString approvalOutcome(const QString& eventType, const QJsonObject& data) {
 
 void presentAgentError(QVariantMap& entry, const QString& message) {
     entry.insert(QStringLiteral("title"), agentErrorTitle());
+    // A provider that went quiet: "<Provider> did not answer for 60 seconds…", as the mock's
+    // workspace/error titles it.
+    static const QRegularExpression silent(
+        QStringLiteral("^(Codex|Claude|Claude Code|Cursor) did not answer for \\d+ seconds\\b"));
+    if (silent.match(message).hasMatch()) {
+        entry.insert(QStringLiteral("title"), QStringLiteral("The provider stopped responding"));
+        return;
+    }
     // The adapters' own words when a provider process ends under a turn.
     static const QList<QPair<QRegularExpression, QString>> exits{
         {QRegularExpression(QStringLiteral("^Codex app-server stopped \\(exit")),

@@ -109,10 +109,43 @@ Item {
         Rectangle {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
-            // ket::badgeRecipe, as KetBadge draws the mock's status; long statuses still elide.
-            // #125: a finished turn that asks the user to decide reads "Waiting for you" (Info tone).
+            // The mock's KetBadge: the conversation's status in the kit's words and tone, read
+            // from the same facts as its sidebar row. Long statuses still elide.
+            // #125: a finished turn that asks the user to decide reads "Waiting for you" (Info).
             readonly property bool awaiting: !agentHost.sessionRunning && header.selectedConversation.awaitingReply === true
-            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, agentHost.sessionRunning ? KetTheme.BadgeTone.Accent : awaiting ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral)
+            readonly property string sessionText: String(agentHost.sessionStatus || "")
+            readonly property int status: {
+                const conversation = header.selectedConversation
+                const text = String(conversation.status || sessionText).toLowerCase()
+                if (conversation.needsInput === true || text.indexOf("input") >= 0 || text.indexOf("question") >= 0)
+                    return KetTheme.ConversationStatus.NeedsInput
+                if (awaiting)
+                    return KetTheme.ConversationStatus.AwaitingReply
+                if (agentHost.sessionRunning)
+                    return KetTheme.ConversationStatus.Working
+                if (/fail|error|disconnect|missing|not found/.test(text))
+                    return KetTheme.ConversationStatus.Error
+                if (text.indexOf("stop") >= 0)
+                    return KetTheme.ConversationStatus.Stopped
+                return conversation.started === true ? KetTheme.ConversationStatus.Completed : KetTheme.ConversationStatus.NotStarted
+            }
+            // A failed reply reads as the kit's "Reply failed"; another fault (a missing worktree,
+            // a lost connection) and a conversation not started yet keep the session's own words.
+            readonly property string label: status === KetTheme.ConversationStatus.Error && /disconnect|missing|not found/.test(String(header.selectedConversation.status || sessionText).toLowerCase())
+                ? sessionText
+                : status === KetTheme.ConversationStatus.NotStarted && sessionText.length > 0 ? sessionText
+                : KetTheme.conversationStatusLabel(status)
+            readonly property int tone: {
+                switch (status) {
+                case KetTheme.ConversationStatus.Completed: return KetTheme.BadgeTone.Success
+                case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
+                case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
+                case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
+                case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
+                }
+                return KetTheme.BadgeTone.Neutral
+            }
+            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, tone)
             Layout.preferredHeight: recipe.height
             Layout.preferredWidth: statusText.implicitWidth + 2 * recipe.paddingInline
             Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
@@ -124,7 +157,7 @@ Item {
                 id: statusText
                 anchors.centerIn: parent
                 width: Math.min(implicitWidth, parent.width - 2 * conversationStatusBadge.recipe.paddingInline)
-                text: agentHost.sessionRunning ? "Working" : conversationStatusBadge.awaiting ? "Waiting for you" : agentHost.sessionStatus
+                text: conversationStatusBadge.label
                 color: conversationStatusBadge.recipe.text
                 font.family: KetTheme.fontFamily
                 font.pixelSize: conversationStatusBadge.recipe.fontPixels
