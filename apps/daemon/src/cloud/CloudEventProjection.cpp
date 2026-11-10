@@ -1,4 +1,5 @@
 #include "cloud/CloudEventProjection.h"
+#include "agents/WorkReport.h"
 #include "storage/TranscriptItemSnapshot.h"
 
 #include <QCryptographicHash>
@@ -319,6 +320,9 @@ QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObj
     if (isCommandOutputEventType(eventType)) {
         return commandProjection(payload);
     }
+    // ADR 0106: report text is agent-written but may quote sensitive output.
+    if (eventType == QStringLiteral("work_report.updated"))
+        return work_report::cloudProjection(payload);
     if ((normalizedMarker(itemType) == QStringLiteral("mcptoolcall") ||
          normalizedMarker(itemType) == QStringLiteral("dynamictoolcall"))) {
         return mcpToolCallProjection(payload);

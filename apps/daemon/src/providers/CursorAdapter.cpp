@@ -1268,10 +1268,10 @@ void CursorAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
         browser_tools::hostAgentInstructions(browserSessions_.contains(turn.ketplusSessionId)) +
         QStringLiteral("\n\n") +
         computer_tools::agentInstructions(computerSessions_.contains(turn.ketplusSessionId));
-    if (agentSessions_.contains(turn.ketplusSessionId) &&
-        !agentInstructions_.value(turn.ketplusSessionId).isEmpty())
+    const bool agentTools = agentSessions_.contains(turn.ketplusSessionId);
+    if (agentTools && !agentInstructions_.value(turn.ketplusSessionId).isEmpty())
         hostText += QStringLiteral("\n\n") + agentInstructions_.value(turn.ketplusSessionId);
-    hostText = withResponseGuidance(hostText);
+    hostText = withResponseGuidance(hostText, agentTools);
     prompt.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                {QStringLiteral("text"), hostText}});
     emit canonicalEvent(turn.ketplusSessionId, QStringLiteral("turn.started"),

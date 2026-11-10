@@ -117,6 +117,16 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         found->turnSequence = sequence;
         found->turnStartedAt = sentAt;
         found->turnContextTokens = -1;
+        found->turnReport = {};
+    }
+    // ADR 0106: the ledger joins the turn's end row; the Report tab follows it live.
+    if (type == QStringLiteral("work_report.updated")) {
+        if (sequence == found->turnSequence)
+            found->turnReport = data;
+        emit notificationReceived(
+            QStringLiteral("daemon/workReport"),
+            {{QStringLiteral("threadId"), sessionId}, {QStringLiteral("report"), data}});
+        return;
     }
     if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)
         found->turnContextTokens = agent_message::daemonContextTokens(data);
@@ -135,6 +145,9 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             notice.insert(QStringLiteral("contextTokens"), turn.contextTokens);
         if (notice.isEmpty())
             return;
+        if (type == QStringLiteral("turn.completed") && sequence == found->turnSequence &&
+            !found->turnReport.isEmpty())
+            notice.insert(QStringLiteral("workReport"), found->turnReport.toVariantMap());
         if (daemonHasTranscriptWindow_ &&
             (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {
             if (found->windowReady) {

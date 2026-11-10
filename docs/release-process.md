@@ -68,8 +68,8 @@ and stay as they are. To release:
 ```sh
 git switch main
 git merge --ff-only develop
-git tag -a pro-v0.1.51 -m "KétPlus Pro 0.1.51"
-git push origin main pro-v0.1.51
+git tag -a pro-v0.1.52 -m "KétPlus Pro 0.1.52"
+git push origin main pro-v0.1.52
 git switch develop
 ```
 

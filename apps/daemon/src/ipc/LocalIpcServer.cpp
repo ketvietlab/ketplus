@@ -298,6 +298,7 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                        QStringLiteral("session.agent_messages.release"),
                        QStringLiteral("session.reviewer.get"),
                        QStringLiteral("session.reviewer.set"),
+                       QStringLiteral("session.work_report.read"),
                        QStringLiteral("session.configuration.read"),
                        QStringLiteral("session.configuration.apply"),
                        QStringLiteral("session.execution_policy.apply"),

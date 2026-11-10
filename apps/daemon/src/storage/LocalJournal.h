@@ -442,6 +442,11 @@ class LocalJournal final {
     conversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
+    // ADR 0106: the conversation's current work report ledger, empty before its first report.
+    [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
+    // Stores a ledger whose version is newer than the stored one.
+    bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
+                         QString* error = nullptr);
 
   private:
     bool initializeAgents();
@@ -488,6 +493,7 @@ class LocalJournal final {
                                                  const std::function<bool()>& mutation,
                                                  bool ownTransaction = true);
     bool initializeContexts();
+    bool initializeWorkReports();
     [[nodiscard]] TranscriptWindow transcriptWindowImpl(const QString& sessionId, qint64 generation,
                                                         qint64 beforeCursor, qint64 snapshotCursor,
                                                         qint64 projectionRevision, int turnLimit,

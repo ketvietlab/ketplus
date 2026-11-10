@@ -358,6 +358,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] qint64 agentTurnSequence(const QString& sessionId) const override;
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
+    // ADR 0106, in SessionHostWorkReports.cpp.
+    QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
+                                 const QJsonObject& payload) override;
+    [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
     [[nodiscard]] AgentConversation agentConversationOf(const Session& session) const;
     // The ketplus_agents launch for a conversation generation, when an endpoint is set.
     [[nodiscard]] std::optional<agent_tools::Launch> agentLaunch(const QString& sessionId,

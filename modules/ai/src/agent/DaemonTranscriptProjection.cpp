@@ -489,6 +489,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     // begins mid-turn has no start, so that turn's line omits the duration.
     QHash<qint64, QDateTime> turnStarts;
     QHash<qint64, qint64> turnContext;
+    // ADR 0106: a turn's last work report, shown with its end row.
+    QHash<qint64, QJsonObject> turnReports;
     for (const auto& value : page.value("events").toArray()) {
         const auto event = value.toObject();
         const auto type = event.value("event_type").toString();
@@ -507,8 +509,14 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         turn.contextTokens = turnContext.value(sequence, -1);
         if (type == "turn.completed" && sentAt.isValid() && turnStarts.contains(sequence))
             turn.durationMs = turnStarts.value(sequence).msecsTo(sentAt);
-        const auto notice = daemonEventNotice(
+        if (type == "work_report.updated") {
+            turnReports.insert(sequence, data);
+            continue;
+        }
+        auto notice = daemonEventNotice(
             type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage, turn);
+        if (type == "turn.completed" && !notice.isEmpty() && turnReports.contains(sequence))
+            notice.insert("workReport", turnReports.value(sequence).toVariantMap());
         QJsonObject item = data.value("item").toObject();
         if (item.isEmpty()) {
             item = data;

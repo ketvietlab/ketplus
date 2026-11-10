@@ -25,7 +25,8 @@ const QStringList& historyTables() {
                                     QStringLiteral("activity_summaries"),
                                     QStringLiteral("activity_files"),
                                     QStringLiteral("large_event_payloads"),
-                                    QStringLiteral("large_event_payload_chunks")};
+                                    QStringLiteral("large_event_payload_chunks"),
+                                    QStringLiteral("work_reports")};
     return tables;
 }
 

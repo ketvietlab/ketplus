@@ -48,6 +48,8 @@ class AgentMessageModel final : public QAbstractListModel {
     Q_INVOKABLE int groupLeaderIndex(int row) const;
     // The files the turn ending at visible `row` changed, for its changed-files card.
     Q_INVOKABLE QVariantMap turnFiles(int row) const;
+    // ADR 0106: the work report a turn-end row carries, empty when the turn reported none.
+    Q_INVOKABLE QVariantMap turnReport(int row) const;
     // Stable keys of the activity groups currently loaded.
     Q_INVOKABLE QStringList activityGroupKeys() const;
     Q_INVOKABLE int sourceCount() const { return int(sourceItems_.size()); }
