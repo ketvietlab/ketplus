@@ -125,33 +125,38 @@ void MainWindow::deleteAgentConversation(const QString& worktreePath,
                                          const QString& conversationId) {
     if (agentManager_ == nullptr || conversationId.isEmpty())
         return;
+    if (agentDialogOpen(this, QStringLiteral("conversationDeleteDialogCard")))
+        return;
     const QString path = worktreePath;
     const QString id = conversationId;
     QStringList owned = agentManager_->conversationOwnedWorktreePaths(path, id);
     const bool hasLinkedWorktree = agentManager_->conversationOwnsWorktree(path, id);
     if (hasLinkedWorktree && owned.isEmpty())
         owned = QStringList{path};
-    AgentConversationDeleteDialog dialog(hasLinkedWorktree ? owned : QStringList{}, this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    clearPendingWorktreeDeletion();
-    if (dialog.deleteLinkedWorktree()) {
-        if (!hasLinkedWorktree) {
-            auto* notice =
-                new QMessageBox(QMessageBox::Warning, tr("Unable to delete worktree"),
-                                tr("This conversation is not linked to a dedicated worktree."),
-                                QMessageBox::Ok, this);
-            notice->setObjectName(QStringLiteral("worktreeDeletionError"));
-            notice->setAttribute(Qt::WA_DeleteOnClose);
-            notice->open();
-            return;
-        }
-        pendingDeleteConversationPath_ = path;
-        pendingDeleteWorktreePaths_ = owned;
-        pendingDeleteWorktreeRepository_ = primaryWorktreePath();
-        pendingDeleteWorktreeForce_ = dialog.forceDeleteWorktree();
-    }
-    agentManager_->deleteConversation(path, id);
+    auto* form = new AgentConversationDeleteDialog(hasLinkedWorktree ? owned : QStringList{});
+    connect(form->present(this), &ket::Dialog::accepted, this,
+            [this, form, path, id, owned, hasLinkedWorktree] {
+                if (agentManager_ == nullptr)
+                    return;
+                clearPendingWorktreeDeletion();
+                if (form->deleteLinkedWorktree()) {
+                    if (!hasLinkedWorktree) {
+                        auto* notice = new QMessageBox(
+                            QMessageBox::Warning, tr("Unable to delete worktree"),
+                            tr("This conversation is not linked to a dedicated worktree."),
+                            QMessageBox::Ok, this);
+                        notice->setObjectName(QStringLiteral("worktreeDeletionError"));
+                        notice->setAttribute(Qt::WA_DeleteOnClose);
+                        notice->open();
+                        return;
+                    }
+                    pendingDeleteConversationPath_ = path;
+                    pendingDeleteWorktreePaths_ = owned;
+                    pendingDeleteWorktreeRepository_ = primaryWorktreePath();
+                    pendingDeleteWorktreeForce_ = form->forceDeleteWorktree();
+                }
+                agentManager_->deleteConversation(path, id);
+            });
 }
 
 } // namespace ketplus

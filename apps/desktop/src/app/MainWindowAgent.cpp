@@ -1,3 +1,4 @@
+#include "KetDialog.h"
 #include "agent/CodexAppServer.h"
 #include "app/AgentConversationWidth.h"
 #include "app/AgentWorktreeCreator.h"
@@ -639,14 +640,18 @@ void MainWindow::createAgentWorktree() {
         return;
     }
 
-    const QString repositoryPath = workspaceRoot_;
-    AgentWorktreeDialog dialog(repositoryPath, this);
-    if (dialog.exec() != QDialog::Accepted || workspaceRoot_ != repositoryPath) {
+    // A shortcut can ask again while the card is open.
+    if (agentDialogOpen(this, QStringLiteral("agentWorktreeDialogCard")))
         return;
-    }
-
-    agentWorktreeCreator_->create(repositoryPath, primaryWorktreePath(), dialog.branchName(),
-                                  dialog.baseBranch());
+    const QString repositoryPath = workspaceRoot_;
+    auto* form = new AgentWorktreeDialog(repositoryPath);
+    connect(form->present(this), &ket::Dialog::accepted, this, [this, form, repositoryPath] {
+        // The folder can change while the card is open.
+        if (workspaceRoot_ != repositoryPath)
+            return;
+        agentWorktreeCreator_->create(repositoryPath, primaryWorktreePath(), form->branchName(),
+                                      form->baseBranch());
+    });
 }
 
 QString MainWindow::primaryWorktreePath() const {
@@ -668,6 +673,9 @@ void MainWindow::startNewAgentConversation() {
         agentManager_->newSession(activePath);
         return;
     }
+    // A shortcut can ask again while the card is open.
+    if (agentDialogOpen(this, QStringLiteral("agentConversationDialogCard")))
+        return;
     const QString repositoryPath = workspaceRoot_;
     // The sidebar selects by the conversation on screen, which can sit in another
     // worktree of this repository than the open folder; the dialog opens on the
@@ -681,29 +689,32 @@ void MainWindow::startNewAgentConversation() {
             continue;
         choices.append(worktree);
     }
-    AgentWorktreeDialog dialog(anchorPath, this, AgentWorktreeDialog::Purpose::Conversation,
-                               primaryWorktreePath(), choices);
+    auto* form =
+        new AgentWorktreeDialog(anchorPath, nullptr, AgentWorktreeDialog::Purpose::Conversation,
+                                primaryWorktreePath(), choices);
     // Worktrees made outside KetPlus (another agent, a terminal) change nothing the
     // repository watcher sees, so the cached list can miss them: list them again and
-    // update the dialog in place rather than delay it.
-    connect(git_, &GitService::worktreesChanged, &dialog,
-            [&dialog](const QVector<GitWorktree>& worktrees) { dialog.setWorktrees(worktrees); });
+    // update the form in place rather than delay it.
+    connect(git_, &GitService::worktreesChanged, form, &AgentWorktreeDialog::setWorktrees);
+    connect(form->present(this), &ket::Dialog::accepted, this, [this, form, repositoryPath] {
+        // The worktree list belongs to the repository the card opened on.
+        if (workspaceRoot_ != repositoryPath)
+            return;
+        if (!form->createWorktree()) {
+            const QString selected = form->selectedWorktreePath();
+            if (!selected.isEmpty())
+                switchToWorktree(selected);
+            agentManager_->newSession(selected.isEmpty() ? agentWorkspace_->activePath()
+                                                         : selected);
+            return;
+        }
+        pendingConversationWorktree_ = true;
+        // A new worktree is cut from a branch, not from another worktree: Git resolves
+        // the base ref the same way in any checkout of the repository.
+        agentWorktreeCreator_->create(primaryWorktreePath(), primaryWorktreePath(),
+                                      form->branchName(), form->baseBranch());
+    });
     git_->refresh();
-    // The worktree list belongs to the repository the dialog opened on.
-    if (dialog.exec() != QDialog::Accepted || workspaceRoot_ != repositoryPath)
-        return;
-    if (!dialog.createWorktree()) {
-        const QString selected = dialog.selectedWorktreePath();
-        if (!selected.isEmpty())
-            switchToWorktree(selected);
-        agentManager_->newSession(selected.isEmpty() ? agentWorkspace_->activePath() : selected);
-        return;
-    }
-    pendingConversationWorktree_ = true;
-    // A new worktree is cut from a branch, not from another worktree: Git resolves
-    // the base ref the same way in any checkout of the repository.
-    agentWorktreeCreator_->create(primaryWorktreePath(), primaryWorktreePath(), dialog.branchName(),
-                                  dialog.baseBranch());
 }
 
 void MainWindow::setAgentWorkspaceVisible(const bool visible) {

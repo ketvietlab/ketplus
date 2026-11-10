@@ -27,7 +27,6 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -61,6 +60,14 @@
 #include <algorithm>
 
 namespace {
+
+// The card open over `window`: a closed one lingers until the event loop deletes it.
+ket::Dialog* openCard(const QWidget& window, const QString& name) {
+    for (auto* card : window.findChildren<ket::Dialog*>(name))
+        if (card->isOpen())
+            return card;
+    return nullptr;
+}
 
 QQuickItem* visualItemNamed(QQuickItem* item, const QString& name) {
     if (item->objectName() == name)
@@ -497,20 +504,22 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(view && manager);
         window.statusBar()->hide();
         QSignalSpy result(manager, &ketplus::AgentSessionManager::conversationDeletionFinished);
-        QTimer::singleShot(0, &window, [&window] {
-            auto* dialog = window.findChild<QDialog*>(QStringLiteral("conversationDeleteDialog"));
-            QVERIFY(dialog);
-            auto* buttons = dialog->findChild<QDialogButtonBox*>();
-            QVERIFY(buttons);
+        view->requestDeleteConversation(QStringLiteral("missing-conversation"));
+        {
+            auto* card = openCard(window, QStringLiteral("conversationDeleteDialogCard"));
+            QVERIFY(card);
+            auto* dialog = card->findChild<QWidget*>(QStringLiteral("conversationDeleteDialog"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteConfirm"));
+            QVERIFY(dialog && confirm);
             auto* linked =
                 dialog->findChild<QCheckBox*>(QStringLiteral("deleteLinkedWorktreeCheck"));
             auto* force = dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck"));
             QVERIFY(linked && force);
             QVERIFY(!linked->isEnabled());
             QVERIFY(!force->isEnabled());
-            buttons->button(QDialogButtonBox::Ok)->click();
-        });
-        view->requestDeleteConversation(QStringLiteral("missing-conversation"));
+            confirm->click();
+        }
         QCOMPARE(result.size(), 1);
         auto* error = window.findChild<QMessageBox*>(QStringLiteral("conversationDeletionError"));
         QVERIFY(error);
@@ -1263,17 +1272,21 @@ class AgentWorkspaceShellTest final : public QObject {
         };
         QVERIFY(conversationButton(QStringLiteral("New conversation")) == nullptr);
 
-        QTimer::singleShot(0, &window, [&window] {
-            auto* dialog = window.findChild<QDialog*>(QStringLiteral("agentConversationDialog"));
-            QVERIFY(dialog);
+        view->requestNewSession();
+        {
+            auto* card = openCard(window, QStringLiteral("agentConversationDialogCard"));
+            QVERIFY(card);
+            auto* dialog = card->findChild<QWidget*>(QStringLiteral("agentConversationDialog"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("worktreeDialogConfirm"));
+            QVERIFY(dialog && confirm);
             QVERIFY(dialog->findChild<QCheckBox*>(QStringLiteral("createWorktreeCheck")) ==
                     nullptr);
             auto* base = dialog->findChild<QComboBox*>(QStringLiteral("worktreeBaseWorktree"));
             auto* name = dialog->findChild<QLineEdit*>(QStringLiteral("worktreeBranchName"));
             auto* create =
                 dialog->findChild<QRadioButton*>(QStringLiteral("createNewWorktreeRadio"));
-            auto* buttons = dialog->findChild<QDialogButtonBox*>();
-            QVERIFY(base && name && create && buttons);
+            QVERIFY(base && name && create);
             QVERIFY(base->count() >= 1);
             // The second section cuts a branch; the first runs in a checkout as it is.
             QVERIFY(!name->isEnabled());
@@ -1281,10 +1294,9 @@ class AgentWorkspaceShellTest final : public QObject {
             QVERIFY(name->isEnabled());
             QCOMPARE(name->placeholderText(), QStringLiteral("new branch name"));
             name->setText(QStringLiteral("feature/sidebar-listed"));
-            QTRY_VERIFY(buttons->button(QDialogButtonBox::Ok)->isEnabled());
-            buttons->button(QDialogButtonBox::Ok)->click();
-        });
-        view->requestNewSession();
+            QTRY_VERIFY(confirm->isEnabled());
+            confirm->click();
+        }
 
         QTRY_VERIFY_WITH_TIMEOUT(conversationButton(QStringLiteral("New conversation")) != nullptr,
                                  5000);
@@ -1303,9 +1315,14 @@ class AgentWorkspaceShellTest final : public QObject {
         const QString conversationId = manager->activeConversationId(linkedPath);
         QVERIFY(!conversationId.isEmpty());
         QVERIFY(manager->conversationOwnsWorktree(linkedPath, conversationId));
-        QTimer::singleShot(0, &window, [&window, linkedPath] {
-            auto* dialog = window.findChild<QDialog*>(QStringLiteral("conversationDeleteDialog"));
-            QVERIFY(dialog);
+        view->requestDeleteConversation(conversationId);
+        {
+            auto* card = openCard(window, QStringLiteral("conversationDeleteDialogCard"));
+            QVERIFY(card);
+            auto* dialog = card->findChild<QWidget*>(QStringLiteral("conversationDeleteDialog"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteConfirm"));
+            QVERIFY(dialog && confirm);
             auto* linked =
                 dialog->findChild<QCheckBox*>(QStringLiteral("deleteLinkedWorktreeCheck"));
             QVERIFY(linked);
@@ -1318,22 +1335,19 @@ class AgentWorkspaceShellTest final : public QObject {
             auto* force = dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck"));
             auto* warning =
                 dialog->findChild<QLabel*>(QStringLiteral("forceDeleteWorktreeWarning"));
-            auto* buttons = dialog->findChild<QDialogButtonBox*>();
-            QVERIFY(force && warning && buttons);
+            QVERIFY(force && warning);
             QVERIFY(force->text().contains(QStringLiteral("discarding")));
             linked->setChecked(true);
             QVERIFY(force->isEnabled());
             QVERIFY(!warning->isVisibleTo(dialog));
             force->setChecked(true);
             QVERIFY(warning->isVisibleTo(dialog));
-            QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(),
-                     QStringLiteral("Delete and Discard Changes"));
+            QCOMPARE(confirm->text(), QStringLiteral("Delete and Discard Changes"));
             force->setChecked(false);
             QVERIFY(!warning->isVisibleTo(dialog));
-            QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(), QStringLiteral("Delete"));
-            dialog->reject();
-        });
-        view->requestDeleteConversation(conversationId);
+            QCOMPARE(confirm->text(), QStringLiteral("Delete"));
+            card->reject();
+        }
         QCOMPARE(manager->ownedWorktrees(linkedPath).size(), 1);
 
         // Deleting the conversation keeps a worktree that has an unsaved editor, like the
@@ -1367,17 +1381,20 @@ class AgentWorkspaceShellTest final : public QObject {
                         {QStringLiteral("state"), QStringLiteral("running")}});
         QVERIFY(manager->runningCheckoutPaths().contains(linkedPath));
         QSignalSpy deleted(manager, &ketplus::AgentSessionManager::conversationDeletionFinished);
-        QTimer::singleShot(0, &window, [&window] {
-            auto* dialog = window.findChild<QDialog*>(QStringLiteral("conversationDeleteDialog"));
-            QVERIFY(dialog);
+        view->requestDeleteConversation(conversationId);
+        {
+            auto* card = openCard(window, QStringLiteral("conversationDeleteDialogCard"));
+            QVERIFY(card);
+            auto* dialog = card->findChild<QWidget*>(QStringLiteral("conversationDeleteDialog"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteConfirm"));
+            QVERIFY(dialog && confirm);
             auto* linked =
                 dialog->findChild<QCheckBox*>(QStringLiteral("deleteLinkedWorktreeCheck"));
-            auto* buttons = dialog->findChild<QDialogButtonBox*>();
-            QVERIFY(linked && buttons);
+            QVERIFY(linked);
             linked->setChecked(true);
-            buttons->button(QDialogButtonBox::Ok)->click();
-        });
-        view->requestDeleteConversation(conversationId);
+            confirm->click();
+        }
         QTRY_COMPARE_WITH_TIMEOUT(deleted.size(), 1, 5000);
         QMessageBox* kept = nullptr;
         QTRY_VERIFY((kept = window.findChild<QMessageBox*>(
@@ -1638,34 +1655,51 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(git({"update-ref", "refs/remotes/origin/base", "HEAD"}));
         QVERIFY(git({"commit", "--allow-empty", "-qm", "later"}));
 
-        ketplus::AgentWorktreeDialog dialog(repository);
-        dialog.show();
+        // The forms open as cards over a window, as in the app (#422).
+        QWidget host;
+        host.resize(900, 720);
+        host.show();
+        auto* dialogForm = new ketplus::AgentWorktreeDialog(repository);
+        ketplus::AgentWorktreeDialog& dialog = *dialogForm;
+        QPointer<ket::Dialog> dialogCard = dialog.present(&host);
+        QVERIFY(dialogCard->isOpen());
+        QCOMPARE(dialogCard->parentWidget(), &host);
+        QCOMPARE(dialogCard->title(), QStringLiteral("Create worktree"));
         auto* bases = dialog.findChild<QComboBox*>("worktreeBaseBranch");
         auto* name = dialog.findChild<QLineEdit*>("worktreeBranchName");
-        auto* buttons = dialog.findChild<QDialogButtonBox*>();
-        QVERIFY(bases && name && buttons);
+        auto* confirm =
+            dialogCard->findChild<QAbstractButton*>(QStringLiteral("worktreeDialogConfirm"));
+        QVERIFY(bases && name && confirm);
+        QCOMPARE(host.focusWidget(), name);
         QTRY_VERIFY(bases->isEnabled());
         QCOMPARE(dialog.baseBranch(), QStringLiteral("refs/heads/develop"));
-        QVERIFY(!buttons->button(QDialogButtonBox::Ok)->isEnabled());
+        QVERIFY(!confirm->isEnabled());
         QVERIFY(bases->findData("refs/heads/base") >= 0);
         QVERIFY(bases->findData("refs/remotes/origin/base") >= 0);
         bases->setCurrentIndex(bases->findData("refs/remotes/origin/base"));
         name->setText("feature/agent-ui");
-        QVERIFY(buttons->button(QDialogButtonBox::Ok)->isEnabled());
+        QVERIFY(confirm->isEnabled());
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_WORKTREE_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
-            QVERIFY(dialog.grab().save(screenshot));
-        dialog.hide();
+            QVERIFY(host.grab().save(screenshot));
+        const QString createdBranch = dialog.branchName();
+        const QString createdBase = dialog.baseBranch();
+        // Closing the card deletes it and its form.
+        dialogCard->reject();
+        QTRY_VERIFY(dialogCard.isNull());
 
         ketplus::GitWorktree current;
         current.path = repository;
         current.branch = QStringLiteral("develop");
         current.current = true;
-        ketplus::AgentWorktreeDialog conversation(
+        auto* conversationForm = new ketplus::AgentWorktreeDialog(
             repository, nullptr, ketplus::AgentWorktreeDialog::Purpose::Conversation, repository,
             {current});
-        conversation.show();
-        QVERIFY(conversation.minimumWidth() >= 560);
+        ketplus::AgentWorktreeDialog& conversation = *conversationForm;
+        QPointer<ket::Dialog> conversationCard = conversation.present(&host);
+        QVERIFY(conversationCard->isOpen());
+        QCOMPARE(conversationCard->title(), QStringLiteral("New conversation"));
+        QCOMPARE(conversationCard->card()->width(), 560);
         QVERIFY(conversation.findChild<QCheckBox*>(QStringLiteral("createWorktreeCheck")) ==
                 nullptr);
         auto* conversationBases =
@@ -1677,11 +1711,12 @@ class AgentWorkspaceShellTest final : public QObject {
             conversation.findChild<QRadioButton*>(QStringLiteral("createNewWorktreeRadio"));
         auto* conversationExisting =
             conversation.findChild<QRadioButton*>(QStringLiteral("useExistingWorktreeRadio"));
-        auto* conversationButtons = conversation.findChild<QDialogButtonBox*>();
+        auto* conversationConfirm =
+            conversationCard->findChild<QAbstractButton*>(QStringLiteral("worktreeDialogConfirm"));
         auto* conversationError =
             conversation.findChild<QLabel*>(QStringLiteral("worktreeDialogError"));
         QVERIFY(conversationBases && conversationName && conversationBranches &&
-                conversationCreate && conversationExisting && conversationButtons &&
+                conversationCreate && conversationExisting && conversationConfirm &&
                 conversationError);
         // The first section is the default: run where the reader already is.
         QVERIFY(conversationExisting->isChecked());
@@ -1702,8 +1737,7 @@ class AgentWorkspaceShellTest final : public QObject {
                 QCOMPARE(centre, conversationExisting->palette().color(QPalette::Text));
                 if (const auto capture = qEnvironmentVariable("KETPLUS_RADIO_SCREENSHOT");
                     !capture.isEmpty())
-                    QVERIFY(
-                        conversation.grab().save(capture + (dark ? ".dark.png" : ".light.png")));
+                    QVERIFY(host.grab().save(capture + (dark ? ".dark.png" : ".light.png")));
             }
             theme.cancelPreview();
         }
@@ -1713,7 +1747,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(!conversationBranches->isEnabled());
         QCOMPARE(conversation.selectedWorktreePath(), QFileInfo(repository).canonicalFilePath());
         QVERIFY(!conversation.createWorktree());
-        QVERIFY(conversationButtons->button(QDialogButtonBox::Ok)->isEnabled());
+        QVERIFY(conversationConfirm->isEnabled());
         QTRY_VERIFY(conversation.property("localBranchesReady").toBool());
 
         // A worktree made outside KetPlus while the dialog is open joins the list,
@@ -1748,22 +1782,24 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(conversationBranches->findData("refs/remotes/origin/base") >= 0);
         QCOMPARE(conversationBranches->findData(QStringLiteral("HEAD")), -1);
         QCOMPARE(conversation.baseBranch(), QStringLiteral("refs/heads/develop"));
-        QVERIFY(!conversationButtons->button(QDialogButtonBox::Ok)->isEnabled());
+        QVERIFY(!conversationConfirm->isEnabled());
         conversationName->setText(QStringLiteral("develop"));
-        QTRY_VERIFY(conversationButtons->button(QDialogButtonBox::Ok)->isEnabled());
+        QTRY_VERIFY(conversationConfirm->isEnabled());
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_CONVERSATION_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
-            QVERIFY(conversation.grab().save(screenshot));
-        conversationButtons->button(QDialogButtonBox::Ok)->click();
-        QVERIFY(conversation.isVisible());
+            QVERIFY(host.grab().save(screenshot));
+        conversationConfirm->click();
+        // An invalid form keeps its card open.
+        QVERIFY(conversationCard->isOpen());
         QVERIFY(conversationError->isVisible());
         QVERIFY(conversationError->text().contains(QStringLiteral("already exists")));
-        conversation.hide();
+        conversationCard->reject();
+        QTRY_VERIFY(conversationCard.isNull());
 
         ketplus::AgentWorktreeCreator creator;
         QSignalSpy created(&creator, &ketplus::AgentWorktreeCreator::created);
         QSignalSpy failed(&creator, &ketplus::AgentWorktreeCreator::failed);
-        creator.create(repository, repository, dialog.branchName(), dialog.baseBranch());
+        creator.create(repository, repository, createdBranch, createdBase);
         QTRY_COMPARE_WITH_TIMEOUT(created.count(), 1, 5000);
         QCOMPARE(failed.count(), 0);
 
