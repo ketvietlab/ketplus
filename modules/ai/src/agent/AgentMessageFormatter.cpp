@@ -655,6 +655,11 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                              QUrl(resource).toLocalFile(), id);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("imageGeneration"));
         entry.insert(QStringLiteral("images"), images);
+        // What the image was generated from, for the mock's "Prompt" line under it.
+        QString prompt = item.value(QStringLiteral("revisedPrompt")).toString();
+        if (prompt.isEmpty())
+            prompt = item.value(QStringLiteral("prompt")).toString();
+        entry.insert(QStringLiteral("commandDescription"), sanitizedText(prompt).simplified());
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("details"), QVariantMap{{QStringLiteral("path"), path}});
         entry.insert(QStringLiteral("sanitizedPayload"),

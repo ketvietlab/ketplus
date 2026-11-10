@@ -395,6 +395,17 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                        "[413/980] Building CXX object apps/daemon/CMakeFiles/…/SessionHost.cpp.o"},
                       {"durationMs", 38000},
                       {"exitCode", 0}});
+        // The mock's settled approval, between the commands and the edits.
+        journal.event("approval.requested",
+                      {{"approval_id", "codex-approval"},
+                       {"kind", "approval"},
+                       {"request_type", "mcp_tool_call"},
+                       {"server_name", "ketplus_browser"},
+                       {"tool_title", "browser_open"},
+                       {"reason", "Codex wants to open a page."},
+                       {"command", "http://localhost:5173/settings/storage"}});
+        journal.event("approval.resolved", {{"approval_id", "codex-approval"},
+                                            {"answers", QJsonObject{{"decision", "accept"}}}});
         // The mock's edits: an update, a new file, a move and a deletion.
         QStringList budget;
         for (int line = 1; line <= 41; ++line)
@@ -480,20 +491,33 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.finish("interrupted", 68, {{"reason", "user"}});
     }
     QVariantList rows = journal.rows();
-    // The mock's first Claude prompt today carries a capture; journal media needs a store, so
-    // the row takes the screenshot's file URL directly.
-    if (provider == "claude") {
-        const QString shot =
-            QUrl::fromLocalFile(QDir(assets).filePath("screenshot-sidebar.png")).toString();
-        for (auto& row : rows) {
-            auto entry = row.toMap();
-            if (entry.value("kind") == "user" &&
-                entry.value("body").toString().contains("capture")) {
-                entry.insert("images", QVariantList{shot});
-                row = entry;
-                break;
-            }
+    // The mock's images: journal media needs a store, so the rows take the mock's screenshots
+    // as file URLs directly. The first Claude prompt today carries a capture; image steps show
+    // what they viewed, generated or captured.
+    const auto shot = [&assets](const char* name) {
+        return QUrl::fromLocalFile(
+                   QDir(assets).filePath(QStringLiteral("screenshot-%1.png").arg(name)))
+            .toString();
+    };
+    bool promptDone = provider != "claude";
+    for (auto& row : rows) {
+        auto entry = row.toMap();
+        const QString subtype = entry.value("subtype").toString();
+        const QString eventType = entry.value("eventType").toString();
+        if (!promptDone && entry.value("kind") == "user" &&
+            entry.value("body").toString().contains("capture")) {
+            entry.insert("images", QVariantList{shot("sidebar")});
+            promptDone = true;
+        } else if (eventType == "browser.screenshot") {
+            entry.insert("images", QVariantList{shot("sidebar"), shot("editor")});
+        } else if (subtype == "imageView") {
+            entry.insert("images", QVariantList{shot("settings")});
+        } else if (subtype == "imageGeneration") {
+            entry.insert("images", QVariantList{shot("editor")});
+        } else {
+            continue;
         }
+        row = entry;
     }
     return rows;
 }
