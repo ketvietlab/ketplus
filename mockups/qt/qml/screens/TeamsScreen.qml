@@ -107,10 +107,19 @@ Item {
             addMemberDialog.open()
         else if (name === "member-agent" && team) {
             addMemberDialog.open()
+            memberAgentDialog.target = ""
             memberAgentDialog.open()
         }
-        else if (name === "member-agent" && team) {
-            addMemberDialog.open()
+        else if (name === "team-created") {
+            // What Create leaves: the team with its planned members.
+            startNewTeam("")
+            teamName.text = "Onboarding rework"
+            teamGoal.text = "Make the first run explain itself."
+            createTeam.clicked()
+        }
+        else if (name === "team-agent") {
+            startNewTeam("")
+            memberAgentDialog.target = "developer"
             memberAgentDialog.open()
         }
         else if (name === "task")
@@ -614,8 +623,9 @@ Item {
                                     spacing: screen.px(5)
                                     Label {
                                         width: parent.width
-                                        text: memberRow.modelData.role === "developer" ? memberRow.modelData.lane
-                                            : memberRow.modelData.role === "reviewer" ? "Reviews " + memberRow.modelData.reviews.join(", ")
+                                        text: memberRow.modelData.role === "developer" ? memberRow.modelData.lane || "No lane yet"
+                                            : memberRow.modelData.role === "reviewer"
+                                              ? (memberRow.modelData.reviews.length > 0 ? "Reviews " + memberRow.modelData.reviews.join(", ") : "Reviews every lane")
                                             : "Assigns tasks, orders the merges"
                                         color: memberRow.modelData.role === "developer" ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                     }
@@ -989,7 +999,7 @@ Item {
             const repository = Fixtures.repositories.find(r => screen.team && r.name === screen.team.repository)
             return repository ? repository.conversations.filter(c => !taken.includes(c.number)) : []
         }
-        readonly property var lanes: screen.members.filter(m => m.role === "developer").map(m => m.lane)
+        readonly property var lanes: screen.members.filter(m => m.role === "developer" && m.lane).map(m => m.lane)
         title: "Add a member to " + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
@@ -1072,7 +1082,7 @@ Item {
                     width: parent.width
                     text: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel + " · " + addMemberDialog.agentEffort + "  ▾"
                     Accessible.name: "Choose model and reasoning effort"
-                    onClicked: memberAgentDialog.open()
+                    onClicked: { memberAgentDialog.target = ""; memberAgentDialog.open() }
                 }
             }
             KetChoice {
@@ -1157,10 +1167,17 @@ Item {
         id: memberAgentDialog
         parent: Basic.Overlay.overlay
         window: screen.window
-        provider: addMemberDialog.agentProvider
-        model: addMemberDialog.agentModel
-        effort: addMemberDialog.agentEffort
+        // "" is Add a member's one conversation; a role is that role's row in New team.
+        property string target
+        readonly property var planned: target !== "" ? newTeamDialog.plan[target] : null
+        provider: planned ? planned.provider : addMemberDialog.agentProvider
+        model: planned ? planned.model : addMemberDialog.agentModel
+        effort: planned ? planned.effort : addMemberDialog.agentEffort
         onChosen: (provider, model, effort) => {
+            if (target !== "") {
+                newTeamDialog.plan = newTeamDialog.withRole(target, { provider: provider, model: model, effort: effort })
+                return
+            }
             addMemberDialog.agentProvider = provider
             addMemberDialog.agentModel = model
             addMemberDialog.agentEffort = effort
@@ -1172,8 +1189,37 @@ Item {
         property bool tried: false
         // The repository whose folder the team joins.
         property string repository: Fixtures.repositories[0].name
+        // The members Create starts: how many of each role, and the agent every one of them uses.
+        readonly property var defaults: ({
+            leader: { count: 1, provider: "codex", model: "GPT-5.6 Sol", effort: "High" },
+            developer: { count: 2, provider: "claude", model: "Opus 5.5", effort: "Medium" },
+            reviewer: { count: 1, provider: "codex", model: "GPT-5.6 Luna", effort: "High" } })
+        property var plan: defaults
+        readonly property var roles: [
+            { role: "leader", label: "Leader", most: 1 },
+            { role: "developer", label: "Developers", most: 5 },
+            { role: "reviewer", label: "Reviewers", most: 3 }]
+        readonly property int total: plan.leader.count + plan.developer.count + plan.reviewer.count
+        // One reviewer keeps up with two or three developers.
+        readonly property int reviewersNeeded: plan.developer.count === 0 ? 0 : plan.developer.count <= 3 ? 1 : 2
+        readonly property string advice:
+            total > 0 && plan.leader.count === 0 ? "Without a leader nobody breaks the goal into tasks or assigns them."
+            : plan.reviewer.count < reviewersNeeded
+              ? plan.developer.count + " developers keep " + reviewersNeeded + (reviewersNeeded > 1 ? " reviewers" : " reviewer") + " busy; with fewer, reviews queue."
+            : plan.developer.count > 0 && plan.reviewer.count > 0 && plan.developer.provider === plan.reviewer.provider
+              ? "A reviewer from another provider than the developers catches more."
+            : ""
+        function withRole(role, patch) {
+            const next = Object.assign({}, plan)
+            next[role] = Object.assign({}, plan[role], patch)
+            return next
+        }
+        function agentText(role) {
+            const entry = Fixtures.providers.find(p => p.id === plan[role].provider)
+            return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
+        }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = "" }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults }
         Column {
             width: newTeamDialog.availableWidth
             spacing: screen.px(14)
@@ -1195,6 +1241,64 @@ Item {
                 help: "Tasks merge here. The leader orders the merges and runs the full tests at the end."
                 KetSelect { id: teamBranch; width: parent.width; model: ["develop", "integration", "release/1.4"] }
             }
+            // Scaffold: the team's conversations, started with it instead of one by one.
+            Column {
+                width: parent.width
+                spacing: screen.px(8)
+                Label { text: "Members"; font.weight: Font.Medium }
+                Label {
+                    width: parent.width
+                    text: "Create starts these as new conversations in the team's folder. The leader gives each developer its lane."
+                    color: KetTheme.t.textSecondary
+                    font.pixelSize: screen.px(12)
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                }
+                Repeater {
+                    model: newTeamDialog.roles
+                    Item {
+                        id: planRow
+                        required property var modelData
+                        readonly property var planned: newTeamDialog.plan[modelData.role]
+                        width: parent.width
+                        height: screen.px(32)
+                        Label {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: screen.px(96)
+                            text: planRow.modelData.label
+                        }
+                        KetSelect {
+                            id: countChoice
+                            x: screen.px(104)
+                            width: screen.px(72)
+                            anchors.verticalCenter: parent.verticalCenter
+                            Accessible.name: "Number of " + planRow.modelData.label.toLowerCase()
+                            model: Array.from({ length: planRow.modelData.most + 1 }, (v, i) => String(i))
+                            currentIndex: planRow.planned.count
+                            onActivated: index => newTeamDialog.plan = newTeamDialog.withRole(planRow.modelData.role, { count: index })
+                        }
+                        KetButton {
+                            anchors.left: countChoice.right
+                            anchors.leftMargin: screen.px(8)
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            enabled: planRow.planned.count > 0
+                            text: newTeamDialog.agentText(planRow.modelData.role) + "  ▾"
+                            Accessible.name: "Choose model and reasoning effort for " + planRow.modelData.label.toLowerCase()
+                            onClicked: { memberAgentDialog.target = planRow.modelData.role; memberAgentDialog.open() }
+                        }
+                    }
+                }
+                Label {
+                    visible: text !== ""
+                    width: parent.width
+                    text: newTeamDialog.advice
+                    color: KetTheme.t.textSecondary
+                    font.pixelSize: screen.px(12)
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                }
+            }
             KetChoice {
                 id: leaderWrites
                 width: parent.width
@@ -1206,23 +1310,48 @@ Item {
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: newTeamDialog.reject() },
             KetButton {
-                text: "Create"
+                id: createTeam
+                text: newTeamDialog.total === 0 ? "Create empty team"
+                    : "Create with " + newTeamDialog.total + (newTeamDialog.total === 1 ? " member" : " members")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     newTeamDialog.tried = true
                     const name = teamName.text.trim()
                     if (name === "")
                         return
-                    // A team starts with nobody; its page asks for a leader first.
+                    // The planned members, each a new conversation with its role's agent. With
+                    // every count at zero the team starts empty and its page asks for a leader.
+                    const members = []
+                    let number = 6101
+                    for (const entry of newTeamDialog.roles) {
+                        const planned = newTeamDialog.plan[entry.role]
+                        const provider = Fixtures.providers.find(p => p.id === planned.provider)
+                        for (let i = 1; i <= planned.count; ++i) {
+                            while (screen.teams.some(t => t.members.some(m => m.number === String(number))))
+                                number += 7
+                            const title = entry.role === "leader" ? "Lead " + name
+                                        : entry.role === "developer" ? "Developer " + i : "Reviewer " + i
+                            members.push({
+                                number: String(number), title: title, name: title, role: entry.role,
+                                provider: (provider ? provider.label : planned.provider) + " · " + planned.model,
+                                agent: { id: planned.provider, label: provider ? provider.label : planned.provider,
+                                         model: planned.model, effort: planned.effort },
+                                lane: "", paths: [], reviews: [], state: "idle",
+                                now: entry.role === "leader" ? "Waiting for the goal"
+                                   : entry.role === "developer" ? "No lane yet" : "No review yet" })
+                            number += 7
+                        }
+                    }
                     screen.teams = screen.teams.concat([{
                         id: "team-" + screen.teams.length, name: name, goal: teamGoal.text.trim() || "No goal yet.",
                         repository: newTeamDialog.repository, branch: teamBranch.currentText, paused: false,
-                        leaderWrites: leaderWrites.checked, members: [],
+                        leaderWrites: leaderWrites.checked, members: members,
                         tasks: [], decisions: [], updates: [] }])
                     screen.teamIndex = screen.teams.length - 1
                     screen.filter = ""
                     newTeamDialog.accept()
-                    screen.window.notify("Created " + name)
+                    screen.window.notify(members.length > 0 ? "Created " + name + " and started " + members.length
+                                         + (members.length === 1 ? " conversation" : " conversations") : "Created " + name)
                 }
             }
         ]
