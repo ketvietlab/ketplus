@@ -377,13 +377,32 @@ void NavigationTest::numberDialogAcceptsOnlyTheRange() {
     QTimer::singleShot(0, &window, [&window, &stayedOpen] {
         auto* field = window.findChild<QLineEdit*>("numberField");
         field->setText("99");
-        emit field->returnPressed();
+        QTest::keyClick(field, Qt::Key_Return);
         auto* dialog = window.findChild<ket::Dialog*>();
         stayedOpen = dialog != nullptr && dialog->isOpen();
         field->setText("12");
-        emit field->returnPressed();
+        QTest::keyClick(field, Qt::Key_Return);
     });
     QCOMPARE(ask().value_or(-1), 12);
     QVERIFY(stayedOpen);
     QVERIFY(window.findChild<ket::Dialog*>() == nullptr);
+
+    // Return on the focused button presses it: Go submits, Cancel cancels.
+    const auto pressOn = [&window, &ask](const QString& label) {
+        QTimer::singleShot(0, &window, [&window, label] {
+            window.findChild<QLineEdit*>("numberField")->setText("5");
+            auto* dialog = window.findChild<ket::Dialog*>();
+            for (auto* button : dialog->findChildren<QAbstractButton*>())
+                if (button->text() == label) {
+                    button->setFocus(Qt::TabFocusReason);
+                    QTest::keyClick(button, Qt::Key_Return);
+                }
+            // A dialog that ignored Return would wait forever; Escape ends the case.
+            if (dialog->isOpen())
+                QTest::keyClick(dialog, Qt::Key_Escape);
+        });
+        return ask();
+    };
+    QCOMPARE(pressOn("Go").value_or(-1), 5);
+    QVERIFY(!pressOn("Cancel").has_value());
 }
