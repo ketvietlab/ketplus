@@ -223,7 +223,7 @@ class TeamTaskTest final : public QObject {
         int actionable = 0;
         for (const auto& update : journal_->teamUpdates(team_, true, 200))
             actionable += update.actionable ? 1 : 0;
-        QVERIFY(actionable >= 4);
+        QVERIFY(actionable >= 3);
     }
 
     void dependenciesMustBeDoneFirst() {

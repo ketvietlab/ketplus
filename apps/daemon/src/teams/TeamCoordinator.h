@@ -6,6 +6,8 @@
 #include <QHash>
 #include <QObject>
 
+class QTimer;
+
 #include <optional>
 
 namespace ketplus::daemon {
@@ -163,6 +165,12 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
 
+    // A member's turn ended (ADR 0112 §7): after the leader's turn the waiting digest is sent.
+    void memberTurnEnded(const QString& sessionId);
+    // The quiet period after which an idle leader receives the digest (ADR 0112 §7).
+    static constexpr int defaultQuietPeriodMs = 20000;
+    void setQuietPeriod(int milliseconds) { quietPeriod_ = milliseconds; }
+
     // A deleted conversation leaves its team (ADR 0112, open point 4).
     void conversationDeleted(const QString& sessionId);
     // Archiving a member is refused; a reason, or nothing when it may be archived.
@@ -203,8 +211,15 @@ class TeamCoordinator : public QObject {
                    const QString& reason, QList<Update>& updates);
     // The leader's first turn, once the team has a goal (ADR 0112, #456/#458).
     void startLeader(qint64 teamId);
-    // Sends a message that starts a turn of `toSession`, after the commit that caused it.
+    // Starts a turn of `toSession` after the commit that caused it, counted against the
+    // budget; held while the team is paused (TeamCoordinatorFlow.cpp).
     virtual void wake(const Team& team, const TeamMessage& message);
+    // Sends the messages held while paused, in order, once the team runs again.
+    void releaseHeld(qint64 teamId);
+    // Restarts the quiet period of the team's digest.
+    void scheduleDigest(qint64 teamId);
+    // One digest of every update since the last one, when one of them is actionable.
+    void sendDigest(qint64 teamId);
     // Points the owner at the task's worktree and sends the assignment.
     void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
                            const QString& reason = {});
@@ -216,6 +231,8 @@ class TeamCoordinator : public QObject {
     TeamHostPort* host_{nullptr};
     QHash<qint64, Team> teams_;
     QHash<QString, qint64> teamBySession_;
+    QHash<qint64, QTimer*> digestTimers_;
+    int quietPeriod_{defaultQuietPeriodMs};
 };
 
 } // namespace teams

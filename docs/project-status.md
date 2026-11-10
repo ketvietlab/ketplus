@@ -39,6 +39,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
   role and lane, and each member's instructions explain its role. The leader's first
   turn carries the goal.
+  Automatic turns (#459): only an assignment, a handover, a review and an answered
+  decision start a member's turn; every other change waits in Updates for the leader's
+  digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
+  holds every team message in order until Resume, and 40 automatic turns pause the team
+  with one decision.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

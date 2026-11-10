@@ -488,12 +488,8 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Say what blocks the task: the question for "
                                                     "the leader."))};
         task->resumeState = from == state::inReview ? state::inProgress : from;
+        // The actionable state update carries the question to the leader's digest.
         task->question = reason.left(4000);
-        if (owner)
-            updates.append({.kind = QStringLiteral("question"),
-                            .text = QStringLiteral("%1 asks: %2").arg(taskId, reason.left(1000)),
-                            .taskId = taskId,
-                            .actionable = true});
     } else if (to == state::todo) {
         if (!leaderOrUser(role) && !daemon)
             return {.error = forbidden(QStringLiteral("move a task back to To do"),
@@ -581,13 +577,6 @@ void TeamCoordinator::deliverAssignment(const Team& team, const Task& task, cons
                 .kind = QStringLiteral("assignment"),
                 .taskId = task.id,
                 .body = assignmentText(team, task, actorName(team, from), handover, reason)});
-}
-
-void TeamCoordinator::wake(const Team& team, const TeamMessage& message) {
-    (void)team;
-    if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
-        qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
-                 qUtf8Printable(message.toSession), qUtf8Printable(error));
 }
 
 } // namespace ketplus::daemon::teams

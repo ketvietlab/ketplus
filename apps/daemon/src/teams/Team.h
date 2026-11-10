@@ -121,6 +121,9 @@ struct Team final {
     QList<Member> members;
     QList<Task> tasks;
     QList<Decision> decisions;
+    // Automatic turns held while the team is paused, oldest first (ADR 0112, open point 2):
+    // {to, from, kind, task_id, body, expect_reply}.
+    QJsonArray held;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};
