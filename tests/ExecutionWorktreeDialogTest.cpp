@@ -3,13 +3,17 @@
 #include "KetToast.h"
 #include "ui/Theme.h"
 #include <QAbstractButton>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPointer>
 #include <QPushButton>
+#include <QQuickView>
+#include <QScreen>
 #include <QScrollBar>
+#include <QVBoxLayout>
 #include <QtTest>
 
 #include <utility>
@@ -17,6 +21,48 @@
 class ExecutionWorktreeDialogTest final : public QObject {
     Q_OBJECT
   private slots:
+    // The Agent Workspace is a QQuickView in a window container, a native child window. A
+    // dialog card drawn into the window's own surface would sit beneath it.
+    void pickerStaysAboveTheAgentWorkspace() {
+        QWidget window;
+        window.resize(900, 600);
+        auto* layout = new QVBoxLayout(&window);
+        layout->setContentsMargins(0, 0, 0, 0);
+        auto* quick = new QQuickView;
+        quick->setColor(QColor(255, 0, 0));
+        auto* container = QWidget::createWindowContainer(quick, &window);
+        layout->addWidget(container);
+        const auto screens = QGuiApplication::screens();
+        for (auto* screen : screens)
+            if (screen != QGuiApplication::primaryScreen())
+                window.move(screen->geometry().topLeft() + QPoint(40, 40));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        ketplus::showExecutionWorktreeDialog(
+            &window, [](const QString&, const QJsonObject&, auto done) { done({}, {}); },
+            [](const QString&) {}, "/workspace/a", {"/workspace/a"}, "/workspace/a");
+        auto* dialog = window.findChild<ket::Dialog*>("executionWorktreeDialog");
+        QVERIFY(dialog && dialog->isVisible());
+        // Offscreen there is no native stacking to look at: the card is a native child,
+        // raised above the container.
+        QVERIFY(dialog->testAttribute(Qt::WA_NativeWindow));
+        if (QGuiApplication::platformName() == QStringLiteral("cocoa")) {
+            QTest::qWait(300);
+            const QImage shot = window.screen()->grabWindow(window.winId()).toImage();
+            const qreal dpr = shot.devicePixelRatio();
+            const auto at = [&](QPoint point) { return shot.pixelColor(point * dpr); };
+            // The card shows over the view, and the backdrop dims the view rather than
+            // hiding it.
+            const QColor card = at(dialog->card()->geometry().center() + QPoint(0, 120));
+            QVERIFY2(!(card.red() > 200 && card.green() < 80), qPrintable(card.name()));
+            const QColor backdrop = at(QPoint(20, 20));
+            QVERIFY2(backdrop.red() > backdrop.green() + 40, qPrintable(backdrop.name()));
+            QVERIFY2(backdrop.red() < 240, qPrintable(backdrop.name()));
+            if (const auto dir = qEnvironmentVariable("KETPLUS_PICKER_CAPTURE_DIR"); !dir.isEmpty())
+                shot.save(dir + "/picker-over-quick.png");
+        }
+        dialog->reject();
+    }
     void scrollSearchAndSelectionSwitchExecutionAfterAcknowledgement() {
         QWidget parent; // the picker is a card inside this window
         parent.resize(900, 600);

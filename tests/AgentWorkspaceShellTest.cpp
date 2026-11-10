@@ -44,6 +44,7 @@
 #include <QQuickView>
 #include <QRadioButton>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QSplitter>
@@ -981,6 +982,17 @@ class AgentWorkspaceShellTest final : public QObject {
     void renameOpensTheMocksDialogInTheWindow() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
+        // Never the installed app's daemon: a socket where none listens.
+        const QByteArray oldData = qgetenv("KETPLUS_DAEMON_DATA_DIR");
+        const QByteArray oldSocket = qgetenv("KETPLUS_DAEMON_SOCKET");
+        qputenv("KETPLUS_DAEMON_DATA_DIR", settings.path().toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", (settings.path() + "/no-daemon").toUtf8());
+        const auto restore = qScopeGuard([&] {
+            oldData.isNull() ? qunsetenv("KETPLUS_DAEMON_DATA_DIR")
+                             : qputenv("KETPLUS_DAEMON_DATA_DIR", oldData);
+            oldSocket.isNull() ? qunsetenv("KETPLUS_DAEMON_SOCKET")
+                               : qputenv("KETPLUS_DAEMON_SOCKET", oldSocket);
+        });
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
         ketplus::ThemeManager theme(*qApp);
