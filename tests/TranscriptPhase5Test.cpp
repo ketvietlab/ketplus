@@ -547,6 +547,48 @@ void AgentWorkspaceViewTest::activityGroupCopyIncludesMembers() {
         QVERIFY2(copyText().contains(QLatin1String(command)), qPrintable(copyText()));
 }
 
+// The answer being written does not scan its Markdown for fences on every chunk, also when
+// a steer has landed under it and it is no longer the last row.
+void AgentWorkspaceViewTest::streamingCodeWaitsForCopyChromeBehindASteer() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+
+    const QString code = QStringLiteral("Use this:\n\n```cpp\nint value = 1;\n```\n\n");
+    QVariantMap answer{{QStringLiteral("kind"), QStringLiteral("assistant")},
+                       {QStringLiteral("body"), code},
+                       {QStringLiteral("meta"), QStringLiteral("Codex · streaming")},
+                       {QStringLiteral("filePath"), QString()}};
+    view.resetMessages({textRow("u", "user", "Show code")}, "workspace:streaming-code");
+    view.setSessionState(QStringLiteral("Streaming"), QStringLiteral("Working…"), true);
+    view.appendMessage(answer);
+    QTRY_VERIFY(delegateAt(transcript, 1));
+    QTest::qWait(100);
+    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+
+    view.appendMessage(textRow("s", "user", "Also explain it"));
+    QTRY_VERIFY(delegateAt(transcript, 2));
+    for (int chunk = 0; chunk < 3; ++chunk) {
+        answer.insert(QStringLiteral("body"), answer.value(QStringLiteral("body")).toString() +
+                                                  QStringLiteral("More text arrives.\n\n"));
+        view.updateMessage(1, answer);
+        QTest::qWait(50);
+        QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+    }
+
+    // Written: the frame gets its Copy button without hover.
+    answer.insert(QStringLiteral("meta"), QStringLiteral("Codex"));
+    view.updateMessage(1, answer);
+    view.setSessionState(QStringLiteral("Ready"), QString(), false);
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+}
+
 void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

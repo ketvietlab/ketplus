@@ -105,7 +105,9 @@ Item {
     // Per-row chrome (copy buttons and their tool tips) exists only while the row is hovered,
     // keyboard-focused or one of its buttons holds focus; collapsed members never create it.
     property bool chromeFocusHold: false
-    readonly property bool codeCopyShown: chromeActive || !(host.sessionRunning && view.messageModel && index === view.messageModel.count - 1)
+    // The answer still being written is known by its own row state, not by being last: a
+    // steer or queued message may land under it while its text keeps growing.
+    readonly property bool codeCopyShown: chromeActive || !(host.sessionRunning && kind === "assistant" && meta.endsWith(" · streaming"))
     readonly property bool chromeActive: (rowHover.hovered || chromeFocusHold || (view.activeFocus && view.keyboardIndex === index))
     // As in the mock, the turn's answer always offers Copy answer under it; a prompt's copy
     // comes with the hover or focus.
