@@ -571,6 +571,14 @@ QPushButton:focus, QToolButton:focus, QComboBox:focus, QLineEdit:focus, QSpinBox
     border-color: {{focus}};
 }
 
+/* ket::TextField draws its own field and leading icon from the kit recipe. */
+ket--TextField, ket--TextField:hover, ket--TextField:focus {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
 QDialog[kvRole="settingsDialog"] {
     background: {{pageBackground}};
 }

@@ -219,7 +219,14 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
     const auto rejected = checkedSession(request, &session);
     if (!rejected.isEmpty())
         return rejected;
-    const auto catalogRoot = worktreeCatalogRoot(*session);
+    const auto payload = request.value("payload").toObject();
+    // Trusted local IPC may list another repository's worktrees before choosing one
+    // (ADR 0105). Cloud commands strip repository_path, so phones keep their catalog.
+    const auto requested = payload.value("repository_path").toString();
+    const auto catalogRoot =
+        requested.isEmpty() ? worktreeCatalogRoot(*session) : normalizedWorktree(requested);
+    if (!requested.isEmpty() && (catalogRoot.isEmpty() || commonDirectory(catalogRoot).isEmpty()))
+        return failure("invalid_repository", "Select a Git repository.");
     auto entries = catalogRoot.isEmpty() ? QJsonArray{} : worktrees(catalogRoot);
     if (entries.isEmpty())
         return failure("worktree_unavailable", "The repository's worktrees could not be read.");
@@ -227,19 +234,29 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
         journal_->touchedWorktreePaths(session->stored.id, session->stored.generation);
     QList<QJsonObject> ranked;
     QString currentBranch;
-    const auto payload = request.value("payload").toObject();
     const auto search = payload.value("query").toString().trimmed();
     const auto common = commonDirectory(catalogRoot);
+    const auto repositoryRoot =
+        QFileInfo(common).fileName() == ".git" ? QFileInfo(common).absolutePath() : QString{};
+    // Browsing does not enrol a repository: it joins the catalog, which phones see, only
+    // once the conversation switches to it.
+    const bool ownRepository =
+        requested.isEmpty() || common == commonDirectory(worktreeCatalogRoot(*session));
     for (const auto& value : entries) {
         auto entry = value.toObject();
         const auto path = entry.value("worktree_path").toString();
-        journal_->rememberWorktree(path);
-        if (QFileInfo(common).fileName() == ".git")
-            journal_->rememberWorktreeRepository(path, QFileInfo(common).absolutePath());
+        if (ownRepository) {
+            journal_->rememberWorktree(path);
+            if (!repositoryRoot.isEmpty())
+                journal_->rememberWorktreeRepository(path, repositoryRoot);
+        }
         auto branch = entry.value("branch").toString();
         branch.remove(0, branch.startsWith("refs/heads/") ? 11 : 0);
         entry.insert("branch", branch.isEmpty() ? QFileInfo(path).fileName() : branch);
         entry.insert("model_touched", touched.contains(path));
+        // The repository's main worktree, marked "Main" in the picker.
+        entry.insert("main", !repositoryRoot.isEmpty() &&
+                                 path == QFileInfo(repositoryRoot).canonicalFilePath());
         if (path == QFileInfo(session->stored.worktreePath).canonicalFilePath())
             currentBranch = entry.value("branch").toString();
         if (search.isEmpty() || (branch + " " + path).contains(search, Qt::CaseInsensitive))
@@ -263,6 +280,7 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
     std::sort(repositories.begin(), repositories.end());
     return {{"ok", true},
             {"repositories", QJsonArray::fromStringList(repositories)},
+            {"repository_path", repositoryRoot},
             {"total", ranked.size()},
             {"offset", offset},
             {"current_branch", currentBranch},

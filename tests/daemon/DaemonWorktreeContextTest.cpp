@@ -529,6 +529,62 @@ class DaemonWorktreeContextTest final : public QObject {
         QCOMPARE(f.journal->sessions().first().worktreePath, f.b);
     }
 
+    // ADR 0105: the desktop picker lists another repository's worktrees before choosing one.
+    void listsAnotherRepositoryWithoutSwitchingOrEnrollingIt() {
+        Fixture f;
+        QVERIFY(f.initialize());
+        auto foreign = f.directory.filePath("foreign");
+        const auto foreignFeature = f.directory.filePath("foreign-feature");
+        QVERIFY(QDir().mkpath(foreign));
+        QVERIFY(git(foreign, {"init", "-b", "main"}));
+        QVERIFY(git(foreign,
+                    {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+                     "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"}));
+        QVERIFY(git(foreign, {"worktree", "add", "-b", "pilot", foreignFeature}));
+        foreign = QFileInfo(foreign).canonicalFilePath();
+
+        const auto page = f.call("session.worktrees", "foreign", {{"repository_path", foreign}});
+        QVERIFY(page.value("ok").toBool());
+        QCOMPARE(page.value("repository_path").toString(), foreign);
+        const auto entries = page.value("worktrees").toArray();
+        QCOMPARE(entries.size(), 2);
+        int mains = 0;
+        for (const auto& value : entries) {
+            const auto entry = value.toObject();
+            if (entry.value("main").toBool()) {
+                ++mains;
+                QCOMPARE(entry.value("worktree_path").toString(), foreign);
+                QCOMPARE(entry.value("branch").toString(), QStringLiteral("main"));
+            }
+        }
+        QCOMPARE(mains, 1);
+        // Listing switches nothing and does not enrol the repository.
+        QCOMPARE(page.value("worktree_path").toString(), f.a);
+        QCOMPARE(page.value("context_revision").toInteger(), 1);
+        QCOMPARE(f.journal->sessions().first().worktreePath, f.a);
+        QVERIFY(!page.value("repositories").toArray().contains(foreign));
+        const auto own = f.call("session.worktrees", "own");
+        QCOMPARE(own.value("repository_path").toString(), f.a);
+        QVERIFY(!own.value("repositories").toArray().contains(foreign));
+
+        const auto plain = f.directory.filePath("plain");
+        QVERIFY(QDir().mkpath(plain));
+        QCOMPARE(f.call("session.worktrees", "plain", {{"repository_path", plain}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_repository"));
+        QCOMPARE(f.call("session.worktrees", "missing",
+                        {{"repository_path", f.directory.filePath("missing")}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_repository"));
+
+        // Choosing one of the listed worktrees switches as before.
+        QVERIFY(
+            f.move(QFileInfo(foreignFeature).canonicalFilePath(), 1, "use").value("ok").toBool());
+        QCOMPARE(f.journal->sessions().first().worktreePath,
+                 QFileInfo(foreignFeature).canonicalFilePath());
+    }
     void switchIsDurableIdempotentAndDoesNotMoveFiles() {
         Fixture f;
         QVERIFY(f.initialize());

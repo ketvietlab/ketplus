@@ -4,10 +4,12 @@
 #include "KetControlRecipes.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
+#include "KetToast.h"
+#include "KetTokens.h"
 #include "app/ConversationRepository.h"
-#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QHash>
 #include <QJsonArray>
@@ -18,6 +20,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QStyledItemDelegate>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -25,6 +28,10 @@
 
 namespace ketplus {
 namespace {
+constexpr int branchRole = Qt::UserRole + 1;
+// A repository's worktree count, once its list has been read.
+constexpr int countRole = Qt::UserRole + 2;
+
 // The paginated catalog stays in QListWidget; kit recipes draw only visible rows.
 class PickerDelegate final : public QStyledItemDelegate {
   public:
@@ -59,8 +66,20 @@ class PickerDelegate final : public QStyledItemDelegate {
                                                recipe.icon));
         const auto lines = index.data().toString().split('\n');
         const qreal textLeft = left + icon + px(recipe.spacing);
-        const qreal width = qMax(0.0, area.right() - textLeft - px(recipe.paddingInline));
+        qreal right = area.right() - px(recipe.paddingInline);
         QFont font = option.font;
+        // A repository's worktree count, on the right as the mock's `.tree-count`.
+        if (const auto count = index.data(countRole).toString(); !count.isEmpty()) {
+            font.setPixelSize(qRound(px(recipe.countPixels)));
+            painter->setFont(font);
+            painter->setPen(recipe.count);
+            const qreal countWidth = QFontMetricsF(font).horizontalAdvance(count);
+            painter->drawText(QRectF(right - countWidth, area.top() + px(recipe.paddingBlock),
+                                     countWidth, QFontMetricsF(font).height()),
+                              Qt::AlignVCenter | Qt::AlignRight, count);
+            right -= countWidth + px(recipe.spacing);
+        }
+        const qreal width = qMax(0.0, right - textLeft);
         font.setPixelSize(qRound(px(recipe.titlePixels)));
         font.setWeight(QFont::Weight(recipe.titleWeight));
         painter->setFont(font);
@@ -84,58 +103,78 @@ class PickerDelegate final : public QStyledItemDelegate {
   private:
     bool repository_;
 };
+// The mock's 1 px panel-border rule between the columns, in the current theme.
+class ColumnRule final : public QWidget {
+  public:
+    explicit ColumnRule(QWidget* parent) : QWidget(parent) {
+        setObjectName("repositoryPickerDivider");
+        setFixedWidth(1);
+        connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+                qOverload<>(&QWidget::update));
+    }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter(this).fillRect(
+            rect(), ket::Tokens::color(u"panel-border", ket::Appearance::instance().theme()));
+    }
+};
 } // namespace
 
 void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest request,
                                  std::function<void(const QString&)> selected,
                                  const QString& fileContextPath, const QStringList& repositories,
-                                 const QString& currentRepository) {
+                                 const QString& currentRepository,
+                                 std::function<void()> createWorktree) {
+    // The mock's Repository & worktree picker: choose a repository, then one of its worktrees,
+    // and "Use this repository" moves the conversation's next turn there (ADR 0105).
     auto* dialog = new QDialog(parent);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle("Conversation repository & worktree");
+    dialog->setWindowTitle("Repository & worktree");
     dialog->setObjectName("executionWorktreeDialog");
-    dialog->resize(800, 580);
+    dialog->resize(800, 440);
     auto* layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(12);
-    auto* note = new QLabel("Choose where this conversation continues. A running turn keeps its "
-                            "original worktree; your choice applies to the next turn.",
-                            dialog);
-    note->setWordWrap(true);
-    layout->addWidget(note);
-    auto* current = new QLabel(dialog);
-    current->setWordWrap(true);
-    current->setAccessibleName("Current conversation worktree");
-    layout->addWidget(current);
     auto* columns = new QHBoxLayout;
+    columns->setSpacing(12);
     auto* repoColumn = new QVBoxLayout;
+    repoColumn->setSpacing(8);
     auto* treeColumn = new QVBoxLayout;
-    columns->addLayout(repoColumn, 2);
-    columns->addLayout(treeColumn, 3);
+    treeColumn->setSpacing(8);
+    auto* repoPane = new QWidget(dialog);
+    repoPane->setFixedWidth(222);
+    repoPane->setLayout(repoColumn);
+    repoColumn->setContentsMargins(0, 0, 0, 0);
+    columns->addWidget(repoPane);
+    auto* divider = new ColumnRule(dialog);
+    columns->addWidget(divider);
+    columns->addLayout(treeColumn, 1);
     layout->addLayout(columns, 1);
-    repoColumn->addWidget(new QLabel("Repository", dialog));
     auto* repoSearch = new ket::TextField(dialog);
-    repoSearch->setLeadingIcon(QStringLiteral("search"));
-    repoSearch->setPlaceholderText("Search repositories");
+    repoSearch->setLeadingIcon(ket::Icons::codeForLucide(u"search"));
+    repoSearch->setPlaceholderText("Search repositories…");
     repoSearch->setAccessibleName("Search repositories");
     repoSearch->setObjectName("repositorySearch");
     repoColumn->addWidget(repoSearch);
     auto* repos = new QListWidget(dialog);
     repos->setObjectName("executionRepositoryList");
     repos->setAccessibleName("Conversation repositories");
+    repos->setFrameShape(QFrame::NoFrame);
+    repos->setStyleSheet(QStringLiteral("QListWidget { background: transparent; }"));
     repos->setItemDelegate(new PickerDelegate(true, repos));
     repoColumn->addWidget(repos, 1);
-    auto* count = new QLabel("Worktree", dialog);
-    treeColumn->addWidget(count);
     auto* search = new ket::TextField(dialog);
-    search->setLeadingIcon(QStringLiteral("search"));
-    search->setPlaceholderText("Search branch or folder");
+    search->setLeadingIcon(ket::Icons::codeForLucide(u"search"));
+    search->setPlaceholderText("Search branch or folder…");
     search->setAccessibleName("Search worktrees");
     search->setObjectName("worktreeSearch");
     treeColumn->addWidget(search);
     auto* list = new QListWidget(dialog);
     list->setObjectName("executionWorktreeList");
     list->setAccessibleName("Execution worktrees");
+    list->setFrameShape(QFrame::NoFrame);
+    list->setStyleSheet(QStringLiteral("QListWidget { background: transparent; }"));
     list->setUniformItemSizes(true);
     list->setSpacing(4);
     list->setItemDelegate(new PickerDelegate(false, list));
@@ -144,35 +183,38 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     status->setObjectName("worktreeStatus");
     status->setWordWrap(true);
     layout->addWidget(status);
-    auto* source = new QLabel(
-        "History and drafts stay here. Earlier file links keep their source worktree.", dialog);
-    source->setWordWrap(true);
-    layout->addWidget(source);
-    auto* buttons = new QDialogButtonBox(dialog);
-    auto* close = new ket::Button("Close", ket::ButtonVariant::Secondary, dialog);
-    auto* refresh = new ket::Button("Refresh", ket::ButtonVariant::Ghost, dialog);
-    auto* retry = new ket::Button("Retry", ket::ButtonVariant::Primary, dialog);
-    buttons->addButton(close, QDialogButtonBox::RejectRole);
-    buttons->addButton(refresh, QDialogButtonBox::ActionRole);
-    buttons->addButton(retry, QDialogButtonBox::ActionRole);
-    retry->hide();
-    layout->addWidget(buttons);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
+    auto* footer = new QHBoxLayout;
+    auto* create = new ket::Button("Create worktree…", ket::ButtonVariant::Ghost, dialog);
+    create->setObjectName("createWorktreeButton");
+    create->setIcon(ket::Icons::icon(u"plus"));
+    auto* use = new ket::Button("Use this repository", ket::ButtonVariant::Primary, dialog);
+    use->setObjectName("useRepositoryButton");
+    use->setEnabled(false);
+    footer->addStretch(1);
+    footer->addWidget(create);
+    footer->addWidget(use);
+    layout->addLayout(footer);
+    create->setVisible(static_cast<bool>(createWorktree));
     struct State {
         int offset{0}, total{0}, epoch{0};
         qint64 revision{0};
         bool loading{false}, switching{false}, available{false};
-        QString current, repository, retryPath, retryRepository;
+        // The conversation's worktree and its repository; the repository whose worktrees
+        // are listed; the worktree chosen in that list.
+        QString current, repository, listed, chosen;
         QStringList roots;
         QHash<QString, QString> lastWorktrees;
+        QHash<QString, int> counts;
     };
     auto state = std::make_shared<State>();
     state->current = fileContextPath;
     state->repository = currentRepository;
+    state->listed = currentRepository;
     state->roots = repositories;
     if (!currentRepository.isEmpty() && !state->roots.contains(currentRepository))
         state->roots.prepend(currentRepository);
     auto renderRepos = [=] {
+        const QSignalBlocker blocker(repos);
         repos->clear();
         auto roots = state->roots;
         roots.removeAll(state->repository);
@@ -182,15 +224,17 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
             if (!(QFileInfo(root).fileName() + " " + root)
                      .contains(repoSearch->text(), Qt::CaseInsensitive))
                 continue;
-            auto* row = new QListWidgetItem(QFileInfo(root).fileName() +
-                                                (root == state->repository ? " · Current" : ""),
-                                            repos);
+            auto* row = new QListWidgetItem(QFileInfo(root).fileName(), repos);
             row->setData(Qt::UserRole, root);
+            if (state->counts.contains(root))
+                row->setData(countRole, QString::number(state->counts.value(root)));
             row->setToolTip(root);
-
-            if (root == state->repository)
+            if (root == state->listed)
                 repos->setCurrentItem(row);
         }
+    };
+    auto updateUse = [=] {
+        use->setEnabled(state->available && !state->switching && !state->chosen.isEmpty());
     };
     QPointer<QDialog> guard(dialog);
     auto load = [=] {
@@ -201,80 +245,111 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         status->setText("Loading worktrees…");
         if (state->offset == 0)
             list->setEnabled(false);
-        request("session.worktrees",
-                {{"query", search->text()}, {"offset", state->offset}, {"limit", 100}},
-                [=](const QJsonObject& result, const QString& error) {
-                    if (!guard || state->epoch != epoch)
-                        return;
-                    state->loading = false;
-                    if (!error.isEmpty() || !result.value("error_code").toString().isEmpty()) {
-                        status->setText(error.isEmpty() ? result.value("error_message").toString()
-                                                        : error);
-                        return;
-                    }
-                    state->current = result.value("worktree_path").toString();
-                    for (const auto& root : result.value("repositories").toArray()) {
-                        const auto path = root.toString();
-                        if (!path.isEmpty() && !state->roots.contains(path))
-                            state->roots.append(path);
-                    }
-                    if (QFileInfo(QDir(state->current).filePath(".git")).exists())
-                        state->repository = conversationRepositoryRoot(state->current);
-                    renderRepos();
-                    state->revision = result.value("context_revision").toInteger();
-                    for (const auto& context : result.value("contexts").toArray()) {
-                        const auto path = context.toObject().value("worktree_path").toString();
-                        const auto owner = conversationRepositoryRoot(path);
-                        if (state->roots.contains(owner))
-                            state->lastWorktrees[owner] = path;
-                    }
-                    state->available = result.value("switch_supported").toBool() &&
-                                       result.value("switch_available").toBool(true);
-                    current->setText("Current · " + state->current);
-                    const bool reset = state->offset == 0;
-                    if (reset)
-                        list->clear();
-                    for (const auto& value : result.value("worktrees").toArray()) {
-                        const auto entry = value.toObject();
-                        const auto path = entry.value("worktree_path").toString();
-                        auto* row = new QListWidgetItem(
-                            entry.value("branch").toString() +
-                                (entry.value("model_touched").toBool() ? " ✦" : "") +
-                                (path == state->current ? " · Current" : "") + "\n" +
-                                QFileInfo(path).fileName(),
-                            list);
-                        row->setData(Qt::UserRole, path);
-                        row->setToolTip(path);
-                    }
-                    state->total = result.value("total").toInt();
-                    state->offset += result.value("worktrees").toArray().size();
-                    count->setText(QString("Worktree · %1 · Model-used first").arg(state->total));
-                    status->setText(!state->available   ? "Switching is unavailable for this "
-                                                          "provider or while a request is pending."
-                                    : state->total == 0 ? "No worktrees match."
-                                                        : "");
-                    list->setEnabled(state->available);
-                    repos->setEnabled(state->available);
-                    if (reset)
-                        list->scrollToTop();
-                    if (result.value("worktrees").toArray().isEmpty())
-                        state->total = state->offset;
-                });
+        QJsonObject payload{{"query", search->text()}, {"offset", state->offset}, {"limit", 100}};
+        // Another repository's worktrees are listed by path, over local IPC only.
+        const bool foreign = !state->listed.isEmpty() && state->listed != state->repository;
+        if (foreign)
+            payload.insert("repository_path", state->listed);
+        request("session.worktrees", payload, [=](const QJsonObject& result, const QString& error) {
+            if (!guard || state->epoch != epoch)
+                return;
+            state->loading = false;
+            if (!error.isEmpty() || !result.value("error_code").toString().isEmpty()) {
+                status->setText(error.isEmpty() ? result.value("error_message").toString() : error);
+                list->setEnabled(true);
+                return;
+            }
+            // A service from before ADR 0105 ignores repository_path and would list the
+            // conversation's own repository under another name.
+            if (foreign && !result.contains("repository_path")) {
+                list->clear();
+                state->chosen.clear();
+                status->setText("Restart KétPlus to list another repository's worktrees.");
+                list->setEnabled(true);
+                updateUse();
+                return;
+            }
+            state->current = result.value("worktree_path").toString();
+            for (const auto& root : result.value("repositories").toArray()) {
+                const auto path = root.toString();
+                if (!path.isEmpty() && !state->roots.contains(path))
+                    state->roots.append(path);
+            }
+            if (QFileInfo(QDir(state->current).filePath(".git")).exists())
+                state->repository = conversationRepositoryRoot(state->current);
+            if (state->listed.isEmpty())
+                state->listed = state->repository;
+            state->revision = result.value("context_revision").toInteger();
+            for (const auto& context : result.value("contexts").toArray()) {
+                const auto path = context.toObject().value("worktree_path").toString();
+                const auto owner = conversationRepositoryRoot(path);
+                if (state->roots.contains(owner))
+                    state->lastWorktrees[owner] = path;
+            }
+            state->available = result.value("switch_supported").toBool() &&
+                               result.value("switch_available").toBool(true);
+            const bool reset = state->offset == 0;
+            if (reset) {
+                list->clear();
+                state->chosen.clear();
+            }
+            const auto preferred = state->listed == state->repository
+                                       ? state->current
+                                       : state->lastWorktrees.value(state->listed);
+            for (const auto& value : result.value("worktrees").toArray()) {
+                const auto entry = value.toObject();
+                const auto path = entry.value("worktree_path").toString();
+                const auto branch = entry.value("branch").toString();
+                auto* row = new QListWidgetItem(
+                    branch + (entry.value("main").toBool() ? "  · Main" : "") +
+                        (entry.value("model_touched").toBool() ? " ✦" : "") +
+                        (path == state->current ? " · Current" : "") + "\n" + path,
+                    list);
+                row->setData(Qt::UserRole, path);
+                row->setData(branchRole, branch);
+                row->setToolTip(path);
+                if (path == preferred || (reset && list->count() == 1)) {
+                    list->setCurrentItem(row);
+                    state->chosen = path;
+                }
+            }
+            state->total = result.value("total").toInt();
+            state->offset += result.value("worktrees").toArray().size();
+            if (search->text().isEmpty())
+                state->counts[state->listed] = state->total;
+            renderRepos();
+            status->setText(!state->available   ? "Switching is unavailable for this provider or "
+                                                  "while a request is pending."
+                            : state->total == 0 ? "No worktree matches."
+                                                : "");
+            list->setEnabled(state->available);
+            repos->setEnabled(state->available);
+            updateUse();
+            if (reset)
+                list->scrollToTop();
+            if (result.value("worktrees").toArray().isEmpty())
+                state->total = state->offset;
+        });
     };
-    auto change = [=](const QString& path, const QString& repository) {
+    auto reload = [=] {
+        ++state->epoch;
+        state->loading = false;
+        state->offset = state->total = 0;
+        load();
+    };
+    auto change = [=](const QString& path, const QString& repository, const QString& branch) {
         if (state->switching || !state->available)
             return;
-        if (path == state->current)
+        if (path == state->current) {
+            dialog->accept();
             return;
+        }
         state->switching = true;
         ++state->epoch;
         state->loading = false;
-        state->retryPath = path;
-        state->retryRepository = repository;
-        retry->hide();
         list->setEnabled(false);
         repos->setEnabled(false);
-        refresh->setEnabled(false);
+        updateUse();
         status->setText("Switching conversation…");
         request(
             "session.worktree.switch",
@@ -283,7 +358,6 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                 if (!guard)
                     return;
                 state->switching = false;
-                refresh->setEnabled(true);
                 if (!error.isEmpty() || !result.value("ok").toBool()) {
                     status->setText(
                         error.isEmpty()
@@ -293,18 +367,17 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                             : error);
                     list->setEnabled(state->available);
                     repos->setEnabled(state->available);
-                    renderRepos();
-                    retry->show();
+                    updateUse();
                     return;
                 }
                 state->current = result.value("worktree_path").toString(path);
-                state->revision = result.value("context_revision").toInteger(state->revision);
                 state->repository = repository;
-                state->lastWorktrees[repository] = state->current;
-                state->offset = state->total = 0;
                 selected(state->current);
-                renderRepos();
-                load();
+                if (parent != nullptr)
+                    ket::Toast::showMessage(parent,
+                                            QStringLiteral("Next turn: %1 · %2")
+                                                .arg(QFileInfo(repository).fileName(), branch));
+                dialog->accept();
             });
     };
     auto* debounce = new QTimer(dialog);
@@ -319,39 +392,45 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         debounce->start();
     });
     QObject::connect(repoSearch, &QLineEdit::textChanged, dialog, renderRepos);
-    QObject::connect(repos, &QListWidget::itemClicked, dialog, [=](QListWidgetItem* row) {
+    const auto listRepository = [=](QListWidgetItem* row) {
         const auto root = row->data(Qt::UserRole).toString();
-        if (root != state->repository)
-            change(QFileInfo(state->lastWorktrees.value(root)).isDir()
-                       ? state->lastWorktrees.value(root)
-                       : root,
-                   root);
-    });
-    QObject::connect(repos, &QListWidget::itemActivated, dialog, [=](QListWidgetItem* row) {
-        const auto root = row->data(Qt::UserRole).toString();
-        if (root != state->repository)
-            change(QFileInfo(state->lastWorktrees.value(root)).isDir()
-                       ? state->lastWorktrees.value(root)
-                       : root,
-                   root);
-    });
+        if (root == state->listed || state->switching)
+            return;
+        state->listed = root;
+        state->chosen.clear();
+        updateUse();
+        reload();
+    };
+    QObject::connect(repos, &QListWidget::itemClicked, dialog, listRepository);
+    QObject::connect(repos, &QListWidget::itemActivated, dialog, listRepository);
     QObject::connect(list->verticalScrollBar(), &QScrollBar::valueChanged, dialog, [=](int value) {
         if (value >= list->verticalScrollBar()->maximum() - 100 && state->offset < state->total)
             load();
     });
-    QObject::connect(refresh, &QAbstractButton::clicked, dialog, [=] {
-        ++state->epoch;
-        state->loading = false;
-        state->offset = state->total = 0;
-        load();
-    });
-    QObject::connect(retry, &QAbstractButton::clicked, dialog,
-                     [=] { change(state->retryPath, state->retryRepository); });
-    const auto select = [=](QListWidgetItem* row) {
-        change(row->data(Qt::UserRole).toString(), state->repository);
+    const auto choose = [=](QListWidgetItem* row) {
+        state->chosen = row->data(Qt::UserRole).toString();
+        updateUse();
     };
-    QObject::connect(list, &QListWidget::itemClicked, dialog, select);
-    QObject::connect(list, &QListWidget::itemActivated, dialog, select);
+    const auto confirm = [=] {
+        for (int index = 0; index < list->count(); ++index) {
+            auto* row = list->item(index);
+            if (row->data(Qt::UserRole).toString() == state->chosen) {
+                change(state->chosen, state->listed, row->data(branchRole).toString());
+                return;
+            }
+        }
+    };
+    QObject::connect(list, &QListWidget::itemClicked, dialog, choose);
+    QObject::connect(list, &QListWidget::itemActivated, dialog, [=](QListWidgetItem* row) {
+        choose(row);
+        confirm();
+    });
+    QObject::connect(use, &QAbstractButton::clicked, dialog, confirm);
+    QObject::connect(create, &QAbstractButton::clicked, dialog, [dialog, createWorktree] {
+        dialog->reject();
+        if (createWorktree)
+            createWorktree();
+    });
     dialog->open();
     renderRepos();
     load();

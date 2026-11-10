@@ -200,7 +200,8 @@ void MainWindow::ensureAgentWorkspace() {
                 promotedSidebarRepository_ = sidebarRepositoryForPath(selectedPath);
                 scheduleSidebarRefresh(true);
             },
-            agentWorkspace_->executionPath(), roots, currentRepository);
+            agentWorkspace_->executionPath(), roots, currentRepository,
+            [this] { setWorktreesWorkspaceVisible(true); });
     });
     connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
             [this] { agentWorkspace_->setExecutionBranch({}); });

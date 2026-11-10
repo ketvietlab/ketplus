@@ -11,5 +11,6 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                                  std::function<void(const QString&)> selected,
                                  const QString& fileContextPath = {},
                                  const QStringList& repositories = {},
-                                 const QString& currentRepository = {});
+                                 const QString& currentRepository = {},
+                                 std::function<void()> createWorktree = {});
 } // namespace ketplus

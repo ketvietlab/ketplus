@@ -31,8 +31,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
-  window geometry. Repository/worktree picker skinning continues in the next
-  stack layer; native acceptance and release remain deferred.
+  window geometry. The repository/worktree picker follows the mock: it lists
+  another repository before switching (ADR 0105). Native acceptance and release
+  remain deferred.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
