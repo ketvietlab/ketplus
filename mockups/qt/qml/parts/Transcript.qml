@@ -18,7 +18,12 @@ Item {
     property int questionStep: 0
     readonly property var blocks: ({ claude: TranscriptFixtures.claude, codex: TranscriptFixtures.codex,
                                      cursor: TranscriptFixtures.cursor,
-                                     "turn-report": TranscriptFixtures.turnReport })[kind] || null
+                                     "turn-report": TranscriptFixtures.turnReport,
+                                     "team-assignment": TranscriptFixtures.teamAssignment,
+                                     "team-digest": TranscriptFixtures.teamDigest,
+                                     "team-review": TranscriptFixtures.teamReview,
+                                     "team-verdict": TranscriptFixtures.teamVerdict,
+                                     "team-decision": TranscriptFixtures.teamDecision })[kind] || null
 
     signal openDetails(string tab)
 

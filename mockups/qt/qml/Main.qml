@@ -20,7 +20,10 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/empty",
+        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
+        // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
+        "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
+        "workspace/team-verdict", "workspace/team-decision",
         "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -88,6 +91,16 @@ Basic.ApplicationWindow {
         screen = "teams"
         teams.startRemove(id, number)
     }
+    // A team block's Open T-n: the task on its team's page.
+    function openTeamTask(taskId) {
+        teams.showTeam(Fixtures.teams[0].id)
+        screen = "teams"
+        teams.showTask(taskId)
+    }
+    // Which member reads which team block: the developer, the leader, the reviewer, the owner.
+    readonly property var teamTranscripts: ({ "team-assignment": "8213", "team-digest": "4821",
+                                              "team-review": "4583", "team-verdict": "8215",
+                                              "team-decision": "4821" })
     function openTeamMember(id, number) {
         teams.showTeam(id)
         teams.openConversation(number)
@@ -263,6 +276,14 @@ Basic.ApplicationWindow {
             const repo = Fixtures.repositories[0]
             openConversation(repo.name, repo.conversations.find(c => c.number === "4821"))
             workspace.openPlan(state.slice(5))
+            return
+        }
+        if (name === "workspace" && teamTranscripts[state]) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            const repo = Fixtures.repositories[0]
+            const member = repo.conversations.find(c => c.number === teamTranscripts[state])
+            openConversation(repo.name, Object.assign({}, member, { transcript: state }))
             return
         }
         if (name === "workspace" && state.startsWith("setup-")) {
