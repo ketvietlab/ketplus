@@ -3,6 +3,7 @@
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ProviderRuntimeStatus.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -311,18 +312,32 @@ void AgentSessionManager::updateState(const SessionPtr& session, const QString& 
 }
 
 void AgentSessionManager::recordSessionError(const SessionPtr& session, const QString& error,
-                                             const bool notify) {
+                                             const bool notify, const QString& code,
+                                             const QString& model, const bool refresh) {
     const QString detail = error.isEmpty() ? QStringLiteral("Unknown Codex error") : error;
     auto entry = message(QStringLiteral("error"), detail, QStringLiteral("Error"));
     entry.insert(QStringLiteral("summary"), detail);
     agent_message::presentAgentError(entry, detail);
+    if (!code.isEmpty()) {
+        // The row shows the provider's setup guide; the readiness it changed is read again.
+        // The guide quotes the provider's words; the row's own text stays for when it reads as
+        // a notice again.
+        entry.insert(QStringLiteral("errorCode"), code);
+        entry.insert(QStringLiteral("errorDetail"), detail);
+        entry.insert(QStringLiteral("errorModel"), model.isEmpty() ? session->model : model);
+        entry.insert(QStringLiteral("provider"), session->daemonAdapter);
+        // A replayed history's errors changed nothing now.
+        if (refresh)
+            providerStatus_->refresh();
+    }
     appendMessage(session, entry);
     if (notify)
         emit errorOccurred(detail);
 }
 
-void AgentSessionManager::failSession(const SessionPtr& session, const QString& error) {
-    recordSessionError(session, error, false);
+void AgentSessionManager::failSession(const SessionPtr& session, const QString& error,
+                                      const QString& code, const QString& model) {
+    recordSessionError(session, error, false, code, model);
     session->pendingPrompt.clear();
     session->turnId.clear();
     session->cancelRequested = false;

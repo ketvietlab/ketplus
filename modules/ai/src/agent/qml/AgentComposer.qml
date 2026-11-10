@@ -105,6 +105,7 @@ Item {
                         bottomPadding: composer.recipe.textPaddingBlock + leadingShift
                         // As in the mock's composer: a new conversation asks what to build, later turns name the provider.
                         property string hint: agentHost.presentationState.folder === "missing" ? "Continue in the main worktree…"
+                                              : root.providerBlocked ? "Write your message now; it sends once " + root.providerTitle(root.selectedProvider) + " is set up"
                                               : root.messageCount === 0 ? "Describe what you want to build…"
                                               : "Message " + root.providerTitle(root.selectedProvider) + "…"
                         // Drafting must remain available even while the
@@ -518,10 +519,20 @@ Item {
             Layout.maximumWidth: Math.max(KetTheme.px(40, KetTheme.zoom), composer.width - (composer.compactControls ? KetTheme.px(120, KetTheme.zoom) : KetTheme.px(240, KetTheme.zoom)))
             contentItem: RowLayout {
                 spacing: KetTheme.px(6, KetTheme.zoom)
+                // The provider cannot work: the button opens its setup guide again.
+                KetIcon {
+                    objectName: "modelButtonSetupWarning"
+                    visible: !!root.providerSetup
+                    Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
+                    Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
+                    name: "warning"
+                    color: KetTheme.t.warning
+                    box: KetTheme.px(14, KetTheme.zoom)
+                }
                 Text {
                     Layout.fillWidth: true
                     text: root.composerModelText()
-                    color: KetTheme.t.textSecondary
+                    color: root.providerSetup ? KetTheme.t.warning : KetTheme.t.textSecondary
                     font.family: KetTheme.fontFamily
                     font.pixelSize: modelButton.recipe.fontPixels
                     elide: Text.ElideRight
@@ -537,12 +548,14 @@ Item {
                 }
             }
             onClicked: {
+                root.showProviderSetup();
                 if (modelPopup.visible)
                     modelPopup.close();
                 else
                     root.openModelPicker();
             }
             Accessible.name: "Choose model and reasoning effort"
+            Accessible.description: root.providerSetup ? root.providerSetup.title : ""
             KetToolTip {
                 objectName: "ketToolTip"
                 visible: modelButton.hovered && !modelPopup.visible

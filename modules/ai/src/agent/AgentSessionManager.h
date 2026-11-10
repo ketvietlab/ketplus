@@ -370,8 +370,13 @@ class AgentSessionManager final : public QObject {
     void dismissPendingQuestions(const SessionPtr& session);
     void updateState(const SessionPtr& session, const QString& status, bool running);
     void setWorkingDetail(const SessionPtr& session, const QString& detail);
-    void failSession(const SessionPtr& session, const QString& error);
-    void recordSessionError(const SessionPtr& session, const QString& error, bool notify);
+    // `code` is the daemon's runtime.error code (ADR 0110), when it gave one.
+    // A coded error (ADR 0110) keeps the provider's words and the failed turn's model.
+    void failSession(const SessionPtr& session, const QString& error, const QString& code = {},
+                     const QString& model = {});
+    void recordSessionError(const SessionPtr& session, const QString& error, bool notify,
+                            const QString& code = {}, const QString& model = {},
+                            bool refresh = true);
     void syncConversationTitle(const SessionPtr& session);
     void syncArchived(const SessionPtr& session);
     [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;

@@ -41,6 +41,53 @@ Item {
         return count
     }
     property string selectedProvider: "codex"
+    // ADR 0110: the selected provider's setup guide, when it cannot start a turn. A blocking
+    // guide holds the message, which sends once the provider is set up.
+    readonly property var providerSetup: ((agentHost.providerRuntime || {}).setups || {})[selectedProvider] || null
+    readonly property bool providerBlocked: !!providerSetup && providerSetup.blocking === true
+    // A provider that cannot start a turn shows its guide above the composer; one that ended a
+    // turn shows it at the end of that turn, and the model button carries the warning.
+    readonly property bool providerSetupShown: !!providerSetup && providerSetup.composer === true && !hiddenSetups[selectedProvider]
+    property var hiddenSetups: ({})
+    // A held message: the provider it waits for, the conversation's draft scope and the text
+    // sent. Switching conversation or editing the draft lets it go; switching provider keeps
+    // the draft unsent.
+    property var heldMessage: null
+    function showProviderSetup() {
+        const hidden = Object.assign({}, hiddenSetups)
+        delete hidden[selectedProvider]
+        hiddenSetups = hidden
+    }
+    // The daemon answered and listed the provider without a guide: not a stopped daemon and
+    // not a guide that merely stopped blocking.
+    function providerReady(provider) {
+        const runtime = agentHost.providerRuntime || {}
+        return runtime.gated === true && Object.prototype.hasOwnProperty.call(runtime.providers || {}, provider)
+            && !(runtime.setups || {})[provider]
+    }
+    function sendHeldMessage() {
+        const held = heldMessage
+        if (!held || !providerReady(held.provider))
+            return
+        heldMessage = null
+        if (held.provider === selectedProvider && held.scope === draftScope && prompt.text === held.text
+                && prompt.text.trim().length > 0)
+            submitCurrentPrompt()
+    }
+    Connections {
+        target: agentHost
+        enabled: root.heldMessage !== null
+        function onProviderRuntimeChanged() { root.sendHeldMessage() }
+        function onComposerScopeChanged() { root.heldMessage = null }
+    }
+    Connections {
+        target: prompt
+        enabled: root.heldMessage !== null
+        function onTextChanged() {
+            if (root.heldMessage && prompt.text !== root.heldMessage.text)
+                root.heldMessage = null
+        }
+    }
     readonly property string usageProvider: (agentHost.statusProvider || selectedProvider || "codex").toLowerCase()
     readonly property var usageSnapshot: agentHost.usageSnapshot || ({})
     readonly property bool usageMatchesProvider: (usageSnapshot.provider || "") === usageProvider
@@ -1230,6 +1277,13 @@ Item {
             root.applySlashCommand(root.visibleSlashCommands[0])
             return
         }
+        if (root.providerBlocked) {
+            // The draft stays in the composer and sends once the provider is set up.
+            root.heldMessage = {provider: root.selectedProvider, scope: root.draftScope, text: prompt.text}
+            root.showProviderSetup()
+            imageToast.show("Set up " + root.providerTitle(root.selectedProvider) + " first. Your message is kept.")
+            return
+        }
         agentHost.submitConfiguredPrompt(value, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
         if (agentHost.sessionRunning) {
             prompt.clear()
@@ -1498,6 +1552,27 @@ Item {
                     Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
                     Layout.preferredHeight: implicitHeight
                     Layout.bottomMargin: visible ? KetTheme.px(6, KetTheme.zoom) : 0
+                }
+
+                Loader {
+                    objectName: "composerProviderSetup"
+                    active: root.providerSetupShown
+                    visible: active
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
+                    Layout.preferredHeight: active && item ? item.implicitHeight : 0
+                    Layout.bottomMargin: active ? KetTheme.px(8, KetTheme.zoom) : 0
+                    sourceComponent: AgentProviderSetupCard {
+                        shell: root
+                        setup: root.providerSetup
+                        canHide: true
+                        onHideRequested: {
+                            const hidden = Object.assign({}, root.hiddenSetups)
+                            hidden[root.selectedProvider] = true
+                            root.hiddenSetups = hidden
+                            imageToast.show("Setup steps hidden. Open them again from the model button below, or Settings › Providers.")
+                        }
+                    }
                 }
 
                 AgentComposer {

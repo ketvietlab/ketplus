@@ -236,6 +236,21 @@ class AgentWorkspaceView final : public QWidget {
         emit weeklyLimitChanged();
     }
     QVariantMap providerRuntime() const { return providerRuntime_; }
+    // ADR 0110: the setup guide for a turn the provider ended with a coded error.
+    using TurnGuide = std::function<QVariantMap(const QString& provider, const QString& code,
+                                                const QString& message, const QString& model)>;
+    void setTurnGuide(TurnGuide guide) { turnGuide_ = std::move(guide); }
+    Q_INVOKABLE QVariantMap providerTurnGuide(const QString& provider, const QString& code,
+                                              const QString& message,
+                                              const QString& model = {}) const {
+        return turnGuide_ ? turnGuide_(provider, code, message, model) : QVariantMap{};
+    }
+    // Check again on a setup guide: the daemon forgets reported failures and probes again.
+    Q_INVOKABLE void recheckProviders() { emit providerRecheckRequested(); }
+    // A setup command typed into a terminal for the user to run with Return; never run.
+    Q_INVOKABLE void typeInTerminal(const QString& command) {
+        emit typeInTerminalRequested(command);
+    }
     void setProviderRuntime(const QVariantMap& value) {
         providerRuntime_ = value;
         emit providerRuntimeChanged();
@@ -593,6 +608,8 @@ class AgentWorkspaceView final : public QWidget {
     void terminalRequested();
     void workReportRequested();
     void settingsRequested(const QString& section);
+    void providerRecheckRequested();
+    void typeInTerminalRequested(const QString& command);
     void productNavigationRequested(const QString& destination);
     void atlasRunningCountChanged();
     void addWorktreeRequested();
@@ -690,6 +707,7 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap usageSnapshot_;
     QVariantMap claudeAccountUsage_;
     UsageRequester claudeUsageRequester_;
+    TurnGuide turnGuide_;
     QVariantList backgroundTasks_;
     AtlasResultInspector atlasResultInspector_;
     QVariantMap heldMessageStates_;

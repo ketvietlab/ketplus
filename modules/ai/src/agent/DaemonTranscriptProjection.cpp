@@ -623,6 +623,13 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = message("error", data.value("message").toString(), "Agent · error", {}, itemId);
             // Worded as a live failure's row, as the mock's danger banner.
             presentAgentError(entry, data.value("message").toString());
+            if (const QString code = data.value("code").toString(); !code.isEmpty()) {
+                // The provider's setup guide (ADR 0110), which quotes the provider's own words.
+                entry.insert("errorCode", code);
+                entry.insert("errorDetail", data.value("message").toString());
+                entry.insert("errorModel", data.value("model").toString());
+                entry.insert("provider", data.value("provider").toString());
+            }
             entry.insert("category", "system");
             entry.insert("status", "failed");
         } else if (type == "command.output_delta") {
