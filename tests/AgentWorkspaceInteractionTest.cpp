@@ -36,6 +36,8 @@
 #include <QTextImageFormat>
 #include <QtTest>
 
+#include <cmath>
+
 #include <algorithm>
 
 using namespace agent_workspace_test;
@@ -702,6 +704,32 @@ void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {
     QVERIFY(onLight != onDark);
     QCOMPARE(lines.at(2), QStringLiteral("  style B fill:#fdd,stroke:#c33,color:") + onLight);
     QCOMPARE(lines.at(3), QStringLiteral("  classDef bad fill:#7a1f1f,color:") + onDark);
+    // A mid-grey fill where neither theme text reaches 4.5:1 takes black or white, and every
+    // fill gets a label at 4.5:1 or more.
+    const auto luminance = [](const QColor& colour) {
+        const auto channel = [](const qreal value) {
+            return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(colour.redF()) + 0.7152 * channel(colour.greenF()) +
+               0.0722 * channel(colour.blueF());
+    };
+    const auto labelContrast = [&luminance](const QString& fill) {
+        const QString line = withReadableMermaidLabels(QStringLiteral("style A fill:") + fill);
+        const QColor label(line.section(QStringLiteral("color:"), 1));
+        const qreal a = luminance(QColor(fill));
+        const qreal b = luminance(label);
+        return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
+    };
+    QVERIFY(labelContrast(QStringLiteral("#8b8b8b")) >=
+            ketplus::agent_message::minimumLabelContrast);
+    for (int grey = 0; grey < 256; grey += 3) {
+        for (const QColor& fill : {QColor(grey, grey, grey), QColor(grey, 255 - grey, 128),
+                                   QColor(255 - grey, 64, grey)}) {
+            const qreal ratio = labelContrast(fill.name());
+            QVERIFY2(ratio >= ketplus::agent_message::minimumLabelContrast,
+                     qPrintable(fill.name() + QStringLiteral(" %1").arg(ratio)));
+        }
+    }
     // An author's own text colour and a style without a fill stay as written.
     QCOMPARE(lines.at(4), QStringLiteral("  classDef named fill:pink,color:#000"));
     QCOMPARE(lines.at(5), QStringLiteral("  style A stroke:#333"));
