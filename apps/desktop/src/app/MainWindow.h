@@ -235,7 +235,7 @@ class MainWindow final : public QMainWindow {
     // Names the signed-in account on the sidebar identity button (ADR 0109).
     void setupSidebarAccount();
     [[nodiscard]] remote::DaemonClient* accountDaemon();
-    // ADR 0112 (#464): teams in the sidebar while the daemon advertises teams/1.
+    // ADR 0114 (#464): teams in the sidebar while the daemon advertises teams/1.
     void setupTeams();
     // Takes the members of the repository's teams out of `conversations`, into their folders.
     [[nodiscard]] QVector<SidebarTeam> takeSidebarTeams(const QString& repository,

@@ -105,7 +105,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
 
   signals:
     void eventReady(const QJsonObject& event);
-    // ADR 0112: team.changed or team.removed, for every local client.
+    // ADR 0114: team.changed or team.removed, for every local client.
     void teamEvent(const QString& type, const QJsonObject& payload);
     // A change every desktop window shows at once that is not a session event (#429):
     // `tags.changed` with the catalog and/or the sessions whose labels changed.
@@ -279,7 +279,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
     QString startReviewerConversation(const Session& working, const QString& provider,
                                       QString* error);
-    // ADR 0112, in SessionHostTeams.cpp.
+    // ADR 0114, in SessionHostTeams.cpp.
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;

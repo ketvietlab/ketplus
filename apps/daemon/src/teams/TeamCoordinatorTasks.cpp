@@ -1,4 +1,4 @@
-// ADR 0112 §6: tasks with one owner, states, criteria and an append-only history.
+// ADR 0114 §6: tasks with one owner, states, criteria and an append-only history.
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
@@ -400,10 +400,10 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                     .taskId = task.id,
                     .actionable = actionable,
                     .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
-    // ADR 0112 §2: the reviewer takes tasks first in, first out; commit() sends the next.
+    // ADR 0114 §2: the reviewer takes tasks first in, first out; commit() sends the next.
     if (to == state::inReview && !team.reviewQueue.contains(task.id) && team.reviewing != task.id)
         team.reviewQueue.append(task.id);
-    // A developer whose work all left its hands needs the leader (ADR 0112 §7).
+    // A developer whose work all left its hands needs the leader (ADR 0114 §7).
     if (!task.owner.isEmpty() && (to == state::inReview || to == state::done)) {
         bool busy = false;
         for (const Task& other : team.tasks)

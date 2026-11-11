@@ -1,4 +1,4 @@
-// ADR 0112 §3 and open points 2 and 5: decisions, the one place where a team waits for the
+// ADR 0114 §3 and open points 2 and 5: decisions, the one place where a team waits for the
 // user. The leader raises questions; the daemon raises its own. Only the user answers, and the
 // answer reaches the leader and the owner of the blocked task once.
 #include "teams/TeamCoordinator.h"
@@ -118,7 +118,7 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         return {.error =
                     refusal(QStringLiteral("team_not_found"), QStringLiteral("No such team."))};
     const Team before = *team;
-    // Nothing a member sends answers a decision (ADR 0112 §1).
+    // Nothing a member sends answers a decision (ADR 0114 §1).
     if (actor != QStringLiteral("user"))
         return {.error = refusal(QStringLiteral("role_forbidden"),
                                  QStringLiteral("Only the user answers a decision."))};
@@ -153,7 +153,7 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         if (!resume)
             team->pausedReason = QStringLiteral("user");
     } else if (kind == QStringLiteral("merge")) {
-        // ADR 0112 §5: the user allows exactly this merge.
+        // ADR 0114 §5: the user allows exactly this merge.
         if (Task* ready = team->task(taskId); ready && text == leaderMergesChoice)
             ready->leaderMayMerge = true;
     } else if (kind == firstPlan && text == startPlan) {

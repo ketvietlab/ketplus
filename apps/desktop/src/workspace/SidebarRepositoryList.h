@@ -15,7 +15,7 @@ class QVBoxLayout;
 
 namespace ketplus {
 
-// A team's folder inside its repository (ADR 0112, #464). `members` are conversation maps in the
+// A team's folder inside its repository (ADR 0114, #464). `members` are conversation maps in the
 // folder's order, leader first; each carries "teamRole" and its role tag first in "tags".
 struct SidebarTeam final {
     QString id;

@@ -1,4 +1,4 @@
-// ADR 0112: the team store and the membership rules.
+// ADR 0114: the team store and the membership rules.
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
@@ -313,7 +313,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             team->paused = paused;
             team->pausedReason = paused ? QStringLiteral("user") : QString{};
             if (!paused) {
-                team->automaticTurns = 0; // The user acted on the team (ADR 0112, point 2).
+                team->automaticTurns = 0; // The user acted on the team (ADR 0114, point 2).
                 for (Decision& decision : team->decisions)
                     if (decision.kind == QStringLiteral("budget") &&
                         decision.state == QStringLiteral("open")) {
@@ -416,7 +416,7 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
         return {.error = refused};
     member.joinedAt = nowIso();
     team->members.append(member);
-    // An empty role filled again lifts the pause it caused (ADR 0112, point 4).
+    // An empty role filled again lifts the pause it caused (ADR 0114, point 4).
     if (team->paused && team->pausedReason == QStringLiteral("empty_role") &&
         team->count(role::leader) == 1 && team->count(role::reviewer) == 1 &&
         team->count(role::developer) >= 1) {
@@ -475,7 +475,7 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
                            {QStringLiteral("from"), QJsonArray::fromStringList(oldPaths)},
                            {QStringLiteral("to"), QJsonArray::fromStringList(*normalised)},
                            {QStringLiteral("reason"), reason}};
-    // ADR 0112 §4: in the history of every open task of the lanes it touches.
+    // ADR 0114 §4: in the history of every open task of the lanes it touches.
     for (Task& task : team->tasks)
         if (task.state != state::done &&
             (task.owner == sessionId || task.lane == oldLane || task.lane == member->lane))

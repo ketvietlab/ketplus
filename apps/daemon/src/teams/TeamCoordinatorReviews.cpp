@@ -1,4 +1,4 @@
-// ADR 0112 §2: the team's reviewer reviews each task on the engine of ADR 0067 — a `review`
+// ADR 0114 §2: the team's reviewer reviews each task on the engine of ADR 0067 — a `review`
 // message with the verdict line — triggered by the task entering In review instead of by a
 // finished turn, queued first in first out instead of skipped.
 #include "teams/TeamCoordinator.h"
@@ -150,7 +150,7 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                         {QStringLiteral("round"), round},
                         {QStringLiteral("text"), findings}});
             if (round >= team->maxRounds) {
-                // Past the limit the leader decides (ADR 0112 §2).
+                // Past the limit the leader decides (ADR 0114 §2).
                 task->resumeState = state::inProgress;
                 task->question = QStringLiteral("Review round limit reached (%1 of %2) with "
                                                 "findings.")

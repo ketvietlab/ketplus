@@ -70,7 +70,7 @@ QJsonObject originEntry(const AgentMessageRecord& message) {
 }
 
 // A request to review, which runs read-only (ADR 0067). The findings a team's reviewer sends
-// back to a task's owner are also of kind "review" (ADR 0112) but expect no reply: they start
+// back to a task's owner are also of kind "review" (ADR 0114) but expect no reply: they start
 // an ordinary turn, in which the owner fixes them.
 bool reviewRequest(const AgentMessageRecord& message) {
     return message.kind == QStringLiteral("review") && message.expectReply;
@@ -224,7 +224,7 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
         if (values.size() >= limit)
             continue;
         QJsonObject value = conversationJson(conversation);
-        // ADR 0112: a member's role and lane.
+        // ADR 0114: a member's role and lane.
         if (const QJsonObject team = host_->teamMembership(conversation.sessionId);
             !team.isEmpty()) {
             value.insert(QStringLiteral("team"), team.value(QStringLiteral("name")));
@@ -241,7 +241,7 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
 
 QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& request) {
     QJsonObject payload = request;
-    // ADR 0112: inside a team, "leader" and "reviewer" name the team's member.
+    // ADR 0114: inside a team, "leader" and "reviewer" name the team's member.
     if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
         role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
         const QString number = host_->teamRoleNumber(caller.sessionId, role);
@@ -695,7 +695,7 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
         }
         markState(*request, QStringLiteral("answered"));
         if (request->fromSession.isEmpty()) {
-            // ADR 0112: the team sent it; the team reads the answer.
+            // ADR 0114: the team sent it; the team reads the answer.
             host_->teamRequestFinished(sessionId, *request, text, {});
             continue;
         }

@@ -1,4 +1,4 @@
-// ADR 0112 §7 and open point 2: what starts a turn, the leader's digest, pause and the budget
+// ADR 0114 §7 and open point 2: what starts a turn, the leader's digest, pause and the budget
 // of automatic turns. The coordinator runs on a real journal with a fake runtime and a short
 // quiet period. No provider is started.
 #include "AgentTestFixture.h"

@@ -1,4 +1,4 @@
-// ADR 0112 and #464: a team is a folder inside its repository, before the repository's other
+// ADR 0114 and #464: a team is a folder inside its repository, before the repository's other
 // conversations. Its name opens the team page, its icon folds it, its count is the open
 // decisions. A conversation dragged onto a folder of its own repository joins as a developer.
 #include "KetBadge.h"

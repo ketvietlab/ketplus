@@ -32,7 +32,7 @@ QString toolInstructions(const QString& ownNumber) {
         .arg(ownNumber);
 }
 
-// ADR 0112. The daemon refuses what a role may not do; this text only explains it.
+// ADR 0114. The daemon refuses what a role may not do; this text only explains it.
 QString teamInstructions(const TeamRoleContext& context) {
     QStringList lines{
         QStringLiteral("[KetPlus team]"),

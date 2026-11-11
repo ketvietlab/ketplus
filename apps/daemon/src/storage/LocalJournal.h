@@ -179,7 +179,7 @@ struct LargeEventFragment final {
     QString errorMessage;
 };
 
-// ADR 0112: one entry of a team's append-only Updates log.
+// ADR 0114: one entry of a team's append-only Updates log.
 struct TeamUpdateRecord final {
     qint64 id{0};
     qint64 teamId{0};
@@ -189,7 +189,7 @@ struct TeamUpdateRecord final {
     QString taskId;
     QString text;
     QJsonObject data;
-    // Starts the leader's digest (ADR 0112 §7); other updates ride along.
+    // Starts the leader's digest (ADR 0114 §7); other updates ride along.
     bool actionable{false};
     bool digested{false};
 };
@@ -482,7 +482,7 @@ class LocalJournal final {
     [[nodiscard]] bool isConversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
-    // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at
+    // ADR 0114: teams. The document is the team's JSON; `sessions` are its members, each on at
     // most one team. insertTeam returns the new id, which is never reused.
     [[nodiscard]] std::optional<qint64> insertTeam(const QString& repository, QJsonObject document,
                                                    const QStringList& sessions,

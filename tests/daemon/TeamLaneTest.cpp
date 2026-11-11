@@ -1,4 +1,4 @@
-// ADR 0112 §4: lanes, the check outside a lane and lane changes. The coordinator cases use a
+// ADR 0114 §4: lanes, the check outside a lane and lane changes. The coordinator cases use a
 // fake runtime; the end-to-end case a temporary Git repository and the scripted fake
 // providers. No real provider is started.
 #include "AgentTestFixture.h"

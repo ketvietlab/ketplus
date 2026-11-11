@@ -24,14 +24,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
-- Agent teams, store (ADR 0112, #455): the daemon keeps teams in the journal
+- Agent teams, store (ADR 0114, #455): the daemon keeps teams in the journal
   (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
   their error codes; a member cannot be archived, its own Reviewer setting is refused
   with `team_member` and does not run, and a deleted member leaves its team.
   The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
   local clients; `team.create` starts every member as a named conversation (no turn),
   all or nothing, and `team.changed` / `team.removed` reach every local client.
-  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
+  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0114 §6,
   criteria only the leader or the user writes, an append-only history, dependencies,
   and a handover that moves the task's own worktree and branch to the new owner.
   Agent tools (#458): members get the `team_*` tools of the ketplus_agents server, the
@@ -669,7 +669,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Planned
 
-- Agent teams ([ADR 0112](decisions/0112-agent-teams.md), epic #450): a leader, one
+- Agent teams ([ADR 0114](decisions/0114-agent-teams.md), epic #450): a leader, one
   to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
   review, decisions on the team page and a digest instead of status messages. Each
   step of #450 moves its part to Implemented.

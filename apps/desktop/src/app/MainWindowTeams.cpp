@@ -1,4 +1,4 @@
-// ADR 0112 (#464): teams in the sidebar. The daemon owns each team; the window shows its
+// ADR 0114 (#464): teams in the sidebar. The daemon owns each team; the window shows its
 // folder, offers its menus and sends what the user chose back as team requests.
 #include "DaemonClient.h"
 #include "KetDialog.h"

@@ -1,4 +1,4 @@
-// ADR 0112 §5 and open point 3: who merges a reviewed task, the dependency order and the
+// ADR 0114 §5 and open point 3: who merges a reviewed task, the dependency order and the
 // ancestor check. The coordinator cases use a fake runtime; the end-to-end case a temporary
 // Git repository and the scripted fake providers. No provider quota, no hosting service.
 #include "AgentTestFixture.h"

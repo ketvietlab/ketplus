@@ -1,4 +1,4 @@
-// ADR 0112: messages a team sends into its members' conversations.
+// ADR 0114: messages a team sends into its members' conversations.
 #include "agents/AgentBroker.h"
 #include "storage/LocalJournal.h"
 

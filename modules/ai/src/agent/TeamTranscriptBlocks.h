@@ -7,7 +7,7 @@
 namespace ketplus::team_blocks {
 
 // #468: what a team sends into a member's conversation is a structured message of the daemon
-// (ADR 0112): an assignment (#457), the leader's digest (#459), a review request or its
+// (ADR 0114): an assignment (#457), the leader's digest (#459), a review request or its
 // verdict (ADR 0067) and an answered decision (#462). This reads one into the block the
 // transcript draws:
 //   kind      "assignment", "digest", "review", "verdict" or "decision"

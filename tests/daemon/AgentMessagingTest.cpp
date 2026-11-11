@@ -933,7 +933,7 @@ class AgentMessagingTest final : public QObject {
                      .value("code")
                      .toInt(),
                  -32602);
-        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        // tools/list asks whoami whether to add the team tools (ADR 0114).
         QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send"}));
     }
 };

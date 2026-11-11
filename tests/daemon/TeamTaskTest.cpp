@@ -1,4 +1,4 @@
-// ADR 0112 §6: tasks, with one owner, states, criteria and history. The coordinator runs on a
+// ADR 0114 §6: tasks, with one owner, states, criteria and history. The coordinator runs on a
 // real journal with a fake runtime; the protocol case uses a temporary Git repository and the
 // scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"

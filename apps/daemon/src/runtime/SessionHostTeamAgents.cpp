@@ -1,4 +1,4 @@
-// ADR 0112: the team_* tools of the ketplus_agents server. The daemon checks the caller's
+// ADR 0114: the team_* tools of the ketplus_agents server. The daemon checks the caller's
 // role for every call; a role that may not act is refused with the role that may.
 #include "runtime/SessionHost.h"
 
@@ -198,7 +198,7 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
     return teamDecisionOperation(sessionId, operation, payload);
 }
 
-// ADR 0112 §3: the leader's decisions. The caller's role was checked by teamOperation.
+// ADR 0114 §3: the leader's decisions. The caller's role was checked by teamOperation.
 QJsonObject SessionHost::teamDecisionOperation(const QString& sessionId, const QString& operation,
                                                const QJsonObject& payload) {
     const teams::Team* team = teams_->teamOf(sessionId);

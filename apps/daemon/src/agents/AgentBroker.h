@@ -53,7 +53,7 @@ class AgentHostPort {
     // Returns the tool's answer, ok or failure.
     virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                          const QJsonObject& payload) = 0;
-    // ADR 0112: the caller's team, role and lane for agents_whoami and agents_list; empty for
+    // ADR 0114: the caller's team, role and lane for agents_whoami and agents_list; empty for
     // a conversation on no team.
     [[nodiscard]] virtual QJsonObject teamMembership(const QString& sessionId) const {
         (void)sessionId;
@@ -77,8 +77,8 @@ class AgentHostPort {
             {QStringLiteral("error_code"), QStringLiteral("not_on_team")},
             {QStringLiteral("error_message"), QStringLiteral("This conversation is on no team.")}};
     }
-    // ADR 0112: a member of a team. Its own reviewer (ADR 0067) does not run meanwhile.
-    // ADR 0112: a request the team sent (no sending conversation) was answered with `text`, or
+    // ADR 0114: a member of a team. Its own reviewer (ADR 0067) does not run meanwhile.
+    // ADR 0114: a request the team sent (no sending conversation) was answered with `text`, or
     // its turn ended without a reply (`failure`, the reason).
     virtual void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                                      const QString& text, const QString& failure) {
@@ -149,7 +149,7 @@ class AgentBroker final : public QObject {
     // Conversations whose running turn a message started, by session id: the first sender's
     // `number`, `title` and `kind`. Clients show the sender on the conversation's row.
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
-    // ADR 0112: a message of the team (assignment, digest, review, decision) to a member. It
+    // ADR 0114: a message of the team (assignment, digest, review, decision) to a member. It
     // starts its own chain at hop 1, so the loop guard still applies. Returns an error.
     QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
                             const QString& toSession, const QString& kind, const QString& body,
