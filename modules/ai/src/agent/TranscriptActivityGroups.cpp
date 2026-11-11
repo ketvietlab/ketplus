@@ -41,22 +41,16 @@ const QStringList& activityGroupRoleNames() {
 }
 
 bool isGroupableActivity(const QVariantMap& row) {
-    // Image evidence must remain visible even after the surrounding activities collapse.
+    // As in the mock, steps that return images (viewed or generated images, browser
+    // captures) are steps of their group: an open group shows the image under its step.
     if (row.value(QStringLiteral("presentationHidden")).toBool() ||
         row.value(QStringLiteral("category")).toString() != QStringLiteral("activity") ||
-        row.value(QStringLiteral("chunkContinuation")).toBool() ||
-        !row.value(QStringLiteral("images")).toList().isEmpty())
+        row.value(QStringLiteral("chunkContinuation")).toBool())
         return false;
     // Rows without a turn (legacy snapshots, local notices) have no reliable boundary.
     if (row.value(QStringLiteral("turnId")).toString().isEmpty())
         return false;
     const QString subtype = row.value(QStringLiteral("subtype")).toString();
-    // Capture and visual comparison always keep their own rows, including while
-    // running or if their images are unavailable. Other steps group until they return images.
-    const QString eventType = row.value(QStringLiteral("eventType")).toString();
-    if (eventType == QStringLiteral("browser.screenshot") ||
-        eventType == QStringLiteral("browser.compare"))
-        return false;
     // Questions need an answer, compaction marks a context boundary, and notices are read
     // rather than skimmed; all of them stay visible. Every step collapses, as in the mock:
     // consecutive thoughts, reads, edits, commands, searches, MCP tool calls, image steps and
@@ -74,9 +68,8 @@ bool isGroupableActivity(const QVariantMap& row) {
         QStringLiteral("skill"),         QStringLiteral("taskStopped"),
         QStringLiteral("monitor"),
     };
-    // Browser visits too; evidence rows were kept out above.
-    return steps.contains(subtype) || (subtype.startsWith(QStringLiteral("browser")) &&
-                                       subtype != QStringLiteral("browserScreenshot"));
+    // Browser visits, captures and comparisons too.
+    return steps.contains(subtype) || subtype.startsWith(QStringLiteral("browser"));
 }
 
 void ActivityTally::add(const QString& id, const int amount) {

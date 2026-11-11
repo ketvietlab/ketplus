@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 897b458c3205246072733641998e9a37c6ae6d2f # ket-qt PR #44 merge (keyboard-only nav focus ring)
+    GIT_TAG 9bdd51c200ddb6f84b7504951019bba4a1713c0c # ket-qt PR #46 merge (editable select: text once, inside its border)
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"

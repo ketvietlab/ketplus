@@ -57,6 +57,22 @@ class AtlasTest final : public QObject {
                 {}};
     }
   private slots:
+    // The builder's header reads "<flow> · N screens", N being the distinct screens it shows.
+    void flowCountsDistinctScreens() {
+        QTemporaryDir workspace;
+        QVERIFY(QDir(workspace.path()).mkpath("flows.ketatlas"));
+        QFile file(workspace.filePath("flows.ketatlas/atlas.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({"version":1,"title":"Flows","screens":[],"flows":[
+            {"id":"start","title":"Getting started","nodes":[{"id":"a","screen":"open"},
+             {"id":"b","screen":"ready"},{"id":"c","screen":"open"}]},
+            {"id":"empty","title":"Empty"}]})");
+        file.close();
+        const auto atlas = ketplus::AtlasIndex::readManifest(file.fileName(), workspace.path());
+        QCOMPARE(atlas.flows.size(), 2);
+        QCOMPARE(atlas.flows.at(0).screenCount, 2);
+        QCOMPARE(atlas.flows.at(1).screenCount, 0);
+    }
     void explicitManifestIsBoundedAndWorktreeScoped() {
         QTemporaryDir workspace;
         QTemporaryDir outside;

@@ -69,6 +69,7 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     bool known = false;
     bool running = false;
     bool forkable = false;
+    bool awaiting = false;
     QString number;
     for (const QVariant& value : agentManager_->conversations(path)) {
         const QVariantMap conversation = value.toMap();
@@ -77,6 +78,7 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
         known = true;
         running = conversation.value(QStringLiteral("running")).toBool();
         forkable = conversation.value(QStringLiteral("forkable")).toBool();
+        awaiting = conversation.value(QStringLiteral("awaitingReply")).toBool();
         number = conversation.value(QStringLiteral("number")).toString();
         break;
     }
@@ -86,8 +88,18 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     QMenu menu(this);
     const QString reference = number.isEmpty() ? QString{} : QStringLiteral("@agent/") + number;
     const auto actions = addConversationMenuActions(menu, forkable, running, reference);
+    // #125: a conversation waiting for you can be marked done without answering it.
+    QAction* done = nullptr;
+    if (awaiting) {
+        done = new QAction(tr("Mark as done"), &menu);
+        done->setObjectName(QStringLiteral("conversationMarkDoneAction"));
+        menu.insertAction(menu.actions().value(0), done);
+        menu.insertSeparator(menu.actions().value(1));
+    }
     QAction* selected = menu.exec(QCursor::pos());
-    if (selected == actions.rename)
+    if (selected != nullptr && selected == done)
+        agentManager_->markConversationDone(path, conversationId);
+    else if (selected == actions.rename)
         renameAgentConversation(path, conversationId);
     else if (selected == actions.changeWorktree)
         changeAgentConversationWorktree(path, conversationId);

@@ -72,7 +72,7 @@ QtObject {
         { type: "day", text: "Thursday, 24 September" },
         { type: "user", text: "Profile why the sidebar keeps the CPU busy when nothing happens." },
         { type: "trimmed", text: "This turn is older than 30 days: 38 commands and 12 captures were reduced to their summaries (1.2 MB)." },
-        { type: "turn", status: "completed", text: "6m 20s · 141k context · $2.08" },
+        { type: "turn", status: "completed", text: "6m 20s · 141k context · $2.08 session" },
 
         { type: "day", text: "Today" },
         { type: "user", text: "The sidebar spinner still looks choppy. Check it against this capture and fix it.",
@@ -126,7 +126,7 @@ QtObject {
         { type: "changes", files: [
             { name: "AgentSidebar.qml", path: "modules/ai/src/agent/qml", added: 3, removed: 1 },
             { name: "SpinClock.qml", path: "modules/ai/src/agent/qml", added: 48, removed: 0 }] },
-        { type: "turn", status: "completed", text: "4m 12s · 182k context · $1.24" }
+        { type: "turn", status: "completed", text: "4m 12s · 182k context · $1.24 session" }
     ]
 
     readonly property var codex: [

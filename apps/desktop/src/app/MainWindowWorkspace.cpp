@@ -337,6 +337,7 @@ void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
                 uncommitted.append(file.path);
         agentWorkspace_->setWorkingChanges(snapshot.repositoryRoot, uncommitted);
     }
+    refreshAgentChanges();
     if (explorer_) {
         QHash<QString, QString> statuses;
         for (const auto& file : snapshot.files)

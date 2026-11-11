@@ -42,6 +42,8 @@ class DaemonClient final : public QObject {
   signals:
     void readyChanged(bool ready);
     void eventReceived(const QJsonObject& event);
+    // A daemon push that is not a session event, such as `tags.changed` (#429).
+    void noticeReceived(const QString& type, const QJsonObject& payload);
     void disconnected(const QString& reason);
 
   private:
