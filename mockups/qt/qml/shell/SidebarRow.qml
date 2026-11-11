@@ -3,11 +3,12 @@ import QtQuick
 import QtQuick.Controls.Basic as Basic
 import Ket
 
-// A conversation in the sidebar (concept): one line, always. A state mark, the title, the
-// number. Nothing else is drawn in the list; the state in words, what started the turn, the
-// tags and the worktree are in the hint of a resting pointer and in the accessible
-// description. Colour is on the mark alone, and only for a conversation that runs or waits
-// for the user; a finished one that was read has a grey mark and recedes.
+// A conversation in the sidebar tree (concept): one line, always. A state mark, the title,
+// the number. Nothing else is drawn in the list; the state in words, what started the turn,
+// the tags and the worktree are in the hint of a resting pointer and in the accessible
+// description. The mark carries the state's own icon and colour; a finished conversation
+// that was not read yet has a dot and a semibold title.
+// `indent` is the row's level: its highlight starts there, right of the tree's guide line.
 Basic.AbstractButton {
     id: control
 
@@ -25,10 +26,6 @@ Basic.AbstractButton {
         KetTheme.dark, KetTheme.zoom, checked, hovered, enabled, visualFocus)
     readonly property var statusRecipe: KetTheme.conversationStatusRecipe(KetTheme.dark, status)
     readonly property bool finished: status === KetTheme.ConversationStatus.Completed
-    // History: nothing runs and nothing is asked.
-    readonly property bool quiet: [KetTheme.ConversationStatus.Completed,
-                                   KetTheme.ConversationStatus.Stopped,
-                                   KetTheme.ConversationStatus.NotStarted].includes(status)
     readonly property string statusLabel: (finished && unread ? "Completed, unread"
                                            : KetTheme.conversationStatusLabel(status))
                                           + (detail ? " · " + detail : "")
@@ -36,8 +33,11 @@ Basic.AbstractButton {
     readonly property string hint: [role, statusLabel,
                                     tags.map(t => t.label).join(", "),
                                     worktree].filter(line => line !== "").join("\n")
-    // Where the title starts, for the sidebar's alignment check.
-    readonly property real textLeft: px(30)
+    // The level: a repository's own conversations stand at 20, a team's members at 38.
+    property real indent: px(20)
+    // Where the mark and the title start; the sidebar checks them against the level's heading.
+    readonly property real markLeft: indent + px(4)
+    readonly property real textLeft: indent + px(24)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
@@ -46,6 +46,7 @@ Basic.AbstractButton {
     implicitHeight: px(30)
     implicitWidth: px(240)
     padding: 0
+    leftInset: indent
     Accessible.name: text
     Accessible.description: hint.replace(/\n/g, ", ")
 
@@ -77,7 +78,7 @@ Basic.AbstractButton {
         // One column of marks down the list.
         Item {
             id: mark
-            x: control.px(8)
+            x: control.markLeft
             anchors.verticalCenter: parent.verticalCenter
             width: control.px(14)
             height: width
@@ -91,8 +92,7 @@ Basic.AbstractButton {
                           ? 360 * (KetTheme.animationClock % control.statusRecipe.spinMs)
                             / control.statusRecipe.spinMs
                           : 0
-                color: control.quiet ? KetTheme.t.textMuted : control.statusRecipe.iconColor
-                opacity: control.quiet ? 0.7 : 1
+                color: control.statusRecipe.iconColor
             }
             Rectangle {
                 anchors.centerIn: parent
@@ -109,7 +109,7 @@ Basic.AbstractButton {
             anchors.right: parent.right
             anchors.rightMargin: control.px(8)
             anchors.verticalCenter: parent.verticalCenter
-            text: control.number
+            text: "#" + control.number
             color: control.recipe.number
             font.family: KetTheme.monoFontFamily
             font.pixelSize: control.px(11)

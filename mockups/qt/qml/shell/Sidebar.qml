@@ -62,9 +62,10 @@ Rectangle {
         const to = folder.mapToItem(null, folder.width / 2, px(12))
         return [Math.round(from.x), Math.round(from.y), Math.round(to.x), Math.round(to.y)]
     }
-    // What the list is built on, checked by --smoke: a repository's name and its
-    // conversations' titles share a left edge; a team's name and its members' the same; and
-    // every conversation is one line high.
+    // What the tree is built on, checked by --smoke: a repository's name, the label of its
+    // own conversations and their titles share a left edge; a team's name and its members'
+    // titles the same; a team's icon stands over its members' marks; and every conversation
+    // is one line high.
     function layoutProblems() {
         const problems = []
         const left = (item, x) => Math.round(item.mapToItem(sidebar, x, 0).x * 10) / 10
@@ -77,12 +78,20 @@ Rectangle {
                 if (name.startsWith("repository-")) {
                     heading = { name: name, x: left(item, item.textLeft) }
                 } else if (name.startsWith("team-")) {
-                    walk(item, { name: name, x: left(item, item.textLeft) })
+                    walk(item, { name: name, x: left(item, item.textLeft),
+                                 mark: left(item, item.rowLeft + px(4)) })
+                } else if (name.startsWith("section-")) {
+                    if (item.visible && heading && !near(left(item, item.textLeft), heading.x))
+                        problems.push(name + " starts at " + left(item, item.textLeft)
+                                      + ", its repository " + heading.name + " at " + heading.x)
                 } else if (name.startsWith("conversation-") || name.startsWith("member-")) {
                     ++rows
                     const x = left(item, item.textLeft)
                     if (heading && !near(x, heading.x))
                         problems.push(name + " starts at " + x + ", its heading " + heading.name + " at " + heading.x)
+                    if (heading && heading.mark !== undefined && !near(left(item, item.markLeft), heading.mark))
+                        problems.push(name + " has its mark at " + left(item, item.markLeft)
+                                      + ", its team's icon is at " + heading.mark)
                     if (!near(item.height, px(30)))
                         problems.push(name + " is " + item.height + " high: every row is one line")
                 } else {
@@ -365,6 +374,9 @@ Rectangle {
                                     taken.push(m.number)
                             return sidebar.window.conversationsOf(modelData.name).filter(c => !taken.includes(c.number))
                         }
+                        // Those the tag filter keeps.
+                        readonly property var matching: sidebar.window.tagFilter === "" ? loose
+                            : loose.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
                         width: parent.width
 
                         SidebarRepoHeader {
@@ -405,104 +417,134 @@ Rectangle {
                             }
                         }
 
-                        Repeater {
-                            model: repo.open ? repo.teams : []
+                        // What the repository holds, along the guide line under its chevron:
+                        // its teams, then the conversations that belong to no team.
+                        Item {
+                            visible: repo.open
+                            width: repo.width
+                            height: held.height
 
-                            TeamFolder {
-                                required property var modelData
-                                required property int index
-                                // A child of its repository: one step in from the repository's name.
-                                x: sidebar.inset + sidebar.px(12)
-                                width: repo.width - sidebar.inset - x
-                                window: sidebar.window
-                                team: modelData
-                                conversations: sidebar.window.conversationsOf(repo.modelData.name)
-                                dropPreview: sidebar.dragPreview && index === 0
-                                onContextMenuRequested: conversation => {
-                                    sidebar.window.conversation = conversation
-                                    rowMenu.popup()
-                                }
-                                onMenuRequested: anchor => {
-                                    teamMenu.team = modelData
-                                    if (anchor)
-                                        teamMenu.popup(anchor, 0, anchor.height)
-                                    else
-                                        teamMenu.popup()
-                                }
+                            Rectangle {
+                                x: sidebar.inset + repoHeader.guideLeft
+                                width: 1
+                                height: parent.height
+                                color: KetTheme.t.sidebarBorder
                             }
-                        }
+                            Column {
+                                id: held
+                                width: parent.width
 
-                        Repeater {
-                            model: !repo.open ? []
-                                   : sidebar.window.tagFilter !== ""
-                                     ? repo.loose.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
-                                   : repo.all ? repo.loose
-                                   : repo.loose.slice(0, repo.limit)
+                                Repeater {
+                                    model: repo.open ? repo.teams : []
 
-                            SidebarRow {
-                                id: row
-                                required property var modelData
-                                unread: !!modelData.unread
-                                detail: modelData.from ? "from " + modelData.from : ""
-                                objectName: "conversation-" + modelData.number
-                                x: sidebar.inset
-                                width: repo.width - 2 * sidebar.inset
-                                text: modelData.title
-                                number: modelData.number
-                                tags: modelData.tags
-                                status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
-                                checked: sidebar.window.screen === "workspace"
-                                         && sidebar.window.conversation.number === modelData.number
-                                worktree: modelData.worktree
-                                onClicked: sidebar.window.openConversation(repo.modelData.name,
-                                                                           modelData)
-                                // Dragged onto a team's folder, the conversation joins that team.
-                                DragHandler {
-                                    target: null
-                                    enabled: repo.teams.length > 0
-                                    // The drop takes this row out of the list, so the sidebar
-                                    // finishes the drag, not the row.
-                                    onActiveChanged: {
-                                        if (active)
-                                            sidebar.startDrag(row.modelData, repo.modelData.name)
-                                        else
-                                            sidebar.finishDrag()
+                                    TeamFolder {
+                                        required property var modelData
+                                        required property int index
+                                        x: sidebar.inset
+                                        width: repo.width - 2 * sidebar.inset
+                                        window: sidebar.window
+                                        team: modelData
+                                        conversations: sidebar.window.conversationsOf(repo.modelData.name)
+                                        dropPreview: sidebar.dragPreview && index === 0
+                                        onContextMenuRequested: conversation => {
+                                            sidebar.window.conversation = conversation
+                                            rowMenu.popup()
+                                        }
+                                        onMenuRequested: anchor => {
+                                            teamMenu.team = modelData
+                                            if (anchor)
+                                                teamMenu.popup(anchor, 0, anchor.height)
+                                            else
+                                                teamMenu.popup()
+                                        }
                                     }
-                                    onCentroidChanged: if (active) sidebar.dragPoint = sidebar.mapFromItem(null, centroid.scenePosition)
                                 }
-                                TapHandler {
-                                    acceptedButtons: Qt.RightButton
-                                    onTapped: {
+
+                                // The label that tells them from the teams above; a repository
+                                // without a team needs none.
+                                SidebarSection {
+                                    objectName: "section-" + repo.modelData.name
+                                    visible: repo.teams.length > 0 && repo.matching.length > 0
+                                    x: sidebar.inset
+                                    width: repo.width - 2 * sidebar.inset
+                                    count: repo.matching.length
+                                    onActionTriggered: {
                                         sidebar.window.repository = repo.modelData.name
-                                        sidebar.window.conversation = row.modelData
-                                        rowMenu.popup()
+                                        sidebar.window.showScreen("workspace/welcome")
                                     }
                                 }
-                            }
-                        }
 
-                        Basic.AbstractButton {
-                            visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
-                                     && repo.loose.length > repo.limit
-                            // Under the titles, and it says how many it adds.
-                            x: sidebar.inset + sidebar.px(30)
-                            height: sidebar.px(28)
-                            hoverEnabled: true
-                            text: "Show " + (repo.loose.length - repo.limit) + " more"
-                            onClicked: {
-                                const next = Object.assign({}, sidebar.showAll)
-                                next[repo.modelData.name] = true
-                                sidebar.showAll = next
+                                Repeater {
+                                    model: !repo.open ? []
+                                           : repo.all || sidebar.window.tagFilter !== "" ? repo.matching
+                                           : repo.matching.slice(0, repo.limit)
+
+                                    SidebarRow {
+                                        id: row
+                                        required property var modelData
+                                        unread: !!modelData.unread
+                                        detail: modelData.from ? "from " + modelData.from : ""
+                                        objectName: "conversation-" + modelData.number
+                                        x: sidebar.inset
+                                        width: repo.width - 2 * sidebar.inset
+                                        text: modelData.title
+                                        number: modelData.number
+                                        tags: modelData.tags
+                                        status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
+                                        checked: sidebar.window.screen === "workspace"
+                                                 && sidebar.window.conversation.number === modelData.number
+                                        worktree: modelData.worktree
+                                        onClicked: sidebar.window.openConversation(repo.modelData.name,
+                                                                                   modelData)
+                                        // Dragged onto a team's folder, the conversation joins that team.
+                                        DragHandler {
+                                            target: null
+                                            enabled: repo.teams.length > 0
+                                            // The drop takes this row out of the list, so the sidebar
+                                            // finishes the drag, not the row.
+                                            onActiveChanged: {
+                                                if (active)
+                                                    sidebar.startDrag(row.modelData, repo.modelData.name)
+                                                else
+                                                    sidebar.finishDrag()
+                                            }
+                                            onCentroidChanged: if (active) sidebar.dragPoint = sidebar.mapFromItem(null, centroid.scenePosition)
+                                        }
+                                        TapHandler {
+                                            acceptedButtons: Qt.RightButton
+                                            onTapped: {
+                                                sidebar.window.repository = repo.modelData.name
+                                                sidebar.window.conversation = row.modelData
+                                                rowMenu.popup()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Basic.AbstractButton {
+                                    visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
+                                             && repo.loose.length > repo.limit
+                                    // Under the titles, and it says how many it adds.
+                                    x: sidebar.inset + repoHeader.textLeft
+                                    height: sidebar.px(28)
+                                    hoverEnabled: true
+                                    text: "Show " + (repo.loose.length - repo.limit) + " more"
+                                    onClicked: {
+                                        const next = Object.assign({}, sidebar.showAll)
+                                        next[repo.modelData.name] = true
+                                        sidebar.showAll = next
+                                    }
+                                    contentItem: Text {
+                                        verticalAlignment: Text.AlignVCenter
+                                        text: parent.text
+                                        color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
+                                        font.family: KetTheme.fontFamily
+                                        font.pixelSize: sidebar.px(12)
+                                        font.weight: Font.Medium
+                                    }
+                                    background: null
+                                }
                             }
-                            contentItem: Text {
-                                verticalAlignment: Text.AlignVCenter
-                                text: parent.text
-                                color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
-                                font.family: KetTheme.fontFamily
-                                font.pixelSize: sidebar.px(12)
-                                font.weight: Font.Medium
-                            }
-                            background: null
                         }
 
                         Item { width: 1; height: sidebar.px(4) }

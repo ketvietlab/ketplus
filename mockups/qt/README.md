@@ -268,30 +268,35 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
-## Sidebar list (concept)
+## Sidebar tree (concept)
 
-The repository list is drawn by two mock-local parts until the design is approved; they then
-move into ket-qt as changes to `KetGroupHeader` and `KetConversationRow` (both layers). An
-earlier concept with second lines, tag chips and a summary in the heading was dropped as
-cluttered (#535). This one draws less:
+The repository list is a tree, drawn by mock-local parts until the design is approved; they
+then move into ket-qt (both layers) as a tree row beside `KetGroupHeader` and
+`KetConversationRow`. Two earlier concepts were dropped: second lines with tag chips (#535),
+and a flat list of labels without icons or guide lines. The tree follows Jay's design idea,
+without its "Teams (n)" level: a team is a branch of its repository, directly.
 
-- **Every conversation is one line** (`qml/shell/SidebarRow.qml`): a state mark, the title,
-  the number. No second line, no tags, no role chip, no state in words. Those are in the
-  hint of a resting pointer and in the accessible description: role, state and what started
-  the turn, tags, worktree.
-- **Colour is on the mark alone**, and only for a conversation that runs or waits for the
-  user. Finished, stopped and not started have a grey mark and recede. Finished and unread
-  is the one emphasis: a dot and a semibold title.
-- **A repository is a label** (`qml/shell/SidebarRepoHeader.qml`): small capitals with letter
-  spacing in the muted colour, set apart from the rows by its form and quieter than them. Space separates the
-  repositories; there is no rule, no icon and no summary. Folded, it shows the number of
-  conversations and one dot when any waits for the user. `+` shows on hover or focus.
-- **A team is a row that heads its members** (`qml/shell/TeamFolder.qml`): the secondary
-  colour, medium, its icon muted in the state column, the whole team one step in. The rows
-  are the brightest text in the list; the headings recede.
-- **One left edge per level.** A repository's name and its conversations' titles start
-  together; so do a team's name and its members'. `--smoke` checks these edges and that
-  every conversation is one line high (`Sidebar.layoutProblems`).
+- **A repository is the root** (`qml/shell/SidebarRepoHeader.qml`): a chevron that folds it,
+  a folder, the name in small capitals, and the count of its conversations, which stays.
+  Folded, one dot says that something inside waits for the user. `+` shows on hover or focus,
+  left of the count, and offers a new conversation or a new team.
+- **A team is a branch** (`qml/shell/TeamFolder.qml`): the chevron folds it, the name opens
+  the team's page, the count is its members. A warning mark before the count and a semibold
+  name say that a decision waits for the user. The highlight of a selected team starts right
+  of the chevron.
+- **"Conversations (n)"** (`qml/shell/SidebarSection.qml`) labels the conversations that
+  belong to no team, with `+` for a new one. It shows only where the repository also has
+  teams; a repository without a team lists its conversations directly.
+- **Every conversation is one line** (`qml/shell/SidebarRow.qml`): the state's own mark and
+  colour, the title, `#number`. Finished and unread is a dot and a semibold title. Role,
+  state in words, what started the turn, tags and worktree are in the hint of a resting
+  pointer and in the accessible description.
+- **Guide lines** run under a chevron's centre for as long as what it holds: one for the
+  repository, one for each team. A row's highlight starts right of its guide line.
+- **Two text edges.** The repository's name, the "Conversations" label and the titles of its
+  own conversations start together; a team's name and its members' titles start together,
+  one level in, and a team's icon stands over its members' marks. `--smoke` checks these
+  edges and that every conversation is one line high (`Sidebar.layoutProblems`).
 - "Show N more" says how many it adds.
 
 `--open=repo-folded` folds every repository for a capture of the labels alone.
