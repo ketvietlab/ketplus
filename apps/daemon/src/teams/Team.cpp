@@ -90,23 +90,33 @@ Decision decisionFromJson(const QJsonObject& json) {
 
 } // namespace
 
-HistoryEntry bounded(HistoryEntry entry) {
-    if (entry.text.size() > maximumHistoryText)
-        entry.text = QStringLiteral("%1… (%2 more characters)")
-                         .arg(entry.text.left(maximumHistoryText))
-                         .arg(entry.text.size() - maximumHistoryText);
-    const QStringList keys = entry.data.keys();
+QString boundedText(QString text) {
+    if (text.size() > maximumHistoryText)
+        text = QStringLiteral("%1… (%2 more characters)")
+                   .arg(text.left(maximumHistoryText))
+                   .arg(text.size() - maximumHistoryText);
+    return text;
+}
+
+QJsonObject boundedData(QJsonObject data) {
+    const QStringList keys = data.keys();
     for (const QString& key : keys) {
-        QJsonArray list = entry.data.value(key).toArray();
+        QJsonArray list = data.value(key).toArray();
         if (list.size() <= maximumHistoryListItems)
             continue;
         const QString total = key + QStringLiteral("_total");
-        if (!entry.data.contains(total))
-            entry.data.insert(total, list.size());
+        if (!data.contains(total))
+            data.insert(total, list.size());
         while (list.size() > maximumHistoryListItems)
             list.removeLast();
-        entry.data.insert(key, list);
+        data.insert(key, list);
     }
+    return data;
+}
+
+HistoryEntry bounded(HistoryEntry entry) {
+    entry.text = boundedText(std::move(entry.text));
+    entry.data = boundedData(std::move(entry.data));
     return entry;
 }
 

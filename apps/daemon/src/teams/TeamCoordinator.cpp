@@ -119,9 +119,21 @@ QJsonObject TeamCoordinator::teamJson(const Team& team) const {
     return json;
 }
 
+QList<TeamUpdateRecord> TeamCoordinator::updateRecords(const qint64 teamId,
+                                                       const bool undigestedOnly,
+                                                       const int limit) const {
+    // Updates written before the bounds can hold thousands of paths.
+    QList<TeamUpdateRecord> updates = journal_->teamUpdates(teamId, undigestedOnly, limit);
+    for (TeamUpdateRecord& update : updates) {
+        update.text = boundedText(std::move(update.text));
+        update.data = boundedData(std::move(update.data));
+    }
+    return updates;
+}
+
 QJsonArray TeamCoordinator::updatesJson(const qint64 teamId, const int limit) const {
     QJsonArray updates;
-    for (const TeamUpdateRecord& update : journal_->teamUpdates(teamId, false, limit))
+    for (const TeamUpdateRecord& update : updateRecords(teamId, false, limit))
         updates.append(QJsonObject{{QStringLiteral("id"), update.id},
                                    {QStringLiteral("at"), update.at},
                                    {QStringLiteral("actor"), update.actor},
@@ -167,8 +179,8 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                           .actor = actor,
                                           .kind = update.kind,
                                           .taskId = update.taskId,
-                                          .text = update.text,
-                                          .data = update.data,
+                                          .text = boundedText(update.text),
+                                          .data = boundedData(update.data),
                                           .actionable = update.actionable});
     }
     emit teamChanged(teamJson(team));

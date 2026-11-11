@@ -312,6 +312,9 @@ class TeamCoordinator : public QObject {
         QJsonObject data;
     };
 
+    // The team's Updates from the journal, within the bounds of Team.h.
+    [[nodiscard]] QList<TeamUpdateRecord> updateRecords(qint64 teamId, bool undigestedOnly,
+                                                        int limit) const;
     [[nodiscard]] Team* mutableTeam(qint64 teamId);
     [[nodiscard]] Team* mutableTeamOf(const QString& sessionId);
     // Stores `team` with revision + 1 and the updates, then emits teamChanged. On a journal

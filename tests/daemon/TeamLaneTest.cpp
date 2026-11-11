@@ -169,6 +169,26 @@ class TeamLaneTest final : public QObject {
         QCOMPARE(flagged.data.value("paths").toArray().size(), maximumHistoryListItems);
         QCOMPARE(flagged.data.value("paths_total").toInt(), maximumOutsidePaths);
         QVERIFY(updates("outside_lane").first().text.contains(QStringLiteral("and 180 more")));
+        QCOMPARE(updates("outside_lane").first().data.value("paths").toArray().size(),
+                 maximumHistoryListItems);
+
+        // Updates written before the bounds are bounded when team.get reads them.
+        QJsonArray every;
+        for (const QString& path : many)
+            every.append(path);
+        for (int index = 0; index < 10; ++index)
+            QVERIFY(journal_->appendTeamUpdate({.teamId = team_,
+                                                .at = nowIso(),
+                                                .actor = "daemon",
+                                                .kind = "outside_lane",
+                                                .taskId = task_,
+                                                .text = many.join(", "),
+                                                .data = QJsonObject{{"paths", every}},
+                                                .actionable = true}));
+        const QByteArray listed =
+            QJsonDocument(teams_->updatesJson(team_)).toJson(QJsonDocument::Compact);
+        QVERIFY2(listed.size() < protocol::maximumFrameBytes / 4,
+                 QByteArray::number(listed.size()).constData());
 
         // A document written before the bounds is bounded when it is read.
         QJsonObject stored = toJson(team());

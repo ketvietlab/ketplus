@@ -71,8 +71,11 @@ inline constexpr qsizetype maximumOutsidePaths = 200;
 inline constexpr qsizetype maximumHistoryText = 2000;
 inline constexpr qsizetype maximumHistoryListItems = 50;
 
-// The entry within the bounds above. Entries read from older documents are bounded too.
+// The entry within the bounds above. Entries read from older documents are bounded too, and
+// so are the team's Updates (their text and data), when written and when read.
 [[nodiscard]] HistoryEntry bounded(HistoryEntry entry);
+[[nodiscard]] QString boundedText(QString text);
+[[nodiscard]] QJsonObject boundedData(QJsonObject data);
 
 struct Task final {
     QString id;
