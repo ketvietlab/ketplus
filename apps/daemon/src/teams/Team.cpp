@@ -239,6 +239,10 @@ QJsonObject toJson(const Team& team) {
     QJsonArray decisions;
     for (const Decision& decision : team.decisions)
         decisions.append(toJson(decision));
+    QJsonArray relocations;
+    for (const Relocation& move : team.relocations)
+        relocations.append(QJsonObject{{QStringLiteral("session"), move.session},
+                                       {QStringLiteral("from"), move.from}});
     return {{QStringLiteral("id"), QString::number(team.id)},
             {QStringLiteral("repository"), team.repository},
             {QStringLiteral("name"), team.name},
@@ -264,6 +268,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("review_queue"), strings(team.reviewQueue)},
             {QStringLiteral("reviewing"), team.reviewing},
             {QStringLiteral("reviewing_message"), team.reviewingMessage},
+            {QStringLiteral("relocations"), relocations},
             {QStringLiteral("next_task"), team.nextTask},
             {QStringLiteral("next_decision"), team.nextDecision},
             {QStringLiteral("revision"), team.revision},
@@ -301,6 +306,10 @@ Team teamFromJson(const QJsonObject& json) {
     team.reviewQueue = stringList(json.value(QStringLiteral("review_queue")));
     team.reviewing = json.value(QStringLiteral("reviewing")).toString();
     team.reviewingMessage = json.value(QStringLiteral("reviewing_message")).toString();
+    for (const auto& value : json.value(QStringLiteral("relocations")).toArray())
+        team.relocations.append(
+            Relocation{.session = value.toObject().value(QStringLiteral("session")).toString(),
+                       .from = value.toObject().value(QStringLiteral("from")).toString()});
     team.nextTask = json.value(QStringLiteral("next_task")).toInt(1);
     team.nextDecision = json.value(QStringLiteral("next_decision")).toInt(1);
     team.revision = json.value(QStringLiteral("revision")).toInteger();

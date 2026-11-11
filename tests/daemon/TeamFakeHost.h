@@ -26,6 +26,8 @@ class FakeHost final : public TeamHostPort {
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
         pointed.insert(sessionId, worktree);
+        if (conversations.contains(sessionId))
+            conversations[sessionId].worktree = worktree;
         return {};
     }
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {

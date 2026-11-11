@@ -9,6 +9,8 @@
 #include <QStandardPaths>
 #include <QTest>
 
+#include <algorithm>
+
 using namespace ketplus::daemon;
 using namespace ketplus::daemon::teams;
 
@@ -28,9 +30,12 @@ class FakeHost final : public TeamHostPort {
                             .baseCommit = QStringLiteral("base")};
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
+        if (busy.contains(sessionId))
+            return QStringLiteral("Wait for the turn to finish before switching worktrees.");
         if (!pointError.isEmpty())
             return pointError;
         pointed.insert(sessionId, worktree);
+        conversations[sessionId].worktree = worktree;
         return {};
     }
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {
@@ -53,6 +58,7 @@ class FakeHost final : public TeamHostPort {
                                   .number = id,
                                   .title = id,
                                   .provider = provider,
+                                  .worktree = QStringLiteral("/repo"),
                                   .repository = QStringLiteral("/repo"),
                                   .idle = true});
     }
@@ -60,6 +66,8 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, TeamConversation> conversations;
     QHash<QString, QString> pointed;
     QString pointError;
+    // Conversations that run a turn: they cannot change worktree until it ends.
+    QSet<QString> busy;
     QSet<QString> dirty;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
@@ -340,6 +348,92 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(host_.notes.first().first, QStringLiteral("dev1"));
         QCOMPARE(moved.history.last().data.value("reason").toString(),
                  QStringLiteral("Dev 1 is on the API"));
+    }
+
+    void handoverLeavesAPreviousOwnerThatStandsElsewhere() {
+        // Its next task is queued: the conversation is in that task's worktree already.
+        const QString first = task("Cart");
+        const QString second = task("Checkout");
+        QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
+        QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->handoverTask(team_, first, "dev2", "Dev 1 has Checkout", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+
+        // Held for the first plan: the owner never entered the task's worktree.
+        QVERIFY(!teams_->remove(team_));
+        Team unapproved = standard();
+        unapproved.planApproved = false;
+        team_ = teams_->create(unapproved, "user").teamId;
+        host_.conversations["dev1"].worktree = QStringLiteral("/elsewhere");
+        host_.pointed.clear();
+        const QString held = task("Cart");
+        QVERIFY(teams_->assignTask(team_, held, "dev1", "lead").ok());
+        QVERIFY(get(held).assignmentHeld);
+        QVERIFY(teams_->handoverTask(team_, held, "dev2", "Dev 2 knows the cart", "lead").ok());
+        QVERIFY(!host_.pointed.contains("dev1"));
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/elsewhere"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aBusyPreviousOwnerLeavesWhenItsTurnEnds() {
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, id, "dev2", "Dev 1 is on the API", "lead").ok());
+        QCOMPARE(get(id).owner, QStringLiteral("dev2"));
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        QCOMPARE(teams_->team(team_)->relocations,
+                 QList<Relocation>({{.session = "dev1", .from = "/wt/T-1"}}));
+        const auto waits = [this, &id] {
+            const QList<HistoryEntry> history = get(id).history;
+            return std::any_of(history.cbegin(), history.cend(), [](const HistoryEntry& entry) {
+                return entry.kind == "worktree" && entry.text.contains("when its turn ends");
+            });
+        };
+        QVERIFY(waits());
+
+        // The move is stored with the team, and a turn that is still running keeps it.
+        reopen();
+        QCOMPARE(teams_->team(team_)->relocations.size(), 1);
+        teams_->memberTurnEnded("dev2");
+        QCOMPARE(teams_->team(team_)->relocations.size(), 1);
+
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/repo"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aWaitingMoveGoesToTheTaskThePreviousOwnerStillHas() {
+        const QString first = task("Cart");
+        const QString second = task("Checkout");
+        QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, first, "dev2", "Dev 2 knows the cart", "lead").ok());
+        // Assigned during the turn: the conversation cannot enter this worktree either.
+        QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aTaskHandedBackKeepsItsOwnerInTheWorktree() {
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, id, "dev2", "Dev 2 knows the cart", "lead").ok());
+        QVERIFY(teams_->handoverTask(team_, id, "dev1", "Dev 2 is away", "lead").ok());
+        // Dev 2 was free and left at once; Dev 1 owns the task again and stays.
+        QCOMPARE(host_.conversations.value("dev2").worktree, QStringLiteral("/repo"));
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
     }
 
     void assignmentIsDeliveredWhenTheConversationCannotBeMoved() {

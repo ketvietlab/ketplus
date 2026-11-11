@@ -62,6 +62,8 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 
 void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     const qint64 teamId = snapshot.id;
+    // A turn the team starts never runs in a worktree its member was handed out of.
+    (void)settleRelocations(teamId, message.toSession);
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
@@ -193,6 +195,9 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     } else if (stoppedByUser == false) {
         stalls_[teamId].stopped.remove(sessionId);
     }
+    // The turn is over: a conversation that could not leave a handed-over worktree can now,
+    // before the next message to it starts a turn.
+    (void)settleRelocations(teamId, sessionId);
     watchForStall(teamId);
     checkMerged(teamId);
     if (memberRole == role::developer)

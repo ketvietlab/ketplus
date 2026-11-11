@@ -504,6 +504,8 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
 
 void TeamCoordinator::unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                                       const QString& reason, QList<Update>& updates) {
+    team.relocations.removeIf(
+        [&sessionId](const Relocation& move) { return move.session == sessionId; });
     for (Task& task : team.tasks) {
         if (task.owner != sessionId || task.state == state::done)
             continue;
