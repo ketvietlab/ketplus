@@ -184,7 +184,9 @@ class TeamProtocolTest final : public QObject {
             command(fixture, "team.get", {{"team_id", made.value("team").toObject().value("id")}})
                 .value("ok")
                 .toBool());
-        QVERIFY2(logText(log).count('\n') - before <= 1, "one team.get asks git at most once");
+        // Reading a team reads its members, and their repositories are not asked for: only a
+        // conversation that is to join a team has its repository looked up.
+        QCOMPARE(logText(log).count('\n'), before);
     }
 
     // A team created while git did not answer is filed under the path it was given. It stays

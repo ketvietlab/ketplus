@@ -1797,14 +1797,19 @@ void SessionHost::handleCommandDeferred(const QJsonObject& request, const QStrin
         backgroundTaskCommand(request, std::move(done));
         return;
     }
-    // ADR 0114 §1: a team's task command that asks git has it read off the event loop first.
-    // Only for the local client: handleCommand refuses any other before it asks anything.
+    // ADR 0114 §1: what a team command asks git is read off the event loop first: the
+    // repositories it names, then a task's worktree or its hand to review. Only for the
+    // local client: handleCommand refuses any other before it asks anything.
     if (localClient(clientId) && request.value(QStringLiteral("message_type"))
                                      .toString()
-                                     .startsWith(QStringLiteral("team.task."))) {
-        prepareTeamTask(request, [this, request, clientId, done = std::move(done)] {
-            done(handleCommand(request, clientId));
-        });
+                                     .startsWith(QStringLiteral("team."))) {
+        auto run = [this, request, clientId, done = std::move(done)] {
+            prepareTeamTask(request, [this, request, clientId, done] {
+                done(handleCommand(request, clientId));
+            });
+        };
+        learnRepositories(teamCommandPaths(request.value(QStringLiteral("payload")).toObject()),
+                          std::move(run));
         return;
     }
     if (request.value(QStringLiteral("message_type")).toString() !=

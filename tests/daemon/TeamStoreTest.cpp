@@ -24,6 +24,11 @@ class FakeHost final : public TeamHostPort {
         return it.value();
     }
 
+    // A conversation of these tests stands in its repository's main worktree.
+    QString conversationRepository(const QString& sessionId) const override {
+        return conversations.value(sessionId).worktree;
+    }
+
     void add(const QString& id, const QString& provider = QStringLiteral("codex"),
              const QString& repository = QStringLiteral("/repo")) {
         conversations.insert(id, {.sessionId = id,
@@ -32,7 +37,6 @@ class FakeHost final : public TeamHostPort {
                                   .title = id,
                                   .provider = provider,
                                   .worktree = repository,
-                                  .repository = repository,
                                   .idle = true});
     }
 

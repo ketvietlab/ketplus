@@ -30,8 +30,6 @@ struct TeamConversation final {
     QString model;
     QString effort;
     QString worktree;
-    // The repository's main worktree, the key a team belongs to.
-    QString repository;
     bool idle{false};
 };
 
@@ -136,6 +134,10 @@ class TeamHostPort {
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
+    // The repository's main worktree the conversation works in: the key a team belongs to.
+    // Asked only for a conversation that is to join a team, because the session runtime may
+    // have to ask git for it.
+    [[nodiscard]] virtual QString conversationRepository(const QString& sessionId) const = 0;
     // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
     virtual std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                            QString* error) {

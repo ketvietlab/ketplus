@@ -25,6 +25,11 @@ and a digest instead of status messages — and leaves messaging as it is.
   shared paths, members, tasks, decisions and updates. The daemon stores it.
 - Exactly **one leader**, **one to five developers** and exactly **one reviewer**.
   A conversation is on at most one team. Members belong to the team's repository.
+  The repository is the main worktree git names for a path. The daemon asks git for it
+  only where a repository is named or a conversation is to join a team (`team.list`,
+  `team.create`, `team.member.add`), off its event loop before the command runs, and
+  keeps git's answer. A path it was not asked about beforehand is still asked on the event
+  loop, the first time.
   *Rejected*: any number of reviewers or leaders — two leaders split the plan, and a
   second reviewer only hides a queue that a second team removes.
 - The **leader** is the only member that reports to the user. It breaks the goal into

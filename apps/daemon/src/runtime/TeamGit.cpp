@@ -20,6 +20,22 @@ std::optional<QString> output(const QString& directory, const QStringList& argum
     return QString::fromUtf8(process.readAllStandardOutput());
 }
 
+QString repositoryOf(const QString& worktreePath) {
+    QProcess process;
+    process.setWorkingDirectory(worktreePath);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--no-optional-locks"), QStringLiteral("rev-parse"),
+                   QStringLiteral("--path-format=absolute"), QStringLiteral("--git-common-dir")});
+    if (!process.waitForFinished(5000) || process.exitStatus() != QProcess::NormalExit ||
+        process.exitCode() != 0)
+        return {};
+    const QFileInfo common(QString::fromUtf8(process.readAllStandardOutput()).trimmed());
+    // The main worktree holds the common ".git"; a bare repository is its own key.
+    return common.fileName() == QStringLiteral(".git")
+               ? QFileInfo(common.absolutePath()).canonicalFilePath()
+               : common.canonicalFilePath();
+}
+
 QString taskCommit(const teams::Team& team, const teams::Task& task) {
     if (task.branch.isEmpty())
         return {};
