@@ -87,8 +87,13 @@ class ProviderReadinessTest final : public QObject {
         ProviderReadiness readiness;
         const auto claude = runtime("claude", compat::SupportStatus::Bundled);
         QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        // A subscription sign-in reports "none" as well, so it changes nothing.
         readiness.observeClaudeSource(QStringLiteral("none"));
-        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("signed_out"));
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("ready"));
+        readiness.observeClaudeSource(QStringLiteral("none"));
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("ready"));
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("signed_out"));
         readiness.observeClaudeSource(QStringLiteral("/login managed key"));
         QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("ready"));
         const QString expired = QStringLiteral(
