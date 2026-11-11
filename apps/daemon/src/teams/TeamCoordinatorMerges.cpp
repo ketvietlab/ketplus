@@ -52,28 +52,63 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
     if (!team)
         return;
     QStringList merged;
-    for (const Task& task : team->tasks)
-        if (task.state == state::ready && !task.branch.isEmpty())
-            if (const auto contained = host_->isMerged(*team, task); contained && *contained)
-                merged.append(task.id);
-    if (merged.isEmpty())
+    // A ready task was reviewed at one commit (ADR 0114 §5). Commits added to its branch
+    // after that were never reviewed.
+    QHash<QString, QString> moved;
+    for (const Task& task : team->tasks) {
+        if (task.state != state::ready || task.branch.isEmpty())
+            continue;
+        if (const QString head = host_->taskCommit(*team, task);
+            !head.isEmpty() && !task.headCommit.isEmpty() && head != task.headCommit)
+            moved.insert(task.id, head);
+        if (const auto contained = host_->isMerged(*team, task); contained && *contained)
+            merged.append(task.id);
+    }
+    if (merged.isEmpty() && moved.isEmpty())
         return;
     team = mutableTeam(teamId);
     // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
     QList<Update> updates;
-    for (const QString& id : merged) {
-        Task* task = team->task(id);
-        applyMove(*team, *task, state::done, QStringLiteral("daemon"),
-                  QStringLiteral("%1 contains it").arg(team->integrationBranch), updates);
+    const auto withdrawMerge = [&](const QString& id, const QString& reason) {
         // A merge decision nobody needs any more, as when the user merged by hand.
         for (Decision& decision : team->decisions)
             if (decision.kind == QStringLiteral("merge") && decision.taskId == id &&
                 decision.state == QStringLiteral("open")) {
                 decision.state = QStringLiteral("withdrawn");
-                decision.reason = QStringLiteral("%1 is merged.").arg(id);
+                decision.reason = reason;
                 decision.answeredAt = nowIso();
             }
+    };
+    for (const QString& id : merged) {
+        Task* task = team->task(id);
+        const QString head = moved.take(id);
+        applyMove(*team, *task, state::done, QStringLiteral("daemon"),
+                  QStringLiteral("%1 contains it").arg(team->integrationBranch), updates);
+        withdrawMerge(id, QStringLiteral("%1 is merged.").arg(id));
+        if (head.isEmpty())
+            continue;
+        // Too late to stop it; the leader is told what went in without a review.
+        const QString text = QStringLiteral("%1 was merged at %2, but it was reviewed at %3: the "
+                                            "commits after that were not reviewed.")
+                                 .arg(id, head.left(12), task->headCommit.left(12));
+        addHistory(*task, QStringLiteral("daemon"), QStringLiteral("merge"), text);
+        updates.append({.kind = QStringLiteral("merged_unreviewed"),
+                        .text = text,
+                        .taskId = id,
+                        .actionable = true});
+    }
+    for (auto it = moved.cbegin(); it != moved.cend(); ++it) {
+        Task* task = team->task(it.key());
+        task->mergeOffered = false;
+        task->leaderMayMerge = false;
+        task->resumeState = state::inProgress;
+        task->question = QStringLiteral("%1 was reviewed at %2 and its branch is now at %3. "
+                                        "Start it again and hand it to review, so the new "
+                                        "commits are reviewed before it is merged.")
+                             .arg(task->id, task->headCommit.left(12), it.value().left(12));
+        applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question, updates);
+        withdrawMerge(task->id, QStringLiteral("%1 changed after its review.").arg(task->id));
     }
     offerMerges(*team, updates);
     const bool allDone = !team->tasks.isEmpty() &&

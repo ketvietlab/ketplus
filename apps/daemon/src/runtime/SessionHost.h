@@ -287,7 +287,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
-    [[nodiscard]] QString headCommit(const QString& worktree) const override;
+    [[nodiscard]] QString taskCommit(const teams::Team& team,
+                                     const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
                                                           const teams::Task& task) const override;
     [[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,

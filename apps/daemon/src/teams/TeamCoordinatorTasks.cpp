@@ -151,6 +151,21 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 return restore(taskNotFound(dependency));
             dependencies.append(dependency);
         }
+        // A task waits for its dependencies to be done; in a circle none of them starts.
+        QStringList open = dependencies;
+        QSet<QString> seen;
+        while (!open.isEmpty()) {
+            const QString next = open.takeLast();
+            if (next == taskId)
+                return restore(refusal(
+                    QStringLiteral("dependency_cycle"),
+                    QStringLiteral("%1 cannot wait for a task that waits for %1.").arg(taskId)));
+            if (seen.contains(next))
+                continue;
+            seen.insert(next);
+            if (const Task* other = team->task(next))
+                open.append(other->dependsOn);
+        }
         task = team->task(taskId);
         task->dependsOn = dependencies;
     }
@@ -480,7 +495,7 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Commit your work in %1 before handing %2 to "
                                                     "review; uncommitted changes are not reviewed.")
                                          .arg(task->worktree, taskId))};
-        task->headCommit = host_->headCommit(task->worktree);
+        task->headCommit = host_->taskCommit(*team, *task);
     } else if (to == state::blocked) {
         if (!owner && !daemon && !leaderOrUser(role))
             return {.error =

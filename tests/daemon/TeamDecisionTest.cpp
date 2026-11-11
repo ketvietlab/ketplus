@@ -199,7 +199,13 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(team().task(first)->assignmentHeld);
         QCOMPARE(recipients("decision"), QStringList{"lead"});
         QVERIFY(host_.of("assignment").isEmpty());
-        // The next assignment asks again, with every held task.
+        // The leader changed the plan without assigning: its turn's end asks again.
+        teams_->memberTurnEnded("lead");
+        QCOMPARE(team().openDecisions(), 1);
+        QCOMPARE(team().decisions.last().question, QStringLiteral("Start these 1 tasks?"));
+        teams_->memberTurnEnded("lead");
+        QCOMPARE(team().decisions.size(), 2);
+        // The next assignment adds to the open question, with every held task.
         const QString second = task("Api");
         QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
         QCOMPARE(team().decisions.last().question, QStringLiteral("Start these 2 tasks?"));

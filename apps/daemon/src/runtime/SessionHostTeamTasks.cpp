@@ -104,8 +104,15 @@ std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) con
     return !status->trimmed().isEmpty();
 }
 
-QString SessionHost::headCommit(const QString& worktree) const {
-    return gitOutput(worktree, {QStringLiteral("rev-parse"), QStringLiteral("HEAD")})
+QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
+    if (task.branch.isEmpty())
+        return {};
+    // The branch itself, not a worktree's HEAD: a worktree can be detached or on another
+    // branch, and the branch can move without it.
+    return gitOutput(team.repository,
+                     {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                      QStringLiteral("--quiet"), QStringLiteral("--end-of-options"),
+                      QStringLiteral("refs/heads/%1^{commit}").arg(task.branch)})
         .value_or(QString{})
         .trimmed();
 }
