@@ -91,11 +91,15 @@ Decision decisionFromJson(const QJsonObject& json) {
 } // namespace
 
 QString boundedText(QString text) {
-    if (text.size() > maximumHistoryText)
-        text = QStringLiteral("%1… (%2 more characters)")
-                   .arg(text.left(maximumHistoryText))
-                   .arg(text.size() - maximumHistoryText);
-    return text;
+    if (text.size() <= maximumHistoryText)
+        return text;
+    // The result stays within the bound, so a text bounded when it was written is the same
+    // when the document is read again: room for the note, and no surrogate pair cut in half.
+    constexpr qsizetype note = 40;
+    qsizetype keep = maximumHistoryText - note;
+    if (text.at(keep - 1).isHighSurrogate())
+        --keep;
+    return QStringLiteral("%1… (%2 more characters)").arg(text.left(keep)).arg(text.size() - keep);
 }
 
 QJsonObject boundedData(QJsonObject data) {

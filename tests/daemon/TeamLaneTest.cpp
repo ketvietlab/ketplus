@@ -252,6 +252,21 @@ class TeamLaneTest final : public QObject {
         QCOMPARE(paths, (QStringList{"web/cart.txt", "web/pending.txt"}));
     }
 
+    // A text bounded when it was written is the same when the document is read again, and
+    // the note still counts the characters of the original. No surrogate pair is cut in half.
+    void aBoundedTextIsUnchangedWhenReadAgain() {
+        const QString once = boundedText(QString(5000, u'h'));
+        QVERIFY(once.size() <= maximumHistoryText);
+        QVERIFY2(once.endsWith(QStringLiteral("(3040 more characters)")),
+                 qPrintable(once.right(40)));
+        QCOMPARE(boundedText(once), once);
+        QCOMPARE(bounded({.text = once}).text, once);
+        const QString emoji = QString::fromUtf8("\xF0\x9F\x98\x80");
+        const QString cut = boundedText(QString(1959, u'h') + emoji + QString(100, u'h'));
+        QVERIFY(!cut.contains(emoji.at(0)));
+        QCOMPARE(cut.indexOf(QChar(0x2026)), 1959);
+    }
+
     void revertingTheFilesClearsTheFlag() {
         host_.changed.insert(task_, {"api/routes.cpp"});
         teams_->memberTurnEnded("dev1");
