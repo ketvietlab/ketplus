@@ -441,8 +441,9 @@ Item {
         }
         Instantiator {
             model: agentHost.tagCatalog
-            // Above the separator and Manage tags…, which stay last.
-            onObjectAdded: (index, object) => tagMenu.insertItem(index, object)
+            // Below the role, when there is one, and above the separator and Manage tags…,
+            // which stay last.
+            onObjectAdded: (index, object) => tagMenu.insertItem(index + (header.teamRole ? 1 : 0), object)
             onObjectRemoved: (index, object) => tagMenu.removeItem(object)
             Kit.KetMenuItem {
                 required property var modelData
