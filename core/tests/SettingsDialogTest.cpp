@@ -4,6 +4,7 @@
 #include "KetRecipes.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
+#include "app/SettingsWorkspace.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
 #include <QLabel>
@@ -15,6 +16,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QListWidget>
+#include <QPointer>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -27,7 +29,11 @@ class TestSettingsPage final : public ketplus::SettingsPage {
                      QString title = QStringLiteral("Test page"), QWidget* parent = nullptr)
         : SettingsPage(std::move(id), std::move(title), parent) {}
 
-    [[nodiscard]] bool hasChanges() const override { return dirty; }
+    [[nodiscard]] bool hasChanges() const override {
+        if (probe != nullptr)
+            ++*probe;
+        return dirty;
+    }
     void apply() override {
         ++applyCount;
         dirty = false;
@@ -40,6 +46,17 @@ class TestSettingsPage final : public ketplus::SettingsPage {
 
     bool dirty{false};
     int applyCount{0};
+    int* probe{nullptr};
+};
+
+// Pro's Settings page: a registered page shown as a section of the workspace, below the
+// dialog's own controls.
+class TestWorkspace final : public ketplus::SettingsWorkspace {
+  public:
+    TestWorkspace(ketplus::SettingsDialog* dialog, QWidget* page)
+        : SettingsWorkspace(dialog, QStringLiteral("⌘ ,"), QStringLiteral("KÉT Sans")) {
+        addSection(QStringLiteral("Test"), QStringLiteral("test"), page);
+    }
 };
 
 } // namespace
@@ -63,6 +80,7 @@ class SettingsDialogTest final : public QObject {
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
     void zoomDuringExtensionRebuildKeepsNavigationAlive();
+    void closingTheWorkspaceLeavesTheDialogQuiet();
 };
 
 void SettingsDialogTest::kitLabelsKeepRecipeFontsAcrossThemeChanges() {
@@ -459,6 +477,27 @@ void SettingsDialogTest::zoomDuringExtensionRebuildKeepsNavigationAlive() {
     theme.setInterfaceScale(14, 110);
     QVERIFY(dialog.selectPage("page-0"));
     QCOMPARE(dialog.selectedPageId(), QStringLiteral("page-0"));
+}
+
+// Closing the Settings page deleted its sections, the dialog's moved controls among them, before
+// the dialog; a section page's destruction then applied the deleted controls (0.1.56 crash).
+void SettingsDialogTest::closingTheWorkspaceLeavesTheDialogQuiet() {
+    ketplus::ThemeManager theme(*qApp);
+    auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
+    auto* section = new TestSettingsPage(QStringLiteral("private/section"));
+    auto* watcher = new TestSettingsPage(QStringLiteral("private/watcher"));
+    dialog->addPage(section);
+    dialog->addPage(watcher);
+    auto* workspace = new TestWorkspace(dialog, section);
+    QPointer<ketplus::SettingsDialog> alive(dialog);
+    int readsWhileClosing = 0;
+    connect(workspace, &QObject::destroyed, this, [watcher, &readsWhileClosing, alive] {
+        if (alive)
+            watcher->probe = &readsWhileClosing;
+    });
+    delete workspace;
+    QVERIFY(alive.isNull());
+    QCOMPARE(readsWhileClosing, 0);
 }
 
 QTEST_MAIN(SettingsDialogTest)

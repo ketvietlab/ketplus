@@ -28,6 +28,11 @@ class TerminalPanel final : public QWidget {
     // The same in a new tab, since the current one may be running vim or another program. A
     // panel with no tab yet types into its first.
     void typeTextInNewTab(const QString& text);
+    // One shell and no tab bar or toolbar, for a host that already gives each terminal its own
+    // tab (the Agent Workspace content pane). Find, Clear and Restart stay on the terminal's
+    // context menu and shortcuts.
+    void setSingleSession(bool single);
+    [[nodiscard]] bool isSingleSession() const { return singleSession_; }
 
   signals:
     void closeRequested();
@@ -37,6 +42,8 @@ class TerminalPanel final : public QWidget {
     TerminalTab* currentTab() const;
     void addTab(bool start);
     QTabWidget* tabs_{nullptr};
+    QWidget* actions_{nullptr};
+    bool singleSession_{false};
     ThemePalette palette_;
     int fontSizePixels_{14};
     int lineHeightPixels_{22};

@@ -29,6 +29,7 @@ class SettingsWorkspace : public QWidget {
     // `interfaceFont` names the interface font on Typography.
     SettingsWorkspace(SettingsDialog* dialog, const QString& shortcut, const QString& interfaceFont,
                       QWidget* parent = nullptr);
+    ~SettingsWorkspace() override;
 
     [[nodiscard]] SettingsDialog* dialog() const noexcept { return dialog_; }
     // Selects a section by its navigation id, such as "typography".

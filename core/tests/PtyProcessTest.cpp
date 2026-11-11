@@ -5,6 +5,7 @@
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
 #include <QAbstractButton>
+#include <QTabBar>
 #include <QTabWidget>
 
 #include "KetTokens.h"
@@ -92,6 +93,7 @@ class PtyProcessTest final : public QObject {
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
     void embeddedTabsKeepIndependentSessions();
+    void singleSessionHasNoTabChrome();
     void rendersInputMethodPreedit();
     void coalescesStreamingPaints();
     void controlCInterruptsForegroundCommand();
@@ -620,6 +622,26 @@ void PtyProcessTest::embeddedTabsKeepIndependentSessions() {
     QVERIFY(closed.isNull());
     QCOMPARE(tabs->count(), 1);
     QVERIFY(first->isRunning());
+}
+
+void PtyProcessTest::singleSessionHasNoTabChrome() {
+    // The Agent Workspace gives each terminal its own content tab; a second tab bar inside it
+    // looked like two rows of tabs.
+    TerminalPanel panel;
+    panel.setSingleSession(true);
+    panel.resize(800, 400);
+    panel.show();
+    auto* tabs = panel.findChild<QTabWidget*>(QStringLiteral("terminalPanelTabs"));
+    QVERIFY(tabs);
+    QVERIFY(!tabs->tabBar()->isVisible());
+    auto* create = panel.findChild<QAbstractButton*>(QStringLiteral("newTerminalTab"));
+    QVERIFY(create);
+    QVERIFY(!create->isVisible());
+    panel.typeTextInNewTab(QStringLiteral("echo"));
+    QCOMPARE(tabs->count(), 1);
+    panel.setSingleSession(false);
+    QVERIFY(tabs->tabBar()->isVisible());
+    QVERIFY(create->isVisible());
 }
 
 } // namespace ketplus

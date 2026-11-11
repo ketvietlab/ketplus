@@ -174,6 +174,8 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
 TerminalPanel* MainWindow::openAgentTerminalTab() {
     auto* detailTabs = ensureAgentDetailTabs();
     auto* terminal = new TerminalPanel(detailTabs);
+    // The detail tab is the terminal's tab, so the panel's own tab bar would be a second one.
+    terminal->setSingleSession(true);
     terminal->applyTheme(theme_.palette());
     applyTerminalTypography(terminal);
     terminal->start(workspaceRoot_.isEmpty() ? QDir::homePath() : workspaceRoot_);

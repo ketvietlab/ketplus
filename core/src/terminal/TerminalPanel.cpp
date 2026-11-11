@@ -22,6 +22,7 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     tabs_->setElideMode(Qt::ElideMiddle);
     tabs_->tabBar()->setExpanding(false);
     auto* actions = new QWidget(tabs_);
+    actions_ = actions;
     auto* row = new QHBoxLayout(actions);
     row->setContentsMargins(0, 0, 4, 0);
     row->setSpacing(0);
@@ -104,9 +105,15 @@ void TerminalPanel::typeText(const QString& text) {
 }
 
 void TerminalPanel::typeTextInNewTab(const QString& text) {
-    if (currentTab() != nullptr)
+    if (!singleSession_ && currentTab() != nullptr)
         addTab(true);
     typeText(text);
+}
+
+void TerminalPanel::setSingleSession(const bool single) {
+    singleSession_ = single;
+    tabs_->tabBar()->setVisible(!single);
+    actions_->setVisible(!single);
 }
 
 void TerminalPanel::focusTerminal() {

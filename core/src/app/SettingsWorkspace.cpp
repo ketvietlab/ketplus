@@ -377,6 +377,11 @@ void SettingsWorkspace::addLink(const QString& title, const QString& id) {
     addNavigation(title, id);
 }
 
+// The dialog goes first. Its controls and pages now live on this page, and Qt deletes them
+// before the dialog, its last child; a page's destruction would otherwise make the dialog read
+// controls already deleted.
+SettingsWorkspace::~SettingsWorkspace() { delete dialog_; }
+
 void SettingsWorkspace::showSection(const QString& id) {
     for (int row = 0; row < navigation_->count(); ++row) {
         if (navigation_->item(row)->data(Qt::UserRole).toString() == id) {

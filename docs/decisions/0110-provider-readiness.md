@@ -45,7 +45,10 @@ The sign-in probes:
 - **Claude:** no probe. Claude Code keeps its sign-in in the Keychain, which
   KetPlus does not read. Instead, the sidecar's `provider.authentication` source is
   recorded when a query starts:
-  - `none` means `signed_out`;
+  - `none` changes nothing. It only says no API key was used, and a Claude
+    subscription sign-in reports it too (ADR 0026), so treating it as
+    `signed_out` marked working sessions as not signed in. A real sign-out
+    reaches readiness through the turn's `auth_required` error instead;
   - any other source means `ready`.
 
   A source never clears an earlier `expired` or `key_rejected`. Only a turn that
@@ -53,7 +56,7 @@ The sign-in probes:
 
 A reported `signed_out` ends as soon as a probe finds an account, since the user
 signed in after it. Claude has no probe, so its `signed_out` lasts until the next
-query reports a source; the UI therefore never blocks sending on it.
+query reports an API key source or a turn works; the UI therefore never blocks sending on it.
 
 Reported states persist in `provider-readiness.json` beside the journal. The file
 is owner-only and keeps them across daemon restarts. A limit is dropped once
