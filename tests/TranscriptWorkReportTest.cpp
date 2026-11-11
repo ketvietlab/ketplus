@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetAppearance.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/ConversationChangesPane.h"
@@ -29,6 +30,58 @@ QJsonObject reportItem(const QString& key, const QString& group, const QString& 
     fields.insert("created_turn", created);
     fields.insert("updated_turn", updated);
     return fields;
+}
+
+// The mock's report (mockups/qt Fixtures.turnReport) in the daemon's ledger shape, so the app's
+// captures compare with the mock's side by side.
+QJsonObject mockReport() {
+    const auto item = [](const QString& key, const QString& group, const QString& title,
+                         const QString& status, const qint64 created, const qint64 updated,
+                         QJsonObject fields = {}) {
+        QJsonObject result = reportItem(key, group, status, created, updated, fields);
+        result.insert("title", title);
+        return result;
+    };
+    const auto next = [](const QString& action, const QString& owner) {
+        return QJsonObject{{"action", action}, {"owner", owner}};
+    };
+    return {
+        {"title", "Repository picker and new UI follow-ups"},
+        {"turn", 4},
+        {"version", 7},
+        {"items",
+         QJsonArray{
+             item("pr-399", "Pull requests", "#399 Interface zoom separate from font size", "done",
+                  2, 3,
+                  {{"evidence", "Merged into feat/new-ui · review by @agent/7542 passed"},
+                   {"verified", QJsonArray{"tests", "build"}}}),
+             item("pr-401", "Pull requests", "#401 Mermaid labels meet AA contrast", "done", 2, 3,
+                  {{"evidence",
+                    "The 4.45:1 label now reaches 4.6:1 · sweep regression added · merged"},
+                   {"verified", QJsonArray{"code", "tests", "build", "capture"}}}),
+             item("picker-daemon", "Repository picker · #164",
+                  "The daemon lists another repository's worktrees", "done", 4, 4,
+                  {{"evidence", "Lists them without switching or enrolling the repository · "
+                                "daemon_worktree_context 2/2 passed"},
+                   {"verified", QJsonArray{"code", "tests"}}}),
+             item("picker-dialog", "Repository picker · #164", "The dialog follows the mock flow",
+                  "active", 2, 4,
+                  {{"evidence", "Choose a repository, then one of its worktrees, or use the "
+                                "repository or create a worktree"},
+                   {"remaining", "Worktree counts, the window's call site and the dialog tests"},
+                   {"next", next("Finish the dialog and run its tests", "agent")},
+                   {"verified", QJsonArray{"code"}}}),
+             item("picker-adr", "Repository picker · #164", "ADR 0105 and the daemon version",
+                  "waiting", 2, 2, {{"next", next("Write them once the dialog lands", "agent")}}),
+             item("issue-402", "Decisions", "#402 Retire the compatibility stylesheet", "waiting",
+                  4, 4,
+                  {{"remaining", "Now, or folded into #137–#139"},
+                   {"next", next("Choose when to do it", "user")}}),
+             item("update-notice", "Decisions", "Toasts and the update notice", "blocked", 2, 3,
+                  {{"remaining", "The notice needs approved wording"},
+                   {"next", next("Approve the notice wording", "user")}}),
+             item("legacy-picker", "Dropped", "Keep the old picker behind a setting", "cancelled",
+                  1, 3, {{"evidence", "Replaced by the mock flow in turn 3"}})}}};
 }
 
 } // namespace
@@ -309,4 +362,136 @@ void AgentWorkspaceViewTest::changesPaneListsTheWorktreeChanges() {
 
     pane.setChanges("/repo", "develop", {});
     QTRY_VERIFY(findVisibleItem(root, "conversationChangesEmpty") != nullptr);
+}
+
+// ADR 0106, mock workspace/report-running: while a turn runs, its latest report closes the
+// transcript with a Running badge and the live activity in place of the run line. The turn's
+// end hands over to the end-of-turn card, and the next turn starts without the old report.
+void AgentWorkspaceViewTest::runningTurnShowsItsWorkReport() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages({QVariantMap{{"kind", "user"}, {"body", "Carry on with the dialog."}}},
+                       "running-report");
+    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
+    view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* indicator = nullptr;
+    QTRY_VERIFY((indicator = findVisibleItem(root, "workingIndicator")) != nullptr);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+
+    view.setTurnWorkReport(mockReport().toVariantMap());
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "runningWorkReport")) != nullptr);
+    QVERIFY(findVisibleItem(root, "workingIndicator") == nullptr);
+    QVERIFY(card->property("running").toBool());
+    QCOMPARE(card->property("total").toInt(), 7);
+    QCOMPARE(card->property("finished").toInt(), 3);
+    // The bar follows the counts even though the report arrived after the card was made.
+    QQuickItem* bar = nullptr;
+    const auto findBar = [&](const auto& self, QQuickItem* item) -> void {
+        if (bar == nullptr && item->inherits("QQuickProgressBar"))
+            bar = item;
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    findBar(findBar, card);
+    QVERIFY(bar != nullptr);
+    QVERIFY(qAbs(bar->property("position").toReal() - 3.0 / 7.0) < 0.001);
+    auto* footer = findVisibleItem(card, "workReportFooter");
+    QVERIFY(footer != nullptr);
+    QVERIFY(!footer->property("opens").toBool());
+    QCOMPARE(footer->property("label").toString(),
+             QStringLiteral("Working · Editing ExecutionWorktreeDialog.cpp"));
+    QVERIFY(findVisibleItem(card, "workReportActivity") != nullptr);
+    if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_RUNNING_CAPTURE");
+        !capture.isEmpty()) {
+        card->setProperty("openItem", "picker-dialog");
+        QTest::qWait(120);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+
+    view.setSessionState("Follow up on the new UI", "Completed", false);
+    QTRY_VERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
+    QVERIFY(view.turnWorkReport().isEmpty());
+    QTRY_VERIFY(findVisibleItem(root, "workingIndicator") != nullptr);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+}
+
+// #404 "Done when": the card, the running card and the Report tab rendered from the mock's
+// fixture in light and dark at 100% and 125%, for a side-by-side check with mockups/qt
+// (workspace/report, workspace/report-running and workspace/report-details). Without
+// KETPLUS_WORK_REPORT_PARITY_DIR it still checks that every cell lays out at its zoom.
+void AgentWorkspaceViewTest::workReportCapturesMatchTheMock() {
+    const QString directory = qEnvironmentVariable("KETPLUS_WORK_REPORT_PARITY_DIR");
+    auto& appearance = ket::Appearance::instance();
+    const QJsonObject report = mockReport();
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events",
+          QJsonArray{journalEvent(1, 4, "user.message",
+                                  {{"text", "Carry on with the picker and the follow-ups."}}),
+                     journalEvent(2, 4, "work_report.updated", report),
+                     journalEvent(3, 4, "turn.completed", {{"status", "completed"}})}}});
+    for (const bool dark : {false, true}) {
+        for (const double zoom : {1.0, 1.25}) {
+            appearance.setMode(dark ? ket::Appearance::Mode::Dark : ket::Appearance::Mode::Light);
+            appearance.setZoom(zoom);
+            const QString cell =
+                QStringLiteral("%1-%2").arg(dark ? "dark" : "light", zoom == 1.0 ? "1" : "1.25");
+            const auto save = [&](QQuickWindow* window, const QString& state) {
+                if (directory.isEmpty())
+                    return;
+                QTest::qWait(150);
+                QVERIFY(window->grabWindow().save(
+                    QDir(directory).filePath(QStringLiteral("%1-%2.png").arg(state, cell))));
+            };
+            {
+                ketplus::AgentWorkspaceView view;
+                view.applyTheme(ketplus::currentThemePalette());
+                view.resize(1440, 900);
+                view.show();
+                view.resetMessages(rows, "parity-" + cell);
+                QQuickItem* card = nullptr;
+                QTRY_VERIFY((card = findVisibleItem(view.quickView()->rootObject(),
+                                                    "transcriptWorkReport")) != nullptr);
+                QCOMPARE(card->property("finished").toInt(), 3);
+                QTRY_VERIFY(card->height() > 0 && card->width() > 0);
+                card->setProperty("openItem", "picker-dialog");
+                save(view.quickView(), "report");
+            }
+            {
+                ketplus::AgentWorkspaceView view;
+                view.applyTheme(ketplus::currentThemePalette());
+                view.resize(1440, 900);
+                view.show();
+                view.resetMessages(
+                    {QVariantMap{{"kind", "user"}, {"body", "Carry on with the dialog."}}},
+                    "parity-running-" + cell);
+                view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
+                view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
+                view.setTurnWorkReport(report.toVariantMap());
+                QQuickItem* card = nullptr;
+                QTRY_VERIFY((card = findVisibleItem(view.quickView()->rootObject(),
+                                                    "runningWorkReport")) != nullptr);
+                card->setProperty("openItem", "picker-dialog");
+                save(view.quickView(), "report-running");
+            }
+            {
+                ketplus::WorkReportPane pane;
+                pane.resize(520, 900);
+                pane.show();
+                pane.showConversation("parity");
+                pane.acceptReport("parity", report.toVariantMap(), {});
+                QQuickItem* ledger = nullptr;
+                QTRY_VERIFY((ledger = findVisibleItem(pane.quickView()->rootObject(),
+                                                      "workReportLedger")) != nullptr);
+                QCOMPARE(ledger->property("total").toInt(), 7);
+                save(pane.quickView(), "report-details");
+            }
+        }
+    }
+    appearance.setMode(ket::Appearance::Mode::Dark);
+    appearance.setZoom(1.0);
 }

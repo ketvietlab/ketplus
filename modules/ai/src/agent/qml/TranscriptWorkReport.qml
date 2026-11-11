@@ -15,6 +15,11 @@ Rectangle {
     signal openRequested()
     // The details pane shows the whole ledger without a frame of its own.
     property bool ledger: false
+    // While its turn runs the card closes the live transcript: a Running badge, and the
+    // footer shows the turn's live activity instead of the next step.
+    property bool running: false
+    property string activity
+    property bool animate: running
     property string openItem
     property bool showClosed: true
     readonly property var items: report && report.items ? report.items : []
@@ -131,8 +136,10 @@ Rectangle {
                 readonly property bool allDone: card.total > 0 && card.finished === card.total
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: allDone ? qsTr("All done") : card.needsYou ? qsTr("Needs you") : qsTr("Turn %1").arg(card.turn)
-                tone: allDone ? KetTheme.BadgeTone.Success
+                text: card.running ? qsTr("Running") : allDone ? qsTr("All done")
+                    : card.needsYou ? qsTr("Needs you") : qsTr("Turn %1").arg(card.turn)
+                tone: card.running ? KetTheme.BadgeTone.Accent
+                    : allDone ? KetTheme.BadgeTone.Success
                     : card.needsYou ? KetTheme.BadgeTone.Warning : KetTheme.BadgeTone.Neutral
             }
         }
@@ -147,9 +154,11 @@ Rectangle {
                 anchors.right: count.left
                 anchors.rightMargin: card.px(12)
                 anchors.verticalCenter: parent.verticalCenter
+                // A fraction: ProgressBar clamps value to `to` when it is set, so a count would
+                // stick at 1 when the report arrives after the card was created.
                 from: 0
-                to: Math.max(1, card.total)
-                value: card.finished
+                to: 1
+                value: card.total > 0 ? card.finished / card.total : 0
                 Accessible.name: qsTr("Report progress")
             }
             Row {
@@ -399,17 +408,19 @@ Rectangle {
 
         Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
 
-        // The next step and who takes it. In the transcript it opens the Report tab.
+        // While a turn runs: its live activity. Otherwise the next step and who takes it; in the
+        // transcript it opens the Report tab.
         Rectangle {
             id: footer
             readonly property var next: card.items.find(item => (item.status === "active" || item.status === "blocked") && item.next)
                                         || card.items.find(item => item.status === "waiting" && item.next)
-            readonly property bool opens: !card.ledger
-            readonly property string label: next ? qsTr("Next · %1 · %2").arg(next.next.action).arg(card.owner(next.next.owner))
+            readonly property bool opens: !card.ledger && !card.running
+            readonly property string label: card.running ? (card.activity || qsTr("Agent is working…"))
+                : next ? qsTr("Next · %1 · %2").arg(next.next.action).arg(card.owner(next.next.owner))
                 : card.total > 0 && card.finished === card.total ? qsTr("Nothing left to do") : ""
             objectName: "workReportFooter"
             width: parent.width
-            height: card.px(opens ? 28 : 20)
+            height: card.px(card.ledger ? 20 : 28)
             radius: card.px(5)
             color: footerArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
             border.color: footer.activeFocus ? KetTheme.t.focusBorder : "transparent"
@@ -420,13 +431,19 @@ Rectangle {
             Keys.onSpacePressed: if (opens) card.openRequested()
             Keys.onReturnPressed: if (opens) card.openRequested()
             Row {
-                x: footer.opens ? card.px(6) : 0
+                x: card.ledger ? 0 : card.px(6)
                 width: parent.width - x - when.width - card.px(20)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: card.px(8)
+                Kit.KetActivityIndicator {
+                    objectName: "workReportActivity"
+                    visible: card.running
+                    running: card.animate
+                    anchors.verticalCenter: parent.verticalCenter
+                }
                 Kit.KetIcon { visible: footer.opens; name: "chevron-right"; box: card.px(14); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
                 Text {
-                    width: parent.width - (footer.opens ? card.px(22) : 0)
+                    width: parent.width - (footer.opens || card.running ? card.px(24) : 0)
                     anchors.verticalCenter: parent.verticalCenter
                     elide: Text.ElideRight
                     textFormat: Text.PlainText
@@ -439,9 +456,9 @@ Rectangle {
             Text {
                 id: when
                 anchors.right: parent.right
-                anchors.rightMargin: footer.opens ? card.px(8) : 0
+                anchors.rightMargin: card.ledger ? 0 : card.px(8)
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.ledger ? qsTr("Updated in turn %1").arg(card.turn) : qsTr("Open report")
+                text: card.running ? qsTr("Now") : card.ledger ? qsTr("Updated in turn %1").arg(card.turn) : qsTr("Open report")
                 color: KetTheme.t.textMuted
                 font.family: KetTheme.fontFamily
                 font.pixelSize: card.px(12)

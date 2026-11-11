@@ -413,6 +413,8 @@ void AgentWorkspaceView::setSessionState(const QString& title, const QString& st
                                          const bool running) {
     if (!running)
         flushStreamingMessages();
+    else if (!sessionRunning_)
+        setTurnWorkReport({});
     sessionTitle_ = title.isEmpty() ? QStringLiteral("New conversation") : title;
     sessionStatus_ = status.isEmpty() ? QStringLiteral("Ready") : status;
     sessionRunning_ = running;
