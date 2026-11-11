@@ -1797,6 +1797,16 @@ void SessionHost::handleCommandDeferred(const QJsonObject& request, const QStrin
         backgroundTaskCommand(request, std::move(done));
         return;
     }
+    // ADR 0114 §1: a team's task command that asks git has it read off the event loop first.
+    // Only for the local client: handleCommand refuses any other before it asks anything.
+    if (localClient(clientId) && request.value(QStringLiteral("message_type"))
+                                     .toString()
+                                     .startsWith(QStringLiteral("team.task."))) {
+        prepareTeamTask(request, [this, request, clientId, done = std::move(done)] {
+            done(handleCommand(request, clientId));
+        });
+        return;
+    }
     if (request.value(QStringLiteral("message_type")).toString() !=
         QStringLiteral("session.steer")) {
         done(handleCommand(request, clientId));

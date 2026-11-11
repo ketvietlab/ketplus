@@ -78,6 +78,21 @@ struct TaskFacts final {
 };
 enum class TaskQuestion { Merge, Lane };
 using TaskFactsDone = std::function<void(const QHash<QString, TaskFacts>&)>;
+// What git answered when a task's worktree was asked for: the worktree, or why there is none.
+struct WorktreeAnswer final {
+    std::optional<TaskWorktree> worktree;
+    QString error;
+};
+// What a hand to review reads from git, and the worktree and branch it was read for: whether
+// work is uncommitted (nothing when git failed) and the commit the branch points at.
+struct HandoffFacts final {
+    QString worktree;
+    QString branch;
+    std::optional<bool> dirty;
+    QString head;
+};
+using WorktreeDone = std::function<void(const WorktreeAnswer&)>;
+using HandoffDone = std::function<void(const HandoffFacts&)>;
 using TaskDiffDone = std::function<void(const std::optional<TaskDiff>&)>;
 
 class TeamHostPort {
@@ -103,6 +118,21 @@ class TeamHostPort {
     // it returns here, later where the session runtime reads it off its event loop.
     virtual void askDiff(const Team& team, const Task& task, TaskDiffDone done) {
         done(taskDiff(team, task));
+    }
+    // Creates the task's branch and worktree, and reads what a hand to review needs, for a
+    // command that was prepared (TeamCoordinator::prepare). Both answer `done` on the caller's
+    // thread: before they return here, later where the session runtime asks git off its
+    // event loop.
+    virtual void askWorktree(const Team& team, const Task& task, WorktreeDone done) {
+        WorktreeAnswer answer;
+        answer.worktree = createTaskWorktree(team, task, &answer.error);
+        done(answer);
+    }
+    virtual void askHandoff(const Team& team, const Task& task, HandoffDone done) {
+        done({.worktree = task.worktree,
+              .branch = task.branch,
+              .dirty = hasUncommittedWork(task.worktree),
+              .head = taskCommit(team, task)});
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
@@ -239,6 +269,23 @@ class TeamCoordinator : public QObject {
                         const QString& actor, const QString& note = {});
     TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
                            const QString& actor);
+    // TeamCoordinatorGit.cpp. An assignment and a handover make the task's worktree, and a
+    // hand to review reads the worktree, through the host on the caller's thread. prepare()
+    // asks the host first, where it may answer later, and then calls `then`: the command is
+    // run there as always and finds the answer instead of asking. `then` is called at once
+    // for a command that would be refused or asks git nothing. One worktree is asked for a
+    // task however many commands wait for it.
+    struct TaskRequest final {
+        enum class Kind { Assign, Handover, Move };
+        Kind kind{Kind::Assign};
+        qint64 teamId{0};
+        QString taskId;
+        QString actor;
+        QString owner;
+        QString reason;
+        QString to;
+    };
+    void prepare(const TaskRequest& request, std::function<void()> then);
     // "user", "daemon", the member's role, or empty for a stranger.
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
@@ -282,9 +329,11 @@ class TeamCoordinator : public QObject {
     // is asked through the host, which may answer later; one question is open for a team at a
     // time, and a check asked for meanwhile runs when it is answered.
     void checkMerged(qint64 teamId);
-    // Whether a merge check, a lane check or a review's diff is still with git.
+    // Whether a merge check, a lane check, a review's diff or a prepared command is still
+    // with git.
     [[nodiscard]] bool checksOpen() const {
-        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty() || !reviewDiffs_.isEmpty();
+        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty() || !reviewDiffs_.isEmpty() ||
+               !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
@@ -388,6 +437,19 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] static QString assignmentText(const Team& team, const Task& task,
                                                 const QString& fromName, bool handover,
                                                 const QString& reason);
+    // Why the command is refused before git is asked for anything; nothing when it may go on.
+    [[nodiscard]] std::optional<TeamError> assignRefusal(const Team& team, const Task& task,
+                                                         const QString& owner,
+                                                         const QString& actor) const;
+    [[nodiscard]] std::optional<TeamError> handoverRefusal(const Team& team, const Task& task,
+                                                           const QString& owner,
+                                                           const QString& reason,
+                                                           const QString& actor) const;
+    // The task's worktree and what its hand to review reads: the answer prepare() got, or the
+    // host's on this thread.
+    [[nodiscard]] WorktreeAnswer worktreeFor(const Team& team, const Task& task);
+    [[nodiscard]] HandoffFacts handoffFor(const Team& team, const Task& task) const;
+    void worktreeAnswered(qint64 teamId, const QString& taskId, const WorktreeAnswer& answer);
 
     LocalJournal* journal_{nullptr};
     TeamHostPort* host_{nullptr};
@@ -400,6 +462,12 @@ class TeamCoordinator : public QObject {
     QSet<qint64> mergeChecksAgain_;
     QSet<QString> laneChecks_;
     QSet<QString> laneChecksAgain_;
+    // Prepared commands, by "<team>/<task>": those waiting for the task's worktree, and the
+    // answers that are there while the commands they were asked for run.
+    QHash<QString, QList<std::function<void()>>> worktreeWaits_;
+    QHash<QString, WorktreeAnswer> worktrees_;
+    QHash<QString, HandoffFacts> handoffs_;
+    int handoffsAsked_{0};
     QHash<QString, qint64> teamBySession_;
     bool loaded_{false};
     QHash<qint64, QTimer*> digestTimers_;

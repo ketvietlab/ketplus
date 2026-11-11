@@ -333,14 +333,23 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         return;
     }
     if (!it->agentToken.isEmpty()) {
-        send(socket, AgentBroker::isOperation(type)
-                         ? protocol::response(
-                               request, host_->handleAgentCommand(
-                                            it->agentToken, type,
-                                            request.value(QStringLiteral("payload")).toObject()))
-                         : protocol::failure(request, QStringLiteral("forbidden"),
-                                             QStringLiteral("Agent connections may only call "
-                                                            "agents.* operations.")));
+        if (!AgentBroker::isOperation(type)) {
+            send(socket, protocol::failure(request, QStringLiteral("forbidden"),
+                                           QStringLiteral("Agent connections may only call "
+                                                          "agents.* operations.")));
+            return;
+        }
+        // Answered at once, except a team's task tool that waits for git (ADR 0114 §1).
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        host_->handleAgentCommandDeferred(
+            it->agentToken, type, request.value(QStringLiteral("payload")).toObject(),
+            [server = QPointer<LocalIpcServer>(this), guardedSocket,
+             request](const QJsonObject& result) {
+                if (!server || guardedSocket.isNull() ||
+                    !server->connections_.contains(guardedSocket))
+                    return;
+                server->send(guardedSocket, protocol::response(request, result));
+            });
         return;
     }
     if (type == QStringLiteral("daemon.prepare_upgrade")) {
@@ -426,14 +435,19 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         });
         return;
     }
-    if (SessionHost::isBackgroundTaskCommand(type)) {
+    // Answered later: a background task command, and a team's task command that waits for git.
+    if (SessionHost::isBackgroundTaskCommand(type) ||
+        type.startsWith(QStringLiteral("team.task."))) {
         const QPointer<QLocalSocket> guardedSocket(socket);
-        host_->handleCommandDeferred(
-            request, it->clientId, [this, guardedSocket, request](const QJsonObject& result) {
-                if (guardedSocket.isNull() || !connections_.contains(guardedSocket))
-                    return;
-                send(guardedSocket, protocol::response(request, result));
-            });
+        host_->handleCommandDeferred(request, it->clientId,
+                                     [server = QPointer<LocalIpcServer>(this), guardedSocket,
+                                      request](const QJsonObject& result) {
+                                         if (!server || guardedSocket.isNull() ||
+                                             !server->connections_.contains(guardedSocket))
+                                             return;
+                                         server->send(guardedSocket,
+                                                      protocol::response(request, result));
+                                     });
         return;
     }
     if (cloud_ != nullptr && cloud_->handles(type)) {

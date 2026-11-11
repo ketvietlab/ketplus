@@ -196,7 +196,17 @@ may be journaled after the turn has answered.
    works on, else to another task of its own, else back to the repository; a conversation
    that stands elsewhere is left alone. The move is stored with the handover
    (`relocations`). A conversation that cannot move during its turn leaves when the turn
-   ends or before the team's next message to it, unless the task came back to it. *Rejected*: one
+   ends or before the team's next message to it, unless the task came back to it. The
+   daemon makes the worktree off its event loop, and reads there what a hand to review
+   needs (the worktree's status and the branch's commit). The command that asks for them
+   (the user's `team.task.assign`, `team.task.handover` and `team.task.move`, a member's
+   `team_task_assign`, `team_task_handover` and `team_task_update`) is answered when git
+   has answered, and is checked then against the team as it has become. A command that
+   would be refused asks git nothing, and one worktree is asked for a task however many
+   commands wait for it. A worktree made for a command that was refused meanwhile stays
+   with the task, because its path and its branch are taken. The worktree switch of
+   ADR 0111 that follows still lists the repository's worktrees on the event loop, as the
+   user's own switch does. *Rejected*: one
    worktree per developer switching branches — a handover would have to move
    uncommitted work between worktrees, and a developer could carry it into the wrong
    task.

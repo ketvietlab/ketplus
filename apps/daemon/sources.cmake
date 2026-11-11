@@ -110,8 +110,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamRules.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorAssign.cpp
     src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorGit.cpp
     src/teams/TeamCoordinatorStall.cpp
     src/teams/TeamCoordinatorWaits.cpp
     src/teams/TeamCoordinatorLanes.cpp

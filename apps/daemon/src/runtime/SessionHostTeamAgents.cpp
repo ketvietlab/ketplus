@@ -74,6 +74,48 @@ QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
          .leaderWritesRequirements = team->leaderWritesRequirements});
 }
 
+QString SessionHost::teamMemberByNumber(const teams::Team& team, const QString& number) const {
+    const QString wanted = agent_messaging::bareNumber(number);
+    for (const teams::Member& member : team.members) {
+        const auto it = sessions_.constFind(member.sessionId);
+        if (it != sessions_.cend() &&
+            journal_->conversationNumber(it->stored.id, it->stored.generation) == wanted)
+            return member.sessionId;
+    }
+    return {};
+}
+
+// The tools that reach git, as teamOperation below reads them: a developer hands its task to
+// review, the leader assigns a task or hands it over.
+void SessionHost::prepareTeamOperation(const QString& sessionId, const QString& operation,
+                                       const QJsonObject& payload, std::function<void()> then) {
+    using Kind = teams::TeamCoordinator::TaskRequest::Kind;
+    const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
+    const QString role = team ? team->member(sessionId)->role : QString{};
+    std::optional<Kind> kind;
+    if (operation == QStringLiteral("team_task_update") && role == teams::role::developer)
+        kind = Kind::Move;
+    else if (operation == QStringLiteral("team_task_assign") && role == teams::role::leader)
+        kind = Kind::Assign;
+    else if (operation == QStringLiteral("team_task_handover") && role == teams::role::leader)
+        kind = Kind::Handover;
+    if (!kind) {
+        then();
+        return;
+    }
+    teams_->prepare({.kind = *kind,
+                     .teamId = team->id,
+                     .taskId = payload.value(QStringLiteral("task_id")).toString(),
+                     .actor = sessionId,
+                     .owner = *kind == Kind::Move
+                                  ? QString{}
+                                  : teamMemberByNumber(
+                                        *team, payload.value(QStringLiteral("owner")).toString()),
+                     .reason = payload.value(QStringLiteral("reason")).toString(),
+                     .to = payload.value(QStringLiteral("state")).toString()},
+                    std::move(then));
+}
+
 QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& operation,
                                        const QJsonObject& payload) {
     const teams::Team* team = teams_->teamOf(sessionId);
@@ -165,15 +207,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             sessionId, &created);
         return answer(result, created);
     }
-    const auto memberByNumber = [&](const QString& number) -> QString {
-        const QString wanted = agent_messaging::bareNumber(number);
-        for (const teams::Member& member : team->members) {
-            const auto it = sessions_.constFind(member.sessionId);
-            if (it != sessions_.cend() &&
-                journal_->conversationNumber(it->stored.id, it->stored.generation) == wanted)
-                return member.sessionId;
-        }
-        return {};
+    const auto memberByNumber = [&](const QString& number) {
+        return teamMemberByNumber(*team, number);
     };
     if (operation == QStringLiteral("team_task_assign"))
         return answer(
