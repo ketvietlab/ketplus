@@ -84,6 +84,9 @@ Item {
     // `teams/paused`: the team used its automatic turns and waits for the user to go on.
     function showState(state) {
         teams = state === "empty" ? [] : Fixtures.teams
+        // `teams/live`: content as a team writes it: long choices, descriptions, lanes, updates.
+        if (state === "live")
+            teams = [Fixtures.liveTeam]
         teamIndex = 0
         filter = ""
         if (state === "large")
@@ -92,6 +95,8 @@ Item {
                 state: "idle", now: "No task yet" }]) })
         if (state === "task")
             Qt.callLater(() => screen.showTask("T-3"))
+        if (state === "live-task")
+            Qt.callLater(() => { screen.showState("live"); screen.showTask("T-1") })
         if (state === "ready")
             change({ merges: "user",
                 tasks: tasks.map(t => t.id !== "T-1" ? t : Object.assign({}, t, { state: "ready",
@@ -147,7 +152,7 @@ Item {
             memberAgentDialog.open()
         }
         else if (name === "task")
-            showTask("T-3")
+            showTask(tasks.some(t => t.id === "T-3") && team.id !== "pilot" ? "T-3" : tasks[0].id)
         else if (name === "handover")
             startHandover(tasks.find(t => t.id === "T-3"))
     }
@@ -599,6 +604,8 @@ Item {
                     id: card
                     required property var modelData
                     readonly property var task: screen.tasks.find(t => t.id === modelData.task) || null
+                    // Past this a choice is a sentence, not a button's label.
+                    readonly property bool sentences: modelData.options.some(o => o.length > 28)
                     height: cardBody.implicitHeight + screen.px(32)
                     border.color: KetTheme.t.accentBorder
                     Column {
@@ -610,12 +617,62 @@ Item {
                         Label { width: parent.width; text: card.modelData.question; font.pixelSize: screen.px(15); font.weight: Font.Medium; wrapMode: Text.Wrap; elide: Text.ElideNone }
                         Label { width: parent.width; text: card.modelData.detail; color: KetTheme.t.textSecondary; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.35 }
                         Item { width: 1; height: screen.px(2) }
+                        // A choice written as a sentence is a row of its own: the whole sentence
+                        // reads, and the card keeps its width. Short choices stay buttons.
+                        Column {
+                            visible: card.sentences
+                            width: parent.width
+                            spacing: screen.px(6)
+                            Repeater {
+                                model: card.sentences ? card.modelData.options : []
+                                Basic.AbstractButton {
+                                    id: choiceRow
+                                    required property string modelData
+                                    required property int index
+                                    readonly property bool best: index === card.modelData.recommended
+                                    width: parent.width
+                                    height: choiceLine.implicitHeight + screen.px(20)
+                                    hoverEnabled: true
+                                    Accessible.name: modelData + (best ? ", recommended" : "")
+                                    onClicked: screen.decide(card.modelData, modelData)
+                                    background: Rectangle {
+                                        radius: screen.px(6)
+                                        color: choiceRow.down ? KetTheme.t.surfaceInset
+                                             : choiceRow.hovered ? KetTheme.t.surfaceHover
+                                             : choiceRow.best ? KetTheme.t.accentSubtle : "transparent"
+                                        border.color: choiceRow.visualFocus ? KetTheme.t.focusBorder
+                                                    : choiceRow.best ? KetTheme.t.accentBorder : KetTheme.t.panelBorder
+                                        border.width: choiceRow.visualFocus ? 2 : 1
+                                    }
+                                    contentItem: Item {
+                                        RowLayout {
+                                            id: choiceLine
+                                            x: screen.px(14)
+                                            width: parent.width - screen.px(26)
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: screen.px(12)
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: choiceRow.modelData
+                                                wrapMode: Text.Wrap
+                                                elide: Text.ElideNone
+                                                lineHeight: 1.3
+                                                font.weight: choiceRow.best ? Font.Medium : Font.Normal
+                                            }
+                                            KetBadge { visible: choiceRow.best; text: "Recommended"; tone: KetTheme.BadgeTone.Accent }
+                                            KetIcon { name: "chevron-right"; box: screen.px(14); color: KetTheme.t.textMuted }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Item { visible: card.sentences; width: 1; height: screen.px(2) }
                         // The choices, and beside them who asked and what the answer unblocks.
                         RowLayout {
                             width: parent.width
                             spacing: screen.px(8)
                             Repeater {
-                                model: card.modelData.options
+                                model: card.sentences ? [] : card.modelData.options
                                 KetButton {
                                     required property string modelData
                                     required property int index
@@ -633,6 +690,7 @@ Item {
                             Label {
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideLeft
                                 text: card.modelData.id + " · " + (card.modelData.askedBy ? screen.reference(card.modelData.askedBy) : "The team") + " · " + card.modelData.when
                                       + (card.task ? " · " + (card.task.state === "blocked" ? "Blocks " : "For ") + card.task.id : "")
                                 color: KetTheme.t.textMuted
@@ -797,16 +855,40 @@ Item {
                                 Column {
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: screen.px(150)
-                                    Layout.preferredWidth: screen.px(260)
+                                    Layout.preferredWidth: screen.px(190)
                                     spacing: screen.px(5)
-                                    Label { width: parent.width; text: memberRow.modelData.title; font.pixelSize: screen.px(14); font.weight: Font.Medium }
+                                    // A narrow page has no role column: the role sits beside the name.
                                     Row {
+                                        width: parent.width
                                         spacing: screen.px(8)
-                                        Mono { text: screen.reference(memberRow.modelData.number) }
-                                        Label { text: memberRow.modelData.provider; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                                        Label {
+                                            width: Math.min(implicitWidth, parent.width - (nameRole.visible ? nameRole.width + parent.spacing : 0))
+                                            text: memberRow.modelData.title
+                                            font.pixelSize: screen.px(14)
+                                            font.weight: Font.Medium
+                                        }
+                                        KetBadge {
+                                            id: nameRole
+                                            visible: !screen.wide
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: screen.roles[memberRow.modelData.role].label.split(" · ")[0]
+                                            tone: screen.roles[memberRow.modelData.role].tone
+                                        }
+                                    }
+                                    Row {
+                                        width: parent.width
+                                        spacing: screen.px(8)
+                                        Mono { id: memberNumber; text: screen.reference(memberRow.modelData.number) }
+                                        Label {
+                                            width: parent.width - memberNumber.width - parent.spacing
+                                            text: memberRow.modelData.provider
+                                            color: KetTheme.t.textMuted
+                                            font.pixelSize: screen.px(12)
+                                        }
                                     }
                                 }
                                 Item {
+                                    visible: screen.wide
                                     Layout.preferredWidth: screen.px(158)
                                     Layout.fillHeight: true
                                     KetBadge {
@@ -818,7 +900,7 @@ Item {
                                 // A developer's lane and its paths; the lanes a reviewer checks.
                                 Column {
                                     Layout.fillWidth: true
-                                    Layout.preferredWidth: screen.px(250)
+                                    Layout.preferredWidth: screen.px(340)
                                     spacing: screen.px(5)
                                     Label {
                                         width: parent.width
@@ -886,15 +968,20 @@ Item {
                             id: updateRow
                             required property var modelData
                             required property int index
+                            // A report is a paragraph: three lines, and the rest on request.
+                            property bool expanded: false
                             width: updateList.width
-                            height: screen.px(52)
+                            height: Math.max(screen.px(52), updateLine.implicitHeight + screen.px(22))
                             Rectangle { visible: updateRow.index > 0; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: screen.px(18)
-                                anchors.rightMargin: screen.px(18)
+                                id: updateLine
+                                x: screen.px(18)
+                                width: parent.width - screen.px(36)
+                                anchors.verticalCenter: parent.verticalCenter
                                 spacing: screen.px(12)
                                 KetIcon {
+                                    Layout.alignment: Qt.AlignTop
+                                    Layout.topMargin: screen.px(2)
                                     name: updateRow.modelData.icon
                                     box: screen.px(14)
                                     color: updateRow.modelData.warning ? KetTheme.t.warning : KetTheme.t.textSecondary
@@ -902,10 +989,48 @@ Item {
                                 Column {
                                     Layout.fillWidth: true
                                     spacing: screen.px(4)
-                                    Label { width: parent.width; text: updateRow.modelData.text }
-                                    Label { width: parent.width; text: updateRow.modelData.detail; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                                    Label {
+                                        id: updateText
+                                        width: parent.width
+                                        text: updateRow.modelData.text
+                                        wrapMode: Text.Wrap
+                                        lineHeight: 1.3
+                                        maximumLineCount: updateRow.expanded ? 1000 : 3
+                                    }
+                                    Row {
+                                        width: parent.width
+                                        spacing: screen.px(10)
+                                        Label {
+                                            width: Math.min(implicitWidth, parent.width - (updateMore.visible ? updateMore.width + parent.spacing : 0))
+                                            text: updateRow.modelData.detail
+                                            color: KetTheme.t.textMuted
+                                            font.pixelSize: screen.px(12)
+                                            elide: Text.ElideMiddle
+                                        }
+                                        Basic.AbstractButton {
+                                            id: updateMore
+                                            visible: updateText.truncated || updateRow.expanded
+                                            text: updateRow.expanded ? "Show less" : "Show more"
+                                            Accessible.name: text
+                                            onClicked: updateRow.expanded = !updateRow.expanded
+                                            contentItem: Label {
+                                                text: updateMore.text
+                                                color: KetTheme.t.accentText
+                                                font.pixelSize: screen.px(12)
+                                                font.weight: Font.Medium
+                                                font.underline: updateMore.hovered || updateMore.visualFocus
+                                            }
+                                            hoverEnabled: true
+                                            padding: 0
+                                        }
+                                    }
                                 }
-                                Label { text: updateRow.modelData.when; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                                Label {
+                                    Layout.alignment: Qt.AlignTop
+                                    text: updateRow.modelData.when
+                                    color: KetTheme.t.textMuted
+                                    font.pixelSize: screen.px(12)
+                                }
                             }
                         }
                     }
@@ -1011,10 +1136,14 @@ Item {
         readonly property var owner: screen.member(task.owner)
         readonly property var reviewer: screen.members.find(m => m.role === "reviewer" && (m.reviews || []).includes(task.lane)) || null
         title: task.id + " · " + task.title
-        Column {
-            width: taskDialog.availableWidth
-            spacing: screen.px(16)
-            Row {
+        // A task carries a description to read, so its dialog is wider than a form's.
+        width: parent ? Math.min(screen.px(640), parent.width - 2 * recipe.margin) : screen.px(640)
+        // The description shows this much until the user asks for all of it.
+        property bool wholeDescription: false
+        onOpened: wholeDescription = false
+        DialogBody {
+            Flow {
+                width: parent.width
                 spacing: screen.px(8)
                 KetBadge { text: screen.states[taskDialog.task.state].label; tone: screen.states[taskDialog.task.state].tone }
                 KetBadge { text: taskDialog.task.lane || "Whole epic" }
@@ -1043,6 +1172,44 @@ Item {
                 Fact { label: "Branch"; value: taskDialog.task.branch || ""; mono: true }
                 Fact { label: "Worktree"; value: taskDialog.task.worktree || ""; mono: true }
                 Fact { label: "Depends on"; value: taskDialog.task.dependsOn || ""; mono: true }
+            }
+            Rectangle { visible: descriptionBlock.visible; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
+            // What the leader wrote for the owner, as Markdown. A long one is cut with a fade.
+            Column {
+                id: descriptionBlock
+                readonly property bool cut: descriptionText.implicitHeight > screen.px(168)
+                visible: !!taskDialog.task.description
+                width: parent.width
+                spacing: screen.px(8)
+                Label { text: "Description"; font.pixelSize: screen.px(14); font.weight: Font.Medium }
+                Item {
+                    width: parent.width
+                    height: descriptionBlock.cut && !taskDialog.wholeDescription ? screen.px(150) : descriptionText.implicitHeight
+                    clip: true
+                    MarkdownView {
+                        id: descriptionText
+                        width: parent.width
+                        window: screen.window
+                        markdown: taskDialog.task.description || ""
+                    }
+                    Rectangle {
+                        visible: descriptionBlock.cut && !taskDialog.wholeDescription
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: screen.px(48)
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: Qt.alpha(KetTheme.t.panelBg, 0) }
+                            GradientStop { position: 1; color: KetTheme.t.panelBg }
+                        }
+                    }
+                }
+                KetButton {
+                    visible: descriptionBlock.cut
+                    text: taskDialog.wholeDescription ? "Show less" : "Show all"
+                    variant: KetTheme.ButtonVariant.Ghost
+                    controlSize: KetTheme.ControlSize.Small
+                    onClicked: taskDialog.wholeDescription = !taskDialog.wholeDescription
+                }
             }
             Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
             Column {
@@ -1076,9 +1243,9 @@ Item {
                 }
                 Row {
                     spacing: screen.px(8)
-                    KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "lock"; box: screen.px(13); color: KetTheme.t.textMuted }
+                    KetIcon { y: screen.px(2); name: "lock"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Label {
-                        width: taskDialog.availableWidth - screen.px(21)
+                        width: parent.parent.width - screen.px(21)
                         text: taskDialog.task.criteriaNote || "Only the leader changes these. The reviewer checks the pull request against them."
                         color: KetTheme.t.textMuted
                         font.pixelSize: screen.px(12)
