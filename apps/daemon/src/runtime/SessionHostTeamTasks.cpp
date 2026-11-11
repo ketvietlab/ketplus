@@ -10,6 +10,8 @@
 #include <QProcess>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace ketplus::daemon {
 namespace {
 
@@ -172,9 +174,10 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
             return refused(result.error->code, result.error->message);
         const teams::Team* team = teams_->team(result.teamId);
         const teams::Task* task = team ? team->task(id) : nullptr;
-        return QJsonObject{{QStringLiteral("ok"), true},
-                           {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}},
-                           {QStringLiteral("task"), task ? teams::toJson(*task) : QJsonObject{}}};
+        return QJsonObject{
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}},
+            {QStringLiteral("task"), task ? teams::taskPageJson(*task) : QJsonObject{}}};
     };
     const teams::Team* team = teams_->team(teamId);
     if (!team)
@@ -194,7 +197,14 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
         if (!task)
             return refused(QStringLiteral("task_not_found"),
                            QStringLiteral("There is no task %1.").arg(taskId));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("task"), teams::toJson(*task)}};
+        // ADR 0115: one page of history, newest last; history_before reads the page before.
+        const QJsonValue before = payload.value(QStringLiteral("history_before"));
+        return {
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("task"),
+             teams::taskPageJson(
+                 *task, payload.value(QStringLiteral("history_limit")).toInt(teams::defaultPage),
+                 before.isDouble() ? before.toInteger() : -1)}};
     }
     if (type == QStringLiteral("team.task.create")) {
         QString created;
@@ -231,12 +241,31 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
     // ADR 0114 §3: decisions, answered only by the user through a client.
     const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
     if (type == QStringLiteral("team.decision.list")) {
-        QJsonArray decisions;
+        // ADR 0115: newest first, one page; before_id reads older ones.
         const QString wanted = payload.value(QStringLiteral("state")).toString();
-        for (const teams::Decision& decision : team->decisions)
-            if (wanted.isEmpty() || decision.state == wanted)
-                decisions.append(teams::toJson(decision));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("decisions"), decisions}};
+        const QString before = payload.value(QStringLiteral("before_id")).toString();
+        const int limit =
+            std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
+                       teams::maximumPage);
+        QJsonArray decisions;
+        bool reached = before.isEmpty();
+        bool more = false;
+        for (auto it = team->decisions.crbegin(); it != team->decisions.crend(); ++it) {
+            if (!reached) {
+                reached = it->id == before;
+                continue;
+            }
+            if (!wanted.isEmpty() && it->state != wanted)
+                continue;
+            if (decisions.size() == limit) {
+                more = true;
+                break;
+            }
+            decisions.append(teams::toJson(*it));
+        }
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("decisions"), decisions},
+                {QStringLiteral("has_more"), more}};
     }
     if (type == QStringLiteral("team.decision.answer")) {
         const QString choice = payload.value(QStringLiteral("choice")).toString();

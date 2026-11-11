@@ -6,6 +6,8 @@
 #include <QSet>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace ketplus::daemon {
 namespace {
 
@@ -136,7 +138,7 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         QJsonArray list;
         for (const teams::Team* team :
              teams_->teams(repository.isEmpty() ? QString{} : repositoryOf(repository)))
-            list.append(teams_->teamJson(*team));
+            list.append(teams_->directoryJson(*team));
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
@@ -147,9 +149,32 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         if (!team)
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
+        // ADR 0115: the newest page of Updates; team.updates.list reads older ones.
+        const QJsonArray updates = teams_->updatesJson(teamId, teams::defaultPage + 1);
+        QJsonArray page;
+        for (qsizetype index = 0; index < std::min<qsizetype>(updates.size(), teams::defaultPage);
+             ++index)
+            page.append(updates.at(index));
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("team"), teams_->teamJson(*team)},
-                {QStringLiteral("updates"), teams_->updatesJson(teamId)}};
+                {QStringLiteral("updates"), page},
+                {QStringLiteral("updates_has_more"), updates.size() > teams::defaultPage}};
+    }
+    if (type == QStringLiteral("team.updates.list")) {
+        if (!teams_->team(teamId))
+            return failure(QStringLiteral("team_not_found"),
+                           QStringLiteral("The team no longer exists."));
+        const int limit =
+            std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
+                       teams::maximumPage);
+        const qint64 before = payload.value(QStringLiteral("before_id")).toInteger();
+        QJsonArray updates = teams_->updatesJson(teamId, limit + 1, before);
+        const bool more = updates.size() > limit;
+        while (updates.size() > limit)
+            updates.removeLast();
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("updates"), updates},
+                {QStringLiteral("has_more"), more}};
     }
     if (type == QStringLiteral("team.create"))
         return createTeam(payload);

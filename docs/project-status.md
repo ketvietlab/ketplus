@@ -24,6 +24,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Bounded team messages (ADR 0115):
+  - A message too large for one frame becomes a failure of its request, or a
+    `truncated` event; the client keeps its connection.
+  - `team.list` and `team.changed` carry only the members.
+  - `team.get` carries a summary without history, plus the newest 50 Updates.
+  - History, older Updates and decisions come page by page.
+  - The sidebar keeps a team's members together while the daemon reconnects.
 - Agent teams, store (ADR 0114, #455): the daemon keeps teams in the journal
   (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
   their error codes; a member cannot be archived, its own Reviewer setting is refused

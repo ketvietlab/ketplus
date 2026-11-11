@@ -10,9 +10,64 @@
 #include <QPointer>
 #include <QVBoxLayout>
 
-// The task dialog's actions: presenting it, and handing the task over.
+#include <utility>
+
+// The task dialog's actions: presenting it, reading its history and handing the task over.
 
 namespace ketplus {
+
+void TeamTaskDialog::readHistory(const bool earlier) {
+    if (historyPending_) {
+        historyAgain_ = historyAgain_ || !earlier;
+        return;
+    }
+    if (earlier && historyStart_ <= 0)
+        return;
+    historyPending_ = true;
+    QJsonObject payload{{QStringLiteral("team_id"), teamId_},
+                        {QStringLiteral("task_id"), taskId_},
+                        {QStringLiteral("history_limit"), 50}};
+    if (earlier)
+        payload.insert(QStringLiteral("history_before"), historyStart_);
+    const QPointer<TeamTaskDialog> alive(this);
+    teams_->request(
+        QStringLiteral("team.task.get"), payload,
+        [alive, earlier](const QJsonObject& result, const QString& error) {
+            if (!alive)
+                return;
+            alive->historyPending_ = false;
+            const QJsonObject task = result.value(QStringLiteral("task")).toObject();
+            if (error.isEmpty() && task.contains(QStringLiteral("history_total"))) {
+                const QJsonArray page = task.value(QStringLiteral("history")).toArray();
+                const qsizetype start = task.value(QStringLiteral("history_start")).toInteger();
+                const qsizetype shownEnd = alive->historyStart_ + alive->history_.size();
+                QJsonArray joined;
+                if (earlier && alive->historyRead_ && start + page.size() == alive->historyStart_) {
+                    // The page before the first entry shown.
+                    joined = page;
+                    for (const auto& value : alive->history_)
+                        joined.append(value);
+                    alive->historyStart_ = start;
+                } else if (!earlier && alive->historyRead_ && start >= alive->historyStart_ &&
+                           start <= shownEnd) {
+                    // A newer page: keep what was read before it.
+                    for (qsizetype index = 0; index < start - alive->historyStart_; ++index)
+                        joined.append(alive->history_.at(index));
+                    for (const auto& value : page)
+                        joined.append(value);
+                } else {
+                    joined = page;
+                    alive->historyStart_ = start;
+                }
+                alive->history_ = joined;
+                alive->historyTotal_ = task.value(QStringLiteral("history_total")).toInteger();
+                alive->historyRead_ = true;
+                alive->rebuild();
+            }
+            if (std::exchange(alive->historyAgain_, false))
+                alive->readHistory();
+        });
+}
 
 ket::Dialog* TeamTaskDialog::openHandover() {
     if (handover_ || !canHandOver_)

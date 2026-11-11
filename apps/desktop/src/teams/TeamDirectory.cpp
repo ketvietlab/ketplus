@@ -15,15 +15,25 @@ TeamDirectory::TeamDirectory(QObject* parent) : QObject(parent) {}
 void TeamDirectory::setTransport(Transport transport) { transport_ = std::move(transport); }
 
 void TeamDirectory::setAvailable(const bool available) {
-    if (available_ == available)
+    if (available_ == available && !stale_)
         return;
     available_ = available;
+    stale_ = false;
     if (!available_) {
         teams_.clear();
         emit changed();
         return;
     }
     refresh();
+}
+
+void TeamDirectory::setDisconnected() {
+    if (!available_)
+        return;
+    available_ = false;
+    stale_ = !teams_.isEmpty();
+    ++listRequest_; // an answer still on its way is dropped
+    emit changed();
 }
 
 void TeamDirectory::refresh() {
@@ -55,10 +65,19 @@ void TeamDirectory::refresh() {
                });
 }
 
-void TeamDirectory::store(const QJsonObject& team) {
-    const QString id = team.value(QStringLiteral("id")).toString();
+void TeamDirectory::store(const QJsonObject& received) {
+    const QString id = received.value(QStringLiteral("id")).toString();
     if (id.isEmpty())
         return;
+    // ADR 0115: team.list and team.changed carry no tasks or decisions. The ones a page read
+    // with team.get stay until it reads them again.
+    QJsonObject team = received;
+    if (received.value(QStringLiteral("directory")).toBool())
+        if (const auto known = teams_.constFind(id); known != teams_.cend())
+            for (const QString key : {QStringLiteral("tasks"), QStringLiteral("decisions"),
+                                      QStringLiteral("decisions_total")})
+                if (known->contains(key))
+                    team.insert(key, known->value(key));
     // Events and answers can arrive in either order; the higher revision wins.
     // An answer that repeats what is known changes nothing (a page re-reads on every change).
     if (const auto it = teams_.constFind(id);
@@ -74,7 +93,11 @@ void TeamDirectory::applyEvent(const QString& type, const QJsonObject& payload) 
     if (!available_)
         return;
     if (type == QStringLiteral("team.changed")) {
-        store(payload.value(QStringLiteral("team")).toObject());
+        // ADR 0115: a team too large for one message arrives as its id; read the list again.
+        if (payload.value(QStringLiteral("truncated")).toBool())
+            refresh();
+        else
+            store(payload.value(QStringLiteral("team")).toObject());
     } else if (type == QStringLiteral("team.removed")) {
         if (teams_.remove(payload.value(QStringLiteral("team_id")).toString()) > 0)
             emit changed();

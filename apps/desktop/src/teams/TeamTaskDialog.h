@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QJsonArray>
 #include <QPointer>
 #include <QString>
 #include <QWidget>
@@ -19,9 +20,9 @@ class TeamDirectory;
 
 // #466: one task, laid out as mockups/qt's task dialog: its state and lane, the facts (owner,
 // reviewer, pull request, branch, worktree, dependencies), the description as Markdown (a long
-// one is cut, with Show all), the acceptance criteria and the whole history. It scrolls inside
-// the dialog and follows the team while open. Hand over… opens a second dialog that needs a
-// new owner and a reason (#457).
+// one is cut, with Show all), the acceptance criteria and the history, read a page at a time
+// with team.task.get (ADR 0115). It scrolls inside the dialog and follows the team while open.
+// Hand over… opens a second dialog that needs a new owner and a reason (#457).
 class TeamTaskDialog final : public QWidget {
     Q_OBJECT
 
@@ -55,6 +56,8 @@ class TeamTaskDialog final : public QWidget {
   private:
     void rebuild();
     void fitHeight();
+    // The newest page of history, or with `earlier` the page before the first entry shown.
+    void readHistory(bool earlier = false);
 
     TeamDirectory* teams_;
     QString teamId_;
@@ -68,6 +71,14 @@ class TeamTaskDialog final : public QWidget {
     ket::TextField* reason_;
     QLabel* error_;
     QPointer<ket::Dialog> handover_;
+    // History entries [historyStart_, historyStart_ + history_.size()) of historyTotal_. The
+    // history only grows, so a newer page joins the entries read before.
+    QJsonArray history_;
+    qsizetype historyStart_{0};
+    qsizetype historyTotal_{0};
+    bool historyRead_{false};
+    bool historyPending_{false};
+    bool historyAgain_{false};
     bool wholeDescription_{false};
     bool canHandOver_{false};
 };

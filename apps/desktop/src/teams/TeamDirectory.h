@@ -29,6 +29,13 @@ class TeamDirectory final : public QObject {
     // Only a daemon that advertises teams/1 has teams. Turning it off forgets them.
     void setAvailable(bool available);
     [[nodiscard]] bool isAvailable() const noexcept { return available_; }
+    // ADR 0115: the daemon went away. The teams last read stay, marked stale, so the sidebar
+    // keeps each team's members together until the daemon is back and the list is read again.
+    // Requests fail meanwhile.
+    void setDisconnected();
+    [[nodiscard]] bool isStale() const noexcept { return stale_; }
+    // Whether the sidebar groups conversations by team: teams that are current or stale.
+    [[nodiscard]] bool hasTeams() const noexcept { return available_ || stale_; }
 
     void refresh();
     static constexpr int firstRetryMs = 1000;
@@ -52,10 +59,11 @@ class TeamDirectory final : public QObject {
     void changed();
 
   private:
-    void store(const QJsonObject& team);
+    void store(const QJsonObject& received);
 
     Transport transport_;
     bool available_{false};
+    bool stale_{false};
     // A list that failed is asked for again, later each time: the daemon may still be
     // starting, and without the list the sidebar would show a team's members as loose
     // conversations until something else changed.

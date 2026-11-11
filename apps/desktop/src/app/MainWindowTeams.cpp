@@ -43,7 +43,12 @@ void MainWindow::setupTeams() {
     const auto update = [this, daemon, list] {
         if (!list)
             return;
-        teams_->setAvailable(daemon->isReady() && daemon->hasFeature(QStringLiteral("teams/1")));
+        // A daemon that went away keeps its teams, stale, so the sidebar does not scatter a
+        // team's members as loose conversations while it reconnects (ADR 0115).
+        if (!daemon->isReady())
+            teams_->setDisconnected();
+        else
+            teams_->setAvailable(daemon->hasFeature(QStringLiteral("teams/1")));
         list->setTeamsAvailable(teams_->isAvailable());
         scheduleSidebarRefresh();
     };
@@ -60,7 +65,7 @@ void MainWindow::setupTeams() {
 QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
                                                   QVariantList& conversations) const {
     QVector<SidebarTeam> folders;
-    if (teams_ == nullptr || !teams_->isAvailable())
+    if (teams_ == nullptr || !teams_->hasTeams())
         return folders;
     for (const QJsonObject& team : teams_->teams(repository)) {
         SidebarTeam folder{
