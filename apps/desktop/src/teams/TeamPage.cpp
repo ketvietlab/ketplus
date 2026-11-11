@@ -139,17 +139,21 @@ void TeamPage::resizeEvent(QResizeEvent* event) {
         rebuild();
 }
 
-// The focused widget's own name, or its nearest named ancestor's: a kit control keeps the
-// focus on a part without a name. A decision's and a member's row carry their id.
+// The focused widget's own name, or its nearest named ancestor's and the part's place in it: a
+// kit control keeps the focus on a part without a name. A decision's and a member's row carry
+// their id.
 TeamPage::FocusPlace TeamPage::focusPlace() const {
     QWidget* focused = content_ ? window()->focusWidget() : nullptr;
     if (!focused || !content_->isAncestorOf(focused))
         return {};
+    QWidget* const part = focused;
     while (focused != content_ && focused->objectName().isEmpty())
         focused = focused->parentWidget();
     if (focused == content_)
         return {};
     FocusPlace place{.name = focused->objectName()};
+    if (part != focused)
+        place.part = static_cast<int>(focused->findChildren<QWidget*>().indexOf(part));
     const QWidget* scope = content_;
     for (QWidget* above = focused->parentWidget(); above != content_; above = above->parentWidget())
         if (above->objectName().contains(QLatin1Char('_'))) {
@@ -169,9 +173,17 @@ void TeamPage::restoreFocus(const FocusPlace& place) {
     if (!scope)
         return;
     const QList<QWidget*> same = scope->findChildren<QWidget*>(place.name);
-    if (!same.isEmpty())
-        same.at(qMin(place.index, static_cast<int>(same.size()) - 1))
-            ->setFocus(Qt::OtherFocusReason);
+    if (same.isEmpty())
+        return;
+    QWidget* target = same.at(qMin(place.index, static_cast<int>(same.size()) - 1));
+    // The same part of the rebuilt widget, when it still takes the keyboard there: a banner
+    // does not act on a key, its button does.
+    if (place.part >= 0) {
+        const QList<QWidget*> parts = target->findChildren<QWidget*>();
+        if (place.part < parts.size() && parts.at(place.part)->focusPolicy() != Qt::NoFocus)
+            target = parts.at(place.part);
+    }
+    target->setFocus(Qt::OtherFocusReason);
 }
 
 void TeamPage::rebuild() {
@@ -381,7 +393,9 @@ void TeamPage::buildBanners(const QJsonObject& team) {
             ket::BannerTone::Warning, tr("Automatic turns are paused"),
             pausedReason(team.value(QStringLiteral("paused_reason")).toString()), column_);
         banner->setObjectName(QStringLiteral("teamPausedBanner"));
-        connect(banner->setAction(tr("Resume")), &QAbstractButton::clicked, this, [this] {
+        QAbstractButton* resume = banner->setAction(tr("Resume"));
+        resume->setObjectName(QStringLiteral("teamPausedResume"));
+        connect(resume, &QAbstractButton::clicked, this, [this] {
             send(QStringLiteral("team.update"), {{QStringLiteral("paused"), false}});
         });
         layout_->addWidget(banner);
@@ -395,7 +409,9 @@ void TeamPage::buildBanners(const QJsonObject& team) {
                 .arg(developers),
             column_);
         banner->setObjectName(QStringLiteral("teamQueueBanner"));
-        connect(banner->setAction(tr("New team…")), &QAbstractButton::clicked, this,
+        QAbstractButton* another = banner->setAction(tr("New team…"));
+        another->setObjectName(QStringLiteral("teamQueueNewTeam"));
+        connect(another, &QAbstractButton::clicked, this,
                 [this, repository = team.value(QStringLiteral("repository")).toString()] {
                     emit newTeamRequested(repository);
                 });

@@ -600,6 +600,38 @@ class TeamPageTest final : public QObject {
         QCOMPARE(focused->parentWidget()->objectName(), row);
         QCOMPARE(page.tasksTable()->item(page.tasksTable()->currentRow(), 0)->text(), task);
     }
+
+    // A banner's button keeps the keyboard through a live update: Space still resumes the team.
+    // So does a part without a name, which is found again by its place in the banner.
+    void aLiveUpdateKeepsTheFocusOnABannersButton() {
+        start(fixture(1, 4, true, false));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        for (const bool named : {true, false}) {
+            const QPointer<QAbstractButton> before(
+                page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            QCOMPARE(before->objectName(), QStringLiteral("teamPausedResume"));
+            if (!named)
+                before->setObjectName(QString());
+            before->setFocus();
+            QCOMPARE(page.window()->focusWidget(), before.data());
+            QJsonObject next = fixture(named ? 5 : 6, 4, true, false);
+            next.insert("name", named ? "Shop 2" : "Shop 3");
+            teams_->applyEvent("team.changed", {{"team", next}});
+            QApplication::processEvents();
+            QVERIFY(!before); // the content was rebuilt
+            QWidget* focused = page.window()->focusWidget();
+            QVERIFY(focused);
+            QCOMPARE(focused, page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            const int sent = daemon_.count("team.update");
+            QTest::keyClick(focused, Qt::Key_Space);
+            QCOMPARE(daemon_.count("team.update"), sent + 1);
+            QCOMPARE(daemon_.last("team.update").value("paused").toBool(true), false);
+        }
+        QVERIFY(page.findChild<QAbstractButton*>("teamQueueNewTeam"));
+    }
 };
 
 QTEST_MAIN(TeamPageTest)

@@ -64,6 +64,8 @@ class TeamPage final : public QWidget {
         QString name;
         QString row;
         int index{-1};
+        // Where the focus was inside the named widget, when it was on a part without a name.
+        int part{-1};
     };
     [[nodiscard]] FocusPlace focusPlace() const;
     void restoreFocus(const FocusPlace& place);
