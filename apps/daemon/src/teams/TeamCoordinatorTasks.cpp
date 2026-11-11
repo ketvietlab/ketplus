@@ -393,6 +393,30 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                                    {QStringLiteral("body"),
                                     QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
                                         .arg(taskId, member->name, reason.trimmed())}});
+    // The previous owner must not stay in a worktree that is someone else's now: it goes to
+    // the task it still works on, or back to the repository.
+    if (!previous.isEmpty() && team->member(previous)) {
+        const Task handed = *team->task(taskId);
+        QString home = team->repository;
+        for (const Task& other : team->tasks)
+            if (other.owner == previous && other.state == state::inProgress &&
+                !other.worktree.isEmpty())
+                home = other.worktree;
+        if (!handed.worktree.isEmpty() && home != handed.worktree) {
+            if (const QString error = host_->pointConversationAt(previous, home);
+                !error.isEmpty()) {
+                Team* stored = mutableTeam(teamId);
+                const Team unmoved = *stored;
+                addHistory(*stored->task(taskId), QStringLiteral("daemon"),
+                           QStringLiteral("worktree"),
+                           QStringLiteral("The previous owner's conversation was not moved out "
+                                          "of %1: %2")
+                               .arg(handed.worktree, error));
+                (void)commit(*stored, unmoved, QStringLiteral("daemon"), {});
+            }
+            team = mutableTeam(teamId);
+        }
+    }
     // A task held for the first plan stays held with its new owner.
     if (!team->task(taskId)->assignmentHeld)
         deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());

@@ -331,6 +331,8 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(moved.branch, QStringLiteral("team/%1/T-1").arg(team_));
         QCOMPARE(moved.state, state::inProgress);
         QCOMPARE(host_.pointed.value("dev2"), QStringLiteral("/wt/T-1"));
+        // The previous owner leaves the worktree that is not its own any more.
+        QCOMPARE(host_.pointed.value("dev1"), QStringLiteral("/repo"));
         QCOMPARE(host_.messages.size(), 1);
         QVERIFY(host_.messages.first().body.contains("handed over"));
         QVERIFY(host_.messages.first().body.contains("History:"));
