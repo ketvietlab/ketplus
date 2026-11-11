@@ -60,8 +60,10 @@ std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Ta
             ? output(task.worktree, {QStringLiteral("log"), QStringLiteral("--first-parent"),
                                      QStringLiteral("--no-merges"), QStringLiteral("--format="),
                                      QStringLiteral("--name-only"), QStringLiteral("--no-renames"),
+                                     QStringLiteral("-z"), QStringLiteral("--end-of-options"),
                                      QStringLiteral("%1..HEAD").arg(task.baseCommit)})
             : output(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
+                                     QStringLiteral("-z"), QStringLiteral("--end-of-options"),
                                      QStringLiteral("%1...HEAD").arg(team.integrationBranch)});
     const auto pending =
         output(task.worktree,
@@ -69,7 +71,8 @@ std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Ta
                 QStringLiteral("-uall"), QStringLiteral("--no-renames")});
     if (!committed || !pending)
         return std::nullopt;
-    QStringList paths = committed->split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    // -z: a path is spelled as it is, not quoted; --end-of-options: a branch is never an option.
+    QStringList paths = committed->split(QChar(u'\0'), Qt::SkipEmptyParts);
     for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
         if (entry.size() > 3)
             paths.append(entry.mid(3));
@@ -85,7 +88,8 @@ std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
     process.setWorkingDirectory(team.repository);
     process.start(QStringLiteral("git"),
                   {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
-                   QStringLiteral("--is-ancestor"), task.branch, team.integrationBranch});
+                   QStringLiteral("--is-ancestor"), QStringLiteral("--end-of-options"), task.branch,
+                   team.integrationBranch});
     if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
         return std::nullopt;
     if (process.exitCode() == 0 || process.exitCode() == 1)
@@ -99,13 +103,14 @@ std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Ta
     const QString range = QStringLiteral("%1...%2").arg(
         team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
     const auto diff = output(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
-                                         QStringLiteral("--no-ext-diff"), range});
+                                         QStringLiteral("--no-ext-diff"),
+                                         QStringLiteral("--end-of-options"), range});
     const auto names =
-        output(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
+        output(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"),
+                           QStringLiteral("-z"), QStringLiteral("--end-of-options"), range});
     if (!diff || !names)
         return std::nullopt;
-    return teams::TaskDiff{.diff = *diff,
-                           .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+    return teams::TaskDiff{.diff = *diff, .files = names->split(QChar(u'\0'), Qt::SkipEmptyParts)};
 }
 
 // ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
@@ -113,9 +118,9 @@ std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Ta
 teams::WorktreeAnswer createWorktree(const teams::Team& team, const teams::Task& task) {
     const QString base =
         team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
-    const auto commit =
-        output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                                 base + QStringLiteral("^{commit}")});
+    const auto commit = output(
+        team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                          QStringLiteral("--end-of-options"), base + QStringLiteral("^{commit}")});
     if (!commit)
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The integration branch %1 does not exist in %2.")

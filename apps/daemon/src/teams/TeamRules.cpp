@@ -69,6 +69,28 @@ std::optional<TeamError> validName(const QString& name, const QString& what) {
     return std::nullopt;
 }
 
+std::optional<TeamError> validBranch(const QString& branch) {
+    if (branch.isEmpty())
+        return std::nullopt;
+    const auto invalid = [&branch] {
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("\"%1\" is not a branch name.").arg(branch));
+    };
+    if (branch.startsWith(QLatin1Char('-')) || branch == QStringLiteral("@") ||
+        branch.endsWith(QLatin1Char('.')) || branch.contains(QStringLiteral("..")) ||
+        branch.contains(QStringLiteral("@{")) || branch.toUtf8().size() > 255)
+        return invalid();
+    for (const QChar character : branch)
+        if (character.category() == QChar::Other_Control || character == QLatin1Char(' ') ||
+            QStringLiteral("~^:?*[\\").contains(character))
+            return invalid();
+    for (const QString& component : branch.split(QLatin1Char('/')))
+        if (component.isEmpty() || component.startsWith(QLatin1Char('.')) ||
+            component.endsWith(QStringLiteral(".lock")))
+            return invalid();
+    return std::nullopt;
+}
+
 std::optional<TeamError> canCreate(const Team& team, const QList<Candidate>& candidates) {
     if (auto invalid = validName(team.name, QStringLiteral("The team")))
         return invalid;

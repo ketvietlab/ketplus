@@ -317,9 +317,22 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     }
     if (changes.contains(QStringLiteral("goal")))
         team->goal = changes.value(QStringLiteral("goal")).toString().trimmed().left(4000);
-    if (changes.contains(QStringLiteral("integration_branch")))
-        team->integrationBranch =
+    if (changes.contains(QStringLiteral("integration_branch"))) {
+        const QString branch =
             changes.value(QStringLiteral("integration_branch")).toString().trimmed();
+        if (auto invalid = rules::validBranch(branch)) {
+            *team = before;
+            return {.error = invalid};
+        }
+        // Lanes and merges are checked against it: a team that has one changes it, not drops it.
+        if (branch.isEmpty() && !team->integrationBranch.isEmpty()) {
+            *team = before;
+            return {.error = TeamError{QStringLiteral("invalid_payload"),
+                                       QStringLiteral("The integration branch can be changed, "
+                                                      "not removed.")}};
+        }
+        team->integrationBranch = branch;
+    }
     if (changes.contains(QStringLiteral("merge_policy"))) {
         const QString policy = changes.value(QStringLiteral("merge_policy")).toString();
         if (policy != role::leader && policy != QStringLiteral("user")) {
@@ -644,6 +657,20 @@ std::optional<TeamError> TeamCoordinator::archiveRefusal(const QString& sessionI
     const Team* team = teamOf(sessionId);
     if (!team)
         return std::nullopt;
+    // A developer can be removed; the leader and the reviewer stay as long as the team does.
+    const Member* member = team->member(sessionId);
+    const QString role = member ? member->role : QString{};
+    if (role == role::leader)
+        return TeamError{QStringLiteral("team_member"),
+                         QStringLiteral("This conversation leads team %1, and a team keeps its "
+                                        "leader. Delete the team before archiving it.")
+                             .arg(team->name)};
+    if (role == role::reviewer)
+        return TeamError{QStringLiteral("team_member"),
+                         QStringLiteral("This conversation reviews for team %1, and a team keeps "
+                                        "its reviewer. Give the team another reviewer, or delete "
+                                        "it, before archiving this conversation.")
+                             .arg(team->name)};
     return TeamError{QStringLiteral("team_member"),
                      QStringLiteral("This conversation is on team %1. Remove it from the team "
                                     "before archiving it.")
