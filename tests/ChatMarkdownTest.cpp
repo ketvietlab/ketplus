@@ -123,11 +123,23 @@ class ChatMarkdownTest final : public QObject {
         QTest::newRow("open fence") << "~~~\n" + url << "~~~\n" + url;
         QTest::newRow("indented code") << "Text\n\n    " + url << "Text\n\n    " + url;
         QTest::newRow("explicit link") << "[Open](" + url + ")" << "[Open](" + url + ")";
+        // #160: a remote image is a link to it; a local one stays an image.
+        QTest::newRow("remote image") << "![chart](" + url + ")" << "[chart](" + url + ")";
+        QTest::newRow("remote image in angle brackets")
+            << "See ![chart](<" + url + ">)." << "See [chart](<" + url + ">).";
+        QTest::newRow("local image")
+            << QString("![shot](file:///tmp/a.png) http://example.com/x")
+            << QString("![shot](file:///tmp/a.png) <http://example.com/x>");
+        QTest::newRow("relative image") << QString("![shot](docs/a.png) http://example.com/x")
+                                        << QString("![shot](docs/a.png) <http://example.com/x>");
+        // An escaped raw tag right after a URL ends the URL, so the autolink closes.
+        QTest::newRow("url before escaped tag")
+            << QString("<style>@import url(http://example.com/t.css);</style> after")
+            << QString("\\<style>@import url(<http://example.com/t.css>);\\</style> after");
         QTest::newRow("url label")
             << '[' + url + "](https://example.com)" << '[' + url + "](https://example.com)";
         QTest::newRow("reference label") << '[' + url + "][ref]" << '[' + url + "][ref]";
         QTest::newRow("reference definition") << "[ref]: " + url << "[ref]: " + url;
-        QTest::newRow("image") << "![image](" + url + ")" << "![image](" + url + ")";
         QTest::newRow("autolink") << linked << linked;
         QTest::newRow("bold") << "**" + url + "**" << "**" + linked + "**";
         QTest::newRow("italic") << '_' + url + '_' << '_' + linked + '_';

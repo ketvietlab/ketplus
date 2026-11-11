@@ -28,6 +28,8 @@ class FakeHost final : public TeamHostPort {
                             .baseCommit = QStringLiteral("base")};
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
+        if (!pointError.isEmpty())
+            return pointError;
         pointed.insert(sessionId, worktree);
         return {};
     }
@@ -55,6 +57,7 @@ class FakeHost final : public TeamHostPort {
 
     QHash<QString, TeamConversation> conversations;
     QHash<QString, QString> pointed;
+    QString pointError;
     QSet<QString> dirty;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
@@ -326,6 +329,22 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(host_.notes.first().first, QStringLiteral("dev1"));
         QCOMPARE(moved.history.last().data.value("reason").toString(),
                  QStringLiteral("Dev 1 is on the API"));
+    }
+
+    void assignmentIsDeliveredWhenTheConversationCannotBeMoved() {
+        // Several tasks, so that recording the failure reallocates the stored list.
+        for (int index = 0; index < 8; ++index)
+            (void)task(QStringLiteral("Filler %1").arg(index));
+        const QString id = task("Cart");
+        host_.pointError = QStringLiteral("The conversation is running a turn.");
+        host_.messages.clear();
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QCOMPARE(host_.messages.size(), 1);
+        QCOMPARE(host_.messages.first().toSession, QStringLiteral("dev1"));
+        QCOMPARE(host_.messages.first().taskId, id);
+        QVERIFY(host_.messages.first().body.contains(QStringLiteral("\"Cart\"")));
+        QVERIFY(get(id).history.last().text.contains("was not moved"));
+        QVERIFY(!host_.pointed.contains("dev1"));
     }
 
     void removingTheOwnerUnassignsAndKeepsTheBranchAndHistory() {

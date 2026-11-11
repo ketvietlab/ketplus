@@ -152,14 +152,14 @@ void AgentSessionManager::startTurn(const SessionPtr& session) {
     session->deferredAgentOrder.clear();
     session->explicitFinalInTurn = false;
     updateState(session, QStringLiteral("Thinking…"), true);
-    QJsonObject params{{QStringLiteral("threadId"), session->threadId},
-                       {QStringLiteral("cwd"), session->path},
-                       {QStringLiteral("approvalPolicy"), QStringLiteral("never")},
-                       {QStringLiteral("input"), std::exchange(session->pendingInput, {})},
-                       // Daemon-only: the transcript shows this, not the wrapped input text.
-                       {QStringLiteral("displayText"), prompt},
-                       {QStringLiteral("clientMessageId"),
-                        std::exchange(session->pendingClientMessageId, {})}};
+    QJsonObject params{
+        {QStringLiteral("threadId"), session->threadId},
+        {QStringLiteral("cwd"), session->path},
+        {QStringLiteral("approvalPolicy"), QStringLiteral("never")},
+        {QStringLiteral("input"), std::exchange(session->pendingInput, {})},
+        // Daemon-only: the transcript shows this, not the wrapped input text.
+        {QStringLiteral("displayText"), prompt},
+        {QStringLiteral("clientMessageId"), std::exchange(session->pendingClientMessageId, {})}};
     const auto permissionParams =
         CodexAppServer::permissionParams(session->options.value("permission").toString(), true);
     for (auto it = permissionParams.begin(); it != permissionParams.end(); ++it)
@@ -188,6 +188,8 @@ void AgentSessionManager::startTurn(const SessionPtr& session) {
                                             .toString();
                       if (session->customTitle)
                           syncConversationTitle(session);
+                      // The daemon creates the conversation with its first turn.
+                      sendStartTags(session);
                       if (session->cancelRequested) {
                           cancelSession(session);
                       }
