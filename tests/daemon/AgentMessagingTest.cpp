@@ -16,6 +16,8 @@
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -188,6 +190,59 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(!fixture.host->handleCommand(request("session.list"), "d").isEmpty());
         const QJsonObject inbox = fixture.agents(sender, "agents.inbox");
         QCOMPARE(inbox.value("messages").toArray().size(), 2);
+    }
+
+    // A runtime.error inside a turn that goes on ends nothing, also when the journal takes
+    // it late and the conversation is idle by then: the answer still reaches the sender.
+    void anErrorInsideATurnDoesNotFailItsRequest_data() {
+        QTest::addColumn<bool>("journaledLate");
+        QTest::newRow("at once") << false;
+        QTest::newRow("journaled late") << true;
+    }
+
+    void anErrorInsideATurnDoesNotFailItsRequest() {
+        QFETCH(bool, journaledLate);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("codex", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        const QJsonObject sent = fixture.agents(sender, "agents.send",
+                                                {{"to", "#" + fixture.number(receiver)},
+                                                 {"text", "please hang"},
+                                                 {"expect_reply", true}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        const QString id = sent.value("message_id").toString();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage(id)->state,
+                                  QStringLiteral("delivered"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(logText(fixture.claudeLog).contains("please hang"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.started"), 2, 5000);
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", "late-error");
+            database.setDatabaseName(fixture.directory.filePath("journal.sqlite3"));
+            QVERIFY(database.open());
+            QSqlQuery query(database);
+            if (journaledLate)
+                QVERIFY(query.exec(
+                    "CREATE TRIGGER late_error BEFORE INSERT ON events WHEN NEW.event_type = "
+                    "'runtime.error' BEGIN SELECT RAISE(ABORT, 'not now'); END"));
+            fixture.claude->canonicalEvent(receiver, "runtime.error",
+                                           {{"message", "a tool failed; the turn goes on"}});
+            QCOMPARE(fixture.journal->agentMessage(id)->state, QStringLiteral("delivered"));
+            fixture.claude->canonicalEvent(receiver, "item.completed",
+                                           {{"item_id", "late-answer"},
+                                            {"item_type", "agentMessage"},
+                                            {"text", "Recovered answer"}});
+            fixture.claude->canonicalEvent(receiver, "turn.completed", {{"status", "completed"}});
+            if (journaledLate)
+                QVERIFY(query.exec("DROP TRIGGER late_error"));
+            database.close();
+        }
+        QSqlDatabase::removeDatabase("late-error");
+        QTRY_VERIFY_WITH_TIMEOUT(
+            fixture.journal->agentMessage(id)->state != QStringLiteral("delivered"), 5000);
+        QCOMPARE(fixture.journal->agentMessage(id)->state, QStringLiteral("answered"));
     }
 
     void busyReceiverGetsMessagesWhenItsTurnEnds() {

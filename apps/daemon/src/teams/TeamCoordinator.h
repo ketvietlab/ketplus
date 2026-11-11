@@ -47,7 +47,8 @@ struct TeamMessage final {
     QString toSession;
     // The member it comes from, or empty for the team itself (a digest, a decision).
     QString fromSession;
-    // "assignment", "digest", "review", "decision", "nudge", "stall" or "team".
+    // "assignment", "digest", "review", "decision", "nudge", "stall", "wait",
+    // "message_failed" or "team".
     QString kind;
     QString taskId;
     QString body;
@@ -206,6 +207,20 @@ class TeamCoordinator : public QObject {
     static constexpr int maxStallWakes = 2;
     void setStallPeriod(int milliseconds) { stallPeriod_ = milliseconds; }
     void checkStall(qint64 teamId);
+    // ADR 0114 §8 (TeamCoordinatorWaits.cpp). A leader or developer that waits for something
+    // outside the team says so and is woken after `minutes` to check again. Until then the
+    // watchdog leaves it, and the team it keeps waiting, alone. Kept in memory: after a
+    // restart the watchdog takes over.
+    static constexpr int maxWaitMinutes = 60;
+    TeamResult wait(qint64 teamId, const QString& sessionId, int minutes, const QString& reason,
+                    const QString& taskId = {});
+    [[nodiscard]] bool isWaiting(const QString& sessionId) const {
+        return waits_.contains(sessionId);
+    }
+    void setWaitMinuteForTesting(int milliseconds) { waitMinuteMs_ = milliseconds; }
+    // A message the member sent to `peer`, a conversation outside its team, failed or was
+    // never answered (`reason`, the broker's): the member is woken to decide what to do.
+    void outsideMessageFailed(const QString& sessionId, const QString& peer, const QString& reason);
     // ADR 0114 §3 (TeamCoordinatorDecisions.cpp). Only the leader raises a decision; only the
     // user answers one, with one of its choices or free text.
     TeamResult raiseQuestion(qint64 teamId, const QJsonObject& draft, const QString& actor,
@@ -323,6 +338,17 @@ class TeamCoordinator : public QObject {
     QHash<qint64, QTimer*> stallTimers_;
     QHash<qint64, Stall> stalls_;
     int stallPeriod_{defaultStallPeriodMs};
+
+    struct Wait final {
+        QTimer* timer{nullptr};
+        QString reason;
+        QString taskId;
+    };
+    void cancelWait(const QString& sessionId);
+    void waitEnded(const QString& sessionId);
+    // By member session.
+    QHash<QString, Wait> waits_;
+    int waitMinuteMs_{60 * 1000};
 };
 
 } // namespace teams
