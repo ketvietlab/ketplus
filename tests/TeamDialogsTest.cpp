@@ -2,8 +2,11 @@
 // the refused create, the Claude-only reviewer and the small window, against a fake daemon.
 // Run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamDialogs.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
+#include "KetFieldRow.h"
+#include "KetProfile.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
@@ -75,7 +78,10 @@ class TeamDialogsTest final : public QObject {
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
         ket::Style::install(*qApp);
+        ket::Profile::setCurrent(ket::Profile::ketPlus());
     }
+
+    void cleanup() { ket::Appearance::instance().setZoom(1.0); }
 
     void init() {
         daemon_ = {};
@@ -276,6 +282,91 @@ class TeamDialogsTest final : public QObject {
         QTRY_VERIFY(roomyForm->developerCount()->geometry().right() <
                     roomyForm->agentButton("developer")->geometry().left());
         roomy->reject();
+    }
+
+    // The same at 125 % and 150 %, where the card is narrower still and the controls wider:
+    // opened narrow, zoomed while open, and while the window is resized. Every control ends
+    // inside the form, and the form inside the card.
+    void theFormFitsANarrowCardAtEveryZoom() {
+        const QVariantList longNames{
+            model("codex", "gpt-6.1-super", "GPT-6.1-Super-Long-Context (recommended)", true),
+            model("claude", "default", "Default (recommended) with a very long name", true)};
+        const auto misfit = [](ket::Dialog* dialog, const QString& when) -> QString {
+            auto* scroll = dialog->findChild<QScrollArea*>("teamDialogScroll");
+            auto* form = dialog->findChild<NewTeamForm*>();
+            QString widest;
+            for (const QWidget* child : form->findChildren<QWidget*>())
+                if (child->minimumSizeHint().width() >= scroll->viewport()->width() ||
+                    child->minimumWidth() >= scroll->viewport()->width())
+                    widest += QStringLiteral(" %1/%2=%3")
+                                  .arg(QString::fromLatin1(child->metaObject()->className()),
+                                       child->objectName())
+                                  .arg(child->minimumSizeHint().width());
+            if (form->width() > scroll->viewport()->width())
+                return (QStringLiteral("%1: form %2 > viewport %3 (needs %4, scroll %5, card %6)") +
+                        widest)
+                    .arg(when)
+                    .arg(form->width())
+                    .arg(scroll->viewport()->width())
+                    .arg(form->minimumSizeHint().width())
+                    .arg(scroll->width())
+                    .arg(dialog->card()->width());
+            for (const ket::FieldRow* row : form->findChildren<ket::FieldRow*>()) {
+                const QWidget* control = row->control();
+                if (control->mapTo(form, control->rect().bottomRight()).x() >= form->width())
+                    return QStringLiteral("%1: a control ends outside the form").arg(when);
+            }
+            const QRect card = dialog->card()->geometry();
+            if (card.left() < 0 || card.right() >= dialog->parentWidget()->width())
+                return QStringLiteral("%1: the card leaves the window").arg(when);
+            return {};
+        };
+        const auto settled = [&](ket::Dialog* dialog, const QString& when) {
+            QString problem;
+            // The card is placed again after a resize or a zoom; give it a moment.
+            for (int attempt = 0; attempt < 20; ++attempt) {
+                QTest::qWait(25);
+                problem = misfit(dialog, when);
+                if (problem.isEmpty())
+                    break;
+            }
+            return problem;
+        };
+        QStringList problems;
+        for (const qreal zoom : {1.0, 1.25, 1.5}) {
+            ket::Appearance::instance().setZoom(zoom);
+            QWidget window;
+            window.resize(480, 640);
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", longNames);
+            problems << settled(dialog, QStringLiteral("opened at %1").arg(zoom));
+            for (const int width : {1024, 480, 640, 480}) {
+                window.resize(width, 640);
+                problems << settled(dialog, QStringLiteral("%1 px at %2").arg(width).arg(zoom));
+            }
+            dialog->reject();
+        }
+        ket::Appearance::instance().setZoom(1.0);
+        QWidget window;
+        window.resize(480, 640);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
+        for (const qreal zoom : {1.25, 1.5, 1.25, 1.0}) {
+            ket::Appearance::instance().setZoom(zoom);
+            problems << settled(dialog, QStringLiteral("zoomed to %1 while open").arg(zoom));
+        }
+        // With room again the labels go back beside their controls.
+        window.resize(1024, 640);
+        auto* form = dialog->findChild<NewTeamForm*>();
+        QTRY_VERIFY(form->developerCount()->geometry().right() <
+                    form->agentButton("developer")->geometry().left());
+        for (const ket::FieldRow* row : form->findChildren<ket::FieldRow*>())
+            QVERIFY(!row->isStacked());
+        dialog->reject();
+        problems.removeAll(QString{});
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));
     }
 
     // A long model name elides inside its button instead of widening the form past the card.

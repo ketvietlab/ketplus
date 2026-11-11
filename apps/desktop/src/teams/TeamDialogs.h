@@ -68,6 +68,8 @@ class NewTeamForm final : public QWidget {
     void describePermissions();
     // The form follows the width of `viewport`, the scroll area it is shown in.
     void follow(QWidget* viewport);
+    void fit();
+    void setCompact(bool compact);
 
     TeamDirectory* teams_;
     QString repository_;
@@ -88,11 +90,11 @@ class NewTeamForm final : public QWidget {
     QHash<QString, ket::FieldRow*> rows_;
     // By role, or "name" and "" for the dialog.
     QHash<QString, QString> errors_;
-    // The rows that hold two controls side by side, and the width they need that way.
+    // The rows that hold two controls side by side.
     QBoxLayout* mergeRow_{nullptr};
     QBoxLayout* developerRow_{nullptr};
     QWidget* viewport_{nullptr};
-    int sideBySideWidth_{0};
+    bool fitting_{false};
 };
 
 // #465: one more developer, never an existing conversation (those join by drag or menu).

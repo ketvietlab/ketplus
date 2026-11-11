@@ -1,5 +1,6 @@
 #include "teams/TeamDialogs.h"
 
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
@@ -209,6 +210,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     }
     requirements_->setObjectName(QStringLiteral("teamLeaderWritesRequirements"));
     requirements_->setChecked(true);
+    requirements_->setWordWrap(true);
     layout->addWidget(requirements_);
     if (defaults.singleProvider)
         showNote(hint_, tr("Everything runs on one provider. A second provider gives a more "
@@ -348,26 +350,46 @@ void NewTeamForm::submit(std::function<void(const QJsonObject& team)> created) {
         });
 }
 
-// A narrow window makes the card narrower than the form's two-control rows need. They
-// then stack their controls, so the form is as wide as the card and no label is cut off.
+// A narrow window, or a large zoom, makes the card narrower than the form needs with its
+// labels beside the controls. The form is then compact: every label sits above its control
+// and the two rows that hold two controls stack them, so nothing is cut off at the card's
+// edge. Measured again whenever the card's width or the zoom changes.
 void NewTeamForm::follow(QWidget* viewport) {
     viewport_ = viewport;
     viewport->installEventFilter(this);
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, &NewTeamForm::fit,
+            Qt::QueuedConnection);
+    fit();
+}
+
+void NewTeamForm::setCompact(const bool compact) {
+    const auto direction = compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    mergeRow_->setDirection(direction);
+    developerRow_->setDirection(direction);
+    // Stacked, the count takes the row's width and may give some of its own up.
+    developers_->setExpanding(compact);
+    developers_->setMinimumWidth(compact ? developers_->sizeHint().width() * 3 / 4 : 0);
+    for (ket::FieldRow* row : findChildren<ket::FieldRow*>())
+        row->setStacked(compact);
+}
+
+void NewTeamForm::fit() {
+    if (!viewport_ || fitting_)
+        return;
+    fitting_ = true;
+    setCompact(false);
+    // The rows changed under the layout: without this it answers with the sizes it cached
+    // while they were stacked.
+    for (QWidget* child : findChildren<QWidget*>())
+        child->updateGeometry();
+    layout()->invalidate();
+    setCompact(viewport_->width() < layout()->minimumSize().width());
+    fitting_ = false;
 }
 
 bool NewTeamForm::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == viewport_ && event->type() == QEvent::Resize) {
-        if (mergeRow_->direction() == QBoxLayout::LeftToRight)
-            sideBySideWidth_ = minimumSizeHint().width();
-        const auto direction = viewport_->width() < sideBySideWidth_ ? QBoxLayout::TopToBottom
-                                                                     : QBoxLayout::LeftToRight;
-        mergeRow_->setDirection(direction);
-        developerRow_->setDirection(direction);
-        // Stacked, the count takes the row's width and may give some of its own up.
-        const bool stacked = direction == QBoxLayout::TopToBottom;
-        developers_->setExpanding(stacked);
-        developers_->setMinimumWidth(stacked ? developers_->sizeHint().width() * 3 / 4 : 0);
-    }
+    if (watched == viewport_ && event->type() == QEvent::Resize)
+        fit();
     return QWidget::eventFilter(watched, event);
 }
 
