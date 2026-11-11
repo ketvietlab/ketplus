@@ -550,6 +550,88 @@ class TeamPageTest final : public QObject {
         QApplication::processEvents();
         QCOMPARE(bar->value(), 40);
     }
+
+    void anotherTeamsChangeLeavesThePageAlone() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        const QPointer<QWidget> content(page.scrollArea()->widget());
+        QJsonObject other = fixture(9);
+        other.insert("id", "8");
+        other.insert("name", "Billing");
+        teams_->applyEvent("team.changed", {{"team", other}});
+        QApplication::processEvents();
+        QVERIFY(content);
+        QCOMPARE(page.scrollArea()->widget(), content.data());
+        // Its own change still rebuilds it.
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QVERIFY(page.scrollArea()->widget() != content.data());
+        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
+    }
+
+    void aLiveUpdateKeepsTheFocusAndTheCurrentTask() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        QVERIFY(page.tasksTable()->rowCount() > 0);
+        page.tasksTable()->setCurrentCell(0, 0);
+        const QString task = page.tasksTable()->item(0, 0)->text();
+        const QList<QAbstractButton*> open = page.findChildren<QAbstractButton*>("teamMemberOpen");
+        QVERIFY(open.size() > 1);
+        const QString row = open.last()->parentWidget()->objectName();
+        QVERIFY(row.startsWith("teamMember_"));
+        const QPointer<QAbstractButton> before(open.last());
+        before->setFocus();
+        QCOMPARE(page.window()->focusWidget(), open.last());
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QApplication::processEvents();
+        QVERIFY(!before); // the content was rebuilt
+        QWidget* focused = page.window()->focusWidget();
+        QVERIFY(focused);
+        QCOMPARE(focused->objectName(), QStringLiteral("teamMemberOpen"));
+        QCOMPARE(focused->parentWidget()->objectName(), row);
+        QCOMPARE(page.tasksTable()->item(page.tasksTable()->currentRow(), 0)->text(), task);
+    }
+
+    // A banner's button keeps the keyboard through a live update: Space still resumes the team.
+    // So does a part without a name, which is found again by its place in the banner.
+    void aLiveUpdateKeepsTheFocusOnABannersButton() {
+        start(fixture(1, 4, true, false));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        for (const bool named : {true, false}) {
+            const QPointer<QAbstractButton> before(
+                page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            QCOMPARE(before->objectName(), QStringLiteral("teamPausedResume"));
+            if (!named)
+                before->setObjectName(QString());
+            before->setFocus();
+            QCOMPARE(page.window()->focusWidget(), before.data());
+            QJsonObject next = fixture(named ? 5 : 6, 4, true, false);
+            next.insert("name", named ? "Shop 2" : "Shop 3");
+            teams_->applyEvent("team.changed", {{"team", next}});
+            QApplication::processEvents();
+            QVERIFY(!before); // the content was rebuilt
+            QWidget* focused = page.window()->focusWidget();
+            QVERIFY(focused);
+            QCOMPARE(focused, page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            const int sent = daemon_.count("team.update");
+            QTest::keyClick(focused, Qt::Key_Space);
+            QCOMPARE(daemon_.count("team.update"), sent + 1);
+            QCOMPARE(daemon_.last("team.update").value("paused").toBool(true), false);
+        }
+        QVERIFY(page.findChild<QAbstractButton*>("teamQueueNewTeam"));
+    }
 };
 
 QTEST_MAIN(TeamPageTest)

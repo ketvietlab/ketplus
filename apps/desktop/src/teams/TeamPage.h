@@ -59,6 +59,16 @@ class TeamPage final : public QWidget {
   private:
     void rebuild();
     void readUpdates();
+    // Where the keyboard focus is in the content, by object names: a rebuild puts it back.
+    struct FocusPlace final {
+        QString name;
+        QString row;
+        int index{-1};
+        // Where the focus was inside the named widget, when it was on a part without a name.
+        int part{-1};
+    };
+    [[nodiscard]] FocusPlace focusPlace() const;
+    void restoreFocus(const FocusPlace& place);
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
@@ -84,6 +94,8 @@ class TeamPage final : public QWidget {
     QString repository_;
     QString filter_;
     QJsonArray updates_;
+    // The team the content was built from; empty for the page without a team.
+    QJsonObject shown_;
     QScrollArea* scroll_;
     QWidget* content_{nullptr};
     // The column of sections, centred in content_.
