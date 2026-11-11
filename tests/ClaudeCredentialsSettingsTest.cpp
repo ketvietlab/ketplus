@@ -338,6 +338,12 @@ class ClaudeCredentialsSettingsTest : public QObject {
                     page.grab().save(QDir(directory).filePath(QStringLiteral("%1.png").arg(id))));
         }
         QVERIFY(seen.size() >= 7);
+        // As in the mock, Restore defaults is not offered where it would reset nothing.
+        for (const auto* id : {"account-devices", "storage", "updates"}) {
+            page.showSection(QString::fromLatin1(id));
+            QCoreApplication::processEvents();
+            QVERIFY2(page.findChild<QWidget*>("settingsWorkspaceFooter")->isHidden(), id);
+        }
     }
 };
 QTEST_MAIN(ClaudeCredentialsSettingsTest)

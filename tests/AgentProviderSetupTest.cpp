@@ -4,6 +4,8 @@
 #include "agent/ProviderRuntimeStatus.h"
 #include "agent/ProviderSetupGuide.h"
 
+#include "KetAppearance.h"
+
 #include <QJsonArray>
 #include <QQuickView>
 #include <QSignalSpy>
@@ -31,7 +33,7 @@ QJsonArray cursorMissing() {
                         {"readiness", QJsonObject{{"state", "missing"},
                                                   {"install_command",
                                                    "curl https://cursor.com/install -fsS | bash"},
-                                                  {"login_command", "cursor-agent login"}}}}};
+                                                  {"login_command", "agent login"}}}}};
 }
 
 QJsonArray cursorReady() {
@@ -314,4 +316,157 @@ void AgentWorkspaceViewTest::modelPickerOpensTheProviderSetupGuide() {
     }
     view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
     QTRY_VERIFY(!dialog->property("visible").toBool());
+}
+
+// #170 acceptance: every #169 state (the mock's `setup-*` fixtures) in light and dark, at
+// zoom 1 and 1.25. With KETPLUS_SETUP_MATRIX_DIR set, each is saved as
+// <state>-<light|dark>-<100|125>.png beside the mock's `--state=setup-<state>` capture.
+void AgentWorkspaceViewTest::everySetupStateRendersInBothThemesAndZooms() {
+    struct Composer {
+        const char* state;
+        const char* title;
+        QJsonObject provider;
+    };
+    const QList<Composer> composer{
+        {"cli-missing", "Cursor CLI isn't installed", cursorMissing().first().toObject()},
+        {"cli-outdated", "Codex CLI 0.139.0 is too old",
+         QJsonObject{{"provider", "codex"},
+                     {"name", "Codex CLI"},
+                     {"status", "outdated"},
+                     {"version", "0.139.0"},
+                     {"minimum", "0.154.0"},
+                     {"readiness",
+                      QJsonObject{{"state", "outdated"},
+                                  {"update_command", "npm install -g @openai/codex@latest"}}}}},
+        {"signed-out", "Codex CLI isn't signed in",
+         QJsonObject{{"provider", "codex"},
+                     {"name", "Codex CLI"},
+                     {"status", "supported"},
+                     {"readiness",
+                      QJsonObject{{"state", "signed_out"}, {"login_command", "codex login"}}}}},
+        {"claude-signed-out", "Claude needs a sign-in",
+         QJsonObject{{"provider", "claude"},
+                     {"status", "bundled"},
+                     {"readiness", QJsonObject{{"state", "signed_out"},
+                                               {"install_command",
+                                                "curl -fsSL https://claude.ai/install.sh | bash"},
+                                               {"login_command", "claude"}}}}},
+        {"sidecar-missing", "KetPlus can't find its Claude runtime",
+         QJsonObject{{"provider", "claude"},
+                     {"status", "missing"},
+                     {"readiness", QJsonObject{{"state", "runtime_missing"}}}}},
+    };
+    struct Turn {
+        const char* state;
+        const char* provider;
+        const char* code;
+        const char* message;
+        const char* title;
+    };
+    const QList<Turn> turns{
+        {"expired", "claude", "auth_expired",
+         "Failed to authenticate: OAuth session expired and could not be refreshed",
+         "Your Claude sign-in expired"},
+        {"key-rejected", "claude", "key_rejected", "Anthropic rejected this API key.",
+         "Anthropic rejected your API key"},
+        {"limit", "codex", "limit_reached", "You've hit your weekly limit",
+         "You've used your Codex limit"},
+        {"capacity", "codex", "model_capacity",
+         "Selected model is at capacity. Please try a different model.",
+         "GPT-5.6 Luna is at capacity"},
+        {"plan-blocked", "cursor", "plan_blocked",
+         "Cursor blocked this model for the Cursor Agent CLI account.",
+         "The Cursor CLI account can't use Composer 2"},
+    };
+    auto& appearance = ket::Appearance::instance();
+    const auto originalMode = appearance.mode();
+    const qreal originalZoom = appearance.zoom();
+    const auto restore = qScopeGuard([&] {
+        appearance.setMode(originalMode);
+        appearance.setZoom(originalZoom);
+    });
+    const QString directory = qEnvironmentVariable("KETPLUS_SETUP_MATRIX_DIR");
+    const auto models = [](const char* provider) {
+        const QString id = QString::fromLatin1(provider);
+        const QString label = id == "codex"    ? QStringLiteral("GPT-5.6 Luna")
+                              : id == "cursor" ? QStringLiteral("Composer 2")
+                                               : QStringLiteral("Opus 5.5");
+        return QVariantList{
+            QVariantMap{{"id", label}, {"displayName", label}, {"label", label}, {"provider", id}}};
+    };
+    for (const bool dark : {false, true}) {
+        for (const qreal zoom : {1.0, 1.25}) {
+            appearance.setMode(dark ? ket::Appearance::Mode::Dark : ket::Appearance::Mode::Light);
+            appearance.setZoom(zoom);
+            const QString suffix =
+                QStringLiteral("-%1-%2.png").arg(dark ? "dark" : "light").arg(qRound(zoom * 100));
+            for (const Composer& state : composer) {
+                ketplus::AgentWorkspaceView view;
+                view.applyTheme(testPalette());
+                view.setAgentAvailable(true);
+                view.resize(1440, 900);
+                view.show();
+                QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+                auto* root = view.quickView()->rootObject();
+                const QString provider = state.provider.value("provider").toString();
+                view.setModels(models(qPrintable(provider)));
+                selectProvider(root, provider);
+                view.setProviderRuntime(
+                    ketplus::ProviderRuntimeStatus::stateFrom(QJsonArray{state.provider}));
+                QQuickItem* title = nullptr;
+                QTRY_VERIFY((title = shownItem(root, "agentProviderSetupTitle")));
+                QCOMPARE(title->property("text").toString(), QString::fromUtf8(state.title));
+                if (!directory.isEmpty()) {
+                    QTest::qWait(150);
+                    QVERIFY(view.quickView()->grabWindow().save(directory + "/" + state.state +
+                                                                suffix));
+                }
+            }
+            for (const Turn& state : turns) {
+                ketplus::AgentWorkspaceView view;
+                view.applyTheme(testPalette());
+                view.setAgentAvailable(true);
+                view.resize(1440, 900);
+                view.show();
+                QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+                view.setTurnGuide([](const QString& provider, const QString& code,
+                                     const QString& message, const QString& model) {
+                    return ketplus::provider_setup::guide(
+                        QJsonObject{{"provider", provider},
+                                    {"readiness", QJsonObject{{"login_command",
+                                                               provider == "cursor"  ? "agent login"
+                                                               : provider == "codex" ? "codex login"
+                                                                                     : "claude"}}}},
+                        {{"code", code}, {"message", message}}, model);
+                });
+                auto* root = view.quickView()->rootObject();
+                view.setModels(models(state.provider));
+                selectProvider(root, state.provider);
+                const auto event = [](int cursor, const QString& type, const QJsonObject& payload) {
+                    return QJsonObject{{"cursor", cursor},
+                                       {"turn_sequence", 1},
+                                       {"event_type", type},
+                                       {"payload", payload}};
+                };
+                const QString model = models(state.provider).first().toMap().value("id").toString();
+                const QJsonArray failed{event(1, "user.message", {{"text", "Profile the sidebar"}}),
+                                        event(2, "runtime.error",
+                                              {{"code", state.code},
+                                               {"message", state.message},
+                                               {"provider", state.provider},
+                                               {"model", model}})};
+                view.resetMessages(
+                    ketplus::agent_message::daemonWindowMessages({{"events", failed}}),
+                    state.state);
+                QQuickItem* title = nullptr;
+                QTRY_VERIFY((title = shownItem(root, "agentProviderSetupTitle")));
+                QCOMPARE(title->property("text").toString(), QString::fromUtf8(state.title));
+                if (!directory.isEmpty()) {
+                    QTest::qWait(150);
+                    QVERIFY(view.quickView()->grabWindow().save(directory + "/" + state.state +
+                                                                suffix));
+                }
+            }
+        }
+    }
 }

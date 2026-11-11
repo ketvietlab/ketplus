@@ -85,7 +85,15 @@ void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     QCOMPARE(first->objectName(), QStringLiteral("conversationRoleTagItem"));
     QVERIFY(!first->isEnabled());
     QCOMPARE(first->property("text").toString(), QStringLiteral("Leader · Set by Shop"));
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 1);
+    // The role, the catalog, then the separator and Manage tags….
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 3);
+    // A catalog that changes while the conversation is a member stays below the role.
+    QVariantList catalog = view.tagCatalog();
+    catalog.append(QVariantMap{{"label", "Later"}, {"color", "#5b6b7f"}});
+    view.setTagCatalog(catalog);
+    QTRY_COMPARE(tagMenu->property("count").toInt(), catalog.size() + 3);
+    QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, first), Q_ARG(int, 0));
+    QCOMPARE(first->objectName(), QStringLiteral("conversationRoleTagItem"));
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
 
@@ -95,5 +103,5 @@ void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     QVERIFY(reviewer->property("text").toString().contains("@agent/1093"));
     QTRY_VERIFY(!findVisualItem(root, "conversationRoleTag"));
     QVERIFY(!menuItem(tagMenu, "conversationRoleTagItem"));
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size());
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
 }

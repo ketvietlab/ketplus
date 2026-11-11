@@ -8,6 +8,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/ConversationTags.h"
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QPointer>
@@ -1259,7 +1260,7 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
     QCOMPARE(filtered.count(), 1);
     QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
-    // The daemon stores tags, so Add tag waits for a conversation it knows.
+    // Add tag waits for a daemon that stores tags (before the first turn too, #429).
     auto* addTag = root->findChild<QQuickItem*>("headerAddTagButton");
     QVERIFY(addTag && !addTag->isVisible());
     view.setConversations(
@@ -1285,7 +1286,8 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         }
         return found;
     };
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size());
+    // The catalog, then a separator and Manage tags… (#429).
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
     QVERIFY(tagItem("conversationTagItem_UI")->property("checked").toBool());
     auto* review = tagItem("conversationTagItem_Review");
     QVERIFY(review && !review->property("checked").toBool());
@@ -1297,6 +1299,54 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(tagged.first().at(2).toBool());
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Manage tags… edits a draft of the catalog and saves it whole, with the renames.
+    QSignalSpy catalogSaved(&view, &ketplus::AgentWorkspaceView::tagCatalogSaveRequested);
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagItem("conversationManageTagsItem"), "triggered"));
+    auto* manage = root->findChild<QObject*>("manageTagsDialog");
+    QVERIFY(manage);
+    QTRY_VERIFY(manage->property("visible").toBool());
+    QCOMPARE(manage->property("draft").toList().size(), view.tagCatalog().size());
+    // KETPLUS_MANAGE_TAGS_CAPTURE=<file.png> saves it beside KetPlusMock --open=manage-tags.
+    if (const auto capture = qEnvironmentVariable("KETPLUS_MANAGE_TAGS_CAPTURE");
+        !capture.isEmpty()) {
+        QTest::qWait(300);
+        QVERIFY(root->window()->grabWindow().save(capture));
+    }
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 0),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Interface"))));
+    // Popups draw in the window's overlay, outside the header's item tree.
+    auto* save = findVisualItem(root->window()->contentItem(), "manageTagsSave");
+    QVERIFY(save && save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("interface"))));
+    QTRY_VERIFY(!save->property("enabled").toBool()); // the same name twice
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Speed"))));
+    QTRY_VERIFY(save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
+    QCOMPARE(catalogSaved.count(), 1);
+    const auto savedTags = catalogSaved.first().at(0).toList();
+    QCOMPARE(savedTags.size(), view.tagCatalog().size());
+    QCOMPARE(savedTags.first().toMap().value("label").toString(), QStringLiteral("Interface"));
+    const auto renames = catalogSaved.first().at(1).toMap();
+    QCOMPARE(renames.value(view.tagCatalog().first().toMap().value("label").toString()).toString(),
+             QStringLiteral("Interface"));
+    QCOMPARE(renames.size(), 2);
+    QTRY_VERIFY(!manage->property("visible").toBool());
+    // A catalog from the daemon replaces the menu's labels.
+    view.setTagCatalog({QVariantMap{{"label", "Release"}, {"color", "#d1453b"}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QTRY_COMPARE(tagMenu->property("count").toInt(), 3);
+    QVERIFY(tagItem("conversationTagItem_Release"));
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    view.setTagCatalog(ketplus::conversation_tags::catalog());
     // Another client may have stored the label in another case; it is the same tag.
     view.setConversations({QVariantMap{{"id", "ui"},
                                        {"active", true},
@@ -1342,11 +1392,22 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         QVERIFY2(action->x() > previousX, name);
         previousX = action->x();
     }
+    // As the mock: Changes opens the details pane's Changes tab, not Source Control.
     QSignalSpy navigated(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    QSignalSpy changes(&view, &ketplus::AgentWorkspaceView::changesRequested);
     QVERIFY(
         QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
-    QCOMPARE(navigated.count(), 1);
-    QCOMPARE(navigated.first().first().toString(), QStringLiteral("source-control"));
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(navigated.count(), 0);
+    // With the details pane open, its Open content menu replaces the three openers.
+    view.setDetailsOpen(true);
+    for (const char* name :
+         {"headerChangesButton", "headerTerminalButton", "headerWorkReportButton"})
+        QTRY_VERIFY2(!root->findChild<QQuickItem*>(name)->isVisible(), name);
+    QVERIFY(root->findChild<QQuickItem*>("headerAtlasButton") == nullptr ||
+            root->findChild<QQuickItem*>("headerAtlasButton")->isVisible());
+    view.setDetailsOpen(false);
+    QTRY_VERIFY(root->findChild<QQuickItem*>("headerChangesButton")->isVisible());
     QTRY_VERIFY(placeholder->isVisible());
     QTest::qWait(30);
     QRectF caret;
@@ -1830,7 +1891,7 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         if (format.fontFixedPitch()) {
             code += fragment.text();
             QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), qRound(recipe.codePixels));
-            // Code keeps the body colour; a rounded chip drawn behind it sets it apart.
+            // Code keeps the body colour and has no chip, as the kit and the mock draw it.
             QVERIFY(!format.hasProperty(QTextFormat::ForegroundBrush));
             QVERIFY(!format.hasProperty(QTextFormat::BackgroundBrush));
             QVERIFY(format.fontFixedPitch());
@@ -1841,48 +1902,15 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
     }
     QCOMPARE(code, QStringLiteral("inline_code"));
     QVERIFY(sawStrong);
-    // The space before the code and the code's last character are tracked by the
-    // chip padding, so the chip leaves the neighbouring text uncovered.
+    // No chip and no tracking around it: the text lays out as written.
     const int codeStart = document->toPlainText().indexOf("inline_code");
     QVERIFY(codeStart > 0);
-    for (const int position : {codeStart - 1, codeStart + 10}) {
+    for (const int position : {codeStart - 1, codeStart + 5, codeStart + 10}) {
         QTextCursor cursor(document);
         cursor.setPosition(position + 1);
-        QCOMPARE(cursor.charFormat().fontLetterSpacingType(), QFont::AbsoluteSpacing);
-        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 4.0);
+        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 0.0);
     }
-    QTextCursor inside(document);
-    inside.setPosition(codeStart + 5);
-    QVERIFY(inside.charFormat().fontLetterSpacing() == 0.0);
-
-    // One chip, hugging the code's glyphs with a little room on each side.
-    const auto chips = view.messageInlineCode(quickDocument);
-    QCOMPARE(chips.size(), 1);
-    const auto chip = chips.first().toMap();
-    QRectF before;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, before),
-                                      Q_ARG(int, codeStart - 1)));
-    QRectF first;
-    QRectF last;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, first),
-                                      Q_ARG(int, codeStart)));
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, last),
-                                      Q_ARG(int, codeStart + 11)));
-    QCOMPARE(chip.value("x").toDouble(), first.x() - 4);
-    // The right edge already includes the last character's tracking.
-    QCOMPARE(chip.value("width").toDouble(), last.x() - first.x() + 4);
-    QVERIFY(chip.value("x").toDouble() > before.x());
-    const double top = chip.value("y").toDouble() + body->property("topPadding").toDouble();
-    const double bottom = top + chip.value("height").toDouble();
-    // The chip wraps the smaller code glyphs plus padding, so it stays within a
-    // couple of pixels of the body text's own line box.
-    QVERIFY2(top >= first.y() - 2 && bottom <= first.y() + first.height() + 2,
-             qPrintable(QStringLiteral("chip %1..%2 outside line %3..%4")
-                            .arg(top)
-                            .arg(bottom)
-                            .arg(first.y())
-                            .arg(first.y() + first.height())));
-    QTRY_VERIFY(findVisualItem(body, "messageInlineCodeChip") != nullptr);
+    QVERIFY(findVisualItem(body, "messageInlineCodeChip") == nullptr);
     if (const auto capturePath = qEnvironmentVariable("KETPLUS_INLINE_CODE_CAPTURE");
         !capturePath.isEmpty()) {
         QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
@@ -1990,8 +2018,6 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     QTRY_VERIFY(!code.layout()->formats().isEmpty());
     QCOMPARE(code.layout()->formats().first().format.foreground().color(),
              ket::syntaxRecipe(dark ? ket::Theme::Dark : ket::Theme::Light).comment);
-    // Code blocks already sit in a frame; they get no inline chips.
-    QVERIFY(view.messageInlineCode(quickDocument).isEmpty());
     QCOMPARE(document->firstBlock().blockFormat().lineHeight(),
              bodyPixels * ket::Profile::current().readingLineHeight);
     QCOMPARE(code.blockFormat().lineHeight(),

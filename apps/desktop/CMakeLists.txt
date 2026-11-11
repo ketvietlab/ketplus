@@ -20,8 +20,12 @@ add_library(ketplus_desktop_support STATIC
     src/app/RepositoryRouter.h
     src/app/SpotlightDialog.cpp
     src/app/SpotlightDialog.h
+    src/app/WaitingBadge.cpp
+    src/app/WaitingBadge.h
     src/workspace/ActivityBar.cpp
     src/workspace/ActivityBarAppearance.cpp
+    src/workspace/SidebarControls.cpp
+    src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
@@ -126,6 +130,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowLayout.cpp
     src/app/MainWindowNavigation.cpp
     src/app/MainWindowPanels.cpp
+    src/app/MainWindowDetailActions.cpp
     src/app/MainWindowWorkReport.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
