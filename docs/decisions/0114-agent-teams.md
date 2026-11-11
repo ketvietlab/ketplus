@@ -175,7 +175,8 @@ clients only (`forbidden` otherwise; agents use the tools below):
 revision) and `team.removed` go to every local client.
 
 `team.create` takes `execution_policy` (`read-only`, `ask` or `full`; `ask` when absent):
-what the leader and the developers may do without asking. It is the execution policy of
+what the leader and the developers may do without asking. `full` needs
+`risk_acknowledged`, as it does for one conversation (`execution_policy_denied` otherwise). It is the execution policy of
 those conversations when the team starts them, at creation and for a developer added
 later; the user changes one member in its conversation. The reviewer is not in it: its
 review turns are read-only whatever its conversation's policy is (ADR 0067).

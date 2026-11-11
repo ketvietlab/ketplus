@@ -299,6 +299,11 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
              .contains(draft.executionPolicy))
         return failure(QStringLiteral("invalid_payload"),
                        QStringLiteral("Choose the team's permissions."));
+    // Full access needs the same acknowledgement as choosing it for one conversation.
+    if (draft.executionPolicy == QStringLiteral("full") &&
+        !payload.value(QStringLiteral("risk_acknowledged")).toBool())
+        return failure(QStringLiteral("execution_policy_denied"),
+                       QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));

@@ -136,6 +136,7 @@ class TeamDialogsTest final : public QObject {
         auto* permissions = form.findChild<ket::Select*>("teamPermissions");
         QCOMPARE(permissions->currentData().toString(), QStringLiteral("ask"));
         QCOMPARE(form.payload().value("execution_policy").toString(), QStringLiteral("ask"));
+        QVERIFY(!form.payload().value("risk_acknowledged").toBool());
         permissions->setCurrentIndex(2);
         QCOMPARE(permissions->currentText(), QStringLiteral("Full access"));
         form.developerCount()->setCurrentIndex(2);
@@ -153,6 +154,7 @@ class TeamDialogsTest final : public QObject {
         QCOMPARE(sent.value("integration_branch").toString(), QStringLiteral("team/shop"));
         QCOMPARE(sent.value("merge_policy").toString(), QStringLiteral("user"));
         QCOMPARE(sent.value("execution_policy").toString(), QStringLiteral("full"));
+        QVERIFY(sent.value("risk_acknowledged").toBool());
         QVERIFY(sent.value("leader_writes_requirements").toBool());
         const QJsonObject plan = sent.value("plan").toObject();
         QCOMPARE(plan.value("developers").toObject().value("count").toInt(), 3);

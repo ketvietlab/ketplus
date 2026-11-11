@@ -264,6 +264,9 @@ QJsonObject NewTeamForm::payload() const {
                                                             ? QStringLiteral("user")
                                                             : QStringLiteral("leader")},
                        {QStringLiteral("execution_policy"), permissions_->currentData().toString()},
+                       // Choosing Full access here is the acknowledgement, as in the composer.
+                       {QStringLiteral("risk_acknowledged"),
+                        permissions_->currentData().toString() == QStringLiteral("full")},
                        {QStringLiteral("leader_writes_requirements"), requirements_->isChecked()},
                        {QStringLiteral("plan"),
                         QJsonObject{{QStringLiteral("leader"), agents_.value(leader).json()},

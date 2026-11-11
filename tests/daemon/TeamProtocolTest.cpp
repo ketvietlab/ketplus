@@ -101,14 +101,19 @@ class TeamProtocolTest final : public QObject {
     void theTeamsPermissionsReachItsLeaderAndDevelopers() {
         Fixture fixture;
         QVERIFY(fixture.open());
-        const auto withPolicy = [&](const QString& policy) {
+        const auto withPolicy = [&](const QString& policy, const bool acknowledged = true) {
             return command(fixture, "team.create",
                            {{"repository", fixture.directory.path()},
                             {"name", "Checkout"},
                             {"integration_branch", "integration"},
                             {"execution_policy", policy},
+                            {"risk_acknowledged", acknowledged},
                             {"plan", plan()}});
         };
+        // Full access needs its acknowledgement, as it does for one conversation.
+        QCOMPARE(withPolicy("full", false).value("error_code").toString(),
+                 QStringLiteral("execution_policy_denied"));
+        QCOMPARE(sessions(fixture), 0);
         QCOMPARE(withPolicy("everything").value("error_code").toString(),
                  QStringLiteral("invalid_payload"));
         QCOMPARE(sessions(fixture), 0);
