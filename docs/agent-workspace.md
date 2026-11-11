@@ -387,6 +387,10 @@ current-window value.
   transcript's QML engine a network manager that serves only `file:`, `qrc:` and
   `data:` URLs and fails every other request before any lookup. An inline
   `![alt](https://…)` is shown as a link to the image (`chat_markdown::prepareForDisplay`).
+  A file path that names another machine (`file://host/share/a.png`, `//host/share/a.png`,
+  `\\host\share\a.png`) counts as remote: opening it would connect to that host, on Windows
+  over SMB with the account's credentials. `transcriptMayOpen` allows such a path only inside
+  the conversation's worktree, when that worktree is on the share itself.
   A reference-style remote image stays a broken image that is never fetched. An inline
   local photo is drawn as an 88 px thumbnail, and the document keeps it at that size
   for the screen's density instead of the full decode. Links take the kit's link
