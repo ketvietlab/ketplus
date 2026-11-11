@@ -728,6 +728,18 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     transcript->setProperty("keyboardIndex", 0);
     QTest::qWait(50);
     QVERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+
+    // A running session hides it on the last answer, which may still grow, but not once the
+    // answer's turn has its end line (#160): that answer is final.
+    view.setSessionState(QStringLiteral("Copy"), QStringLiteral("Working…"), true);
+    QTRY_VERIFY(!childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    view.appendMessage({{"kind", "tool"},
+                        {"category", "notice"},
+                        {"subtype", "turnEnd"},
+                        {"status", "completed"},
+                        {"title", "Completed"},
+                        {"messageKey", "copy-turn-end"}});
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
 }
 
 void AgentWorkspaceViewTest::listCodeBlocksStayInTheirItem() {

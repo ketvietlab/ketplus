@@ -42,12 +42,15 @@ Rectangle {
         if (task.status === "stopping")
             return "Stopping…";
         if (!live(task)) {
-            const outcome = task.reason === "worker_restart" ? "KetPlus restarted while it ran" : task.reason === "session_closed" ? "Ended with its conversation" : task.error || task.result || ({
-                    completed: "Completed",
-                    failed: "Failed",
-                    stopped: "Stopped"
-                })[task.status];
-            return outcome + " · " + elapsed(task);
+            // As the mock words a finished task: what it reported, else how long it took.
+            const reported = task.reason === "worker_restart" ? "KetPlus restarted while it ran" : task.reason === "session_closed" ? "Ended with its conversation" : task.error || task.result || "";
+            if (reported.length > 0)
+                return reported;
+            return ({
+                    completed: "Completed in ",
+                    failed: "Failed after ",
+                    stopped: "Stopped after "
+                })[task.status] + elapsed(task);
         }
         if (task.kind === "agent")
             return "Subagent · " + plural(task.tool_uses || 0, "tool") + " · " + tokens(task.total_tokens || 0) + " tokens · " + elapsed(task);

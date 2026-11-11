@@ -589,7 +589,8 @@ Flickable {
         return entry && entry.kind === "assistant" && entry.category !== "activity" && entry.subtype !== "question" && entry.subtype !== "approval";
     }
     // Where a turn's answer ends: 0 inside a turn, 1 the last agent text before the next
-    // request, 2 the last agent text of the transcript (its turn may still be running).
+    // request or its turn's end line, 2 the last agent text of the transcript (its turn may
+    // still be running).
     // `count` only makes bindings re-evaluate as rows arrive.
     function answerEndState(index, count) {
         if (!messageModel || !answerRow(messageModel.get(index)))
@@ -599,7 +600,7 @@ Flickable {
             // A steer joins the running turn; the answer goes on under it.
             if (entry.kind === "user" && entry.eventType === "turn.steered")
                 continue;
-            if (entry.kind === "user")
+            if (entry.kind === "user" || entry.subtype === "turnEnd")
                 return 1;
             if (answerRow(entry))
                 return 0;

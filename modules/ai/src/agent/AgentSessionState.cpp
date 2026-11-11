@@ -251,8 +251,10 @@ void AgentSessionManager::updateState(const SessionPtr& session, const QString& 
     ++session->stateSerial;
     const bool activityChanged = session->running != running;
     if (running || state == QStringLiteral("Error") || state == QStringLiteral("Stopped") ||
-        state == QStringLiteral("Canceled"))
+        state == QStringLiteral("Canceled")) {
         session->completed = false;
+        session->awaitingReply = false; // a new turn or its end without an answer
+    }
     if (!running) {
         setWorkingDetail(session, {});
         session->pendingInputIds.clear();
