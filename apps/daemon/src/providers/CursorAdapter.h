@@ -1,6 +1,7 @@
 #pragma once
 
 #include "providers/ProviderAdapter.h"
+#include "providers/ProviderExecutable.h"
 
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
@@ -141,7 +142,7 @@ class CursorAdapter final : public ProviderAdapter {
     [[nodiscard]] QString stderrTail() const;
     [[nodiscard]] QJsonArray promptContent(const QJsonObject& params) const;
 
-    QString executable_;
+    ProviderExecutable executable_;
     QString pendingSpawnModel_;
     QString spawnModel_;
     QProcess* process_{nullptr};
