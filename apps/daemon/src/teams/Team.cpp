@@ -244,6 +244,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("turn_budget"), team.turnBudget},
             {QStringLiteral("automatic_turns"), team.automaticTurns},
             {QStringLiteral("plan_approved"), team.planApproved},
+            {QStringLiteral("leader_started"), team.leaderStarted},
             {QStringLiteral("members"), members},
             {QStringLiteral("tasks"), tasks},
             {QStringLiteral("tasks_done"), done},
@@ -273,6 +274,7 @@ Team teamFromJson(const QJsonObject& json) {
     team.turnBudget = json.value(QStringLiteral("turn_budget")).toInt(defaultTurnBudget);
     team.automaticTurns = json.value(QStringLiteral("automatic_turns")).toInt();
     team.planApproved = json.value(QStringLiteral("plan_approved")).toBool();
+    team.leaderStarted = json.value(QStringLiteral("leader_started")).toBool();
     for (const auto& value : json.value(QStringLiteral("members")).toArray())
         team.members.append(memberFromJson(value.toObject()));
     for (const auto& value : json.value(QStringLiteral("tasks")).toArray())

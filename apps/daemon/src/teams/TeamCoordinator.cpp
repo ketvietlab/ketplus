@@ -226,6 +226,7 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
                                                   .arg(draft.name)
                                                   .arg(draft.members.size())});
     emit teamChanged(teamJson(draft));
+    startLeader(draft.id);
     return {.teamId = draft.id};
 }
 
@@ -310,7 +311,51 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     }
     if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
+    startLeader(teamId);
     return {.teamId = teamId};
+}
+
+void TeamCoordinator::startLeader(const qint64 teamId) {
+    Team* team = mutableTeam(teamId);
+    if (!team || team->leaderStarted || team->goal.isEmpty())
+        return;
+    const Member* leader = team->memberWithRole(role::leader);
+    if (!leader)
+        return;
+    const Team before = *team;
+    team->leaderStarted = true;
+    if (commit(*team, before, QStringLiteral("daemon"), {}))
+        return;
+    QStringList members;
+    for (const Member& member : team->members) {
+        const auto conversation = host_->teamConversation(member.sessionId);
+        const QString number = conversation ? conversation->number : QString{};
+        members << QStringLiteral("- #%1 %2, %3%4")
+                       .arg(number, member.name, member.role,
+                            member.role == role::developer
+                                ? QStringLiteral(", lane %1 (%2)")
+                                      .arg(member.lane,
+                                           member.paths.isEmpty()
+                                               ? QStringLiteral("no paths")
+                                               : member.paths.join(QStringLiteral(", ")))
+                                : QString{});
+    }
+    wake(
+        *team,
+        {.teamId = team->id,
+         .teamName = team->name,
+         .toSession = leader->sessionId,
+         .kind = QStringLiteral("team"),
+         .body = QStringList{QStringLiteral("Team %1 is ready and you lead it.").arg(team->name),
+                             QStringLiteral("Goal: %1").arg(team->goal),
+                             QStringLiteral("Integration branch: %1")
+                                 .arg(team->integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                                        : team->integrationBranch),
+                             QStringLiteral("Members:"), members.join(QLatin1Char('\n')), QString{},
+                             QStringLiteral("Plan the work: create the tasks with their "
+                                            "criteria and lanes (team_task_create), then "
+                                            "assign them (team_task_assign).")}
+                     .join(QLatin1Char('\n'))});
 }
 
 std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {

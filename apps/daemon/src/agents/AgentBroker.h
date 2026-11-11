@@ -53,6 +53,30 @@ class AgentHostPort {
     // Returns the tool's answer, ok or failure.
     virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                          const QJsonObject& payload) = 0;
+    // ADR 0112: the caller's team, role and lane for agents_whoami and agents_list; empty for
+    // a conversation on no team.
+    [[nodiscard]] virtual QJsonObject teamMembership(const QString& sessionId) const {
+        (void)sessionId;
+        return {};
+    }
+    // The number of the caller's team's `role` ("leader" or "reviewer"), empty off a team.
+    [[nodiscard]] virtual QString teamRoleNumber(const QString& sessionId,
+                                                 const QString& role) const {
+        (void)sessionId;
+        (void)role;
+        return {};
+    }
+    // A team_* tool call (`operation` without the "agents." prefix) by the conversation.
+    virtual QJsonObject teamOperation(const QString& sessionId, const QString& operation,
+                                      const QJsonObject& payload) {
+        (void)sessionId;
+        (void)operation;
+        (void)payload;
+        return {
+            {QStringLiteral("ok"), false},
+            {QStringLiteral("error_code"), QStringLiteral("not_on_team")},
+            {QStringLiteral("error_message"), QStringLiteral("This conversation is on no team.")}};
+    }
     // ADR 0112: a member of a team. Its own reviewer (ADR 0067) does not run meanwhile.
     [[nodiscard]] virtual bool onTeam(const QString& sessionId) const {
         (void)sessionId;

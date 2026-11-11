@@ -130,7 +130,8 @@ bool AgentBroker::isOperation(const QString& type) {
     return type == QStringLiteral("agents.whoami") || type == QStringLiteral("agents.list") ||
            type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
            type == QStringLiteral("agents.work_report") ||
-           type == QStringLiteral("agents.request_user_decision");
+           type == QStringLiteral("agents.request_user_decision") ||
+           type.startsWith(QStringLiteral("agents.team_"));
 }
 
 QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
@@ -155,6 +156,8 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
     if (operation == QStringLiteral("agents.request_user_decision"))
         return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
+    if (operation.startsWith(QStringLiteral("agents.team_")))
+        return host_->teamOperation(caller->sessionId, operation.mid(7), payload);
     return failure(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown agent operation."));
 }
@@ -187,7 +190,10 @@ QJsonObject AgentBroker::messageJson(const AgentMessageRecord& message) {
 }
 
 QJsonObject AgentBroker::whoami(const AgentConversation& caller) const {
-    return ok(conversationJson(caller));
+    QJsonObject value = conversationJson(caller);
+    if (const QJsonObject team = host_->teamMembership(caller.sessionId); !team.isEmpty())
+        value.insert(QStringLiteral("team"), team);
+    return ok(value);
 }
 
 QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject& payload) const {
@@ -213,6 +219,14 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
         if (values.size() >= limit)
             continue;
         QJsonObject value = conversationJson(conversation);
+        // ADR 0112: a member's role and lane.
+        if (const QJsonObject team = host_->teamMembership(conversation.sessionId);
+            !team.isEmpty()) {
+            value.insert(QStringLiteral("team"), team.value(QStringLiteral("name")));
+            value.insert(QStringLiteral("role"), team.value(QStringLiteral("role")));
+            if (team.contains(QStringLiteral("lane")))
+                value.insert(QStringLiteral("lane"), team.value(QStringLiteral("lane")));
+        }
         if (conversation.sessionId == caller.sessionId)
             value.insert(QStringLiteral("self"), true);
         values.append(value);
@@ -220,7 +234,19 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
     return ok({{QStringLiteral("conversations"), values}, {QStringLiteral("total"), total}});
 }
 
-QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& payload) {
+QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& request) {
+    QJsonObject payload = request;
+    // ADR 0112: inside a team, "leader" and "reviewer" name the team's member.
+    if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
+        role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
+        const QString number = host_->teamRoleNumber(caller.sessionId, role);
+        if (number.isEmpty())
+            return failure(QStringLiteral("not_on_team"),
+                           QStringLiteral("\"%1\" names a member of your team, and this "
+                                          "conversation is on no team. Use a number.")
+                               .arg(role));
+        payload.insert(QStringLiteral("to"), number);
+    }
     const QString to = normalizedNumber(payload.value(QStringLiteral("to")));
     if (to.isEmpty())
         return failure(QStringLiteral("invalid_number"),

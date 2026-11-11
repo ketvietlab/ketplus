@@ -201,6 +201,8 @@ class TeamCoordinator : public QObject {
     // Moves a task and records it; no permission check. Adds the actionable updates.
     void applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                    const QString& reason, QList<Update>& updates);
+    // The leader's first turn, once the team has a goal (ADR 0112, #456/#458).
+    void startLeader(qint64 teamId);
     // Sends a message that starts a turn of `toSession`, after the commit that caused it.
     virtual void wake(const Team& team, const TeamMessage& message);
     // Points the owner at the task's worktree and sends the assignment.

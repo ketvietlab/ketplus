@@ -34,6 +34,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
   criteria only the leader or the user writes, an append-only history, dependencies,
   and a handover that moves the task's own worktree and branch to the new owner.
+  Agent tools (#458): members get the `team_*` tools of the ketplus_agents server, the
+  daemon checks the caller's role on every call (`role_forbidden` names the role that
+  may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
+  role and lane, and each member's instructions explain its role. The leader's first
+  turn carries the goal.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

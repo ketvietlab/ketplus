@@ -116,6 +116,8 @@ struct Team final {
     int turnBudget{defaultTurnBudget};
     int automaticTurns{0};
     bool planApproved{false};
+    // The leader has had its first turn with the goal.
+    bool leaderStarted{false};
     QList<Member> members;
     QList<Task> tasks;
     QList<Decision> decisions;

@@ -92,6 +92,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentInstructions.h
     src/agents/AgentMcpServer.cpp
     src/agents/AgentMcpServer.h
+    src/agents/AgentTeamTools.cpp
+    src/agents/AgentTeamTools.h
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
@@ -115,6 +117,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp

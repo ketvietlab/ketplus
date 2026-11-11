@@ -99,7 +99,8 @@ class TeamStoreTest final : public QObject {
             const auto result = teams.create(standard(), QStringLiteral("user"));
             QVERIFY2(result.ok(), qPrintable(result.error->message));
             id = result.teamId;
-            QCOMPARE(changed.size(), 1);
+            // Creating, then the leader's first turn with the goal (#458).
+            QVERIFY(changed.size() >= 1);
             QCOMPARE(changed.first().first().toJsonObject().value("members").toArray().size(), 4);
         }
         LocalJournal journal(journalPath());

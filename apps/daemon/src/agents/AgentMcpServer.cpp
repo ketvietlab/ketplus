@@ -1,5 +1,6 @@
 #include "agents/AgentMcpServer.h"
 
+#include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
 
@@ -187,7 +188,7 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.work_report");
     if (tool == QStringLiteral("request_user_decision"))
         return QStringLiteral("agents.request_user_decision");
-    return {};
+    return teamOperationFor(tool);
 }
 
 QJsonObject result(const QJsonValue& id, const QJsonObject& value) {
@@ -336,8 +337,14 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
-    if (method == QStringLiteral("tools/list"))
-        return result(id, {{QStringLiteral("tools"), tools()}});
+    if (method == QStringLiteral("tools/list")) {
+        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        QJsonArray listed = tools();
+        if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
+            for (const auto& tool : teamTools())
+                listed.append(tool);
+        return result(id, {{QStringLiteral("tools"), listed}});
+    }
     if (method == QStringLiteral("tools/call")) {
         const QJsonObject params = message.value(QStringLiteral("params")).toObject();
         const QString operation = operationFor(params.value(QStringLiteral("name")).toString());
