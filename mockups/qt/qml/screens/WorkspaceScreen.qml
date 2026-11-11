@@ -92,8 +92,6 @@ Item {
         else if (name === "atlas-toggle") { toggleContent("atlas"); toggleContent("atlas") }
         else if (name === "reviewer")
             conversationHeader.openReviewerMenu()
-        else if (name === "manage-tags")
-            conversationHeader.openManageTags()
         else
             composerBar.openPanel(name)
     }

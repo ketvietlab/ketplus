@@ -190,8 +190,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void reviewerPickerFollowsTheActiveConversation();
     void agentMentionsCompleteConversations();
     void teamMemberHeaderShowsItsRoleInsteadOfReviewer();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes_data();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes();
     void selectsModelsInUnifiedPicker();
     void restoresStoredConversationModelInsteadOfCatalogDefault();
     void prefetchesModelsWhenAgentBecomesAvailable();

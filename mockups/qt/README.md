@@ -88,8 +88,8 @@ showing it again opens a new tab. The Lite smoke checks this too.
 There is no Worktrees screen: a worktree is made when a conversation needs one
 (Repository & worktree → Create worktree…, or the New conversation card) and
 switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
-context menu (rename, fork, change worktree, archive, delete), tag filter
-(click a tag in the header), compact window (⇧⌘M), update notice and toasts.
+context menu (rename, fork, change worktree, archive, delete), compact window (⇧⌘M),
+update notice and toasts. Conversations carry no user tags (ADR 0116).
 
 ## Transcript content types
 
@@ -131,7 +131,7 @@ A concept, not built in the app: several conversations that share one goal. Agen
 
 - **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
   the conversations that belong to no team. The folder lists its members' conversations (leader,
-  developers, reviewer), each with its role as its first tag. The icon folds it, the name opens
+  developers, reviewer), each with its role as its only tag. The icon folds it, the name opens
   the team's page, and the count is the decisions that wait for the user. A conversation belongs to one team at a time.
 - **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
   offers New conversation and New team…. A team has one leader and one reviewer, always; New team
@@ -143,8 +143,8 @@ A concept, not built in the app: several conversations that share one goal. Agen
   until the leader gives one. Add member starts one more developer: its lane, its agent and a
   required name. A conversation that already exists joins without a dialog, as a developer:
   dragged onto the team's folder, or from its menu's Add to *team*. The role is the
-  conversation's first tag, in the sidebar and in its header; the team sets it, so the tag menu
-  lists it locked and cannot remove it. A member's header has no Reviewer choice: its
+  conversation's only tag, locked, in the sidebar and in its header; the team sets it and the
+  conversation cannot change it. A member's header has no Reviewer choice: its
   team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove

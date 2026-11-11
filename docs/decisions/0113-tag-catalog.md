@@ -1,6 +1,8 @@
 # ADR 0113: The tag catalog lives in the daemon
 
-Status: accepted (2026-11-11, #429). Extends ADR 0107.
+Status: accepted (2026-11-11, #429). Extends ADR 0107. Amended by
+[ADR 0116](0116-tags-leave-the-ui.md): the daemon part stands; the Desktop part below
+(catalog reads, drawing, Manage tags…, tagging before the first turn) was removed.
 
 ## Context
 

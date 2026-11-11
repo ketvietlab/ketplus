@@ -257,18 +257,6 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             &ActivityBar::conversationContextMenuRequested);
     connect(repositoryList_, &SidebarRepositoryList::conversationRenameRequested, this,
             &ActivityBar::conversationRenameRequested);
-    // The mock's active tag filter: set from a tag in the conversation header, cleared here.
-    tagFilter_ = new SidebarTagFilterChip(context);
-    connect(tagFilter_, &SidebarTagFilterChip::cleared, this,
-            [this] { repositoryList_->setTagFilter({}); });
-    auto* tagFilterRow = new QWidget(context);
-    auto* tagFilterLayout = new QVBoxLayout(tagFilterRow);
-    chrome_geometry::margins(tagFilterLayout, 6, 0, 6, 6);
-    tagFilterLayout->addWidget(tagFilter_);
-    tagFilterRow->setVisible(false);
-    connect(tagFilter_, &SidebarTagFilterChip::cleared, tagFilterRow, &QWidget::hide);
-    tagFilterRow_ = tagFilterRow;
-    contextLayout->addWidget(tagFilterRow);
     contextLayout->addWidget(repositoryList_);
     contextLayout->addStretch();
     contextScroll->setWidget(context);
@@ -526,15 +514,8 @@ void ActivityBar::setSourceControlCount(const int count) {
     sourceControlButton_->setCount(count > 0 ? std::optional<int>(count) : std::nullopt);
 }
 
-void ActivityBar::setTagFilter(const QString& tag) {
-    tagFilter_->setTag(tag.trimmed());
-    tagFilterRow_->setVisible(!tagFilter_->tag().isEmpty());
-    repositoryList_->setTagFilter(tagFilter_->tag());
-}
-
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
-    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,

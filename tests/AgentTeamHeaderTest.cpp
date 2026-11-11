@@ -1,6 +1,7 @@
 #include "AgentWorkspaceViewTest.h"
 #include "agent/AgentWorkspaceView.h"
 
+#include <QAccessible>
 #include <QQuickView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -23,21 +24,11 @@ QVariantMap leaderRole() {
             {"color", "#b4436c"}};
 }
 
-QObject* menuItem(QObject* menu, const QString& name) {
-    for (int index = 0; index < menu->property("count").toInt(); ++index) {
-        QQuickItem* item = nullptr;
-        QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem*, item),
-                                  Q_ARG(int, index));
-        if (item && item->objectName() == name)
-            return item;
-    }
-    return nullptr;
-}
-
 } // namespace
 
-// ADR 0114 (#467): a member's header shows its role first, locked, and has no Reviewer choice;
-// leaving the team restores the choice with the setting it had.
+// ADR 0114 (#467): a member's header shows its role, locked, and has no Reviewer choice;
+// leaving the team restores the choice with the setting it had. ADR 0116: the header draws
+// no user tag, even when a row still carries one, and offers no way to add or manage tags.
 void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -54,18 +45,24 @@ void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     QQuickItem* reviewer = nullptr;
     QTRY_VERIFY((reviewer = findVisualItem(root, "headerReviewerButton")));
     QTRY_VERIFY(reviewer->isVisible());
-    QVERIFY(!findVisualItem(root, "conversationRoleTag"));
+    QQuickItem* role = findVisualItem(root, "conversationRoleTag");
+    QVERIFY(role && !role->isVisible());
 
     view.setTeamRoles({{"s-lead", leaderRole()}});
     QTRY_VERIFY(!reviewer->isVisible());
-    QQuickItem* role = nullptr;
-    QTRY_VERIFY((role = findVisualItem(root, "conversationRoleTag")));
+    QTRY_VERIFY(role->isVisible());
     QVERIFY(role->property("locked").toBool());
+    QVERIFY(!role->property("filterable").toBool());
     QCOMPARE(role->property("text").toString(), QStringLiteral("Leader"));
-    // The role comes first, before the user's own tag of the same name.
-    auto* user = findVisualItem(root, "conversationTag_Leader");
-    QVERIFY(user && user->isVisible());
-    QTRY_VERIFY(role->x() < user->x()); // siblings in the header's tag row
+    QAccessibleInterface* accessible = QAccessible::queryAccessibleInterface(role);
+    QVERIFY(accessible);
+    QCOMPARE(accessible->text(QAccessible::Description),
+             QStringLiteral("Leader of Shop. Opens the team."));
+    // No user tag, Add tag, tag menu or Manage tags… remains.
+    for (const char* name : {"conversationTag_Leader", "headerAddTagButton"})
+        QVERIFY2(!findVisualItem(root, name), name);
+    for (const char* name : {"conversationTagMenu", "manageTagsDialog"})
+        QVERIFY2(!root->findChild<QObject*>(name), name);
     QSignalSpy opened(&view, &ketplus::AgentWorkspaceView::teamRequested);
     auto* area = role->findChild<QQuickItem*>("conversationRoleTagArea");
     QVERIFY(area);
@@ -73,35 +70,12 @@ void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
                       area->mapToScene(QPointF(area->width() / 2, area->height() / 2)).toPoint());
     QTRY_COMPARE(opened.size(), 1);
     QCOMPARE(opened.first().first().toString(), QStringLiteral("7"));
-
-    // The tag menu starts with the role, disabled; the user's "Leader" stays a user tag.
-    auto* addTag = findVisualItem(root, "headerAddTagButton");
-    QVERIFY(addTag && addTag->isVisible());
-    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
-    auto* tagMenu = root->findChild<QObject*>("conversationTagMenu");
-    QTRY_VERIFY(tagMenu->property("visible").toBool());
-    QQuickItem* first = nullptr;
-    QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, first), Q_ARG(int, 0));
-    QCOMPARE(first->objectName(), QStringLiteral("conversationRoleTagItem"));
-    QVERIFY(!first->isEnabled());
-    QCOMPARE(first->property("text").toString(), QStringLiteral("Leader · Set by Shop"));
-    // The role, the catalog, then the separator and Manage tags….
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 3);
-    // A catalog that changes while the conversation is a member stays below the role.
-    QVariantList catalog = view.tagCatalog();
-    catalog.append(QVariantMap{{"label", "Later"}, {"color", "#5b6b7f"}});
-    view.setTagCatalog(catalog);
-    QTRY_COMPARE(tagMenu->property("count").toInt(), catalog.size() + 3);
-    QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, first), Q_ARG(int, 0));
-    QCOMPARE(first->objectName(), QStringLiteral("conversationRoleTagItem"));
-    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
-    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // A click opens the team and changes nothing else: the role stays as the team set it.
+    QCOMPARE(role->property("text").toString(), QStringLiteral("Leader"));
 
     // Leaving the team: the role goes, the Reviewer choice returns with its reviewer.
     view.setTeamRoles({});
     QTRY_VERIFY(reviewer->isVisible());
     QVERIFY(reviewer->property("text").toString().contains("@agent/1093"));
-    QTRY_VERIFY(!findVisualItem(root, "conversationRoleTag"));
-    QVERIFY(!menuItem(tagMenu, "conversationRoleTagItem"));
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
+    QTRY_VERIFY(!role->isVisible());
 }

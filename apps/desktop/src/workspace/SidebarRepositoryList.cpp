@@ -65,18 +65,19 @@ void updateConversation(ket::ConversationRow* row, const QVariantMap& conversati
         label += QObject::tr(" · from #%1").arg(sender);
     row->setStatusLabel(label);
     row->setAccessibleDescription(label);
+    // Only a team member's locked role is drawn; conversations show no user tags (ADR 0116).
     QList<ket::ConversationTag> tags;
     for (const auto& value : conversation.value(QStringLiteral("tags")).toList()) {
         const auto tag = value.toMap();
-        const auto text = tag.value(QStringLiteral("label"), value.toString()).toString().trimmed();
-        if (text.isEmpty())
+        const auto text = tag.value(QStringLiteral("label")).toString().trimmed();
+        if (text.isEmpty() || !tag.value(QStringLiteral("locked")).toBool())
             continue;
         QColor color(tag.value(QStringLiteral("color")).toString());
         if (!color.isValid())
             color = ket::conversationStatusRecipe(ket::ConversationStatus::Working,
                                                   ket::Appearance::instance().theme())
                         .iconColor;
-        tags.append({text, color, tag.value(QStringLiteral("locked")).toBool()});
+        tags.append({text, color, true});
     }
     row->setTags(tags);
 }
@@ -401,11 +402,6 @@ void SidebarRepositoryList::applyZoom(const int zoomPercent) {
     applyPresentation();
 }
 
-void SidebarRepositoryList::setTagFilter(const QString& tag) {
-    tagFilter_ = tag;
-    applyPresentation();
-}
-
 void SidebarRepositoryList::applyPresentation() {
     const auto px = [this](int n) {
         return InterfaceZoomMetrics::geometry(n, chrome_geometry::zoomPercent(this));
@@ -425,10 +421,8 @@ void SidebarRepositoryList::applyPresentation() {
         // A team's members are laid out by their folder.
         for (auto* button : group->findChildren<ket::ConversationRow*>(
                  QStringLiteral("productConversationButton"), Qt::FindDirectChildrenOnly)) {
-            const bool matches = rowMatchesFilter(button);
-            const bool visible = matches && !collapsed &&
-                                 (!tagFilter_.isEmpty() ||
-                                  preview.contains(button->property("conversationId").toString()));
+            const bool visible =
+                !collapsed && preview.contains(button->property("conversationId").toString());
             button->setFixedHeight(button->sizeHint().height());
             button->setVisible(visible);
             if (visible)
@@ -436,8 +430,8 @@ void SidebarRepositoryList::applyPresentation() {
         }
         auto* showMore =
             group->findChild<QPushButton*>(QStringLiteral("productShowMoreConversations"));
-        const bool moreVisible = tagFilter_.isEmpty() && showMore != nullptr && !collapsed &&
-                                 !showAll && repository.conversations.size() > preview.size();
+        const bool moreVisible = showMore != nullptr && !collapsed && !showAll &&
+                                 repository.conversations.size() > preview.size();
         if (showMore != nullptr)
             showMore->setVisible(moreVisible);
         if (auto* name = group->findChild<QAbstractButton*>(

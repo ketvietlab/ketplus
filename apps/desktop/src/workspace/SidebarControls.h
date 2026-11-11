@@ -3,12 +3,6 @@
 #include <QAbstractButton>
 #include <QWidget>
 
-class QLabel;
-
-namespace ket {
-class IconButton;
-}
-
 namespace ketplus {
 
 // The mock's Quick search under the brand: a 28 px field-styled button with the search
@@ -29,32 +23,6 @@ class SidebarSearchButton final : public QAbstractButton {
 
   private:
     QString shortcut_;
-};
-
-// The mock's active tag filter above the repositories: "Tagged <label>" on the accent tint,
-// with a button that clears it. Hidden while no filter is set.
-class SidebarTagFilterChip final : public QWidget {
-    Q_OBJECT
-  public:
-    explicit SidebarTagFilterChip(QWidget* parent = nullptr);
-
-    [[nodiscard]] QString tag() const { return tag_; }
-    void setTag(const QString& tag);
-    [[nodiscard]] QSize sizeHint() const override;
-
-  signals:
-    void cleared();
-
-  protected:
-    void paintEvent(QPaintEvent* event) override;
-    void changeEvent(QEvent* event) override;
-
-  private:
-    void restyle();
-
-    QString tag_;
-    QLabel* label_{nullptr};
-    ket::IconButton* clear_{nullptr};
 };
 
 } // namespace ketplus

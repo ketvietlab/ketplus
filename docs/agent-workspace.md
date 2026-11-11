@@ -765,7 +765,9 @@ The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 - Presentation keeps connection availability, folder availability, history load,
   and turn activity as separate axes. The native header displays repository and
   branch labels rather than the absolute worktree path; scope changes cannot turn
-  a late response into the selected conversation's status.
+  a late response into the selected conversation's status. The header and the sidebar
+  draw no user tags and offer no way to add, manage or filter by one (ADR 0116); a team
+  member's role shows as a locked label that opens the team (ADR 0114).
 - Model selection uses one popover with provider tabs, searchable models,
   a discrete effort slider, and reset-to-default. The slider follows the models
   on the open tab, and hides when a model has no separate effort list. Claude is enabled when the

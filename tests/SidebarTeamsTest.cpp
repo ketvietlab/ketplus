@@ -113,7 +113,7 @@ class SidebarTeamsTest final : public QObject {
     }
 
     // Its teams first, then its other conversations; leader, developers, reviewer; the role
-    // tag first and locked.
+    // is each member's only tag, locked.
     void aTeamIsAFolderBeforeTheRepositorysConversations() {
         SidebarRepositoryList list;
         list.setRepositories({repository("/repo")});
@@ -129,6 +129,7 @@ class SidebarTeamsTest final : public QObject {
         for (auto* row : folder->findChildren<ket::ConversationRow*>("productConversationButton",
                                                                      Qt::FindDirectChildrenOnly)) {
             members.append(row->property("teamRole").toString());
+            QCOMPARE(row->tags().size(), 1);
             QVERIFY(row->tags().first().locked);
             QCOMPARE(row->tags().first().label, team_roles::label(members.last()));
         }
@@ -167,17 +168,6 @@ class SidebarTeamsTest final : public QObject {
         QSignalSpy menu(&list, &SidebarRepositoryList::teamMenuRequested);
         folder->findChild<ket::GroupHeader*>("productTeamFolderHeader")->action()->click();
         QCOMPARE(menu.size(), 1);
-    }
-
-    // A role is not one of the user's tags: filtering by "Leader" finds no member.
-    void theTagFilterIgnoresTheRole() {
-        SidebarRepositoryList list;
-        list.setRepositories({repository("/repo")});
-        list.show();
-        list.setTagFilter(QStringLiteral("Leader"));
-        QVERIFY(!list.findChild<QWidget*>("productTeamFolder")->isVisibleTo(&list));
-        list.setTagFilter({});
-        QVERIFY(list.findChild<QWidget*>("productTeamFolder")->isVisibleTo(&list));
     }
 
     void theFolderMenuSaysWhyAFullTeamTakesNoMember() {

@@ -158,37 +158,22 @@ int SidebarRepositoryList::presentTeamFolders(QWidget* group, const bool reposit
                                                          Qt::FindDirectChildrenOnly)) {
         const bool folded = collapsedTeams_.contains(folder->property("teamId").toString());
         int shown = 0;
-        int matching = 0;
         for (auto* row : folder->findChildren<ket::ConversationRow*>(
                  QStringLiteral("productConversationButton"), Qt::FindDirectChildrenOnly)) {
-            const bool matches = rowMatchesFilter(row);
-            matching += matches ? 1 : 0;
             row->setFixedHeight(row->sizeHint().height());
-            row->setVisible(matches && !folded);
-            shown += matches && !folded ? 1 : 0;
+            row->setVisible(!folded);
+            shown += folded ? 0 : 1;
         }
         auto* header = folderHeader(folder);
         header->setExpanded(!folded);
-        // A tag filter keeps only the folders with a matching member.
-        const bool visible = !repositoryCollapsed && (tagFilter_.isEmpty() || matching > 0);
-        folder->setVisible(visible);
-        if (!visible)
+        folder->setVisible(!repositoryCollapsed);
+        if (repositoryCollapsed)
             continue;
         folder->setFixedHeight(header->sizeHint().height() +
                                shown * (rowHeight + px(kConversationSpacing)));
         height += folder->height() + px(kConversationSpacing);
     }
     return height;
-}
-
-bool SidebarRepositoryList::rowMatchesFilter(const ket::ConversationRow* row) const {
-    if (tagFilter_.isEmpty())
-        return true;
-    // A role is the team's, not one of the user's tags (#467).
-    const auto tags = row->tags();
-    return std::any_of(tags.cbegin(), tags.cend(), [this](const ket::ConversationTag& tag) {
-        return !tag.locked && tag.label == tagFilter_;
-    });
 }
 
 bool SidebarRepositoryList::acceptsDrop(const QString& teamId, const QString& repositoryPath,

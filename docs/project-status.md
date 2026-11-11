@@ -80,11 +80,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `team.get`), also for a merge made by hand.
   Sidebar (#464): with a daemon that advertises `teams/1`, each team is a folder in its
   repository before the other conversations, leader, developers, reviewer, each with its
-  locked role tag first. The folder's name opens the team, its count is the open
-  decisions; its menu adds a member or deletes the team, the conversation menu joins or
-  leaves a team with the reason when it cannot, and a drop on a folder of the same
-  repository joins as a developer. `DaemonClient::teamEventReceived` carries
-  `team.changed` and `team.removed` to the desktop's `TeamDirectory`.
+  locked role tag, the only tag a sidebar row draws. The folder's name opens the team,
+  its count is the open decisions; its menu adds a member or deletes the team, the
+  conversation menu joins or leaves a team with the reason when it cannot, and a drop on
+  a folder of the same repository joins as a developer.
+  `DaemonClient::teamEventReceived` carries `team.changed` and `team.removed` to the
+  desktop's `TeamDirectory`.
   Dialogs (#465): New team sends one `team.create` with the name, goal, integration
   branch, who merges, the permissions of the leader and the developers (`execution_policy`:
   Read only, Workspace or Full access; Workspace unless chosen; the reviewer stays
@@ -93,10 +94,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   A refusal keeps the dialog open with the error at the role it names. Add a developer
   sends `team.member.add` with a required name, lane, paths and agent, hints at the
   reviewer queue from three developers and is disabled at five.
-  Member header (#467): a member's Agent Workspace header shows its role first as a locked
-  tag that opens the team, has no Reviewer choice (the team's reviewer reviews its
-  tasks), and its tag menu starts with a disabled "Role · Set by team" row. Leaving the
-  team brings the Reviewer choice back with its setting.
+  Member header (#467): a member's Agent Workspace header shows its role as a locked
+  label that opens the team and cannot be edited, and has no Reviewer choice (the team's
+  reviewer reviews its tasks). Leaving the team brings the Reviewer choice back with its
+  setting.
   Team page (#466): Open team shows the team in the workspace area: what waits for the
   user (decisions with the recommended choice first, answered in place through
   `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
@@ -138,17 +139,17 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
-  compact title, filterable tags and an Add tag menu; the daemon stores the tags
-  (`session.tags.set`, ADR 0107). The input retains IME/draft/steering
+  compact title, status, worktree and Reviewer choice, and no user tags (ADR 0116).
+  The input retains IME/draft/steering
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
   the mock's field-styled Quick search, a machine header with its chevron, and update
-  pills. A tag chosen in the conversation header filters the sidebar and shows as the
-  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
-  local daemon's existing size-status contract. Tags come from the daemon catalog
-  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+  pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0116); the
+  daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
+  Storage pressure warnings consume the local daemon's existing size-status contract,
+  and "Waiting for you" comes from the daemon (ADR 0112). It matches
   `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,

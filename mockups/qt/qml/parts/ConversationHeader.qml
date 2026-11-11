@@ -5,7 +5,7 @@ import Ket
 import KetPlusMock
 
 // The conversation's 44 px chat-local header: reference, title, status, worktree, reviewer,
-// tags and the pane toggles.
+// a member's role and the pane toggles.
 Rectangle {
     id: header
 
@@ -29,14 +29,13 @@ Rectangle {
         const found = []
         for (const r of Fixtures.repositories)
             for (const c of r.conversations)
-                if (c.number !== header.conversation.number && c.tags.some(t => t.label === "Review"))
+                if (c.number !== header.conversation.number && c.canReview)
                     found.push(c)
         return found
     }
 
     signal toggleDetails(string tab)
 
-    function openManageTags() { manageTags.open() }
     function openReviewerMenu() { reviewerMenu.popup(reviewerButton, 0, reviewerButton.height) }
     function chooseReviewer(name) {
         const next = Object.assign({}, reviewers)
@@ -72,7 +71,7 @@ Rectangle {
     }
 
     // The header gives way from the right as the conversation narrows (the details pane takes
-    // half the workspace): tags first, then the Reviewer label, then the title elides to its
+    // half the workspace): the Reviewer label first, then the title elides to its
     // minimum, then the worktree keeps only its icon, then the number (the sidebar shows it),
     // then Compact window and New conversation (the sidebar and the menus have both). Changes,
     // Terminal and Report stay while the details pane is open; they switch its tab.
@@ -100,10 +99,8 @@ Rectangle {
     readonly property real reviewerRoom: membership ? 0 : reviewerProbe.implicitWidth
     readonly property bool fullReviewer: fixedWidth + titleButton.implicitWidth + gap
                                          + reviewerRoom <= room
-    readonly property bool showTags: fullReviewer && fixedWidth + titleButton.implicitWidth + gap
-                                     + reviewerRoom + tagsProbe.implicitWidth <= room
 
-    // Off-screen measures of the full Reviewer button and the tag group.
+    // Off-screen measures of the worktree and Reviewer buttons.
     Row {
         visible: false
         KetButton {
@@ -129,16 +126,6 @@ Rectangle {
             controlSize: KetTheme.ControlSize.Small
             iconName: "eye"
             text: reviewerButton.fullText
-        }
-        Row {
-            id: tagsProbe
-            spacing: header.gap
-            leftPadding: header.gap
-            Repeater {
-                model: header.conversation.tags
-                KetTag { required property var modelData; text: modelData.label; tagColor: modelData.color }
-            }
-            KetIconButton { controlSize: KetTheme.ControlSize.Small; iconName: "plus"; text: "Add tag" }
         }
     }
 
@@ -228,30 +215,8 @@ Rectangle {
             KetToolTip {
                 visible: roleTag.hovered
                 text: header.membership ? roleTag.text + " of " + header.membership.team.name
-                      + ". The team sets this tag; change the role from the team's page." : ""
+                      + ". The team sets this role; change it from the team's page." : ""
             }
-        }
-
-        Repeater {
-            model: header.window.compact || !header.showTags ? [] : header.conversation.tags
-            KetTag {
-                required property var modelData
-                anchors.verticalCenter: parent.verticalCenter
-                text: modelData.label
-                tagColor: modelData.color
-                filterable: true
-                onClicked: header.window.tagFilter = modelData.label
-            }
-        }
-
-        KetIconButton {
-            id: addTag
-            visible: !header.window.compact && header.showTags
-            anchors.verticalCenter: parent.verticalCenter
-            controlSize: KetTheme.ControlSize.Small
-            iconName: "plus"
-            text: "Add tag"
-            onClicked: tagMenu.popup(addTag, 0, addTag.height)
         }
     }
 
@@ -305,40 +270,6 @@ Rectangle {
             text: "Report"
             onClicked: header.toggleDetails("report")
         }
-    }
-
-    KetMenu {
-        id: tagMenu
-        KetMenuItem {
-            visible: !!header.membership
-            height: visible ? implicitHeight : 0
-            enabled: false
-            iconName: "lock"
-            text: header.membership ? Fixtures.roleTag(header.membership.role).label : ""
-            description: header.membership ? "Set by " + header.membership.team.name : ""
-        }
-        KetMenuSeparator { visible: !!header.membership; height: visible ? implicitHeight : 0 }
-        Repeater {
-            model: Object.keys(Fixtures.tagColors)
-            KetMenuItem {
-                required property string modelData
-                text: modelData
-                iconName: "tag"
-                checkable: true
-                checked: header.conversation.tags.some(t => t.label === modelData)
-                onTriggered: header.window.notify((checked ? "Tagged " : "Removed tag ") + modelData)
-            }
-        }
-        KetMenuSeparator {}
-        KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.openManageTags() }
-    }
-
-    ManageTagsDialog {
-        id: manageTags
-        parent: Basic.Overlay.overlay
-        // The daemon's default catalog, in its order.
-        tags: ["UI", "Performance", "Review", "Atlas", "Account", "Bug", "Docs"].map(label => Fixtures.tag(label))
-        onSaved: (tags, renames) => header.window.notify("Tags saved")
     }
 
     KetMenu {
