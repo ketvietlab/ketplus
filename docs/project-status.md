@@ -62,6 +62,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
+  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a folder in its
+  repository before the other conversations, leader, developers, reviewer, each with its
+  locked role tag first. The folder's name opens the team, its count is the open
+  decisions; its menu adds a member or deletes the team, the conversation menu joins or
+  leaves a team with the reason when it cannot, and a drop on a folder of the same
+  repository joins as a developer. `DaemonClient::teamEventReceived` carries
+  `team.changed` and `team.removed` to the desktop's `TeamDirectory`.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
