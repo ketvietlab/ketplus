@@ -276,7 +276,7 @@ Item {
                     : lane ? "No task yet" : "No lane yet" }
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
-    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges) {
+    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
         for (let i = 1; i <= developers; ++i)
@@ -288,7 +288,8 @@ Item {
         } while (teams.some(t => t.id === id))
         teams = teams.concat([{
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
-            paused: false, merges: merges || "leader", leaderWrites: leaderWrites, members: members,
+            paused: false, merges: merges || "leader", permission: permission || "Workspace",
+            leaderWrites: leaderWrites, members: members,
             tasks: [], decisions: [], updates: [] }])
         teamIndex = teams.length - 1
         filter = ""
@@ -1486,7 +1487,7 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader"; leaderMerges.checked = true }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1 }
         DialogBody {
             KetFieldRow {
                 width: parent.width
@@ -1526,6 +1527,20 @@ Item {
                         text: "Me"
                         onToggled: if (checked) newTeamDialog.merges = "user"
                     }
+                }
+            }
+            // What the leader and the developers may do without asking, as the composer's Mode
+            // lists it. The reviewer is not in it: a review is always read-only.
+            KetFieldRow {
+                width: parent.width
+                label: "Permissions"
+                help: Fixtures.permissionModes[teamPermission.currentIndex].description
+                      + ". The leader and the developers start with this; change it for one member in its conversation. The reviewer stays read-only."
+                KetSelect {
+                    id: teamPermission
+                    width: parent.width
+                    model: Fixtures.permissionModes.map(mode => mode.label)
+                    currentIndex: 1
                 }
             }
             // Scaffold: the team's conversations, started with it instead of one by one.
@@ -1617,7 +1632,7 @@ Item {
                         return
                     newTeamDialog.accept()
                     screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
-                                      leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges)
+                                      leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText)
                 }
             }
         ]
