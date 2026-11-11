@@ -227,6 +227,13 @@ clients only (`forbidden` otherwise; agents use the tools below):
 `team.decision.list`, `team.decision.answer`. Events `team.changed` (the team and its
 revision) and `team.removed` go to every local client.
 
+`team.create` takes `execution_policy` (`read-only`, `ask` or `full`; `ask` when absent):
+what the leader and the developers may do without asking. `full` needs
+`risk_acknowledged`, as it does for one conversation (`execution_policy_denied` otherwise). It is the execution policy of
+those conversations when the team starts them, at creation and for a developer added
+later; the user changes one member in its conversation. The reviewer is not in it: its
+review turns are read-only whatever its conversation's policy is (ADR 0067).
+
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
 `team_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no

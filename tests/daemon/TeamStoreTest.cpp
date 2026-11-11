@@ -97,7 +97,7 @@ class TeamStoreTest final : public QObject {
             teams.load();
             QSignalSpy changed(&teams, &TeamCoordinator::teamChanged);
             const auto result = teams.create(standard(), QStringLiteral("user"));
-            QVERIFY2(result.ok(), qPrintable(result.error->message));
+            QVERIFY2(result.ok(), qPrintable(result.error.value_or(TeamError{}).message));
             id = result.teamId;
             // Creating, then the leader's first turn with the goal (#458).
             QVERIFY(changed.size() >= 1);

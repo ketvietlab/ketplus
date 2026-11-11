@@ -3,6 +3,7 @@
 
 #include "protocol/DaemonProtocol.h"
 
+#include <QSet>
 #include <QUuid>
 
 namespace ketplus::daemon {
@@ -57,7 +58,8 @@ MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& 
 
 QString SessionHost::createMemberConversation(const QString& worktree, const QString& provider,
                                               const QString& model, const QString& effort,
-                                              const QString& title, QString* problem) {
+                                              const QString& title, QString* problem,
+                                              const QString& executionPolicy) {
     const QString directory = normalizedWorktree(worktree);
     if (directory.isEmpty()) {
         *problem = QStringLiteral("The team's repository is not an existing directory.");
@@ -72,6 +74,8 @@ QString SessionHost::createMemberConversation(const QString& worktree, const QSt
     session.stored.title = title;
     session.stored.model = model;
     session.stored.effort = effort;
+    if (!executionPolicy.isEmpty())
+        session.stored.executionPolicy = executionPolicy;
     if (!journal_->upsertSession(session.stored)) {
         *problem = journal_->errorString();
         return {};
@@ -173,8 +177,9 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             return failure(QStringLiteral("provider_unavailable"),
                            missingProviderMessage(plan.provider), plan.role);
         QString problem;
-        const QString sessionId = createMemberConversation(
-            team->repository, plan.provider, plan.model, plan.effort, plan.name, &problem);
+        const QString sessionId =
+            createMemberConversation(team->repository, plan.provider, plan.model, plan.effort,
+                                     plan.name, &problem, team->executionPolicy);
         if (sessionId.isEmpty())
             return failure(QStringLiteral("member_unavailable"), problem, plan.role);
         const auto result = teams_->addMember(teamId,
@@ -295,6 +300,17 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
     draft.integrationBranch =
         payload.value(QStringLiteral("integration_branch")).toString().trimmed();
     draft.mergePolicy = payload.value(QStringLiteral("merge_policy")).toString(teams::role::leader);
+    draft.executionPolicy =
+        payload.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
+    if (!QSet<QString>{QStringLiteral("read-only"), QStringLiteral("ask"), QStringLiteral("full")}
+             .contains(draft.executionPolicy))
+        return failure(QStringLiteral("invalid_payload"),
+                       QStringLiteral("Choose the team's permissions."));
+    // Full access needs the same acknowledgement as choosing it for one conversation.
+    if (draft.executionPolicy == QStringLiteral("full") &&
+        !payload.value(QStringLiteral("risk_acknowledged")).toBool())
+        return failure(QStringLiteral("execution_policy_denied"),
+                       QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
@@ -324,7 +340,9 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         const MemberPlan& member = members.at(index);
         QString problem;
         const QString sessionId = createMemberConversation(
-            repository, member.provider, member.model, member.effort, member.name, &problem);
+            repository, member.provider, member.model, member.effort, member.name, &problem,
+            // The reviewer keeps a conversation's default; its review turns are read-only.
+            member.role == teams::role::reviewer ? QString{} : draft.executionPolicy);
         if (sessionId.isEmpty()) {
             for (const QString& id : std::as_const(started))
                 discardMemberConversation(id);

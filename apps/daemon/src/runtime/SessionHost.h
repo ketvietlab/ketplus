@@ -316,7 +316,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // `problem` set.
     QString createMemberConversation(const QString& worktree, const QString& provider,
                                      const QString& model, const QString& effort,
-                                     const QString& title, QString* problem);
+                                     const QString& title, QString* problem,
+                                     const QString& executionPolicy = {});
     void discardMemberConversation(const QString& sessionId);
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
