@@ -56,6 +56,16 @@ MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& 
             .paths = strings(agent.value(QStringLiteral("paths")))};
 }
 
+// ADR 0115: one page of a team's Updates, newest first, and whether an older one follows.
+QJsonArray updatesPage(const teams::TeamCoordinator& teams, const qint64 teamId, const int limit,
+                       const qint64 before, bool* more) {
+    const QJsonArray page = teams.updatesJson(teamId, limit, before);
+    const qint64 oldest =
+        page.isEmpty() ? 0 : page.last().toObject().value(QStringLiteral("id")).toInteger();
+    *more = oldest > 0 && !teams.updatesJson(teamId, 1, oldest).isEmpty();
+    return page;
+}
+
 } // namespace
 
 QString SessionHost::createMemberConversation(const QString& worktree, const QString& provider,
@@ -150,15 +160,12 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
         // ADR 0115: the newest page of Updates; team.updates.list reads older ones.
-        const QJsonArray updates = teams_->updatesJson(teamId, teams::defaultPage + 1);
-        QJsonArray page;
-        for (qsizetype index = 0; index < std::min<qsizetype>(updates.size(), teams::defaultPage);
-             ++index)
-            page.append(updates.at(index));
+        bool more = false;
+        const QJsonArray page = updatesPage(*teams_, teamId, teams::defaultPage, 0, &more);
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("team"), teams_->teamJson(*team)},
                 {QStringLiteral("updates"), page},
-                {QStringLiteral("updates_has_more"), updates.size() > teams::defaultPage}};
+                {QStringLiteral("updates_has_more"), more}};
     }
     if (type == QStringLiteral("team.updates.list")) {
         if (!teams_->team(teamId))
@@ -168,10 +175,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
                        teams::maximumPage);
         const qint64 before = payload.value(QStringLiteral("before_id")).toInteger();
-        QJsonArray updates = teams_->updatesJson(teamId, limit + 1, before);
-        const bool more = updates.size() > limit;
-        while (updates.size() > limit)
-            updates.removeLast();
+        bool more = false;
+        const QJsonArray updates = updatesPage(*teams_, teamId, limit, before, &more);
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("updates"), updates},
                 {QStringLiteral("has_more"), more}};
