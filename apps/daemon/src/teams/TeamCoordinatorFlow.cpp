@@ -14,7 +14,8 @@ QJsonObject heldJson(const TeamMessage& message) {
             {QStringLiteral("kind"), message.kind},
             {QStringLiteral("task_id"), message.taskId},
             {QStringLiteral("body"), message.body},
-            {QStringLiteral("expect_reply"), message.expectReply}};
+            {QStringLiteral("expect_reply"), message.expectReply},
+            {QStringLiteral("id"), message.id}};
 }
 
 TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
@@ -25,7 +26,8 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
             .kind = json.value(QStringLiteral("kind")).toString(),
             .taskId = json.value(QStringLiteral("task_id")).toString(),
             .body = json.value(QStringLiteral("body")).toString(),
-            .expectReply = json.value(QStringLiteral("expect_reply")).toBool()};
+            .expectReply = json.value(QStringLiteral("expect_reply")).toBool(),
+            .id = json.value(QStringLiteral("id")).toString()};
 }
 
 // Every update since the last digest, grouped by task, the actionable ones marked.
@@ -89,20 +91,9 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     ++team->automaticTurns;
     if (commit(*team, before, QStringLiteral("daemon"), {}))
         return;
-    QString messageId;
-    if (const QString error = host_->postTeamMessage(message, &messageId); !error.isEmpty()) {
+    if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
-        return;
-    }
-    // The review in flight is answered by this message and no other (ADR 0114 §2).
-    team = message.kind == QStringLiteral("review") ? mutableTeam(teamId) : nullptr;
-    if (!team || team->reviewing != message.taskId || messageId.isEmpty())
-        return;
-    const Team sent = *team;
-    team->reviewingMessage = messageId;
-    if (commit(*team, sent, QStringLiteral("daemon"), {}))
-        qWarning("Unable to record the review request of %s.", qUtf8Printable(message.taskId));
 }
 
 void TeamCoordinator::releaseHeld(const qint64 teamId) {

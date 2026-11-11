@@ -50,10 +50,8 @@ class FakeHost final : public TeamHostPort {
         (void)team;
         return merged.contains(task.id);
     }
-    QString postTeamMessage(const TeamMessage& message, QString* messageId) override {
+    QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
-        if (messageId)
-            *messageId = QStringLiteral("m%1").arg(messages.size());
         return {};
     }
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override {
@@ -88,6 +86,14 @@ class FakeHost final : public TeamHostPort {
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
 };
+
+// The reviewer of `session`'s team answers the request its review in flight is bound to.
+inline void finishReview(TeamCoordinator& teams, const QString& session, const QString& text,
+                         const bool noFindings, const QString& failure = {}) {
+    const Team* team = teams.teamOf(session);
+    teams.reviewFinished(session, team ? team->reviewingMessage : QString{}, text, noFindings,
+                         failure);
+}
 
 inline Team standardTeam() {
     Team team;

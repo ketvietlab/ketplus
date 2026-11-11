@@ -158,7 +158,7 @@ class AgentBroker final : public QObject {
     // starts its own chain at hop 1, so the loop guard still applies. Returns an error.
     QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
                             const QString& toSession, const QString& kind, const QString& body,
-                            bool expectReply, QString* messageId = nullptr);
+                            bool expectReply, QString* messageId = nullptr, const QString& id = {});
     // ADR 0067: a reviewer was assigned; the next finished turn is compared with this moment.
     void noteReviewerAssigned(const QString& sessionId);
     // ADR 0067: the reviewer's last "Verdict:" line says "no findings".

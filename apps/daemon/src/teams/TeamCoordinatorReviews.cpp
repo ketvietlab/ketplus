@@ -3,6 +3,8 @@
 // finished turn, queued first in first out instead of skipped.
 #include "teams/TeamCoordinator.h"
 
+#include <QUuid>
+
 #include <QRegularExpression>
 
 namespace ketplus::daemon::teams {
@@ -86,7 +88,10 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
     Task* task = team->task(taskId);
     ++task->round;
     team->reviewing = taskId;
-    team->reviewingMessage.clear();
+    // Bound before it is sent: a review held while the team is paused, or one whose
+    // message is still on its way, cannot be answered by another request.
+    const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    team->reviewingMessage = requestId;
     const QString reviewerSession = reviewer->sessionId;
     const auto diff = host_->taskDiff(*team, *task);
     addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"),
@@ -107,18 +112,23 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
                  .kind = QStringLiteral("review"),
                  .taskId = taskId,
                  .body = body,
-                 .expectReply = true});
+                 .expectReply = true,
+                 .id = requestId});
 }
 
-void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QString& text,
-                                     const bool noFindings, const QString& failure,
-                                     const QString& messageId) {
+void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QString& messageId,
+                                     const QString& text, const bool noFindings,
+                                     const QString& failure) {
     Team* team = mutableTeamOf(reviewerSession);
     if (!team || team->reviewing.isEmpty())
         return;
-    // An earlier request that ends now is not the answer to the review in flight.
-    if (!messageId.isEmpty() && !team->reviewingMessage.isEmpty() &&
-        messageId != team->reviewingMessage)
+    // Only the request this review was bound to answers it; an earlier or unrelated request
+    // that ends now does not. Compatibility, and nothing else: a review that was in flight
+    // in a journal written before reviews were bound has no id, and is matched as it was
+    // then, by the reviewer and the task. No review started by this version is in that
+    // state, held or sent.
+    const bool unbound = team->reviewingMessage.isEmpty();
+    if (!unbound && messageId != team->reviewingMessage)
         return;
     const Member* member = team->member(reviewerSession);
     if (!member || member->role != role::reviewer)
