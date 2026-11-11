@@ -347,6 +347,38 @@ class SidebarTeamsTest final : public QObject {
                       [&](const QJsonObject&, const QString& failure) { error = failure; });
         QVERIFY(!error.isEmpty());
     }
+
+    // The daemon may still be starting when the window asks: a list that failed is asked
+    // for again, or the sidebar would show a team's members as loose conversations.
+    void aTeamListThatFailedIsAskedForAgain() {
+        FakeDaemon daemon;
+        TeamDirectory teams;
+        teams.setTransport(daemon.transport());
+        teams.setFirstRetryForTesting(20);
+        daemon.answers.insert("team.list", {{"ok", false}, {"error_message", "Starting"}});
+        QSignalSpy changed(&teams, &TeamDirectory::changed);
+        teams.setAvailable(true);
+        QVERIFY(teams.teams().isEmpty());
+        QTRY_VERIFY(std::count_if(daemon.sent.cbegin(), daemon.sent.cend(),
+                                  [](const auto& call) { return call.first == "team.list"; }) >= 3);
+        daemon.answers.insert(
+            "team.list",
+            {{"ok", true},
+             {"teams", QJsonArray{QJsonObject{{"id", "7"}, {"name", "Shop"}, {"revision", 1}}}}});
+        QTRY_COMPARE(teams.teams().size(), 1);
+        QVERIFY(!changed.isEmpty());
+        // Once it has the list it stops asking.
+        const auto asked = daemon.sent.size();
+        QTest::qWait(120);
+        QCOMPARE(daemon.sent.size(), asked);
+        // A daemon that went away is not asked.
+        daemon.answers.insert("team.list", {{"ok", false}, {"error_message", "Starting"}});
+        teams.refresh();
+        teams.setAvailable(false);
+        const auto after = daemon.sent.size();
+        QTest::qWait(120);
+        QCOMPARE(daemon.sent.size(), after);
+    }
 };
 
 QTEST_MAIN(SidebarTeamsTest)
