@@ -19,6 +19,7 @@
 #include <QMenu>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -61,7 +62,9 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     outer->addWidget(scroll_);
     connect(teams_, &TeamDirectory::changed, this, [this] {
-        rebuild();
+        // The directory reports every team: only a change of this one rebuilds the page.
+        if (teams_->team(teamId_).value_or(QJsonObject{}) != shown_)
+            rebuild();
         readUpdates();
     });
     // Sizes follow the zoom and the task table's colours the theme.
@@ -136,8 +139,48 @@ void TeamPage::resizeEvent(QResizeEvent* event) {
         rebuild();
 }
 
+// The focused widget's own name, or its nearest named ancestor's: a kit control keeps the
+// focus on a part without a name. A decision's and a member's row carry their id.
+TeamPage::FocusPlace TeamPage::focusPlace() const {
+    QWidget* focused = content_ ? window()->focusWidget() : nullptr;
+    if (!focused || !content_->isAncestorOf(focused))
+        return {};
+    while (focused != content_ && focused->objectName().isEmpty())
+        focused = focused->parentWidget();
+    if (focused == content_)
+        return {};
+    FocusPlace place{.name = focused->objectName()};
+    const QWidget* scope = content_;
+    for (QWidget* above = focused->parentWidget(); above != content_; above = above->parentWidget())
+        if (above->objectName().contains(QLatin1Char('_'))) {
+            place.row = above->objectName();
+            scope = above;
+            break;
+        }
+    place.index = static_cast<int>(scope->findChildren<QWidget*>(place.name).indexOf(focused));
+    return place;
+}
+
+void TeamPage::restoreFocus(const FocusPlace& place) {
+    if (place.index < 0)
+        return;
+    const QWidget* scope =
+        place.row.isEmpty() ? content_ : content_->findChild<QWidget*>(place.row);
+    if (!scope)
+        return;
+    const QList<QWidget*> same = scope->findChildren<QWidget*>(place.name);
+    if (!same.isEmpty())
+        same.at(qMin(place.index, static_cast<int>(same.size()) - 1))
+            ->setFocus(Qt::OtherFocusReason);
+}
+
 void TeamPage::rebuild() {
     const int position = scroll_->verticalScrollBar()->value();
+    const FocusPlace focus = focusPlace();
+    const QString currentTask =
+        tasks_ && tasks_->currentRow() >= 0 && tasks_->item(tasks_->currentRow(), 0)
+            ? tasks_->item(tasks_->currentRow(), 0)->text()
+            : QString{};
     roomy_ = roomy();
     compact_ = compact();
     segmented_ = true;
@@ -159,6 +202,7 @@ void TeamPage::rebuild() {
     layout_->setContentsMargins(0, 0, 0, 0);
     layout_->setSpacing(px(14));
     const auto team = teams_->team(teamId_);
+    shown_ = team.value_or(QJsonObject{});
     if (!team) {
         buildEmpty();
     } else {
@@ -174,6 +218,14 @@ void TeamPage::rebuild() {
     // An update keeps the reader where it was.
     content_->adjustSize();
     scroll_->verticalScrollBar()->setValue(position);
+    // And the keyboard where it was: the control that had the focus and the current task.
+    if (tasks_ && !currentTask.isEmpty())
+        for (int row = 0; row < tasks_->rowCount(); ++row)
+            if (tasks_->item(row, 0)->text() == currentTask) {
+                tasks_->setCurrentCell(row, 0);
+                break;
+            }
+    restoreFocus(focus);
 }
 
 // A section's title, what it counts, and at the right what acts on the whole section.

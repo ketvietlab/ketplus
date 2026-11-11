@@ -550,6 +550,56 @@ class TeamPageTest final : public QObject {
         QApplication::processEvents();
         QCOMPARE(bar->value(), 40);
     }
+
+    void anotherTeamsChangeLeavesThePageAlone() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        const QPointer<QWidget> content(page.scrollArea()->widget());
+        QJsonObject other = fixture(9);
+        other.insert("id", "8");
+        other.insert("name", "Billing");
+        teams_->applyEvent("team.changed", {{"team", other}});
+        QApplication::processEvents();
+        QVERIFY(content);
+        QCOMPARE(page.scrollArea()->widget(), content.data());
+        // Its own change still rebuilds it.
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QVERIFY(page.scrollArea()->widget() != content.data());
+        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
+    }
+
+    void aLiveUpdateKeepsTheFocusAndTheCurrentTask() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        QVERIFY(page.tasksTable()->rowCount() > 0);
+        page.tasksTable()->setCurrentCell(0, 0);
+        const QString task = page.tasksTable()->item(0, 0)->text();
+        const QList<QAbstractButton*> open = page.findChildren<QAbstractButton*>("teamMemberOpen");
+        QVERIFY(open.size() > 1);
+        const QString row = open.last()->parentWidget()->objectName();
+        QVERIFY(row.startsWith("teamMember_"));
+        const QPointer<QAbstractButton> before(open.last());
+        before->setFocus();
+        QCOMPARE(page.window()->focusWidget(), open.last());
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QApplication::processEvents();
+        QVERIFY(!before); // the content was rebuilt
+        QWidget* focused = page.window()->focusWidget();
+        QVERIFY(focused);
+        QCOMPARE(focused->objectName(), QStringLiteral("teamMemberOpen"));
+        QCOMPARE(focused->parentWidget()->objectName(), row);
+        QCOMPARE(page.tasksTable()->item(page.tasksTable()->currentRow(), 0)->text(), task);
+    }
 };
 
 QTEST_MAIN(TeamPageTest)
