@@ -218,7 +218,7 @@ Column {
 
     Text {
         visible: folder.expanded && folder.team.members.length === 0
-        x: folder.indent + folder.px(8)
+        x: folder.px(30)
         height: folder.px(24)
         verticalAlignment: Text.AlignVCenter
         text: "No member yet"
