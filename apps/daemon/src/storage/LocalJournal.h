@@ -58,6 +58,9 @@ struct StoredSession final {
     // The user's labels for this conversation, in the order they were added. Written only by
     // setSessionTags; upsertSession leaves them as they are.
     QStringList tags;
+    // #125: the last turn ended asking the user to approve or decide. Written only by
+    // setSessionAwaitingReply; upsertSession leaves it as it is.
+    bool awaitingReply{false};
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -176,6 +179,21 @@ struct LargeEventFragment final {
     QString errorMessage;
 };
 
+// ADR 0112: one entry of a team's append-only Updates log.
+struct TeamUpdateRecord final {
+    qint64 id{0};
+    qint64 teamId{0};
+    QString at;
+    QString actor;
+    QString kind;
+    QString taskId;
+    QString text;
+    QJsonObject data;
+    // Starts the leader's digest (ADR 0112 §7); other updates ride along.
+    bool actionable{false};
+    bool digested{false};
+};
+
 class LocalJournal final {
   public:
     // 2: mcpToolCall metadata-only projection with sanitized argument summaries (ADR 0008).
@@ -244,6 +262,11 @@ class LocalJournal final {
     bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
     // Replaces the labels of this generation.
     bool setSessionTags(const QString& sessionId, qint64 generation, const QStringList& tags);
+    // #429: the labels this Mac offers, [{label, color}] in order. Until a catalog is stored
+    // (or when it cannot be read) the defaults; an empty array is a catalog with no tags.
+    [[nodiscard]] QJsonArray tagCatalog();
+    bool setTagCatalog(const QJsonArray& catalog);
+    bool setSessionAwaitingReply(const QString& sessionId, qint64 generation, bool awaiting);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;
@@ -455,8 +478,27 @@ class LocalJournal final {
     bool clearConversationReviewer(const QString& sessionId, QString* error = nullptr);
     [[nodiscard]] std::optional<ConversationReviewer>
     conversationReviewer(const QString& sessionId) const;
+    // Whether the conversation reviews another conversation's turns.
+    [[nodiscard]] bool isConversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
+    // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at
+    // most one team. insertTeam returns the new id, which is never reused.
+    [[nodiscard]] std::optional<qint64> insertTeam(const QString& repository, QJsonObject document,
+                                                   const QStringList& sessions,
+                                                   QString* error = nullptr);
+    // Replaces the document when the stored revision is `expectedRevision`.
+    bool saveTeam(qint64 teamId, qint64 expectedRevision, const QJsonObject& document,
+                  const QStringList& sessions, QString* error = nullptr);
+    bool deleteTeam(qint64 teamId, QString* error = nullptr);
+    [[nodiscard]] QList<QJsonObject> teamDocuments() const;
+    [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
+    [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
+                                                         QString* error = nullptr);
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
+                                                      int limit) const;
+    bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: the conversation's current work report ledger, empty before its first report.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
     // Stores a ledger whose version is newer than the stored one.
@@ -465,6 +507,8 @@ class LocalJournal final {
 
   private:
     bool initializeAgents();
+    bool initializeTeams();
+    bool writeTeamMembers(qint64 teamId, const QStringList& sessions, QString* error);
     bool initializeRemoteAudit();
     // The audit's eventual 90-day, 10,000-row cap. Run from pruneRetention and every 256 audit
     // rows, because commands refused before they ran store no command result to trigger it.

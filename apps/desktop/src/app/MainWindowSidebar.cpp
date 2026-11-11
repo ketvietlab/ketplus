@@ -190,11 +190,13 @@ void MainWindow::refreshSidebarRepositories() {
     QVector<SidebarRepository> repositories;
     repositories.reserve(roots.size());
     for (const QString& root : std::as_const(roots)) {
+        QVariantList conversations = conversationsByRepository.value(root);
+        QVector<SidebarTeam> teams = takeSidebarTeams(root, conversations);
         repositories.append({root, QFileInfo(root).fileName(), root == activeRepository,
-                             conversationsByRepository.value(root),
-                             root == promotedSidebarRepository_});
+                             conversations, root == promotedSidebarRepository_, teams});
     }
     activityBar_->setRepositories(repositories);
+    updateTeamRoles();
 }
 
 void MainWindow::openSidebarConversation(const QString& worktreePath,

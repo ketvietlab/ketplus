@@ -379,11 +379,25 @@ current-window value.
   shown as text: `chat_markdown::escapeRawHtml` escapes any `<` that could open a
   tag outside code before Qt imports the Markdown, because an unclosed tag such
   as a `<title>` placeholder hid the rest of the answer except its code spans.
-  The row measurer applies the same escaping. Code keeps the body colour. Inline code
-  sits on a rounded chip (the kit's main text colour at 11% alpha), drawn behind
-  the text by `messageInlineCode()` with one chip per wrapped line; the character
-  before the run and the run's last character are tracked by 4 px so the chip does
-  not cover neighbouring text. Code blocks keep their frames and get no chips.
+  The row measurer applies the same escaping. The bare-URL autolinker stops at a
+  backslash, so a URL just before an escaped tag still closes its autolink. Code keeps
+  the body colour. Inline code is plain monospace text, as in the kit and the mock,
+  with no chip or extra tracking. Code blocks keep their frames.
+  Nothing a model writes reaches the network. `installLocalOnlyNetwork` gives the
+  transcript's QML engine a network manager that serves only `file:`, `qrc:` and
+  `data:` URLs and fails every other request before any lookup. An inline
+  `![alt](https://…)` is shown as a link to the image (`chat_markdown::prepareForDisplay`).
+  A file path that names another machine (`file://host/share/a.png`, `//host/share/a.png`,
+  `\\host\share\a.png`) counts as remote: opening it would connect to that host, on Windows
+  over SMB with the account's credentials. `transcriptMayOpen` allows such a path only inside
+  the conversation's worktree, when that worktree is on the share itself.
+  A reference-style remote image stays a broken image that is never fetched. An inline
+  local photo is drawn as an 88 px thumbnail, and the document keeps it at that size
+  for the screen's density instead of the full decode. Links take the kit's link
+  colour on every format pass, so they follow a theme change. Qt's Markdown importer
+  had kept the colour from the theme in use when the answer was parsed.
+  The layout trace (`KETPLUS_CHAT_LAYOUT_TRACE`) is off unless that variable names a
+  file. It records geometry and keys, never message text.
   Their fill and border come directly from `KetTheme.codeBlockRecipe`, using the
   kit's panel-subtle surface in each theme. Appearance-driven rich-text formatting
   waits until QML font and width bindings settle before measuring overlay frames.
@@ -492,9 +506,8 @@ current-window value.
   Base worktree list in place, so a worktree made outside KetPlus (another agent
   or a terminal) appears without reopening the folder. The worktree already
   picked stays selected.
-  Git > Switch Worktree > Manage worktrees… opens the Worktrees page, which
-  offers Archive and confirmed deletion for inactive linked worktrees with no
-  running agent. Deletion keeps the branch. Conversation deletion confirms
+  There is no Worktrees page (ADR 0111): a worktree is created for a
+  conversation and switched from inside it. Conversation deletion confirms
   whether to remove linked worktrees and whether to force that removal; Git
   still refuses the primary worktree, and a failed non-forced remove leaves an
   error after the conversation is gone. KetPlus stores the worktrees each
@@ -1016,7 +1029,7 @@ daemon acknowledges. The picker then closes and announces "Next turn:
 <repository> · <branch>". Transcript, conversation identity, draft and an active
 provider turn survive, and the new scope applies from the next turn. A failed switch
 keeps the old scope and shows the error, and Use retries. **Create worktree…** opens
-the Worktrees page. iPhone uses a Repository → Worktree bottom sheet over the
+the Create worktree card in place (ADR 0111). iPhone uses a Repository → Worktree bottom sheet over the
 granted catalog.
 
 
@@ -1038,3 +1051,29 @@ another provider. Non-macOS hosts retain inherited runtime authentication.
 The optional query budget and latest-query cost are estimates, not a hard account
 spend cap or bill. Consult Anthropic Console for actual usage. See
 [ADR 0026](decisions/0026-claude-api-key.md) for credential boundaries and release checks.
+
+## Teams
+
+[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+one repository on one goal: exactly one **leader**, one to five **developers** and exactly
+one **reviewer** (a Claude conversation). A conversation is on at most one team.
+
+- **Roles.** The leader plans, writes acceptance criteria, assigns tasks, changes lanes
+  and orders merges; it does not write code or review, and it is the only member that
+  speaks to the user. A developer works on its assigned task inside its lane (path
+  prefixes). The reviewer reviews each task read-only against its criteria.
+- **A task's life.** Created by the leader with criteria, lane and dependencies →
+  assigned (its branch and worktree are cut from the integration branch, and the
+  owner's conversation is pointed at that worktree) → `in_progress` → handed to review
+  with its work committed → `ready` when the reviewer reports no findings, or back to
+  the owner with the findings → merged by the leader or by the user, as the team is set
+  → `done` once its head is in the integration branch.
+- **What wakes whom.** An assignment or handover starts a turn of the new owner; a task
+  entering review, the reviewer; findings, the owner; an answered decision, the leader
+  and the blocked owner; actionable updates, one leader digest. Notes, met marks and
+  other state changes start nothing.
+- **Decisions.** Only the leader raises one; the user answers on the team page. The
+  folder in the sidebar shows the count.
+- **Limits.** 40 automatic turns per team since the user last acted on it, then the team
+  pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
+  message until Resume.

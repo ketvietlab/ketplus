@@ -61,6 +61,8 @@ class LocalIpcServer final : public QObject {
     void consumeFrame(QLocalSocket* socket, const QByteArray& frame);
     void send(QLocalSocket* socket, const QJsonObject& envelope);
     void broadcastEvent(const QJsonObject& event);
+    void broadcastTeamEvent(const QString& type, const QJsonObject& payload);
+    void broadcastNotice(const QString& type, const QJsonObject& payload);
     [[nodiscard]] bool tokenMatches(const QByteArray& candidate) const;
 
     ClaudeCredentials* credentials_{nullptr};

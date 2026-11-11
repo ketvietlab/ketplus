@@ -342,8 +342,12 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 [this, name = provider->name()] { catalogCache_.invalidate(name); });
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
-                if (method == "account/updated")
+                if (method == "account/updated") {
                     catalogCache_.invalidate("codex");
+                    // The CLI signed in, out or changed account: a sign-in, key or limit
+                    // failure reported for the old account no longer applies.
+                    readiness_.forget(QStringLiteral("codex"));
+                }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
     if (claude != nullptr)
@@ -409,6 +413,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     mediaStore_.retainSessions(liveSessions);
     // ADR 0027: every conversation has a number; older journals are backfilled once.
     agents_ = new AgentBroker(journal_, static_cast<AgentHostPort*>(this), this);
+    startTeams();
     for (const Session& session : std::as_const(sessions_)) {
         QString numberError;
         if (journal_
@@ -499,6 +504,9 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("session.reviewer.") && !localClient(clientId))
         return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
+    // ADR 0112: teams are the user's; agents use the team_* tools instead.
+    if (type.startsWith("team.") && !localClient(clientId))
+        return error("forbidden", "Teams are managed from the local Desktop UI.");
     if (type == "session.work_report.read" && !localClient(clientId))
         return error("forbidden", "The work report is read by the local Desktop UI.");
     if (type.startsWith("storage.") && clientId == "cloud-control-v2")
@@ -592,6 +600,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = conversationReviewer(request, type.endsWith(".set"));
     } else if (type == QStringLiteral("session.work_report.read")) {
         result = readWorkReport(request);
+    } else if (type.startsWith(QStringLiteral("team."))) {
+        result = teamCommand(type, request);
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -602,6 +612,12 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = setSessionArchived(request);
     } else if (type == QStringLiteral("session.tags.set")) {
         result = setSessionTags(request);
+    } else if (type == QStringLiteral("tags.catalog")) {
+        result = tagCatalog();
+    } else if (type == QStringLiteral("tags.catalog.set")) {
+        result = setTagCatalog(request);
+    } else if (type == QStringLiteral("session.mark_done")) {
+        result = markSessionDone(request);
     } else if (type == QStringLiteral("session.delete")) {
         result = deleteSession(request);
     } else if (type == QStringLiteral("session.output.read") ||
@@ -767,6 +783,9 @@ void SessionHost::handleProviderQuery(
         return;
     }
     if (type == QStringLiteral("provider.runtime_status")) {
+        // Check again (#170): forget reported sign-in failures and read every probe afresh.
+        if (payload.value(QStringLiteral("recheck")).toBool())
+            readiness_.recheck(QDateTime::currentSecsSinceEpoch());
         providerRuntimeStatus(std::move(callback));
         return;
     }
@@ -1573,6 +1592,7 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
     agents_->forget(sessionId);
+    teams_->conversationDeleted(sessionId);
     mediaStore_.releaseSession(sessionId);
     emit eventReady(
         QJsonObject{{"session_id", sessionId},
@@ -2174,11 +2194,13 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             abandonTurnApprovals(session->stored.id);
         }
         const QJsonObject providerError = params.value(QStringLiteral("error")).toObject();
-        appendProviderEvent(
-            *session, QStringLiteral("runtime.error"),
-            {{QStringLiteral("code"), providerError.value(QStringLiteral("code")).toString()},
-             {QStringLiteral("message"),
-              providerError.value(QStringLiteral("message")).toString()}});
+        QJsonObject failure{
+            {QStringLiteral("message"), providerError.value(QStringLiteral("message")).toString()}};
+        // Codex's own reason, which runtime.error's `code` is classified from first (ADR 0110).
+        const QJsonValue info = providerError.value(QStringLiteral("codexErrorInfo"));
+        if (!info.isUndefined() && !info.isNull())
+            failure.insert(QStringLiteral("provider_info"), info);
+        appendProviderEvent(*session, QStringLiteral("runtime.error"), failure);
         for (const QString& path : std::exchange(session->materializedAttachments, {}))
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
@@ -2542,6 +2564,9 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
         approvals_->expireAssistantQuestions(sessionId, generation);
     if (!alive.isNull() && agents_ != nullptr)
         agents_->noteEvent(sessionId, generation, type, contextualPayload);
+    // ADR 0112 §7: the leader's digest waits for the end of its turn.
+    if (!alive.isNull() && teams_ && (type == "turn.completed" || type == "runtime.stopped"))
+        teams_->memberTurnEnded(sessionId);
     return true;
 }
 
@@ -2552,6 +2577,9 @@ SessionHost::Session* SessionHost::sessionForThread(const QString& threadId) {
 }
 
 bool SessionHost::isMutating(const QString& messageType) {
+    if (messageType.startsWith(QStringLiteral("team.")))
+        return !messageType.endsWith(QStringLiteral(".list")) &&
+               !messageType.endsWith(QStringLiteral(".get"));
     return messageType == QStringLiteral("session.agent_messages.release") ||
            messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||
@@ -2565,6 +2593,8 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.mark_seen") ||
            messageType == QStringLiteral("session.set_archived") ||
            messageType == QStringLiteral("session.tags.set") ||
+           messageType == QStringLiteral("tags.catalog.set") ||
+           messageType == QStringLiteral("session.mark_done") ||
            messageType == QStringLiteral("session.delete") ||
            messageType == QStringLiteral("session.steer") ||
            messageType == QStringLiteral("session.interrupt") ||

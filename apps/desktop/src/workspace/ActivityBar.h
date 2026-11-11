@@ -17,11 +17,13 @@ class QToolButton;
 namespace ket {
 class NavItem;
 class UpdatePill;
-class Select;
 class Banner;
 } // namespace ket
 
 namespace ketplus {
+
+class SidebarSearchButton;
+class SidebarTagFilterChip;
 
 struct ThemePalette;
 
@@ -46,6 +48,7 @@ class ActivityBar final : public QWidget {
     void setSourceControlAvailable(bool available);
     void setSourceControlCount(int count);
     void setRepositories(const QVector<SidebarRepository>& repositories);
+    [[nodiscard]] SidebarRepositoryList* repositoryList() const { return repositoryList_; }
     void setTagFilter(const QString& tag);
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
@@ -88,13 +91,14 @@ class ActivityBar final : public QWidget {
     void refreshIcons();
 
     QButtonGroup* group_{nullptr};
-    ket::NavItem* quickSearchButton_{nullptr};
+    SidebarSearchButton* quickSearchButton_{nullptr};
     QLabel* brandWordmark_{nullptr};
     ket::NavItem* explorerButton_{nullptr};
     ket::NavItem* sourceControlButton_{nullptr};
     ket::NavItem* agentButton_{nullptr};
     ket::NavItem* remoteButton_{nullptr};
-    ket::Select* tagFilter_{nullptr};
+    SidebarTagFilterChip* tagFilter_{nullptr};
+    QWidget* tagFilterRow_{nullptr};
     QWidget* storageNotice_{nullptr};
     ket::Banner* storageBanner_{nullptr};
     SidebarRepositoryList* repositoryList_{nullptr};
@@ -104,6 +108,8 @@ class ActivityBar final : public QWidget {
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QLabel* identityAvatar_{nullptr};
+    QLabel* identityName_{nullptr};
+    QLabel* identitySubtitle_{nullptr};
     QString accountName_;
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};

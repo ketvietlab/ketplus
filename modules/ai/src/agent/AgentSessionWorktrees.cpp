@@ -251,6 +251,19 @@ AgentSessionManager::conversationOwnedWorktreePaths(const QString& worktreePath,
     return worktreeStore_->allPaths(conversationId);
 }
 
+void AgentSessionManager::claimConversationWorktree(const QString& worktreePath,
+                                                    const QString& conversationId,
+                                                    const QString& ownedPath) {
+    if (!worktreeStore_ || conversationId.isEmpty() || ownedPath.isEmpty() ||
+        worktreeStore_->containsPath(ownedPath, conversationId))
+        return;
+    worktreeStore_->save(conversationId, ownedPath,
+                         QString::fromLatin1(ConversationWorktreeStore::kRoleAgent));
+    const QString path = normalizedPath(worktreePath);
+    emit ownedWorktreesChanged(path);
+    emit conversationsChanged(path, conversations(path));
+}
+
 void AgentSessionManager::hideOwnedWorktree(const QString& worktreePath,
                                             const QString& conversationId,
                                             const QString& ownedPath) {

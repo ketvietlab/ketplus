@@ -24,20 +24,84 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Agent teams, store (ADR 0112, #455): the daemon keeps teams in the journal
+  (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
+  their error codes; a member cannot be archived, its own Reviewer setting is refused
+  with `team_member` and does not run, and a deleted member leaves its team.
+  The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
+  local clients; `team.create` starts every member as a named conversation (no turn),
+  all or nothing, and `team.changed` / `team.removed` reach every local client.
+  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
+  criteria only the leader or the user writes, an append-only history, dependencies,
+  and a handover that moves the task's own worktree and branch to the new owner.
+  Agent tools (#458): members get the `team_*` tools of the ketplus_agents server, the
+  daemon checks the caller's role on every call (`role_forbidden` names the role that
+  may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
+  role and lane, and each member's instructions explain its role. The leader's first
+  turn carries the goal.
+  Automatic turns (#459): only an assignment, a handover, a review and an answered
+  decision start a member's turn; every other change waits in Updates for the leader's
+  digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
+  holds every team message in order until Resume, and 40 automatic turns pause the team
+  with one decision.
+  Per-task review (#460): a task entering In review is queued for the team's reviewer,
+  first in first out, as an ADR 0067 `review` message with its criteria and the diff of
+  its branch against the integration branch; `no findings` makes it Ready, findings go
+  back to the owner with round + 1, and past `max_rounds` the task is Blocked.
+  Lanes (#461): after a developer's turn the daemon compares the files its open tasks
+  changed (committed or not) with its prefixes and the shared paths; outside paths are
+  flagged on the task, actionable in the digest, and cleared when reverted or covered
+  by a lane change.
+  Decisions (#462): the leader raises a question with two to four choices
+  (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
+  `team.decision.answer`, which reaches the leader and the blocked owner once and
+  unblocks the task. The leader's first plan waits as "Start these N tasks?", and the
+  budget's decision continues or stops the team.
+  Merging (#463): a Ready task whose dependencies are done is offered once — to the
+  leader's digest under `mergePolicy` `leader`, as a "Merge T-n?" decision under
+  `user` — and becomes Done when the integration branch contains its branch
+  (`git merge-base --is-ancestor`, checked after every member's turn and on
+  `team.get`), also for a merge made by hand.
+  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a folder in its
+  repository before the other conversations, leader, developers, reviewer, each with its
+  locked role tag first. The folder's name opens the team, its count is the open
+  decisions; its menu adds a member or deletes the team, the conversation menu joins or
+  leaves a team with the reason when it cannot, and a drop on a folder of the same
+  repository joins as a developer. `DaemonClient::teamEventReceived` carries
+  `team.changed` and `team.removed` to the desktop's `TeamDirectory`.
+  Dialogs (#465): New team sends one `team.create` with the name, goal, integration
+  branch, who merges, one to five developers and each role's agent (Claude leads and
+  reviews, another ready provider develops; the reviewer's chooser offers Claude only).
+  A refusal keeps the dialog open with the error at the role it names. Add a developer
+  sends `team.member.add` with a required name, lane, paths and agent, hints at the
+  reviewer queue from three developers and is disabled at five.
+  Member header (#467): a member's Agent Workspace header shows its role first as a locked
+  tag that opens the team, has no Reviewer choice (the team's reviewer reviews its
+  tasks), and its tag menu starts with a disabled "Role · Set by team" row. Leaving the
+  team brings the Reviewer choice back with its setting.
+  Team page (#466): Open team shows the team in the workspace area: what waits for the
+  user (decisions with the recommended choice first, answered in place through
+  `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
+  members, and the updates from `team.get`, newest first. Paused and queue banners explain
+  why turns wait. `team.changed` rebuilds it in place and keeps the scroll position. A
+  task opens its description, criteria, dependencies and full history, and Hand over…
+  sends `team.task.handover` with another developer and a required reason. Without the
+  team it explains teams and offers New team.
+
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
   through authenticated outbound Relay; this layer does not add SSH setup.
-  The Worktrees page follows the mock: each linked worktree shows its own Git
-  state, read by one read-only `git status` per worktree off the event loop
-  (`WorktreeStateProbe`); Prune appears only while a worktree folder is missing;
-  Manage opens New conversation here, Open in Files & Editor, Reveal in Finder,
-  Archive and Delete; Create worktree offers "Start a conversation in it".
+  There is no Worktrees page (ADR 0111): worktrees are created for a
+  conversation, from New conversation or the repository picker's Create
+  worktree… card, which moves that conversation to the new worktree, and
+  switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
-  separators and the kit empty state and avatar. Linux machines still connect
-  only through the Relay, so the mock's SSH wording, machine details and
-  Disconnect are not in the app.
+  separators and the kit empty state and avatar. Linux machines connect only
+  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
+  details and Disconnect, and its phone pairing dialog now follows the app's
+  scan, compare and approve flow (no typed pairing code).
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
@@ -53,10 +117,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  tag filtering and update pills. Storage pressure warnings consume the local
-  daemon's existing size-status contract. Tags come from the daemon catalog (ADR 0107);
-  waiting-for-reply renders only when metadata supplies it; automatic intent classification/reviewer orchestration
-  are separate behaviour work. Native acceptance remains deferred.
+  the mock's field-styled Quick search, a machine header with its chevron, and update
+  pills. A tag chosen in the conversation header filters the sidebar and shows as the
+  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
+  local daemon's existing size-status contract. Tags come from the daemon catalog
+  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+  `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
   Search, Source Control and Settings. First use opens a folder welcome surface;
@@ -565,9 +631,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   name and transcript right-click menus copies an idle Codex or Claude
   conversation through the provider's native fork and a journal copy. Cursor
   has no fork operation; forking from an earlier message is not offered yet.
-- The product sidebar opens a dedicated Worktrees workspace with live
-  conversation/activity state, create/manage actions, and the archived-items
-  route. Settings is a full workspace page rather than a modal popup while
+- Worktrees have no workspace of their own (ADR 0111); conversations create
+  and switch them. Settings is a full workspace page rather than a modal popup while
   continuing to reuse the public KetPlus CM settings controls and persistence.
 - Streaming presentation is coalesced, offscreen Markdown work is deferred, and
   an anchored live response can retain its displayed source while the user reads
@@ -600,6 +665,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   QR-confirmed mobile pairing, device revocation, and reconnect visibility.
 
 ## Planned
+
+- Agent teams ([ADR 0112](decisions/0112-agent-teams.md), epic #450): a leader, one
+  to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
+  review, decisions on the team page and a digest instead of status messages. Each
+  step of #450 moves its part to Implemented.
 
 - Cache/payer-aware automatic compact-window selection and UI policy/reason
   controls, based on actual runtime retention and occupancy rather than a shared

@@ -51,6 +51,14 @@ LocalJournal::conversationReviewer(const QString& sessionId) const {
                                 .updatedAt = query.value(3).toString()};
 }
 
+bool LocalJournal::isConversationReviewer(const QString& sessionId) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT 1 FROM conversation_reviewers WHERE reviewer_session_id = ? LIMIT 1"));
+    query.addBindValue(sessionId);
+    return query.exec() && query.next();
+}
+
 int LocalJournal::reviewRequestsInChain(const QString& chainId, const QString& sessionId) const {
     QSqlQuery query(database_);
     query.prepare(QStringLiteral("SELECT COUNT(*) FROM agent_messages WHERE chain_id = ? AND "

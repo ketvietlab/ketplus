@@ -6,7 +6,7 @@
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
-#include "app/WorktreesWorkspacePage.h"
+#include "app/WaitingBadge.h"
 #include "atlas/AtlasTab.h"
 #include "atlas/ManagedAtlasViewers.h"
 #include "workspace/AtlasIndex.h"
@@ -127,6 +127,7 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setConversationWidth);
     connect(agentWorkspace_, &AgentWorkspaceView::repositoryPickerRequested, this,
             &MainWindow::chooseFolder);
+    connect(agentWorkspace_, &AgentWorkspaceView::teamRequested, this, &MainWindow::openTeam);
     auto updateRepositoryName = [this, lastPath = QString()]() mutable {
         const auto path = agentWorkspace_->executionPath();
         if (lastPath == path)
@@ -147,6 +148,8 @@ void MainWindow::ensureAgentWorkspace() {
     updateRepositoryName();
     agentWorktreeCreator_ = new AgentWorktreeCreator(this);
     agentManager_ = new AgentSessionManager(this);
+    connect(this, &QObject::destroyed,
+            [owner = static_cast<QObject*>(this)] { WaitingBadge::instance().forget(owner); });
     setupSidebarStorage();
     setupSidebarAccount();
     connect(
@@ -203,7 +206,10 @@ void MainWindow::ensureAgentWorkspace() {
                 scheduleSidebarRefresh(true);
             },
             agentWorkspace_->executionPath(), roots, currentRepository,
-            [this] { setWorktreesWorkspaceVisible(true); });
+            // Worktrees are made here, for the conversation; there is no Worktrees screen.
+            [this](const QString& repository, qint64 revision) {
+                createConversationWorktree(repository, revision);
+            });
     });
     connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
             [this] { agentWorkspace_->setExecutionBranch({}); });
@@ -235,6 +241,17 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setProviderRuntime);
     agentWorkspace_->setProviderRuntime(agentManager_->providerStatus()->state());
     agentManager_->providerStatus()->refresh();
+    // ADR 0110: the provider setup guide in the conversation.
+    agentWorkspace_->setTurnGuide(
+        [status = agentManager_->providerStatus()](const QString& provider, const QString& code,
+                                                   const QString& message, const QString& model) {
+            return status->turnGuide(provider, code, message, model);
+        });
+    connect(agentWorkspace_, &AgentWorkspaceView::providerRecheckRequested,
+            agentManager_->providerStatus(),
+            [status = agentManager_->providerStatus()] { status->refresh(true); });
+    connect(agentWorkspace_, &AgentWorkspaceView::typeInTerminalRequested, this,
+            &MainWindow::typeInTerminal);
     agentWorkspace_->setClaudeUsageRequester([this](AgentWorkspaceView::UsageReply reply) {
         agentManager_->appServer()->call("provider/claudeCredentials/analytics.refresh", {},
                                          std::move(reply));
@@ -407,27 +424,29 @@ void MainWindow::ensureAgentWorkspace() {
                 statusBar()->showMessage(QStringLiteral("Created worktree for %1").arg(branchName),
                                          3000);
                 promotedWorktreePath_ = normalizedPath(path);
+                if (!pickerWorktreeAgentPath_.isEmpty()) {
+                    moveConversationToCreatedWorktree(path, branchName);
+                    git_->scheduleRefresh(0);
+                    return;
+                }
                 const bool forConversation = pendingConversationWorktree_;
                 pendingConversationWorktree_ = false;
                 switchToWorktree(path);
                 if (forConversation && agentManager_ != nullptr)
                     agentManager_->markActiveConversationOwnsWorktree(path);
-                // "Start a conversation in it": leave the Worktrees page for the new worktree.
+                // "Start a conversation in it": open the new worktree's conversation.
                 if (std::exchange(openCreatedWorktree_, false) && !forConversation)
                     setAgentWorkspaceVisible(true);
                 git_->scheduleRefresh(0);
             });
-    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this, [this] {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->setPruning(false);
-        git_->scheduleRefresh(0);
-    });
+    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this,
+            [this] { git_->scheduleRefresh(0); });
     connect(agentWorktreeCreator_, &AgentWorktreeCreator::failed, this,
             [this](const QString& error) {
                 pendingConversationWorktree_ = false;
                 openCreatedWorktree_ = false;
-                if (worktreesWorkspace_ != nullptr)
-                    worktreesWorkspace_->setPruning(false);
+                pickerWorktreeAgentPath_.clear();
+                pickerWorktreeConversation_.clear();
                 if (!pendingDeleteConversationPath_.isEmpty() ||
                     !pendingDeleteWorktreePaths_.isEmpty()) {
                     clearPendingWorktreeDeletion();
@@ -473,6 +492,11 @@ void MainWindow::ensureAgentWorkspace() {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
             });
+    agentWorkspace_->setTagCatalog(agentManager_->tagCatalog());
+    connect(agentManager_, &AgentSessionManager::tagCatalogChanged, agentWorkspace_,
+            &AgentWorkspaceView::setTagCatalog);
+    connect(agentWorkspace_, &AgentWorkspaceView::tagCatalogSaveRequested, agentManager_,
+            &AgentSessionManager::saveTagCatalog);
     connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
             [this](const QString& conversationId, const QString& label, const bool tagged) {
                 agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,
@@ -589,6 +613,8 @@ void MainWindow::ensureAgentWorkspace() {
             [this](const QString& path, const QVariantList& conversations) {
                 if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
                     agentWorkspace_->setConversations(conversations);
+                WaitingBadge::instance().report(this, normalizedPath(path),
+                                                WaitingBadge::countWaiting(conversations));
                 // The sidebar lists every repository's conversations, not only this worktree's.
                 scheduleSidebarRefresh();
             });
@@ -606,7 +632,6 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentManager_, &AgentSessionManager::activityChanged, this, [this] {
         refreshAgentWorktrees();
-        refreshWorktreesWorkspace();
         // A completed agent turn may have created or removed linked worktrees.
         git_->scheduleRefresh(200);
     });

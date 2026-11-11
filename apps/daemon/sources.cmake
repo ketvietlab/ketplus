@@ -81,6 +81,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/CodexItems.cpp
     src/runtime/CodexItems.h
     src/runtime/ProviderCatalogCache.cpp
+    src/runtime/ProviderErrorCode.cpp
     src/runtime/ProviderReadiness.cpp
     src/runtime/ProviderCatalogCache.h
     src/agents/AgentBroker.cpp
@@ -91,6 +92,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentInstructions.h
     src/agents/AgentMcpServer.cpp
     src/agents/AgentMcpServer.h
+    src/agents/AgentTeamTools.cpp
+    src/agents/AgentTeamTools.h
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
@@ -100,8 +103,26 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
     src/storage/LocalJournalReviewers.cpp
+    src/storage/LocalJournalTeams.cpp
+    src/teams/Team.cpp
+    src/teams/Team.h
+    src/teams/TeamRules.cpp
+    src/teams/TeamRules.h
+    src/teams/TeamCoordinator.cpp
+    src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorDecisions.cpp
+    src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorLanes.cpp
+    src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorReviews.cpp
+    src/teams/TeamCoordinatorTasks.cpp
+    src/agents/AgentBrokerTeams.cpp
     src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
+    src/runtime/SessionHostTeams.cpp
+    src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
@@ -113,6 +134,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
     src/runtime/SessionHostArchive.cpp
+    src/runtime/SessionHostAwaiting.cpp
+    src/runtime/AwaitingReply.h
     src/runtime/SessionHostTags.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp

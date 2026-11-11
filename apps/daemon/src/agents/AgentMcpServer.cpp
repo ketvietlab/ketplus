@@ -1,5 +1,6 @@
 #include "agents/AgentMcpServer.h"
 
+#include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
 
@@ -159,7 +160,19 @@ QJsonArray tools() {
                      {QStringLiteral("limit"),
                       property(QStringLiteral("integer"),
                                QStringLiteral("At most this many messages (1-50)."))}})}},
-        workReportTool()};
+        workReportTool(),
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("request_user_decision")},
+            {QStringLiteral("description"),
+             QStringLiteral("Call once, just before your final answer, when that answer asks the "
+                            "user to approve, choose or decide something before work can go on. "
+                            "KetPlus then shows the conversation as Waiting for you instead of "
+                            "Completed. Do not call it for a plain summary or an optional idea.")},
+            {QStringLiteral("inputSchema"),
+             schema({{QStringLiteral("summary"),
+                      property(QStringLiteral("string"),
+                               QStringLiteral("What the user must decide, in one short line."))}},
+                    {QStringLiteral("summary")})}}};
 }
 
 QString operationFor(const QString& tool) {
@@ -173,7 +186,9 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.inbox");
     if (tool == QStringLiteral("work_report"))
         return QStringLiteral("agents.work_report");
-    return {};
+    if (tool == QStringLiteral("request_user_decision"))
+        return QStringLiteral("agents.request_user_decision");
+    return teamOperationFor(tool);
 }
 
 QJsonObject result(const QJsonValue& id, const QJsonObject& value) {
@@ -322,8 +337,14 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
-    if (method == QStringLiteral("tools/list"))
-        return result(id, {{QStringLiteral("tools"), tools()}});
+    if (method == QStringLiteral("tools/list")) {
+        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        QJsonArray listed = tools();
+        if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
+            for (const auto& tool : teamTools())
+                listed.append(tool);
+        return result(id, {{QStringLiteral("tools"), listed}});
+    }
     if (method == QStringLiteral("tools/call")) {
         const QJsonObject params = message.value(QStringLiteral("params")).toObject();
         const QString operation = operationFor(params.value(QStringLiteral("name")).toString());

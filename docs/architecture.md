@@ -112,10 +112,10 @@ Qt application shell
   without duplicating persistence code.
   The private Archived page owns conversation/worktree visibility restoration;
   it stays open after restoring and can stop a still-running archived turn.
-- The desktop shell owns the full Worktrees workspace. It combines linked Git
-  worktrees from the public read-only Git service with private conversation and
-  running-session counts, while create/archive/delete actions remain explicit
-  private-shell workflows.
+- The desktop shell has no Worktrees workspace (ADR 0111). Linked Git
+  worktrees from the public read-only Git service feed the conversation's
+  execution picker; creating a worktree and removing it with its conversation
+  remain explicit private-shell workflows.
 - Terminal creation is lazy. Hiding its panel only detaches the visible area; it
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.
@@ -183,8 +183,11 @@ Qt application shell
   width. The toggle pulses while running and labels pending questions without
   automatically opening chat or stealing focus; Stop remains a separate action.
   The preview's stable bundle path plus selected flow ID and Builder conversation
-  form the prompt context. `@Flow` is a preferred focus hint, never a filesystem
-  isolation or authorization boundary.
+  form the prompt context. The selected flow is a preferred focus hint, never a
+  filesystem isolation or authorization boundary. As in the mock's `--screen=atlas`, the
+  header names it with its screen count ("Getting started · 2 screens"). It also shows
+  "Validated preview", or "Checking changes" while a manifest is mid-write. The composer
+  asks "Ask for a change to <flow>…".
 - The root CMake build selects the edition (ADR 0029). Pro composes its targets
   with the `KetPlusCM::*` targets of `core/`. Product code must not include files by reaching through
   `core/`; exported include paths and targets form the boundary.
@@ -424,8 +427,8 @@ receipts can be hidden locally per conversation/task incarnation; this never
 deletes daemon task history or stops a running task.
 
 The standalone Agent Workspace sidebar also uses repository → conversation
-composition. It does not render a worktree rail; the execution picker and
-Worktrees page own checkout selection and management. The native shell retains
+composition. It does not render a worktree rail; the execution picker owns
+checkout selection, and worktrees are created for a conversation (ADR 0111). The native shell retains
 its multi-repository grouping.
 
 Pro Quick search wraps the kit CommandPalette in a transparent native popup so it

@@ -194,7 +194,7 @@ Rectangle {
                     checkable: false
                     checked: sidebar.window.screen === modelData.id
                              || (modelData.id === "workspace"
-                                 && ["worktrees", "atlas", "teams"].includes(sidebar.window.screen))
+                                 && ["atlas", "teams"].includes(sidebar.window.screen))
                     onClicked: sidebar.window.showScreen(modelData.id)
                 }
             }

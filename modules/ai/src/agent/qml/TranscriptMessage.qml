@@ -70,6 +70,32 @@ Item {
     required property string eventType
     // The provider a steer joined, from its journal event; older steers have none.
     required property string provider
+    // ADR 0110: the daemon's code for a turn the provider ended; the row shows its setup guide.
+    required property string errorCode
+    // The provider's own words and the model of the turn that failed.
+    required property string errorDetail
+    required property string errorModel
+    // Only the failure that ended the latest turn shows the full guide; once the user writes
+    // again, the row reads as the notice it was.
+    readonly property var providerSetup: {
+        if (kind !== "error" || !errorCode || !view.messageModel)
+            return null;
+        view.messageModel.sourceRevision;
+        host.providerRuntime; // the commands the daemon reports for the provider
+        const rows = view.messageModel.count;
+        for (let next = index + 1; next < rows && next <= index + 50; ++next) {
+            const later = view.messageModel.get(next);
+            // A later turn, the user's or an agent's, or a newer failure.
+            if (later.kind === "user" || (later.kind === "error" && later.errorCode))
+                return null;
+        }
+        const turnModel = errorModel ? shell.modelForId(errorModel) : null;
+        const modelName = turnModel && turnModel.displayName ? turnModel.displayName
+                        : errorModel || shell.modelLabel || shell.selectedModel || "";
+        const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider,
+                                             errorCode, errorDetail || body, modelName);
+        return guide && guide.id ? guide : null;
+    }
     required property string phase
     required property string title
     required property string summary
@@ -100,6 +126,14 @@ Item {
         view.messageModel.sourceRevision;
         const rows = view.messageModel.count;
         return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
+    }
+    // A failed turn whose error banner sits just above it: the banner already says so, and the
+    // mock's workspace/error shows no "Failed" line under it.
+    readonly property bool failureShownAbove: {
+        if (subtype !== "turnEnd" || status !== "failed" || index < 1 || !view.messageModel)
+            return false;
+        view.messageModel.sourceRevision;
+        return view.messageModel.get(index - 1).kind === "error";
     }
     // An event line that opens the transcript ("Switched from…", "Forked from…") starts where a
     // day divider would, right under the top padding.
@@ -382,7 +416,7 @@ Item {
             TranscriptNotice {
                 objectName: "transcriptNotice"
                 width: parent.width
-                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote"
+                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup && !messageDelegate.failureShownAbove
                 height: visible ? implicitHeight : 0
 
                 title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")
@@ -393,6 +427,18 @@ Item {
                 readonly property bool capacity: messageDelegate.subtype === "modelCapacity"
                 actionText: kind === "error" && shell.retryableFailure && shell.retryableFailure.key === messageDelegate.messageKey ? (capacity ? "Switch model" : "Retry") : ""
                 onActionTriggered: capacity ? shell.openModelPicker() : shell.retryFailedTurn(messageDelegate.messageKey)
+            }
+            Loader {
+                objectName: "transcriptProviderSetup"
+                active: !!messageDelegate.providerSetup
+                visible: active
+                width: parent.width
+                height: active && item ? item.implicitHeight : 0
+                sourceComponent: AgentProviderSetupCard {
+                    shell: messageDelegate.shell
+                    setup: messageDelegate.providerSetup
+                    messageKey: messageDelegate.messageKey
+                }
             }
             Loader {
                 active: messageDelegate.subtype === "heldAgentMessage"
@@ -892,7 +938,6 @@ Item {
                 property var codeFences: []
                 property bool codeFencesIdentity: true
                 property var codeBlocks: []
-                property var inlineCode: []
                 property string lastActivatedLink: ""
                 property double lastLinkActivationTime: 0
                 function activateLink(link) {
@@ -928,7 +973,6 @@ Item {
                     try {
                         host.formatMessageDocument(textDocument, font.pixelSize, width);
                         codeBlocks = host.messageCodeBlocks(textDocument);
-                        inlineCode = host.messageInlineCode(textDocument);
                         mermaidPlaceholders = host.mermaidPlaceholderPositions(textDocument);
                         const layout = host.mermaidLayout(textDocument, messageKey);
                         mermaidBlocks = layout.blocks;
@@ -1027,21 +1071,6 @@ Item {
                                 bodyText.applyMermaidMode();
                             });
                         }
-                    }
-                }
-                Repeater {
-                    model: bodyText.inlineCode
-                    delegate: Rectangle {
-                        objectName: "messageInlineCodeChip"
-                        required property var modelData
-                        x: modelData.x
-                        y: modelData.y + bodyText.topPadding
-                        width: modelData.width
-                        height: modelData.height
-                        z: -1
-                        radius: KetTheme.px(4, KetTheme.zoom)
-                        readonly property color ink: KetTheme.t.textMain
-                        color: Qt.rgba(ink.r, ink.g, ink.b, 0.11)
                     }
                 }
                 Loader {
@@ -1294,22 +1323,6 @@ Item {
             TranscriptMessageImages {
                 row: messageDelegate
                 sources: kind === "user" ? [] : messageDelegate.messageImages
-            }
-            // The mock's line under a generated image: what it was made from.
-            Text {
-                objectName: "imagePromptLine"
-                visible: messageDelegate.subtype === "imageGeneration" && messageDelegate.commandDescription.length > 0 && messageDelegate.messageImages.length > 0
-                width: parent.width
-                height: visible ? implicitHeight + KetTheme.px(8, KetTheme.zoom) : 0
-                topPadding: KetTheme.px(8, KetTheme.zoom)
-                text: "<b>Prompt</b>&nbsp;&nbsp;" + messageDelegate.commandDescription.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                textFormat: Text.StyledText
-                wrapMode: Text.Wrap
-                maximumLineCount: 3
-                elide: Text.ElideRight
-                color: KetTheme.t.textSecondary
-                font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.px(13, KetTheme.zoom)
             }
 
         }

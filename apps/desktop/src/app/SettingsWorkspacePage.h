@@ -32,6 +32,8 @@ class SettingsWorkspacePage final : public SettingsWorkspace {
     void accountDevicesRequested();
     void accountSignOutRequested();
     void agentModelsRequested();
+    // A provider setup guide's command, to type into a terminal without running it (#170).
+    void typeInTerminalRequested(const QString& command);
 
   private:
     void addConversationWidth();

@@ -69,6 +69,13 @@ QJsonObject originEntry(const AgentMessageRecord& message) {
             {QStringLiteral("body"), message.body}};
 }
 
+// A request to review, which runs read-only (ADR 0067). The findings a team's reviewer sends
+// back to a task's owner are also of kind "review" (ADR 0112) but expect no reply: they start
+// an ordinary turn, in which the owner fixes them.
+bool reviewRequest(const AgentMessageRecord& message) {
+    return message.kind == QStringLiteral("review") && message.expectReply;
+}
+
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
@@ -76,9 +83,7 @@ QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
                        {QStringLiteral("agent_messages"), entries}};
     // ADR 0067: the turn reviews another conversation and runs read-only.
-    if (std::any_of(messages.cbegin(), messages.cend(), [](const AgentMessageRecord& message) {
-            return message.kind == QStringLiteral("review");
-        }))
+    if (std::any_of(messages.cbegin(), messages.cend(), reviewRequest))
         origin.insert(QStringLiteral("review_guard"), true);
     if (!messages.isEmpty() && messages.first().delivery.startsWith("user_authorized:"))
         origin.insert(QStringLiteral("user_release_id"),
@@ -129,7 +134,9 @@ std::optional<std::pair<QString, qint64>> AgentBroker::sessionForToken(const QSt
 bool AgentBroker::isOperation(const QString& type) {
     return type == QStringLiteral("agents.whoami") || type == QStringLiteral("agents.list") ||
            type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
-           type == QStringLiteral("agents.work_report");
+           type == QStringLiteral("agents.work_report") ||
+           type == QStringLiteral("agents.request_user_decision") ||
+           type.startsWith(QStringLiteral("agents.team_"));
 }
 
 QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
@@ -152,6 +159,10 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return inbox(*caller, payload);
     if (operation == QStringLiteral("agents.work_report"))
         return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
+    if (operation == QStringLiteral("agents.request_user_decision"))
+        return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
+    if (operation.startsWith(QStringLiteral("agents.team_")))
+        return host_->teamOperation(caller->sessionId, operation.mid(7), payload);
     return failure(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown agent operation."));
 }
@@ -184,7 +195,10 @@ QJsonObject AgentBroker::messageJson(const AgentMessageRecord& message) {
 }
 
 QJsonObject AgentBroker::whoami(const AgentConversation& caller) const {
-    return ok(conversationJson(caller));
+    QJsonObject value = conversationJson(caller);
+    if (const QJsonObject team = host_->teamMembership(caller.sessionId); !team.isEmpty())
+        value.insert(QStringLiteral("team"), team);
+    return ok(value);
 }
 
 QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject& payload) const {
@@ -210,6 +224,14 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
         if (values.size() >= limit)
             continue;
         QJsonObject value = conversationJson(conversation);
+        // ADR 0112: a member's role and lane.
+        if (const QJsonObject team = host_->teamMembership(conversation.sessionId);
+            !team.isEmpty()) {
+            value.insert(QStringLiteral("team"), team.value(QStringLiteral("name")));
+            value.insert(QStringLiteral("role"), team.value(QStringLiteral("role")));
+            if (team.contains(QStringLiteral("lane")))
+                value.insert(QStringLiteral("lane"), team.value(QStringLiteral("lane")));
+        }
         if (conversation.sessionId == caller.sessionId)
             value.insert(QStringLiteral("self"), true);
         values.append(value);
@@ -217,7 +239,19 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
     return ok({{QStringLiteral("conversations"), values}, {QStringLiteral("total"), total}});
 }
 
-QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& payload) {
+QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& request) {
+    QJsonObject payload = request;
+    // ADR 0112: inside a team, "leader" and "reviewer" name the team's member.
+    if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
+        role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
+        const QString number = host_->teamRoleNumber(caller.sessionId, role);
+        if (number.isEmpty())
+            return failure(QStringLiteral("not_on_team"),
+                           QStringLiteral("\"%1\" names a member of your team, and this "
+                                          "conversation is on no team. Use a number.")
+                               .arg(role));
+        payload.insert(QStringLiteral("to"), number);
+    }
     const QString to = normalizedNumber(payload.value(QStringLiteral("to")));
     if (to.isEmpty())
         return failure(QStringLiteral("invalid_number"),
@@ -436,7 +470,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     QList<AgentMessageRecord> deliverable;
     for (AgentMessageRecord& message : queued) {
         // The receiver may have switched provider since the review was requested.
-        if (message.kind == QStringLiteral("review") && !enforcesReviewGuard(receiver->provider)) {
+        if (reviewRequest(message) && !enforcesReviewGuard(receiver->provider)) {
             markState(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             notice(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             continue;
@@ -505,7 +539,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         if (message.expectReply)
             origin.expectReply.append(message.id);
-        if (message.kind == QStringLiteral("review"))
+        if (reviewRequest(message))
             origin.review = true;
     }
     turns_.insert(sessionId, origin);
@@ -548,8 +582,7 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
     QList<AgentMessageRecord> pending = journal_->agentMessagesTo(
         sessionId, generation, {QStringLiteral("queued"), QStringLiteral("held")});
     // A review request runs only in its own read-only turn (ADR 0067), never in the user's.
-    pending.removeIf(
-        [](const AgentMessageRecord& message) { return message.kind == QStringLiteral("review"); });
+    pending.removeIf(reviewRequest);
     if (pending.isEmpty())
         return {};
     // Messages left over are delivered when this turn ends.
@@ -653,10 +686,19 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
             const QString reason =
                 completed ? QStringLiteral("no_reply") : QStringLiteral("turn_") + status;
             markState(*request, QStringLiteral("failed"), reason);
+            if (request->fromSession.isEmpty()) {
+                host_->teamRequestFinished(sessionId, *request, {}, reason);
+                continue;
+            }
             notice(*request, QStringLiteral("failed"), reason);
             continue;
         }
         markState(*request, QStringLiteral("answered"));
+        if (request->fromSession.isEmpty()) {
+            // ADR 0112: the team sent it; the team reads the answer.
+            host_->teamRequestFinished(sessionId, *request, text, {});
+            continue;
+        }
         const auto sender = host_->agentConversation(request->fromSession);
         if (!sender || sender->generation != request->fromGeneration)
             continue;

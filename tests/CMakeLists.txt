@@ -60,6 +60,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptAgentNoteTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
+    AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
@@ -71,6 +72,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceMissingWorktreeTest.cpp
     AgentConversationForkMenuTest.cpp
     AgentReviewerPickerTest.cpp
+    AgentTeamHeaderTest.cpp
     AgentWorkspaceViewTest.cpp
     AgentWorkspaceViewTest.h
     TranscriptPhase5Test.cpp
@@ -105,6 +107,9 @@ target_link_libraries(ketplus_transcript_window_model_tests PRIVATE Qt6::Test Qt
 ketplus_add_gui_test(ketplus_transcript_activity_groups_tests TranscriptActivityGroupsTest.cpp)
 target_link_libraries(ketplus_transcript_activity_groups_tests PRIVATE Qt6::Test ketplus_ai)
 
+ketplus_add_gui_test(ketplus_transcript_safety_tests TranscriptSafetyTest.cpp)
+target_link_libraries(ketplus_transcript_safety_tests PRIVATE Qt6::Test Qt6::Network Qt6::Quick ketplus_ai)
+
 ketplus_add_gui_test(ketplus_symbol_icon_tests SymbolIconTest.cpp)
 target_link_libraries(ketplus_symbol_icon_tests PRIVATE Qt6::Test ketplus_ai)
 
@@ -119,6 +124,14 @@ target_link_libraries(ketplus_working_line_tests PRIVATE Qt6::Test ketplus_deskt
 
 ketplus_add_gui_test(ketplus_conversation_menu_tests ConversationMenuTest.cpp)
 target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
+target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
+target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
+target_link_libraries(ketplus_team_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_settings_integration_tests MainWindowSettingsTest.cpp)
 target_link_libraries(ketplus_settings_integration_tests PRIVATE

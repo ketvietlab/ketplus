@@ -16,10 +16,19 @@ Item {
                 return conversation;
         return ({});
     }
-    readonly property var tags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
+    readonly property var userTags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
             label: tag,
             color: KetTheme.t.accent
         } : tag)
+    // ADR 0112 (#467): a member's role, set by its team, leads its tags and cannot be edited.
+    readonly property var teamRole: (agentHost.teamRoles || {})[selectedConversation.sessionId || ""] || null
+    readonly property var tags: (teamRole ? [{
+                label: teamRole.label,
+                color: teamRole.color,
+                locked: true,
+                teamId: teamRole.team_id,
+                teamName: teamRole.team_name
+            }] : []).concat(userTags)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
             if (candidate.selected)
@@ -49,9 +58,16 @@ Item {
     readonly property bool tagsEditable: !agentHost.compactWindow && selectedConversation.tagsEditable === true
     readonly property real tagGroupWidth: (tags.length > 0 ? conversationTags.implicitWidth + gap : 0) + (tagsEditable ? addTagButton.implicitWidth + gap : 0)
     readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
-    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : 4)
+    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : agentHost.detailsOpen ? 1 : 4)
     readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
     readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
+    // "Claude · Opus 5.5": the provider and its default model, when the catalog has it.
+    function reviewerTitle(provider, title) {
+        for (let model of agentHost.models)
+            if (model.provider === provider && model.isDefault)
+                return title + " · " + (model.displayName || model.model)
+        return title
+    }
     readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
@@ -102,8 +118,43 @@ Item {
         Rectangle {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
-            // ket::badgeRecipe, as KetBadge draws the mock's status; long statuses still elide.
-            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, agentHost.sessionRunning ? KetTheme.BadgeTone.Accent : KetTheme.BadgeTone.Neutral)
+            // The mock's KetBadge: the conversation's status in the kit's words and tone, read
+            // from the same facts as its sidebar row. Long statuses still elide.
+            // #125: a finished turn that asks the user to decide reads "Waiting for you" (Info).
+            readonly property bool awaiting: !agentHost.sessionRunning && header.selectedConversation.awaitingReply === true
+            readonly property string sessionText: String(agentHost.sessionStatus || "")
+            readonly property int status: {
+                const conversation = header.selectedConversation
+                const text = String(conversation.status || sessionText).toLowerCase()
+                if (conversation.needsInput === true || text.indexOf("input") >= 0 || text.indexOf("question") >= 0)
+                    return KetTheme.ConversationStatus.NeedsInput
+                if (awaiting)
+                    return KetTheme.ConversationStatus.AwaitingReply
+                if (agentHost.sessionRunning)
+                    return KetTheme.ConversationStatus.Working
+                if (/fail|error|disconnect|missing|not found/.test(text))
+                    return KetTheme.ConversationStatus.Error
+                if (text.indexOf("stop") >= 0)
+                    return KetTheme.ConversationStatus.Stopped
+                return conversation.started === true ? KetTheme.ConversationStatus.Completed : KetTheme.ConversationStatus.NotStarted
+            }
+            // A failed reply reads as the kit's "Reply failed"; another fault (a missing worktree,
+            // a lost connection) and a conversation not started yet keep the session's own words.
+            readonly property string label: status === KetTheme.ConversationStatus.Error && /disconnect|missing|not found/.test(String(header.selectedConversation.status || sessionText).toLowerCase())
+                ? sessionText
+                : status === KetTheme.ConversationStatus.NotStarted && sessionText.length > 0 ? sessionText
+                : KetTheme.conversationStatusLabel(status)
+            readonly property int tone: {
+                switch (status) {
+                case KetTheme.ConversationStatus.Completed: return KetTheme.BadgeTone.Success
+                case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
+                case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
+                case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
+                case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
+                }
+                return KetTheme.BadgeTone.Neutral
+            }
+            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, tone)
             Layout.preferredHeight: recipe.height
             Layout.preferredWidth: statusText.implicitWidth + 2 * recipe.paddingInline
             Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
@@ -115,7 +166,7 @@ Item {
                 id: statusText
                 anchors.centerIn: parent
                 width: Math.min(implicitWidth, parent.width - 2 * conversationStatusBadge.recipe.paddingInline)
-                text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
+                text: conversationStatusBadge.label
                 color: conversationStatusBadge.recipe.text
                 font.family: KetTheme.fontFamily
                 font.pixelSize: conversationStatusBadge.recipe.fontPixels
@@ -212,7 +263,8 @@ Item {
             readonly property bool full: header.fullReviewer
             readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
             readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
-            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
+            // The team's reviewer reviews a member's tasks (#460); its room goes to the title.
+            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true && !header.teamRole
             enabled: agentHost.reviewerState.pending !== true
             controlSize: Kit.KetTheme.ControlSize.Small
             variant: assigned ? Kit.KetTheme.ButtonVariant.Secondary : Kit.KetTheme.ButtonVariant.Ghost
@@ -235,13 +287,33 @@ Item {
                 // Every tag, as the mock: they show together when they fit and leave together.
                 model: header.tags
                 Kit.KetTag {
+                    id: chip
                     required property var modelData
-                    objectName: "conversationTag_" + modelData.label
+                    objectName: locked ? "conversationRoleTag" : "conversationTag_" + modelData.label
                     text: modelData.label
                     tagColor: modelData.color || KetTheme.t.accent
                     maxWidth: KetTheme.px(100, KetTheme.zoom)
-                    filterable: true
+                    locked: modelData.locked === true
+                    filterable: !locked
                     onClicked: agentHost.requestTagFilter(text)
+                    // The role opens its team's page; the kit never clicks a locked tag itself.
+                    Accessible.role: locked ? Accessible.Button : Accessible.StaticText
+                    Accessible.description: locked ? modelData.label + " of " + modelData.teamName + ". Opens the team." : ""
+                    Accessible.onPressAction: if (locked) agentHost.requestTeam(modelData.teamId)
+                    MouseArea {
+                        id: roleMouse
+                        objectName: "conversationRoleTagArea"
+                        anchors.fill: parent
+                        visible: chip.locked
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: agentHost.requestTeam(chip.modelData.teamId)
+                    }
+                    KetToolTip {
+                        objectName: "roleTagToolTip"
+                        visible: roleMouse.containsMouse
+                        text: chip.locked ? chip.modelData.label + " of " + chip.modelData.teamName : ""
+                    }
                 }
             }
         }
@@ -300,21 +372,21 @@ Item {
         }
         Kit.KetIconButton {
             objectName: "headerChangesButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "compare"
             text: "Changes"
-            onClicked: agentHost.requestProductNavigation("source-control")
+            onClicked: agentHost.requestChanges()
         }
         Kit.KetIconButton {
             objectName: "headerTerminalButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "terminal"
             text: "Open terminal"
             onClicked: agentHost.requestTerminal()
         }
         Kit.KetIconButton {
             objectName: "headerWorkReportButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "view-list"
             text: "Work report"
             onClicked: agentHost.requestWorkReport()
@@ -351,12 +423,27 @@ Item {
             for (let index = 0; index < count; ++index) {
                 const item = itemAt(index);
                 if (item && item.tagLabel)
-                    item.checked = header.tags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
+                    item.checked = header.userTags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
+            }
+        }
+        // A member's role is listed first, disabled: the team sets it (#467).
+        Instantiator {
+            model: header.teamRole ? [header.teamRole] : []
+            onObjectAdded: (index, object) => tagMenu.insertItem(0, object)
+            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                objectName: "conversationRoleTagItem"
+                enabled: false
+                iconName: "lock"
+                text: modelData.label + " · Set by " + modelData.team_name
             }
         }
         Instantiator {
-            model: agentHost.tagCatalog()
-            onObjectAdded: (index, object) => tagMenu.addItem(object)
+            model: agentHost.tagCatalog
+            // Below the role, when there is one, and above the separator and Manage tags…,
+            // which stay last.
+            onObjectAdded: (index, object) => tagMenu.insertItem(index + (header.teamRole ? 1 : 0), object)
             onObjectRemoved: (index, object) => tagMenu.removeItem(object)
             Kit.KetMenuItem {
                 required property var modelData
@@ -368,6 +455,21 @@ Item {
                 onTriggered: agentHost.requestConversationTag(header.selectedConversation.id, tagLabel, checked)
             }
         }
+        Kit.KetMenuSeparator {}
+        Kit.KetMenuItem {
+            objectName: "conversationManageTagsItem"
+            text: "Manage tags…"
+            iconName: "settings"
+            onTriggered: manageTagsDialog.open()
+        }
+    }
+
+    ManageTagsDialog {
+        id: manageTagsDialog
+        objectName: "manageTagsDialog"
+        parent: Basic.Overlay.overlay
+        tags: agentHost.tagCatalog
+        onSaved: (tags, renames) => agentHost.requestTagCatalogSave(tags, renames)
     }
 
     Kit.KetMenu {
@@ -395,12 +497,22 @@ Item {
         Kit.KetMenuSection {
             text: "New review agent"
         }
+        // As the mock, each provider names the model a new reviewer starts with: the
+        // provider's default, which the daemon uses.
         Kit.KetMenuItem {
             objectName: "newClaudeReviewerItem"
-            text: "Claude"
+            text: header.reviewerTitle("claude", "Claude")
             description: "Starts a reviewer in this worktree, read only"
             iconName: "bot"
             onTriggered: agentHost.chooseReviewer("", "claude")
+        }
+        // ADR 0067: Codex cannot be held read only yet, so it is listed but cannot review.
+        Kit.KetMenuItem {
+            objectName: "newCodexReviewerItem"
+            text: header.reviewerTitle("codex", "Codex")
+            description: "Cannot review yet: Codex cannot be held read only"
+            iconName: "bot"
+            enabled: false
         }
         Kit.KetMenuSection {
             text: "Existing conversation"

@@ -30,7 +30,7 @@ KetPlusMock --smoke --display=secondary                # on another display, lea
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) or toast (the app-wide toast, on any screen)
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
 ```
 
 Screens and states (`--screen` / `--state`):
@@ -42,7 +42,6 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `teams` | `task`, `large`, `empty`, `ready`, `paused` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision). `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
@@ -86,7 +85,9 @@ showing it again opens a new tab. The Lite smoke checks this too.
 | `changes` | | Source Control, as in Pro |
 | `settings` | `typography` | Appearance and Typography only |
 
-App-wide: Quick search (⌘K), the repository and worktree picker, conversation
+There is no Worktrees screen: a worktree is made when a conversation needs one
+(Repository & worktree → Create worktree…, or the New conversation card) and
+switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
 context menu (rename, fork, change worktree, archive, delete), tag filter
 (click a tag in the header), compact window (⇧⌘M), update notice and toasts.
 

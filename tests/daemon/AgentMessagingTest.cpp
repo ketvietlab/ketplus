@@ -899,7 +899,7 @@ class AgentMessagingTest final : public QObject {
                 .toObject()
                 .value("tools")
                 .toArray();
-        QCOMPARE(tools.size(), 5);
+        QCOMPARE(tools.size(), 6); // with work_report and request_user_decision
         const QJsonObject whoami = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"},
              {"id", 3},
@@ -933,7 +933,8 @@ class AgentMessagingTest final : public QObject {
                      .value("code")
                      .toInt(),
                  -32602);
-        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.send"}));
+        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send"}));
     }
 };
 

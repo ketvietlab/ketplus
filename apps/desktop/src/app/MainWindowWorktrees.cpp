@@ -1,13 +1,14 @@
+#include "KetDialog.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeCreator.h"
+#include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
 #include "app/SettingsWorkspacePage.h"
-#include "app/WorktreeStateProbe.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
+#include "teams/TeamPage.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
@@ -19,6 +20,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QLayout>
 #include <QMenu>
 #include <QMessageBox>
@@ -30,12 +32,15 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <utility>
 
 namespace ketplus {
 void MainWindow::hideUtilityWorkspaces() {
-    if (worktreesWorkspace_ != nullptr)
-        worktreesWorkspace_->hide();
-    worktreesWorkspaceMode_ = false;
+    if (teamPage_ != nullptr) {
+        teamPage_->hide();
+        teamPage_->deleteLater();
+        teamPage_.clear();
+    }
     if (settingsWorkspace_ != nullptr) {
         auto* page = settingsWorkspace_;
         settingsWorkspace_ = nullptr;
@@ -46,118 +51,6 @@ void MainWindow::hideUtilityWorkspaces() {
     if (settingsWorkspaceMode_)
         theme_.cancelPreview();
     settingsWorkspaceMode_ = false;
-}
-
-void MainWindow::refreshWorktreesWorkspace() {
-    if (worktreesWorkspace_ == nullptr)
-        return;
-    QSet<QString> archivedPaths;
-    for (const QVariant& value : archivedWorktrees()) {
-        const QString path =
-            QFileInfo(value.toMap().value(QStringLiteral("path")).toString()).canonicalFilePath();
-        if (!path.isEmpty())
-            archivedPaths.insert(path);
-    }
-    QVector<GitWorktree> visible;
-    QHash<QString, int> conversations;
-    bool hasPrunableWorktrees = false;
-    for (const GitWorktree& worktree : std::as_const(worktrees_)) {
-        hasPrunableWorktrees =
-            hasPrunableWorktrees ||
-            (!worktree.bare && (worktree.prunable || !QFileInfo(worktree.path).isDir()));
-        const QString path = QFileInfo(worktree.path).canonicalFilePath();
-        if (worktree.bare || worktree.prunable || archivedPaths.contains(path))
-            continue;
-        visible.append(worktree);
-        conversations.insert(
-            path, agentManager_ == nullptr ? 0 : agentManager_->conversations(path).size());
-    }
-    worktreesWorkspace_->setWorktrees(visible, workspaceRoot_,
-                                      agentManager_ == nullptr ? QSet<QString>{}
-                                                               : agentManager_->runningPaths(),
-                                      conversations, !gitSnapshot_.files.isEmpty());
-    worktreesWorkspace_->setPruneAvailable(hasPrunableWorktrees &&
-                                           !agentWorktreeCreator_->isRunning());
-    // The open worktree's state comes from its Git snapshot; the others are read here.
-    if (worktreesWorkspaceMode_ && worktreeStateProbe_ != nullptr) {
-        const QString active = QFileInfo(workspaceRoot_).canonicalFilePath();
-        QStringList others;
-        for (const GitWorktree& worktree : std::as_const(visible)) {
-            const QString path = QFileInfo(worktree.path).canonicalFilePath();
-            if (!path.isEmpty() && path != active)
-                others.append(path);
-        }
-        worktreeStateProbe_->probe(others);
-    }
-}
-
-void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
-    if (!visible) {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->hide();
-        worktreesWorkspaceMode_ = false;
-        return;
-    }
-
-    hideUtilityWorkspaces();
-    setRemoteWorkspaceVisible(false);
-    setAtlasWorkspaceVisible(false);
-    setAgentWorkspaceVisible(false);
-    ensureAgentWorkspace();
-    if (worktreesWorkspace_ == nullptr) {
-        worktreesWorkspace_ = new WorktreesWorkspacePage(workspaceSplit_);
-        workspaceSplit_->addWidget(worktreesWorkspace_);
-        worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
-        worktreeStateProbe_ = new WorktreeStateProbe(worktreesWorkspace_);
-        connect(worktreeStateProbe_, &WorktreeStateProbe::stateKnown, worktreesWorkspace_,
-                &WorktreesWorkspacePage::setWorktreeDirty);
-        connect(worktreeStateProbe_, &WorktreeStateProbe::stateUnknown, worktreesWorkspace_,
-                &WorktreesWorkspacePage::clearWorktreeState);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::createRequested, this,
-                &MainWindow::createAgentWorktree);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::pruneRequested, this, [this] {
-            if (agentWorktreeCreator_ == nullptr || agentWorktreeCreator_->isRunning())
-                return;
-            worktreesWorkspace_->setPruning(true);
-            agentWorktreeCreator_->prune(workspaceRoot_);
-        });
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::worktreeRequested, this,
-                [this](const QString& path) {
-                    promotedWorktreePath_ = QFileInfo(path).canonicalFilePath();
-                    switchToWorktree(path);
-                    setAgentWorkspaceVisible(true);
-                });
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::manageRequested, this,
-                &MainWindow::showWorktreeMenu);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::archivedRequested, this,
-                &MainWindow::showSettings);
-    }
-    if (explorer_ != nullptr)
-        explorer_->hide();
-    if (gitChanges_ != nullptr)
-        gitChanges_->hide();
-    if (terminal_ != nullptr)
-        terminal_->hide();
-    if (agentWorkspace_ != nullptr)
-        agentWorkspace_->hide();
-    if (agentDetailPane_ != nullptr)
-        agentDetailPane_->hide();
-    editorSplit_->hide();
-    worktreesWorkspaceMode_ = true;
-    settingsWorkspaceMode_ = false;
-    worktreesWorkspace_->show();
-    refreshWorktreesWorkspace();
-    setShellMode(ActivityBar::Mode::AgentWorkspace);
-    workspaceSplit_->show();
-    mainSplit_->show();
-    mainSplit_->setMaximumHeight(QWIDGETSIZE_MAX);
-    mainSplit_->parentWidget()->layout()->activate();
-    QList<int> shellSizes(mainSplit_->count(), 0);
-    shellSizes[mainSplit_->indexOf(workspaceSplit_)] = qMax(480, mainSplit_->height());
-    mainSplit_->setSizes(shellSizes);
-    QList<int> sizes(workspaceSplit_->count(), 0);
-    sizes[workspaceSplit_->indexOf(worktreesWorkspace_)] = qMax(800, workspaceSplit_->width());
-    workspaceSplit_->setSizes(sizes);
 }
 
 QString MainWindow::worktreeRemovalBlocker(const QString& target) const {
@@ -371,4 +264,73 @@ QVariantList MainWindow::archivedWorktrees() const {
     }
     return result;
 }
+void MainWindow::createConversationWorktree(const QString& repository, const qint64 revision) {
+    if (agentManager_ == nullptr || agentWorkspace_ == nullptr || repository.isEmpty())
+        return;
+    if (agentDialogOpen(this, QStringLiteral("agentWorktreeDialogCard")))
+        return;
+    const QString agentPath = agentWorkspace_->activePath();
+    const QString conversation = agentManager_->activeConversationId(agentPath);
+    // The open folder's repository knows its main checkout; another repository from the
+    // picker is listed by its main checkout already.
+    const QString primary =
+        QFileInfo(sidebarRepositoryForPath(workspaceRoot_)).canonicalFilePath() ==
+                QFileInfo(repository).canonicalFilePath()
+            ? primaryWorktreePath()
+            : repository;
+    auto* form = new AgentWorktreeDialog(repository, nullptr,
+                                         AgentWorktreeDialog::Purpose::Worktree, primary);
+    form->useForThisConversation();
+    connect(form->present(this), &ket::Dialog::accepted, this,
+            [this, form, agentPath, conversation, revision, primary] {
+                // The reader can open another conversation while the card is open.
+                if (agentWorkspace_->activePath() != agentPath ||
+                    agentManager_->activeConversationId(agentPath) != conversation)
+                    return;
+                pickerWorktreeAgentPath_ = agentPath;
+                pickerWorktreeConversation_ = conversation;
+                pickerWorktreeRevision_ = revision;
+                agentWorktreeCreator_->create(primary, primary, form->branchName(),
+                                              form->baseBranch());
+            });
+}
+
+void MainWindow::moveConversationToCreatedWorktree(const QString& worktreePath,
+                                                   const QString& branch) {
+    const QString agentPath = std::exchange(pickerWorktreeAgentPath_, {});
+    const QString conversation = std::exchange(pickerWorktreeConversation_, {});
+    if (agentManager_ == nullptr)
+        return;
+    // The worktree is this conversation's even if it moved on meanwhile.
+    agentManager_->claimConversationWorktree(agentPath, conversation, worktreePath);
+    if (agentWorkspace_ == nullptr || agentWorkspace_->activePath() != agentPath ||
+        agentManager_->activeConversationId(agentPath) != conversation) {
+        statusBar()->showMessage(tr("Created worktree %1.").arg(branch), 5000);
+        return;
+    }
+    agentManager_->executionWorktreeCommand(
+        agentPath, QStringLiteral("session.worktree.switch"),
+        {{QStringLiteral("worktree_path"), worktreePath},
+         {QStringLiteral("expected_context_revision"), pickerWorktreeRevision_}},
+        [this, worktreePath, branch](const QJsonObject& result, const QString& error) {
+            if (!error.isEmpty() || !result.value(QStringLiteral("ok")).toBool()) {
+                const QString reason =
+                    !error.isEmpty() ? error
+                                     : result.value(QStringLiteral("error_message"))
+                                           .toString(tr("Choose it in Repository & worktree."));
+                statusBar()->showMessage(
+                    tr("Created worktree %1, but this conversation stayed where it was. %2")
+                        .arg(branch, reason),
+                    8000);
+                return;
+            }
+            const QString moved =
+                result.value(QStringLiteral("worktree_path")).toString(worktreePath);
+            setFileContextWorktree(moved);
+            promotedSidebarRepository_ = sidebarRepositoryForPath(moved);
+            scheduleSidebarRefresh(true);
+            statusBar()->showMessage(tr("Next turn: %1").arg(branch), 5000);
+        });
+}
+
 } // namespace ketplus

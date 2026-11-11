@@ -79,7 +79,7 @@ LocalJournal::LocalJournal(const QString& path)
     // Operations reset their own errors. Keep failed startup unusable even if a later
     // operation clears that diagnostic; recovery requires a freshly initialized journal.
     if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
-        !markFormat())
+        !initializeTeams() || !markFormat())
         database_.close();
 }
 
@@ -326,6 +326,8 @@ bool LocalJournal::migrateTranscriptSchema() {
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
         !ensureColumn(QStringLiteral("sessions"), QStringLiteral("tags"),
                       QStringLiteral("TEXT NOT NULL DEFAULT '[]'")) ||
+        !ensureColumn(QStringLiteral("sessions"), QStringLiteral("awaiting_reply"),
+                      QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("replay_projection_state"), QStringLiteral("revision"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         // The repository a linked worktree belonged to, kept for after the worktree is deleted.
@@ -1050,7 +1052,7 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
             "SELECT id, worktree_path, adapter, thread_id, turn_id, state, generation, "
             "last_cursor, current_turn_sequence, title, configuration_revision, model, effort, "
             "execution_policy, mode, provider_threads, last_seen_cursor, last_turn_started_at, "
-            "context_revision, compact_window, archived_at, tags "
+            "context_revision, compact_window, archived_at, tags, awaiting_reply "
             "FROM sessions ORDER BY id"))) {
         setError(query.lastError().text());
         return std::nullopt;
@@ -1066,7 +1068,8 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
                        query.value(14).toString(),   query.value(15).toString(),
                        query.value(16).toLongLong(), query.value(17).toString(),
                        query.value(18).toLongLong(), query.value(19).toLongLong(),
-                       query.value(20).toString(),   storedTags(query.value(21).toString())});
+                       query.value(20).toString(),   storedTags(query.value(21).toString()),
+                       query.value(22).toBool()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());

@@ -184,7 +184,12 @@ QString SessionHost::agentInstructions(const Session& session) const {
         return {};
     const QString number =
         journal_->conversationNumber(session.stored.id, session.stored.generation);
-    return number.isEmpty() ? QString{} : agent_messaging::toolInstructions(number);
+    if (number.isEmpty())
+        return {};
+    // ADR 0112: a member also gets its role's instructions, current at every turn.
+    const QString team = teamInstructionsFor(session.stored.id);
+    return team.isEmpty() ? agent_messaging::toolInstructions(number)
+                          : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;
 }
 
 void SessionHost::addAgentContext(Session& session, const QString& userText, QJsonArray& input,

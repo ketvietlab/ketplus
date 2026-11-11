@@ -120,8 +120,11 @@ bool SessionHost::deferJournalEvent(Session& session, const QString& type,
     return true;
 }
 
-bool SessionHost::appendEvent(Session& session, const QString& type, const QJsonObject& payload,
-                              QString* error) {
+bool SessionHost::appendEvent(Session& session, const QString& type,
+                              const QJsonObject& providerPayload, QString* error) {
+    // A turn's end tells readiness how the provider is doing (#170); errors gain a code.
+    const QJsonObject payload = noteProviderOutcome(session, type, providerPayload);
+    noteAwaitingReply(session, type, payload);
     const QString id = session.stored.id;
     const qint64 generation = session.stored.generation;
     const QPointer<SessionHost> alive(this);

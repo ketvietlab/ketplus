@@ -132,6 +132,7 @@ void ClaudeCredentials::handle(const QString& operation, const QJsonObject& payl
             return;
         }
         observation_ = {};
+        emit changed();
         reply(status(config), {});
         return;
     }

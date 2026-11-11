@@ -426,9 +426,16 @@ class AtlasWorkspaceTest final : public QObject {
         QVERIFY(chat->isVisible());
         QVERIFY(!preview->geometry().intersects(frame->geometry()));
         QVERIFY(frame->width() <= 410);
-        auto* flow = builder->findChild<QLabel*>("atlasBuilderFlowContext");
-        QVERIFY(flow);
-        QCOMPARE(flow->text(), QStringLiteral("@Flow · Primary flow"));
+        // The mock names the flow under the Atlas and asks for a change to it in the composer.
+        auto* subtitle = builder->findChild<QLabel*>("atlasBuilderToolbarSubtitle");
+        QVERIFY(subtitle);
+        QCOMPARE(subtitle->text(), QStringLiteral("Primary flow · 0 screens"));
+        QCOMPARE(chat->composerHint(), QStringLiteral("Ask for a change to Primary flow…"));
+        auto* validated = builder->findChild<QWidget*>("atlasBuilderValidated");
+        QVERIFY(validated && validated->isVisible());
+        if (const auto capture = qEnvironmentVariable("KETPLUS_ATLAS_BUILDER_CAPTURE");
+            !capture.isEmpty())
+            QVERIFY(window.grab().save(capture));
         QCOMPARE(builder->promptContext().value("atlasFlowId").toString(),
                  QStringLiteral("primary"));
         QCOMPARE(builder->promptContext().value("atlasConversationId").toString(), conversation);

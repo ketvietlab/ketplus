@@ -144,6 +144,14 @@ QString approvalOutcome(const QString& eventType, const QJsonObject& data) {
 
 void presentAgentError(QVariantMap& entry, const QString& message) {
     entry.insert(QStringLiteral("title"), agentErrorTitle());
+    // A provider that went quiet: "<Provider> did not answer for 60 seconds…", as the mock's
+    // workspace/error titles it.
+    static const QRegularExpression silent(
+        QStringLiteral("^(Codex|Claude|Claude Code|Cursor) did not answer for \\d+ seconds\\b"));
+    if (silent.match(message).hasMatch()) {
+        entry.insert(QStringLiteral("title"), QStringLiteral("The provider stopped responding"));
+        return;
+    }
     // The adapters' own words when a provider process ends under a turn.
     static const QList<QPair<QRegularExpression, QString>> exits{
         {QRegularExpression(QStringLiteral("^Codex app-server stopped \\(exit")),
@@ -167,9 +175,13 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
     if (capacity.match(message).hasMatch()) {
         entry.insert(QStringLiteral("title"), QStringLiteral("Selected model is at capacity"));
         entry.insert(QStringLiteral("subtype"), QStringLiteral("modelCapacity"));
-        const QString text = QStringLiteral(
-            "The model could not finish the turn. Try again, or pick another model for this "
-            "conversation.");
+        // As the mock words it, naming the provider; each pattern belongs to one of them.
+        const QString provider = message.startsWith(QStringLiteral("Selected model is at capacity"))
+                                     ? QStringLiteral("Codex")
+                                     : QStringLiteral("Claude");
+        const QString text = QStringLiteral("%1 could not finish the turn. Try again, or pick "
+                                            "another model for this conversation.")
+                                 .arg(provider);
         entry.insert(QStringLiteral("body"), text);
         entry.insert(QStringLiteral("summary"), text);
     }
@@ -623,6 +635,13 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = message("error", data.value("message").toString(), "Agent · error", {}, itemId);
             // Worded as a live failure's row, as the mock's danger banner.
             presentAgentError(entry, data.value("message").toString());
+            if (const QString code = data.value("code").toString(); !code.isEmpty()) {
+                // The provider's setup guide (ADR 0110), which quotes the provider's own words.
+                entry.insert("errorCode", code);
+                entry.insert("errorDetail", data.value("message").toString());
+                entry.insert("errorModel", data.value("model").toString());
+                entry.insert("provider", data.value("provider").toString());
+            }
             entry.insert("category", "system");
             entry.insert("status", "failed");
         } else if (type == "command.output_delta") {

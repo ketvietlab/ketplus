@@ -4,6 +4,8 @@ add_library(ketplus_ai STATIC
     src/agent/TranscriptStepItems.cpp
     src/agent/TranscriptTurnFiles.cpp
     src/agent/TranscriptTurnFiles.h
+    src/agent/ConversationChangesPane.cpp
+    src/agent/ConversationChangesPane.h
     src/agent/WorkReportPane.cpp
     src/agent/WorkReportPane.h
     src/agent/WorkReportText.cpp
@@ -66,6 +68,8 @@ add_library(ketplus_ai STATIC
     src/agent/MermaidLabelContrast.h
     src/agent/TranscriptFileLinks.cpp
     src/agent/TranscriptFileLinks.h
+    src/agent/TranscriptNetworkPolicy.cpp
+    src/agent/TranscriptNetworkPolicy.h
     src/agent/TranscriptTrace.cpp
     src/agent/TranscriptTrace.h
     src/agent/ChatMarkdown.cpp
@@ -102,6 +106,8 @@ add_library(ketplus_ai STATIC
     src/agent/CodexRateLimits.h
     src/agent/ProviderRuntimeStatus.cpp
     src/agent/ProviderRuntimeStatus.h
+    src/agent/ProviderSetupGuide.cpp
+    src/agent/ProviderSetupGuide.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp
@@ -109,6 +115,7 @@ add_library(ketplus_ai STATIC
 )
 target_link_libraries(ketplus_ai
     PUBLIC
+        Qt6::Network
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
@@ -183,6 +190,7 @@ set_source_files_properties(
 )
 set_source_files_properties(src/agent/qml/AtlasResultCard.qml PROPERTIES QT_RESOURCE_ALIAS "AtlasResultCard.qml")
 set_source_files_properties(src/agent/qml/HeldMessageAction.qml PROPERTIES QT_RESOURCE_ALIAS "HeldMessageAction.qml")
+set_source_files_properties(src/agent/qml/AgentProviderSetupCard.qml PROPERTIES QT_RESOURCE_ALIAS "AgentProviderSetupCard.qml")
 set_source_files_properties(src/agent/qml/TranscriptNotice.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptNotice.qml")
 set_source_files_properties(src/agent/qml/TranscriptActivityHeader.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityHeader.qml")
 set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptChangedFiles.qml")
@@ -192,6 +200,8 @@ set_source_files_properties(src/agent/qml/TranscriptFileMenu.qml PROPERTIES QT_R
 set_source_files_properties(src/agent/qml/TranscriptAgentNote.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptAgentNote.qml")
 set_source_files_properties(src/agent/qml/TranscriptWorkReport.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptWorkReport.qml")
 set_source_files_properties(src/agent/qml/WorkReportPane.qml PROPERTIES QT_RESOURCE_ALIAS "WorkReportPane.qml")
+set_source_files_properties(src/agent/qml/ConversationChangesPane.qml PROPERTIES QT_RESOURCE_ALIAS "ConversationChangesPane.qml")
+set_source_files_properties(src/agent/qml/ManageTagsDialog.qml PROPERTIES QT_RESOURCE_ALIAS "ManageTagsDialog.qml")
 set_source_files_properties(src/agent/qml/TranscriptTrimmedDetail.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTrimmedDetail.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
@@ -298,6 +308,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptRemoteGroup.qml
         src/agent/qml/TranscriptNotice.qml
     src/agent/qml/HeldMessageAction.qml
+    src/agent/qml/AgentProviderSetupCard.qml
     src/agent/qml/AtlasResultCard.qml
         src/agent/qml/TranscriptActivityRow.qml
         src/agent/qml/TranscriptActivityHeader.qml
@@ -308,6 +319,8 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptAgentNote.qml
         src/agent/qml/TranscriptWorkReport.qml
         src/agent/qml/WorkReportPane.qml
+        src/agent/qml/ConversationChangesPane.qml
+        src/agent/qml/ManageTagsDialog.qml
         src/agent/qml/TranscriptTrimmedDetail.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml

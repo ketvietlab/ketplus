@@ -3,15 +3,15 @@
 #include "KetDialog.h"
 #include "KetRecipes.h"
 #include "KetSelect.h"
+#include "KetTokens.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/ConversationChangesPane.h"
 #include "agent/WorkReportPane.h"
 #include "app/AgentWorktreeCreator.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
-#include "app/WorktreeStateProbe.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
@@ -81,6 +81,37 @@ QQuickItem* visualItemNamed(QQuickItem* item, const QString& name) {
     return nullptr;
 }
 
+// KETPLUS_DIALOG_CAPTURE_DIR=<dir> saves `<name>-light.png` and `<name>-dark.png` of a dialog
+// card over `target`, for the side by side with the mock (#422).
+void captureDialog(QWidget& target, const QString& name, ketplus::ThemeManager* theme = nullptr) {
+    const QString directory = qEnvironmentVariable("KETPLUS_DIALOG_CAPTURE_DIR");
+    if (directory.isEmpty())
+        return;
+    for (const bool dark : {false, true}) {
+        ket::Appearance::instance().setMode(dark ? ket::Appearance::Mode::Dark
+                                                 : ket::Appearance::Mode::Light);
+        if (theme != nullptr) {
+            theme->previewMode(dark ? ketplus::ThemeManager::Mode::Dark
+                                    : ketplus::ThemeManager::Mode::Light);
+        } else {
+            // A bare host has no app palette: give it the window's colours, as MainWindow does.
+            const auto tone = ket::Appearance::instance().theme();
+            QPalette palette = target.palette();
+            palette.setColor(QPalette::Window, ket::Tokens::color(u"page-bg", tone));
+            palette.setColor(QPalette::WindowText, ket::Tokens::color(u"text-main", tone));
+            target.setPalette(palette);
+            target.setAutoFillBackground(true);
+        }
+        QTest::qWait(50);
+        target.grab().save(QDir(directory).filePath(
+            QStringLiteral("%1-%2.png")
+                .arg(name, dark ? QStringLiteral("dark") : QStringLiteral("light"))));
+    }
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    if (theme != nullptr)
+        theme->previewMode(ketplus::ThemeManager::Mode::Light);
+}
+
 } // namespace
 
 class AgentWorkspaceShellTest final : public QObject {
@@ -97,126 +128,6 @@ class AgentWorkspaceShellTest final : public QObject {
                     .filePath(QStringLiteral("conversation-worktrees.sqlite"))
                     .toUtf8());
     }
-    // The mock's three worktrees (`Fixtures.worktrees`). KETPLUS_WORKTREES_CAPTURE=<dir> saves
-    // the page in both themes for the side by side with `KetPlusMock --screen=worktrees`.
-    void worktreesPageListsTheMocksWorktrees() {
-        ketplus::ThemeManager theme(*qApp);
-        ketplus::WorktreesWorkspacePage page;
-        page.resize(1280 - 240, 820);
-        QVector<ketplus::GitWorktree> worktrees;
-        for (const auto& [path, branch] :
-             {std::pair{"/workspace/ketplus-desktop", "develop"},
-              std::pair{"/workspace/ketplus-desktop-onboarding", "feature-onboarding"},
-              std::pair{"/workspace/ketplus-desktop-scroll", "fix-scroll-anchor"}}) {
-            ketplus::GitWorktree worktree;
-            worktree.path = QString::fromLatin1(path);
-            worktree.branch = QString::fromLatin1(branch); // GitParser drops refs/heads/
-            worktree.current = worktrees.isEmpty();
-            worktrees.append(worktree);
-        }
-        page.setWorktrees(worktrees, worktrees.first().path,
-                          {worktrees[0].path, worktrees[1].path, worktrees[2].path},
-                          {{worktrees[0].path, 3}, {worktrees[1].path, 2}, {worktrees[2].path, 2}},
-                          true);
-        page.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&page));
-        // Prune appears only while a worktree's folder is missing.
-        auto* prune = page.findChild<QAbstractButton*>(QStringLiteral("worktreesPruneButton"));
-        QVERIFY(prune && !prune->isVisible());
-        page.setPruneAvailable(true);
-        QVERIFY(prune->isVisible() && prune->isEnabled());
-        page.setPruning(true);
-        page.setPruneAvailable(false);
-        QVERIFY(prune->isVisible() && !prune->isEnabled());
-        page.setPruning(false);
-        QVERIFY(!prune->isVisible());
-        const auto* list = page.findChild<QWidget*>(QStringLiteral("worktreesWorkspaceList"));
-        QVERIFY(list != nullptr);
-        QStringList shown;
-        for (auto* label : list->findChildren<QLabel*>())
-            shown.append(label->text());
-        for (const auto* branch : {"develop", "feature-onboarding", "fix-scroll-anchor"})
-            QVERIFY2(shown.join('\n').contains(QString::fromLatin1(branch)), branch);
-        // Only the open worktree's Git state is known at first; the others say nothing until
-        // theirs has been read.
-        const auto states = [&page] {
-            QStringList texts;
-            for (auto* state :
-                 page.findChildren<ket::Badge*>(QStringLiteral("worktreesWorkspaceState")))
-                texts.append(state->text());
-            return texts;
-        };
-        QCOMPARE(states(), QStringList{QStringLiteral("Uncommitted changes")});
-        page.setWorktreeDirty(worktrees[1].path, true);
-        page.setWorktreeDirty(worktrees[2].path, false);
-        QCOMPARE(states(),
-                 (QStringList{QStringLiteral("Uncommitted changes"),
-                              QStringLiteral("Uncommitted changes"), QStringLiteral("Clean")}));
-        page.setWorktreeDirty(worktrees[1].path, false);
-        QCOMPARE(states().at(1), QStringLiteral("Clean"));
-        // A failed read leaves no state rather than the old one.
-        page.clearWorktreeState(worktrees[1].path);
-        QCOMPARE(states(),
-                 (QStringList{QStringLiteral("Uncommitted changes"), QStringLiteral("Clean")}));
-        page.setWorktreeDirty(worktrees[1].path, false);
-
-        // The probe reads each worktree with one read-only `git status`.
-        QTemporaryDir cleanRepo;
-        QTemporaryDir dirtyRepo;
-        for (const auto* repo : {&cleanRepo, &dirtyRepo})
-            QCOMPARE(QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"),
-                                                               QStringLiteral("-q"), repo->path()}),
-                     0);
-        QFile untracked(dirtyRepo.filePath(QStringLiteral("note.txt")));
-        QVERIFY(untracked.open(QIODevice::WriteOnly) && untracked.write("x") == 1);
-        untracked.close();
-        ketplus::WorktreeStateProbe probe;
-        QSignalSpy known(&probe, &ketplus::WorktreeStateProbe::stateKnown);
-        QSignalSpy unknown(&probe, &ketplus::WorktreeStateProbe::stateUnknown);
-        QTemporaryDir notARepo;
-        probe.probe({cleanRepo.path(), dirtyRepo.path(), QStringLiteral("/nonexistent/path"),
-                     notARepo.path()});
-        probe.probe({cleanRepo.path()}); // already running: not started twice, read again later
-        QTRY_COMPARE_WITH_TIMEOUT(known.count(), 2, 10000);
-        // A read that fails says so, so an earlier answer does not stay on screen.
-        QTRY_COMPARE_WITH_TIMEOUT(unknown.count(), 2, 10000);
-        QStringList unread;
-        for (const auto& arguments : unknown)
-            unread.append(arguments.at(0).toString());
-        QVERIFY(unread.contains(QStringLiteral("/nonexistent/path")));
-        QVERIFY(unread.contains(notARepo.path()));
-        QHash<QString, bool> probed;
-        for (const auto& arguments : known)
-            probed.insert(arguments.at(0).toString(), arguments.at(1).toBool());
-        QCOMPARE(probed.value(cleanRepo.path(), true), false);
-        QCOMPARE(probed.value(dirtyRepo.path(), false), true);
-        // The request that arrived mid-read is owed one more read: a change made inside the
-        // throttle window shows without another refresh.
-        QFile late(cleanRepo.filePath(QStringLiteral("late.txt")));
-        QVERIFY(late.open(QIODevice::WriteOnly) && late.write("x") == 1);
-        late.close();
-        QTRY_COMPARE_WITH_TIMEOUT(known.count(), 3, 10000);
-        QCOMPARE(known.at(2).at(0).toString(), cleanRepo.path());
-        QCOMPARE(known.at(2).at(1).toBool(), true);
-        // A request inside the window is deferred, not dropped.
-        probe.probe({dirtyRepo.path()});
-        probe.probe({dirtyRepo.path()});
-        QTRY_COMPARE_WITH_TIMEOUT(known.count(), 4, 10000);
-        QTest::qWait(200);
-        QCOMPARE(known.count(), 4);
-        if (const auto dir = qEnvironmentVariable("KETPLUS_WORKTREES_CAPTURE"); !dir.isEmpty()) {
-            for (const auto mode :
-                 {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {
-                theme.previewMode(mode);
-                page.applyPalette(theme.palette(), theme.interfaceZoomPercent());
-                QTest::qWait(50);
-                page.grab().save(QDir(dir).filePath(mode == ketplus::ThemeManager::Mode::Light
-                                                        ? QStringLiteral("worktrees-light.png")
-                                                        : QStringLiteral("worktrees-dark.png")));
-            }
-        }
-    }
-
     void compactConversationWindowPreservesSessionAndDraft() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -355,6 +266,51 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(pane->report().isEmpty());
         emit manager->workReportChanged(agent->activePath(), pane->conversationId(), report, {});
         QCOMPARE(pane->report().value("version").toInt(), 1);
+    }
+    // The mock's header Changes opens the details pane's Changes tab; while the pane is open,
+    // its Open content menu replaces the header's openers, and Hide content pane keeps the tabs.
+    void headerChangesOpensTheDetailsPaneChangesTab() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1440, 900);
+        window.show();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(agent);
+        QVERIFY(!agent->detailsOpen());
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("agentDetailTabs"));
+        QVERIFY(tabs);
+        QVERIFY(qobject_cast<ketplus::ConversationChangesPane*>(tabs->currentWidget()));
+        QCOMPARE(tabs->tabText(tabs->currentIndex()), QStringLiteral("Changes"));
+        QTRY_VERIFY(tabs->isVisible());
+        QVERIFY(agent->detailsOpen());
+        // Asked again, the same tab is selected.
+        emit agent->workReportRequested();
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        int panes = 0;
+        for (int index = 0; index < tabs->count(); ++index)
+            panes +=
+                qobject_cast<ketplus::ConversationChangesPane*>(tabs->widget(index)) != nullptr;
+        QCOMPARE(panes, 1);
+        QVERIFY(qobject_cast<ketplus::ConversationChangesPane*>(tabs->currentWidget()));
+        QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("agentDetailOpenContent")));
+        QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("agentDetailOpenTabs")));
+        auto* hide = window.findChild<QAbstractButton*>(QStringLiteral("agentDetailHidePane"));
+        QVERIFY(hide);
+        const int count = tabs->count();
+        hide->click();
+        QTRY_VERIFY(!tabs->isVisible());
+        QVERIFY(!agent->detailsOpen());
+        QCOMPARE(tabs->count(), count);
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        QTRY_VERIFY(tabs->isVisible());
+        QVERIFY(agent->detailsOpen());
     }
     void agentDetailEditorHasFindAndGoToLine() {
         QTemporaryDir settings;
@@ -565,6 +521,31 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(copyAction->isEnabled());
         QVERIFY(!undoAction->isEnabled());
     }
+    void deleteCardOffersArchiveInstead() {
+        QWidget host;
+        host.resize(900, 600);
+        host.show();
+        auto* form = new ketplus::AgentConversationDeleteDialog({}, QStringLiteral("@agent/4821"));
+        QSignalSpy archived(form, &ketplus::AgentConversationDeleteDialog::archiveRequested);
+        QPointer<ket::Dialog> card = form->present(&host);
+        QVERIFY(card);
+        QSignalSpy accepted(card.data(), &ket::Dialog::accepted);
+        auto* message = form->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
+        QVERIFY(message);
+        QVERIFY(message->text().startsWith(QStringLiteral("@agent/4821 and its transcript")));
+        QStringList actions;
+        for (auto* button : card->card()->findChildren<QAbstractButton*>())
+            if (!card->body()->isAncestorOf(button) && !button->text().isEmpty())
+                actions.append(button->text());
+        QCOMPARE(actions, (QStringList{QStringLiteral("Cancel"), QStringLiteral("Archive instead"),
+                                       QStringLiteral("Delete")}));
+        captureDialog(host, QStringLiteral("delete-card"));
+        card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteArchive"))->click();
+        QCOMPARE(archived.count(), 1);
+        QCOMPARE(accepted.count(), 0); // archiving never deletes
+        QTRY_VERIFY(card.isNull() || !card->isOpen());
+    }
+
     void deleteConfirmationReportsFailureWithHiddenStatusBar() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -597,6 +578,14 @@ class AgentWorkspaceShellTest final : public QObject {
             QVERIFY(linked && force);
             QVERIFY(!linked->isEnabled());
             QVERIFY(!force->isEnabled());
+            // The mock's card: nothing to remove, so no worktree choices, and Archive instead.
+            QCOMPARE(card->title(), QStringLiteral("Delete conversation?"));
+            QVERIFY(linked->isHidden() && force->isHidden());
+            auto* message = dialog->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
+            QVERIFY(message);
+            QVERIFY(message->text().contains(QStringLiteral("Its worktree and files stay.")));
+            QVERIFY(card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteArchive")));
+            captureDialog(window, QStringLiteral("delete-conversation"), &theme);
             confirm->click();
         }
         QCOMPARE(result.size(), 1);
@@ -639,9 +628,9 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(sidebar->width(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->minimumWidth(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->maximumWidth(), ketplus::ActivityBar::kWidth);
-        const auto nav = ket::navItemRecipe(false, {}, ket::Appearance::instance().theme());
+        // The mock's Quick search is a 28 px field, not a navigation row.
         QCOMPARE(search->height(),
-                 qRound(ket::Appearance::scale(nav.height, ket::Appearance::instance().zoom())));
+                 qRound(ket::Appearance::scale(28, ket::Appearance::instance().zoom())));
         QVERIFY(window.findChild<QWidget*>(QStringLiteral("productTopBar")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productBranchButton")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productTerminalButton")) == nullptr);
@@ -667,7 +656,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(sidebar->findChild<QComboBox*>(QStringLiteral("productMachineSelect")));
         QVERIFY(settingsAction->text().startsWith(QStringLiteral("Settings")));
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productSettingsButton")) == nullptr);
-        QVERIFY(identity->text().contains(QStringLiteral("Personal workspace")));
+        QVERIFY(identity->accessibleName().contains(QStringLiteral("Personal workspace")));
         QVERIFY(sidebar->isVisible());
 
         search->click();
@@ -809,100 +798,25 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(sourceControl);
         QTRY_VERIFY(sourceControl->isEnabled());
 
-        const auto showWorktreesPage = [&window] {
-            auto* manage = window.findChild<QAction*>(QStringLiteral("manageWorktreesAction"));
-            QVERIFY(manage);
-            manage->trigger();
-        };
-        showWorktreesPage();
-        ketplus::WorktreesWorkspacePage* worktreesPage = nullptr;
-        QTRY_VERIFY((worktreesPage = window.findChild<ketplus::WorktreesWorkspacePage*>()) !=
-                        nullptr &&
-                    worktreesPage->isVisible());
-        auto* pruneButton =
-            worktreesPage->findChild<QAbstractButton*>(QStringLiteral("worktreesPruneButton"));
+        // There is no Worktrees screen to reach: a worktree opens from its conversation.
+        QVERIFY(window.findChild<QAction*>(QStringLiteral("manageWorktreesAction")) == nullptr);
         auto* worktreeCreator = window.findChild<ketplus::AgentWorktreeCreator*>(
             QStringLiteral("agentWorktreeCreator"));
-        QVERIFY(pruneButton && worktreeCreator);
-        QTRY_VERIFY(pruneButton->isEnabled() && pruneButton->isVisible());
-        QSignalSpy pruned(worktreeCreator, &ketplus::AgentWorktreeCreator::pruned);
-        pruneButton->click();
-        QTRY_COMPARE_WITH_TIMEOUT(pruned.count(), 1, 5000);
-        QTRY_VERIFY(!pruneButton->isEnabled() && !pruneButton->isVisible());
-        QAbstractButton* promotedButton = nullptr;
-        for (auto* button : worktreesPage->findChildren<QAbstractButton*>(
-                 QStringLiteral("worktreesWorkspaceOpenButton"))) {
-            if (button->toolTip() == QFileInfo(promoted).canonicalFilePath())
-                promotedButton = button;
-        }
-        QVERIFY(promotedButton);
-        QCOMPARE(promotedButton->height(), 40);
-        auto* promotedRow = promotedButton->parentWidget()->parentWidget();
-        QVERIFY(promotedRow);
-        QCOMPARE(promotedRow->objectName(), QStringLiteral("worktreesWorkspaceRow"));
-        QCOMPARE(promotedRow->height(), 90);
-        auto* name = promotedButton->findChild<QLabel*>(QStringLiteral("worktreesWorkspaceName"));
-        auto* conversations =
-            promotedButton->findChild<QLabel*>(QStringLiteral("worktreesWorkspaceMeta"));
-        auto* worktreeIcon =
-            promotedRow->findChild<QLabel*>(QStringLiteral("worktreesWorkspaceIcon"));
-        QVERIFY(name && conversations && worktreeIcon);
-        QVERIFY(conversations->geometry().top() - name->geometry().bottom() <= 6);
-        QCOMPARE(worktreeIcon->mapTo(promotedRow, QPoint()).y(),
-                 name->mapTo(promotedRow, QPoint()).y());
-        if (const QString screenshot =
-                qEnvironmentVariable("KETPLUS_WORKTREES_WORKSPACE_SCREENSHOT");
-            !screenshot.isEmpty()) {
-            QTest::qWait(50);
-            window.repaint();
-            QVERIFY(window.grab().save(screenshot));
-        }
-        promotedButton->click();
-        QTRY_VERIFY(agentView->isVisible());
+        QVERIFY(worktreeCreator);
+        window.switchToWorktree(promoted);
         QTRY_COMPARE(agentView->activePath(), QFileInfo(promoted).canonicalFilePath());
-
         auto* editorSplit = window.findChild<QSplitter*>(QStringLiteral("editorSplit"));
         auto* explorerButton =
             window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
         QVERIFY(editorSplit && explorerButton);
-        showWorktreesPage();
-        QTRY_VERIFY(worktreesPage->isVisible());
-        // Manage opens the mock's menu under the button: where to go, then what ends it.
-        auto* manageButton =
-            worktreesPage->findChild<QAbstractButton*>(QStringLiteral("worktreesManageButton"));
-        QVERIFY(manageButton);
-        QStringList menuActions;
-        const QString menuScreenshot = qEnvironmentVariable("KETPLUS_WORKTREE_MENU_SCREENSHOT");
-        QTimer::singleShot(200, &window, [&] {
-            auto* menu = window.findChild<QMenu*>(QStringLiteral("worktreeManageMenu"));
-            if (menu == nullptr)
-                return;
-            for (const auto* action : menu->actions())
-                menuActions.append(action->isSeparator() ? QStringLiteral("-")
-                                                         : action->objectName());
-            if (!menuScreenshot.isEmpty())
-                menu->grab().save(menuScreenshot);
-            menu->close();
-        });
-        manageButton->click();
-        QCOMPARE(menuActions.mid(0, 6),
-                 (QStringList{QStringLiteral("newConversationInWorktreeAction"),
-                              QStringLiteral("openWorktreeFilesAction"),
-                              QStringLiteral("revealWorktreeAction"), QStringLiteral("-"),
-                              QStringLiteral("archiveWorktreeAction"),
-                              QStringLiteral("deleteWorktreeAction")}));
-        QVERIFY(worktreesPage->isVisible());
         explorerButton->click();
-        QTRY_VERIFY(!worktreesPage->isVisible());
         QTRY_VERIFY(editorSplit->isVisible());
-        QTRY_VERIFY(window.findChild<ketplus::ExplorerPanel*>()->isVisible());
-        showWorktreesPage();
-        QTRY_VERIFY(worktreesPage->isVisible());
+        QTRY_VERIFY(window.findChild<ketplus::ExplorerPanel*>() != nullptr &&
+                    window.findChild<ketplus::ExplorerPanel*>()->isVisible());
         QTRY_VERIFY(sourceControl->isEnabled());
         sourceControl->click();
-        QTRY_VERIFY(!worktreesPage->isVisible());
-        QTRY_VERIFY(editorSplit->isVisible());
-        QTRY_VERIFY(window.findChild<ketplus::GitChangesPanel*>()->isVisible());
+        QTRY_VERIFY(window.findChild<ketplus::GitChangesPanel*>() != nullptr &&
+                    window.findChild<ketplus::GitChangesPanel*>()->isVisible());
 
         const QString title = window.windowTitle();
         window.switchToWorktree(stale);
@@ -1157,6 +1071,7 @@ class AgentWorkspaceShellTest final : public QObject {
             if (!dialog->body()->isAncestorOf(button) && !button->text().isEmpty())
                 actions.append(button->text());
         QCOMPARE(actions, (QStringList{QStringLiteral("Cancel"), QStringLiteral("Rename")}));
+        captureDialog(window, QStringLiteral("rename-conversation"), &theme);
 
         // Escape keeps the name; Return renames.
         QTest::keyClick(field, Qt::Key_Escape);
@@ -1323,6 +1238,88 @@ class AgentWorkspaceShellTest final : public QObject {
         view->requestNewSession();
         QTRY_VERIFY(conversationButton(QStringLiteral("New conversation")) != nullptr);
         QVERIFY(conversationButton(QStringLiteral("New conversation"))->isChecked());
+    }
+
+    // Repository & worktree → Create worktree… makes a worktree for the conversation that
+    // opened the picker: the open folder stays, and deleting the conversation offers it.
+    void pickerCreatesTheWorktreeForThisConversation() {
+        QTemporaryDir settings;
+        QTemporaryDir directory;
+        QVERIFY(settings.isValid());
+        QVERIFY(directory.isValid());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+
+        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        QVERIFY(QDir().mkpath(repository));
+        const auto git = [&repository](const QStringList& arguments) {
+            QProcess process;
+            process.start(QStringLiteral("git"),
+                          QStringList{QStringLiteral("-C"), repository} + arguments);
+            return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
+                   process.exitCode() == 0;
+        };
+        QVERIFY(git({QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("-b"),
+                     QStringLiteral("main")}));
+        QVERIFY(git({QStringLiteral("config"), QStringLiteral("user.email"),
+                     QStringLiteral("picker-worktree-test@example.invalid")}));
+        QVERIFY(git({QStringLiteral("config"), QStringLiteral("user.name"),
+                     QStringLiteral("Picker Worktree Test")}));
+        QFile readme(QDir(repository).filePath(QStringLiteral("README.md")));
+        QVERIFY(readme.open(QIODevice::WriteOnly | QIODevice::Text));
+        QVERIFY(readme.write("test\n") > 0);
+        readme.close();
+        QVERIFY(git({QStringLiteral("add"), QStringLiteral("README.md")}));
+        QVERIFY(git({QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("initial")}));
+
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(repository);
+        window.resize(1200, 800);
+        window.show();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
+        auto* manager = window.findChild<ketplus::AgentSessionManager*>();
+        QVERIFY(view && manager);
+        QTRY_VERIFY(!manager->activeConversationId(view->activePath()).isEmpty());
+        const QString agentPath = view->activePath();
+        const QString conversation = manager->activeConversationId(agentPath);
+
+        view->requestExecutionWorktree();
+        ket::Dialog* picker = nullptr;
+        QTRY_VERIFY((picker = window.findChild<ket::Dialog*>(
+                         QStringLiteral("executionWorktreeDialog"))) != nullptr);
+        auto* createButton =
+            picker->findChild<QAbstractButton*>(QStringLiteral("createWorktreeButton"));
+        QVERIFY(createButton);
+        createButton->click();
+        {
+            auto* card = openCard(window, QStringLiteral("agentWorktreeDialogCard"));
+            QVERIFY(card);
+            auto* start = card->findChild<QWidget*>(QStringLiteral("worktreeStartConversation"));
+            auto* note = card->findChild<QWidget*>(QStringLiteral("worktreeConversationNote"));
+            QVERIFY(start && note);
+            QVERIFY(!start->isVisibleTo(card));
+            QVERIFY(note->isVisibleTo(card));
+            auto* name = card->findChild<QLineEdit*>(QStringLiteral("worktreeBranchName"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("worktreeDialogConfirm"));
+            QVERIFY(name && confirm);
+            name->setText(QStringLiteral("feature/from-picker"));
+            QTRY_VERIFY(confirm->isEnabled());
+            confirm->click();
+        }
+        const QString createdPath =
+            directory.filePath(QStringLiteral("ketviet-feature-from-picker"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            manager->conversationOwnedWorktreePaths(agentPath, conversation).size() == 1, 5000);
+        QCOMPARE(
+            QFileInfo(manager->conversationOwnedWorktreePaths(agentPath, conversation).constFirst())
+                .canonicalFilePath(),
+            QFileInfo(createdPath).canonicalFilePath());
+        // The folder the window opened stays open; only the conversation moves.
+        QCOMPARE(view->activePath(), agentPath);
+        QCOMPARE(manager->activeConversationId(agentPath), conversation);
     }
 
     void listsLinkedWorktreeConversationInSidebarBeforeFirstTurn() {
@@ -1800,6 +1797,7 @@ class AgentWorkspaceShellTest final : public QObject {
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_WORKTREE_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
             QVERIFY(host.grab().save(screenshot));
+        captureDialog(host, QStringLiteral("create-worktree"));
         const QString createdBranch = dialog.branchName();
         const QString createdBase = dialog.baseBranch();
         // Closing the card deletes it and its form.
@@ -1906,6 +1904,7 @@ class AgentWorkspaceShellTest final : public QObject {
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_CONVERSATION_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
             QVERIFY(host.grab().save(screenshot));
+        captureDialog(host, QStringLiteral("new-conversation"));
         conversationConfirm->click();
         // An invalid form keeps its card open.
         QVERIFY(conversationCard->isOpen());

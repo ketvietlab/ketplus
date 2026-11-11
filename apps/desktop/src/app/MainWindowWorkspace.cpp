@@ -337,6 +337,7 @@ void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
                 uncommitted.append(file.path);
         agentWorkspace_->setWorkingChanges(snapshot.repositoryRoot, uncommitted);
     }
+    refreshAgentChanges();
     if (explorer_) {
         QHash<QString, QString> statuses;
         for (const auto& file : snapshot.files)
@@ -432,8 +433,6 @@ void MainWindow::prioritizeWorktree(QVector<GitWorktree>& worktrees) const {
 
 void MainWindow::rebuildWorktreeMenu() {
     worktreeMenu_->clear();
-    worktreeMenu_->addAction(manageWorktreesAction_);
-    worktreeMenu_->addSeparator();
     if (worktrees_.isEmpty()) {
         auto* emptyAction = worktreeMenu_->addAction(QStringLiteral("No linked worktrees"));
         emptyAction->setEnabled(false);

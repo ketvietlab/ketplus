@@ -44,6 +44,13 @@ class AgentWorkspaceViewTest final : public QObject {
     void sentAgentMessageReadsAsTheMockNote();
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
+    void silentProviderReadsAsTheMocksError();
+    void providerSetupHoldsTheMessageUntilTheProviderWorks();
+    void aHeldMessageGoesWithItsDraft();
+    void providerSetupClosesTheTurnTheProviderEnded();
+    void claudeSignOutGuidesWithoutHoldingTheMessage();
+    void modelPickerOpensTheProviderSetupGuide();
+    void everySetupStateRendersInBothThemesAndZooms();
     void trimmedTurnOpensStorageSettings();
     void compactionReadsAsAnEventLine();
     void activityOperationSemantics();
@@ -146,6 +153,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
+    void changesPaneListsTheWorktreeChanges();
     void retryResendsTheLatestFailedPrompt();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();
@@ -174,6 +182,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void conversationMenusOfferFork();
     void hiddenConversationReferenceTakesNoKeyFocus();
     void reviewerPickerFollowsTheActiveConversation();
+    void teamMemberHeaderShowsItsRoleInsteadOfReviewer();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
     void selectsModelsInUnifiedPicker();

@@ -67,8 +67,13 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
     addSection(tr("Computer use"), QStringLiteral("computer"),
                new SettingsComputerPage({}, {}, this));
-    addSection(tr("Providers"), QStringLiteral("providers"),
-               new SettingsProvidersPage(std::move(providers), this, std::move(credentials)));
+    auto* providersPage =
+        new SettingsProvidersPage(std::move(providers), this, std::move(credentials));
+    connect(providersPage, &SettingsProvidersPage::typeInTerminalRequested, this,
+            &SettingsWorkspacePage::typeInTerminalRequested);
+    connect(providersPage, &SettingsProvidersPage::sectionRequested, this,
+            [this](const QString& id) { showSection(id); });
+    addSection(tr("Providers"), QStringLiteral("providers"), providersPage);
     // Archived conversations are a page of the dialog (DesktopSettingsPages); it moves here.
     auto* publicNavigation = dialog->findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     auto* publicPages = dialog->findChild<QStackedWidget*>(QStringLiteral("settingsPages"));
@@ -86,11 +91,13 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // Storage has its own controls; Restore defaults does not apply to it.
     addSection(tr("Storage"), QStringLiteral("storage"),
                new SettingsStoragePage(std::move(storageRequester), this), false);
+    // Sparkle keeps the update preferences; Restore defaults does not reset them.
     addSection(tr("Updates"), QStringLiteral("updates"),
-               new SettingsUpdatesPage(AppUpdater::instance(), this));
+               new SettingsUpdatesPage(AppUpdater::instance(), this), false);
     addStyleRules(QStringLiteral(R"QSS(
 QLabel#storageUsage, QLabel#storageStatus, QComboBox#storageDetailDays,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
+QLabel#computerStatus, QLabel#browserToolsStatus { color:%3; font-size:{{body}}px; }
 )QSS"));
     connect(this, &SettingsWorkspace::linkActivated, this, [this](const QString& id) {
         if (id == QStringLiteral("agent-models"))
