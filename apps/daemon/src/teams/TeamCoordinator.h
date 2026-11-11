@@ -78,6 +78,7 @@ struct TaskFacts final {
 };
 enum class TaskQuestion { Merge, Lane };
 using TaskFactsDone = std::function<void(const QHash<QString, TaskFacts>&)>;
+using TaskDiffDone = std::function<void(const std::optional<TaskDiff>&)>;
 
 class TeamHostPort {
   public:
@@ -97,6 +98,11 @@ class TeamHostPort {
                                                   .merged = std::nullopt,
                                                   .changed = changedPaths(team, task)});
         done(facts);
+    }
+    // Reads the task's diff for its review and answers `done` on the caller's thread: before
+    // it returns here, later where the session runtime reads it off its event loop.
+    virtual void askDiff(const Team& team, const Task& task, TaskDiffDone done) {
+        done(taskDiff(team, task));
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
@@ -271,9 +277,9 @@ class TeamCoordinator : public QObject {
     // is asked through the host, which may answer later; one question is open for a team at a
     // time, and a check asked for meanwhile runs when it is answered.
     void checkMerged(qint64 teamId);
-    // Whether a question of a merge or a lane check is still with git.
+    // Whether a merge check, a lane check or a review's diff is still with git.
     [[nodiscard]] bool checksOpen() const {
-        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty();
+        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty() || !reviewDiffs_.isEmpty();
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
@@ -347,8 +353,13 @@ class TeamCoordinator : public QObject {
     // Offers each Ready task whose dependencies are done for merging, once: an actionable
     // update for the leader, and under mergePolicy "user" a "Merge T-n?" decision.
     void offerMerges(Team& team, QList<Update>& updates);
-    // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp).
+    // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp). The diff is
+    // read through the host first, which may answer later; nothing of the team changes until
+    // then, so a restart meanwhile leaves the task queued.
     void pumpReviews(qint64 teamId);
+    // Starts the review the diff was read for, if that task is still the next one as it was.
+    void startReview(qint64 teamId, const Task& asked, const QString& repository,
+                     const QString& integration, const std::optional<TaskDiff>& diff);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,
                                             const std::optional<TaskDiff>& diff);
     // Restarts the quiet period of the team's digest.
@@ -375,6 +386,8 @@ class TeamCoordinator : public QObject {
     QHash<qint64, Team> teams_;
     // Checks whose question to git is open, and those asked for again meanwhile: a team id
     // for the merge check, "<team>/<developer>" for the lane check.
+    // Teams whose next review waits for git to read its diff.
+    QSet<qint64> reviewDiffs_;
     QSet<qint64> mergeChecks_;
     QSet<qint64> mergeChecksAgain_;
     QSet<QString> laneChecks_;

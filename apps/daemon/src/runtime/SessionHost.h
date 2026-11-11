@@ -291,6 +291,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
     void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
                   teams::TaskQuestion question, teams::TaskFactsDone done) override;
+    void askDiff(const teams::Team& team, const teams::Task& task,
+                 teams::TaskDiffDone done) override;
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,

@@ -76,6 +76,14 @@ class FakeHost final : public TeamHostPort {
                                    held.append([done, facts] { done(facts); });
                                });
     }
+    void askDiff(const Team& team, const Task& task, TaskDiffDone done) override {
+        ++asked;
+        if (!holdAnswers) {
+            done(taskDiff(team, task));
+            return;
+        }
+        held.append([done, diff = taskDiff(team, task)] { done(diff); });
+    }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
