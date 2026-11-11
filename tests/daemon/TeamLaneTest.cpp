@@ -102,6 +102,23 @@ class TeamLaneTest final : public QObject {
         QVERIFY(!teams_->checksOpen());
     }
 
+    // The paths were compared with the integration branch the team had. After it changed the
+    // answer is dropped and git is asked again.
+    void anAnswerAgainstAnotherIntegrationBranchIsDroppedAndAskedAgain() {
+        host_.holdAnswers = true;
+        host_.changed.insert(task_, {"api/old-base.cpp"});
+        teams_->memberTurnEnded("dev1");
+        const int asked = host_.asked;
+        QVERIFY(teams_->update(team_, {{"integration_branch", "release-other"}}, "user").ok());
+        host_.changed.insert(task_, {"web/cart.cpp"});
+        host_.answer();
+        QVERIFY(task().outsideLane.isEmpty());
+        QCOMPARE(host_.asked, asked + 1);
+        host_.answer();
+        QVERIFY(task().outsideLane.isEmpty());
+        QVERIFY(!teams_->checksOpen());
+    }
+
     void outsideTheLaneIsFlaggedAndReachesTheDigest() {
         host_.changed.insert(task_, {"web/cart.cpp", "api/routes.cpp", "webby/x"});
         teams_->memberTurnEnded("dev1");

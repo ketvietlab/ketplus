@@ -62,16 +62,24 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
         return;
     }
     mergeChecks_.insert(teamId);
-    host_->askTasks(*team, ready, TaskQuestion::Merge,
-                    [self = QPointer<TeamCoordinator>(this), teamId,
-                     ready](const QHash<QString, TaskFacts>& facts) {
-                        if (!self)
-                            return;
-                        self->mergeChecks_.remove(teamId);
-                        self->applyMergeFacts(teamId, ready, facts);
-                        if (self->mergeChecksAgain_.remove(teamId))
-                            self->checkMerged(teamId);
-                    });
+    host_->askTasks(
+        *team, ready, TaskQuestion::Merge,
+        [self = QPointer<TeamCoordinator>(this), teamId, ready, repository = team->repository,
+         integration = team->integrationBranch](const QHash<QString, TaskFacts>& facts) {
+            if (!self)
+                return;
+            self->mergeChecks_.remove(teamId);
+            bool again = self->mergeChecksAgain_.remove(teamId);
+            // Git answered for the integration branch the team had. An answer
+            // about another one says nothing: it is dropped and asked again.
+            const Team* now = self->team(teamId);
+            if (now && now->repository == repository && now->integrationBranch == integration)
+                self->applyMergeFacts(teamId, ready, facts);
+            else
+                again = now != nullptr;
+            if (again)
+                self->checkMerged(teamId);
+        });
 }
 
 void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& asked,

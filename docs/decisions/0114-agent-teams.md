@@ -205,7 +205,8 @@ may be journaled after the turn has answered.
    a merge made outside the app is noticed the same way. The daemon asks git off its event
    loop (as it does for the lane check of §4): the read that asked is answered with the team
    as it is, and the merge follows as a `team.changed` event. One question is open for a team
-   at a time, and its answer is applied only to a task that is still as it was asked about. The same check compares the
+   at a time, and its answer is applied only to a task that is still as it was asked about.
+   An answer about an integration branch the team no longer has is dropped and asked again. The same check compares the
    branch with the commit that was reviewed: a ready task whose branch moved goes back to
    Blocked to be reviewed again, and one merged with commits after its review is done
    with a `merged_unreviewed` update to the leader. *Rejected*: pull request state

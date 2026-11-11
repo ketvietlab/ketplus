@@ -85,16 +85,25 @@ void TeamCoordinator::checkLanes(const qint64 teamId, const QString& developer) 
         return;
     }
     laneChecks_.insert(check);
-    host_->askTasks(*team, mine, TaskQuestion::Lane,
-                    [self = QPointer<TeamCoordinator>(this), teamId, developer, check,
-                     mine](const QHash<QString, TaskFacts>& facts) {
-                        if (!self)
-                            return;
-                        self->laneChecks_.remove(check);
-                        self->applyLaneFacts(teamId, developer, mine, facts);
-                        if (self->laneChecksAgain_.remove(check))
-                            self->checkLanes(teamId, developer);
-                    });
+    host_->askTasks(
+        *team, mine, TaskQuestion::Lane,
+        [self = QPointer<TeamCoordinator>(this), teamId, developer, check, mine,
+         repository = team->repository,
+         integration = team->integrationBranch](const QHash<QString, TaskFacts>& facts) {
+            if (!self)
+                return;
+            self->laneChecks_.remove(check);
+            bool again = self->laneChecksAgain_.remove(check);
+            // The paths were compared with the integration branch the team had.
+            // An answer against another one is dropped and asked again.
+            const Team* now = self->team(teamId);
+            if (now && now->repository == repository && now->integrationBranch == integration)
+                self->applyLaneFacts(teamId, developer, mine, facts);
+            else
+                again = now != nullptr;
+            if (again)
+                self->checkLanes(teamId, developer);
+        });
 }
 
 void TeamCoordinator::applyLaneFacts(const qint64 teamId, const QString& developer,
@@ -110,7 +119,8 @@ void TeamCoordinator::applyLaneFacts(const qint64 teamId, const QString& develop
         // The lanes are read as they are now; a task that changed hands or worktree
         // meanwhile is checked after its owner's next turn.
         if (!task || fact == facts.cend() || !fact->changed || task->owner != developer ||
-            !open(*task) || task->worktree != was.worktree)
+            !open(*task) || task->worktree != was.worktree || task->branch != was.branch ||
+            task->baseCommit != was.baseCommit)
             continue;
         found.insert(task->id, outsidePaths(*team, developer, *fact->changed));
     }

@@ -283,6 +283,27 @@ class TeamMergeTest final : public QObject {
         QVERIFY(!teams_->checksOpen());
     }
 
+    // Git answered whether the integration branch the team had contains the task. After the
+    // branch changed the answer says nothing: it is dropped, and git is asked again.
+    void anAnswerForAnotherIntegrationBranchIsDroppedAndAskedAgain() {
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.holdAnswers = true;
+        host_.merged.insert(id);
+        teams_->checkMerged(team_);
+        const int asked = host_.asked;
+        QVERIFY(teams_->update(team_, {{"integration_branch", "release-other"}}, "user").ok());
+        // The new integration branch does not contain the task.
+        host_.merged.remove(id);
+        host_.answer();
+        QCOMPARE(team().integrationBranch, QStringLiteral("release-other"));
+        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(host_.asked, asked + 1);
+        host_.answer();
+        QCOMPARE(get(id).state, state::ready);
+        QVERIFY(!teams_->checksOpen());
+    }
+
     // An answer that arrives after its team was deleted changes nothing and leaves no
     // question open.
     void anAnswerForADeletedTeamIsDropped() {
