@@ -478,6 +478,8 @@ class LocalJournal final {
     bool clearConversationReviewer(const QString& sessionId, QString* error = nullptr);
     [[nodiscard]] std::optional<ConversationReviewer>
     conversationReviewer(const QString& sessionId) const;
+    // Whether the conversation reviews another conversation's turns.
+    [[nodiscard]] bool isConversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
     // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at

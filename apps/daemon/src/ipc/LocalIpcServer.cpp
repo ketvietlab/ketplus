@@ -53,6 +53,7 @@ LocalIpcServer::LocalIpcServer(SessionHost* host, const QString& serverName,
     server_->setSocketOptions(QLocalServer::UserAccessOption);
     connect(server_, &QLocalServer::newConnection, this, &LocalIpcServer::acceptConnections);
     connect(host_, &SessionHost::eventReady, this, &LocalIpcServer::broadcastEvent);
+    connect(host_, &SessionHost::teamEvent, this, &LocalIpcServer::broadcastTeamEvent);
     connect(host_, &SessionHost::noticeReady, this, &LocalIpcServer::broadcastNotice);
 }
 
@@ -490,6 +491,22 @@ void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
         return;
     }
     socket->write(frame);
+}
+
+// ADR 0112: team.changed and team.removed reach every authenticated client, never an agent.
+void LocalIpcServer::broadcastTeamEvent(const QString& type, const QJsonObject& payload) {
+    const QJsonObject envelope{
+        {QStringLiteral("protocol_version"), protocol::currentVersion},
+        {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("message_type"), type},
+        {QStringLiteral("sent_at"), protocol::timestamp()},
+        {QStringLiteral("payload"), payload}};
+    const QList<QLocalSocket*> sockets = connections_.keys();
+    for (QLocalSocket* socket : sockets) {
+        const auto it = connections_.constFind(socket);
+        if (it != connections_.cend() && it->authenticated && it->agentToken.isEmpty())
+            send(socket, envelope);
+    }
 }
 
 void LocalIpcServer::broadcastEvent(const QJsonObject& event) {

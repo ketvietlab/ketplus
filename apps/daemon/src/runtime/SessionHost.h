@@ -105,6 +105,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
 
   signals:
     void eventReady(const QJsonObject& event);
+    // ADR 0112: team.changed or team.removed, for every local client.
+    void teamEvent(const QString& type, const QJsonObject& payload);
     // A change every desktop window shows at once that is not a session event (#429):
     // `tags.changed` with the catalog and/or the sessions whose labels changed.
     void noticeReady(const QString& type, const QJsonObject& payload);
@@ -283,6 +285,15 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
     void startTeams();
+    [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
+    [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
+    [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // A member conversation that has not had a turn yet. Returns its id, or empty with
+    // `problem` set.
+    QString createMemberConversation(const QString& worktree, const QString& provider,
+                                     const QString& model, const QString& effort,
+                                     const QString& title, QString* problem);
+    void discardMemberConversation(const QString& sessionId);
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
     void storeFork(const QString& sourceId, qint64 sourceGeneration, const QString& forkId,

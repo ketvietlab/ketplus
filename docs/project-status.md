@@ -28,6 +28,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
   their error codes; a member cannot be archived, its own Reviewer setting is refused
   with `team_member` and does not run, and a deleted member leaves its team.
+  The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
+  local clients; `team.create` starts every member as a named conversation (no turn),
+  all or nothing, and `team.changed` / `team.removed` reach every local client.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
