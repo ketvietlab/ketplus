@@ -2,6 +2,8 @@
 
 #include <QDateTime>
 
+#include <algorithm>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -122,6 +124,30 @@ HistoryEntry bounded(HistoryEntry entry) {
     entry.text = boundedText(std::move(entry.text));
     entry.data = boundedData(std::move(entry.data));
     return entry;
+}
+
+QJsonObject summaryJson(const Task& task) {
+    QJsonObject json = toJson(task, false);
+    if (task.outsideLane.size() > summaryOutsidePaths) {
+        json.insert(QStringLiteral("outside_lane"),
+                    strings(task.outsideLane.first(summaryOutsidePaths)));
+        json.insert(QStringLiteral("outside_lane_total"), task.outsideLane.size());
+    }
+    return json;
+}
+
+QJsonObject taskPageJson(const Task& task, const int limit, const qsizetype before) {
+    QJsonObject json = toJson(task, false);
+    const qsizetype total = task.history.size();
+    const qsizetype end = before < 0 || before > total ? total : before;
+    const qsizetype start = std::max<qsizetype>(0, end - std::clamp(limit, 1, maximumPage));
+    QJsonArray history;
+    for (qsizetype index = start; index < end; ++index)
+        history.append(toJson(task.history.at(index)));
+    json.insert(QStringLiteral("history"), history);
+    json.insert(QStringLiteral("history_total"), total);
+    json.insert(QStringLiteral("history_start"), start);
+    return json;
 }
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }

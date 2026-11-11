@@ -116,14 +116,43 @@ QJsonObject TeamCoordinator::teamJson(const Team& team) const {
     json.insert(QStringLiteral("members"), members);
     json.remove(QStringLiteral("next_task"));
     json.remove(QStringLiteral("next_decision"));
+    // ADR 0115: a summary. History, held messages and old decisions grow with time; clients
+    // read them with team.task.get and team.decision.list.
+    QJsonArray tasks;
+    for (const Task& task : team.tasks)
+        tasks.append(summaryJson(task));
+    json.insert(QStringLiteral("tasks"), tasks);
+    json.remove(QStringLiteral("held"));
+    json.insert(QStringLiteral("held_count"), team.held.size());
+    QJsonArray decisions;
+    qsizetype answered = 0;
+    for (auto it = team.decisions.crbegin(); it != team.decisions.crend(); ++it) {
+        const bool open = it->state == QStringLiteral("open");
+        if (!open && answered >= summaryAnsweredDecisions)
+            continue;
+        answered += open ? 0 : 1;
+        decisions.prepend(toJson(*it));
+    }
+    json.insert(QStringLiteral("decisions"), decisions);
+    json.insert(QStringLiteral("decisions_total"), team.decisions.size());
+    return json;
+}
+
+QJsonObject TeamCoordinator::directoryJson(const Team& team) const {
+    QJsonObject json = teamJson(team);
+    json.remove(QStringLiteral("tasks"));
+    json.remove(QStringLiteral("decisions"));
+    json.insert(QStringLiteral("tasks_total"), team.tasks.size());
+    json.insert(QStringLiteral("directory"), true);
     return json;
 }
 
 QList<TeamUpdateRecord> TeamCoordinator::updateRecords(const qint64 teamId,
-                                                       const bool undigestedOnly,
-                                                       const int limit) const {
+                                                       const bool undigestedOnly, const int limit,
+                                                       const qint64 beforeId) const {
     // Updates written before the bounds can hold thousands of paths.
-    QList<TeamUpdateRecord> updates = journal_->teamUpdates(teamId, undigestedOnly, limit);
+    QList<TeamUpdateRecord> updates =
+        journal_->teamUpdates(teamId, undigestedOnly, limit, beforeId);
     for (TeamUpdateRecord& update : updates) {
         update.text = boundedText(std::move(update.text));
         update.data = boundedData(std::move(update.data));
@@ -131,9 +160,11 @@ QList<TeamUpdateRecord> TeamCoordinator::updateRecords(const qint64 teamId,
     return updates;
 }
 
-QJsonArray TeamCoordinator::updatesJson(const qint64 teamId, const int limit) const {
+QJsonArray TeamCoordinator::updatesJson(const qint64 teamId, const int limit,
+                                        const qint64 beforeId) const {
     QJsonArray updates;
-    for (const TeamUpdateRecord& update : updateRecords(teamId, false, limit))
+    for (const TeamUpdateRecord& update :
+         updateRecords(teamId, false, std::clamp(limit, 1, maximumPage), beforeId))
         updates.append(QJsonObject{{QStringLiteral("id"), update.id},
                                    {QStringLiteral("at"), update.at},
                                    {QStringLiteral("actor"), update.actor},
@@ -183,7 +214,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                           .data = boundedData(update.data),
                                           .actionable = update.actionable});
     }
-    emit teamChanged(teamJson(team));
+    emit teamChanged(directoryJson(team));
     if (actionable)
         scheduleDigest(team.id);
     if (team.reviewing.isEmpty() && !team.reviewQueue.isEmpty())
@@ -265,7 +296,7 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
                                       .text = QStringLiteral("Team %1 created with %2 members.")
                                                   .arg(draft.name)
                                                   .arg(draft.members.size())});
-    emit teamChanged(teamJson(draft));
+    emit teamChanged(directoryJson(draft));
     startLeader(draft.id);
     return {.teamId = draft.id};
 }

@@ -190,12 +190,16 @@ TeamTaskDialog::TeamTaskDialog(TeamDirectory* teams, const QString& teamId, cons
     error_->setVisible(false);
     fields->addWidget(error_);
 
-    connect(teams_, &TeamDirectory::changed, this, &TeamTaskDialog::rebuild);
+    connect(teams_, &TeamDirectory::changed, this, [this] {
+        rebuild();
+        readHistory();
+    });
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
             &TeamTaskDialog::rebuild);
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             &TeamTaskDialog::rebuild);
     rebuild();
+    readHistory();
 }
 
 QString TeamTaskDialog::error() const { return error_->isHidden() ? QString{} : error_->text(); }
@@ -365,7 +369,18 @@ void TeamTaskDialog::rebuild() {
 
     column->addWidget(new Rule(details_));
     column->addWidget(heading(tr("History"), details_, "teamTaskHistoryHeading"));
-    for (const auto& value : task.value(QStringLiteral("history")).toArray()) {
+    // ADR 0115: an older daemon still sends the whole history with the team.
+    if (historyRead_ && historyStart_ > 0) {
+        auto* earlier = new ket::Button(tr("Show earlier (%1)").arg(historyStart_),
+                                        ket::ButtonVariant::Ghost, details_);
+        earlier->setObjectName(QStringLiteral("teamTaskHistoryEarlier"));
+        earlier->setControlSize(ket::ControlSize::Small);
+        connect(earlier, &QAbstractButton::clicked, this, [this] { readHistory(true); });
+        column->addWidget(earlier, 0, Qt::AlignLeft);
+    }
+    const QJsonArray history =
+        historyRead_ ? history_ : task.value(QStringLiteral("history")).toArray();
+    for (const auto& value : history) {
         const QJsonObject entry = value.toObject();
         const QString actor = entry.value(QStringLiteral("actor")).toString();
         const QJsonObject who = TeamDirectory::member(*team, actor);

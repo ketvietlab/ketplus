@@ -1045,3 +1045,9 @@ switch, git queries, message posting through `AgentBroker`). `SessionHostTeams.c
 dispatches the `team.*` requests of the `teams/1` and `teams.tasks/1` features and
 implements the port. Member agents reach the same coordinator through the `team_*`
 tools of the ketplus_agents server, with the caller's role checked by the daemon.
+What clients read is bounded by the size of the team, never by its age (ADR 0115):
+- `team.list` and `team.changed` carry the directory form (members only).
+- `team.get` carries a summary without history, with the newest page of Updates.
+- History, older Updates and older decisions come page by page.
+- `LocalIpcServer::send` replaces any message too large for one frame with a failure of
+  that request, or a `truncated` event, and never drops the client for it.

@@ -348,6 +348,71 @@ class SidebarTeamsTest final : public QObject {
         QVERIFY(!error.isEmpty());
     }
 
+    // ADR 0115: a daemon that goes away leaves its teams, stale, so a team's members stay in
+    // one folder while it reconnects; the list is read again once it is back.
+    void aDisconnectKeepsTheTeamsUntilTheDaemonIsBack() {
+        FakeDaemon daemon;
+        daemon.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team("7", 2)}}});
+        TeamDirectory teams;
+        teams.setTransport(daemon.transport());
+        teams.setAvailable(true);
+        QVERIFY(teams.teamOf("s-dev2"));
+        QSignalSpy changed(&teams, &TeamDirectory::changed);
+        teams.setDisconnected();
+        QVERIFY(!teams.isAvailable());
+        QVERIFY(teams.isStale());
+        QVERIFY(teams.hasTeams());
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(teams.teamOf("s-dev2")->value("id").toString(), QStringLiteral("7"));
+        // Nothing is asked of a daemon that is not there.
+        const auto asked = daemon.sent.size();
+        teams.refresh();
+        QString error;
+        teams.request("team.get", {{"team_id", "7"}},
+                      [&](const QJsonObject&, const QString& failure) { error = failure; });
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(daemon.sent.size(), asked);
+        // Back: read again, and no longer stale.
+        teams.setAvailable(true);
+        QCOMPARE(daemon.sent.size(), asked + 1);
+        QCOMPARE(daemon.sent.last().first, QStringLiteral("team.list"));
+        QVERIFY(!teams.isStale());
+        QVERIFY(teams.teamOf("s-dev2"));
+        // A daemon without teams/1 has none.
+        teams.setDisconnected();
+        teams.setAvailable(false);
+        QVERIFY(!teams.hasTeams());
+        QVERIFY(teams.teams().isEmpty());
+    }
+
+    // team.list and team.changed carry no tasks: the ones a page read stay. A team too large
+    // for one message arrives as its id, and the list is read again.
+    void directoryEventsKeepTheTasksAPageRead() {
+        FakeDaemon daemon;
+        daemon.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team("7", 1)}}});
+        TeamDirectory teams;
+        teams.setTransport(daemon.transport());
+        teams.setAvailable(true);
+        QJsonObject read = team("7", 1, 2);
+        read.insert("tasks", QJsonArray{QJsonObject{{"id", "T-1"}}});
+        read.insert("decisions", QJsonArray{QJsonObject{{"id", "D-1"}}});
+        teams.applyEvent("team.changed", {{"team", read}});
+        QJsonObject directory = team("7", 2, 3);
+        directory.insert("directory", true);
+        directory.insert("name", "Renamed");
+        teams.applyEvent("team.changed", {{"team", directory}});
+        const QJsonObject known = *teams.team("7");
+        QCOMPARE(known.value("name").toString(), QStringLiteral("Renamed"));
+        QCOMPARE(known.value("revision").toInt(), 3);
+        QCOMPARE(known.value("tasks").toArray().size(), 1);
+        QCOMPARE(known.value("decisions").toArray().size(), 1);
+        QVERIFY(teams.teamOf("s-dev2"));
+        const auto asked = daemon.sent.size();
+        teams.applyEvent("team.changed", {{"truncated", true}, {"team_id", "7"}, {"revision", 4}});
+        QCOMPARE(daemon.sent.size(), asked + 1);
+        QCOMPARE(daemon.sent.last().first, QStringLiteral("team.list"));
+    }
+
     // The daemon may still be starting when the window asks: a list that failed is asked
     // for again, or the sidebar would show a team's members as loose conversations.
     void aTeamListThatFailedIsAskedForAgain() {

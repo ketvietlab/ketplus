@@ -107,7 +107,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             if (!task)
                 return refusal(QStringLiteral("task_not_found"),
                                QStringLiteral("There is no task %1.").arg(taskId));
-            return {{QStringLiteral("ok"), true}, {QStringLiteral("task"), teams::toJson(*task)}};
+            return {{QStringLiteral("ok"), true},
+                    {QStringLiteral("task"), teams::taskPageJson(*task)}};
         }
         QJsonArray tasks;
         for (const teams::Task& task : team->tasks)

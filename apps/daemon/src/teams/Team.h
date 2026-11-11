@@ -190,6 +190,22 @@ struct Team final {
 [[nodiscard]] QJsonObject toJson(const Team& team);
 [[nodiscard]] Team teamFromJson(const QJsonObject& json);
 [[nodiscard]] QJsonObject toJson(const Task& task, bool withHistory = true);
+
+// ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
+// The summary lists the first outside paths of a task and the newest answered decisions;
+// the rest comes from team.task.get, team.updates and team.decision.list, page by page.
+inline constexpr qsizetype summaryOutsidePaths = 20;
+inline constexpr qsizetype summaryAnsweredDecisions = 20;
+inline constexpr int defaultPage = 50;
+inline constexpr int maximumPage = 200;
+
+// The task without history in a summary: at most summaryOutsidePaths outside paths, the
+// full count as "outside_lane_total".
+[[nodiscard]] QJsonObject summaryJson(const Task& task);
+// The task with one page of its history: the newest `limit` entries before index `before`
+// (the end when negative), oldest first, with "history_total" and "history_start".
+[[nodiscard]] QJsonObject taskPageJson(const Task& task, int limit = defaultPage,
+                                       qsizetype before = -1);
 [[nodiscard]] QJsonObject toJson(const Decision& decision);
 [[nodiscard]] QJsonObject toJson(const Member& member);
 
