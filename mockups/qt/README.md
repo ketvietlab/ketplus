@@ -268,6 +268,23 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
+## Sidebar list (concept)
+
+The repository list is drawn by two mock-local parts until the design is approved; they then
+move into ket-qt as changes to `KetGroupHeader` and `KetConversationRow` (both layers).
+
+- `qml/shell/SidebarRepoHeader.qml`: a repository is a heading, not a row. A rule above it,
+  a chevron, the name in the main colour and semibold, and on the right what its
+  conversations are doing: waiting for the user, working, unread, or the total when all is
+  quiet. A folded repository therefore still says that something needs a look. The `+`
+  replaces the summary while the heading is hovered or focused.
+- `qml/shell/SidebarRow.qml`: one line for a conversation with nothing to say (state mark,
+  title, number at the right). A second line only for a turn that runs ("Working · from
+  #4821"), a question, a failure, or tags. A finished conversation that was read has no mark
+  and a regular title; unread is a dot and a semibold title. Titles line up under the
+  repository's name.
+- "Show N more" says how many it adds.
+
 The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
 the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
 (`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a

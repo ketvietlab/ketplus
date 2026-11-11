@@ -312,6 +312,7 @@ Rectangle {
                     Column {
                         id: repo
                         required property var modelData
+                        required property int index
                         readonly property bool open: sidebar.expanded[modelData.name] !== false
                         readonly property bool all: !!sidebar.showAll[modelData.name]
                         readonly property int limit: 7
@@ -327,12 +328,23 @@ Rectangle {
                         }
                         width: parent.width
 
-                        KetGroupHeader {
+                        SidebarRepoHeader {
+                            id: repoHeader
+                            readonly property var every: sidebar.window.conversationsOf(repo.modelData.name)
+                            function statusOf(c) {
+                                return sidebar.window.planStatus ? sidebar.window.planStatus(c.number, c.status) : c.status
+                            }
                             x: sidebar.inset
                             width: parent.width - 2 * sidebar.inset
                             name: repo.modelData.name
+                            divider: repo.index > 0
                             expanded: repo.open
                             selected: sidebar.window.repository === repo.modelData.name
+                            count: every.length
+                            working: every.filter(c => statusOf(c) === KetTheme.ConversationStatus.Working).length
+                            waiting: every.filter(c => [KetTheme.ConversationStatus.NeedsInput,
+                                                        KetTheme.ConversationStatus.Error].includes(statusOf(c))).length
+                            unread: every.filter(c => !!c.unread && statusOf(c) === KetTheme.ConversationStatus.Completed).length
                             onExpandedChanged: {
                                 const next = Object.assign({}, sidebar.expanded)
                                 next[repo.modelData.name] = expanded
@@ -387,9 +399,11 @@ Rectangle {
                                    : repo.all ? repo.loose
                                    : repo.loose.slice(0, repo.limit)
 
-                            KetConversationRow {
+                            SidebarRow {
                                 id: row
                                 required property var modelData
+                                unread: !!modelData.unread
+                                detail: modelData.from ? "from " + modelData.from : ""
                                 objectName: "conversation-" + modelData.number
                                 x: sidebar.inset
                                 width: repo.width - 2 * sidebar.inset
@@ -439,10 +453,11 @@ Rectangle {
                         Basic.AbstractButton {
                             visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
                                      && repo.loose.length > repo.limit
-                            x: sidebar.px(28)
+                            // Under the titles, and it says how many it adds.
+                            x: sidebar.inset + sidebar.px(30)
                             height: sidebar.px(28)
                             hoverEnabled: true
-                            text: "Show more"
+                            text: "Show " + (repo.loose.length - repo.limit) + " more"
                             onClicked: {
                                 const next = Object.assign({}, sidebar.showAll)
                                 next[repo.modelData.name] = true
@@ -453,13 +468,13 @@ Rectangle {
                                 text: parent.text
                                 color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                 font.family: KetTheme.fontFamily
-                                font.pixelSize: sidebar.px(13)
+                                font.pixelSize: sidebar.px(12)
                                 font.weight: Font.Medium
                             }
                             background: null
                         }
 
-                        Item { width: 1; height: sidebar.px(6) }
+                        Item { width: 1; height: sidebar.px(4) }
                     }
                 }
             }

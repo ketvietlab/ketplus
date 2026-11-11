@@ -183,10 +183,12 @@ Column {
     Repeater {
         model: folder.expanded ? folder.shown : []
 
-        KetConversationRow {
+        SidebarRow {
             id: row
             required property var modelData
             readonly property var item: folder.conversation(modelData.number)
+            unread: !!item.unread
+            detail: item.from ? "from " + item.from : ""
             x: folder.indent
             width: folder.width - folder.indent
             text: item.title
