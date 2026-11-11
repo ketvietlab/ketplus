@@ -11,9 +11,11 @@
 #include "KetStyle.h"
 #include "KetTextField.h"
 #include "teams/TeamDirectory.h"
+#include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
 
 #include <QApplication>
+#include <QHeaderView>
 #include <QJsonArray>
 #include <QLabel>
 #include <QScrollArea>
@@ -21,6 +23,7 @@
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QtTest>
+#include <functional>
 
 using namespace ketplus;
 
@@ -100,12 +103,22 @@ QJsonObject fixture(int revision = 1, int developers = 2, bool paused = false,
 struct FakeDaemon {
     QList<QPair<QString, QJsonObject>> sent;
     QHash<QString, QJsonObject> answers;
+    // While set, answers wait in `late` until the test delivers them.
+    bool hold{false};
+    QList<std::function<void()>> late;
     TeamDirectory::Transport transport() {
         return [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
             sent.append({type, payload});
             const QJsonObject answer = answers.value(type, {{"ok", true}});
-            reply(answer, answer.value("ok").toBool() ? QString{}
-                                                      : answer.value("error_message").toString());
+            const auto deliver = [answer, reply] {
+                reply(answer, answer.value("ok").toBool()
+                                  ? QString{}
+                                  : answer.value("error_message").toString());
+            };
+            if (hold)
+                late.append(deliver);
+            else
+                deliver();
         };
     }
     int count(const QString& type) const {
@@ -168,10 +181,12 @@ class TeamPageTest final : public QObject {
         QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop"));
         QCOMPARE(page.findChild<QLabel*>("teamPageGoal")->text(),
                  QStringLiteral("Checkout in one page"));
-        const QString facts = page.findChild<QLabel*>("teamPageFacts")->text();
-        QVERIFY2(facts.contains("into team/shop") && facts.contains("the leader merges tasks") &&
-                     facts.contains("1 of 4 tasks done"),
-                 qPrintable(facts));
+        QCOMPARE(page.findChild<QLabel*>("teamPageRepository")->text(), QStringLiteral("shop"));
+        QCOMPARE(page.findChild<QLabel*>("teamPageBranch")->text(), QStringLiteral("team/shop"));
+        QCOMPARE(page.findChild<QLabel*>("teamPageMerges")->text(),
+                 QStringLiteral("The leader merges tasks"));
+        QCOMPARE(page.findChild<QLabel*>("teamPageProgress")->text(),
+                 QStringLiteral("1 of 4 tasks done"));
         // Waiting for you: the recommended choice first and marked.
         auto* card = page.findChild<QFrame*>("teamDecision_D-1");
         QVERIFY(card);
@@ -192,7 +207,7 @@ class TeamPageTest final : public QObject {
         // Members: one row each, what each does; the developer's menu removes it.
         QVERIFY(page.findChild<QWidget*>("teamMember_lead"));
         QVERIFY(page.findChild<QWidget*>("teamMember_dev1")
-                    ->findChild<QLabel*>("teamMemberFacts")
+                    ->findChild<QLabel*>("teamMemberStatus")
                     ->text()
                     .contains("On T-1"));
         QVERIFY(page.findChild<QWidget*>("teamMember_dev1")
@@ -211,6 +226,120 @@ class TeamPageTest final : public QObject {
         QVERIFY(updates.first().endsWith("T-1 assigned"));
         QVERIFY(!page.findChild<ket::Banner*>("teamPausedBanner"));
         QVERIFY(!page.findChild<ket::Banner*>("teamQueueBanner"));
+    }
+
+    // What a live team writes: choices that are sentences, long lanes and paths, an update
+    // that is a paragraph and one that is a single unbreakable word. Nothing may leave the page.
+    void longContentStaysInsideThePage() {
+        QJsonObject team = fixture();
+        const QString longest =
+            "Theo nhóm sản phẩm: mỗi nhóm một lệnh, gom mọi món hết tồn trong 15 phút";
+        QJsonObject decision = team.value("decisions").toArray().first().toObject();
+        decision.insert("question", "Khi bán hàng chế biến mà hết tồn, hệ thống tự mở lệnh sản "
+                                    "xuất theo cách nào để bếp không nhận quá nhiều lệnh nhỏ?");
+        decision.insert("context",
+                        QString("Lựa chọn này quyết định mô hình dữ liệu. ").repeated(6));
+        decision.insert("choices",
+                        QJsonArray{"Theo từng sản phẩm: mỗi món hết tồn mở một lệnh riêng", longest,
+                                   "Không tự mở"});
+        decision.insert("recommended", longest);
+        team.insert("decisions", QJsonArray{decision});
+        team.insert("name", "Kingfruit Pilot: thuế, nhập hàng loạt, bán tại quầy và báo cáo");
+        team.insert("goal",
+                    QString("Đưa Kingfruit vào chạy thử với thuế theo người mua. ").repeated(4));
+        QJsonArray members = team.value("members").toArray();
+        QJsonObject developer = members.at(1).toObject();
+        developer.insert("name", "Developer 1 with a conversation title that goes on and on");
+        developer.insert("provider", "Claude · Opus 5.5 · a provider label that is long");
+        developer.insert("lane", "Thuế, Kế toán & Bán hàng, và mọi thứ quanh hoá đơn");
+        developer.insert("paths", QJsonArray{"ketsuite/packages/ketsuite/src/modules/account/",
+                                             "ketsuite/packages/ketsuite/src/modules/product/"});
+        members.replace(1, developer);
+        team.insert("members", members);
+        QJsonArray tasks = team.value("tasks").toArray();
+        QJsonObject first = tasks.first().toObject();
+        first.insert("title",
+                     "Thuế cho tổ chức trong nhập và sửa hàng loạt sản phẩm của catalogue");
+        first.insert("lane", developer.value("lane"));
+        tasks.replace(0, first);
+        team.insert("tasks", tasks);
+        start(team);
+        daemon_.answers.insert(
+            "team.get",
+            {{"ok", true},
+             {"team", team},
+             {"updates",
+              QJsonArray{
+                  QJsonObject{
+                      {"id", 1},
+                      {"at", "2026-11-10T10:00:00.000Z"},
+                      {"actor", "dev1"},
+                      {"task_id", "T-1"},
+                      {"text", QString("Đã xong phần nhập tệp, còn sửa hàng loạt. ").repeated(30)}},
+                  QJsonObject{{"id", 2},
+                              {"at", "2026-11-10T10:01:00.000Z"},
+                              {"actor", "daemon"},
+                              {"kind", "outside_lane"},
+                              {"text", QString("ketsuite/packages/").repeated(20)}}}}});
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.show();
+        const QString grabs = qEnvironmentVariable("KETPLUS_TEAM_PAGE_GRABS");
+        for (const int width : {480, 620, 800, 1024, 1440}) {
+            page.resize(width, 900);
+            QTRY_COMPARE(page.updates().size(), 2);
+            QCoreApplication::processEvents();
+            QWidget* content = page.scrollArea()->widget();
+            QVERIFY2(content->width() <= page.scrollArea()->viewport()->width(),
+                     qPrintable(QStringLiteral("page %1: content is %2 wide in %3")
+                                    .arg(width)
+                                    .arg(content->width())
+                                    .arg(page.scrollArea()->viewport()->width())));
+            for (QWidget* child : content->findChildren<QWidget*>()) {
+                // The table lays its own cells out and elides them.
+                if (!child->isVisibleTo(content) || page.tasksTable()->isAncestorOf(child))
+                    continue;
+                const QRect box(child->mapTo(content, QPoint(0, 0)), child->size());
+                QVERIFY2(box.left() >= 0 && box.right() < content->width(),
+                         qPrintable(QStringLiteral("page %1: %2 \"%3\" spans %4..%5 of %6")
+                                        .arg(width)
+                                        .arg(child->metaObject()->className(), child->objectName())
+                                        .arg(box.left())
+                                        .arg(box.right())
+                                        .arg(content->width())));
+            }
+            // Every column the table shows fits; it has no sideways scroll either.
+            const QHeaderView* header = page.tasksTable()->horizontalHeader();
+            QVERIFY2(header->length() <= page.tasksTable()->viewport()->width(),
+                     qPrintable(QStringLiteral("page %1: task columns need %2 of %3")
+                                    .arg(width)
+                                    .arg(header->length())
+                                    .arg(page.tasksTable()->viewport()->width())));
+            QCOMPARE(header->isSectionHidden(4), width < 1024); // the lane goes first
+            if (!grabs.isEmpty()) {
+                content->resize(content->width(), content->sizeHint().height());
+                QVERIFY(content->grab().save(
+                    QStringLiteral("%1/team-page-%2.png").arg(grabs).arg(width)));
+            }
+        }
+        // Sentences are rows, the recommended one first; each still answers the decision.
+        auto* card = page.findChild<QFrame*>("teamDecision_D-1");
+        const auto rows = card->findChildren<team_page::ChoiceRow*>("teamDecisionChoice");
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows.first()->property("choice").toString(), longest);
+        QVERIFY(rows.first()->accessibleName().endsWith("recommended"));
+        QVERIFY(card->findChildren<ket::Button*>("teamDecisionChoice").isEmpty());
+        // A paragraph shows three lines and the rest on request.
+        auto* more = page.findChildren<ket::Button*>("teamUpdateMore").last();
+        auto* text = more->parentWidget()->findChild<team_page::Text*>("teamUpdate");
+        QVERIFY(text->truncated() && more->isVisible());
+        const int folded = text->height();
+        more->click();
+        QTRY_VERIFY(text->height() > folded);
+        QVERIFY(!text->truncated() && more->isVisible());
+        QCOMPARE(more->text(), QStringLiteral("Show less"));
+        rows.at(1)->click();
+        QCOMPARE(daemon_.last("team.decision.answer").value("choice").toString(),
+                 QStringLiteral("Theo từng sản phẩm: mỗi món hết tồn mở một lệnh riêng"));
     }
 
     void pausedAndQueueBannersAndTheEmptyPage() {
@@ -266,7 +395,22 @@ class TeamPageTest final : public QObject {
         // Only another developer can take it; a reason is required.
         QCOMPARE(body->handoverOwner()->count(), 1);
         QCOMPARE(body->handoverOwner()->currentData().toString(), QStringLiteral("dev2"));
-        dialog->findChild<ket::Button*>("teamHandoverButton")->click();
+        // The handover is a dialog of its own, opened from the task's actions.
+        QVERIFY(!window.findChild<ket::Button*>("teamHandoverButton"));
+        QVERIFY(dialog->findChild<ket::Button*>("teamHandoverOpen")->isVisibleTo(dialog));
+        QVERIFY(dialog->findChild<ket::Button*>("teamTaskOpenOwner")->isVisibleTo(dialog));
+        dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
+        QPointer<ket::Dialog> handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
+        QVERIFY(handover && handover->isOpen());
+        // Cancelled, it opens again as a new dialog with the same fields.
+        handover->reject();
+        QTRY_VERIFY(!handover);
+        QVERIFY(body->handoverOwner());
+        dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
+        handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
+        QVERIFY(handover && handover->isOpen());
+        QVERIFY(body->handoverReason()->isVisibleTo(&window));
+        window.findChild<ket::Button*>("teamHandoverButton")->click();
         QCOMPARE(daemon_.count("team.task.handover"), 0);
         QVERIFY(!body->error().isEmpty());
         body->handoverReason()->setText("Dev 1 is on T-3");
@@ -277,7 +421,7 @@ class TeamPageTest final : public QObject {
         tasks.replace(0, moved);
         after.insert("tasks", tasks);
         daemon_.answers.insert("team.task.handover", {{"ok", true}, {"team", after}});
-        dialog->findChild<ket::Button*>("teamHandoverButton")->click();
+        window.findChild<ket::Button*>("teamHandoverButton")->click();
         const QJsonObject sent = daemon_.last("team.task.handover");
         QCOMPARE(sent.value("task_id").toString(), QStringLiteral("T-1"));
         QCOMPARE(sent.value("owner").toString(), QStringLiteral("dev2"));
@@ -286,8 +430,107 @@ class TeamPageTest final : public QObject {
         // The row and the open dialog show the new owner.
         QTRY_VERIFY(page.tasksTable()->item(0, 3)->text().startsWith("Dev 2"));
         QVERIFY(dialog->isOpen());
-        QVERIFY(dialog->findChild<QLabel*>("teamTaskFacts")->text().contains("Dev 2"));
+        QVERIFY(dialog->findChild<QLabel*>("teamTaskOwner")->text().contains("Dev 2"));
+        // The handover closed itself and left its fields with the task.
+        QTRY_VERIFY(!handover);
+        QVERIFY(body->handoverOwner());
+        // And after a handover that went through: Dev 1 can take it back.
+        dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
+        handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
+        QVERIFY(handover && handover->isOpen());
+        QCOMPARE(body->handoverOwner()->currentData().toString(), QStringLiteral("dev1"));
+        handover->reject();
+        QTRY_VERIFY(!handover);
+        QSignalSpy asked(&page, &TeamPage::conversationRequested);
+        dialog->findChild<ket::Button*>("teamTaskOpenOwner")->click();
+        QCOMPARE(asked.size(), 1);
+        QCOMPARE(asked.first().first().toString(), QStringLiteral("dev2"));
+    }
+
+    // An answer that arrives after its handover dialog was cancelled belongs to that dialog:
+    // it neither closes the one opened since nor clears what the user wrote there.
+    void aLateHandoverAnswerLeavesANewDialogAlone() {
+        start(fixture());
+        QWidget window;
+        window.resize(1024, 640);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        auto* body = dialog->findChild<TeamTaskDialog*>();
+        QPointer<ket::Dialog> first = body->openHandover();
+        QVERIFY(first);
+        body->handoverReason()->setText("First reason");
+        daemon_.hold = true;
+        body->handOver();
+        QCOMPARE(daemon_.late.size(), 1);
+        first->reject();
+        QTRY_VERIFY(!first);
+        QPointer<ket::Dialog> second = body->openHandover();
+        QVERIFY(second && second->isOpen());
+        body->handoverReason()->setText("A new draft");
+        daemon_.hold = false;
+        daemon_.late.takeFirst()();
+        QCoreApplication::processEvents();
+        QVERIFY(second && second->isOpen());
+        QCOMPARE(body->handoverReason()->text(), QStringLiteral("A new draft"));
+        QVERIFY(body->error().isEmpty());
+        second->reject();
         dialog->reject();
+    }
+
+    // A leader writes a task as Markdown, often long: the dialog renders it, cuts it and keeps
+    // itself and its actions inside the window.
+    void aLongDescriptionIsCutAndStaysInsideTheWindow() {
+        QJsonObject team = fixture(2);
+        QJsonArray tasks = team.value("tasks").toArray();
+        QJsonObject long1 = tasks.at(0).toObject();
+        long1.insert(
+            "description",
+            QString("## Scope\n\nMove `ketsuite/packages/import` to the new pipeline.\n\n") +
+                QString("- Keep the public API of `ImportJob` as it is\n").repeated(14) +
+                "\n```\nnpm run test -- import\n```\n");
+        long1.insert("worktree", QString("/work/shop/.worktrees/") + QString("deep/").repeated(30));
+        tasks.replace(0, long1);
+        team.insert("tasks", tasks);
+        start(team);
+        const QString grabs = qEnvironmentVariable("KETPLUS_TEAM_PAGE_GRABS");
+        for (const QSize size : {QSize(1024, 640), QSize(520, 560)}) {
+            QWidget window;
+            window.resize(size);
+            TeamPage page(teams_.get(), "7", "/work/shop", &window);
+            page.resize(size);
+            window.show();
+            auto* dialog = page.openTask("T-1");
+            auto* body = dialog->findChild<TeamTaskDialog*>();
+            QCoreApplication::processEvents();
+            auto* all = dialog->findChild<ket::Button*>("teamTaskDescriptionAll");
+            QVERIFY(all && all->isVisibleTo(dialog));
+            QCOMPARE(all->text(), QStringLiteral("Show all"));
+            auto* clip = dialog->findChild<QWidget*>("teamTaskDescriptionClip");
+            const int cut = clip->height();
+            QVERIFY(cut < 200);
+            if (!grabs.isEmpty())
+                window.grab().save(
+                    QStringLiteral("%1/team-task-%2.png").arg(grabs).arg(size.width()));
+            // Everything the dialog shows is inside the window, the actions included.
+            const QRect frame(QPoint(0, 0), window.size());
+            for (const auto* button : dialog->findChildren<ket::Button*>())
+                if (button->isVisibleTo(&window) && !body->isAncestorOf(button))
+                    QVERIFY2(
+                        frame.contains(QRect(button->mapTo(&window, QPoint(0, 0)), button->size())),
+                        qPrintable(button->text()));
+            auto* details = dialog->findChild<QWidget*>("teamTaskDetails");
+            QVERIFY(details->width() <= body->width());
+            all->click();
+            QCoreApplication::processEvents();
+            all = dialog->findChild<ket::Button*>("teamTaskDescriptionAll");
+            QCOMPARE(all->text(), QStringLiteral("Show less"));
+            QVERIFY(dialog->findChild<QWidget*>("teamTaskDescriptionClip")->height() > cut);
+            if (!grabs.isEmpty())
+                window.grab().save(
+                    QStringLiteral("%1/team-task-%2-all.png").arg(grabs).arg(size.width()));
+            dialog->reject();
+        }
     }
 
     // A team.changed from another client updates the page in place of where the reader was.
