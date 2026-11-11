@@ -232,6 +232,52 @@ class TeamDialogsTest final : public QObject {
         dialog->reject();
     }
 
+    // In a narrow window the card is narrower than its 560 px: the form follows it instead of
+    // keeping its width behind the card's edge, where the labels were cut off.
+    void theFormFollowsANarrowCard() {
+        QWidget window;
+        window.resize(480, 640);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
+        QApplication::processEvents();
+        auto* scroll = dialog->findChild<QScrollArea*>("teamDialogScroll");
+        auto* form = dialog->findChild<NewTeamForm*>();
+        QStringList widest;
+        for (const QWidget* child : form->findChildren<QWidget*>(Qt::FindDirectChildrenOnly))
+            widest.append(
+                QStringLiteral("%1/%2=%3")
+                    .arg(QString::fromLatin1(child->metaObject()->className()), child->objectName())
+                    .arg(child->minimumSizeHint().width()));
+        QTRY_VERIFY2(form->width() <= scroll->viewport()->width(),
+                     qPrintable(QStringLiteral("form %1 > viewport %2: %3")
+                                    .arg(form->width())
+                                    .arg(scroll->viewport()->width())
+                                    .arg(widest.join(QLatin1Char(' ')))));
+        QVERIFY(dialog->card()->geometry().right() <= window.width());
+        // The count sits above the developers' agent, and both end inside the form.
+        const QWidget* count = form->developerCount();
+        const QWidget* agent = form->agentButton("developer");
+        QVERIFY(count->geometry().bottom() < agent->geometry().top());
+        QVERIFY(count->mapTo(form, count->rect().bottomRight()).x() < form->width());
+        QVERIFY(agent->mapTo(form, agent->rect().bottomRight()).x() < form->width());
+        if (qEnvironmentVariableIsSet("KETPLUS_TEST_GRAB"))
+            window.grab().save(qEnvironmentVariable("KETPLUS_TEST_GRAB"));
+        dialog->reject();
+
+        // A window with room keeps them side by side.
+        QWidget wide;
+        wide.resize(1024, 640);
+        wide.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&wide));
+        auto* roomy = NewTeamForm::present(&wide, teams_.get(), "/repo", bothProviders);
+        QApplication::processEvents();
+        auto* roomyForm = roomy->findChild<NewTeamForm*>();
+        QTRY_VERIFY(roomyForm->developerCount()->geometry().right() <
+                    roomyForm->agentButton("developer")->geometry().left());
+        roomy->reject();
+    }
+
     // A long model name elides inside its button instead of widening the form past the card.
     void longModelNamesStayInsideTheCard() {
         const QVariantList longNames{

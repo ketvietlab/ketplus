@@ -7,6 +7,7 @@
 #include <QVariantList>
 #include <QWidget>
 
+class QBoxLayout;
 class QLabel;
 
 namespace ket {
@@ -57,11 +58,16 @@ class NewTeamForm final : public QWidget {
   signals:
     void memberCountChanged(int count);
 
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
   private:
     void chooseAgent(const QString& role);
     void showErrors(const QJsonObject& refusal);
     void clearErrors();
     void describePermissions();
+    // The form follows the width of `viewport`, the scroll area it is shown in.
+    void follow(QWidget* viewport);
 
     TeamDirectory* teams_;
     QString repository_;
@@ -82,6 +88,11 @@ class NewTeamForm final : public QWidget {
     QHash<QString, ket::FieldRow*> rows_;
     // By role, or "name" and "" for the dialog.
     QHash<QString, QString> errors_;
+    // The rows that hold two controls side by side, and the width they need that way.
+    QBoxLayout* mergeRow_{nullptr};
+    QBoxLayout* developerRow_{nullptr};
+    QWidget* viewport_{nullptr};
+    int sideBySideWidth_{0};
 };
 
 // #465: one more developer, never an existing conversation (those join by drag or menu).

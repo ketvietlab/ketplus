@@ -110,6 +110,9 @@ QScrollArea* scrolling(QWidget* form, QWidget* anchor) {
     auto* scroll = new QScrollArea;
     scroll->setObjectName(QStringLiteral("teamDialogScroll"));
     scroll->setWidget(form);
+    // setWidget turns the fill on: the form would paint the window colour over the card.
+    form->setAutoFillBackground(false);
+    scroll->viewport()->setAutoFillBackground(false);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -156,6 +159,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow->addWidget(leaderMerges_);
     mergeRow->addWidget(userMerges_);
     mergeRow->addStretch();
+    mergeRow_ = mergeRow;
     layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
 
     // What the leader and the developers may do without asking, as the composer's Mode
@@ -189,6 +193,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
         auto* row = new QHBoxLayout(control);
         row->setContentsMargins(0, 0, 0, 0);
         if (role == developer) {
+            developerRow_ = row;
             row->addWidget(developers_);
         } else {
             auto* fixed = new QLabel(QStringLiteral("1"), control);
@@ -343,6 +348,29 @@ void NewTeamForm::submit(std::function<void(const QJsonObject& team)> created) {
         });
 }
 
+// A narrow window makes the card narrower than the form's two-control rows need. They
+// then stack their controls, so the form is as wide as the card and no label is cut off.
+void NewTeamForm::follow(QWidget* viewport) {
+    viewport_ = viewport;
+    viewport->installEventFilter(this);
+}
+
+bool NewTeamForm::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == viewport_ && event->type() == QEvent::Resize) {
+        if (mergeRow_->direction() == QBoxLayout::LeftToRight)
+            sideBySideWidth_ = minimumSizeHint().width();
+        const auto direction = viewport_->width() < sideBySideWidth_ ? QBoxLayout::TopToBottom
+                                                                     : QBoxLayout::LeftToRight;
+        mergeRow_->setDirection(direction);
+        developerRow_->setDirection(direction);
+        // Stacked, the count takes the row's width and may give some of its own up.
+        const bool stacked = direction == QBoxLayout::TopToBottom;
+        developers_->setExpanding(stacked);
+        developers_->setMinimumWidth(stacked ? developers_->sizeHint().width() * 3 / 4 : 0);
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 QString NewTeamForm::hint() const { return hint_->isHidden() ? QString{} : hint_->text(); }
 
 ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const QString& repository,
@@ -352,7 +380,9 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     dialog->setObjectName(QStringLiteral("newTeamDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* form = new NewTeamForm(teams, repository, models);
-    dialog->setBody(scrolling(form, anchor));
+    QScrollArea* scroll = scrolling(form, anchor);
+    form->follow(scroll->viewport());
+    dialog->setBody(scroll);
     dialog->setCardWidth(560);
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
