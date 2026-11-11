@@ -16,6 +16,7 @@
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QInputMethodEvent>
@@ -24,6 +25,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QVBoxLayout>
 
@@ -198,7 +200,9 @@ void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
     panel.typeText(QStringLiteral("echo __KETPLUS_TYPED__\r\n"));
     auto* view = panel.findChild<TerminalView*>();
     QVERIFY(view != nullptr);
-    QTRY_VERIFY_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"), 5000);
+    // On failure, show what the terminal held, so a runner's shell can be told apart.
+    QTRY_VERIFY2_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"),
+                              qPrintable(view->visibleText()), 5000);
     QTest::qWait(500);
     QCOMPARE(view->visibleText().count(QStringLiteral("__KETPLUS_TYPED__")), 1);
     // Another command goes to a new tab, never into the program running in the open one.
@@ -377,7 +381,9 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
     paints.count = 0;
     QTest::keyClicks(&terminal, QStringLiteral("ketplus_live_echo"));
 
-    QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 1000);
+    // A slow runner's shell can still be starting after its first output; echo is what is checked.
+    QTRY_VERIFY2_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"),
+                              qPrintable(terminal.visibleText()), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
     session.sendBytes(QByteArray(1, '\x03'));
     QTest::qWait(100);
@@ -573,6 +579,9 @@ void PtyProcessTest::emitsMouseProtocolFromCore() {
 }
 
 void PtyProcessTest::embeddedTabsKeepIndependentSessions() {
+#if !defined(Q_OS_UNIX)
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
     TerminalPanel panel;
     panel.resize(800, 400);
     panel.show();
@@ -634,6 +643,22 @@ int main(int argc, char** argv) {
 #if defined(Q_OS_UNIX)
     if (qEnvironmentVariableIsSet("KETPLUS_PTY_EXIT_PROBE"))
         return runExitProbe(argc, argv);
+#endif
+#if defined(Q_OS_UNIX)
+    // The shells start as login shells. A runner's own startup files can print, pause or read
+    // the keyboard (zsh's new-user menu does), so the shell gets a home of empty ones.
+    QTemporaryDir home;
+    if (!home.isValid())
+        return 1;
+    for (const char* name :
+         {".zshenv", ".zprofile", ".zshrc", ".zlogin", ".bash_profile", ".bashrc", ".profile"}) {
+        QFile file(home.filePath(QString::fromLatin1(name)));
+        if (!file.open(QIODevice::WriteOnly))
+            return 1;
+    }
+    qputenv("HOME", home.path().toLocal8Bit());
+    for (const char* variable : {"ZDOTDIR", "BASH_ENV", "ENV"})
+        qunsetenv(variable);
 #endif
     QApplication application(argc, argv);
     // As QTEST_MAIN sets it, so font metrics match the other GUI tests.

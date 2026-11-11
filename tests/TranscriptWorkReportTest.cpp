@@ -1,6 +1,7 @@
 #include "AgentWorkspaceViewTest.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/ConversationChangesPane.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/WorkReportPane.h"
 
@@ -265,4 +266,47 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     pane.acceptReport("second", {}, "Update the daemon to see the work report.");
     QTRY_COMPARE(empty->property("text").toString(),
                  QStringLiteral("Update the daemon to see the work report."));
+}
+
+// The header's Changes opens this tab: the worktree's uncommitted files as the kit card, each
+// opening its diff, and Open Source Control, as the mock's DetailsPane changes tab.
+void AgentWorkspaceViewTest::changesPaneListsTheWorktreeChanges() {
+    ketplus::ConversationChangesPane pane;
+    pane.resize(600, 500);
+    pane.show();
+    auto* root = pane.quickView()->rootObject();
+    QVERIFY(root != nullptr);
+    QTRY_VERIFY(findVisibleItem(root, "conversationChangesEmpty") != nullptr);
+
+    QSignalSpy changed(&pane, &ketplus::ConversationChangesPane::changesChanged);
+    pane.setChanges("/repo", "develop", {"src/app/Main.cpp", "README.md"});
+    QCOMPARE(changed.count(), 1);
+    pane.setChanges("/repo", "develop", {"src/app/Main.cpp", "README.md"});
+    QCOMPARE(changed.count(), 1); // the same snapshot again changes nothing
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "conversationChangedFiles")) != nullptr);
+    QCOMPARE(card->property("note").toString(), QStringLiteral("develop · not committed"));
+    const auto files = card->property("files").toList();
+    QCOMPARE(files.size(), 2);
+    QCOMPARE(files.at(0).toMap().value("name").toString(), QStringLiteral("Main.cpp"));
+    QCOMPARE(files.at(0).toMap().value("path").toString(), QStringLiteral("src/app"));
+    QCOMPARE(files.at(1).toMap().value("path").toString(), QString());
+
+    QSignalSpy diff(&pane, &ketplus::ConversationChangesPane::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(card, "fileActivated", Q_ARG(int, 1)));
+    QCOMPARE(diff.count(), 1);
+    QCOMPARE(diff.first().first().toString(), QStringLiteral("/repo/README.md"));
+    QSignalSpy sourceControl(&pane, &ketplus::ConversationChangesPane::sourceControlRequested);
+    auto* open = findVisibleItem(root, "changesOpenSourceControl");
+    QVERIFY(open != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(open, "clicked"));
+    QCOMPARE(sourceControl.count(), 1);
+    if (const auto capture = qEnvironmentVariable("KETPLUS_CHANGES_PANE_CAPTURE");
+        !capture.isEmpty()) {
+        QTest::qWait(120);
+        QVERIFY(pane.quickView()->grabWindow().save(capture));
+    }
+
+    pane.setChanges("/repo", "develop", {});
+    QTRY_VERIFY(findVisibleItem(root, "conversationChangesEmpty") != nullptr);
 }

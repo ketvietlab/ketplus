@@ -90,6 +90,9 @@ Item {
         width: parent.width
         Text {
             width: screen.px(180)
+            // A long label wraps in its column, as the app's form label does.
+            rightPadding: screen.px(12)
+            wrapMode: Text.Wrap
             text: parent.label
             color: KetTheme.t.textMain
             font.family: KetTheme.fontFamily
@@ -523,9 +526,8 @@ Item {
                 title: "KétPlus Pro 1.8.0"
                 ready: true
                 badges: KetBadge { text: "Ready"; tone: KetTheme.BadgeTone.Success }
+                // Release notes stay in Sparkle's own window.
                 detail: "Downloaded and verified. Restart to finish installing; running turns finish first."
-                notes: ["Quick search finds conversations and Atlases", "Background tasks keep running after a restart",
-                        "Compact window remembers its size per display"]
                 actions: [
                     KetButton { text: "Restart now"; variant: KetTheme.ButtonVariant.Primary; onClicked: { screen.window.updateReady = false; screen.window.notify("KétPlus Pro 1.8.0 installed") } },
                     KetButton { text: "Later"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.window.notify("Reminder in 4 hours") }
@@ -538,7 +540,8 @@ Item {
                 badges: KetBadge { text: "Up to date"; tone: KetTheme.BadgeTone.Neutral }
                 detail: "Checked just now."
             }
-            SettingRow { label: "Channel"; KetSelect { width: parent.width; model: ["Stable", "Beta"] } }
+            // One release channel per build (staging and production are separate apps).
+            KetCheckbox { text: "Check for updates automatically"; checked: true }
             KetCheckbox { text: "Download updates automatically"; checked: true }
             KetButton { text: "Check for updates"; iconName: "refresh"; onClicked: screen.window.notify("KétPlus Pro is up to date") }
         }

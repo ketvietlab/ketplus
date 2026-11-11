@@ -107,6 +107,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void eventReady(const QJsonObject& event);
     // ADR 0112: team.changed or team.removed, for every local client.
     void teamEvent(const QString& type, const QJsonObject& payload);
+    // A change every desktop window shows at once that is not a session event (#429):
+    // `tags.changed` with the catalog and/or the sessions whose labels changed.
+    void noticeReady(const QString& type, const QJsonObject& payload);
 
   private:
     ClaudeAccountUsage* claudeAccountUsage_{nullptr};
@@ -125,6 +128,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         bool interruptPending{false};
         // A client's Stop is ending this turn, so its interrupted end says so.
         bool stopRequested{false};
+        // #125: this turn's last answer, and whether the agent asked the user to decide.
+        QString lastAnswerText;
+        bool decisionRequested{false};
         // The provider turn that last completed in the current provider process. A repeated
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
@@ -239,6 +245,15 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionTags(const QJsonObject& request);
+    // #429, in SessionHostTags.cpp: the labels this Mac offers.
+    [[nodiscard]] QJsonObject tagCatalog();
+    [[nodiscard]] QJsonObject setTagCatalog(const QJsonObject& request);
+    // #125 "Waiting for you", in SessionHostAwaiting.cpp: Mark as done, and the turn's
+    // events that set or clear it.
+    [[nodiscard]] QJsonObject markSessionDone(const QJsonObject& request);
+    void noteAwaitingReply(Session& session, const QString& type, const QJsonObject& payload);
+    void setAwaitingReply(Session& session, bool awaiting);
+    [[nodiscard]] static bool endsWaitingForUser(const Session& session);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.
@@ -398,6 +413,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
     // ADR 0106, in SessionHostWorkReports.cpp.
+    QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
+                                   const QJsonObject& payload) override;
     QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                  const QJsonObject& payload) override;
     [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);

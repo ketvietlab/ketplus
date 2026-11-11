@@ -69,6 +69,13 @@ void CloudControlClient::heartbeat() {
         const QHash<QString, QString> numbers = journal_->conversationNumbers();
         for (auto it = numbers.cbegin(); it != numbers.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("number"), it.value());
+        // #429: the phone shows each conversation's tags in the catalog's colours.
+        QHash<QString, QString> tagColors;
+        for (const auto& value : journal_->tagCatalog()) {
+            const QJsonObject tag = value.toObject();
+            tagColors.insert(tag.value(QStringLiteral("label")).toString().toLower(),
+                             tag.value(QStringLiteral("color")).toString());
+        }
         const QHash<QString, QJsonObject> senders =
             host_ ? host_->agentTurnSenders() : QHash<QString, QJsonObject>{};
         for (auto it = senders.cbegin(); it != senders.cend(); ++it)
@@ -77,12 +84,13 @@ void CloudControlClient::heartbeat() {
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
         const QPointer<CloudControlClient> guard(this);
-        heartbeatPool_.start([guard, stored, repositories, agentMetadata, requestEpoch, workspaceId,
-                              machineId, salt]() {
+        heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestEpoch,
+                              workspaceId, machineId, salt]() {
             QHash<QString, QJsonObject> metadata;
             const QList<QJsonArray> batches =
                 heartbeatSessionBatches(CloudControlClient::sessionSnapshots(
-                    stored, workspaceId, machineId, salt, repositories, &metadata, agentMetadata));
+                    stored, workspaceId, machineId, salt, repositories, &metadata, agentMetadata,
+                    tagColors));
             QMetaObject::invokeMethod(
                 guard,
                 [guard, batches, metadata, requestEpoch, workspaceId, machineId]() {

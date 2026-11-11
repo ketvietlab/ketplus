@@ -168,8 +168,11 @@ void rememberConversation(const QString& directory, const QString& sessionId) {
                          {"id", sessionId}, {"threadId", sessionId}, {"title", "Scripted"}}}}});
 }
 
+// Owner-only, as the client and daemon require of a credential whatever the umask is.
 bool writeToken(const QTemporaryDir& directory) {
     QFile token(directory.filePath("local.token"));
-    return token.open(QIODevice::WriteOnly) && token.write(QByteArray(48, 'k')) == 48;
+    return token.open(QIODevice::WriteOnly) &&
+           token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) &&
+           token.write(QByteArray(48, 'k')) == 48;
 }
 } // namespace
