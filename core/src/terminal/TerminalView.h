@@ -104,6 +104,8 @@ class TerminalView final : public QAbstractScrollArea {
     [[nodiscard]] bool cellIsSelected(int absoluteRow, int column) const;
     [[nodiscard]] int searchMatchAt(int absoluteRow, int column) const;
     [[nodiscard]] static bool positionLess(CellPosition left, CellPosition right) noexcept;
+    // A key, click or paste that may move the shell cursor ends the text an IME may rewrite.
+    void forgetTypedText();
 
     TerminalSession& session_;
     int cellWidth_{8};
@@ -120,6 +122,10 @@ class TerminalView final : public QAbstractScrollArea {
     QColor currentSearchColor_;
     QString preeditText_;
     int preeditCursor_{0};
+    // Text typed since the last key that may move the shell's cursor. Input methods read it as
+    // the text before the cursor and replace part of it (Vietnamese tone marks rewrite the
+    // current word), which the view turns into backspaces followed by the new text.
+    QString typedText_;
     QTimer* cursorTimer_{nullptr};
     QTimer* renderTimer_{nullptr};
     QTimer* searchTimer_{nullptr};

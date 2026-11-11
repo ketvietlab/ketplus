@@ -84,6 +84,13 @@ monospace family (KÉT Sans Mono when installed, then the platform's).
   script runs it in a new terminal window.
 - Set `-DKETPLUS_CM_BUILD_TERMINAL_APP=OFF` to omit the bundle.
 
+Input methods see the text typed since the shell's cursor last moved (an arrow,
+Tab, Enter, a click or a paste ends it) as the text before the cursor. When one
+rewrites part of it, as Vietnamese Telex/VNI do for tone marks, the terminal
+sends backspaces and the new text, so the shell and its completion see each
+letter as it is typed. Composition an input method keeps marked is drawn
+underlined over cleared cells.
+
 For a self-contained Release bundle with the required Qt frameworks, install to
 a staging directory after building:
 
