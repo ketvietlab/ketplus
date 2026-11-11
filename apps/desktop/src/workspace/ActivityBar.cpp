@@ -9,10 +9,10 @@
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetNavItem.h"
-#include "KetSelect.h"
 #include "KetUpdateCard.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
+#include "workspace/SidebarControls.h"
 #include "workspace/SymbolIcons.h"
 
 #include <QAbstractButton>
@@ -123,7 +123,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* brand = new QWidget(this);
     brand->setObjectName(QStringLiteral("productBrand"));
     brand->setProperty("kvRole", QStringLiteral("productBrand"));
-    chrome_geometry::fixedHeight(brand, 50);
+    chrome_geometry::fixedHeight(brand, 54); // the mock: 16 above the 24 px mark, 14 below
     auto* brandLayout = new QHBoxLayout(brand);
     chrome_geometry::margins(brandLayout, 4, 0, 2, 0);
     chrome_geometry::spacing(brandLayout, 6);
@@ -136,22 +136,20 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     brandLayout->addStretch();
     layout->addWidget(brand);
 
-    quickSearchButton_ =
-        new ket::NavItem(tr("Quick search"), ket::Icons::codeForLucide(u"search"), this);
+    // The mock's field-styled Quick search; it opens the command palette.
+    quickSearchButton_ = new SidebarSearchButton(tr("Quick search"), QStringLiteral("⌘ K"), this);
     quickSearchButton_->setObjectName(QStringLiteral("quickSearchButton"));
-    quickSearchButton_->setCheckable(false);
-    quickSearchButton_->setShortcutText(QStringLiteral("⌘ K"));
     connect(quickSearchButton_, &QAbstractButton::clicked, this,
             &ActivityBar::quickSearchRequested);
     layout->addWidget(quickSearchButton_);
-    chrome_geometry::addSpacing(layout, 12);
+    chrome_geometry::addSpacing(layout, 8);
 
     agentButton_ =
         addModeButton(symbols::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
     explorerButton_ = addModeButton(symbols::folder, tr("Files & Editor"), Mode::Explorer);
     sourceControlButton_ =
         addModeButton(symbols::gitBranch, tr("Source Control"), Mode::SourceControl);
-    remoteButton_ = addModeButton(symbols::unplug, tr("Connections"), Mode::Remote);
+    remoteButton_ = addModeButton(symbols::network, tr("Connections"), Mode::Remote);
     explorerButton_->setObjectName(QStringLiteral("explorerActivityButton"));
     sourceControlButton_->setObjectName(QStringLiteral("sourceControlActivityButton"));
     agentButton_->setObjectName(QStringLiteral("agentWorkspaceActivityButton"));
@@ -162,7 +160,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
         auto* button = navigationButtons.at(index);
         layout->addWidget(button);
         if (index + 1 < navigationButtons.size())
-            chrome_geometry::addSpacing(layout, 4);
+            chrome_geometry::addSpacing(layout, 2); // the mock's destination spacing
     }
 
     auto* contextScroll = new QScrollArea(this);
@@ -220,6 +218,14 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             emit machineRequested(machineSelect_->itemData(index).toString());
     });
     machineLayout->addWidget(machineSelect_, 1);
+    // The mock's chevron beside the machine name opens the machine list.
+    auto* machineChooser =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"chevron-down")),
+                            tr("Choose machine"), machineRow);
+    machineChooser->setObjectName(QStringLiteral("productMachineChooser"));
+    machineChooser->setControlSize(ket::ControlSize::Small);
+    connect(machineChooser, &QAbstractButton::clicked, machineSelect_, &QComboBox::showPopup);
+    machineLayout->addWidget(machineChooser);
     repositoryAction_ = new QToolButton(machineRow);
     repositoryAction_->setProperty("kvRole", QStringLiteral("productSectionAction"));
     repositoryAction_->setProperty("symbolName", QByteArray(symbols::plus));
@@ -251,13 +257,18 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             &ActivityBar::conversationContextMenuRequested);
     connect(repositoryList_, &SidebarRepositoryList::conversationRenameRequested, this,
             &ActivityBar::conversationRenameRequested);
-    tagFilter_ = new ket::Select(context);
-    tagFilter_->setObjectName(QStringLiteral("conversationTagFilter"));
-    tagFilter_->setAccessibleName(tr("Filter conversations by tag"));
-    tagFilter_->hide();
-    connect(tagFilter_, &QComboBox::currentIndexChanged, this,
-            [this] { repositoryList_->setTagFilter(tagFilter_->currentData().toString()); });
-    contextLayout->addWidget(tagFilter_);
+    // The mock's active tag filter: set from a tag in the conversation header, cleared here.
+    tagFilter_ = new SidebarTagFilterChip(context);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, this,
+            [this] { repositoryList_->setTagFilter({}); });
+    auto* tagFilterRow = new QWidget(context);
+    auto* tagFilterLayout = new QVBoxLayout(tagFilterRow);
+    chrome_geometry::margins(tagFilterLayout, 6, 0, 6, 6);
+    tagFilterLayout->addWidget(tagFilter_);
+    tagFilterRow->setVisible(false);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, tagFilterRow, &QWidget::hide);
+    tagFilterRow_ = tagFilterRow;
+    contextLayout->addWidget(tagFilterRow);
     contextLayout->addWidget(repositoryList_);
     contextLayout->addStretch();
     contextScroll->setWidget(context);
@@ -266,7 +277,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     storageNotice_ = new QWidget(this);
     storageNotice_->setObjectName(QStringLiteral("sidebarStorageWarning"));
     auto* storageLayout = new QVBoxLayout(storageNotice_);
-    storageLayout->setContentsMargins(0, 0, 0, 0);
+    chrome_geometry::margins(storageLayout, 0, 0, 0, 6); // the mock's gap above Update ready
     auto* storageSettings = new StorageNoticeButton(storageNotice_);
     storageSettings->setObjectName(QStringLiteral("sidebarStorageSettings"));
     storageSettings->setCursor(Qt::PointingHandCursor);
@@ -516,32 +527,14 @@ void ActivityBar::setSourceControlCount(const int count) {
 }
 
 void ActivityBar::setTagFilter(const QString& tag) {
-    const int index = tagFilter_->findData(tag);
-    if (index >= 0)
-        tagFilter_->setCurrentIndex(index);
+    tagFilter_->setTag(tag.trimmed());
+    tagFilterRow_->setVisible(!tagFilter_->tag().isEmpty());
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
-    QStringList labels;
-    for (const auto& repository : repositories)
-        for (const auto& conversation : repository.conversations)
-            for (const auto& value : conversation.toMap().value("tags").toList()) {
-                const QString label =
-                    value.toMap().value("label", value.toString()).toString().trimmed();
-                if (!label.isEmpty() && !labels.contains(label))
-                    labels.append(label);
-            }
-    labels.sort(Qt::CaseInsensitive);
-    const QString selected = tagFilter_->currentData().toString();
-    const QSignalBlocker block(tagFilter_);
-    tagFilter_->clear();
-    tagFilter_->addItem(tr("All tags"), QString());
-    for (const auto& label : labels)
-        tagFilter_->addItem(label, label);
-    tagFilter_->setCurrentIndex(qMax(0, tagFilter_->findData(selected)));
-    tagFilter_->setVisible(!labels.isEmpty());
-    repositoryList_->setTagFilter(tagFilter_->currentData().toString());
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,

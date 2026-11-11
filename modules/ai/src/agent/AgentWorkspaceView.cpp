@@ -9,6 +9,7 @@
 
 #include "agent/CodexAppServer.h"
 #include "agent/FileReveal.h"
+#include "agent/TranscriptNetworkPolicy.h"
 #include "agent/TranscriptTrace.h"
 #include "app/AppearanceSettings.h"
 #include "ui/InterfaceFont.h"
@@ -147,6 +148,7 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     setFocusProxy(container_);
     view_->installEventFilter(this);
 
+    installLocalOnlyNetwork(view_->engine());
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);

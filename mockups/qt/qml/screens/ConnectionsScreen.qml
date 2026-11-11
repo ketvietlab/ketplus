@@ -6,8 +6,9 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 
-// Connections: this Mac, paired phones and trusted Linux machines (SSH or the KetPlus
-// Relay), and the account. Pairing and trust are deterministic prototype states. Signed
+// Connections: this Mac, paired phones and trusted Linux machines (through the KetPlus
+// Relay, as the app; there is no SSH), and the account. Pairing and trust are
+// deterministic prototype states. Signed
 // out, it introduces connecting (parts/ConnectionsIntro) and opens the app's browser
 // sign-in dialog.
 Item {
@@ -15,9 +16,10 @@ Item {
 
     required property var window
     property var phones: [{ name: "iPhone 16", detail: "KetPlus App · Paired" }]
-    property var machines: [{ name: "build-node-01", detail: "Ubuntu 24.04 LTS · Ready for remote work", via: "Relay", online: true }]
+    property var machines: [{ name: "build-node-01", detail: "Linux · Trusted", via: "Relay" }]
     property bool historyOpen: false
-    property int linuxMode: 0
+    property bool linuxLinkChecked: false
+    property bool pairClaimed: false
     // What paired devices did on this Mac (#86): the daemon's remote command audit, newest
     // first. Only requests that can change something are recorded; reads are not.
     readonly property var activity: screen.window.remoteActivity ? activityFixture : []
@@ -375,25 +377,15 @@ Item {
                     iconName: "terminal"
                     name: modelData.name
                     detail: modelData.detail
-                    badges: [{ text: modelData.online ? "Connected" : "Offline", tone: modelData.online ? KetTheme.BadgeTone.Success : KetTheme.BadgeTone.Neutral },
+                    // As the app: trusted through the Relay, with no SSH details or Disconnect.
+                    badges: [{ text: "Available", tone: KetTheme.BadgeTone.Success },
                              { text: modelData.via, tone: KetTheme.BadgeTone.Neutral }]
-                    KetButton { text: "Details"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.window.notify("Fingerprint SHA256:9f2c…a41e verified") }
-                    KetButton {
-                        text: modelData.online ? "Disconnect" : "Connect"
-                        iconName: "disconnect"
-                        variant: KetTheme.ButtonVariant.Ghost
-                        onClicked: {
-                            const next = screen.machines.slice()
-                            next[index] = Object.assign({}, modelData, { online: !modelData.online })
-                            screen.machines = next
-                        }
-                    }
                 }
             }
             Row {
                 spacing: screen.px(8)
                 KetIcon { name: "shield"; box: screen.px(13); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "Linux machines connect over your SSH access (free) or through the KetPlus Relay (Pro). Verify the host fingerprint or pairing code before trusting one."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+                Text { text: "Linux machines connect through an authenticated outbound relay. Compare the identity shown here with ketplusctl on Linux."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
             }
 
             Item {
@@ -434,38 +426,63 @@ Item {
     KetMenu {
         id: addMenu
         KetMenuItem { text: "Pair a phone or tablet"; description: "Scan a code with the KetPlus App"; iconName: "smartphone"; onTriggered: pairDialog.open() }
-        KetMenuItem { text: "Connect a Linux machine"; description: "Over SSH or the KetPlus Relay"; iconName: "terminal"; onTriggered: linuxDialog.open() }
+        KetMenuItem { text: "Connect a Linux machine"; description: "Through the KetPlus Relay"; iconName: "terminal"; onTriggered: linuxDialog.open() }
     }
 
+    // The app's pairing: scan the code, then compare the confirmation code on both screens
+    // and approve. There is no typed pairing code.
     KetDialog {
         id: pairDialog
-        title: "Pair a phone"
-        Row {
-            spacing: screen.px(20)
+        title: screen.pairClaimed ? "Confirm device" : "Connect your phone"
+        onOpened: screen.pairClaimed = false
+        // The app's layout: one centred column, the code under the words.
+        Column {
+            id: pairCopy
+            Layout.fillWidth: true
+            spacing: screen.px(8)
+            component PairText: Text {
+                width: pairCopy.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: screen.px(13)
+            }
+            PairText { text: screen.pairClaimed ? "Is this your phone?" : "Take your workspace with you."; color: KetTheme.t.textMain; font.pixelSize: screen.px(17); font.weight: Font.DemiBold }
+            PairText { text: screen.pairClaimed ? "Compare the code on both devices." : "In KetPlus on your phone, choose Scan QR code." }
+            Item { width: 1; height: screen.px(12) }
             Grid {
+                visible: !screen.pairClaimed
+                anchors.horizontalCenter: parent.horizontalCenter
                 columns: 9
                 Repeater {
                     model: 81
                     Rectangle {
                         required property int index
-                        width: screen.px(14); height: width
+                        width: screen.px(19); height: width
                         color: ((index * 7919) % 13 < 6 || [0, 1, 2, 9, 18, 6, 7, 8, 17, 26, 54, 63, 72, 73, 74].includes(index)) ? KetTheme.t.textMain : KetTheme.t.panelBg
                     }
                 }
             }
-            Column {
-                spacing: screen.px(10)
-                Text { text: "Open KetPlus on your phone and scan the code,\nor type the pairing code."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); lineHeight: 1.4 }
-                Text { text: "K7Q2 · 9XMD"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(22) }
-                KetBadge { text: "Waiting for your phone…"; tone: KetTheme.BadgeTone.Info }
-            }
+            PairText { visible: screen.pairClaimed; text: "482 913"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(28) }
+            PairText { visible: screen.pairClaimed; text: "Device     iPad Air" }
+            Item { width: 1; height: screen.px(12) }
+            PairText { visible: !screen.pairClaimed; text: "Code expires in 04:59"; color: KetTheme.t.textMuted }
+            Item { width: 1; height: screen.px(12) }
+            PairText { visible: !screen.pairClaimed; color: KetTheme.t.textMain; horizontalAlignment: Text.AlignLeft; leftPadding: screen.px(64); lineHeight: 1.3; text: "1.  Scan this code.\n2.  Compare the confirmation codes.\n3.  Approve this device on your Mac." }
+            Item { width: 1; height: screen.px(12) }
+            PairText { text: "Closing or declining cancels this pairing ticket."; color: KetTheme.t.textMuted }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: pairDialog.reject() },
+            KetButton { text: screen.pairClaimed ? "Decline" : "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: pairDialog.reject() },
             KetButton {
-                text: "Simulate pairing"
+                text: screen.pairClaimed ? "Yes, connect this device" : "Simulate scan"
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
+                    if (!screen.pairClaimed) {
+                        screen.pairClaimed = true
+                        return
+                    }
                     screen.phones = screen.phones.concat([{ name: "iPad Air", detail: "KetPlus App · Paired just now" }])
                     pairDialog.accept()
                     screen.window.notify("iPad Air paired")
@@ -542,29 +559,36 @@ Item {
         ]
     }
 
+    // The app's Linux pairing: a one-time ketplus:// link from ketplusctl, the identity
+    // compared on both machines, then the approval checked.
     KetDialog {
         id: linuxDialog
         title: "Connect a Linux machine"
-        KetSegmentedControl {
-            options: ["SSH (free)", "KetPlus Relay (Pro)"]
-            currentIndex: screen.linuxMode
-            onActivated: index => screen.linuxMode = index
-        }
+        onOpened: { screen.linuxLinkChecked = false; identityMatch.checked = false }
         KetFieldRow {
             // The dialog body is a ColumnLayout: a width binding would let the row overflow.
             Layout.fillWidth: true
-            label: screen.linuxMode === 0 ? "Host" : "Pairing code"
-            help: screen.linuxMode === 0 ? "Uses your ~/.ssh/config and agent. KetPlus installs its daemon in ~/.ketplus."
-                                         : "Run ketplusctl pair on the machine and type the code it shows."
-            KetTextField { width: parent.width; placeholderText: screen.linuxMode === 0 ? "build-node-02.local" : "ABCD-1234" }
+            label: "Pairing link"
+            help: "Run ketplusctl pairing create on the machine and paste the ketplus:// link it shows."
+            KetTextField { width: parent.width; echoMode: TextInput.Password; placeholderText: "ketplus://pair?ticket=…&secret=…" }
         }
+        Text {
+            visible: screen.linuxLinkChecked
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: "Compare the first six characters of claimDigest shown by ketplusctl pairing status: 7F3A9C"
+            color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13)
+        }
+        KetCheckbox { id: identityMatch; visible: screen.linuxLinkChecked; text: "I checked the identity on both machines." }
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: linuxDialog.reject() },
+            KetButton { text: "Check link"; onClicked: screen.linuxLinkChecked = true },
             KetButton {
-                text: "Verify and trust"
+                text: "Check approval"
                 variant: KetTheme.ButtonVariant.Primary
+                enabled: identityMatch.checked
                 onClicked: {
-                    screen.machines = screen.machines.concat([{ name: "build-node-02", detail: "Debian 13 · Ready for remote work", via: screen.linuxMode === 0 ? "SSH" : "Relay", online: true }])
+                    screen.machines = screen.machines.concat([{ name: "build-node-02", detail: "Linux · Trusted", via: "Relay" }])
                     linuxDialog.accept()
                     screen.window.notify("build-node-02 trusted")
                 }

@@ -106,6 +106,7 @@ Item {
                         // As in the mock's composer: a new conversation asks what to build, later turns name the provider.
                         property string hint: agentHost.presentationState.folder === "missing" ? "Continue in the main worktree…"
                                               : root.providerBlocked ? "Write your message now; it sends once " + root.providerTitle(root.selectedProvider) + " is set up"
+                                              : agentHost.composerHint !== "" ? agentHost.composerHint
                                               : root.messageCount === 0 ? "Describe what you want to build…"
                                               : "Message " + root.providerTitle(root.selectedProvider) + "…"
                         // Drafting must remain available even while the

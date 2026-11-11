@@ -167,7 +167,8 @@ class CloudControlClient final : public QObject {
                      const QString& machineId, const QByteArray& pathIdSalt,
                      const QHash<QString, QString>& repositories,
                      QHash<QString, QJsonObject>* metadata = nullptr,
-                     const QHash<QString, QJsonObject>& agentMetadata = {});
+                     const QHash<QString, QJsonObject>& agentMetadata = {},
+                     const QHash<QString, QString>& tagColors = {});
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
     // phone; a snapshot whose metadata cannot be sealed is

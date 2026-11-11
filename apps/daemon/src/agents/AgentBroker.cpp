@@ -69,6 +69,13 @@ QJsonObject originEntry(const AgentMessageRecord& message) {
             {QStringLiteral("body"), message.body}};
 }
 
+// A request to review, which runs read-only (ADR 0067). The findings a team's reviewer sends
+// back to a task's owner are also of kind "review" (ADR 0112) but expect no reply: they start
+// an ordinary turn, in which the owner fixes them.
+bool reviewRequest(const AgentMessageRecord& message) {
+    return message.kind == QStringLiteral("review") && message.expectReply;
+}
+
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
@@ -76,9 +83,7 @@ QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
                        {QStringLiteral("agent_messages"), entries}};
     // ADR 0067: the turn reviews another conversation and runs read-only.
-    if (std::any_of(messages.cbegin(), messages.cend(), [](const AgentMessageRecord& message) {
-            return message.kind == QStringLiteral("review");
-        }))
+    if (std::any_of(messages.cbegin(), messages.cend(), reviewRequest))
         origin.insert(QStringLiteral("review_guard"), true);
     if (!messages.isEmpty() && messages.first().delivery.startsWith("user_authorized:"))
         origin.insert(QStringLiteral("user_release_id"),
@@ -130,6 +135,7 @@ bool AgentBroker::isOperation(const QString& type) {
     return type == QStringLiteral("agents.whoami") || type == QStringLiteral("agents.list") ||
            type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
            type == QStringLiteral("agents.work_report") ||
+           type == QStringLiteral("agents.request_user_decision") ||
            type.startsWith(QStringLiteral("agents.team_"));
 }
 
@@ -153,6 +159,8 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return inbox(*caller, payload);
     if (operation == QStringLiteral("agents.work_report"))
         return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
+    if (operation == QStringLiteral("agents.request_user_decision"))
+        return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
     if (operation.startsWith(QStringLiteral("agents.team_")))
         return host_->teamOperation(caller->sessionId, operation.mid(7), payload);
     return failure(QStringLiteral("unsupported_operation"),
@@ -462,7 +470,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     QList<AgentMessageRecord> deliverable;
     for (AgentMessageRecord& message : queued) {
         // The receiver may have switched provider since the review was requested.
-        if (message.kind == QStringLiteral("review") && !enforcesReviewGuard(receiver->provider)) {
+        if (reviewRequest(message) && !enforcesReviewGuard(receiver->provider)) {
             markState(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             notice(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             continue;
@@ -531,7 +539,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         if (message.expectReply)
             origin.expectReply.append(message.id);
-        if (message.kind == QStringLiteral("review"))
+        if (reviewRequest(message))
             origin.review = true;
     }
     turns_.insert(sessionId, origin);
@@ -574,8 +582,7 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
     QList<AgentMessageRecord> pending = journal_->agentMessagesTo(
         sessionId, generation, {QStringLiteral("queued"), QStringLiteral("held")});
     // A review request runs only in its own read-only turn (ADR 0067), never in the user's.
-    pending.removeIf(
-        [](const AgentMessageRecord& message) { return message.kind == QStringLiteral("review"); });
+    pending.removeIf(reviewRequest);
     if (pending.isEmpty())
         return {};
     // Messages left over are delivered when this turn ends.

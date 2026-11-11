@@ -71,6 +71,7 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     bool known = false;
     bool running = false;
     bool forkable = false;
+    bool awaiting = false;
     QString number;
     QString executionPath = path;
     for (const QVariant& value : agentManager_->conversations(path)) {
@@ -81,6 +82,7 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
         executionPath = conversation.value(QStringLiteral("executionPath"), path).toString();
         running = conversation.value(QStringLiteral("running")).toBool();
         forkable = conversation.value(QStringLiteral("forkable")).toBool();
+        awaiting = conversation.value(QStringLiteral("awaitingReply")).toBool();
         number = conversation.value(QStringLiteral("number")).toString();
         break;
     }
@@ -90,6 +92,14 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     QMenu menu(this);
     const QString reference = number.isEmpty() ? QString{} : QStringLiteral("@agent/") + number;
     const auto actions = addConversationMenuActions(menu, forkable, running, reference);
+    // #125: a conversation waiting for you can be marked done without answering it.
+    QAction* done = nullptr;
+    if (awaiting) {
+        done = new QAction(tr("Mark as done"), &menu);
+        done->setObjectName(QStringLiteral("conversationMarkDoneAction"));
+        menu.insertAction(menu.actions().value(0), done);
+        menu.insertSeparator(menu.actions().value(1));
+    }
     // ADR 0112 (#464): join a team of its repository, or leave its team.
     const QString sessionId = conversationSessionId(path, conversationId);
     if (teams_ != nullptr && teams_->isAvailable())
@@ -98,7 +108,9 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     QAction* selected = menu.exec(QCursor::pos());
     if (handleConversationTeamAction(selected, sessionId))
         return;
-    if (selected == actions.rename)
+    if (selected != nullptr && selected == done)
+        agentManager_->markConversationDone(path, conversationId);
+    else if (selected == actions.rename)
         renameAgentConversation(path, conversationId);
     else if (selected == actions.changeWorktree)
         changeAgentConversationWorktree(path, conversationId);
