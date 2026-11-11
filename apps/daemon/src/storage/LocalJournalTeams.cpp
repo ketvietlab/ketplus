@@ -182,6 +182,13 @@ QList<QJsonObject> LocalJournal::teamDocuments(bool* read) const {
         return documents;
     while (query.next())
         documents.append(parsed(query.value(0).toString()));
+    // A read that stopped part way is not the whole list: report it and return nothing,
+    // so the caller keeps what it had instead of a list with teams missing.
+    if (query.lastError().isValid()) {
+        if (read)
+            *read = false;
+        return {};
+    }
     return documents;
 }
 
