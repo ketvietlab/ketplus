@@ -176,7 +176,8 @@ std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::
 void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                                       const QString& text, const QString& failure) {
     if (teams_ && request.kind == QStringLiteral("review"))
-        teams_->reviewFinished(sessionId, text, AgentBroker::verdictHasNoFindings(text), failure);
+        teams_->reviewFinished(sessionId, text, AgentBroker::verdictHasNoFindings(text), failure,
+                               request.id);
 }
 
 // ADR 0114 §8: a member that asked a conversation outside its team would wait for an answer
@@ -188,10 +189,10 @@ void SessionHost::agentMessageFailed(const AgentMessageRecord& message, const QS
     teams_->outsideMessageFailed(message.fromSession, QLatin1Char('#') + message.toNumber, reason);
 }
 
-QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
+QString SessionHost::postTeamMessage(const teams::TeamMessage& message, QString* messageId) {
     return agents_->postTeamMessage(
         message.fromSession, QStringLiteral("Team %1").arg(message.teamName), message.toSession,
-        message.kind, message.body, message.expectReply);
+        message.kind, message.body, message.expectReply, messageId);
 }
 
 void SessionHost::noteInConversation(const QString& sessionId, const QJsonObject& note) {

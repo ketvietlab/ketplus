@@ -50,8 +50,10 @@ class FakeHost final : public TeamHostPort {
         (void)team;
         return merged.contains(task.id);
     }
-    QString postTeamMessage(const TeamMessage& message) override {
+    QString postTeamMessage(const TeamMessage& message, QString* messageId) override {
         messages.append(message);
+        if (messageId)
+            *messageId = QStringLiteral("m%1").arg(messages.size());
         return {};
     }
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override {

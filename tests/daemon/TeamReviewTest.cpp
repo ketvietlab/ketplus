@@ -103,7 +103,13 @@ class TeamReviewTest final : public QObject {
         const QString third_ = inReview("Three", "dev3");
         QCOMPARE(reviewsTo("rev").size(), 1);
         QCOMPARE(team().reviewQueue, (QStringList{second, third_}));
-        teams_->reviewFinished("rev", "Fine.\nVerdict: no findings", true);
+        // A request other than the one in flight that ends is not its answer.
+        QVERIFY(!team().reviewingMessage.isEmpty());
+        teams_->reviewFinished("rev", "Fine.\nVerdict: no findings", true, {}, "another");
+        QCOMPARE(task(first).state, state::inReview);
+        QCOMPARE(team().reviewing, first);
+        teams_->reviewFinished("rev", "Fine.\nVerdict: no findings", true, {},
+                               team().reviewingMessage);
         QCOMPARE(task(first).state, state::ready);
         QCOMPARE(reviewsTo("rev").size(), 2);
         QCOMPARE(reviewsTo("rev").last().taskId, second);

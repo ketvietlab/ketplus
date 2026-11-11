@@ -298,7 +298,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                              const QString& text, const QString& failure) override;
     void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) override;
-    QString postTeamMessage(const teams::TeamMessage& message) override;
+    QString postTeamMessage(const teams::TeamMessage& message, QString* messageId) override;
     [[nodiscard]] QJsonObject teamMembership(const QString& sessionId) const override;
     [[nodiscard]] QString teamRoleNumber(const QString& sessionId,
                                          const QString& role) const override;

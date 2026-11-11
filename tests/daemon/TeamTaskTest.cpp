@@ -39,7 +39,7 @@ class FakeHost final : public TeamHostPort {
     QString taskCommit(const Team&, const Task& task) const override {
         return task.branch + "@head";
     }
-    QString postTeamMessage(const TeamMessage& message) override {
+    QString postTeamMessage(const TeamMessage& message, QString*) override {
         messages.append(message);
         return {};
     }

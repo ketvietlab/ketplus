@@ -567,6 +567,7 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
         // The review in flight waits for the next reviewer, first in the queue.
         team->reviewQueue.prepend(team->reviewing);
         team->reviewing.clear();
+        team->reviewingMessage.clear();
     }
     if (role != role::developer || team->count(role::developer) == 0) {
         const QString empty = role == role::developer ? QStringLiteral("developer") : role;

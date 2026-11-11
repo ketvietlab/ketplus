@@ -263,6 +263,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("held"), team.held},
             {QStringLiteral("review_queue"), strings(team.reviewQueue)},
             {QStringLiteral("reviewing"), team.reviewing},
+            {QStringLiteral("reviewing_message"), team.reviewingMessage},
             {QStringLiteral("next_task"), team.nextTask},
             {QStringLiteral("next_decision"), team.nextDecision},
             {QStringLiteral("revision"), team.revision},
@@ -299,6 +300,7 @@ Team teamFromJson(const QJsonObject& json) {
     team.held = json.value(QStringLiteral("held")).toArray();
     team.reviewQueue = stringList(json.value(QStringLiteral("review_queue")));
     team.reviewing = json.value(QStringLiteral("reviewing")).toString();
+    team.reviewingMessage = json.value(QStringLiteral("reviewing_message")).toString();
     team.nextTask = json.value(QStringLiteral("next_task")).toInt(1);
     team.nextDecision = json.value(QStringLiteral("next_decision")).toInt(1);
     team.revision = json.value(QStringLiteral("revision")).toInteger();

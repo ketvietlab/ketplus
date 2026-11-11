@@ -115,8 +115,10 @@ class TeamHostPort {
         (void)task;
         return std::nullopt;
     }
-    virtual QString postTeamMessage(const TeamMessage& message) {
+    // `messageId` receives the id of the queued message.
+    virtual QString postTeamMessage(const TeamMessage& message, QString* messageId) {
         (void)message;
+        (void)messageId;
         return {};
     }
     // Shows a line in the conversation without starting a turn.
@@ -239,8 +241,10 @@ class TeamCoordinator : public QObject {
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
+    // `messageId` is the review request that ended; one that is not the review in flight
+    // is ignored.
     void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
-                        const QString& failure = {});
+                        const QString& failure = {}, const QString& messageId = {});
 
     // The quiet period after which an idle leader receives the digest (ADR 0114 §7).
     static constexpr int defaultQuietPeriodMs = 20000;

@@ -86,6 +86,7 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
     Task* task = team->task(taskId);
     ++task->round;
     team->reviewing = taskId;
+    team->reviewingMessage.clear();
     const QString reviewerSession = reviewer->sessionId;
     const auto diff = host_->taskDiff(*team, *task);
     addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"),
@@ -110,9 +111,14 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
 }
 
 void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QString& text,
-                                     const bool noFindings, const QString& failure) {
+                                     const bool noFindings, const QString& failure,
+                                     const QString& messageId) {
     Team* team = mutableTeamOf(reviewerSession);
     if (!team || team->reviewing.isEmpty())
+        return;
+    // An earlier request that ends now is not the answer to the review in flight.
+    if (!messageId.isEmpty() && !team->reviewingMessage.isEmpty() &&
+        messageId != team->reviewingMessage)
         return;
     const Member* member = team->member(reviewerSession);
     if (!member || member->role != role::reviewer)
@@ -120,6 +126,7 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
     const Team before = *team;
     const QString taskId = team->reviewing;
     team->reviewing.clear();
+    team->reviewingMessage.clear();
     Task* task = team->task(taskId);
     QList<Update> updates;
     std::optional<TeamMessage> back;

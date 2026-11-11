@@ -89,9 +89,20 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     ++team->automaticTurns;
     if (commit(*team, before, QStringLiteral("daemon"), {}))
         return;
-    if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
+    QString messageId;
+    if (const QString error = host_->postTeamMessage(message, &messageId); !error.isEmpty()) {
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
+        return;
+    }
+    // The review in flight is answered by this message and no other (ADR 0114 §2).
+    team = message.kind == QStringLiteral("review") ? mutableTeam(teamId) : nullptr;
+    if (!team || team->reviewing != message.taskId || messageId.isEmpty())
+        return;
+    const Team sent = *team;
+    team->reviewingMessage = messageId;
+    if (commit(*team, sent, QStringLiteral("daemon"), {}))
+        qWarning("Unable to record the review request of %s.", qUtf8Printable(message.taskId));
 }
 
 void TeamCoordinator::releaseHeld(const qint64 teamId) {

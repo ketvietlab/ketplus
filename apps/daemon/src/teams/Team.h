@@ -140,6 +140,8 @@ struct Team final {
     // ADR 0114 §2: tasks waiting for the reviewer, first in first out, and the one it reviews.
     QStringList reviewQueue;
     QString reviewing;
+    // The message that asked for that review; empty until it is sent (held while paused).
+    QString reviewingMessage;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};
