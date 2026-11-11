@@ -112,6 +112,7 @@ logged. Merging the integration branch onward always stays with the user.
 | review with findings | the owner (`review` reply) |
 | decision answered | the leader and the blocked owner (`decision`) |
 | actionable updates | the leader, once, as a `digest` |
+| a member's work left open, or the whole team idle with work left (§8) | that member (`nudge`), then the leader (`stall`) |
 | anything else | nobody |
 
 Actionable updates: a task became `ready`, `blocked` or `done`, a review hit its round
@@ -119,6 +120,39 @@ limit, a path was flagged outside a lane, a developer has no task left, a develo
 question. When the leader's turn ends with actionable updates waiting, or after a quiet
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
+
+### 8. A team that stops is moved on (decided 2026-11-11)
+
+The table above is event-driven: a turn that ends with work left and no event to follow
+leaves the team standing. It happened in the first real team: a developer's turn ended
+with its task in progress, the leader ended its turn to wait for work outside the team,
+and nothing woke either of them.
+
+The daemon therefore watches each team. **3 minutes** after a member's turn ends it
+looks at a team that is not paused, has no open decision and has a task that is not done
+(or no task yet). A team no member of which ends a turn is not looked at, so starting the
+daemon does not wake teams that were left long ago:
+
+1. An idle developer that owns a task `in_progress`, and an idle reviewer with a task
+   `in_review`, gets one `nudge`: go on, or block the task with what you wait for. Once
+   per member until the team's work changes; other members working does not delay it.
+2. When nobody works and nobody was just nudged, the leader gets a `stall` message that
+   lists every open task with its owner, at most **twice** while the work does not change.
+3. After that the daemon raises a `stalled` decision on the team page: "Wake the leader
+   again" (recommended) or "Pause the team". An open decision stops the watch, so the
+   team now waits for the user visibly instead of silently.
+
+"The work changed" means a task's state, owner, met criteria, pull request or head
+commit, or the number of decisions. Nudges and stall wakes are automatic turns and count
+against the budget (open point 2). The count is kept in memory; a restart begins it again.
+
+The user's Stop is respected: a member whose turn the user stopped is not nudged, and a
+leader the user stopped is not woken, so step 3 follows at once. A member's next turn
+that ends by itself lifts that, and "Wake the leader again" lifts it for the leader only.
+A worker that exits without a new turn changes nothing.
+
+Not covered here: a timed wait a member asks for ("check again in 10 minutes"), and a
+message to a conversation outside the team that failed to deliver.
 
 ## Open points, fixed here
 

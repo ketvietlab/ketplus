@@ -44,6 +44,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
   holds every team message in order until Resume, and 40 automatic turns pause the team
   with one decision.
+  Stall watchdog (ADR 0114 §8): 3 minutes after a member's turn ends, a team with work
+  left is moved on: an idle developer with a task in progress (or the reviewer with a
+  task in review) is nudged once, an idle team wakes the leader with the open tasks at
+  most twice, then a `stalled` decision asks the user to wake the leader again or pause.
+  A member the user stopped is not woken on its own.
   Per-task review (#460): a task entering In review is queued for the team's reviewer,
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go

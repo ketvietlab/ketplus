@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QSet>
 
 class QTimer;
 
@@ -46,7 +47,7 @@ struct TeamMessage final {
     QString toSession;
     // The member it comes from, or empty for the team itself (a digest, a decision).
     QString fromSession;
-    // "assignment", "digest", "review", "decision" or "team".
+    // "assignment", "digest", "review", "decision", "nudge", "stall" or "team".
     QString kind;
     QString taskId;
     QString body;
@@ -192,8 +193,17 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
 
-    // A member's turn ended (ADR 0114 §7): after the leader's turn the waiting digest is sent.
-    void memberTurnEnded(const QString& sessionId);
+    // A member's turn ended (ADR 0114 §7): after the leader's turn the waiting digest is sent,
+    // and the team is watched for a stall (§8). `stoppedByUser` is the user's Stop; nothing
+    // keeps what the member's last turn said (its worker exited, no turn ended).
+    void memberTurnEnded(const QString& sessionId, std::optional<bool> stoppedByUser = false);
+    // ADR 0114 §8 (TeamCoordinatorStall.cpp). A team with work left and nobody working is
+    // moved on: a developer that left its task in progress is nudged once, then the leader
+    // is woken, then the user is asked.
+    static constexpr int defaultStallPeriodMs = 3 * 60 * 1000;
+    static constexpr int maxStallWakes = 2;
+    void setStallPeriod(int milliseconds) { stallPeriod_ = milliseconds; }
+    void checkStall(qint64 teamId);
     // ADR 0114 §3 (TeamCoordinatorDecisions.cpp). Only the leader raises a decision; only the
     // user answers one, with one of its choices or free text.
     TeamResult raiseQuestion(qint64 teamId, const QJsonObject& draft, const QString& actor,
@@ -296,6 +306,20 @@ class TeamCoordinator : public QObject {
     QHash<QString, qint64> teamBySession_;
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
+
+    // What the watchdog did since the team's work last changed. Not stored: a restart
+    // starts the count again, which only costs one more wake.
+    struct Stall final {
+        QString signature;
+        int wakes{0};
+        QSet<QString> nudged;
+        // Members whose last turn the user stopped; they are not woken on their own.
+        QSet<QString> stopped;
+    };
+    void watchForStall(qint64 teamId);
+    QHash<qint64, QTimer*> stallTimers_;
+    QHash<qint64, Stall> stalls_;
+    int stallPeriod_{defaultStallPeriodMs};
 };
 
 } // namespace teams

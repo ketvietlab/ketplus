@@ -152,6 +152,19 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         resume = text.startsWith(QStringLiteral("Continue"));
         if (!resume)
             team->pausedReason = QStringLiteral("user");
+    } else if (kind == QStringLiteral("stalled")) {
+        // The user moves a stopped team on, or pauses it; the watchdog starts over.
+        // Members the user stopped stay stopped, except the leader the user now wakes.
+        Stall& stall = stalls_[teamId];
+        stall.signature.clear();
+        stall.wakes = 0;
+        stall.nudged.clear();
+        if (text == pauseTeamChoice) {
+            team->paused = true;
+            team->pausedReason = QStringLiteral("user");
+        } else if (const Member* woken = team->memberWithRole(role::leader)) {
+            stall.stopped.remove(woken->sessionId);
+        }
     } else if (kind == QStringLiteral("merge")) {
         // ADR 0114 §5: the user allows exactly this merge.
         if (Task* ready = team->task(taskId); ready && text == leaderMergesChoice)

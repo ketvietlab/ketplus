@@ -64,6 +64,12 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "asking for status. Change a lane with team_lane_set and give the reason; "
                      "raise a decision with team_decision_raise only for what changes the "
                      "product. You are the only member that speaks to the user.")
+              << QStringLiteral(
+                     "The team only moves when a turn ends in an action. Before you end a "
+                     "turn, every task that is not done must have an owner working on it, be "
+                     "blocked with what it waits for, or wait on a decision you raised. Do not "
+                     "end a turn to wait for something outside the team: check it, or block "
+                     "the task on it.")
               << (context.mergePolicy == QStringLiteral("user")
                       ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
                                        "unless the user allowed that one task.")
@@ -88,7 +94,9 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "lane, or say on the task why you could not. Report through the task with "
                      "team_task_update (state, note, met marks, pull request), not through "
                      "messages. If you need an answer, block the task with your question; the "
-                     "leader answers it. Hand the task to review (state in_review) once its "
+                     "leader answers it. Do not end a turn with your task in progress and "
+                     "nothing said: finish it, or block it with what you wait for. Hand the "
+                     "task to review (state in_review) once its "
                      "criteria are met and your work is committed. Do not merge.");
     } else {
         lines << QStringLiteral(

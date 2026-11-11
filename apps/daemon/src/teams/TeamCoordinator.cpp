@@ -1,6 +1,8 @@
 // ADR 0114: the team store and the membership rules.
 #include "teams/TeamCoordinator.h"
 
+#include <QTimer>
+
 #include "storage/LocalJournal.h"
 
 #include <algorithm>
@@ -393,6 +395,8 @@ std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {
         teamBySession_.remove(session);
     teams_.remove(teamId);
     delete digestTimers_.take(teamId);
+    delete stallTimers_.take(teamId);
+    stalls_.remove(teamId);
     emit teamRemoved(QString::number(teamId), repository);
     return std::nullopt;
 }
