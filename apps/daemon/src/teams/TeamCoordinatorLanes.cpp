@@ -11,19 +11,33 @@ bool covered(const QString& path, const QStringList& prefixes) {
                        [&](const QString& prefix) { return rules::pathUnder(path, prefix); });
 }
 
-// The paths of `files` that neither the owner's lane nor the shared paths cover, sorted. A
-// developer without prefixes has no lane to leave.
+// The first paths of `files`, sorted, that neither the owner's lane nor the shared paths
+// cover. A developer without prefixes has no lane to leave. A flag that lists hundreds of
+// paths is about the base the files were compared with, not about one lane; the first
+// maximumOutsidePaths of them are enough to act on.
 QStringList outsidePaths(const Team& team, const QString& owner, const QStringList& files) {
     const Member* member = team.member(owner);
     if (!member || member->paths.isEmpty())
         return {};
     QStringList outside;
     for (const QString& file : files)
-        if (!covered(file, member->paths) && !covered(file, team.sharedPaths) &&
-            !outside.contains(file))
+        if (!covered(file, member->paths) && !covered(file, team.sharedPaths))
             outside.append(file);
+    outside.removeDuplicates();
     outside.sort();
+    if (outside.size() > maximumOutsidePaths)
+        outside.resize(maximumOutsidePaths);
     return outside;
+}
+
+// At most a screenful of paths for a message; the rest is a count.
+QString listed(const QStringList& paths) {
+    constexpr qsizetype shown = 20;
+    if (paths.size() <= shown)
+        return paths.join(QStringLiteral(", "));
+    return QStringLiteral("%1 and %2 more")
+        .arg(paths.first(shown).join(QStringLiteral(", ")))
+        .arg(paths.size() - shown);
 }
 
 bool open(const Task& task) {
@@ -56,13 +70,12 @@ bool TeamCoordinator::flagOutside(Team& team, Task& task, const QStringList& out
              .data = data});
         return true;
     }
-    const QString text =
-        QStringLiteral("Outside its lane: %1").arg(outside.join(QStringLiteral(", ")));
+    const QString text = QStringLiteral("Outside its lane: %1").arg(listed(outside));
     addHistory(task, QStringLiteral("daemon"), QStringLiteral("outside_lane"), text, data);
     // Only a path that was not flagged before needs the leader.
     updates.append({.kind = QStringLiteral("outside_lane"),
                     .text = QStringLiteral("%1 by %2 changes files outside its lane: %3")
-                                .arg(task.id, name, outside.join(QStringLiteral(", "))),
+                                .arg(task.id, name, listed(outside)),
                     .taskId = task.id,
                     .actionable = !added.isEmpty(),
                     .data = data});

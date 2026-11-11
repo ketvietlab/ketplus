@@ -449,6 +449,69 @@ class TeamPageTest final : public QObject {
 
     // An answer that arrives after its handover dialog was cancelled belongs to that dialog:
     // it neither closes the one opened since nor clears what the user wrote there.
+    // ADR 0115: the task's history comes from team.task.get a page at a time.
+    void theTaskDialogReadsItsHistoryPageByPage() {
+        start(fixture());
+        QJsonObject paged = task("T-1", "in_progress", "dev1");
+        QJsonArray newest;
+        for (int index = 70; index < 120; ++index)
+            newest.append(QJsonObject{{"at", "2026-11-10T10:00:00.000Z"},
+                                      {"actor", "daemon"},
+                                      {"text", QStringLiteral("Entry %1").arg(index)}});
+        paged.insert("history", newest);
+        paged.insert("history_total", 120);
+        paged.insert("history_start", 70);
+        daemon_.answers.insert("team.task.get", {{"ok", true}, {"task", paged}});
+        QWidget window;
+        window.resize(1024, 640);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        QCOMPARE(daemon_.last("team.task.get").value("task_id").toString(), QStringLiteral("T-1"));
+        QTRY_COMPARE(labels(dialog, "teamTaskHistory").size(), 50);
+        QVERIFY(labels(dialog, "teamTaskHistory").last().contains("Entry 119"));
+        auto* earlier = dialog->findChild<ket::Button*>("teamTaskHistoryEarlier");
+        QVERIFY(earlier);
+        QJsonObject older = paged;
+        QJsonArray first;
+        for (int index = 20; index < 70; ++index)
+            first.append(QJsonObject{{"at", "2026-11-10T10:00:00.000Z"},
+                                     {"actor", "daemon"},
+                                     {"text", QStringLiteral("Entry %1").arg(index)}});
+        older.insert("history", first);
+        older.insert("history_start", 20);
+        daemon_.answers.insert("team.task.get", {{"ok", true}, {"task", older}});
+        earlier->click();
+        QCOMPARE(daemon_.last("team.task.get").value("history_before").toInt(), 70);
+        QTRY_COMPARE(labels(dialog, "teamTaskHistory").size(), 100);
+        QVERIFY(labels(dialog, "teamTaskHistory").first().contains("Entry 20"));
+        QVERIFY(labels(dialog, "teamTaskHistory").last().contains("Entry 119"));
+    }
+
+    // ADR 0115: older Updates come a page at a time.
+    void olderUpdatesComeOnRequest() {
+        start(fixture());
+        QJsonObject get = daemon_.answers.value("team.get");
+        get.insert("updates_has_more", true);
+        daemon_.answers.insert("team.get", get);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 640);
+        page.show();
+        QTRY_VERIFY(page.findChild<ket::Button*>("teamUpdatesOlder"));
+        daemon_.answers.insert(
+            "team.updates.list",
+            {{"ok", true},
+             {"updates",
+              QJsonArray{QJsonObject{
+                  {"id", 0}, {"at", "2026-11-10T09:00:00.000Z"}, {"text", "Team created"}}}},
+             {"has_more", false}});
+        page.findChild<ket::Button*>("teamUpdatesOlder")->click();
+        QCOMPARE(daemon_.last("team.updates.list").value("before_id").toInt(), 1);
+        QTRY_COMPARE(labels(&page, "teamUpdate").size(), 3);
+        QVERIFY(labels(&page, "teamUpdate").last().contains("Team created"));
+        QVERIFY(!page.findChild<ket::Button*>("teamUpdatesOlder"));
+    }
+
     void aLateHandoverAnswerLeavesANewDialogAlone() {
         start(fixture());
         QWidget window;

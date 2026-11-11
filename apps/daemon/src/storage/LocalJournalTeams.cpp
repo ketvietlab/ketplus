@@ -223,15 +223,18 @@ std::optional<qint64> LocalJournal::appendTeamUpdate(const TeamUpdateRecord& upd
 }
 
 QList<TeamUpdateRecord> LocalJournal::teamUpdates(const qint64 teamId, const bool undigestedOnly,
-                                                  const int limit) const {
+                                                  const int limit, const qint64 beforeId) const {
     QList<TeamUpdateRecord> updates;
     QSqlQuery query(database_);
     query.prepare(
         QStringLiteral("SELECT id, at, actor, kind, task_id, text, data, actionable, digested "
-                       "FROM team_updates WHERE team_id = ? %1 ORDER BY id %2 LIMIT ?")
+                       "FROM team_updates WHERE team_id = ? %1 %3 ORDER BY id %2 LIMIT ?")
             .arg(undigestedOnly ? QStringLiteral("AND digested = 0") : QString{},
-                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC")));
+                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC"),
+                 beforeId > 0 ? QStringLiteral("AND id < ?") : QString{}));
     query.addBindValue(teamId);
+    if (beforeId > 0)
+        query.addBindValue(beforeId);
     query.addBindValue(limit);
     if (!query.exec())
         return updates;

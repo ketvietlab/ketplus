@@ -497,9 +497,18 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
 }
 
 void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
-    const QByteArray frame = protocol::encodeFrame(envelope);
-    if (frame.size() > protocol::maximumFrameBytes + 4 ||
-        socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+    QByteArray frame = protocol::encodeFrame(envelope);
+    if (frame.size() > protocol::maximumFrameBytes + 4) {
+        // ADR 0115: a message too large for one frame never costs the client its connection.
+        qWarning("Replacing %s of %lld bytes: it exceeds the frame limit.",
+                 qUtf8Printable(envelope.value(QStringLiteral("message_type")).toString()),
+                 static_cast<long long>(frame.size()));
+        frame = protocol::encodeFrame(protocol::oversizedReplacement(envelope, frame.size()));
+    }
+    if (socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+        // A client that stopped reading is dropped; it reconnects and reads the state again.
+        qWarning("Dropping a client: %lld bytes already queued.",
+                 static_cast<long long>(socket->bytesToWrite()));
         socket->abort();
         return;
     }

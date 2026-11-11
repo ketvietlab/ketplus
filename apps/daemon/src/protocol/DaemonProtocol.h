@@ -25,6 +25,11 @@ struct ValidationResult final {
 
 [[nodiscard]] ValidationResult validateEnvelope(const QJsonObject& envelope);
 [[nodiscard]] QByteArray encodeFrame(const QJsonObject& envelope);
+// What goes out instead of a message whose frame would exceed maximumFrameBytes, so the
+// client keeps its connection (ADR 0115). A reply becomes a `response_too_large` failure
+// with the same correlation; an event keeps its scalar fields (ids, revision) and says
+// `truncated: true`, and the client reads the full state again with a request.
+[[nodiscard]] QJsonObject oversizedReplacement(const QJsonObject& envelope, qsizetype bytes);
 [[nodiscard]] QJsonObject response(const QJsonObject& request, const QJsonObject& payload);
 [[nodiscard]] QJsonObject failure(const QJsonObject& request, const QString& code,
                                   const QString& message);

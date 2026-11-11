@@ -79,7 +79,13 @@ a decision only when a change alters what the product does. A prefix belongs to 
 lane (`lane_overlap`). After a developer's turn the daemon compares the files changed on
 the task's branch with the owner's prefixes and the shared paths, records the outside
 paths on the task (`outsideLane`, actionable in the digest) and clears the flag when they
-are reverted or covered. *Rejected*: asking the user for every lane change — it is
+are reverted or covered. The files changed are the diff from where the branch left the
+integration branch; a team without one counts only the branch's own commits since the
+task's base (first parent, no merges), so merging the main line into the branch flags
+nothing. A team's document reaches clients in one 1 MiB frame, so a task keeps at most
+200 outside paths, and a history entry at most 2,000 characters of text and 50 items per
+list, with the full count as `<key>_total`; documents written before the bounds are
+bounded when read. *Rejected*: asking the user for every lane change — it is
 about who edits which file, not what the product does.
 
 ### 5. Who merges a reviewed task is a team setting (decided)

@@ -1,10 +1,13 @@
 // ADR 0114: the teams/1 protocol and the member scaffold, against a SessionHost with the
 // scripted fake providers. No real provider is started and no turn runs.
 #include "AgentTestFixture.h"
+#include "teams/Team.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QProcess>
+#include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
@@ -73,6 +76,53 @@ class TeamProtocolTest final : public QObject {
     }
 
   private slots:
+    // ADR 0115: every page of Updates says whether an older one follows, the largest page too.
+    void everyPageOfUpdatesSaysWhetherAnOlderOneFollows() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QJsonValue teamId = create(fixture).value("team").toObject().value("id");
+        const qint64 id = teamId.toString().toLongLong();
+        QVERIFY(id > 0);
+        const int written = command(fixture, "team.updates.list", {{"team_id", teamId}})
+                                .value("updates")
+                                .toArray()
+                                .size();
+        constexpr int added = 2 * ketplus::daemon::teams::maximumPage + 7;
+        for (int index = 0; index < added; ++index)
+            QVERIFY(fixture.journal->appendTeamUpdate(
+                {.teamId = id,
+                 .at = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs),
+                 .actor = QStringLiteral("daemon"),
+                 .kind = QStringLiteral("note"),
+                 .text = QStringLiteral("Update %1").arg(index)}));
+        const QJsonObject read = command(fixture, "team.get", {{"team_id", teamId}});
+        QCOMPARE(read.value("updates").toArray().size(), ketplus::daemon::teams::defaultPage);
+        QVERIFY(read.value("updates_has_more").toBool());
+        QSet<qint64> seen;
+        qint64 before = 0;
+        QList<int> pages;
+        for (bool more = true; more;) {
+            QJsonObject payload{{"team_id", teamId}, {"limit", 1000}};
+            if (before > 0)
+                payload.insert("before_id", before);
+            const QJsonObject page = command(fixture, "team.updates.list", payload);
+            QVERIFY(page.value("ok").toBool());
+            const QJsonArray updates = page.value("updates").toArray();
+            QVERIFY(!updates.isEmpty());
+            for (const auto& update : updates) {
+                const qint64 updateId = update.toObject().value("id").toInteger();
+                QVERIFY(!seen.contains(updateId));
+                seen.insert(updateId);
+                before = updateId;
+            }
+            pages.append(updates.size());
+            more = page.value("has_more").toBool();
+        }
+        QCOMPARE(seen.size(), written + added);
+        QCOMPARE(pages.first(), ketplus::daemon::teams::maximumPage);
+        QCOMPARE(pages.size(), 3);
+    }
+
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void featureIsAdvertised() { QVERIFY(protocol::features(1).contains("teams/1")); }

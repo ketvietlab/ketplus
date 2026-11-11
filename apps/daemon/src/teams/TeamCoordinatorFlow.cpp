@@ -150,7 +150,7 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
     const Member* leader = team ? team->memberWithRole(role::leader) : nullptr;
     if (!leader || team->paused)
         return;
-    const QList<TeamUpdateRecord> updates = journal_->teamUpdates(teamId, true, 500);
+    const QList<TeamUpdateRecord> updates = updateRecords(teamId, true, 500);
     const bool actionable =
         std::any_of(updates.cbegin(), updates.cend(),
                     [](const TeamUpdateRecord& update) { return update.actionable; });

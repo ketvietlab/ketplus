@@ -497,9 +497,10 @@ class LocalJournal final {
     [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
     [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
                                                          QString* error = nullptr);
-    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
-    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
-                                                      int limit) const;
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first; with `beforeId`,
+    // only those older than it.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly, int limit,
+                                                      qint64 beforeId = 0) const;
     bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: the conversation's current work report ledger, empty before its first report.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;

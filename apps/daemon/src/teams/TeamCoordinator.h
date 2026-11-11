@@ -234,7 +234,12 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] bool isMember(const QString& sessionId) const { return teamOf(sessionId); }
     // The team as clients receive it: the document plus each member's number, title and agent.
     [[nodiscard]] QJsonObject teamJson(const Team& team) const;
-    [[nodiscard]] QJsonArray updatesJson(qint64 teamId, int limit = 200) const;
+    // ADR 0115: the team for team.list and team.changed: teamJson without its tasks and
+    // decisions, marked "directory". Its size follows the members, so the sidebar always
+    // receives every team; a page reads the rest with team.get.
+    [[nodiscard]] QJsonObject directoryJson(const Team& team) const;
+    [[nodiscard]] QJsonArray updatesJson(qint64 teamId, int limit = defaultPage,
+                                         qint64 beforeId = 0) const;
 
     // `draft` carries the settings and the members with their session ids. Nothing is stored
     // when a rule refuses it.
@@ -363,6 +368,9 @@ class TeamCoordinator : public QObject {
         QJsonObject data;
     };
 
+    // The team's Updates from the journal, within the bounds of Team.h.
+    [[nodiscard]] QList<TeamUpdateRecord> updateRecords(qint64 teamId, bool undigestedOnly,
+                                                        int limit, qint64 beforeId = 0) const;
     [[nodiscard]] Team* mutableTeam(qint64 teamId);
     [[nodiscard]] Team* mutableTeamOf(const QString& sessionId);
     // Stores `team` with revision + 1 and the updates, then emits teamChanged. On a journal

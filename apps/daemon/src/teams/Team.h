@@ -64,6 +64,19 @@ struct HistoryEntry final {
     QJsonObject data;
 };
 
+// A team's whole document goes to clients in one daemon frame (1 MiB), so what a task keeps
+// grows with its work, never with the size of a diff. A list longer than the bound keeps its
+// first entries and records the full count next to it as "<key>_total".
+inline constexpr qsizetype maximumOutsidePaths = 200;
+inline constexpr qsizetype maximumHistoryText = 2000;
+inline constexpr qsizetype maximumHistoryListItems = 50;
+
+// The entry within the bounds above. Entries read from older documents are bounded too, and
+// so are the team's Updates (their text and data), when written and when read.
+[[nodiscard]] HistoryEntry bounded(HistoryEntry entry);
+[[nodiscard]] QString boundedText(QString text);
+[[nodiscard]] QJsonObject boundedData(QJsonObject data);
+
 struct Task final {
     QString id;
     QString title;
@@ -177,6 +190,22 @@ struct Team final {
 [[nodiscard]] QJsonObject toJson(const Team& team);
 [[nodiscard]] Team teamFromJson(const QJsonObject& json);
 [[nodiscard]] QJsonObject toJson(const Task& task, bool withHistory = true);
+
+// ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
+// The summary lists the first outside paths of a task and the newest answered decisions;
+// the rest comes from team.task.get, team.updates and team.decision.list, page by page.
+inline constexpr qsizetype summaryOutsidePaths = 20;
+inline constexpr qsizetype summaryAnsweredDecisions = 20;
+inline constexpr int defaultPage = 50;
+inline constexpr int maximumPage = 200;
+
+// The task without history in a summary: at most summaryOutsidePaths outside paths, the
+// full count as "outside_lane_total".
+[[nodiscard]] QJsonObject summaryJson(const Task& task);
+// The task with one page of its history: the newest `limit` entries before index `before`
+// (the end when negative), oldest first, with "history_total" and "history_start".
+[[nodiscard]] QJsonObject taskPageJson(const Task& task, int limit = defaultPage,
+                                       qsizetype before = -1);
 [[nodiscard]] QJsonObject toJson(const Decision& decision);
 [[nodiscard]] QJsonObject toJson(const Member& member);
 

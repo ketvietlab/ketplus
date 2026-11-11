@@ -104,12 +104,45 @@ void TeamPage::readUpdates() {
                             if (!error.isEmpty())
                                 return;
                             QJsonArray updates = result.value(QStringLiteral("updates")).toArray();
-                            if (updates == alive->updates_)
+                            const bool more =
+                                result.value(QStringLiteral("updates_has_more")).toBool();
+                            if (updates == alive->updates_ && more == alive->newestHaveMore_)
                                 return;
                             alive->updates_ = updates;
+                            alive->newestHaveMore_ = more;
                             alive->rebuild();
                         });
     });
+}
+
+void TeamPage::readOlderUpdates() {
+    if (olderPending_)
+        return;
+    qint64 oldest = 0;
+    for (const QJsonArray* page : {&updates_, &olderUpdates_})
+        for (const auto& value : *page) {
+            const qint64 id = value.toObject().value(QStringLiteral("id")).toInteger();
+            oldest = oldest == 0 ? id : qMin(oldest, id);
+        }
+    if (oldest <= 0)
+        return;
+    olderPending_ = true;
+    const QPointer<TeamPage> alive(this);
+    teams_->request(QStringLiteral("team.updates.list"),
+                    {{QStringLiteral("team_id"), teamId_},
+                     {QStringLiteral("before_id"), oldest},
+                     {QStringLiteral("limit"), 50}},
+                    [alive](const QJsonObject& result, const QString& error) {
+                        if (!alive)
+                            return;
+                        alive->olderPending_ = false;
+                        if (!error.isEmpty())
+                            return;
+                        for (const auto& value : result.value(QStringLiteral("updates")).toArray())
+                            alive->olderUpdates_.append(value);
+                        alive->olderHaveMore_ = result.value(QStringLiteral("has_more")).toBool();
+                        alive->rebuild();
+                    });
 }
 
 QString TeamPage::memberName(const QJsonObject& team, const QString& sessionId) {

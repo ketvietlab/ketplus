@@ -2,6 +2,8 @@
 
 #include <QDateTime>
 
+#include <algorithm>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -25,11 +27,11 @@ QJsonObject toJson(const HistoryEntry& entry) {
 }
 
 HistoryEntry historyFromJson(const QJsonObject& json) {
-    return {.at = json.value(QStringLiteral("at")).toString(),
-            .actor = json.value(QStringLiteral("actor")).toString(),
-            .kind = json.value(QStringLiteral("kind")).toString(),
-            .text = json.value(QStringLiteral("text")).toString(),
-            .data = json.value(QStringLiteral("data")).toObject()};
+    return bounded({.at = json.value(QStringLiteral("at")).toString(),
+                    .actor = json.value(QStringLiteral("actor")).toString(),
+                    .kind = json.value(QStringLiteral("kind")).toString(),
+                    .text = json.value(QStringLiteral("text")).toString(),
+                    .data = json.value(QStringLiteral("data")).toObject()});
 }
 
 Member memberFromJson(const QJsonObject& json) {
@@ -62,6 +64,8 @@ Task taskFromJson(const QJsonObject& json) {
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
+    if (task.outsideLane.size() > maximumOutsidePaths)
+        task.outsideLane.resize(maximumOutsidePaths);
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
     task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
@@ -87,6 +91,64 @@ Decision decisionFromJson(const QJsonObject& json) {
 }
 
 } // namespace
+
+QString boundedText(QString text) {
+    if (text.size() <= maximumHistoryText)
+        return text;
+    // The result stays within the bound, so a text bounded when it was written is the same
+    // when the document is read again: room for the note, and no surrogate pair cut in half.
+    constexpr qsizetype note = 40;
+    qsizetype keep = maximumHistoryText - note;
+    if (text.at(keep - 1).isHighSurrogate())
+        --keep;
+    return QStringLiteral("%1… (%2 more characters)").arg(text.left(keep)).arg(text.size() - keep);
+}
+
+QJsonObject boundedData(QJsonObject data) {
+    const QStringList keys = data.keys();
+    for (const QString& key : keys) {
+        QJsonArray list = data.value(key).toArray();
+        if (list.size() <= maximumHistoryListItems)
+            continue;
+        const QString total = key + QStringLiteral("_total");
+        if (!data.contains(total))
+            data.insert(total, list.size());
+        while (list.size() > maximumHistoryListItems)
+            list.removeLast();
+        data.insert(key, list);
+    }
+    return data;
+}
+
+HistoryEntry bounded(HistoryEntry entry) {
+    entry.text = boundedText(std::move(entry.text));
+    entry.data = boundedData(std::move(entry.data));
+    return entry;
+}
+
+QJsonObject summaryJson(const Task& task) {
+    QJsonObject json = toJson(task, false);
+    if (task.outsideLane.size() > summaryOutsidePaths) {
+        json.insert(QStringLiteral("outside_lane"),
+                    strings(task.outsideLane.first(summaryOutsidePaths)));
+        json.insert(QStringLiteral("outside_lane_total"), task.outsideLane.size());
+    }
+    return json;
+}
+
+QJsonObject taskPageJson(const Task& task, const int limit, const qsizetype before) {
+    QJsonObject json = toJson(task, false);
+    const qsizetype total = task.history.size();
+    const qsizetype end = before < 0 || before > total ? total : before;
+    const qsizetype start = std::max<qsizetype>(0, end - std::clamp(limit, 1, maximumPage));
+    QJsonArray history;
+    for (qsizetype index = start; index < end; ++index)
+        history.append(toJson(task.history.at(index)));
+    json.insert(QStringLiteral("history"), history);
+    json.insert(QStringLiteral("history_total"), total);
+    json.insert(QStringLiteral("history_start"), start);
+    return json;
+}
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }
 

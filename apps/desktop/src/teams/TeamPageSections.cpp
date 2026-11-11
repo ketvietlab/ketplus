@@ -11,6 +11,8 @@
 
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QSet>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -21,7 +23,6 @@ namespace {
 using team_page::px;
 using team_page::Text;
 
-constexpr int kUpdatesShown = 50;
 // Past this a choice is a sentence, not a button's label (mockups/qt, Teams).
 constexpr int kButtonChoiceLength = 28;
 constexpr int kUpdateLines = 3;
@@ -329,8 +330,15 @@ void TeamPage::buildMembers(const QJsonObject& team) {
 
 void TeamPage::buildUpdates() {
     QList<QJsonObject> updates;
-    for (const auto& value : updates_)
-        updates.append(value.toObject());
+    QSet<qint64> seen;
+    for (const QJsonArray* page : {&updates_, &olderUpdates_})
+        for (const auto& value : *page) {
+            const QJsonObject update = value.toObject();
+            if (!seen.contains(update.value(QStringLiteral("id")).toInteger())) {
+                seen.insert(update.value(QStringLiteral("id")).toInteger());
+                updates.append(update);
+            }
+        }
     std::sort(updates.begin(), updates.end(),
               [](const QJsonObject& left, const QJsonObject& right) {
                   return left.value(QStringLiteral("id")).toInteger() >
@@ -351,7 +359,7 @@ void TeamPage::buildUpdates() {
     }
     const auto found = teams_->team(teamId_);
     const QJsonObject team = found ? *found : QJsonObject{};
-    for (qsizetype index = 0; index < updates.size() && index < kUpdatesShown; ++index) {
+    for (qsizetype index = 0; index < updates.size(); ++index) {
         const QJsonObject& update = updates.at(index);
         const QString kind = update.value(QStringLiteral("kind")).toString();
         const bool warning = kind == QStringLiteral("outside_lane");
@@ -413,6 +421,18 @@ void TeamPage::buildUpdates() {
         at->setType(12);
         line->addWidget(at, 0, Qt::AlignTop);
         rows->addWidget(row);
+    }
+    // ADR 0115: older Updates come a page at a time.
+    if (olderUpdates_.isEmpty() ? newestHaveMore_ : olderHaveMore_) {
+        auto* older = new ket::Button(tr("Show older"), ket::ButtonVariant::Ghost, panel);
+        older->setObjectName(QStringLiteral("teamUpdatesOlder"));
+        older->setControlSize(ket::ControlSize::Small);
+        auto* line = new QHBoxLayout;
+        line->setContentsMargins(px(18), px(8), px(18), px(10));
+        line->addWidget(older);
+        line->addStretch(1);
+        rows->addLayout(line);
+        connect(older, &QAbstractButton::clicked, this, [this] { readOlderUpdates(); });
     }
     layout_->addWidget(panel);
 }
