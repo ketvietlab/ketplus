@@ -153,7 +153,8 @@ class AwaitingReplyTest final : public QObject {
                                     {"arguments", QJsonObject{{"summary", "Approve"}}}}}},
             daemon);
         QVERIFY(!answer.value("result").toObject().value("isError").toBool());
-        QCOMPARE(operations, (QStringList{"agents.request_user_decision"}));
+        // Listing asks who the agent is, for the team tools (ADR 0112); the call is routed.
+        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.request_user_decision"}));
         QVERIFY(AgentBroker::isOperation("agents.request_user_decision"));
     }
 };
