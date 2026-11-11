@@ -2108,17 +2108,39 @@ Flickable {
         // real gutter above it so a one-line command delegate
         // can never paint beneath the footer while its implicit
         // layout is settling during a streamed model update.
-        height: host.sessionRunning ? KetTheme.px(62, KetTheme.zoom) : 0
+        // ADR 0106 (mock workspace/report-running): once the running turn reports, its card
+        // closes the transcript and carries the live activity in place of the run line.
+        readonly property var runningReport: host.sessionRunning && host.turnWorkReport
+            && host.turnWorkReport.items && host.turnWorkReport.items.length > 0 ? host.turnWorkReport : null
+        readonly property real sideMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
+        height: !host.sessionRunning ? 0
+            : runningReport ? runningCard.implicitHeight + KetTheme.px(24, KetTheme.zoom)
+            : KetTheme.px(62, KetTheme.zoom)
 
         AgentRunStatus {
             workspace: shell
-            visible: host.sessionRunning
+            visible: host.sessionRunning && !transcriptFooter.runningReport
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
-            anchors.rightMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
+            anchors.leftMargin: transcriptFooter.sideMargin
+            anchors.rightMargin: transcriptFooter.sideMargin
             anchors.top: parent.top
             anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
+        }
+        TranscriptWorkReport {
+            id: runningCard
+            objectName: "runningWorkReport"
+            visible: !!transcriptFooter.runningReport
+            x: transcriptFooter.sideMargin
+            y: KetTheme.px(8, KetTheme.zoom)
+            width: parent.width - 2 * transcriptFooter.sideMargin
+            report: transcriptFooter.runningReport || ({})
+            running: true
+            activity: host.runStatus
+            animate: visible && host.workingMotionEnabled && !host.restoring
+                && Window.window !== null && Window.window.visible
+                && Window.window.visibility !== Window.Minimized
+            onOpenRequested: host.requestWorkReport()
         }
     }
 

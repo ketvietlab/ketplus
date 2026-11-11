@@ -290,8 +290,10 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         return;
     }
     if (method == "daemon/workReport") {
-        emit workReportChanged(session->path, session->id,
-                               params.value("report").toObject().toVariantMap(), {});
+        const QVariantMap report = params.value("report").toObject().toVariantMap();
+        emit workReportChanged(session->path, session->id, report, {});
+        if (params.value("currentTurn").toBool())
+            emit turnWorkReportChanged(session->path, session->id, report);
         return;
     }
     if (method == "daemon/activityGroup") {

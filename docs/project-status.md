@@ -495,7 +495,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   turn records its work with the `work_report` tool instead of a markdown matrix:
   - the daemon merges items by key into the conversation's ledger, so unfinished work
     carries forward and implementation, verification and delivery stay separate checks;
-  - the turn closes with the mock's report card, which counts the items itself;
+  - the turn closes with the mock's report card, which counts the items itself; while the
+    turn runs, the same card closes the live transcript with a Running badge and the
+    turn's activity;
   - Copy conversation exports the report as a table.
 
   Without the tools, or when the call fails, the turn still ends with the localized

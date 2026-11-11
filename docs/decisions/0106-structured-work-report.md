@@ -95,6 +95,12 @@ cannot count it, filter it or show it anywhere else.
   - The tab reads the stored ledger with `session.work_report.read` and then applies
     the conversation's `work_report.updated` events. An older ledger version never
     replaces a newer one, so a slow read cannot undo a live update.
+  - While a turn runs, its latest report closes the live transcript, as the mock's
+    `workspace/report-running`: a Running badge, and the footer shows the turn's live
+    activity and "Now" instead of the next step. The card replaces the run line until
+    the turn ends, when the end-of-turn card takes over. The desktop marks a
+    `work_report.updated` of the running turn as current; a new turn or another
+    conversation starts without it.
 
 ## Consequences
 
