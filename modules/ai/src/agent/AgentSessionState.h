@@ -29,13 +29,6 @@ struct AgentSessionManager::Session final {
     QString agentTurnTitle;
     bool agentTurnReply{false};
     bool customTitle{false};
-    // The user's labels, as the daemon stores them (`session.tags/1`).
-    QStringList tags;
-    // The list the user's changes add up to while the daemon is still storing an earlier one.
-    QStringList tagsWanted;
-    bool tagSyncPending{false};
-    // #429: labels chosen before the first turn, sent once the daemon knows the conversation.
-    bool tagsAwaitStart{false};
     // #125: the last turn ended asking the user to approve or decide ("Waiting for you").
     bool awaitingReply{false};
     bool archived{false};

@@ -16,7 +16,7 @@ class QVBoxLayout;
 namespace ketplus {
 
 // A team's folder inside its repository (ADR 0114, #464). `members` are conversation maps in the
-// folder's order, leader first; each carries "teamRole" and its role tag first in "tags".
+// folder's order, leader first; each carries "teamRole" and its locked role tag in "tags".
 struct SidebarTeam final {
     QString id;
     QString name;
@@ -58,7 +58,6 @@ class SidebarRepositoryList final : public QWidget {
     explicit SidebarRepositoryList(QWidget* parent = nullptr);
 
     void applyZoom(int zoomPercent);
-    void setTagFilter(const QString& tag);
     void setRepositories(const QVector<SidebarRepository>& repositories);
     // With teams/1 the repository's + offers New team… beside New conversation.
     void setTeamsAvailable(bool available) { teamsAvailable_ = available; }
@@ -92,11 +91,10 @@ class SidebarRepositoryList final : public QWidget {
     QWidget* createTeamFolder(QWidget* group, const SidebarRepository& repository,
                               const SidebarTeam& team);
     void updateTeamFolders(const QVector<SidebarRepository>& repositories);
-    // The folders' height inside `group`, laid out for the current tag filter and collapse.
+    // The folders' height inside `group`, laid out for the current collapse.
     int presentTeamFolders(QWidget* group, bool repositoryCollapsed, int rowHeight);
     bool handleDrag(QObject* watched, QEvent* event);
     void onRepositoryAction(const QString& path, QWidget* anchor);
-    [[nodiscard]] bool rowMatchesFilter(const ket::ConversationRow* row) const;
     void markConversationSeen(const QString& conversationId);
     void updateRows(const QVector<SidebarRepository>& repositories);
     void applyPresentation();
@@ -118,7 +116,6 @@ class SidebarRepositoryList final : public QWidget {
     QSet<QString> showAllPaths_;
     // Completion is new until the user opens that conversation during this application session.
     QSet<QString> seenConversationIds_;
-    QString tagFilter_;
     bool built_{false};
 };
 

@@ -1,13 +1,10 @@
 #include "workspace/SidebarControls.h"
 
 #include "KetAppearance.h"
-#include "KetButton.h"
 #include "KetIcons.h"
 #include "KetTokens.h"
 
 #include <QEvent>
-#include <QHBoxLayout>
-#include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -86,72 +83,6 @@ void SidebarSearchButton::paintEvent(QPaintEvent*) {
     painter.drawText(
         labelRect, Qt::AlignVCenter | Qt::AlignLeft,
         QFontMetricsF(labelFont).elidedText(text(), Qt::ElideRight, labelRect.width()));
-}
-
-SidebarTagFilterChip::SidebarTagFilterChip(QWidget* parent) : QWidget(parent) {
-    setObjectName(QStringLiteral("sidebarTagFilter"));
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* layout = new QHBoxLayout(this);
-    layout->setSpacing(0);
-    label_ = new QLabel(this);
-    label_->setObjectName(QStringLiteral("sidebarTagFilterLabel"));
-    label_->setTextFormat(Qt::PlainText); // a tag is the user's text, never markup
-    layout->addWidget(label_, 1);
-    clear_ = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
-                                 tr("Clear filter"), this);
-    clear_->setObjectName(QStringLiteral("sidebarTagFilterClear"));
-    clear_->setControlSize(ket::ControlSize::Small);
-    layout->addWidget(clear_);
-    connect(clear_, &QAbstractButton::clicked, this, [this] {
-        setTag({});
-        emit cleared();
-    });
-    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
-            &SidebarTagFilterChip::restyle);
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-            &SidebarTagFilterChip::restyle);
-    restyle();
-    hide();
-}
-
-void SidebarTagFilterChip::setTag(const QString& tag) {
-    tag_ = tag;
-    label_->setText(tr("Tagged %1").arg(tag));
-    setAccessibleName(tag.isEmpty() ? QString() : tr("Tagged %1").arg(tag));
-    setVisible(!tag.isEmpty());
-}
-
-QSize SidebarTagFilterChip::sizeHint() const {
-    return {QWidget::sizeHint().width(), qRound(zoomed(32))};
-}
-
-void SidebarTagFilterChip::changeEvent(QEvent* event) {
-    if (event->type() == QEvent::FontChange)
-        restyle();
-    QWidget::changeEvent(event);
-}
-
-void SidebarTagFilterChip::restyle() {
-    // Text starts after the filter glyph (10 px in, 12 px glyph, 6 px gap), as in the mock.
-    layout()->setContentsMargins(qRound(zoomed(28)), 0, qRound(zoomed(4)), 0);
-    QPalette palette = label_->palette();
-    palette.setColor(QPalette::WindowText, token(u"accent-text"));
-    label_->setPalette(palette);
-    label_->setFont(sized(font(), 12, QFont::Medium));
-    setFixedHeight(qRound(zoomed(32)));
-    update();
-}
-
-void SidebarTagFilterChip::paintEvent(QPaintEvent*) {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(token(u"accent-border"), 1));
-    painter.setBrush(token(u"accent-subtle"));
-    painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), zoomed(6), zoomed(6));
-    const qreal box = zoomed(12);
-    painter.drawPixmap(
-        QPointF(zoomed(10), (height() - box) / 2),
-        ket::Icons::pixmap(u"filter", box, devicePixelRatioF(), token(u"accent-text")));
 }
 
 } // namespace ketplus

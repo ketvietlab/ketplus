@@ -45,7 +45,7 @@ class ExplorerPanelTest final : public QObject {
     void ordersRepositoryConversationsByLatestTurnAcrossWorktrees();
     void ordersRepositoriesByTheirNewestConversation();
     void scalesSidebarTypeWithInterfaceZoom();
-    void filtersTagsAndUsesAuthoritativeStorageWarning();
+    void drawsNoTagsAndUsesAuthoritativeStorageWarning();
 };
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
@@ -563,7 +563,7 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
                           QStringLiteral("untitled-b"), QStringLiteral("crm")}));
 }
 
-void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
+void ExplorerPanelTest::drawsNoTagsAndUsesAuthoritativeStorageWarning() {
     ketplus::ActivityBar bar;
     bar.resize(260, 680);
     bar.show();
@@ -575,24 +575,15 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
                     {"title", "Two"},
                     {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
     bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    // As in the mock, no filter shows until a tag in the conversation header is chosen.
-    auto* filter = bar.findChild<QWidget*>("sidebarTagFilter");
-    QVERIFY(filter && !filter->isVisible());
-    bar.setTagFilter("UI");
-    QVERIFY(filter->isVisible());
-    QCOMPARE(filter->accessibleName(), QString("Tagged UI"));
+    // ADR 0117: no tag filter above the repositories and no user tag on a row, even when the
+    // metadata still carries one.
+    QVERIFY(!bar.findChild<QWidget*>("sidebarTagFilter"));
     const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");
     QCOMPARE(rows.size(), 2);
-    for (auto* row : rows)
-        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    // New rows keep the active filter.
-    bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
-        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    QTest::mouseClick(filter->findChild<QAbstractButton*>("sidebarTagFilterClear"), Qt::LeftButton);
-    QVERIFY(!filter->isVisible());
-    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+    for (auto* row : rows) {
         QTRY_VERIFY(row->isVisible());
+        QVERIFY(row->tags().isEmpty());
+    }
     auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
     QVERIFY(warning && !warning->isVisible());
     bar.setStorageStatus({{"ok", true},

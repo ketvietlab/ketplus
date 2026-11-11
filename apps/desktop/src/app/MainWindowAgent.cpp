@@ -386,8 +386,6 @@ void MainWindow::ensureAgentWorkspace() {
         openAgentTerminalTab();
     });
     connectAgentWorkReport();
-    connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
-            &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,
             &MainWindow::showSettingsSection);
     connect(agentWorkspace_, &AgentWorkspaceView::productNavigationRequested, this,
@@ -493,16 +491,6 @@ void MainWindow::ensureAgentWorkspace() {
                 QTimer::singleShot(0, this, [this, conversationId] {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
-            });
-    agentWorkspace_->setTagCatalog(agentManager_->tagCatalog());
-    connect(agentManager_, &AgentSessionManager::tagCatalogChanged, agentWorkspace_,
-            &AgentWorkspaceView::setTagCatalog);
-    connect(agentWorkspace_, &AgentWorkspaceView::tagCatalogSaveRequested, agentManager_,
-            &AgentSessionManager::saveTagCatalog);
-    connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
-            [this](const QString& conversationId, const QString& label, const bool tagged) {
-                agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,
-                                                  label, tagged);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationArchiveRequested, this,
             [this](const QString& conversationId) {

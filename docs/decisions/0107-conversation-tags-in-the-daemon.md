@@ -1,6 +1,7 @@
 # ADR 0107: The daemon stores a conversation's tags
 
 Status: accepted (Jay, 2026-11-10). Replaces the Desktop-only storage of ADR 0028.
+Amended by [ADR 0117](0117-tags-leave-the-ui.md): the daemon keeps tags, the UI draws none.
 
 ## Context
 

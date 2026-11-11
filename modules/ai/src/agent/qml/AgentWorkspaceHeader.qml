@@ -1,7 +1,6 @@
 import Ket
 import QtQuick
 import Ket as Kit
-import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
 Item {
@@ -16,19 +15,8 @@ Item {
                 return conversation;
         return ({});
     }
-    readonly property var userTags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
-            label: tag,
-            color: KetTheme.t.accent
-        } : tag)
-    // ADR 0114 (#467): a member's role, set by its team, leads its tags and cannot be edited.
+    // ADR 0114 (#467): a member's role, set by its team; it cannot be edited here.
     readonly property var teamRole: (agentHost.teamRoles || {})[selectedConversation.sessionId || ""] || null
-    readonly property var tags: (teamRole ? [{
-                label: teamRole.label,
-                color: teamRole.color,
-                locked: true,
-                teamId: teamRole.team_id,
-                teamName: teamRole.team_name
-            }] : []).concat(userTags)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
             if (candidate.selected)
@@ -38,8 +26,8 @@ Item {
     }
     readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
     readonly property string scopeBranch: agentHost.executionBranch || selectedWorktree.branch || "workspace"
-    // The header gives way from the right as it narrows, in the mock's order: the tags and Add
-    // tag first, then the Reviewer label, then the title and the worktree elide, then the
+    // The header gives way from the right as it narrows, in the mock's order: a member's role
+    // first, then the Reviewer label, then the title and the worktree elide, then the
     // worktree keeps only its icon, then the number leaves (the sidebar shows it), then Compact
     // window and New conversation (the sidebar and the menus have both). Each step is measured
     // from implicit widths, so hiding an item cannot feed back into its own test.
@@ -55,9 +43,7 @@ Item {
     // The row layout rounds every item to whole pixels, so a fit needs that much to spare.
     readonly property real slack: KetTheme.px(8, KetTheme.zoom)
     readonly property bool fullReviewer: titleRow.width >= fixedWidth + reviewerProbe.implicitWidth + gap + slack
-    readonly property bool tagsEditable: !agentHost.compactWindow && selectedConversation.tagsEditable === true
-    readonly property real tagGroupWidth: (tags.length > 0 ? conversationTags.implicitWidth + gap : 0) + (tagsEditable ? addTagButton.implicitWidth + gap : 0)
-    readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
+    readonly property bool showRole: teamRole !== null && (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + roleChip.implicitWidth + gap + slack
     readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : 4)
     readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
     readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
@@ -105,7 +91,7 @@ Item {
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
             // Everything else at its narrowest, each with its spacing; the trailing filler adds one more.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - (addTagButton.visible ? addTagButton.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (roleChip.visible ? roleChip.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
             text: agentHost.sessionTitle
             color: KetTheme.t.textMain
             elide: Text.ElideRight
@@ -279,53 +265,32 @@ Item {
             Accessible.name: assigned ? "Reviewer: " + name : "Reviewer"
             Accessible.description: detail
         }
-        Row {
-            id: conversationTags
-            visible: header.tags.length > 0 && header.showTags
-            spacing: KetTheme.px(4, KetTheme.zoom)
-            Repeater {
-                // Every tag, as the mock: they show together when they fit and leave together.
-                model: header.tags
-                Kit.KetTag {
-                    id: chip
-                    required property var modelData
-                    objectName: locked ? "conversationRoleTag" : "conversationTag_" + modelData.label
-                    text: modelData.label
-                    tagColor: modelData.color || KetTheme.t.accent
-                    maxWidth: KetTheme.px(100, KetTheme.zoom)
-                    locked: modelData.locked === true
-                    filterable: !locked
-                    onClicked: agentHost.requestTagFilter(text)
-                    // The role opens its team's page; the kit never clicks a locked tag itself.
-                    Accessible.role: locked ? Accessible.Button : Accessible.StaticText
-                    Accessible.description: locked ? modelData.label + " of " + modelData.teamName + ". Opens the team." : ""
-                    Accessible.onPressAction: if (locked) agentHost.requestTeam(modelData.teamId)
-                    MouseArea {
-                        id: roleMouse
-                        objectName: "conversationRoleTagArea"
-                        anchors.fill: parent
-                        visible: chip.locked
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: agentHost.requestTeam(chip.modelData.teamId)
-                    }
-                    KetToolTip {
-                        objectName: "roleTagToolTip"
-                        visible: roleMouse.containsMouse
-                        text: chip.locked ? chip.modelData.label + " of " + chip.modelData.teamName : ""
-                    }
-                }
+        Kit.KetTag {
+            id: roleChip
+            objectName: "conversationRoleTag"
+            visible: header.showRole
+            text: header.teamRole ? header.teamRole.label : ""
+            tagColor: (header.teamRole && header.teamRole.color) || KetTheme.t.accent
+            maxWidth: KetTheme.px(100, KetTheme.zoom)
+            locked: true
+            filterable: false
+            // The role opens its team's page; the kit never clicks a locked tag itself.
+            Accessible.role: Accessible.Button
+            Accessible.description: header.teamRole ? header.teamRole.label + " of " + header.teamRole.team_name + ". Opens the team." : ""
+            Accessible.onPressAction: if (header.teamRole) agentHost.requestTeam(header.teamRole.team_id)
+            MouseArea {
+                id: roleMouse
+                objectName: "conversationRoleTagArea"
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (header.teamRole) agentHost.requestTeam(header.teamRole.team_id)
             }
-        }
-        Kit.KetIconButton {
-            id: addTagButton
-            objectName: "headerAddTagButton"
-            // The daemon stores a conversation's tags, so there is none to tag before it starts.
-            visible: header.tagsEditable && header.showTags
-            controlSize: Kit.KetTheme.ControlSize.Small
-            iconName: "plus"
-            text: "Add tag"
-            onClicked: tagMenu.popup(addTagButton, 0, addTagButton.height)
+            KetToolTip {
+                objectName: "roleTagToolTip"
+                visible: roleMouse.containsMouse
+                text: header.teamRole ? header.teamRole.label + " of " + header.teamRole.team_name : ""
+            }
         }
         Item {
             Layout.fillWidth: true
@@ -413,63 +378,6 @@ Item {
     function openReviewerMenu() {
         reviewerMenu.candidates = agentHost.reviewerCandidates();
         reviewerMenu.popup(reviewerButton, 0, reviewerButton.height);
-    }
-
-    Kit.KetMenu {
-        id: tagMenu
-        objectName: "conversationTagMenu"
-        // Checks are set on every open: triggering a checkable item replaces a binding.
-        onAboutToShow: {
-            for (let index = 0; index < count; ++index) {
-                const item = itemAt(index);
-                if (item && item.tagLabel)
-                    item.checked = header.userTags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
-            }
-        }
-        // A member's role is listed first, disabled: the team sets it (#467).
-        Instantiator {
-            model: header.teamRole ? [header.teamRole] : []
-            onObjectAdded: (index, object) => tagMenu.insertItem(0, object)
-            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
-            Kit.KetMenuItem {
-                required property var modelData
-                objectName: "conversationRoleTagItem"
-                enabled: false
-                iconName: "lock"
-                text: modelData.label + " · Set by " + modelData.team_name
-            }
-        }
-        Instantiator {
-            model: agentHost.tagCatalog
-            // Below the role, when there is one, and above the separator and Manage tags…,
-            // which stay last.
-            onObjectAdded: (index, object) => tagMenu.insertItem(index + (header.teamRole ? 1 : 0), object)
-            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
-            Kit.KetMenuItem {
-                required property var modelData
-                readonly property string tagLabel: modelData.label
-                objectName: "conversationTagItem_" + tagLabel
-                text: tagLabel
-                iconName: "tag"
-                checkable: true
-                onTriggered: agentHost.requestConversationTag(header.selectedConversation.id, tagLabel, checked)
-            }
-        }
-        Kit.KetMenuSeparator {}
-        Kit.KetMenuItem {
-            objectName: "conversationManageTagsItem"
-            text: "Manage tags…"
-            iconName: "settings"
-            onTriggered: manageTagsDialog.open()
-        }
-    }
-
-    ManageTagsDialog {
-        id: manageTagsDialog
-        objectName: "manageTagsDialog"
-        parent: Basic.Overlay.overlay
-        tags: agentHost.tagCatalog
-        onSaved: (tags, renames) => agentHost.requestTagCatalogSave(tags, renames)
     }
 
     Kit.KetMenu {

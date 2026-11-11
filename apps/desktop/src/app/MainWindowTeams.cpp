@@ -97,12 +97,13 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
             const QString role = member.value(QStringLiteral("role")).toString();
             row.insert(QStringLiteral("teamId"), folder.id);
             row.insert(QStringLiteral("teamRole"), role);
-            // The role is the first tag, set by the team (#467).
-            QVariantList tags{QVariantMap{{QStringLiteral("label"), team_roles::label(role)},
-                                          {QStringLiteral("color"), team_roles::color(role).name()},
-                                          {QStringLiteral("locked"), true}}};
-            tags += row.value(QStringLiteral("tags")).toList();
-            row.insert(QStringLiteral("tags"), tags);
+            // The role is the row's only tag, locked: the team sets it (#467). Conversations
+            // carry no user tags in the UI (ADR 0117).
+            row.insert(
+                QStringLiteral("tags"),
+                QVariantList{QVariantMap{{QStringLiteral("label"), team_roles::label(role)},
+                                         {QStringLiteral("color"), team_roles::color(role).name()},
+                                         {QStringLiteral("locked"), true}}});
             // #125: the leader waits for the user while a decision is open.
             if (role == QStringLiteral("leader") && folder.openDecisions > 0 &&
                 !row.value(QStringLiteral("running")).toBool())

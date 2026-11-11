@@ -267,34 +267,6 @@ Rectangle {
             }
         }
 
-        // An active tag filter.
-        Rectangle {
-            visible: sidebar.window.tagFilter !== ""
-            Layout.fillWidth: true
-            Layout.leftMargin: sidebar.inset
-            Layout.rightMargin: sidebar.inset
-            Layout.bottomMargin: sidebar.px(6)
-            Layout.preferredHeight: sidebar.px(32)
-            radius: sidebar.px(6)
-            color: KetTheme.t.accentSubtle
-            border.color: KetTheme.t.accentBorder
-            Row {
-                x: sidebar.px(10)
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: sidebar.px(6)
-                KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "filter"; box: sidebar.px(12); color: KetTheme.t.accentText }
-                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12); font.weight: Font.Medium }
-            }
-            KetIconButton {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                controlSize: KetTheme.ControlSize.Small
-                iconName: "close"
-                text: "Clear filter"
-                onClicked: sidebar.window.tagFilter = ""
-            }
-        }
-
         // Repositories and conversations.
         Basic.ScrollView {
             Layout.fillWidth: true
@@ -382,8 +354,6 @@ Rectangle {
 
                         Repeater {
                             model: !repo.open ? []
-                                   : sidebar.window.tagFilter !== ""
-                                     ? repo.loose.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
                                    : repo.all ? repo.loose
                                    : repo.loose.slice(0, repo.limit)
 
@@ -395,7 +365,6 @@ Rectangle {
                                 width: repo.width - 2 * sidebar.inset
                                 text: modelData.title
                                 number: modelData.number
-                                tags: modelData.tags
                                 status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
@@ -437,8 +406,7 @@ Rectangle {
                         }
 
                         Basic.AbstractButton {
-                            visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
-                                     && repo.loose.length > repo.limit
+                            visible: repo.open && !repo.all && repo.loose.length > repo.limit
                             x: sidebar.px(28)
                             height: sidebar.px(28)
                             hoverEnabled: true

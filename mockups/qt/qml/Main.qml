@@ -61,7 +61,6 @@ Basic.ApplicationWindow {
     // Paired devices have done something on this Mac (connections); none yet in
     // connections/no-activity.
     property bool remoteActivity: true
-    property string tagFilter
     // Teams (concept): folders in the sidebar; a team's name opens its page (teams).
     readonly property var teamList: teams.teams
     readonly property string currentTeam: teams.team ? teams.team.id : ""
@@ -131,7 +130,7 @@ Basic.ApplicationWindow {
             number = String(6101 + 7 * startedCount++)
         } while (findConversation(number))
         const conversation = Object.assign({}, blank || {}, {
-            number: number, title: title, tags: [], transcript: "welcome",
+            number: number, title: title, transcript: "welcome",
             status: KetTheme.ConversationStatus.NotStarted,
             provider: agent.label, providerId: agent.id, model: agent.model, effort: agent.effort })
         const next = Object.assign({}, started)

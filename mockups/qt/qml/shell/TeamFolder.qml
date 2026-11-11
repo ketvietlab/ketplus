@@ -7,7 +7,7 @@ import KetPlusMock
 // A team in the sidebar (concept): a folder inside its repository, beside the conversations
 // that belong to no team. Its icon folds the folder; its name opens the team's page; the count
 // is the decisions that wait for the user. Inside, the members' conversations: leader,
-// developers, reviewers, each with its role as its first tag.
+// developers, reviewers, each with its role as its only tag.
 // It draws ket::groupHeaderRecipe as KetGroupHeader does. The kit has no header whose name
 // activates instead of folding, and Két Symbol has no team icon yet: both come first in ket-qt
 // when the app builds this.
@@ -29,10 +29,9 @@ Column {
     readonly property var recipe: KetTheme.groupHeaderRecipe(
         KetTheme.dark, KetTheme.zoom, selected, hot, name.down, true, name.visualFocus)
     readonly property real indent: KetTheme.px(12, KetTheme.zoom)
-    // Leader, developers, then reviewers. A tag filter keeps the members that carry the tag.
+    // Leader, developers, then reviewers.
     readonly property var shown: ["leader", "developer", "reviewer"]
         .reduce((list, role) => list.concat(team.members.filter(m => m.role === role)), [])
-        .filter(m => window.tagFilter === "" || folder.conversation(m.number).tags.some(t => t.label === window.tagFilter))
     readonly property var roleTags: ({ leader: Fixtures.roleTag("leader"), developer: Fixtures.roleTag("developer"),
                                        reviewer: Fixtures.roleTag("reviewer") })
 
@@ -47,12 +46,9 @@ Column {
         const found = conversations.find(c => c.number === number)
         if (found)
             return found
-        return { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
+        return { number: number, title: who ? who.title : "", worktree: team.branch,
                  status: KetTheme.ConversationStatus.NotStarted }
     }
-
-    // A new team has nobody yet and still shows; a tag filter hides a folder with no match.
-    visible: window.tagFilter === "" || shown.length > 0
 
     Item {
         width: folder.width
@@ -191,7 +187,7 @@ Column {
             width: folder.width - folder.indent
             text: item.title
             number: item.number
-            tags: [folder.roleTags[modelData.role]].concat(item.tags)
+            tags: [folder.roleTags[modelData.role]]
             status: folder.window.planStatus ? folder.window.planStatus(item.number, item.status) : item.status
             checked: folder.window.screen === "workspace"
                      && folder.window.conversation.number === item.number
