@@ -14,16 +14,41 @@ Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_test
 (`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
 test's own environment and the shell's, so a test run never opens windows on the screen. A
 test binary run directly needs it exported. This override does not cover Lite tests in
-`core/`. The Qt build and Release
-characterization run on macOS only; Ubuntu builds are paused to cut CI cost and
-must be restored before a Linux release. The browser regression and design
-evidence checks still run on Ubuntu. Private Windows CI remains deferred until
-the required Qt 6.11 WebView development packages are available from Qt's
-public repository. Pull requests into `integration` and branch pushes run no
-CI; run the targets for the area you changed before pushing and list them in the
-pull request. CI runs on promotion pull requests into `develop`, on pull
-requests into `main` and on pushes to `main`; a newer commit cancels the
-obsolete run. See `docs/release-process.md`.
+`core/`. The Pro desktop build and Release
+characterization run on macOS only; Pro desktop builds on Ubuntu are paused to
+cut CI cost and must be restored before a Linux release. The headless daemon,
+browser regression and design evidence checks still run on Ubuntu. Pro Windows
+CI remains deferred until the required Qt 6.11 WebView development packages are
+available from Qt's public repository. Pull requests into `integration` and
+branch pushes run no CI; run the targets for the area you changed before pushing
+and list them in the pull request. CI runs on promotion pull requests into
+`develop`, on pull requests into `main` and on pushes to `main`; a newer commit
+cancels the obsolete run. See `docs/release-process.md`.
+
+### CI operating-system matrix
+
+`build.yml` calls `os-suite.yml` once per edition and OS. Its `build` job
+compiles the suite once, on the oldest runner of the set so the binaries load
+on the newer ones, and uploads the build tree (without object files or static
+libraries) as a three-day artifact. A `test` job per runner version
+(`fail-fast: false`) restores the same Qt and Node, unpacks the tree and runs
+`ctest` with `QT_QPA_PLATFORM=offscreen`:
+
+| Job | Built on | Tested on |
+| --- | --- | --- |
+| `lite-linux` | `ubuntu-22.04` | `ubuntu-22.04`, `ubuntu-24.04` |
+| `lite-macos` | `macos-14` | `macos-14`, `macos-15` |
+| `lite-windows` | `windows-2022` | `windows-2022`, `windows-2025` |
+| `pro-macos` | `macos-14` | `macos-14`, `macos-15` (serial CTest) |
+
+The FetchContent cache (`.cache/fetchcontent`) is keyed on the suite, OS,
+architecture, compiler version, Qt version and the hash of `CMakeLists.txt`,
+every `*.cmake` file and the Claude sidecar `package-lock.json`; compiler
+objects go through sccache. CTest files hold absolute paths, so the build job
+records the checkout, Qt and Node paths in `build/ci-paths.txt` and each test
+job fails with a named mismatch, instead of running stale or missing binaries,
+when a runner image puts any of them elsewhere. Node is pinned to an exact
+version for the same reason. No job in the matrix uses provider quota.
 
 ## Target map
 

@@ -1,0 +1,222 @@
+name: os-suite
+
+# One edition's test suite on several versions of one operating system. The
+# build job compiles the test targets once, on the oldest runner of the set so
+# its binaries load on the newer ones, and hands the build tree to a test job
+# per runner version. Called from build.yml only.
+on:
+  workflow_call:
+    inputs:
+      suite:
+        description: "lite or pro; names the build tree and the artifact"
+        required: true
+        type: string
+      build-runner:
+        description: "Runner that builds the tree: the oldest of test-runners"
+        required: true
+        type: string
+      test-runners:
+        description: "JSON list of runners of the same OS and architecture"
+        required: true
+        type: string
+      qt-version:
+        required: true
+        type: string
+      qt-modules:
+        required: true
+        type: string
+      configure-args:
+        required: true
+        type: string
+      ctest-args:
+        required: false
+        type: string
+        default: ""
+      node:
+        description: "Stage the Claude sidecar and run its Node tests"
+        required: false
+        type: boolean
+        default: false
+      build-timeout:
+        required: false
+        type: number
+        default: 60
+      test-timeout:
+        required: false
+        type: number
+        default: 45
+
+permissions:
+  contents: read
+
+env:
+  # Exact, so every runner of the set resolves the same toolcache path that the
+  # build tree records for the sidecar tests.
+  NODE_VERSION: "24.11.1"
+
+jobs:
+  build:
+    runs-on: ${{ inputs.build-runner }}
+    timeout-minutes: ${{ inputs.build-timeout }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Restore Qt SDK
+        id: qt
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4
+        with:
+          version: ${{ inputs.qt-version }}
+          modules: ${{ inputs.qt-modules }}
+          cache: true
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        if: runner.os == 'Windows'
+
+      - uses: seanmiddleditch/gha-setup-ninja@96bed6edff20d1dd61ecff9b75cc519d516e6401 # v5
+
+      # The Pro build stages the Claude sidecar with `npm ci`.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: inputs.node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/daemon/providers/claude-sidecar/package-lock.json
+
+      - name: Identify the compiler
+        id: compiler
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            id="msvc-${VCToolsVersion}"
+          else
+            id="$(c++ --version | head -n 1)"
+          fi
+          echo "id=$(printf '%s' "$id" | tr -c 'A-Za-z0-9._-' '_')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore source dependencies
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .cache/fetchcontent
+          key: fetchcontent-${{ inputs.suite }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiler.outputs.id }}-qt-${{ inputs.qt-version }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake', 'apps/daemon/providers/claude-sidecar/package-lock.json') }}
+          restore-keys: |
+            fetchcontent-${{ inputs.suite }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiler.outputs.id }}-qt-${{ inputs.qt-version }}-
+
+      - name: Restore compiler objects
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+
+      # Pin the Node that CTest runs the sidecar tests with to setup-node's
+      # toolcache copy, which the test runners install at the same path.
+      - name: Locate Node
+        id: node
+        if: inputs.node
+        shell: bash
+        run: |
+          node_path="$(command -v node)"
+          echo "args=-DKETPLUS_NODE_EXECUTABLE=$node_path -DKETPLUS_SIDECAR_TEST_NODE=$node_path" >> "$GITHUB_OUTPUT"
+
+      # The runner's default shell: Git Bash's coreutils `link` would shadow
+      # MSVC's linker on Windows.
+      - name: Configure
+        run: cmake -S . -B build -G Ninja ${{ inputs.configure-args }} ${{ steps.node.outputs.args }}
+
+      - name: Build
+        run: cmake --build build
+
+      # The test runners check this before running anything: CTest files hold
+      # absolute paths to the checkout, Qt and Node.
+      - name: Record the paths the build tree depends on
+        shell: bash
+        env:
+          QT_PATH: ${{ env.QT_ROOT_DIR }}
+        run: |
+          {
+            echo "workspace=$GITHUB_WORKSPACE"
+            echo "qt=$QT_PATH"
+            if [ "${{ inputs.node }}" = true ]; then echo "node=$(command -v node)"; fi
+          } > build/ci-paths.txt
+          cat build/ci-paths.txt
+
+      # Object files and static/import libraries are only needed to link.
+      - name: Pack the build tree
+        shell: bash
+        run: >-
+          tar -cf build-tree.tar
+          --exclude='*.o' --exclude='*.obj' --exclude='*.a' --exclude='*.lib'
+          build
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-${{ inputs.suite }}-${{ runner.os }}
+          path: build-tree.tar
+          retention-days: 3
+
+  test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.test-runners) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ inputs.test-timeout }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Restore Qt SDK
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4
+        with:
+          version: ${{ inputs.qt-version }}
+          modules: ${{ inputs.qt-modules }}
+          cache: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: inputs.node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ inputs.suite }}-${{ runner.os }}
+
+      - name: Unpack the build tree
+        shell: bash
+        run: tar -xf build-tree.tar && rm build-tree.tar
+
+      - name: Check the build tree fits this runner
+        shell: bash
+        env:
+          QT_PATH: ${{ env.QT_ROOT_DIR }}
+        run: |
+          status=0
+          while IFS='=' read -r name recorded; do
+            case "$name" in
+              workspace) current="$GITHUB_WORKSPACE" ;;
+              qt) current="$QT_PATH" ;;
+              node) current="$(command -v node)" ;;
+              *) continue ;;
+            esac
+            if [ "$recorded" != "$current" ]; then
+              echo "::error::$name was $recorded on ${{ inputs.build-runner }} but is $current here; the build tree cannot run on this runner"
+              status=1
+            fi
+          done < build/ci-paths.txt
+          exit "$status"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure ${{ inputs.ctest-args }}
+
+      - name: Diagnose Windows test failures
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem build/ketplus_*_tests.txt -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "== $($_.Name) =="
+            Get-Content $_
+          }
