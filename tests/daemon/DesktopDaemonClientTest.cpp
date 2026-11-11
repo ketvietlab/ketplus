@@ -1399,6 +1399,7 @@ class DesktopDaemonClientTest final : public QObject {
                     .toBool());
         // The Report tab follows the conversation live.
         QSignalSpy reports(&desktop, &AgentSessionManager::workReportChanged);
+        QSignalSpy turnReports(&desktop, &AgentSessionManager::turnWorkReportChanged);
         const QString conversation = desktop.activeConversationId(worktree);
         const QJsonObject reported =
             agentRoundTrip(agent, "agents.work_report",
@@ -1440,6 +1441,11 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!reports.isEmpty());
         QCOMPARE(reports.first().at(1).toString(), conversation);
         QCOMPARE(reports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Live"));
+        // The turn waiting on the question is still running, so its transcript shows the card.
+        QTRY_COMPARE(turnReports.size(), 1);
+        QCOMPARE(turnReports.first().at(1).toString(), conversation);
+        QCOMPARE(turnReports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
                  QStringLiteral("Live"));
 
         // Opening the tab reads the stored ledger.

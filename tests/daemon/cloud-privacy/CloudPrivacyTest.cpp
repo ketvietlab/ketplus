@@ -1471,6 +1471,99 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(QJsonDocument(local.events).toJson().contains(marker.toUtf8()));
     }
 
+    // #404 / ADR 0106: a work report reaches the relay as transcript content, redacted field by
+    // field, both when it is uploaded live and when a remote client replays the restore window
+    // after it reconnects. The journal is written directly, as an older daemon that stored the
+    // text unredacted would have, so only the cloud projection stands between it and the relay.
+    void workReportReachesTheRelayRedactedAndReplays() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("work-report.sqlite"));
+        const QJsonObject report{
+            {"title", "Release"},
+            {"turn", 1},
+            {"version", 1},
+            {"items",
+             QJsonArray{QJsonObject{
+                 {"key", "sign"},
+                 {"group", "Release"},
+                 {"title", "Sign the package"},
+                 {"status", "blocked"},
+                 {"evidence", "curl token=" + marker + "_EVIDENCE"},
+                 {"remaining", "Run with --api-key " + marker + "_REMAINING"},
+                 {"next", QJsonObject{{"action", "Send Authorization: Bearer " + marker + "_NEXT"},
+                                      {"owner", "user"}}},
+                 {"created_turn", 1},
+                 {"updated_turn", 1}}}}};
+        QString journalError;
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "work_report.updated", report,
+                                       &journalError) > 0,
+                 qPrintable(journalError));
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "turn.completed",
+                                       {{"status", "completed"}, {"work_report", report}},
+                                       &journalError) > 0,
+                 qPrintable(journalError));
+        const auto checkReport = [](const QJsonObject& projected) {
+            QCOMPARE(projected.value("title").toString(), QStringLiteral("Release"));
+            const QJsonArray items = projected.value("items").toArray();
+            QCOMPARE(items.size(), 1);
+            const QJsonObject item = items.first().toObject();
+            QCOMPARE(item.value("key").toString(), QStringLiteral("sign"));
+            QCOMPARE(item.value("status").toString(), QStringLiteral("blocked"));
+            QCOMPARE(item.value("next").toObject().value("owner").toString(),
+                     QStringLiteral("user"));
+            QVERIFY(item.value("evidence").toString().startsWith("curl"));
+            QVERIFY(item.value("next").toObject().value("action").toString().startsWith("Send"));
+        };
+
+        // Live: the uploaded envelopes decrypt to the report without the secrets.
+        c.start();
+        Access::upload(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        const auto outgoing = c.outgoing();
+        QCOMPARE(outgoing.size(), 2);
+        for (int i = 0; i < outgoing.size(); ++i) {
+            const auto envelope = outgoing.at(i).toObject();
+            QString error;
+            const auto bytes = decrypt(c, envelope, &error);
+            QVERIFY2(!bytes.isEmpty(), qPrintable(error));
+            QVERIFY2(!bytes.contains(marker.toUtf8()), bytes.constData());
+            const auto payload = QJsonDocument::fromJson(bytes).object();
+            if (i == 0) {
+                QCOMPARE(envelope.value("eventType").toString(),
+                         QStringLiteral("work_report.updated"));
+                checkReport(payload);
+            } else {
+                QCOMPARE(envelope.value("eventType").toString(), QStringLiteral("turn.completed"));
+                checkReport(payload.value("work_report").toObject());
+            }
+        }
+
+        // Reconnect: the restore window replays the same report, projected the same way.
+        QByteArray bytes;
+        const QJsonObject page = restorePage(c, "restore-work-report-0001", &bytes);
+        QVERIFY(page.value("ok").toBool());
+        QVERIFY2(!bytes.contains(marker.toUtf8()), bytes.constData());
+        bool sawReport = false;
+        bool sawTurnEnd = false;
+        for (const QJsonValue& value : page.value("events").toArray()) {
+            const QJsonObject event = value.toObject();
+            const QJsonObject payload = event.value("payload").toObject();
+            if (event.value("event_type") == "work_report.updated") {
+                sawReport = true;
+                checkReport(payload);
+            }
+            if (event.value("event_type") == "turn.completed") {
+                sawTurnEnd = true;
+                checkReport(payload.value("work_report").toObject());
+            }
+        }
+        QVERIFY(sawReport);
+        QVERIFY(sawTurnEnd);
+        // The desktop's own window keeps what the journal holds.
+        const auto local = c.journal.transcriptWindow("session-synthetic", 1);
+        QVERIFY(QJsonDocument(local.events).toJson().contains(marker.toUtf8()));
+    }
+
     void largeMcpItemRestoresInlineProjectedWithoutRawChunks() {
         QTemporaryDir dir;
         Context c(dir.filePath("restore-large-mcp.sqlite"));

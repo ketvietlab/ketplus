@@ -125,7 +125,9 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             found->turnReport = data;
         emit notificationReceived(
             QStringLiteral("daemon/workReport"),
-            {{QStringLiteral("threadId"), sessionId}, {QStringLiteral("report"), data}});
+            {{QStringLiteral("threadId"), sessionId},
+             {QStringLiteral("report"), data},
+             {QStringLiteral("currentTurn"), sequence == found->turnSequence}});
         return;
     }
     if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)

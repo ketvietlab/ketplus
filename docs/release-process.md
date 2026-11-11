@@ -8,7 +8,8 @@ Three long-lived branches carry every change (ADR 0030):
 feature/fix -> test what you changed -> pull request into integration -> merge
                                                                           |
                                          pull request integration -> develop
-                                         (promotion provenance + full build)
+                                         (promotion provenance + full build,
+                                          tests on several OS versions)
                                                                           |
                                              release: main fast-forwards to develop
 ```
@@ -35,7 +36,8 @@ check refuses it.
 
 Branch protection: `integration` has no required checks but allows no
 force-push or deletion; `develop` requires `promotion provenance` and the
-`build` jobs, including for administrators; `main` keeps its release rules.
+`build` workflow's jobs (including every `os-suite` build and test entry listed
+in `docs/testing.md`), including for administrators; `main` keeps its release rules.
 The `develop` rule is the intended configuration and must be set by a repository
 owner; until then (not configured as of 2026-11-09) a failing promotion check
 does not block the merge.

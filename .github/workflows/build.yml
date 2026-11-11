@@ -97,97 +97,53 @@ jobs:
       - name: Claude browser integration without provider calls
         run: node --test apps/daemon/providers/claude-sidecar/test/browser.test.mjs apps/daemon/providers/claude-sidecar/test/transcript.test.mjs apps/daemon/providers/claude-sidecar/test/input.test.mjs
 
-  lite:
-    # KétPlus, the editor alone, on every platform it ships on.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Restore Qt SDK
-        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4
-        with:
-          version: "6.10.*"
-          modules: qt5compat
-          cache: true
-      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
-        if: runner.os == 'Windows'
-      - uses: seanmiddleditch/gha-setup-ninja@96bed6edff20d1dd61ecff9b75cc519d516e6401 # v5
-      - name: Restore source dependencies
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: .cache/fetchcontent
-          key: fetchcontent-${{ runner.os }}-qt-6.10-${{ hashFiles('core/cmake/Dependencies.cmake') }}
-      - name: Restore compiler objects
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-      - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
-      - name: Build
-        run: cmake --build build
-      - name: Test
-        run: ctest --test-dir build --output-on-failure --verbose
-      - name: Diagnose Windows test failures
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-ChildItem build/ketplus_*_tests.txt | ForEach-Object {
-            Write-Host "== $($_.Name) =="
-            Get-Content $_
-          }
+  # Each edition's suite builds once per OS on the oldest runner version, then
+  # runs on every listed version of that OS (os-suite.yml). Full Linux Desktop
+  # and Windows Pro builds remain deferred; the daemon has its own Linux lane.
+  lite-linux:
+    uses: ./.github/workflows/os-suite.yml
+    with:
+      suite: lite
+      build-runner: ubuntu-22.04
+      test-runners: '["ubuntu-22.04", "ubuntu-24.04"]'
+      qt-version: "6.10.*"
+      qt-modules: qt5compat
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
+      ctest-args: --verbose
 
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Full Linux Desktop and Windows builds remain deferred; daemon has its own Linux lane.
-        os: [macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
-    env:
-      SCCACHE_GHA_ENABLED: "true"
+  lite-macos:
+    uses: ./.github/workflows/os-suite.yml
+    with:
+      suite: lite
+      build-runner: macos-15
+      test-runners: '["macos-15", "macos-26"]'
+      qt-version: "6.10.*"
+      qt-modules: qt5compat
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
+      ctest-args: --verbose
 
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
+  lite-windows:
+    uses: ./.github/workflows/os-suite.yml
+    with:
+      suite: lite
+      build-runner: windows-2022
+      test-runners: '["windows-2022", "windows-2025"]'
+      qt-version: "6.10.*"
+      qt-modules: qt5compat
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
+      ctest-args: --verbose
 
-      - name: Restore Qt SDK
-        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4
-        with:
-          version: "6.11.1"
-          modules: qt5compat qtwebsockets qtwebview
-          cache: true
-
-      - uses: seanmiddleditch/gha-setup-ninja@96bed6edff20d1dd61ecff9b75cc519d516e6401 # v5
-
-      # Every build stages the Claude sidecar with `npm ci`.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "24"
-
-      - name: Restore source dependencies
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: .cache/fetchcontent
-          key: fetchcontent-${{ runner.os }}-qt-6.11-${{ hashFiles('core/cmake/Dependencies.cmake') }}
-
-      - name: Restore compiler objects
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-
-      - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
-
-      - name: Build
-        run: cmake --build build
-
-      # One test at a time: the desktop/daemon integration tests time out when they share the
-      # runner's three cores. The suite takes about 30 minutes, hence the job's 75.
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+  pro-macos:
+    uses: ./.github/workflows/os-suite.yml
+    with:
+      suite: pro
+      build-runner: macos-15
+      test-runners: '["macos-15", "macos-26"]'
+      qt-version: "6.11.1"
+      qt-modules: qt5compat qtwebsockets qtwebview
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
+      node: true
+      build-timeout: 60
+      # One test at a time: the desktop/daemon integration tests time out when
+      # they share the runner's three cores. The suite takes about 30 minutes.
+      test-timeout: 60

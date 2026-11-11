@@ -194,6 +194,10 @@ class AgentSessionManager final : public QObject {
     // be read.
     void workReportChanged(const QString& worktreePath, const QString& conversationId,
                            const QVariantMap& report, const QString& error);
+    // The same report when it belongs to the running turn: the transcript shows it while
+    // the turn runs (mock workspace/report-running).
+    void turnWorkReportChanged(const QString& worktreePath, const QString& conversationId,
+                               const QVariantMap& report);
     void backgroundTaskResult(const QString& worktreePath, const QString& taskId,
                               const QString& action, const QVariantMap& result);
     void activityChanged();

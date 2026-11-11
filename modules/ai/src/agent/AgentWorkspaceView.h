@@ -56,6 +56,8 @@ class AgentWorkspaceView final : public QWidget {
     // The running line: "Working · <latest reasoning heading>" while one is known (#385).
     Q_PROPERTY(QString runStatus READ runStatus NOTIFY sessionChanged)
     Q_PROPERTY(bool sessionRunning READ sessionRunning NOTIFY sessionChanged)
+    // ADR 0106: the running turn's latest work report; empty until the turn reports.
+    Q_PROPERTY(QVariantMap turnWorkReport READ turnWorkReport NOTIFY turnWorkReportChanged)
     Q_PROPERTY(int atlasRunningCount READ atlasRunningCount NOTIFY atlasRunningCountChanged)
     Q_PROPERTY(bool agentAvailable READ agentAvailable NOTIFY agentAvailableChanged)
     Q_PROPERTY(bool restoring READ restoring NOTIFY restoringChanged)
@@ -441,6 +443,14 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void requestTerminal();
     // ADR 0106: opens the details pane's Report tab for the active conversation.
     Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
+    [[nodiscard]] QVariantMap turnWorkReport() const { return turnWorkReport_; }
+    // Set while the active conversation's turn runs; a new turn or conversation clears it.
+    void setTurnWorkReport(const QVariantMap& report) {
+        if (report == turnWorkReport_)
+            return;
+        turnWorkReport_ = report;
+        emit turnWorkReportChanged();
+    }
     // The header's Changes: the details pane's Changes tab for the active worktree.
     Q_INVOKABLE void requestChanges() { emit changesRequested(); }
     // A section such as "storage" opens on it; none opens Settings where it was.
@@ -643,6 +653,7 @@ class AgentWorkspaceView final : public QWidget {
     void fileDiffRequested(const QString& relativePath);
     void terminalRequested();
     void workReportRequested();
+    void turnWorkReportChanged();
     void changesRequested();
     void settingsRequested(const QString& section);
     void providerRecheckRequested();
@@ -787,6 +798,7 @@ class AgentWorkspaceView final : public QWidget {
     QString sessionStatus_{QStringLiteral("Ready")};
     QString workingDetail_;
     bool sessionRunning_{false};
+    QVariantMap turnWorkReport_;
     int atlasRunningCount_{0};
     bool findActionsProvided_{false};
     bool agentAvailable_{true};

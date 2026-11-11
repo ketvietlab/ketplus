@@ -19,7 +19,7 @@ Rectangle {
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
-    color: KetTheme.t.pageBg
+    color: KetTheme.t.panelBg
 
     Basic.ScrollView {
         id: scroll

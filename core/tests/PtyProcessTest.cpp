@@ -28,6 +28,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVBoxLayout>
+#include <utility>
 
 #include <cmath>
 #include <cstdio>
@@ -55,6 +56,20 @@ class PaintCounter final : public QObject {
         return QObject::eventFilter(watched, event);
     }
 };
+
+// A slow runner can deliver the first exposure paints long after show(), so a fixed wait does
+// not say the view is idle. Wait for the first paint, then until 100 ms pass without another.
+bool waitUntilPaintsSettle(const PaintCounter& paints) {
+    if (!QTest::qWaitFor([&] { return paints.count > 0; }, 5000))
+        return false;
+    for (int round = 0; round < 50; ++round) {
+        const int before = paints.count;
+        QTest::qWait(100);
+        if (paints.count == before)
+            return true;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -436,15 +451,14 @@ void PtyProcessTest::coalescesStreamingPaints() {
     terminal.show();
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
-    QTest::qWait(20);
+    QVERIFY(waitUntilPaintsSettle(paints));
     paints.count = 0;
 
     for (int chunk = 0; chunk < 120; ++chunk) {
         session.feedOutput(QByteArray("x"));
     }
-    QTest::qWait(80);
-
-    QVERIFY(paints.count > 0);
+    // The output paints, late on a slow runner; once it settles, the chunks shared few paints.
+    QVERIFY(waitUntilPaintsSettle(paints));
     QVERIFY2(paints.count <= 8,
              qPrintable(QStringLiteral("120 output chunks caused %1 paints").arg(paints.count)));
 }
@@ -491,7 +505,7 @@ void PtyProcessTest::honorsSynchronizedOutputTransactions() {
     terminal.show();
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
-    QTest::qWait(80);
+    QVERIFY(waitUntilPaintsSettle(paints));
     paints.count = 0;
 
     session.feedOutput(QByteArray("\x1b[?2026hplaceholder"));
@@ -499,7 +513,7 @@ void PtyProcessTest::honorsSynchronizedOutputTransactions() {
     QCOMPARE(paints.count, 0);
 
     session.feedOutput(QByteArray("\r\x1b[2Ktyped\x1b[?2026l"));
-    QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 100);
+    QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 5000);
     QVERIFY(terminal.visibleText().contains(QStringLiteral("typed")));
     QVERIFY(!terminal.visibleText().contains(QStringLiteral("placeholder")));
 }
@@ -646,17 +660,29 @@ int main(int argc, char** argv) {
 #endif
 #if defined(Q_OS_UNIX)
     // The shells start as login shells. A runner's own startup files can print, pause or read
-    // the keyboard (zsh's new-user menu does), so the shell gets a home of empty ones.
+    // the keyboard (zsh's new-user menu does), so the shell gets a home of its own ones. They
+    // only set a short prompt: the default one holds the host name, and a runner's is long
+    // enough that a typed command wraps at 80 columns and no longer reads as one line.
     QTemporaryDir home;
     if (!home.isValid())
         return 1;
-    for (const char* name :
-         {".zshenv", ".zprofile", ".zshrc", ".zlogin", ".bash_profile", ".bashrc", ".profile"}) {
+    const QByteArray bashPrompt = "PS1='$ '\n";
+    const QByteArray zshPrompt = "PROMPT='$ '\nRPROMPT=''\n";
+    const std::pair<const char*, QByteArray> startupFiles[] = {{".zshenv", {}},
+                                                               {".zprofile", {}},
+                                                               {".zshrc", zshPrompt},
+                                                               {".zlogin", {}},
+                                                               {".bash_profile", bashPrompt},
+                                                               {".bashrc", bashPrompt},
+                                                               {".profile", bashPrompt}};
+    for (const auto& [name, contents] : startupFiles) {
         QFile file(home.filePath(QString::fromLatin1(name)));
-        if (!file.open(QIODevice::WriteOnly))
+        if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size())
             return 1;
     }
     qputenv("HOME", home.path().toLocal8Bit());
+    // macOS bash prints a "default shell is now zsh" notice first.
+    qputenv("BASH_SILENCE_DEPRECATION_WARNING", "1");
     for (const char* variable : {"ZDOTDIR", "BASH_ENV", "ENV"})
         qunsetenv(variable);
 #endif

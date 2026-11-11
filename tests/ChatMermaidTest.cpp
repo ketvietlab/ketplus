@@ -551,7 +551,9 @@ class ChatMermaidTest final : public QObject {
               "frames, "
               "reader drift %.2f px",
               qPrintable(reading), baseline, duringSwitch, p99, qint64(frames.size()), drift);
-        QVERIFY2(duringSwitch < 150, "switching to Mermaid stalled the GUI thread");
+        // Slow runners already show long gaps while streaming; judge the switch against them.
+        QVERIFY2(duringSwitch < qMax<qint64>(150, 3 * baseline),
+                 "switching to Mermaid stalled the GUI thread");
         if (following)
             QTRY_VERIFY(transcript->property("atYEnd").toBool());
         else

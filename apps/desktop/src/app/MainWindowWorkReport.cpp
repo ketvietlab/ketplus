@@ -42,11 +42,22 @@ void MainWindow::connectAgentWorkReport() {
                 if (auto* pane = workReportPane(agentDetailTabs_))
                     pane->acceptReport(conversationId, report, error);
             });
+    // The running turn's report closes the live transcript, as the mock's running card.
+    connect(agentManager_, &AgentSessionManager::turnWorkReportChanged, this,
+            [this](const QString& path, const QString& conversationId, const QVariantMap& report) {
+                if (path == agentWorkspace_->activePath() &&
+                    conversationId == agentManager_->activeConversationId(path))
+                    agentWorkspace_->setTurnWorkReport(report);
+            });
     // Selecting another conversation or worktree moves the open tab to it.
-    connect(agentManager_, &AgentSessionManager::messagesReset, this,
-            [this] { refreshAgentWorkReport(false); });
-    connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
-            [this] { refreshAgentWorkReport(false); });
+    connect(agentManager_, &AgentSessionManager::messagesReset, this, [this] {
+        agentWorkspace_->setTurnWorkReport({});
+        refreshAgentWorkReport(false);
+    });
+    connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this, [this] {
+        agentWorkspace_->setTurnWorkReport({});
+        refreshAgentWorkReport(false);
+    });
 }
 
 void MainWindow::openAgentWorkReportTab() {
