@@ -232,14 +232,16 @@ as `ketplus_browser`:
 
 ### User references
 
-- `@` remains file mentions. Typing `#` in the composer offers conversations by
-  number and title; choosing one inserts `#4821`.
-- On submit and steering, `#NNNN` tokens that name a live conversation on this
+- `@` remains file mentions, except `@agent/`. Typing `#` or `@agent/` in the
+  composer offers conversations by number and title; choosing one inserts
+  `#4821` or `@agent/4821`, as the user started it.
+- On submit and steering, `#NNNN` and `@agent/NNNN` tokens that name a live conversation on this
   host are listed for the agent in a preamble with number, title, provider and
   state, in the same way as referenced paths. Unresolved tokens stay plain text.
 - A reference never sends a message by itself; the agent calls `agents_send`
   when the user asks it to. `#1234` can also be an issue or pull-request number,
   so the preamble says references are for contacting conversations on request.
+  `agents_send` and the team tools accept a number in any of these forms.
 - Delivered agent messages appear as an outlined bubble labelled
   "From @agent/1093 · title · provider", as the Qt mock draws it (earlier
   builds wrote "Message from …" or "Reply from …").

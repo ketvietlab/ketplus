@@ -328,7 +328,9 @@ class AgentWorkspaceView final : public QWidget {
     // a listing lands, so a binding that reads it asks again.
     Q_INVOKABLE QVariantList fileMentionSuggestions(const QString& query);
     // ADR 0027: `#` completes conversation numbers from the directory below.
-    Q_INVOKABLE QVariantList conversationMentionSuggestions(const QString& query) const;
+    // `prefix` is how the user started the mention, "#" or "@agent/"; suggestions insert it.
+    Q_INVOKABLE QVariantList conversationMentionSuggestions(
+        const QString& query, const QString& prefix = QStringLiteral("#")) const;
     Q_INVOKABLE void refreshFileMentions();
     int fileMentionRevision() const { return fileMentionRevision_; }
     Q_INVOKABLE void chooseAttachments();

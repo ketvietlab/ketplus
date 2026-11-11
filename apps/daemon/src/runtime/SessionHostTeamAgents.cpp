@@ -155,9 +155,7 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         return answer(result, created);
     }
     const auto memberByNumber = [&](const QString& number) -> QString {
-        QString wanted = number.trimmed();
-        if (wanted.startsWith(QLatin1Char('#')))
-            wanted.remove(0, 1);
+        const QString wanted = agent_messaging::bareNumber(number);
         for (const teams::Member& member : team->members) {
             const auto it = sessions_.constFind(member.sessionId);
             if (it != sessions_.cend() &&

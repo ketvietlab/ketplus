@@ -78,7 +78,8 @@ QVariantList AgentWorkspaceView::fileMentionSuggestions(const QString& query) {
     return suggestions;
 }
 
-QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& query) const {
+QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& query,
+                                                                const QString& prefix) const {
     if (!conversationDirectory_)
         return {};
     const QString needle = query.trimmed();
@@ -99,8 +100,8 @@ QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& q
             detail.append(path.section(QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty));
         suggestions.append(QVariantMap{
             {QStringLiteral("kind"), QStringLiteral("conversation")},
-            {QStringLiteral("name"), QLatin1Char('#') + number},
-            {QStringLiteral("mention"), QLatin1Char('#') + number},
+            {QStringLiteral("name"), prefix + number},
+            {QStringLiteral("mention"), prefix + number},
             {QStringLiteral("description"), title},
             {QStringLiteral("detail"), detail.join(QStringLiteral(" · "))},
         });
