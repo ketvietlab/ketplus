@@ -283,11 +283,12 @@ cluttered (#535). This one draws less:
   user. Finished, stopped and not started have a grey mark and recede. Finished and unread
   is the one emphasis: a dot and a semibold title.
 - **A repository is a label** (`qml/shell/SidebarRepoHeader.qml`): small capitals with letter
-  spacing in the secondary colour, set apart from the rows by its form. Space separates the
+  spacing in the muted colour, set apart from the rows by its form and quieter than them. Space separates the
   repositories; there is no rule, no icon and no summary. Folded, it shows the number of
   conversations and one dot when any waits for the user. `+` shows on hover or focus.
-- **A team is a row that heads its members** (`qml/shell/TeamFolder.qml`): the main colour,
-  medium, its icon in the state column, the whole team one step in.
+- **A team is a row that heads its members** (`qml/shell/TeamFolder.qml`): the secondary
+  colour, medium, its icon muted in the state column, the whole team one step in. The rows
+  are the brightest text in the list; the headings recede.
 - **One left edge per level.** A repository's name and its conversations' titles start
   together; so do a team's name and its members'. `--smoke` checks these edges and that
   every conversation is one line high (`Sidebar.layoutProblems`).

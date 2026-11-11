@@ -69,7 +69,8 @@ Item {
                 width: folded.x - header.px(8) - x
                 text: header.name
                 elide: Text.ElideMiddle
-                color: header.selected ? KetTheme.t.textMain : KetTheme.t.textSecondary
+                // Quieter than the rows it heads: a label, never the brightest text in the list.
+                color: header.selected ? KetTheme.t.textSecondary : KetTheme.t.textMuted
                 font.family: KetTheme.fontFamily
                 font.pixelSize: header.px(11)
                 font.weight: Font.DemiBold

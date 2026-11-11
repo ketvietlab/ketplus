@@ -100,7 +100,7 @@ Column {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "bot"
                     box: folder.recipe.iconSize
-                    color: folder.selected ? KetTheme.t.accentText : folder.recipe.text
+                    color: folder.selected ? KetTheme.t.accentText : KetTheme.t.textMuted
                 }
             }
             background: Rectangle {
@@ -124,9 +124,9 @@ Column {
                 verticalAlignment: Text.AlignVCenter
                 text: name.text
                 elide: Text.ElideRight
-                // A heading one level below the repository's: the main colour, so it does
-                // not read as a row's second line, and medium where the repository is semibold.
-                color: folder.selected ? KetTheme.t.accentText : KetTheme.t.textMain
+                // A heading one level below the repository's: the secondary colour, so the
+                // rows stay the brightest text, and medium where the repository is semibold.
+                color: folder.selected ? KetTheme.t.accentText : KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: folder.px(13)
                 font.weight: Font.Medium
