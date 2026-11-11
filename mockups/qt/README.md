@@ -283,6 +283,9 @@ move into ket-qt as changes to `KetGroupHeader` and `KetConversationRow` (both l
   #4821"), a question, a failure, or tags. A finished conversation that was read has no mark
   and a regular title; unread is a dot and a semibold title. Titles line up under the
   repository's name.
+- `qml/shell/SidebarTag.qml`: on the dark sidebar a tag is tinted at 30% with a hairline of
+  its colour and a lightened label, so the chip's edge is visible and lines up with the
+  titles. `KetTag`'s 13% tint is lost there. It becomes a theme-aware `ket::tagRecipe`.
 - "Show N more" says how many it adds.
 
 The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and

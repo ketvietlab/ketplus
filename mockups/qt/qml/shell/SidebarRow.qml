@@ -133,15 +133,14 @@ Basic.AbstractButton {
             }
             Repeater {
                 model: control.tags.slice(0, control.shownTags)
-                KetTag {
+                SidebarTag {
                     required property var modelData
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.label
                     tagColor: modelData.color
-                    maxWidth: control.recipe.tagMaxWidth
                 }
             }
-            KetTag {
+            SidebarTag {
                 visible: control.tags.length > control.shownTags
                 anchors.verticalCenter: parent.verticalCenter
                 text: "+" + (control.tags.length - control.shownTags)
