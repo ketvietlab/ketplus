@@ -234,6 +234,8 @@ class TeamLaneTest final : public QObject {
         write(QDir(repository).filePath("api/routes.txt"));
         commitAll(repository, "someone else");
         write(QDir(worktree).filePath("web/cart.txt"));
+        // A path git would quote: it is read as it is spelled (#484).
+        write(QDir(worktree).filePath(QString::fromUtf8("web/gi\xe1\xbb\x8f.txt")));
         commitAll(worktree, "mine");
         git(worktree, {"-c", "user.email=t@example.com", "-c", "user.name=T", "merge", "-q",
                        "--no-edit", "main"});
@@ -249,7 +251,18 @@ class TeamLaneTest final : public QObject {
         QVERIFY(changed);
         QStringList paths = *changed;
         paths.sort();
-        QCOMPARE(paths, (QStringList{"web/cart.txt", "web/pending.txt"}));
+        const QString quoted = QString::fromUtf8("web/gi\xe1\xbb\x8f.txt");
+        QCOMPARE(paths, (QStringList{"web/cart.txt", quoted, "web/pending.txt"}));
+        // With an integration branch the diff is from where the branch left it: the same files.
+        team.integrationBranch = "main";
+        const auto against = team_git::changedPaths(team, task);
+        QVERIFY(against);
+        paths = *against;
+        paths.sort();
+        QCOMPARE(paths, (QStringList{"web/cart.txt", quoted, "web/pending.txt"}));
+        const auto diff = team_git::taskDiff(team, task);
+        QVERIFY(diff);
+        QCOMPARE(diff->files, (QStringList{"web/cart.txt", quoted}));
     }
 
     // A text bounded when it was written is the same when the document is read again, and

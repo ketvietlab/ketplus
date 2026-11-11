@@ -41,6 +41,9 @@ namespace rules {
                                                     const Candidate& candidate);
 [[nodiscard]] std::optional<TeamError> canRemoveMember(const Team& team, const QString& sessionId);
 [[nodiscard]] std::optional<TeamError> validName(const QString& name, const QString& what);
+// A branch a team names (its integration branch): empty for none, or a name git accepts
+// (`git check-ref-format --branch`) that cannot be read as an option.
+[[nodiscard]] std::optional<TeamError> validBranch(const QString& branch);
 
 } // namespace rules
 } // namespace ketplus::daemon::teams

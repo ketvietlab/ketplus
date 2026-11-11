@@ -76,6 +76,43 @@ class TeamProtocolTest final : public QObject {
     }
 
   private slots:
+    // A branch name reaches git: one git would read as an option, or would not accept, is
+    // refused, and a team that has an integration branch changes it rather than drops it.
+    void aBranchGitWouldNotAcceptIsRefused() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto createWith = [&](const QString& branch) {
+            return command(fixture, "team.create",
+                           {{"repository", fixture.directory.path()},
+                            {"name", "Checkout"},
+                            {"integration_branch", branch},
+                            {"merge_policy", "leader"},
+                            {"plan", plan()}});
+        };
+        for (const QString& bad : {"-x", "--upload-pack=touch /tmp/x", "team..x", "a b",
+                                   "refs/heads/.hidden", "x.lock", "@", "x@{1}"})
+            QCOMPARE(createWith(bad).value("error_code").toString(),
+                     QStringLiteral("invalid_payload"));
+        QCOMPARE(sessions(fixture), 0);
+        const QJsonObject made = createWith("release/2026.11");
+        QVERIFY2(made.value("ok").toBool(), qPrintable(made.value("error_message").toString()));
+        const QJsonValue id = made.value("team").toObject().value("id");
+        QCOMPARE(command(fixture, "team.update", {{"team_id", id}, {"integration_branch", "-r"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(command(fixture, "team.update", {{"team_id", id}, {"integration_branch", ""}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(command(fixture, "team.update", {{"team_id", id}, {"integration_branch", "main"}})
+                     .value("team")
+                     .toObject()
+                     .value("integration_branch")
+                     .toString(),
+                 QStringLiteral("main"));
+    }
+
     // ADR 0115: every page of Updates says whether an older one follows, the largest page too.
     void everyPageOfUpdatesSaysWhetherAnOlderOneFollows() {
         Fixture fixture;

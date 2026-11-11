@@ -245,6 +245,14 @@ class TeamStoreTest final : public QObject {
         QVERIFY(!teams.isMember("dev2"));
         QVERIFY(!teams.archiveRefusal("dev2"));
         QCOMPARE(teams.archiveRefusal("dev1")->code, QStringLiteral("team_member"));
+        // The message says what can be done: a developer is removed, the leader and the
+        // reviewer stay as long as the team does.
+        QVERIFY(teams.archiveRefusal("dev1")->message.contains("Remove it from the team"));
+        const Team& made = *teams.team(id);
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::leader)->sessionId)
+                    ->message.contains("Delete the team"));
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::reviewer)->sessionId)
+                    ->message.contains("another reviewer"));
         QVERIFY(!journal.teamUpdates(id, false, 100).isEmpty());
     }
 

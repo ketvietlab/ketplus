@@ -1,5 +1,6 @@
 // ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
+#include "teams/TeamRules.h"
 
 #include "protocol/DaemonProtocol.h"
 
@@ -330,6 +331,8 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
     draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed().left(4000);
     draft.integrationBranch =
         payload.value(QStringLiteral("integration_branch")).toString().trimmed();
+    if (const auto invalid = teams::rules::validBranch(draft.integrationBranch))
+        return failure(invalid->code, invalid->message);
     draft.mergePolicy = payload.value(QStringLiteral("merge_policy")).toString(teams::role::leader);
     draft.executionPolicy =
         payload.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));

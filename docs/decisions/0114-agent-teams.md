@@ -275,11 +275,15 @@ review turns are read-only whatever its conversation's policy is (ADR 0067).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
-`team_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
+`team_member`, `not_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
 team request is served; ask again), `task_not_found`, `invalid_transition`,
 `not_owner`, `role_forbidden`, `dependencies_open`, `dependency_cycle`,
 `uncommitted_work`,
 `decision_closed`, `invalid_payload`.
+A team's integration branch is a name git accepts (`git check-ref-format --branch`) and
+never one that reads as an option; a team that has one changes it, not drops it
+(`invalid_payload`). Every branch the daemon hands to git follows `--end-of-options`, and
+paths are read with `-z`, so a path is spelled as it is.
 
 Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
