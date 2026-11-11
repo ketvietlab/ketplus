@@ -40,15 +40,14 @@ QString errorText(const QJsonObject& error) {
 } // namespace
 
 CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
-    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable, &findExecutable),
       process_(new QProcess(this)),
       stdoutReader_(maximumProviderMessageBytes,
                     {QStringLiteral("id"), QStringLiteral("method"),
                      QStringLiteral("params.threadId"), QStringLiteral("params.turnId"),
                      QStringLiteral("params.turn.id")}),
-      restartTimer_(new QTimer(this)),
-      versionProbe_(
-          new compat::ProviderVersionProbe(compat::policy(QStringLiteral("codex")), {}, this)) {
+      restartTimer_(new QTimer(this)), versionProbe_(new compat::ProviderVersionProbe(
+                                           compat::policy(QStringLiteral("codex")), {}, this)) {
     restartTimer_->setSingleShot(true);
     reloader_ = new browser_tools::CodexLaunchReloader(
         [this] { return browserArguments(); }, [this] { return isIdle(); },
@@ -130,7 +129,7 @@ CodexAdapter::~CodexAdapter() {
     stop();
 }
 
-bool CodexAdapter::isAvailable() const { return !executable_.isEmpty(); }
+bool CodexAdapter::isAvailable() const { return !executable_.path().isEmpty(); }
 
 QString CodexAdapter::missingMessage() const {
     return compat::missing(compat::policy(QStringLiteral("codex"))).message;
@@ -138,7 +137,7 @@ QString CodexAdapter::missingMessage() const {
 
 bool CodexAdapter::isReady() const { return ready_; }
 
-QString CodexAdapter::executable() const { return executable_; }
+QString CodexAdapter::executable() const { return executable_.path(); }
 
 void CodexAdapter::call(const QString& method, const QJsonObject& params, Callback callback) {
     if (!isAvailable()) {
@@ -154,7 +153,7 @@ void CodexAdapter::call(const QString& method, const QJsonObject& params, Callba
 }
 
 void CodexAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> callback) {
-    versionProbe_->check(executable_,
+    versionProbe_->check(executable_.path(),
                          [this, callback = std::move(callback)](const compat::Runtime& runtime) {
                              callback(narrowing_.apply(runtime));
                          });
@@ -163,7 +162,7 @@ void CodexAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> cal
 bool CodexAdapter::supports(const QString& capability) const {
     if (narrowing_.removed(capability))
         return false;
-    const auto runtime = versionProbe_->cached(executable_);
+    const auto runtime = versionProbe_->cached(executable_.path());
     return runtime ? runtime->supports(capability)
                    : versionProbe_->policy().baselineSupports(capability);
 }
@@ -213,9 +212,8 @@ void CodexAdapter::respond(const QJsonValue& requestId, const QJsonObject& resul
 void CodexAdapter::respondError(const QJsonValue& requestId, const QString& code,
                                 const QString& message) {
     sendObject({{QStringLiteral("id"), requestId},
-                {QStringLiteral("error"),
-                 QJsonObject{{QStringLiteral("code"), code},
-                             {QStringLiteral("message"), message}}}});
+                {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code},
+                                                      {QStringLiteral("message"), message}}}});
 }
 
 int CodexAdapter::restartDelayMs() const { return restartDelayMs_; }
@@ -301,7 +299,7 @@ void CodexAdapter::ensureStarted() {
         if (checkingVersion_)
             return;
         checkingVersion_ = true;
-        versionProbe_->check(executable_, [this](const compat::Runtime& runtime) {
+        versionProbe_->check(executable_.path(), [this](const compat::Runtime& runtime) {
             checkingVersion_ = false;
             if (runtime.blocksLaunch()) {
                 failPending(runtime.message);
@@ -321,7 +319,7 @@ void CodexAdapter::ensureStarted() {
     starting_ = true;
     stdoutReader_.clear();
     stderrBuffer_.clear();
-    process_->setProgram(executable_);
+    process_->setProgram(executable_.path());
     // Browser tools (ADR 0008) are read from the shared settings file on every start; a later
     // settings change restarts an idle provider through reloader_.
     launchedBrowserArguments_ = browserArguments();
@@ -445,23 +443,22 @@ void CodexAdapter::skipOversized(const OversizedProviderLine& line) {
     if (line.fields.contains(QStringLiteral("id"))) {
         // A request Codex waits on: answer it so the turn does not hang.
         sendObject({{QStringLiteral("id"), id},
-                    {QStringLiteral("error"),
-                     QJsonObject{{QStringLiteral("code"), -32603},
-                                 {QStringLiteral("message"), reason}}}});
+                    {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), -32603},
+                                                          {QStringLiteral("message"), reason}}}});
         return;
     }
     const QString thread = line.fields.value(QStringLiteral("params.threadId")).toString();
     emit notificationSkipped(method, thread, line.bytes);
     if (method == QStringLiteral("turn/completed")) {
         // The turn still ends; only its final payload is lost.
-        const QString turn = line.fields.value(QStringLiteral("params.turn.id"))
-                                 .toString(line.fields.value(QStringLiteral("params.turnId"))
-                                               .toString());
-        handleNotification(method,
-                           {{QStringLiteral("threadId"), thread},
-                            {QStringLiteral("turn"),
-                             QJsonObject{{QStringLiteral("id"), turn},
-                                         {QStringLiteral("status"), QStringLiteral("completed")}}}});
+        const QString turn =
+            line.fields.value(QStringLiteral("params.turn.id"))
+                .toString(line.fields.value(QStringLiteral("params.turnId")).toString());
+        handleNotification(
+            method, {{QStringLiteral("threadId"), thread},
+                     {QStringLiteral("turn"),
+                      QJsonObject{{QStringLiteral("id"), turn},
+                                  {QStringLiteral("status"), QStringLiteral("completed")}}}});
     }
 }
 

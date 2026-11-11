@@ -1,6 +1,7 @@
 #pragma once
 
 #include "providers/ProviderAdapter.h"
+#include "providers/ProviderExecutable.h"
 
 #include <QDeadlineTimer>
 #include <QElapsedTimer>
@@ -74,7 +75,7 @@ class ClaudeAdapter final : public ProviderAdapter {
     void configureProcess();
 
     ClaudeCredentials* credentials_{nullptr};
-    QString executable_;
+    ProviderExecutable executable_;
     QProcess* process_{nullptr};
     QByteArray stdoutBuffer_;
     QByteArray stderrBuffer_;

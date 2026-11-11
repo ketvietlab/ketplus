@@ -128,6 +128,11 @@ current-window value.
 
 - The Codex CLI is discovered from `PATH`, `~/.local/bin/codex`, Homebrew, or
   `/usr/local/bin/codex`.
+- A discovered CLI path (not one given with `--codex`/`--cursor` or the
+  `KETPLUS_*` overrides) is looked up again, at most every 2 seconds, while it
+  is missing or its file has gone. A CLI installed while KetPlus runs, or moved
+  by its own updater, is used on the next request or Retry without restarting
+  the daemon (`ProviderExecutable`).
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in

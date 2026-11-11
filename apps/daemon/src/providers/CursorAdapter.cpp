@@ -376,7 +376,7 @@ bool looksRunnable(const QFileInfo& info) {
 } // namespace
 
 CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
-    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable) {
+    : ProviderAdapter(parent), executable_(executable, &findExecutable) {
     process_ = new QProcess(this);
     versionProbe_ = new compat::ProviderVersionProbe(
         compat::policy(QStringLiteral("cursor")),
@@ -460,13 +460,13 @@ CursorAdapter::~CursorAdapter() {
     stop();
 }
 
-bool CursorAdapter::isAvailable() const { return !executable_.isEmpty(); }
+bool CursorAdapter::isAvailable() const { return !executable_.path().isEmpty(); }
 
 QString CursorAdapter::missingMessage() const { return missingExecutableMessage(); }
 
 bool CursorAdapter::isReady() const { return ready_; }
 
-QString CursorAdapter::executable() const { return executable_; }
+QString CursorAdapter::executable() const { return executable_.path(); }
 
 QString CursorAdapter::installCommand() {
 #if defined(Q_OS_WIN)
@@ -776,7 +776,7 @@ QString CursorAdapter::permissionMode(const QString& profile) {
 }
 
 void CursorAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> callback) {
-    versionProbe_->check(executable_,
+    versionProbe_->check(executable_.path(),
                          [this, callback = std::move(callback)](const compat::Runtime& runtime) {
                              callback(narrowing_.apply(runtime));
                          });
@@ -785,7 +785,7 @@ void CursorAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> ca
 bool CursorAdapter::supports(const QString& capability) const {
     if (narrowing_.removed(capability))
         return false;
-    const auto runtime = versionProbe_->cached(executable_);
+    const auto runtime = versionProbe_->cached(executable_.path());
     return runtime ? runtime->supports(capability)
                    : versionProbe_->policy().baselineSupports(capability);
 }
@@ -988,7 +988,7 @@ void CursorAdapter::ensureStarted() {
         if (checkingVersion_)
             return;
         checkingVersion_ = true;
-        versionProbe_->check(executable_, [this](const compat::Runtime& runtime) {
+        versionProbe_->check(executable_.path(), [this](const compat::Runtime& runtime) {
             checkingVersion_ = false;
             if (runtime.blocksLaunch()) {
                 failPending(runtime.message);
@@ -1013,7 +1013,7 @@ void CursorAdapter::ensureStarted() {
 }
 
 void CursorAdapter::configureProcess() {
-    const ProcessInvocation invocation = processInvocation(executable_, pendingSpawnModel_);
+    const ProcessInvocation invocation = processInvocation(executable_.path(), pendingSpawnModel_);
     spawnModel_ = pendingSpawnModel_;
     pendingSpawnModel_.clear();
     process_->setProgram(invocation.program);
@@ -1187,7 +1187,7 @@ void CursorAdapter::startCatalogProcess() {
     environment.insert(QStringLiteral("NO_COLOR"), QStringLiteral("1"));
     environment.insert(QStringLiteral("TERM"), QStringLiteral("dumb"));
     process->setProcessEnvironment(environment);
-    const ProcessInvocation invocation = listModelsInvocation(executable_);
+    const ProcessInvocation invocation = listModelsInvocation(executable_.path());
     process->setProgram(invocation.program);
     process->setArguments(invocation.arguments);
     connect(process, &QProcess::started, process, &QProcess::closeWriteChannel);
