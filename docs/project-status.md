@@ -69,6 +69,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   leaves a team with the reason when it cannot, and a drop on a folder of the same
   repository joins as a developer. `DaemonClient::teamEventReceived` carries
   `team.changed` and `team.removed` to the desktop's `TeamDirectory`.
+  Dialogs (#465): New team sends one `team.create` with the name, goal, integration
+  branch, who merges, one to five developers and each role's agent (Claude leads and
+  reviews, another ready provider develops; the reviewer's chooser offers Claude only).
+  A refusal keeps the dialog open with the error at the role it names. Add a developer
+  sends `team.member.add` with a required name, lane, paths and agent, hints at the
+  reviewer queue from three developers and is disabled at five.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

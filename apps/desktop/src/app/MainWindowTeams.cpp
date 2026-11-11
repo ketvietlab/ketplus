@@ -4,7 +4,9 @@
 #include "KetDialog.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
+#include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
+#include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "workspace/ActivityBar.h"
@@ -210,15 +212,35 @@ bool MainWindow::handleConversationTeamAction(QAction* chosen, const QString& se
 }
 
 void MainWindow::showNewTeamDialog(const QString& repository) {
-    // The New team dialog arrives with #465.
-    Q_UNUSED(repository);
-    statusBar()->showMessage(tr("New team is not available yet."), 5000);
+    if (teams_ == nullptr || !teams_->isAvailable() || agentManager_ == nullptr ||
+        agentDialogOpen(this, QStringLiteral("newTeamDialog")))
+        return;
+    const auto open = [this, repository](const QVariantList& models) {
+        NewTeamForm::present(this, teams_, repository, models, [this](const QJsonObject& team) {
+            statusBar()->showMessage(
+                tr("Team %1 created.").arg(team.value(QStringLiteral("name")).toString()), 5000);
+        });
+    };
+    // The roles choose among the models the app lists; read them first if it has none yet.
+    if (!agentManager_->models().isEmpty()) {
+        open(agentManager_->models());
+        return;
+    }
+    auto* once = new QObject(this);
+    connect(agentManager_, &AgentSessionManager::modelsLoaded, once,
+            [once, open](const QVariantList& models) {
+                once->deleteLater();
+                open(models);
+            });
+    agentManager_->loadModels();
 }
 
 void MainWindow::showAddTeamMemberDialog(const QString& teamId) {
-    // The Add developer dialog arrives with #465.
-    Q_UNUSED(teamId);
-    statusBar()->showMessage(tr("Add member is not available yet."), 5000);
+    const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
+    if (!team || agentManager_ == nullptr ||
+        agentDialogOpen(this, QStringLiteral("addDeveloperDialog")))
+        return;
+    AddDeveloperForm::present(this, teams_, *team, agentManager_->models());
 }
 
 } // namespace ketplus
