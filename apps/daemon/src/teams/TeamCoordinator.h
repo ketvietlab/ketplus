@@ -54,6 +54,12 @@ struct TeamMessage final {
 };
 
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
+// The changes of a task's branch against the integration branch it was cut from.
+struct TaskDiff final {
+    QString diff;
+    QStringList files;
+};
+
 class TeamHostPort {
   public:
     virtual ~TeamHostPort() = default;
@@ -83,6 +89,13 @@ class TeamHostPort {
         return {};
     }
     // Queues the message; it starts a turn when the receiver is idle. Returns an error.
+    // The task's branch against its base on the integration branch; nothing when git failed.
+    [[nodiscard]] virtual std::optional<TaskDiff> taskDiff(const Team& team,
+                                                           const Task& task) const {
+        (void)team;
+        (void)task;
+        return std::nullopt;
+    }
     virtual QString postTeamMessage(const TeamMessage& message) {
         (void)message;
         return {};
@@ -167,6 +180,11 @@ class TeamCoordinator : public QObject {
 
     // A member's turn ended (ADR 0112 §7): after the leader's turn the waiting digest is sent.
     void memberTurnEnded(const QString& sessionId);
+    // ADR 0112 §2: the team's reviewer answered the review it was sent, or its turn failed
+    // (`failure` set). `noFindings` is the verdict line of ADR 0067.
+    void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
+                        const QString& failure = {});
+
     // The quiet period after which an idle leader receives the digest (ADR 0112 §7).
     static constexpr int defaultQuietPeriodMs = 20000;
     void setQuietPeriod(int milliseconds) { quietPeriod_ = milliseconds; }
@@ -216,6 +234,10 @@ class TeamCoordinator : public QObject {
     virtual void wake(const Team& team, const TeamMessage& message);
     // Sends the messages held while paused, in order, once the team runs again.
     void releaseHeld(qint64 teamId);
+    // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp).
+    void pumpReviews(qint64 teamId);
+    [[nodiscard]] static QString reviewText(const Team& team, const Task& task,
+                                            const std::optional<TaskDiff>& diff);
     // Restarts the quiet period of the team's digest.
     void scheduleDigest(qint64 teamId);
     // One digest of every update since the last one, when one of them is actionable.

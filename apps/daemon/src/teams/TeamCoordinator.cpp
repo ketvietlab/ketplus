@@ -156,6 +156,8 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     emit teamChanged(teamJson(team));
     if (actionable)
         scheduleDigest(team.id);
+    if (team.reviewing.isEmpty() && !team.reviewQueue.isEmpty())
+        pumpReviews(team.id);
     return std::nullopt;
 }
 
@@ -543,6 +545,11 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
     updates.prepend({.kind = QStringLiteral("member_removed"),
                      .text = QStringLiteral("%1 was deleted and left the team.").arg(name),
                      .data = {{QStringLiteral("session_id"), sessionId}}});
+    if (role == role::reviewer && !team->reviewing.isEmpty()) {
+        // The review in flight waits for the next reviewer, first in the queue.
+        team->reviewQueue.prepend(team->reviewing);
+        team->reviewing.clear();
+    }
     if (role != role::developer || team->count(role::developer) == 0) {
         const QString empty = role == role::developer ? QStringLiteral("developer") : role;
         team->paused = true;
