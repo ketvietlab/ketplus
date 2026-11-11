@@ -2,32 +2,29 @@
 import QtQuick
 import Ket
 
-// A tag on a sidebar row (concept). KetTag tints its colour at 13% on both themes; on the
-// dark sidebar that chip is as dark as the row, its edge is lost and the label looks
-// indented from the titles' edge. Here the dark chip is tinted more, has a hairline of its
-// colour and a label lightened from it, so the chip's own left edge is what lines up.
-// After approval this becomes a theme-aware ket::tagRecipe in ket-qt.
+// A tag on a sidebar row (concept). Every tag is the same neutral grey: in the list, colour
+// belongs to a conversation's state alone (working, needs input, failed, unread), and a
+// coloured tag beside "Needs input" or "Reply failed" competed with it. The chip is drawn
+// from the text colour at a low alpha with a hairline, so its edge stays visible on the
+// dark sidebar and on a selected row, and that edge is what lines up with the titles.
+// After approval this becomes a neutral variant of ket::tagRecipe in ket-qt.
 Rectangle {
     id: tag
 
     property string text
-    property color tagColor: "transparent"
-    property bool overflow: false
     property real maxWidth: KetTheme.px(96, KetTheme.zoom)
-    readonly property bool dark: KetTheme.dark
+    readonly property color ink: KetTheme.t.textSecondary
+    // The width a label takes as a chip, for a row that counts how many fit.
+    function widthOf(advance) { return Math.min(advance + 2 * px(6), maxWidth) }
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    function mix(a, b, t) {
-        return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
-    }
 
-    implicitWidth: Math.min(label.implicitWidth + 2 * px(6), maxWidth)
+    implicitWidth: widthOf(label.implicitWidth)
     implicitHeight: px(18)
     radius: px(4)
-    color: overflow ? KetTheme.t.surfaceHover
-                    : Qt.rgba(tagColor.r, tagColor.g, tagColor.b, dark ? 0.30 : 0.13)
-    border.width: dark ? 1 : 0
-    border.color: overflow ? KetTheme.t.sidebarBorder
-                           : Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.55)
+    // A filled chip with a faint edge, not an outlined button.
+    color: Qt.rgba(ink.r, ink.g, ink.b, KetTheme.dark ? 0.20 : 0.12)
+    border.width: 1
+    border.color: Qt.rgba(ink.r, ink.g, ink.b, KetTheme.dark ? 0.16 : 0.10)
     Accessible.name: text
 
     Text {
@@ -36,9 +33,7 @@ Rectangle {
         width: Math.min(implicitWidth, tag.maxWidth - 2 * tag.px(6))
         text: tag.text
         elide: Text.ElideRight
-        color: tag.overflow ? KetTheme.t.textSecondary
-               : tag.dark ? tag.mix(tag.tagColor, Qt.rgba(1, 1, 1, 1), 0.72)
-               : KetTheme.t.textSecondary
+        color: tag.ink
         font.family: KetTheme.fontFamily
         font.pixelSize: tag.px(11)
         font.weight: Font.Medium

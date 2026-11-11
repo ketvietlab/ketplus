@@ -62,6 +62,39 @@ Rectangle {
         const to = folder.mapToItem(null, folder.width / 2, px(12))
         return [Math.round(from.x), Math.round(from.y), Math.round(to.x), Math.round(to.y)]
     }
+    // The left edges the list is built on, checked by --smoke: a repository's name and its
+    // conversations' titles and second lines; a team's name and its members' the same; and
+    // no second line running past its row.
+    function layoutProblems() {
+        const problems = []
+        const left = (item, x) => Math.round(item.mapToItem(sidebar, x, 0).x * 10) / 10
+        const near = (a, b) => Math.abs(a - b) <= 0.5
+        let rows = 0
+        // A repository's heading is a sibling of what it heads; a team's folder contains it.
+        const walk = (root, heading) => {
+            for (const item of root.children) {
+                const name = item.objectName || ""
+                if (name.startsWith("repository-")) {
+                    heading = { name: name, x: left(item, item.textLeft) }
+                } else if (name.startsWith("team-")) {
+                    walk(item, { name: name, x: left(item, item.textLeft) })
+                } else if (name.startsWith("conversation-") || name.startsWith("member-")) {
+                    ++rows
+                    const x = left(item, item.textLeft)
+                    if (heading && !near(x, heading.x))
+                        problems.push(name + " starts at " + x + ", its heading " + heading.name + " at " + heading.x)
+                    if (item.twoLines && item.secondRight > item.width - px(8) + 0.5)
+                        problems.push(name + ": the second line runs past the row")
+                } else {
+                    walk(item, heading)
+                }
+            }
+        }
+        walk(sidebar, null)
+        if (!rows)
+            problems.push("no conversation rows to check")
+        return problems
+    }
     function openMenu(name) {
         const repository = Fixtures.repositories[0]
         const team = sidebar.window.teamList[0]
@@ -71,6 +104,12 @@ Rectangle {
         } else if (name === "team-menu" && team) {
             teamMenu.team = team
             teamMenu.popup(sidebar, px(150), px(326))
+        } else if (name === "repo-folded") {
+            // Every repository folded: the headings alone say what runs and what waits.
+            const next = {}
+            for (const r of Fixtures.repositories)
+                next[r.name] = false
+            expanded = next
         } else if (name === "drag-member") {
             // A conversation held over the first team's folder.
             dragPoint = Qt.point(px(96), px(318))
@@ -330,6 +369,7 @@ Rectangle {
 
                         SidebarRepoHeader {
                             id: repoHeader
+                            objectName: "repository-" + repo.modelData.name
                             readonly property var every: sidebar.window.conversationsOf(repo.modelData.name)
                             function statusOf(c) {
                                 return sidebar.window.planStatus ? sidebar.window.planStatus(c.number, c.status) : c.status
@@ -343,9 +383,10 @@ Rectangle {
                             count: every.length
                             working: every.filter(c => statusOf(c) === KetTheme.ConversationStatus.Working).length
                             waiting: every.filter(c => [KetTheme.ConversationStatus.NeedsInput,
+                                                        KetTheme.ConversationStatus.AwaitingReply,
                                                         KetTheme.ConversationStatus.Error].includes(statusOf(c))).length
                             unread: every.filter(c => !!c.unread && statusOf(c) === KetTheme.ConversationStatus.Completed).length
-                            onExpandedChanged: {
+                            onToggled: expanded => {
                                 const next = Object.assign({}, sidebar.expanded)
                                 next[repo.modelData.name] = expanded
                                 sidebar.expanded = next

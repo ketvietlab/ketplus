@@ -20,9 +20,22 @@ Item {
     property int waiting: 0
     property int unread: 0
     property string actionText: "New conversation"
+    // Where the name starts, for the sidebar's alignment check.
+    readonly property real textLeft: px(30)
+    // The summary in words, for a resting pointer and a screen reader.
+    readonly property string summaryText: {
+        const parts = []
+        if (waiting) parts.push(waiting + " waiting for you")
+        if (working) parts.push(working + " working")
+        if (unread) parts.push(unread + " unread")
+        parts.push(count + (count === 1 ? " conversation" : " conversations"))
+        return parts.join(" · ")
+    }
     readonly property bool hot: hover.hovered || fold.visualFocus || action.visualFocus
     readonly property real lead: divider ? px(9) : 0
     signal actionTriggered()
+    // The user folds or unfolds it; the owner keeps the state.
+    signal toggled(bool expanded)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
@@ -47,8 +60,13 @@ Item {
         height: header.px(30)
         hoverEnabled: true
         Accessible.name: header.name
-        Accessible.description: (header.expanded ? "Expanded" : "Collapsed") + ", " + header.count + " conversations"
-        onClicked: header.expanded = !header.expanded
+        Accessible.description: (header.expanded ? "Expanded" : "Collapsed") + ", " + header.summaryText
+        KetToolTip {
+            visible: fold.hovered && !fold.pressed
+            delay: 900
+            text: header.summaryText
+        }
+        onClicked: header.toggled(!header.expanded)
 
         background: Rectangle {
             radius: header.px(6)
@@ -68,7 +86,7 @@ Item {
                 color: KetTheme.t.textSecondary
             }
             Text {
-                x: header.px(30)
+                x: header.textLeft
                 anchors.verticalCenter: parent.verticalCenter
                 width: summary.x - header.px(8) - x
                 text: header.name
@@ -89,19 +107,33 @@ Item {
                 spacing: header.px(8)
                 opacity: header.hot ? 0 : 1
 
+                // The marks are the rows' own, so the summary needs no legend.
                 component Count: Row {
-                    property color tone
+                    property int status: -1 // a conversation status, or -1 for unread
                     property int value
-                    property string what
+                    readonly property var mark: status < 0 ? null
+                        : KetTheme.conversationStatusRecipe(KetTheme.dark, status)
                     visible: value > 0
-                    spacing: header.px(4)
-                    Accessible.name: value + " " + what
-                    Rectangle {
+                    spacing: header.px(3)
+                    Item {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: header.px(6)
+                        width: header.px(12)
                         height: width
-                        radius: width / 2
-                        color: parent.tone
+                        KetIcon {
+                            anchors.centerIn: parent
+                            visible: !!parent.parent.mark
+                            name: parent.parent.mark ? parent.parent.mark.icon : ""
+                            box: header.px(12)
+                            color: parent.parent.mark ? parent.parent.mark.iconColor : "transparent"
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: !parent.parent.mark
+                            width: header.px(7)
+                            height: width
+                            radius: width / 2
+                            color: KetTheme.t.accentText
+                        }
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -114,21 +146,17 @@ Item {
 
                 Count {
                     anchors.verticalCenter: parent.verticalCenter
-                    tone: KetTheme.conversationStatusRecipe(KetTheme.dark, KetTheme.ConversationStatus.NeedsInput).iconColor
+                    status: KetTheme.ConversationStatus.NeedsInput
                     value: header.waiting
-                    what: "waiting for you"
                 }
                 Count {
                     anchors.verticalCenter: parent.verticalCenter
-                    tone: KetTheme.conversationStatusRecipe(KetTheme.dark, KetTheme.ConversationStatus.Working).iconColor
+                    status: KetTheme.ConversationStatus.Working
                     value: header.working
-                    what: "working"
                 }
                 Count {
                     anchors.verticalCenter: parent.verticalCenter
-                    tone: KetTheme.t.accentText
                     value: header.unread
-                    what: "unread"
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter

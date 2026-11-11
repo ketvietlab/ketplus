@@ -270,23 +270,35 @@ A fence that is not one of these samples stays source only.
 
 ## Sidebar list (concept)
 
-The repository list is drawn by two mock-local parts until the design is approved; they then
-move into ket-qt as changes to `KetGroupHeader` and `KetConversationRow` (both layers).
+The repository list is drawn by three mock-local parts until the design is approved; they
+then move into ket-qt as changes to `KetGroupHeader`, `KetConversationRow` and
+`ket::tagRecipe` (both layers). The rules:
 
-- `qml/shell/SidebarRepoHeader.qml`: a repository is a heading, not a row. A rule above it,
-  a chevron, the name in the main colour and semibold, and on the right what its
-  conversations are doing: waiting for the user, working, unread, or the total when all is
-  quiet. A folded repository therefore still says that something needs a look. The `+`
+- **Colour means state, and nothing else.** Working, needs input, waiting for you, failed and
+  unread are the only coloured things in the list. Tags are one neutral grey
+  (`qml/shell/SidebarTag.qml`): a coloured tag beside "Needs input" or "Reply failed"
+  competed with it. The chip is the text colour at a low alpha with a faint edge, so it is
+  visible on the dark sidebar and on a selected row. `+N` is plain text, not a chip.
+- **Headings are not rows.** A repository (`qml/shell/SidebarRepoHeader.qml`) has a rule
+  above it, a chevron and its name in the main colour, semibold. A team
+  (`qml/shell/TeamFolder.qml`) is one level below: the main colour, medium, its icon in the
+  rows' state column. Neither uses the grey of a row's second line.
+- **A folded repository still reports.** On the right of its heading are the rows' own marks
+  with a count: waiting for the user (needs input, waiting for you, failed), working,
+  unread; or the total when all is quiet. Resting the pointer says it in words. The `+`
   replaces the summary while the heading is hovered or focused.
-- `qml/shell/SidebarRow.qml`: one line for a conversation with nothing to say (state mark,
-  title, number at the right). A second line only for a turn that runs ("Working · from
-  #4821"), a question, a failure, or tags. A finished conversation that was read has no mark
-  and a regular title; unread is a dot and a semibold title. Titles line up under the
-  repository's name.
-- `qml/shell/SidebarTag.qml`: on the dark sidebar a tag is tinted at 30% with a hairline of
-  its colour and a lightened label, so the chip's edge is visible and lines up with the
-  titles. `KetTag`'s 13% tint is lost there. It becomes a theme-aware `ket::tagRecipe`.
+- **One line unless there is something to say** (`qml/shell/SidebarRow.qml`): state mark,
+  title, number at the right. A second line only for a turn that runs ("Working · from
+  #4821"), a question, a failure, or tags. Whole tags only: as many as fit after the state,
+  the rest counted in `+N`; a tag is never cut.
+- **Semibold means it waits for you**: unread, needs input, waiting for you, failed. A turn
+  that runs has its spinner and a regular title. Finished and read: no mark.
+- **One left edge per level.** A repository's name, its conversations' titles and their
+  second lines start together; so do a team's name and its members'. `--smoke` checks these
+  edges, and that no second line runs past its row (`Sidebar.layoutProblems`).
 - "Show N more" says how many it adds.
+
+`--open=repo-folded` folds every repository for a capture of the headings alone.
 
 The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
 the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0

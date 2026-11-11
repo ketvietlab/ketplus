@@ -26,10 +26,33 @@ Basic.AbstractButton {
                                   KetTheme.ConversationStatus.NeedsInput,
                                   KetTheme.ConversationStatus.AwaitingReply,
                                   KetTheme.ConversationStatus.Error].includes(status)
+    // What waits for the user is semibold; a turn that runs has its spinner and is not.
+    readonly property bool calls: unread || [KetTheme.ConversationStatus.NeedsInput,
+                                             KetTheme.ConversationStatus.AwaitingReply,
+                                             KetTheme.ConversationStatus.Error].includes(status)
     readonly property bool twoLines: live || tags.length > 0 || detail !== ""
     readonly property string statusLabel: KetTheme.conversationStatusLabel(status)
-    // The state and what started the turn come first; tags take the room that is left.
-    readonly property int shownTags: Math.min(tags.length, !live ? 2 : detail !== "" ? 0 : 1)
+    readonly property string lead: live ? statusLabel + (detail ? " · " + detail : "") : detail
+    // Where the title and the second line start, for the sidebar's alignment check.
+    readonly property real textLeft: px(30)
+    readonly property real secondRight: textLeft + second.width
+    // Whole tags only: the state and what started the turn come first, then as many tags
+    // as fit, keeping room for +N while any is left out. A tag is never cut.
+    readonly property int shownTags: {
+        const gap = px(6)
+        let room = width - textLeft - px(8)
+        if (lead !== "")
+            room -= leadMetrics.advanceWidth(lead) + gap
+        const chip = text => chipProbe.widthOf(tagMetrics.advanceWidth(text))
+        const more = count => count ? gap + tagMetrics.advanceWidth("+" + count) : 0
+        let x = 0
+        for (let i = 0; i < tags.length; ++i) {
+            if (x + chip(tags[i].label) + more(tags.length - i - 1) > room)
+                return i
+            x += chip(tags[i].label) + gap
+        }
+        return tags.length
+    }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
@@ -40,6 +63,19 @@ Basic.AbstractButton {
     padding: 0
     Accessible.name: text
     Accessible.description: (unread ? "Unread, " : "") + statusLabel + (detail ? ", " + detail : "")
+                            + (tags.length ? ", tags " + tags.map(t => t.label).join(", ") : "")
+
+    FontMetrics {
+        id: tagMetrics
+        font.family: KetTheme.fontFamily
+        font.pixelSize: control.px(11)
+        font.weight: Font.Medium
+    }
+    FontMetrics {
+        id: leadMetrics
+        font: leadText.font
+    }
+    SidebarTag { id: chipProbe; visible: false }
 
     // A working mark turns once per spin period on KetTheme's stepped clock.
     readonly property bool spins: statusRecipe.spinning && visible
@@ -99,7 +135,7 @@ Basic.AbstractButton {
 
         Text {
             id: title
-            x: mark.x + mark.width + control.px(8)
+            x: control.textLeft
             y: control.px(6)
             width: numberText.x - control.px(8) - x
             height: control.px(18)
@@ -109,23 +145,23 @@ Basic.AbstractButton {
             color: control.recipe.title
             font.family: KetTheme.fontFamily
             font.pixelSize: control.px(13)
-            font.weight: control.unread || control.live ? Font.DemiBold : Font.Normal
+            font.weight: control.calls ? Font.DemiBold : Font.Normal
         }
 
         Row {
+            id: second
+            objectName: "second"
             visible: control.twoLines
-            x: title.x
+            x: control.textLeft
             y: control.px(25)
-            width: parent.width - x - control.px(8)
             height: control.px(16)
             spacing: control.px(6)
-            clip: true
 
             Text {
-                visible: control.live || control.detail !== ""
+                id: leadText
+                visible: control.lead !== ""
                 anchors.verticalCenter: parent.verticalCenter
-                text: control.live ? control.statusLabel + (control.detail ? " · " + control.detail : "")
-                                   : control.detail
+                text: control.lead
                 color: control.live ? control.statusRecipe.labelColor : control.recipe.meta
                 font.family: KetTheme.fontFamily
                 font.pixelSize: control.px(11)
@@ -137,14 +173,17 @@ Basic.AbstractButton {
                     required property var modelData
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.label
-                    tagColor: modelData.color
                 }
             }
-            SidebarTag {
+            // Not a chip: it counts tags, it is not one.
+            Text {
                 visible: control.tags.length > control.shownTags
                 anchors.verticalCenter: parent.verticalCenter
                 text: "+" + (control.tags.length - control.shownTags)
-                overflow: true
+                color: control.recipe.meta
+                font.family: KetTheme.fontFamily
+                font.pixelSize: control.px(11)
+                font.weight: Font.Medium
             }
         }
     }
