@@ -194,8 +194,9 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
 
     // A member's turn ended (ADR 0114 §7): after the leader's turn the waiting digest is sent,
-    // and the team is watched for a stall (§8). `stoppedByUser` is the user's Stop.
-    void memberTurnEnded(const QString& sessionId, bool stoppedByUser = false);
+    // and the team is watched for a stall (§8). `stoppedByUser` is the user's Stop; nothing
+    // keeps what the member's last turn said (its worker exited, no turn ended).
+    void memberTurnEnded(const QString& sessionId, std::optional<bool> stoppedByUser = false);
     // ADR 0114 §8 (TeamCoordinatorStall.cpp). A team with work left and nobody working is
     // moved on: a developer that left its task in progress is nudged once, then the leader
     // is woken, then the user is asked.

@@ -147,8 +147,9 @@ commit, or the number of decisions. Nudges and stall wakes are automatic turns a
 against the budget (open point 2). The count is kept in memory; a restart begins it again.
 
 The user's Stop is respected: a member whose turn the user stopped is not nudged, and a
-leader the user stopped is not woken, so step 3 follows at once. Its next turn that ends
-by itself lifts that.
+leader the user stopped is not woken, so step 3 follows at once. A member's next turn
+that ends by itself lifts that, and "Wake the leader again" lifts it for the leader only.
+A worker that exits without a new turn changes nothing.
 
 Not covered here: a timed wait a member asks for ("check again in 10 minutes"), and a
 message to a conversation outside the team that failed to deliver.

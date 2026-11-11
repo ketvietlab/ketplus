@@ -137,13 +137,18 @@ class TeamStallTest final : public QObject {
         teams_->checkStall(team_);
         QCOMPARE(host_.messages.size(), 1);
         QCOMPARE(team().decisions.last().kind, QStringLiteral("stalled"));
-        // Its next turn that ends by itself lifts that.
-        teams_->memberTurnEnded("dev1");
+        // Waking the leader lifts the leader's Stop, not the developer's; neither does a
+        // worker that exits without a new turn.
         QVERIFY(teams_->answerDecision(team_, team().decisions.last().id, wakeLeaderChoice, "user")
                     .ok());
+        teams_->memberTurnEnded("dev1", std::nullopt);
         host_.messages.clear();
         teams_->checkStall(team_);
-        QCOMPARE(kinds(), QStringList{"nudge>dev1"});
+        QCOMPARE(kinds(), QStringList{"stall>lead"});
+        // The developer's next turn that ends by itself does.
+        teams_->memberTurnEnded("dev1");
+        teams_->checkStall(team_);
+        QCOMPARE(kinds(), (QStringList{"stall>lead", "nudge>dev1"}));
     }
 
     void aTeamThatWorksOrIsDoneIsLeftAlone() {
