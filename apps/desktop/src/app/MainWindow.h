@@ -239,6 +239,8 @@ class MainWindow final : public QMainWindow {
     // Takes the members of the repository's teams out of `conversations`, into their folders.
     [[nodiscard]] QVector<SidebarTeam> takeSidebarTeams(const QString& repository,
                                                         QVariantList& conversations) const;
+    // Each member conversation's role for the Agent Workspace header (#467).
+    void updateTeamRoles();
     void showTeamMenu(const QString& teamId);
     void openTeam(const QString& teamId);
     void joinTeam(const QString& teamId, const QString& sessionId);

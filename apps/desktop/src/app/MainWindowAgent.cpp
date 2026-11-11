@@ -127,6 +127,7 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setConversationWidth);
     connect(agentWorkspace_, &AgentWorkspaceView::repositoryPickerRequested, this,
             &MainWindow::chooseFolder);
+    connect(agentWorkspace_, &AgentWorkspaceView::teamRequested, this, &MainWindow::openTeam);
     auto updateRepositoryName = [this, lastPath = QString()]() mutable {
         const auto path = agentWorkspace_->executionPath();
         if (lastPath == path)

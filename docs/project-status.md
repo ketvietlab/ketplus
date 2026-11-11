@@ -75,6 +75,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   A refusal keeps the dialog open with the error at the role it names. Add a developer
   sends `team.member.add` with a required name, lane, paths and agent, hints at the
   reviewer queue from three developers and is disabled at five.
+  Member header (#467): a member's Agent Workspace header shows its role first as a locked
+  tag that opens the team, has no Reviewer choice (the team's reviewer reviews its
+  tasks), and its tag menu starts with a disabled "Role · Set by team" row. Leaving the
+  team brings the Reviewer choice back with its setting.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
