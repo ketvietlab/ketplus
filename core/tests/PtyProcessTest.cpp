@@ -57,6 +57,20 @@ class PaintCounter final : public QObject {
     }
 };
 
+// A slow runner can deliver the first exposure paints long after show(), so a fixed wait does
+// not say the view is idle. Wait for the first paint, then until 100 ms pass without another.
+bool waitUntilPaintsSettle(const PaintCounter& paints) {
+    if (!QTest::qWaitFor([&] { return paints.count > 0; }, 5000))
+        return false;
+    for (int round = 0; round < 50; ++round) {
+        const int before = paints.count;
+        QTest::qWait(100);
+        if (paints.count == before)
+            return true;
+    }
+    return false;
+}
+
 } // namespace
 
 class PtyProcessTest final : public QObject {
@@ -437,15 +451,14 @@ void PtyProcessTest::coalescesStreamingPaints() {
     terminal.show();
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
-    QTest::qWait(20);
+    QVERIFY(waitUntilPaintsSettle(paints));
     paints.count = 0;
 
     for (int chunk = 0; chunk < 120; ++chunk) {
         session.feedOutput(QByteArray("x"));
     }
-    QTest::qWait(80);
-
-    QVERIFY(paints.count > 0);
+    // The output paints, late on a slow runner; once it settles, the chunks shared few paints.
+    QVERIFY(waitUntilPaintsSettle(paints));
     QVERIFY2(paints.count <= 8,
              qPrintable(QStringLiteral("120 output chunks caused %1 paints").arg(paints.count)));
 }
@@ -492,7 +505,7 @@ void PtyProcessTest::honorsSynchronizedOutputTransactions() {
     terminal.show();
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
-    QTest::qWait(80);
+    QVERIFY(waitUntilPaintsSettle(paints));
     paints.count = 0;
 
     session.feedOutput(QByteArray("\x1b[?2026hplaceholder"));
@@ -500,7 +513,7 @@ void PtyProcessTest::honorsSynchronizedOutputTransactions() {
     QCOMPARE(paints.count, 0);
 
     session.feedOutput(QByteArray("\r\x1b[2Ktyped\x1b[?2026l"));
-    QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 100);
+    QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 5000);
     QVERIFY(terminal.visibleText().contains(QStringLiteral("typed")));
     QVERIFY(!terminal.visibleText().contains(QStringLiteral("placeholder")));
 }

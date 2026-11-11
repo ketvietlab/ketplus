@@ -83,7 +83,7 @@ class ProviderStderrFloodTest final : public QObject {
     }
 
     static bool callSucceeds(ProviderAdapter* adapter, const QString& method,
-                             const QJsonObject& params = {}) {
+                             const QJsonObject& params = {}, const int timeoutMs = 30000) {
         struct Reply {
             int callbacks = 0;
             QString error;
@@ -95,7 +95,7 @@ class ProviderStderrFloodTest final : public QObject {
             reply->result = value;
             reply->error = error;
         });
-        return QTest::qWaitFor([&] { return reply->callbacks != 0; }, 30000) &&
+        return QTest::qWaitFor([&] { return reply->callbacks != 0; }, timeoutMs) &&
                reply->callbacks == 1 && reply->error.isEmpty() &&
                reply->result.value("ok").toBool();
     }
@@ -154,7 +154,8 @@ class ProviderStderrFloodTest final : public QObject {
         const auto pid = process->processId();
         QVERIFY(pid > 0);
         for (int round = 1; round <= 2; ++round) {
-            QVERIFY(callSucceeds(adapter.get(), "fixture/flood", {{"round", round}}));
+            // 32 MiB of stderr per flood takes over 30 s on hosted macOS runners.
+            QVERIFY(callSucceeds(adapter.get(), "fixture/flood", {{"round", round}}, 120000));
             QCOMPARE(progress, round * (chunksPerFlood / progressEvery));
             QVERIFY(stderrSignals > 0);
             QVERIFY2(drained, "QProcess retained unread stderr after the adapter drain slot");
