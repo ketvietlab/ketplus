@@ -14,6 +14,7 @@
 #include <QLabel>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPushButton>
 #include <QSet>
 #include <QSettings>
 #include <QSizePolicy>
@@ -313,13 +314,14 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
             rows_.append(button);
         }
         if (repository.conversations.size() > kPreviewConversationCount) {
-            auto* showMore = new QToolButton(group);
+            // A QPushButton honours text-align, so the label starts where the mock's does.
+            auto* showMore = new QPushButton(group);
             showMore->setObjectName(QStringLiteral("productShowMoreConversations"));
             showMore->setProperty("kvRole", QStringLiteral("productShowMoreConversations"));
             showMore->setProperty("repositoryPath", repository.path);
             showMore->setText(tr("Show more"));
-            showMore->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            showMore->setStyleSheet(QStringLiteral("text-align: left;"));
+            showMore->setFlat(true);
+            showMore->setCursor(Qt::PointingHandCursor);
             chrome_geometry::fixedHeight(showMore, kShowMoreHeight);
             showMore->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
             connect(showMore, &QToolButton::clicked, this, [this, path = repository.path] {
@@ -411,7 +413,7 @@ void SidebarRepositoryList::applyPresentation() {
                 ++visibleRows;
         }
         auto* showMore =
-            group->findChild<QToolButton*>(QStringLiteral("productShowMoreConversations"));
+            group->findChild<QPushButton*>(QStringLiteral("productShowMoreConversations"));
         const bool moreVisible = tagFilter_.isEmpty() && showMore != nullptr && !collapsed &&
                                  !showAll && repository.conversations.size() > preview.size();
         if (showMore != nullptr)
