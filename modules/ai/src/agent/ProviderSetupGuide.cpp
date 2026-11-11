@@ -7,6 +7,23 @@
 
 namespace ketplus::provider_setup {
 namespace {
+// The guide names the computer the way its system does.
+QString thisComputer() {
+#if defined(Q_OS_MACOS)
+    return QCoreApplication::translate("ProviderSetupGuide", "this Mac");
+#else
+    return QCoreApplication::translate("ProviderSetupGuide", "this computer");
+#endif
+}
+
+// `codex login --with-api-key` reads the key on standard input (OpenAI's Codex auth docs).
+QString codexApiKeyLogin() {
+#if defined(Q_OS_WIN)
+    return QStringLiteral("$env:OPENAI_API_KEY | codex login --with-api-key");
+#else
+    return QStringLiteral("printenv OPENAI_API_KEY | codex login --with-api-key");
+#endif
+}
 
 QString tr(const char* text) { return QCoreApplication::translate("ProviderSetupGuide", text); }
 
@@ -145,10 +162,12 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
         value.insert(QStringLiteral("badge"), tr("Not installed"));
         value.insert(QStringLiteral("reason"),
                      id == QStringLiteral("cursor")
-                         ? tr("KetPlus runs Cursor through the Cursor CLI on this Mac and couldn't "
+                         ? tr("KetPlus runs Cursor through the Cursor CLI on %1 and couldn't "
                               "find it. The Cursor app alone is not enough.")
-                         : tr("KetPlus runs Codex through the Codex CLI on this Mac and couldn't "
-                              "find it."));
+                               .arg(thisComputer())
+                         : tr("KetPlus runs Codex through the Codex CLI on %1 and couldn't "
+                              "find it.")
+                               .arg(thisComputer()));
         value.insert(QStringLiteral("error"), firstLine(message));
         value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
         steps << step(tr("Install the %1 in a terminal.").arg(cli), install)
@@ -195,21 +214,23 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
         value.insert(QStringLiteral("badge"), tr("Not signed in"));
         if (id == QStringLiteral("cursor")) {
             value.insert(QStringLiteral("reason"),
-                         tr("Cursor is installed but the Cursor CLI has no account on this Mac. "
+                         tr("Cursor is installed but the Cursor CLI has no account on %1. "
                             "The Cursor app signs in separately, and KetPlus does not store "
-                            "Cursor credentials."));
+                            "Cursor credentials.")
+                             .arg(thisComputer()));
             steps << step(tr("Sign in in a terminal with the account that has your Cursor plan. "
                              "A browser window opens."),
                           login);
         } else {
             value.insert(QStringLiteral("reason"),
-                         tr("Codex is installed but has no account on this Mac. KetPlus uses the "
-                            "CLI's own sign-in and does not store Codex credentials."));
+                         tr("Codex is installed but has no account on %1. KetPlus uses the "
+                            "CLI's own sign-in and does not store Codex credentials.")
+                             .arg(thisComputer()));
             steps << step(tr("Sign in in a terminal. A browser window opens for your ChatGPT "
                              "account."),
                           login)
                   << step(tr("Using an OpenAI API key instead? Pass it on standard input."),
-                          QStringLiteral("printenv OPENAI_API_KEY | codex login --with-api-key"));
+                          codexApiKeyLogin());
         }
         steps << step(tr("Check again."));
         value.insert(QStringLiteral("ready"), tr("%1 is signed in").arg(name));
@@ -315,7 +336,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                       login);
         if (codex)
             steps << step(tr("Or pass a working OpenAI API key on standard input."),
-                          QStringLiteral("printenv OPENAI_API_KEY | codex login --with-api-key"));
+                          codexApiKeyLogin());
         else
             steps << step(tr("Or set CURSOR_API_KEY to a working key, then quit and reopen "
                              "KetPlus."));

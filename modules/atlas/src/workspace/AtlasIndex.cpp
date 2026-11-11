@@ -159,8 +159,14 @@ AtlasDescriptor parseManifest(const QFileInfo& info, const QString& root) {
         const auto flow = value.toObject();
         const QString id = flow.value(QStringLiteral("id")).toString();
         const QString title = flow.value(QStringLiteral("title")).toString();
+        QSet<QString> screens;
+        for (const auto& node : flow.value(QStringLiteral("nodes")).toArray()) {
+            const QString screen = node.toObject().value(QStringLiteral("screen")).toString();
+            if (!screen.isEmpty())
+                screens.insert(screen);
+        }
         if (!id.isEmpty())
-            descriptor.flows.append({id, title.isEmpty() ? id : title});
+            descriptor.flows.append({id, title.isEmpty() ? id : title, int(screens.size())});
     }
     return descriptor;
 }

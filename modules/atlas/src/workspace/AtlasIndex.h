@@ -26,6 +26,7 @@ struct AtlasScreenDescriptor {
 struct AtlasFlowDescriptor {
     QString id;
     QString title;
+    int screenCount{0}; // Distinct screens its nodes show.
 
     bool operator==(const AtlasFlowDescriptor&) const = default;
 };

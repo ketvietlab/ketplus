@@ -181,10 +181,11 @@ class CloudPrivacyTestAccess {
         return client.senderKeys_.size();
     }
     static QJsonObject metadata(const StoredSession& session,
-                                const QHash<QString, QJsonObject>& agentMetadata = {}) {
+                                const QHash<QString, QJsonObject>& agentMetadata = {},
+                                const QHash<QString, QString>& tagColors = {}) {
         QHash<QString, QJsonObject> sealed;
         CloudControlClient::sessionSnapshots({session}, "workspace-synthetic", "machine-synthetic",
-                                             "salt", {}, &sealed, agentMetadata);
+                                             "salt", {}, &sealed, agentMetadata, tagColors);
         return sealed.value(session.id);
     }
     static QJsonArray snapshots(const QList<StoredSession>& sessions) {
