@@ -106,10 +106,14 @@ class FakeDaemon final : public QObject {
     void answer(const QJsonObject& request, const QJsonObject& payload) {
         if (!current)
             return;
-        const QJsonObject envelope{
-            {QStringLiteral("correlation_id"), request.value(QStringLiteral("message_id"))},
-            {QStringLiteral("message_type"), request.value(QStringLiteral("message_type"))},
-            {QStringLiteral("payload"), payload}};
+        send({{QStringLiteral("correlation_id"), request.value(QStringLiteral("message_id"))},
+              {QStringLiteral("message_type"), request.value(QStringLiteral("message_type"))},
+              {QStringLiteral("payload"), payload}});
+    }
+
+    void send(const QJsonObject& envelope) {
+        if (!current)
+            return;
         const QByteArray body = QJsonDocument(envelope).toJson(QJsonDocument::Compact);
         QByteArray frame(4, Qt::Uninitialized);
         const auto size = static_cast<quint32>(body.size());
@@ -1017,6 +1021,28 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!client.hasCapability(prefix + "read"));
         for (const auto& request : daemon.requests)
             QCOMPARE(request.value("message_type").toString(), "session.attach");
+    }
+
+    // ADR 0114: team.changed and team.removed carry no session and answer no request.
+    void teamEventsReachTheirOwnSignal() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        remote::DaemonClient client;
+        QTRY_VERIFY(client.isReady());
+        QSignalSpy teams(&client, &remote::DaemonClient::teamEventReceived);
+        QSignalSpy sessions(&client, &remote::DaemonClient::eventReceived);
+        daemon.send({{"message_type", "team.changed"},
+                     {"payload", QJsonObject{{"team", QJsonObject{{"id", "7"}}}}}});
+        daemon.send({{"message_type", "team.removed"}, {"payload", QJsonObject{{"team_id", "7"}}}});
+        QTRY_COMPARE(teams.size(), 2);
+        QCOMPARE(teams.at(0).at(0).toString(), QStringLiteral("team.changed"));
+        QCOMPARE(teams.at(0).at(1).toJsonObject().value("team").toObject().value("id").toString(),
+                 QStringLiteral("7"));
+        QCOMPARE(teams.at(1).at(0).toString(), QStringLiteral("team.removed"));
+        QCOMPARE(sessions.size(), 0);
+        QVERIFY(client.isReady());
     }
 
     void sentWritesAreFailedNotReplayedAfterDisconnect() {

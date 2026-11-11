@@ -1,4 +1,4 @@
-// ADR 0112 §7 and open point 2: what starts a member's turn, the budget of automatic turns,
+// ADR 0114 §7 and open point 2: what starts a member's turn, the budget of automatic turns,
 // the messages held while a team is paused, and the leader's digest.
 #include "storage/LocalJournal.h"
 #include "teams/TeamCoordinator.h"
@@ -66,7 +66,7 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     const Team before = *team;
     QList<Update> updates;
     if (!team->paused && team->automaticTurns >= team->turnBudget) {
-        // The budget is used up: pause once and ask (ADR 0112, open point 2).
+        // The budget is used up: pause once and ask (ADR 0114, open point 2).
         team->paused = true;
         team->pausedReason = QStringLiteral("budget");
         const QString more = QStringLiteral("Continue (%1 more turns)").arg(team->turnBudget);
@@ -160,8 +160,12 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId) {
     if (!team)
         return;
     const Member* member = team->member(sessionId);
-    if (member && member->role == role::leader)
-        sendDigest(team->id);
+    const qint64 teamId = team->id;
+    checkMerged(teamId);
+    if (member && member->role == role::developer)
+        checkLanes(teamId, sessionId);
+    else if (member && member->role == role::leader)
+        sendDigest(teamId);
 }
 
 } // namespace ketplus::daemon::teams

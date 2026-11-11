@@ -69,6 +69,13 @@ QJsonObject originEntry(const AgentMessageRecord& message) {
             {QStringLiteral("body"), message.body}};
 }
 
+// A request to review, which runs read-only (ADR 0067). The findings a team's reviewer sends
+// back to a task's owner are also of kind "review" (ADR 0114) but expect no reply: they start
+// an ordinary turn, in which the owner fixes them.
+bool reviewRequest(const AgentMessageRecord& message) {
+    return message.kind == QStringLiteral("review") && message.expectReply;
+}
+
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
@@ -76,9 +83,7 @@ QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
                        {QStringLiteral("agent_messages"), entries}};
     // ADR 0067: the turn reviews another conversation and runs read-only.
-    if (std::any_of(messages.cbegin(), messages.cend(), [](const AgentMessageRecord& message) {
-            return message.kind == QStringLiteral("review");
-        }))
+    if (std::any_of(messages.cbegin(), messages.cend(), reviewRequest))
         origin.insert(QStringLiteral("review_guard"), true);
     if (!messages.isEmpty() && messages.first().delivery.startsWith("user_authorized:"))
         origin.insert(QStringLiteral("user_release_id"),
@@ -219,7 +224,7 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
         if (values.size() >= limit)
             continue;
         QJsonObject value = conversationJson(conversation);
-        // ADR 0112: a member's role and lane.
+        // ADR 0114: a member's role and lane.
         if (const QJsonObject team = host_->teamMembership(conversation.sessionId);
             !team.isEmpty()) {
             value.insert(QStringLiteral("team"), team.value(QStringLiteral("name")));
@@ -236,7 +241,7 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
 
 QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& request) {
     QJsonObject payload = request;
-    // ADR 0112: inside a team, "leader" and "reviewer" name the team's member.
+    // ADR 0114: inside a team, "leader" and "reviewer" name the team's member.
     if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
         role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
         const QString number = host_->teamRoleNumber(caller.sessionId, role);
@@ -465,7 +470,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     QList<AgentMessageRecord> deliverable;
     for (AgentMessageRecord& message : queued) {
         // The receiver may have switched provider since the review was requested.
-        if (message.kind == QStringLiteral("review") && !enforcesReviewGuard(receiver->provider)) {
+        if (reviewRequest(message) && !enforcesReviewGuard(receiver->provider)) {
             markState(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             notice(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             continue;
@@ -534,7 +539,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         if (message.expectReply)
             origin.expectReply.append(message.id);
-        if (message.kind == QStringLiteral("review"))
+        if (reviewRequest(message))
             origin.review = true;
     }
     turns_.insert(sessionId, origin);
@@ -577,8 +582,7 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
     QList<AgentMessageRecord> pending = journal_->agentMessagesTo(
         sessionId, generation, {QStringLiteral("queued"), QStringLiteral("held")});
     // A review request runs only in its own read-only turn (ADR 0067), never in the user's.
-    pending.removeIf(
-        [](const AgentMessageRecord& message) { return message.kind == QStringLiteral("review"); });
+    pending.removeIf(reviewRequest);
     if (pending.isEmpty())
         return {};
     // Messages left over are delivered when this turn ends.
@@ -682,10 +686,19 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
             const QString reason =
                 completed ? QStringLiteral("no_reply") : QStringLiteral("turn_") + status;
             markState(*request, QStringLiteral("failed"), reason);
+            if (request->fromSession.isEmpty()) {
+                host_->teamRequestFinished(sessionId, *request, {}, reason);
+                continue;
+            }
             notice(*request, QStringLiteral("failed"), reason);
             continue;
         }
         markState(*request, QStringLiteral("answered"));
+        if (request->fromSession.isEmpty()) {
+            // ADR 0114: the team sent it; the team reads the answer.
+            host_->teamRequestFinished(sessionId, *request, text, {});
+            continue;
+        }
         const auto sender = host_->agentConversation(request->fromSession);
         if (!sender || sender->generation != request->fromGeneration)
             continue;

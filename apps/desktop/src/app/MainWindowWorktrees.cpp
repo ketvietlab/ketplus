@@ -8,6 +8,7 @@
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
+#include "teams/TeamPage.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
@@ -35,6 +36,11 @@
 
 namespace ketplus {
 void MainWindow::hideUtilityWorkspaces() {
+    if (teamPage_ != nullptr) {
+        teamPage_->hide();
+        teamPage_->deleteLater();
+        teamPage_.clear();
+    }
     if (settingsWorkspace_ != nullptr) {
         auto* page = settingsWorkspace_;
         settingsWorkspace_ = nullptr;

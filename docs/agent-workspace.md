@@ -324,7 +324,14 @@ current-window value.
   message names for the agent, which contacts them through `ketplus_agents`
   only when asked. A turn another agent started shows its message as a
   user bubble under a muted "From @agent/1093 · title · provider" label
-  (reviews keep "Review request from …"); a prompt's images lead its bubble and a steer adds "Sent
+  (reviews keep "Review request from …"). A team's own message (#468: an assignment, the
+  leader's digest, a review request or its verdict, an answered decision) is drawn as one
+  card instead: kind and team, the task and its title, the facts, criteria, changed files,
+  findings, digest groups with what needs the leader marked, or the question and answer.
+  `agent/TeamTranscriptBlocks` reads the card from the message's text, so
+  `ketplus_team_transcript_contract_tests` runs the daemon's real texts through it; a message
+  it cannot read, or a kind it does not know, stays the bubble with its text. Open T-n opens
+  the task on the team page. A prompt's images lead its bubble and a steer adds "Sent
   while <provider> was working" below it, naming the provider its `turn.steered`
   event records (older steers read "the agent"). The sender's transcript adds the mock's note for
   each message it sent: "Message to @agent/1093" (or "Reply to", "Notice to"),
@@ -1054,7 +1061,7 @@ spend cap or bill. Consult Anthropic Console for actual usage. See
 
 ## Teams
 
-[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+[ADR 0114](decisions/0114-agent-teams.md) (epic #450). A team is several conversations of
 one repository on one goal: exactly one **leader**, one to five **developers** and exactly
 one **reviewer** (a Claude conversation). A conversation is on at most one team.
 

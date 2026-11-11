@@ -31,12 +31,16 @@ QJsonObject tool(const QString& name, const QString& description, const QJsonObj
 }
 
 const QStringList& names() {
-    static const QStringList value{
-        QStringLiteral("team_get"),           QStringLiteral("team_tasks"),
-        QStringLiteral("team_task_update"),   QStringLiteral("team_task_create"),
-        QStringLiteral("team_task_assign"),   QStringLiteral("team_task_handover"),
-        QStringLiteral("team_task_criteria"), QStringLiteral("team_lane_set"),
-        QStringLiteral("team_decision_raise")};
+    static const QStringList value{QStringLiteral("team_get"),
+                                   QStringLiteral("team_tasks"),
+                                   QStringLiteral("team_task_update"),
+                                   QStringLiteral("team_task_create"),
+                                   QStringLiteral("team_task_assign"),
+                                   QStringLiteral("team_task_handover"),
+                                   QStringLiteral("team_task_criteria"),
+                                   QStringLiteral("team_lane_set"),
+                                   QStringLiteral("team_decision_raise"),
+                                   QStringLiteral("team_decision_withdraw")};
     return value;
 }
 
@@ -118,16 +122,23 @@ QJsonArray teamTools() {
                list(QStringLiteral("Path prefixes relative to the repository."))},
               {QStringLiteral("reason"), text(QStringLiteral("Why the lane changes."))}},
              {QStringLiteral("developer"), QStringLiteral("paths"), QStringLiteral("reason")}),
-        tool(QStringLiteral("team_decision_raise"),
-             QStringLiteral("Leader: ask the user a question that changes the product, with two "
-                            "to four choices and your recommendation. Shown on the team page."),
-             {{QStringLiteral("question"), text(QStringLiteral("The question."))},
-              {QStringLiteral("context"), text(QStringLiteral("A short context."))},
-              {QStringLiteral("choices"), list(QStringLiteral("Two to four choices."))},
-              {QStringLiteral("recommended"), text(QStringLiteral("The choice you recommend."))},
-              {QStringLiteral("task_id"), text(QStringLiteral("The task it blocks, if any."))}},
-             {QStringLiteral("question"), QStringLiteral("choices"),
-              QStringLiteral("recommended")})};
+        tool(
+            QStringLiteral("team_decision_raise"),
+            QStringLiteral("Leader: ask the user a question that changes the product, with two "
+                           "to four choices and your recommendation. Shown on the team page."),
+            {{QStringLiteral("question"), text(QStringLiteral("The question."))},
+             {QStringLiteral("context"), text(QStringLiteral("A short context."))},
+             {QStringLiteral("choices"), list(QStringLiteral("Two to four choices."))},
+             {QStringLiteral("recommended"), text(QStringLiteral("The choice you recommend."))},
+             {QStringLiteral("task_id"), text(QStringLiteral("The task it blocks, if any."))}},
+            {QStringLiteral("question"), QStringLiteral("choices"), QStringLiteral("recommended")}),
+        tool(
+            QStringLiteral("team_decision_withdraw"),
+            QStringLiteral("Leader: withdraw a decision you raised that is no longer needed, "
+                           "with the reason."),
+            {{QStringLiteral("decision_id"), text(QStringLiteral("The decision id, such as D-2."))},
+             {QStringLiteral("reason"), text(QStringLiteral("Why it is no longer needed."))}},
+            {QStringLiteral("decision_id"), QStringLiteral("reason")})};
 }
 
 QString teamOperationFor(const QString& tool) {

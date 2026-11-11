@@ -1,4 +1,4 @@
-// ADR 0112, open point 4: one JSON document per team, a session → team index that makes
+// ADR 0114, open point 4: one JSON document per team, a session → team index that makes
 // "one team per conversation" a constraint, and the append-only log of updates.
 #include "storage/LocalJournal.h"
 

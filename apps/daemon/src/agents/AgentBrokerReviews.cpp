@@ -193,6 +193,8 @@ QString reviewBody(const AgentConversation& working, const QString& base, const 
 
 // A snapshot is the tree of every tracked and untracked (not ignored) file, written through
 // a copy of the worktree's index so neither the worktree nor its index changes.
+bool AgentBroker::verdictHasNoFindings(const QString& text) { return reportsNoFindings(text); }
+
 void AgentBroker::snapshotWorktree(const QString& worktree,
                                    std::function<void(std::optional<QString>)> done) {
     QPointer<AgentBroker> self(this);
@@ -252,7 +254,7 @@ void AgentBroker::reviewFinishedTurn(const QString& sessionId, const qint64 gene
     const auto working = host_->agentConversation(sessionId);
     if (!reviewer || !working || working->generation != generation)
         return;
-    // ADR 0112: the team's reviewer reviews a member's tasks instead.
+    // ADR 0114: the team's reviewer reviews a member's tasks instead.
     if (host_->onTeam(sessionId))
         return;
     // Cancelled, failed or stopped turns trigger nothing; their changes stay in the next diff.

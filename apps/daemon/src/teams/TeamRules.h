@@ -6,7 +6,7 @@
 
 namespace ketplus::daemon::teams {
 
-// A refusal with its protocol error code (ADR 0112, "Protocol").
+// A refusal with its protocol error code (ADR 0114, "Protocol").
 struct TeamError final {
     QString code;
     QString message;

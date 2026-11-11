@@ -30,6 +30,19 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
+    src/workspace/SidebarRepositoryListTeams.cpp
+    src/teams/TeamDirectory.cpp
+    src/teams/TeamDirectory.h
+    src/teams/TeamMenus.cpp
+    src/teams/TeamMenus.h
+    src/teams/TeamAgentDialog.cpp
+    src/teams/TeamAgentDialog.h
+    src/teams/TeamDialogs.cpp
+    src/teams/TeamDialogs.h
+    src/teams/TeamPage.cpp
+    src/teams/TeamPage.h
+    src/teams/TeamTaskDialog.cpp
+    src/teams/TeamTaskDialog.h
 )
 target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Network
@@ -106,6 +119,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowAgent.cpp
     src/app/MainWindowConversationActions.cpp
     src/app/ConversationMenu.cpp
+    src/app/MainWindowTeams.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp
     src/app/TranscriptFileType.h

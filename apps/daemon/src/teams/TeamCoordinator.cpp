@@ -1,4 +1,4 @@
-// ADR 0112: the team store and the membership rules.
+// ADR 0114: the team store and the membership rules.
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
@@ -156,6 +156,8 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     emit teamChanged(teamJson(team));
     if (actionable)
         scheduleDigest(team.id);
+    if (team.reviewing.isEmpty() && !team.reviewQueue.isEmpty())
+        pumpReviews(team.id);
     return std::nullopt;
 }
 
@@ -303,6 +305,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                              .arg(normalised->isEmpty() ? QStringLiteral("none")
                                                         : normalised->join(QStringLiteral(", ")))});
         team->sharedPaths = *normalised;
+        recheckLanes(*team, updates);
     }
     if (changes.contains(QStringLiteral("paused"))) {
         const bool paused = changes.value(QStringLiteral("paused")).toBool();
@@ -310,7 +313,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             team->paused = paused;
             team->pausedReason = paused ? QStringLiteral("user") : QString{};
             if (!paused) {
-                team->automaticTurns = 0; // The user acted on the team (ADR 0112, point 2).
+                team->automaticTurns = 0; // The user acted on the team (ADR 0114, point 2).
                 for (Decision& decision : team->decisions)
                     if (decision.kind == QStringLiteral("budget") &&
                         decision.state == QStringLiteral("open")) {
@@ -413,7 +416,7 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
         return {.error = refused};
     member.joinedAt = nowIso();
     team->members.append(member);
-    // An empty role filled again lifts the pause it caused (ADR 0112, point 4).
+    // An empty role filled again lifts the pause it caused (ADR 0114, point 4).
     if (team->paused && team->pausedReason == QStringLiteral("empty_role") &&
         team->count(role::leader) == 1 && team->count(role::reviewer) == 1 &&
         team->count(role::developer) >= 1) {
@@ -472,14 +475,14 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
                            {QStringLiteral("from"), QJsonArray::fromStringList(oldPaths)},
                            {QStringLiteral("to"), QJsonArray::fromStringList(*normalised)},
                            {QStringLiteral("reason"), reason}};
-    // ADR 0112 §4: in the history of every open task of the lanes it touches.
+    // ADR 0114 §4: in the history of every open task of the lanes it touches.
     for (Task& task : team->tasks)
         if (task.state != state::done &&
             (task.owner == sessionId || task.lane == oldLane || task.lane == member->lane))
             addHistory(task, actor, QStringLiteral("lane"), text, data);
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("lane_changed"), .text = text, .data = data}}))
+    QList<Update> updates{{.kind = QStringLiteral("lane_changed"), .text = text, .data = data}};
+    recheckLanes(*team, updates);
+    if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};
 }
@@ -543,6 +546,11 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
     updates.prepend({.kind = QStringLiteral("member_removed"),
                      .text = QStringLiteral("%1 was deleted and left the team.").arg(name),
                      .data = {{QStringLiteral("session_id"), sessionId}}});
+    if (role == role::reviewer && !team->reviewing.isEmpty()) {
+        // The review in flight waits for the next reviewer, first in the queue.
+        team->reviewQueue.prepend(team->reviewing);
+        team->reviewing.clear();
+    }
     if (role != role::developer || team->count(role::developer) == 0) {
         const QString empty = role == role::developer ? QStringLiteral("developer") : role;
         team->paused = true;

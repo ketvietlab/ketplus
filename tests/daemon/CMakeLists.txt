@@ -69,6 +69,10 @@ ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
 ketplus_add_daemon_test(ketplus_team_flow_tests TeamFlowTest.cpp)
+ketplus_add_daemon_test(ketplus_team_review_tests TeamReviewTest.cpp)
+ketplus_add_daemon_test(ketplus_team_lane_tests TeamLaneTest.cpp)
+ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
+ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
 ketplus_add_daemon_test(ketplus_work_report_tests WorkReportTest.cpp)
 ketplus_add_daemon_test(ketplus_awaiting_reply_tests AwaitingReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_tag_catalog_tests TagCatalogTest.cpp)
@@ -180,3 +184,9 @@ set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 
 ketplus_tests_offscreen()
+# #468: the daemon's team texts, read by the desktop's transcript blocks.
+ketplus_add_daemon_test(ketplus_team_transcript_contract_tests TeamTranscriptContractTest.cpp)
+target_sources(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src/agent/TeamTranscriptBlocks.cpp)
+target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src)

@@ -69,6 +69,8 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
+class TeamDirectory;
+class TeamPage;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -233,6 +235,28 @@ class MainWindow final : public QMainWindow {
     // Names the signed-in account on the sidebar identity button (ADR 0109).
     void setupSidebarAccount();
     [[nodiscard]] remote::DaemonClient* accountDaemon();
+    // ADR 0114 (#464): teams in the sidebar while the daemon advertises teams/1.
+    void setupTeams();
+    // Takes the members of the repository's teams out of `conversations`, into their folders.
+    [[nodiscard]] QVector<SidebarTeam> takeSidebarTeams(const QString& repository,
+                                                        QVariantList& conversations) const;
+    // Each member conversation's role for the Agent Workspace header (#467).
+    void updateTeamRoles();
+    void showTeamMenu(const QString& teamId);
+    void openTeam(const QString& teamId);
+    // #466: the team page in the workspace, or the empty page of a repository without one.
+    void showTeamPage(const QString& teamId, const QString& repository);
+    void openTeamMember(const QString& sessionId);
+    void openTeamTask(const QString& teamId, const QString& taskId);
+    void joinTeam(const QString& teamId, const QString& sessionId);
+    void leaveTeam(const QString& teamId, const QString& sessionId);
+    void deleteTeam(const QString& teamId);
+    void showNewTeamDialog(const QString& repository);
+    void showAddTeamMemberDialog(const QString& teamId);
+    // The conversation menu's team entries; true when `chosen` was one of them.
+    bool handleConversationTeamAction(QAction* chosen, const QString& sessionId);
+    [[nodiscard]] QString conversationSessionId(const QString& worktreePath,
+                                                const QString& conversationId) const;
     void showUpdateSettings();
     // Opens Settings on a section; an empty id keeps the section it shows.
     void showSettingsSection(const QString& id);
@@ -428,6 +452,8 @@ class MainWindow final : public QMainWindow {
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
     remote::DaemonClient* accountDaemon_{nullptr};
+    TeamDirectory* teams_{nullptr};
+    QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     // The Create worktree card asked to open Agent Workspace on what it creates.

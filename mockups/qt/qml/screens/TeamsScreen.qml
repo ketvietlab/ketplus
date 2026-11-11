@@ -26,10 +26,12 @@ Item {
         todo: { label: "To do", tone: KetTheme.BadgeTone.Neutral },
         doing: { label: "In progress", tone: KetTheme.BadgeTone.Accent },
         review: { label: "In review", tone: KetTheme.BadgeTone.Info },
+        // Passed review with every criterion met; waits for whoever merges (#463).
+        ready: { label: "Ready to merge", tone: KetTheme.BadgeTone.Success },
         blocked: { label: "Blocked", tone: KetTheme.BadgeTone.Warning },
         done: { label: "Done", tone: KetTheme.BadgeTone.Success }
     })
-    readonly property var filters: ["", "doing", "review", "blocked", "done"]
+    readonly property var filters: ["", "doing", "review", "ready", "blocked", "done"]
     readonly property var roles: ({
         leader: { label: "Leader · Requirements", tone: KetTheme.BadgeTone.Accent },
         developer: { label: "Developer", tone: KetTheme.BadgeTone.Neutral },
@@ -77,8 +79,9 @@ Item {
             openTask = tasks.find(t => t.id === id)
     }
 
-    // `teams/empty`: no team yet. `teams/large`: a fourth
-    // developer, so reviews queue.
+    // `teams/empty`: no team yet. `teams/large`: a fourth developer, so reviews queue.
+    // `teams/ready`: the user merges, and T-1 passed review: "Merge T-1?" waits for the user.
+    // `teams/paused`: the team used its automatic turns and waits for the user to go on.
     function showState(state) {
         teams = state === "empty" ? [] : Fixtures.teams
         teamIndex = 0
@@ -89,7 +92,26 @@ Item {
                 state: "idle", now: "No task yet" }]) })
         if (state === "task")
             Qt.callLater(() => screen.showTask("T-3"))
+        if (state === "ready")
+            change({ merges: "user",
+                tasks: tasks.map(t => t.id !== "T-1" ? t : Object.assign({}, t, { state: "ready",
+                    history: t.history.concat([
+                        { when: "Today, 12:20", text: "@agent/4583 passed round 1 of 3 with no findings" },
+                        { when: "Today, 12:20", text: "Every criterion is met: Ready to merge" }]) })),
+                decisions: [mergeDecision].concat(decisions) })
+        if (state === "paused")
+            change({ paused: true, pausedReason: "budget",
+                decisions: [budgetDecision].concat(decisions),
+                members: members.map(m => m.state === "working"
+                    ? Object.assign({}, m, { state: "idle", now: "Waits: the team is paused" }) : m) })
     }
+    // What the daemon raises itself (#463, #459): a merge under the user setting, and the budget.
+    readonly property var mergeDecision: ({ id: "D-3", kind: "merge", question: "Merge T-1 into release/1.4?",
+        detail: "The review passed with no findings and every criterion is met. You chose to merge each task yourself.",
+        askedBy: "", task: "T-1", when: "Just now", options: ["Merge", "Not yet"], recommended: 0 })
+    readonly property var budgetDecision: ({ id: "D-4", kind: "budget", question: "The team used its 40 automatic turns. Continue?",
+        detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
+        askedBy: "", task: "", when: "Just now", options: ["Continue with 40 more", "Stay paused"], recommended: 0 })
 
     // `--open=new-team|add-member|task|handover` opens a dialog for review captures.
     function openDialog(name) {
@@ -191,6 +213,22 @@ Item {
 
     // The user's answer goes to the leader and to the owner of the task it blocks.
     function decide(decision, option) {
+        // The daemon's own decisions act on the team instead of going to a member.
+        if (decision.kind === "merge" || decision.kind === "budget") {
+            const yes = option === decision.options[0]
+            change({
+                decisions: decisions.filter(d => d.id !== decision.id),
+                paused: decision.kind === "budget" ? !yes : team.paused,
+                pausedReason: decision.kind === "budget" && yes ? "" : team.pausedReason,
+                tasks: tasks.map(t => t.id !== decision.task || !yes ? t : Object.assign({}, t, { state: "done",
+                    history: t.history.concat([{ when: "Just now", text: "You merged " + t.id + " into " + team.branch }]) })),
+                updates: [{ icon: "check", text: decision.id + " decided: " + option, detail: "You · the team", when: "Just now" }]
+                    .concat(team.updates)
+            })
+            screen.window.notify(decision.kind === "merge" ? (yes ? "Merged " + decision.task : "Kept " + decision.task + " ready")
+                                                           : (yes ? "Resumed " + team.name : "The team stays paused"))
+            return
+        }
         const task = tasks.find(t => t.id === decision.task)
         const blocked = task && task.state === "blocked"
         change({
@@ -514,6 +552,22 @@ Item {
             }
 
             KetBanner {
+                objectName: "teamPausedBanner"
+                width: parent.width
+                visible: !!screen.team && screen.team.paused
+                tone: KetTheme.BannerTone.Warning
+                title: screen.team && screen.team.pausedReason === "budget"
+                       ? "Paused: the team used its automatic turns" : "Paused"
+                message: "No member starts a turn on its own. Messages to members wait and arrive in order when you resume."
+                actionText: "Resume"
+                onActionTriggered: {
+                    screen.change({ paused: false, pausedReason: "",
+                        decisions: screen.decisions.filter(d => d.kind !== "budget") })
+                    screen.window.notify("Resumed " + screen.team.name)
+                }
+            }
+
+            KetBanner {
                 width: parent.width
                 visible: screen.reviewQueue
                 tone: KetTheme.BannerTone.Info
@@ -573,12 +627,13 @@ Item {
                             KetButton {
                                 text: "Answer in the conversation"
                                 variant: KetTheme.ButtonVariant.Ghost
+                                visible: !!card.modelData.askedBy
                                 onClicked: screen.openConversation(card.modelData.askedBy)
                             }
                             Label {
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignRight
-                                text: card.modelData.id + " · " + screen.reference(card.modelData.askedBy) + " · " + card.modelData.when
+                                text: card.modelData.id + " · " + (card.modelData.askedBy ? screen.reference(card.modelData.askedBy) : "The team") + " · " + card.modelData.when
                                       + (card.task ? " · " + (card.task.state === "blocked" ? "Blocks " : "For ") + card.task.id : "")
                                 color: KetTheme.t.textMuted
                                 font.pixelSize: screen.px(12)
@@ -878,7 +933,7 @@ Item {
         KetMenuItem {
             text: screen.team && screen.team.paused ? "Resume automatic turns" : "Pause automatic turns"
             description: "Members finish their turn, then wait for you"
-            iconName: screen.team && screen.team.paused ? "play" : "pause-circle"
+            iconName: screen.team && screen.team.paused ? "resume" : "pause-circle"
             onTriggered: {
                 const paused = !screen.team.paused
                 screen.change({ paused: paused })

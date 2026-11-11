@@ -1,7 +1,7 @@
 #pragma once
 
 // A fake runtime for the team coordinator: conversations, worktrees and the messages a team
-// sends, all in memory (ADR 0112).
+// sends, all in memory (ADR 0114).
 #include "teams/TeamCoordinator.h"
 
 #include <QHash>
@@ -34,6 +34,22 @@ class FakeHost final : public TeamHostPort {
     QString headCommit(const QString& worktree) const override {
         return heads.value(worktree, worktree + QStringLiteral("@head"));
     }
+    std::optional<TaskDiff> taskDiff(const Team& team, const Task& task) const override {
+        (void)team;
+        if (unreadable.contains(task.id))
+            return std::nullopt;
+        return TaskDiff{.diff = QStringLiteral("+++ b/web/%1.txt\n+change of %1").arg(task.id),
+                        .files = {QStringLiteral("web/%1.txt").arg(task.id)}};
+    }
+    std::optional<QStringList> changedPaths(const Team& team, const Task& task) const override {
+        (void)team;
+        const auto it = changed.constFind(task.id);
+        return it == changed.cend() ? std::nullopt : std::optional(it.value());
+    }
+    std::optional<bool> isMerged(const Team& team, const Task& task) const override {
+        (void)team;
+        return merged.contains(task.id);
+    }
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
         return {};
@@ -64,6 +80,9 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, QString> pointed;
     QHash<QString, QString> heads;
     QSet<QString> dirty;
+    QSet<QString> unreadable;
+    QHash<QString, QStringList> changed;
+    QSet<QString> merged;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
 };
@@ -73,6 +92,8 @@ inline Team standardTeam() {
     team.repository = QStringLiteral("/repo");
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
+    // The first plan is approved unless a test is about it (ADR 0114, open point 5).
+    team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
                     {.sessionId = "dev1",
                      .role = role::developer,

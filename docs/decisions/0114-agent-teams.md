@@ -1,4 +1,4 @@
-# ADR 0112: Agent teams — a leader, developers and a reviewer on one goal
+# ADR 0114: Agent teams — a leader, developers and a reviewer on one goal
 
 Status: accepted (Jay, 2026-11-10 for the rules marked *decided*; the open points
 below were fixed in this ADR with the recommendation of epic #450). Implements
@@ -183,7 +183,8 @@ Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_lane_set`,
-`team_decision_raise` (leader). A call by the wrong role names the role that may.
+`team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
+the role that may.
 
 ## Consequences
 

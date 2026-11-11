@@ -1,4 +1,4 @@
-// ADR 0112 §6: tasks with one owner, states, criteria and an append-only history.
+// ADR 0114 §6: tasks with one owner, states, criteria and an append-only history.
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
@@ -303,7 +303,8 @@ TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskI
                                .taskId = taskId,
                                .data = {{QStringLiteral("owner"), owner}}}}))
         return {.error = failed};
-    deliverAssignment(*team, *team->task(taskId), actor, false);
+    if (!holdForFirstPlan(teamId, taskId, actor))
+        deliverAssignment(*team, *team->task(taskId), actor, false);
     return {.teamId = teamId};
 }
 
@@ -377,7 +378,9 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                                    {QStringLiteral("body"),
                                     QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
                                         .arg(taskId, member->name, reason.trimmed())}});
-    deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
+    // A task held for the first plan stays held with its new owner.
+    if (!team->task(taskId)->assignmentHeld)
+        deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
     return {.teamId = teamId};
 }
 
@@ -397,7 +400,10 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                     .taskId = task.id,
                     .actionable = actionable,
                     .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
-    // A developer whose work all left its hands needs the leader (ADR 0112 §7).
+    // ADR 0114 §2: the reviewer takes tasks first in, first out; commit() sends the next.
+    if (to == state::inReview && !team.reviewQueue.contains(task.id) && team.reviewing != task.id)
+        team.reviewQueue.append(task.id);
+    // A developer whose work all left its hands needs the leader (ADR 0114 §7).
     if (!task.owner.isEmpty() && (to == state::inReview || to == state::done)) {
         bool busy = false;
         for (const Task& other : team.tasks)

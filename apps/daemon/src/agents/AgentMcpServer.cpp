@@ -338,7 +338,7 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
     if (method == QStringLiteral("ping"))
         return result(id, {});
     if (method == QStringLiteral("tools/list")) {
-        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        // ADR 0114: the team tools only for a member; the daemon refuses them for others.
         QJsonArray listed = tools();
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())

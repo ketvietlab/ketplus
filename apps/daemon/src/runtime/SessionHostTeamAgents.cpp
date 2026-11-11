@@ -1,4 +1,4 @@
-// ADR 0112: the team_* tools of the ketplus_agents server. The daemon checks the caller's
+// ADR 0114: the team_* tools of the ketplus_agents server. The daemon checks the caller's
 // role for every call; a role that may not act is refused with the role that may.
 #include "runtime/SessionHost.h"
 
@@ -198,11 +198,34 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
     return teamDecisionOperation(sessionId, operation, payload);
 }
 
-// Decisions arrive with #462.
+// ADR 0114 §3: the leader's decisions. The caller's role was checked by teamOperation.
 QJsonObject SessionHost::teamDecisionOperation(const QString& sessionId, const QString& operation,
                                                const QJsonObject& payload) {
-    (void)sessionId;
-    (void)payload;
+    const teams::Team* team = teams_->teamOf(sessionId);
+    if (!team)
+        return refusal(QStringLiteral("not_on_team"),
+                       QStringLiteral("This conversation is on no team."));
+    const qint64 teamId = team->id;
+    const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
+    const auto decisionJson = [&](const QString& id) -> QJsonObject {
+        const teams::Team* current = teams_->team(teamId);
+        const teams::Decision* decision = current ? current->decision(id) : nullptr;
+        return decision ? QJsonObject{{QStringLiteral("ok"), true},
+                                      {QStringLiteral("decision"), teams::toJson(*decision)}}
+                        : QJsonObject{{QStringLiteral("ok"), true}};
+    };
+    if (operation == QStringLiteral("team_decision_raise")) {
+        QString raised;
+        const auto result = teams_->raiseQuestion(teamId, payload, sessionId, &raised);
+        return result.ok() ? decisionJson(raised)
+                           : refusal(result.error->code, result.error->message);
+    }
+    if (operation == QStringLiteral("team_decision_withdraw")) {
+        const auto result = teams_->withdrawDecision(
+            teamId, decisionId, payload.value(QStringLiteral("reason")).toString(), sessionId);
+        return result.ok() ? decisionJson(decisionId)
+                           : refusal(result.error->code, result.error->message);
+    }
     return refusal(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown team tool %1.").arg(operation));
 }

@@ -42,13 +42,14 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `teams` | `task`, `large`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team. `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
+| `teams` | `task`, `large`, `empty`, `ready`, `paused` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision). `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
 | `workspace` | `plan-ready`, `plan-planning`, `plan-running`, `plan-continuing`, `plan-blocked`, `plan-paused`, `plan-limit`, `plan-complete` | Concept: Plan is a document tab in the existing right pane; the transcript and composer remain visible. Automatic planning from repository context, compact tasks and source references, daemon follow-up, Stop, blocker and budget states. See [the harness preview](marketing/plan-harness/README.md). |
 | `workspace` | `content-tabs`, `content-terminal`, `content-file` | Editor-style right pane with two files, two independent terminal sessions and the conversation plan. Closable tabs, horizontal overflow, `+` and open-documents menu (`--open=content-tabs`). |
+| `workspace` | `team-assignment`, `team-digest`, `team-review`, `team-verdict`, `team-decision` | What a team sends into its members' conversations, each as one block (`TeamTranscriptBlock`): the developer's assignment (criteria, lane, branch, who assigned it), the leader's digest (ten changes grouped by task, what needs the leader marked), the reviewer's request (criteria and the change in short), the owner's verdict (findings and the round) and the leader's answered decision. Open T-n, and a digest group's title, open the task on the team page |
 | `workspace` | `turn-report` | English marketing sample: end-of-turn status, evidence, blockers, next actions and owners. Uses the existing final-answer Markdown table renderer; all release data is fictional. |
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
 | `workspace` | `setup-cli-missing`, `setup-cli-outdated`, `setup-signed-out`, `setup-claude-signed-out`, `setup-sidecar-missing` | A provider that cannot start a turn: a new conversation with its setup guide above the composer, which keeps the draft (see Provider setup) |
@@ -174,9 +175,16 @@ A concept, not built in the app: several conversations that share one goal. Agen
   in one conversation. The answer goes to the leader and to the owner of the task it blocks.
 - **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
 
-Not drawn yet: the leader's digest and a task assignment in a transcript, and a team on the
-phone. Before the app builds this, ket-qt needs a group
-header whose name activates instead of folding, and Két Symbol a team icon (the mock uses `bot`).
+- **In a transcript**: the daemon's messages to a member (assignment, digest, review, verdict,
+  decision) are blocks, not paragraphs (`workspace/team-*`). Each is one accessible item named by
+  its kind and title. A client that does not know a kind shows the message body as text.
+- **Ready to merge**: a task that passed review with every criterion met. Under the `user` merge
+  setting the team asks "Merge T-n?" in Waiting for you (`teams/ready`).
+- **Paused**: a team that used its automatic turns says so above its decisions and asks whether to
+  go on (`teams/paused`).
+
+Not drawn yet: a team on the phone. ket-qt has the group header whose name activates instead of
+folding (ket-qt #47); Két Symbol still needs a team icon (the mock uses `bot`).
 
 ## Provider setup
 

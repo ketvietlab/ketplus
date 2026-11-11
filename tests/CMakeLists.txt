@@ -58,6 +58,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptInteractionTest.cpp
     TranscriptFileStepsTest.cpp
     TranscriptAgentNoteTest.cpp
+    TranscriptTeamBlockTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
     AgentProviderSetupTest.cpp
@@ -72,6 +73,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceMissingWorktreeTest.cpp
     AgentConversationForkMenuTest.cpp
     AgentReviewerPickerTest.cpp
+    AgentTeamHeaderTest.cpp
     AgentWorkspaceViewTest.cpp
     AgentWorkspaceViewTest.h
     TranscriptPhase5Test.cpp
@@ -123,6 +125,14 @@ target_link_libraries(ketplus_working_line_tests PRIVATE Qt6::Test ketplus_deskt
 
 ketplus_add_gui_test(ketplus_conversation_menu_tests ConversationMenuTest.cpp)
 target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
+target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
+target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
+target_link_libraries(ketplus_team_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_settings_integration_tests MainWindowSettingsTest.cpp)
 target_link_libraries(ketplus_settings_integration_tests PRIVATE

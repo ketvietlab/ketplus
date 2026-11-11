@@ -1,4 +1,4 @@
-// ADR 0112 §6: the task side of teams in the session runtime — the task's worktree, the
+// ADR 0114 §6: the task side of teams in the session runtime — the task's worktree, the
 // owner's conversation, team messages, and the teams.tasks/1 requests.
 #include "runtime/SessionHost.h"
 
@@ -41,7 +41,7 @@ QStringList strings(const QJsonValue& value) {
 
 } // namespace
 
-// ADR 0112, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
+// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
 // worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
 std::optional<teams::TaskWorktree>
 SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) {
@@ -108,6 +108,68 @@ QString SessionHost::headCommit(const QString& worktree) const {
     return gitOutput(worktree, {QStringLiteral("rev-parse"), QStringLiteral("HEAD")})
         .value_or(QString{})
         .trimmed();
+}
+
+std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
+                                                     const teams::Task& task) const {
+    const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
+    // The branch against the integration branch it was cut from (ADR 0114 §2).
+    const QString range = QStringLiteral("%1...%2").arg(
+        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
+    const auto diff = gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
+                                            QStringLiteral("--no-ext-diff"), range});
+    const auto names =
+        gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
+    if (!diff || !names)
+        return std::nullopt;
+    return teams::TaskDiff{.diff = *diff,
+                           .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+}
+
+std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
+                                                     const teams::Task& task) const {
+    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir())
+        return std::nullopt;
+    const QString base =
+        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch;
+    // Committed on the branch since it left its base, then what is not committed yet.
+    const auto committed =
+        gitOutput(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
+                                  QStringLiteral("%1...HEAD").arg(base)});
+    const auto pending =
+        gitOutput(task.worktree,
+                  {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
+                   QStringLiteral("-uall"), QStringLiteral("--no-renames")});
+    if (!committed || !pending)
+        return std::nullopt;
+    QStringList paths = committed->split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
+        if (entry.size() > 3)
+            paths.append(entry.mid(3));
+    paths.removeDuplicates();
+    return paths;
+}
+
+std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::Task& task) const {
+    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
+        return std::nullopt;
+    // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
+    QProcess process;
+    process.setWorkingDirectory(team.repository);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
+                   QStringLiteral("--is-ancestor"), task.branch, team.integrationBranch});
+    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
+        return std::nullopt;
+    if (process.exitCode() == 0 || process.exitCode() == 1)
+        return process.exitCode() == 0;
+    return std::nullopt;
+}
+
+void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
+                                      const QString& text, const QString& failure) {
+    if (teams_ && request.kind == QStringLiteral("review"))
+        teams_->reviewFinished(sessionId, text, AgentBroker::verdictHasNoFindings(text), failure);
 }
 
 QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
@@ -188,6 +250,27 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
         return answer(teams_->setCriteria(teamId, taskId,
                                           strings(payload.value(QStringLiteral("criteria"))), user),
                       taskId);
+    // ADR 0114 §3: decisions, answered only by the user through a client.
+    const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
+    if (type == QStringLiteral("team.decision.list")) {
+        QJsonArray decisions;
+        const QString wanted = payload.value(QStringLiteral("state")).toString();
+        for (const teams::Decision& decision : team->decisions)
+            if (wanted.isEmpty() || decision.state == wanted)
+                decisions.append(teams::toJson(decision));
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("decisions"), decisions}};
+    }
+    if (type == QStringLiteral("team.decision.answer")) {
+        const QString choice = payload.value(QStringLiteral("choice")).toString();
+        const auto result = teams_->answerDecision(
+            teamId, decisionId,
+            choice.isEmpty() ? payload.value(QStringLiteral("text")).toString() : choice, user);
+        if (!result.ok())
+            return refused(result.error->code, result.error->message);
+        const teams::Team* current = teams_->team(teamId);
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("team"), current ? teams_->teamJson(*current) : QJsonObject{}}};
+    }
     return refused(QStringLiteral("unknown_operation"),
                    QStringLiteral("Unknown team request %1.").arg(type));
 }

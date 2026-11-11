@@ -458,6 +458,20 @@ class AgentWorkspaceView final : public QWidget {
         emit settingsRequested(section);
     }
     Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
+    // ADR 0114 (#467): each member conversation's role, by daemon session id, as
+    // {team_id, team_name, role, label, color}. The header shows it first and has no Reviewer.
+    Q_PROPERTY(QVariantMap teamRoles READ teamRoles NOTIFY teamRolesChanged)
+    QVariantMap teamRoles() const { return teamRoles_; }
+    void setTeamRoles(const QVariantMap& roles) {
+        if (teamRoles_ != roles) {
+            teamRoles_ = roles;
+            emit teamRolesChanged();
+        }
+    }
+    Q_INVOKABLE void requestTeam(const QString& teamId) { emit teamRequested(teamId); }
+    // #468: a team block's Open T-n. The task is of the open conversation's team, or else of
+    // the member team named in the block.
+    Q_INVOKABLE void requestTeamTask(const QString& teamName, const QString& taskId);
     [[nodiscard]] QVariantList tagCatalog() const;
     void setTagCatalog(const QVariantList& catalog) {
         if (tagCatalogSet_ && catalog == tagCatalog_)
@@ -567,6 +581,9 @@ class AgentWorkspaceView final : public QWidget {
 
   signals:
     void tagFilterRequested(const QString& tag);
+    void teamRolesChanged();
+    void teamRequested(const QString& teamId);
+    void teamTaskRequested(const QString& teamId, const QString& taskId);
     void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
@@ -761,6 +778,7 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap heldMessageStates_;
     QString heldMessageScope_;
     QVariantMap reviewerState_;
+    QVariantMap teamRoles_;
     QString reviewerScope_;
     QVariantMap backgroundTaskOutput_;
     QVariantList skills_;

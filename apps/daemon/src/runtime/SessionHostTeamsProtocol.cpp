@@ -1,4 +1,4 @@
-// ADR 0112: the team.* requests of the teams/1 feature, for trusted local clients.
+// ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
 
 #include "protocol/DaemonProtocol.h"
@@ -129,6 +129,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
+        // ADR 0114, open point 3: reading the team notices a merge made outside the app.
+        teams_->checkMerged(teamId);
         const teams::Team* team = teams_->team(teamId);
         if (!team)
             return failure(QStringLiteral("team_not_found"),
