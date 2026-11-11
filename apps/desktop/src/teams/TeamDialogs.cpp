@@ -1,5 +1,6 @@
 #include "teams/TeamDialogs.h"
 
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
@@ -110,6 +111,9 @@ QScrollArea* scrolling(QWidget* form, QWidget* anchor) {
     auto* scroll = new QScrollArea;
     scroll->setObjectName(QStringLiteral("teamDialogScroll"));
     scroll->setWidget(form);
+    // setWidget turns the fill on: the form would paint the window colour over the card.
+    form->setAutoFillBackground(false);
+    scroll->viewport()->setAutoFillBackground(false);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -156,6 +160,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow->addWidget(leaderMerges_);
     mergeRow->addWidget(userMerges_);
     mergeRow->addStretch();
+    mergeRow_ = mergeRow;
     layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
 
     // What the leader and the developers may do without asking, as the composer's Mode
@@ -189,6 +194,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
         auto* row = new QHBoxLayout(control);
         row->setContentsMargins(0, 0, 0, 0);
         if (role == developer) {
+            developerRow_ = row;
             row->addWidget(developers_);
         } else {
             auto* fixed = new QLabel(QStringLiteral("1"), control);
@@ -204,6 +210,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     }
     requirements_->setObjectName(QStringLiteral("teamLeaderWritesRequirements"));
     requirements_->setChecked(true);
+    requirements_->setWordWrap(true);
     layout->addWidget(requirements_);
     if (defaults.singleProvider)
         showNote(hint_, tr("Everything runs on one provider. A second provider gives a more "
@@ -343,6 +350,49 @@ void NewTeamForm::submit(std::function<void(const QJsonObject& team)> created) {
         });
 }
 
+// A narrow window, or a large zoom, makes the card narrower than the form needs with its
+// labels beside the controls. The form is then compact: every label sits above its control
+// and the two rows that hold two controls stack them, so nothing is cut off at the card's
+// edge. Measured again whenever the card's width or the zoom changes.
+void NewTeamForm::follow(QWidget* viewport) {
+    viewport_ = viewport;
+    viewport->installEventFilter(this);
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, &NewTeamForm::fit,
+            Qt::QueuedConnection);
+    fit();
+}
+
+void NewTeamForm::setCompact(const bool compact) {
+    const auto direction = compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    mergeRow_->setDirection(direction);
+    developerRow_->setDirection(direction);
+    // Stacked, the count takes the row's width and may give some of its own up.
+    developers_->setExpanding(compact);
+    developers_->setMinimumWidth(compact ? developers_->sizeHint().width() * 3 / 4 : 0);
+    for (ket::FieldRow* row : findChildren<ket::FieldRow*>())
+        row->setStacked(compact);
+}
+
+void NewTeamForm::fit() {
+    if (!viewport_ || fitting_)
+        return;
+    fitting_ = true;
+    setCompact(false);
+    // The rows changed under the layout: without this it answers with the sizes it cached
+    // while they were stacked.
+    for (QWidget* child : findChildren<QWidget*>())
+        child->updateGeometry();
+    layout()->invalidate();
+    setCompact(viewport_->width() < layout()->minimumSize().width());
+    fitting_ = false;
+}
+
+bool NewTeamForm::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == viewport_ && event->type() == QEvent::Resize)
+        fit();
+    return QWidget::eventFilter(watched, event);
+}
+
 QString NewTeamForm::hint() const { return hint_->isHidden() ? QString{} : hint_->text(); }
 
 ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const QString& repository,
@@ -352,7 +402,9 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     dialog->setObjectName(QStringLiteral("newTeamDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* form = new NewTeamForm(teams, repository, models);
-    dialog->setBody(scrolling(form, anchor));
+    QScrollArea* scroll = scrolling(form, anchor);
+    form->follow(scroll->viewport());
+    dialog->setBody(scroll);
     dialog->setCardWidth(560);
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
