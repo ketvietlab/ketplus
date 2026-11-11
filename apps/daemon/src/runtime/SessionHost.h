@@ -103,6 +103,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // agents.* operations of the conversation that holds `token`.
     [[nodiscard]] QJsonObject handleAgentCommand(const QString& token, const QString& type,
                                                  const QJsonObject& payload);
+    // The same, answered through `done`: at once, or for a team's task tool that asks git,
+    // after git was read off the event loop (ADR 0114 §1).
+    void handleAgentCommandDeferred(const QString& token, const QString& type,
+                                    const QJsonObject& payload, CommandCallback done);
     [[nodiscard]] QString agentToken(const QString& sessionId);
 
   signals:
@@ -293,6 +297,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                   teams::TaskQuestion question, teams::TaskFactsDone done) override;
     void askDiff(const teams::Team& team, const teams::Task& task,
                  teams::TaskDiffDone done) override;
+    void askWorktree(const teams::Team& team, const teams::Task& task,
+                     teams::WorktreeDone done) override;
+    void askHandoff(const teams::Team& team, const teams::Task& task,
+                    teams::HandoffDone done) override;
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
@@ -318,6 +326,13 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void startTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
+    // Has the git a task command will ask for read off the event loop, then calls `then`,
+    // where the command runs as always: a client's request, and a member's team_task_* tool.
+    void prepareTeamTask(const QJsonObject& request, std::function<void()> then);
+    void prepareTeamOperation(const QString& sessionId, const QString& operation,
+                              const QJsonObject& payload, std::function<void()> then);
+    // The member a leader names by its conversation number; empty when it is not on the team.
+    [[nodiscard]] QString teamMemberByNumber(const teams::Team& team, const QString& number) const;
     [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
     // A member conversation that has not had a turn yet. Returns its id, or empty with
     // `problem` set.

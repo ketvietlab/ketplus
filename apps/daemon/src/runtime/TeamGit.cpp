@@ -1,6 +1,7 @@
 // ADR 0114: the questions a team asks git. Nothing here reads the session runtime.
 #include "runtime/TeamGit.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QProcess>
 
@@ -83,6 +84,53 @@ std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Ta
         return std::nullopt;
     return teams::TaskDiff{.diff = *diff,
                            .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+}
+
+// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
+// worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
+teams::WorktreeAnswer createWorktree(const teams::Team& team, const teams::Task& task) {
+    const QString base =
+        team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
+    const auto commit =
+        output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                                 base + QStringLiteral("^{commit}")});
+    if (!commit)
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("The integration branch %1 does not exist in %2.")
+                             .arg(base, team.repository)};
+    const QString slug = task.id.toLower();
+    const QString branch = QStringLiteral("team/%1/%2").arg(team.id).arg(slug);
+    const QFileInfo repository(team.repository);
+    const QString path = QDir::cleanPath(repository.dir().filePath(
+        QStringLiteral("%1-team-%2-%3").arg(repository.fileName()).arg(team.id).arg(slug)));
+    if (QFileInfo::exists(path))
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("The worktree path %1 already exists.").arg(path)};
+    if (!output(team.repository,
+                {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
+                 QStringLiteral("--"), path, commit->trimmed()}))
+        return {
+            .worktree = std::nullopt,
+            .error =
+                QStringLiteral("git could not create the worktree %1 on %2.").arg(path, branch)};
+    return {.worktree = teams::TaskWorktree{.branch = branch,
+                                            .worktree = QFileInfo(path).canonicalFilePath(),
+                                            .baseCommit = commit->trimmed()},
+            .error = {}};
+}
+
+std::optional<bool> hasUncommittedWork(const QString& worktree) {
+    const auto status = output(worktree, {QStringLiteral("status"), QStringLiteral("--porcelain")});
+    if (!status)
+        return std::nullopt;
+    return !status->trimmed().isEmpty();
+}
+
+teams::HandoffFacts handoff(const teams::Team& team, const teams::Task& task) {
+    return {.worktree = task.worktree,
+            .branch = task.branch,
+            .dirty = hasUncommittedWork(task.worktree),
+            .head = taskCommit(team, task)};
 }
 
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,

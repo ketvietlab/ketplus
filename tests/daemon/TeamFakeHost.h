@@ -22,7 +22,11 @@ class FakeHost final : public TeamHostPort {
     }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
-        (void)error;
+        ++made;
+        if (!worktreeError.isEmpty()) {
+            *error = worktreeError;
+            return std::nullopt;
+        }
         return TaskWorktree{.branch = QStringLiteral("team/%1/%2").arg(team.id).arg(task.id),
                             .worktree = QStringLiteral("/wt/") + task.id,
                             .baseCommit = QStringLiteral("base")};
@@ -34,6 +38,7 @@ class FakeHost final : public TeamHostPort {
         return {};
     }
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {
+        ++statusReads;
         return dirty.contains(worktree);
     }
     QString taskCommit(const Team&, const Task& task) const override {
@@ -84,6 +89,25 @@ class FakeHost final : public TeamHostPort {
         }
         held.append([done, diff = taskDiff(team, task)] { done(diff); });
     }
+    // A prepared command's git: done when it is asked, as git works while the caller waits.
+    void askWorktree(const Team& team, const Task& task, WorktreeDone done) override {
+        ++asked;
+        TeamHostPort::askWorktree(team, task, [this, done](const WorktreeAnswer& answer) {
+            if (holdAnswers)
+                held.append([done, answer] { done(answer); });
+            else
+                done(answer);
+        });
+    }
+    void askHandoff(const Team& team, const Task& task, HandoffDone done) override {
+        ++asked;
+        TeamHostPort::askHandoff(team, task, [this, done](const HandoffFacts& facts) {
+            if (holdAnswers)
+                held.append([done, facts] { done(facts); });
+            else
+                done(facts);
+        });
+    }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
@@ -117,6 +141,10 @@ class FakeHost final : public TeamHostPort {
     QSet<QString> merged;
     bool holdAnswers = false;
     int asked = 0;
+    // Worktrees made and worktrees read, however they were asked for.
+    int made = 0;
+    mutable int statusReads = 0;
+    QString worktreeError;
     QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;

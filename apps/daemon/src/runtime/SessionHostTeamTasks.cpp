@@ -28,38 +28,34 @@ QStringList strings(const QJsonValue& value) {
 
 } // namespace
 
-// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
-// worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
 std::optional<teams::TaskWorktree>
 SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) {
-    const QString base =
-        team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
-    const auto commit =
-        team_git::output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                                           base + QStringLiteral("^{commit}")});
-    if (!commit) {
-        *error = QStringLiteral("The integration branch %1 does not exist in %2.")
-                     .arg(base, team.repository);
-        return std::nullopt;
-    }
-    const QString slug = task.id.toLower();
-    const QString branch = QStringLiteral("team/%1/%2").arg(team.id).arg(slug);
-    const QFileInfo repository(team.repository);
-    const QString path = QDir::cleanPath(repository.dir().filePath(
-        QStringLiteral("%1-team-%2-%3").arg(repository.fileName()).arg(team.id).arg(slug)));
-    if (QFileInfo::exists(path)) {
-        *error = QStringLiteral("The worktree path %1 already exists.").arg(path);
-        return std::nullopt;
-    }
-    if (!team_git::output(team.repository,
-                          {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"),
-                           branch, QStringLiteral("--"), path, commit->trimmed()})) {
-        *error = QStringLiteral("git could not create the worktree %1 on %2.").arg(path, branch);
-        return std::nullopt;
-    }
-    return teams::TaskWorktree{.branch = branch,
-                               .worktree = QFileInfo(path).canonicalFilePath(),
-                               .baseCommit = commit->trimmed()};
+    teams::WorktreeAnswer answer = team_git::createWorktree(team, task);
+    *error = answer.error;
+    return answer.worktree;
+}
+
+// A prepared command's git runs on the thread of the team's other questions, in their order.
+void SessionHost::askWorktree(const teams::Team& team, const teams::Task& task,
+                              teams::WorktreeDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            teams::WorktreeAnswer answer = team_git::createWorktree(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), answer = std::move(answer)] { done(answer); },
+                Qt::QueuedConnection);
+        });
+}
+
+void SessionHost::askHandoff(const teams::Team& team, const teams::Task& task,
+                             teams::HandoffDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            teams::HandoffFacts facts = team_git::handoff(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+                Qt::QueuedConnection);
+        });
 }
 
 QString SessionHost::pointConversationAt(const QString& sessionId, const QString& worktree) {
@@ -84,11 +80,7 @@ QString SessionHost::pointConversationAt(const QString& sessionId, const QString
 }
 
 std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) const {
-    const auto status =
-        team_git::output(worktree, {QStringLiteral("status"), QStringLiteral("--porcelain")});
-    if (!status)
-        return std::nullopt;
-    return !status->trimmed().isEmpty();
+    return team_git::hasUncommittedWork(worktree);
 }
 
 std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
@@ -160,6 +152,33 @@ void SessionHost::noteInConversation(const QString& sessionId, const QJsonObject
     const auto it = sessions_.constFind(sessionId);
     if (it != sessions_.cend())
         appendAgentNotice(sessionId, it->stored.generation, note);
+}
+
+// The user's task commands that reach git: assign, hand over, and move, which reads the
+// worktree when the task goes to review. handleCommand refuses what it always refused.
+void SessionHost::prepareTeamTask(const QJsonObject& request, std::function<void()> then) {
+    using Kind = teams::TeamCoordinator::TaskRequest::Kind;
+    const QString type = request.value(QStringLiteral("message_type")).toString();
+    std::optional<Kind> kind;
+    if (type == QStringLiteral("team.task.assign"))
+        kind = Kind::Assign;
+    else if (type == QStringLiteral("team.task.handover"))
+        kind = Kind::Handover;
+    else if (type == QStringLiteral("team.task.move"))
+        kind = Kind::Move;
+    if (!kind || !teams_ || !teams_->isLoaded()) {
+        then();
+        return;
+    }
+    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    teams_->prepare({.kind = *kind,
+                     .teamId = payload.value(QStringLiteral("team_id")).toString().toLongLong(),
+                     .taskId = payload.value(QStringLiteral("task_id")).toString(),
+                     .actor = QStringLiteral("user"),
+                     .owner = payload.value(QStringLiteral("owner")).toString(),
+                     .reason = payload.value(QStringLiteral("reason")).toString(),
+                     .to = payload.value(QStringLiteral("state")).toString()},
+                    std::move(then));
 }
 
 // teams.tasks/1, for trusted local clients: the user acts on the team's tasks.
