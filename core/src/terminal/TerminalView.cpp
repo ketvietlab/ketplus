@@ -28,6 +28,7 @@
 #include <QPainter>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QTextBoundaryFinder>
 #include <QTimer>
 #include <QToolButton>
 #include <QWheelEvent>
@@ -367,13 +368,36 @@ void TerminalView::paintEvent(QPaintEvent* event) {
         (session_.alternateScreen() ? 0 : session_.historyLineCount()) + cursor.row - offset;
     int preeditCursorOffset = 0;
     if (!preeditText_.isEmpty() && cursorDisplayRow >= 0 && cursorDisplayRow < session_.rows()) {
-        const int preeditX = leftPadding_ + cursor.col * cellWidth_;
+        // Composing text (an IME such as Vietnamese Telex keeps the current word marked) covers
+        // whatever the shell drew under the cursor, such as a zsh autosuggestion, so each
+        // grapheme takes whole cells on a cleared background instead of overdrawing them.
         const int preeditY = topPadding_ + cursorDisplayRow * cellHeight_;
-        painter.setFont(baseFont);
+        QFont preeditFont = baseFont;
+        preeditFont.setUnderline(true);
+        painter.setFont(preeditFont);
         painter.setPen(foreground_);
-        painter.drawText(preeditX, preeditY + baseline, preeditText_);
-        preeditCursorOffset =
-            QFontMetrics(baseFont).horizontalAdvance(preeditText_.left(preeditCursor_));
+        QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, preeditText_);
+        int start = 0;
+        int cellColumn = cursor.col;
+        while (start < preeditText_.size()) {
+            graphemes.setPosition(start);
+            int end = static_cast<int>(graphemes.toNextBoundary());
+            if (end <= start) {
+                end = static_cast<int>(preeditText_.size());
+            }
+            const QString grapheme = preeditText_.mid(start, end - start);
+            const int span =
+                baseMetrics.horizontalAdvance(grapheme) > cellWidth_ + cellWidth_ / 2 ? 2 : 1;
+            const QRect cellRect(leftPadding_ + cellColumn * cellWidth_, preeditY,
+                                 span * cellWidth_, cellHeight_);
+            painter.fillRect(cellRect, background_);
+            painter.drawText(cellRect.left(), cellRect.top() + baseline, grapheme);
+            if (start < preeditCursor_) {
+                preeditCursorOffset += span * cellWidth_;
+            }
+            cellColumn += span;
+            start = end;
+        }
     }
     if (session_.cursorVisible() && cursorBlinkOn_ && hasFocus() && cursorDisplayRow >= 0 &&
         cursorDisplayRow < session_.rows()) {

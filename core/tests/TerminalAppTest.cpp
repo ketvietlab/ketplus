@@ -1,5 +1,6 @@
 #include "terminal_app/TerminalWindow.h"
 
+#include "terminal/TerminalSession.h"
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
 #include "ui/KetFonts.h"
@@ -16,6 +17,7 @@
 #include <QDir>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QInputMethodEvent>
 #include <QLabel>
 #include <QSettings>
 #include <QTabWidget>
@@ -39,6 +41,7 @@ class TerminalAppTest final : public QObject {
     void showsTheKetPlusName();
     void aboutUsesTheKitDialog();
     void drawsTheTerminalInKetSansMono();
+    void composingTextCoversTheCellsUnderIt();
 };
 
 void TerminalAppTest::initTestCase() {
@@ -227,6 +230,28 @@ void TerminalAppTest::drawsTheTerminalInKetSansMono() {
     TerminalWindow window(QDir::tempPath());
     QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(),
              QStringLiteral("KET Sans Mono"));
+}
+
+void TerminalAppTest::composingTextCoversTheCellsUnderIt() {
+    // An IME keeps the word being typed as preedit text while zsh-autosuggestions draws its
+    // dimmed suggestion under the cursor. The preedit must hide that suggestion rather than be
+    // painted on top of it, so the result matches composing over empty cells.
+    const auto render = [](const QByteArray& shellOutput) {
+        TerminalSession session;
+        TerminalView view(session);
+        view.setFocusPolicy(Qt::NoFocus);
+        view.resize(320, 120);
+        view.show();
+        session.feedOutput(shellOutput);
+        QInputMethodEvent compose(QStringLiteral("a"), {});
+        QCoreApplication::sendEvent(&view, &compose);
+        QCoreApplication::processEvents();
+        return view.viewport()->grab().toImage();
+    };
+    const QImage overSuggestion = render(QByteArrayLiteral("\x1b[90mW\x1b[0m\r"));
+    const QImage overBlank = render(QByteArrayLiteral("\r"));
+    QCOMPARE(overSuggestion.size(), overBlank.size());
+    QVERIFY(overSuggestion == overBlank);
 }
 
 } // namespace ketplus
