@@ -168,6 +168,44 @@ class TeamMergeTest final : public QObject {
         QCOMPARE(team().openDecisions(), 0);
     }
 
+    void commitsAfterTheReviewSendAReadyTaskBackToReview() {
+        QVERIFY(teams_->update(team_, {{"merge_policy", "user"}}, "user").ok());
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        QCOMPARE(merges().size(), 1);
+        const QString reviewed = get(id).headCommit;
+        QVERIFY(!reviewed.isEmpty());
+        // Nothing moved: it stays ready.
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(get(id).state, state::ready);
+        host_.heads.insert(get(id).worktree, "later");
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(get(id).state, state::blocked);
+        QCOMPARE(get(id).resumeState, state::inProgress);
+        QVERIFY(get(id).question.contains("later"));
+        QVERIFY(!get(id).mergeOffered && !get(id).leaderMayMerge);
+        QCOMPARE(merges().first()->state, QStringLiteral("withdrawn"));
+        // Reviewed again at the new commit, it is offered again.
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        teams_->reviewFinished("rev", "Verdict: no findings", true);
+        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).headCommit, QStringLiteral("later"));
+        QCOMPARE(merges().size(), 2);
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(get(id).state, state::ready);
+    }
+
+    void aMergeWithCommitsAfterTheReviewIsDoneAndReported() {
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.heads.insert(get(id).worktree, "later");
+        host_.merged.insert(id);
+        teams_->memberTurnEnded("lead");
+        QCOMPARE(get(id).state, state::done);
+        QCOMPARE(updates("merged_unreviewed"), 1);
+    }
+
     void theAncestorCheckOnARealRepository() {
         agent_test::Fixture fixture;
         QVERIFY(fixture.open(true));

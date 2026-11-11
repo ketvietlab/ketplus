@@ -222,6 +222,46 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
     return {.teamId = teamId};
 }
 
+// The one open "Start these N tasks?" decision, with the held assignments as they are now.
+void TeamCoordinator::askFirstPlan(Team& team) {
+    QStringList plan;
+    for (const Task& entry : team.tasks)
+        if (entry.assignmentHeld) {
+            const Member* owner = team.member(entry.owner);
+            plan << QStringLiteral("%1 \"%2\" → %3")
+                        .arg(entry.id, entry.title, owner ? owner->name : entry.owner);
+        }
+    const QString question = QStringLiteral("Start these %1 tasks?").arg(plan.size());
+    const QString context = plan.join(QLatin1Char('\n'));
+    if (Decision* open = openDecision(team, firstPlan)) {
+        open->question = question;
+        open->context = context;
+    } else {
+        raiseDecision(team, firstPlan, question, context,
+                      {startPlan, QStringLiteral("Change the plan first")}, startPlan, {},
+                      QStringLiteral("daemon"));
+    }
+}
+
+// The user answered the first plan with something other than Start: the leader changes the
+// plan, and at the end of its turn the user is asked again. Without this the assignments
+// would stay held with no question open.
+void TeamCoordinator::askFirstPlanAgain(const qint64 teamId) {
+    const Team* current = team(teamId);
+    if (!current || current->planApproved)
+        return;
+    const bool held = std::any_of(current->tasks.cbegin(), current->tasks.cend(),
+                                  [](const Task& task) { return task.assignmentHeld; });
+    Team* team = held ? mutableTeam(teamId) : nullptr;
+    if (!team || openDecision(*team, firstPlan))
+        return;
+    const Team before = *team;
+    askFirstPlan(*team);
+    if (commit(*team, before, QStringLiteral("daemon"), {}))
+        qWarning("Unable to ask about the first plan of team %lld again.",
+                 static_cast<long long>(teamId));
+}
+
 bool TeamCoordinator::holdForFirstPlan(const qint64 teamId, const QString& taskId,
                                        const QString& actor) {
     Team* team = mutableTeam(teamId);
@@ -232,23 +272,7 @@ bool TeamCoordinator::holdForFirstPlan(const qint64 teamId, const QString& taskI
     if (!task)
         return false;
     task->assignmentHeld = true;
-    QStringList plan;
-    for (const Task& entry : team->tasks)
-        if (entry.assignmentHeld) {
-            const Member* owner = team->member(entry.owner);
-            plan << QStringLiteral("%1 \"%2\" → %3")
-                        .arg(entry.id, entry.title, owner ? owner->name : entry.owner);
-        }
-    const QString question = QStringLiteral("Start these %1 tasks?").arg(plan.size());
-    const QString context = plan.join(QLatin1Char('\n'));
-    if (Decision* open = openDecision(*team, firstPlan)) {
-        open->question = question;
-        open->context = context;
-    } else {
-        raiseDecision(*team, firstPlan, question, context,
-                      {startPlan, QStringLiteral("Change the plan first")}, startPlan, {},
-                      QStringLiteral("daemon"));
-    }
+    askFirstPlan(*team);
     if (commit(*team, before, QStringLiteral("daemon"),
                {{.kind = QStringLiteral("assignment_held"),
                  .text = QStringLiteral("%1 waits for the first plan to be approved.").arg(taskId),

@@ -197,7 +197,10 @@ may be journaled after the turn has answered.
 3. **How the daemon knows a task is merged.** *Chosen*: the task's head commit is an
    ancestor of the integration branch (`git merge-base --is-ancestor`), checked when a
    member's turn ends and when a client reads the team. No hosting service is called, so
-   a merge made outside the app is noticed the same way. *Rejected*: pull request state
+   a merge made outside the app is noticed the same way. The same check compares the
+   branch with the commit that was reviewed: a ready task whose branch moved goes back to
+   Blocked to be reviewed again, and one merged with commits after its review is done
+   with a `merged_unreviewed` update to the leader. *Rejected*: pull request state
    from GitHub — it needs credentials and a network, and is not the branch that matters.
 4. **Storage shape.** *Chosen*: three journal tables. `teams` keeps one JSON document
    per team (settings, members, tasks with criteria and history, decisions, the id
@@ -215,7 +218,8 @@ may be journaled after the turn has answered.
    - A **fork** of a member is not a member.
 5. **The first plan.** *Chosen*: the leader's first list of tasks waits for the user as
    one decision, "Start these N tasks?". Assignments made before it is answered are
-   recorded and held; "Start" releases them. Later re-plans are logged only, because
+   recorded and held; "Start" releases them. Any other answer goes to the leader, and
+   the question is raised again when the leader's turn ends, until it is "Start". Later re-plans are logged only, because
    only the first plan fans out to every developer at once.
 
 ## Protocol
@@ -240,7 +244,8 @@ Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
 `team_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
 team request is served; ask again), `task_not_found`, `invalid_transition`,
-`not_owner`, `role_forbidden`, `dependencies_open`, `uncommitted_work`,
+`not_owner`, `role_forbidden`, `dependencies_open`, `dependency_cycle`,
+`uncommitted_work`,
 `decision_closed`, `invalid_payload`.
 
 Agent tools in the ketplus_agents server, served only to members: `team_get`,

@@ -236,6 +236,13 @@ class TeamTaskTest final : public QObject {
         QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
         const auto refused = teams_->moveTask(team_, second, state::inProgress, "dev2");
         QCOMPARE(refused.error.value_or(TeamError{}).code, QStringLiteral("dependencies_open"));
+        // Tasks cannot wait for each other in a circle, however long.
+        const QString third = task("Third", {second});
+        QCOMPARE(teams_->updateTask(team_, first, {{"depends_on", QJsonArray{third}}}, "lead")
+                     .error.value_or(TeamError{})
+                     .code,
+                 QStringLiteral("dependency_cycle"));
+        QVERIFY(get(first).dependsOn.isEmpty());
         QVERIFY(refused.error->message.contains(first));
         QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
         for (const QString& next : {state::inProgress})

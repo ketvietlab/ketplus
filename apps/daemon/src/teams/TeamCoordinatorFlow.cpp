@@ -195,8 +195,10 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     checkMerged(teamId);
     if (memberRole == role::developer)
         checkLanes(teamId, sessionId);
-    else if (memberRole == role::leader)
+    else if (memberRole == role::leader) {
+        askFirstPlanAgain(teamId);
         sendDigest(teamId);
+    }
 }
 
 } // namespace ketplus::daemon::teams
