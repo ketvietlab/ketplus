@@ -162,9 +162,11 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
         return;
     const Member* member = team->member(sessionId);
     const qint64 teamId = team->id;
-    if (stoppedByUser == true)
+    if (stoppedByUser == true) {
         stalls_[teamId].stopped.insert(sessionId);
-    else if (stoppedByUser == false)
+        // The user's Stop also ends what the member asked to be woken for.
+        cancelWait(sessionId);
+    } else if (stoppedByUser == false)
         stalls_[teamId].stopped.remove(sessionId);
     watchForStall(teamId);
     checkMerged(teamId);

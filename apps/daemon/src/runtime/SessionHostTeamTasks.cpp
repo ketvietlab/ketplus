@@ -172,6 +172,15 @@ void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessa
         teams_->reviewFinished(sessionId, text, AgentBroker::verdictHasNoFindings(text), failure);
 }
 
+// ADR 0114 §8: a member that asked a conversation outside its team would wait for an answer
+// that never comes. Messages inside the team are the team's own and are handled there.
+void SessionHost::agentMessageFailed(const AgentMessageRecord& message, const QString& reason) {
+    const teams::Team* team = teams_ ? teams_->teamOf(message.fromSession) : nullptr;
+    if (!team || team->member(message.toSession))
+        return;
+    teams_->outsideMessageFailed(message.fromSession, QLatin1Char('#') + message.toNumber, reason);
+}
+
 QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
     return agents_->postTeamMessage(
         message.fromSession, QStringLiteral("Team %1").arg(message.teamName), message.toSession,

@@ -87,6 +87,11 @@ class AgentHostPort {
         (void)text;
         (void)failure;
     }
+    // A message a conversation sent failed, expired or was never answered (`reason`).
+    virtual void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) {
+        (void)message;
+        (void)reason;
+    }
     [[nodiscard]] virtual bool onTeam(const QString& sessionId) const {
         (void)sessionId;
         return false;

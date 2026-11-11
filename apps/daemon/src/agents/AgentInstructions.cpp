@@ -67,9 +67,10 @@ QString teamInstructions(const TeamRoleContext& context) {
               << QStringLiteral(
                      "The team only moves when a turn ends in an action. Before you end a "
                      "turn, every task that is not done must have an owner working on it, be "
-                     "blocked with what it waits for, or wait on a decision you raised. Do not "
-                     "end a turn to wait for something outside the team: check it, or block "
-                     "the task on it.")
+                     "blocked with what it waits for, or wait on a decision you raised. To "
+                     "wait for something outside the team (a build, a deployment, another "
+                     "conversation), call team_wait with what you wait for: you are woken to "
+                     "check again. Do not end a turn to wait without it.")
               << (context.mergePolicy == QStringLiteral("user")
                       ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
                                        "unless the user allowed that one task.")
@@ -95,7 +96,9 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "team_task_update (state, note, met marks, pull request), not through "
                      "messages. If you need an answer, block the task with your question; the "
                      "leader answers it. Do not end a turn with your task in progress and "
-                     "nothing said: finish it, or block it with what you wait for. Hand the "
+                     "nothing said: finish it, block it with what you wait for, or, for "
+                     "something outside the team such as a build, call team_wait so you are "
+                     "woken to check again. Hand the "
                      "task to review (state in_review) once its "
                      "criteria are met and your work is committed. Do not merge.");
     } else {

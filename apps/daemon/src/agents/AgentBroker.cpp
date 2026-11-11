@@ -659,7 +659,17 @@ void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, c
         scheduleDelivery(sessionId);
         return;
     }
-    if (type == QStringLiteral("tasks.changed") || type == QStringLiteral("runtime.error"))
+    if (type == QStringLiteral("runtime.error")) {
+        // A turn the provider refused to start ends with this alone, no turn.completed: its
+        // requests would wait for an answer until they expire. An error inside a turn that
+        // still runs leaves the conversation busy and is finished by that turn's end.
+        if (const auto conversation = host_->agentConversation(sessionId);
+            conversation && conversation->idle)
+            finishTurn(sessionId, generation, QStringLiteral("failed"));
+        scheduleDelivery(sessionId);
+        return;
+    }
+    if (type == QStringLiteral("tasks.changed"))
         scheduleDelivery(sessionId);
 }
 
@@ -792,6 +802,10 @@ void AgentBroker::notice(const AgentMessageRecord& message, const QString& state
     outgoing.insert(QStringLiteral("direction"), QStringLiteral("outgoing"));
     outgoing.insert(QStringLiteral("peer_number"), message.toNumber);
     host_->appendAgentNotice(message.fromSession, message.fromGeneration, outgoing);
+    // The notice is for the reader of the transcript; the sending agent's turn has ended.
+    if ((state == QStringLiteral("failed") || state == QStringLiteral("expired")) &&
+        !message.fromSession.isEmpty())
+        host_->agentMessageFailed(message, reason);
     if (state != QStringLiteral("held") && !message.delivery.startsWith("user_authorized:"))
         return;
     QJsonObject incoming = common;

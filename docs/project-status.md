@@ -49,6 +49,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   task in review) is nudged once, an idle team wakes the leader with the open tasks at
   most twice, then a `stalled` decision asks the user to wake the leader again or pause.
   A member the user stopped is not woken on its own.
+  `team_wait` lets a leader or developer wait 1 to 60 minutes for something outside the
+  team and be woken to check, and a member's message to a conversation outside the team
+  that failed or was never answered wakes that member (message kinds `wait` and
+  `message_failed`). Waits are in memory only; neither has run on a live team yet.
   Per-task review (#460): a task entering In review is queued for the team's reviewer,
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go
