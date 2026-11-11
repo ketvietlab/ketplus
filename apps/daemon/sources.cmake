@@ -112,6 +112,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorStall.cpp
     src/teams/TeamCoordinatorLanes.cpp
     src/teams/TeamCoordinatorMerges.cpp
     src/teams/TeamCoordinatorReviews.cpp

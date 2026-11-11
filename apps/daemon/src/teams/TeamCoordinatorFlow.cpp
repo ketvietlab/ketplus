@@ -155,12 +155,17 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
                  .body = digestText(*team, updates)});
 }
 
-void TeamCoordinator::memberTurnEnded(const QString& sessionId) {
+void TeamCoordinator::memberTurnEnded(const QString& sessionId, const bool stoppedByUser) {
     const Team* team = teamOf(sessionId);
     if (!team)
         return;
     const Member* member = team->member(sessionId);
     const qint64 teamId = team->id;
+    if (stoppedByUser)
+        stalls_[teamId].stopped.insert(sessionId);
+    else
+        stalls_[teamId].stopped.remove(sessionId);
+    watchForStall(teamId);
     checkMerged(teamId);
     if (member && member->role == role::developer)
         checkLanes(teamId, sessionId);

@@ -152,6 +152,13 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         resume = text.startsWith(QStringLiteral("Continue"));
         if (!resume)
             team->pausedReason = QStringLiteral("user");
+    } else if (kind == QStringLiteral("stalled")) {
+        // The user moves a stopped team on, or pauses it; the watchdog starts over.
+        stalls_.remove(teamId);
+        if (text == pauseTeamChoice) {
+            team->paused = true;
+            team->pausedReason = QStringLiteral("user");
+        }
     } else if (kind == QStringLiteral("merge")) {
         // ADR 0114 §5: the user allows exactly this merge.
         if (Task* ready = team->task(taskId); ready && text == leaderMergesChoice)

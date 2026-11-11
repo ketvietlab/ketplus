@@ -2566,7 +2566,8 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
         agents_->noteEvent(sessionId, generation, type, contextualPayload);
     // ADR 0114 §7: the leader's digest waits for the end of its turn.
     if (!alive.isNull() && teams_ && (type == "turn.completed" || type == "runtime.stopped"))
-        teams_->memberTurnEnded(sessionId);
+        teams_->memberTurnEnded(sessionId, payload.value(QStringLiteral("reason")).toString() ==
+                                               QStringLiteral("user"));
     return true;
 }
 

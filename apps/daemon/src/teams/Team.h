@@ -29,6 +29,10 @@ inline const QString done = QStringLiteral("done");
 // The choice of a "Merge T-n?" decision that lets the leader merge that task (ADR 0114 §5).
 inline const QString leaderMergesChoice = QStringLiteral("Let the leader merge this one");
 
+// The choices of the "stalled" decision the watchdog raises (ADR 0114 §8).
+inline const QString wakeLeaderChoice = QStringLiteral("Wake the leader again");
+inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
+
 inline constexpr int maximumDevelopers = 5;
 inline constexpr int maximumCriteria = 20;
 inline constexpr int defaultReviewRounds = 2;
@@ -90,7 +94,7 @@ struct Task final {
 
 struct Decision final {
     QString id;
-    // "question" (the leader), "first_plan", "budget", "merge", "empty_role".
+    // "question" (the leader), "first_plan", "budget", "merge", "empty_role", "stalled".
     QString kind{QStringLiteral("question")};
     QString question;
     QString context;
