@@ -303,7 +303,8 @@ TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskI
                                .taskId = taskId,
                                .data = {{QStringLiteral("owner"), owner}}}}))
         return {.error = failed};
-    deliverAssignment(*team, *team->task(taskId), actor, false);
+    if (!holdForFirstPlan(teamId, taskId, actor))
+        deliverAssignment(*team, *team->task(taskId), actor, false);
     return {.teamId = teamId};
 }
 
@@ -377,7 +378,9 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                                    {QStringLiteral("body"),
                                     QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
                                         .arg(taskId, member->name, reason.trimmed())}});
-    deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
+    // A task held for the first plan stays held with its new owner.
+    if (!team->task(taskId)->assignmentHeld)
+        deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
     return {.teamId = teamId};
 }
 

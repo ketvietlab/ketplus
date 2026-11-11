@@ -234,6 +234,27 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
         return answer(teams_->setCriteria(teamId, taskId,
                                           strings(payload.value(QStringLiteral("criteria"))), user),
                       taskId);
+    // ADR 0112 §3: decisions, answered only by the user through a client.
+    const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
+    if (type == QStringLiteral("team.decision.list")) {
+        QJsonArray decisions;
+        const QString wanted = payload.value(QStringLiteral("state")).toString();
+        for (const teams::Decision& decision : team->decisions)
+            if (wanted.isEmpty() || decision.state == wanted)
+                decisions.append(teams::toJson(decision));
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("decisions"), decisions}};
+    }
+    if (type == QStringLiteral("team.decision.answer")) {
+        const QString choice = payload.value(QStringLiteral("choice")).toString();
+        const auto result = teams_->answerDecision(
+            teamId, decisionId,
+            choice.isEmpty() ? payload.value(QStringLiteral("text")).toString() : choice, user);
+        if (!result.ok())
+            return refused(result.error->code, result.error->message);
+        const teams::Team* current = teams_->team(teamId);
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("team"), current ? teams_->teamJson(*current) : QJsonObject{}}};
+    }
     return refused(QStringLiteral("unknown_operation"),
                    QStringLiteral("Unknown team request %1.").arg(type));
 }
