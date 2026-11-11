@@ -132,6 +132,12 @@ class TeamDialogsTest final : public QObject {
         form.findChild<ket::TextField*>("teamGoalField")->setText("Checkout in one page");
         form.findChild<ket::TextField*>("teamIntegrationBranchField")->setText("team/shop");
         form.findChild<ket::Radio*>("teamUserMerges")->setChecked(true);
+        // Workspace unless chosen; the help says what the choice means.
+        auto* permissions = form.findChild<ket::Select*>("teamPermissions");
+        QCOMPARE(permissions->currentData().toString(), QStringLiteral("ask"));
+        QCOMPARE(form.payload().value("execution_policy").toString(), QStringLiteral("ask"));
+        permissions->setCurrentIndex(2);
+        QCOMPARE(permissions->currentText(), QStringLiteral("Full access"));
         form.developerCount()->setCurrentIndex(2);
         form.setAgent("developer", {"codex", "gpt-5", "high"});
         daemon_.answers.insert(
@@ -146,6 +152,7 @@ class TeamDialogsTest final : public QObject {
         QCOMPARE(sent.value("goal").toString(), QStringLiteral("Checkout in one page"));
         QCOMPARE(sent.value("integration_branch").toString(), QStringLiteral("team/shop"));
         QCOMPARE(sent.value("merge_policy").toString(), QStringLiteral("user"));
+        QCOMPARE(sent.value("execution_policy").toString(), QStringLiteral("full"));
         QVERIFY(sent.value("leader_writes_requirements").toBool());
         const QJsonObject plan = sent.value("plan").toObject();
         QCOMPARE(plan.value("developers").toObject().value("count").toInt(), 3);

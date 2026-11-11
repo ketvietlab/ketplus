@@ -113,6 +113,10 @@ struct Team final {
     QString goal;
     QString integrationBranch;
     QString mergePolicy{role::leader};
+    // What the leader and the developers may do without asking: a conversation's execution
+    // policy ("read-only", "ask" or "full"), given to every such member the team starts.
+    // The reviewer is not in it: a review turn is always read-only (ADR 0067).
+    QString executionPolicy{QStringLiteral("ask")};
     bool leaderWritesRequirements{true};
     bool paused{false};
     QString pausedReason;

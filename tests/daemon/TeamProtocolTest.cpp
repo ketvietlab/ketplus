@@ -96,6 +96,67 @@ class TeamProtocolTest final : public QObject {
                  QStringLiteral("Lead Checkout"));
     }
 
+    // The team's permissions are the execution policy of the leader and the developers it
+    // starts, at creation and later; the reviewer keeps a conversation's default.
+    void theTeamsPermissionsReachItsLeaderAndDevelopers() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto withPolicy = [&](const QString& policy) {
+            return command(fixture, "team.create",
+                           {{"repository", fixture.directory.path()},
+                            {"name", "Checkout"},
+                            {"integration_branch", "integration"},
+                            {"execution_policy", policy},
+                            {"plan", plan()}});
+        };
+        QCOMPARE(withPolicy("everything").value("error_code").toString(),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(sessions(fixture), 0);
+        const QJsonObject created = withPolicy("full");
+        QVERIFY2(created.value("ok").toBool(), qPrintable(text(created)));
+        const QJsonObject team = created.value("team").toObject();
+        QCOMPARE(team.value("execution_policy").toString(), QStringLiteral("full"));
+        const auto policyOf = [&](const QString& sessionId) {
+            for (const StoredSession& stored : fixture.journal->sessions())
+                if (stored.id == sessionId)
+                    return stored.executionPolicy;
+            return QString{};
+        };
+        for (const auto& value : team.value("members").toArray()) {
+            const QJsonObject member = value.toObject();
+            QCOMPARE(policyOf(member.value("session_id").toString()),
+                     member.value("role").toString() == "reviewer" ? QStringLiteral("ask")
+                                                                   : QStringLiteral("full"));
+        }
+        // A developer the team starts later gets the same.
+        const QJsonObject added = command(fixture, "team.member.add",
+                                          {{"team_id", team.value("id").toString()},
+                                           {"name", "Docs writer"},
+                                           {"lane", "Docs"},
+                                           {"paths", QJsonArray{"docs"}},
+                                           {"provider", "codex"}});
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        const QJsonArray members = added.value("team").toObject().value("members").toArray();
+        bool found = false;
+        for (const auto& value : members)
+            if (value.toObject().value("name").toString() == "Docs writer") {
+                found = true;
+                QCOMPARE(policyOf(value.toObject().value("session_id").toString()),
+                         QStringLiteral("full"));
+            }
+        QVERIFY(found);
+        // A team made without the setting asks, as before.
+        fixture.restart();
+        QCOMPARE(command(fixture, "team.list", {})
+                     .value("teams")
+                     .toArray()
+                     .first()
+                     .toObject()
+                     .value("execution_policy")
+                     .toString(),
+                 QStringLiteral("full"));
+    }
+
     void refusedCreateLeavesNothingBehind() {
         Fixture fixture;
         QVERIFY(fixture.open());

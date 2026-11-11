@@ -245,6 +245,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("goal"), team.goal},
             {QStringLiteral("integration_branch"), team.integrationBranch},
             {QStringLiteral("merge_policy"), team.mergePolicy},
+            {QStringLiteral("execution_policy"), team.executionPolicy},
             {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
             {QStringLiteral("paused"), team.paused},
             {QStringLiteral("paused_reason"), team.pausedReason},
@@ -277,6 +278,8 @@ Team teamFromJson(const QJsonObject& json) {
     team.goal = json.value(QStringLiteral("goal")).toString();
     team.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
     team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
+    team.executionPolicy =
+        json.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
     team.leaderWritesRequirements =
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();
