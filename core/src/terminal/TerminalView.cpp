@@ -18,7 +18,9 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetrics>
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QLabel>
@@ -226,7 +228,10 @@ bool TerminalView::restart() {
     return started;
 }
 
-void TerminalView::pasteClipboard() { session_.sendPaste(QApplication::clipboard()->text()); }
+void TerminalView::pasteClipboard() {
+    forgetTypedText();
+    session_.sendPaste(QApplication::clipboard()->text());
+}
 
 void TerminalView::copySelection() {
     const QString text = selectedText();
@@ -499,6 +504,7 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
     }
 #endif
     if (!session_.isRunning()) {
+        forgetTypedText();
         QAbstractScrollArea::keyPressEvent(event);
         return;
     }
@@ -569,6 +575,13 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
     }
 
     if (key != VTERM_KEY_NONE) {
+        if (key == VTERM_KEY_BACKSPACE && event->modifiers() == Qt::NoModifier &&
+            !typedText_.isEmpty()) {
+            // The shell erases one character, so the input method's view drops one too.
+            typedText_.chop(typedText_.back().isLowSurrogate() && typedText_.size() > 1 ? 2 : 1);
+        } else {
+            forgetTypedText();
+        }
         session_.sendKey(key, modifiersFor(event));
         event->accept();
         return;
@@ -579,6 +592,7 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
         event->key() <= Qt::Key_Z) {
         const uint character =
             static_cast<uint>('a' + (event->key() - static_cast<int>(Qt::Key_A)));
+        forgetTypedText();
         session_.sendCodepoint(
             character,
             static_cast<VTermModifier>(terminalModifiers & (VTERM_MOD_CTRL | VTERM_MOD_ALT)));
@@ -593,13 +607,29 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
         for (const uint character : characters) {
             session_.sendCodepoint(character, modifiers);
         }
+        if (modifiers == VTERM_MOD_NONE) {
+            typedText_ += event->text();
+        } else {
+            forgetTypedText();
+        }
         event->accept();
         return;
     }
     QAbstractScrollArea::keyPressEvent(event);
 }
 
+void TerminalView::forgetTypedText() {
+    if (typedText_.isEmpty()) {
+        return;
+    }
+    typedText_.clear();
+    if (hasFocus()) {
+        QGuiApplication::inputMethod()->update(Qt::ImQueryInput);
+    }
+}
+
 void TerminalView::mousePressEvent(QMouseEvent* event) {
+    forgetTypedText();
     setFocus(Qt::MouseFocusReason);
     const bool selectionOverride = (event->modifiers() & Qt::ShiftModifier) != 0;
     if (session_.mouseTrackingEnabled() && !selectionOverride) {
@@ -762,9 +792,28 @@ void TerminalView::inputMethodEvent(QInputMethodEvent* event) {
             break;
         }
     }
-    for (const uint character : event->commitString().toUcs4()) {
+    QString commit = event->commitString();
+    if (event->replacementStart() != 0 || event->replacementLength() != 0) {
+        const qsizetype from = typedText_.size() + event->replacementStart();
+        const qsizetype length = event->replacementLength();
+        if (from >= 0 && length >= 0 && from + length <= typedText_.size()) {
+            // The shell only sees a byte stream, so rewriting the word means erasing back to the
+            // start of the replaced range and typing the new text plus what followed it.
+            const QString erased = typedText_.mid(from);
+            for (qsizetype count = erased.toUcs4().size(); count > 0; --count) {
+                session_.sendKey(VTERM_KEY_BACKSPACE, VTERM_MOD_NONE);
+            }
+            commit += typedText_.mid(from + length);
+            typedText_.truncate(from);
+        } else {
+            // A range outside what this view sent cannot be rewritten; insert at the cursor.
+            typedText_.clear();
+        }
+    }
+    for (const uint character : commit.toUcs4()) {
         session_.sendCodepoint(character, VTERM_MOD_NONE);
     }
+    typedText_ += commit;
     requestRender();
     event->accept();
 }
@@ -781,8 +830,17 @@ QVariant TerminalView::inputMethodQuery(const Qt::InputMethodQuery query) const 
     if (query == Qt::ImFont) {
         return font();
     }
-    if (query == Qt::ImCursorPosition || query == Qt::ImAnchorPosition) {
-        return preeditCursor_;
+    // The "document" an input method sees is the text typed since the shell's cursor last moved
+    // for another reason, with the cursor at its end.
+    if (query == Qt::ImCursorPosition || query == Qt::ImAnchorPosition ||
+        query == Qt::ImAbsolutePosition) {
+        return static_cast<int>(typedText_.size());
+    }
+    if (query == Qt::ImSurroundingText || query == Qt::ImTextBeforeCursor) {
+        return typedText_;
+    }
+    if (query == Qt::ImTextAfterCursor || query == Qt::ImCurrentSelection) {
+        return QString();
     }
     return QAbstractScrollArea::inputMethodQuery(query);
 }
@@ -796,6 +854,7 @@ void TerminalView::focusInEvent(QFocusEvent* event) {
 
 void TerminalView::focusOutEvent(QFocusEvent* event) {
     QAbstractScrollArea::focusOutEvent(event);
+    typedText_.clear();
     session_.setFocused(false);
     requestRender();
 }
