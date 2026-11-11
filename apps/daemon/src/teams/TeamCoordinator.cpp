@@ -141,7 +141,9 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
         teamBySession_.remove(session);
     for (const QString& session : team.memberSessions())
         teamBySession_.insert(session, team.id);
-    for (const Update& update : updates)
+    bool actionable = false;
+    for (const Update& update : updates) {
+        actionable = actionable || update.actionable;
         (void)journal_->appendTeamUpdate({.teamId = team.id,
                                           .at = team.changedAt,
                                           .actor = actor,
@@ -150,7 +152,10 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                           .text = update.text,
                                           .data = update.data,
                                           .actionable = update.actionable});
+    }
     emit teamChanged(teamJson(team));
+    if (actionable)
+        scheduleDigest(team.id);
     return std::nullopt;
 }
 
@@ -206,6 +211,8 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
         member.joinedAt = now;
     draft.tasks.clear();
     draft.decisions.clear();
+    draft.held = {};
+    draft.automaticTurns = 0;
     draft.nextTask = 1;
     draft.nextDecision = 1;
     QString error;
@@ -302,15 +309,28 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         if (paused != team->paused) {
             team->paused = paused;
             team->pausedReason = paused ? QStringLiteral("user") : QString{};
-            if (!paused)
+            if (!paused) {
                 team->automaticTurns = 0; // The user acted on the team (ADR 0112, point 2).
+                for (Decision& decision : team->decisions)
+                    if (decision.kind == QStringLiteral("budget") &&
+                        decision.state == QStringLiteral("open")) {
+                        decision.state = QStringLiteral("withdrawn");
+                        decision.reason = QStringLiteral("The team was resumed.");
+                        decision.answeredAt = nowIso();
+                    }
+            }
             updates.append({.kind = paused ? QStringLiteral("paused") : QStringLiteral("resumed"),
                             .text = paused ? QStringLiteral("Automatic turns paused.")
                                            : QStringLiteral("Automatic turns resumed.")});
         }
     }
+    const bool resumed = before.paused && !team->paused;
     if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
+    if (resumed) {
+        releaseHeld(teamId);
+        scheduleDigest(teamId);
+    }
     startLeader(teamId);
     return {.teamId = teamId};
 }
@@ -369,6 +389,7 @@ std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {
     for (const QString& session : team->memberSessions())
         teamBySession_.remove(session);
     teams_.remove(teamId);
+    delete digestTimers_.take(teamId);
     emit teamRemoved(QString::number(teamId), repository);
     return std::nullopt;
 }
