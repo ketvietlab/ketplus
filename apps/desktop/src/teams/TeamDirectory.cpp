@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QPointer>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -29,10 +30,22 @@ void TeamDirectory::refresh() {
     if (!available_ || !transport_)
         return;
     const QPointer<TeamDirectory> alive(this);
+    // Only the newest request counts: an older one that fails must not start a second retry.
+    const int request = ++listRequest_;
     transport_(QStringLiteral("team.list"), {},
-               [alive](const QJsonObject& result, const QString& error) {
-                   if (!alive || !error.isEmpty() || !alive->available_)
+               [alive, request](const QJsonObject& result, const QString& error) {
+                   if (!alive || !alive->available_ || request != alive->listRequest_)
                        return;
+                   if (!error.isEmpty()) {
+                       const int delay = alive->retryDelayMs_;
+                       alive->retryDelayMs_ = qMin(delay * 2, longestRetryMs);
+                       QTimer::singleShot(delay, alive.data(), [alive, request] {
+                           if (alive && request == alive->listRequest_)
+                               alive->refresh();
+                       });
+                       return;
+                   }
+                   alive->retryDelayMs_ = alive->firstRetry_;
                    alive->teams_.clear();
                    for (const auto& value : result.value(QStringLiteral("teams")).toArray()) {
                        const QJsonObject team = value.toObject();

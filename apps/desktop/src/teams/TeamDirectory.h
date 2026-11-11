@@ -31,6 +31,9 @@ class TeamDirectory final : public QObject {
     [[nodiscard]] bool isAvailable() const noexcept { return available_; }
 
     void refresh();
+    static constexpr int firstRetryMs = 1000;
+    static constexpr int longestRetryMs = 30000;
+    void setFirstRetryForTesting(int milliseconds) { retryDelayMs_ = firstRetry_ = milliseconds; }
     void applyEvent(const QString& type, const QJsonObject& payload);
     // Sends a team request; a "team" in the answer updates the cache at once.
     void request(const QString& type, const QJsonObject& payload, Reply reply = {});
@@ -53,6 +56,12 @@ class TeamDirectory final : public QObject {
 
     Transport transport_;
     bool available_{false};
+    // A list that failed is asked for again, later each time: the daemon may still be
+    // starting, and without the list the sidebar would show a team's members as loose
+    // conversations until something else changed.
+    int retryDelayMs_{firstRetryMs};
+    int listRequest_{0};
+    int firstRetry_{firstRetryMs};
     QHash<QString, QJsonObject> teams_;
 };
 
