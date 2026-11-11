@@ -1,6 +1,7 @@
 #include "KetIcons.h"
 #include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
+#include "app/ApplicationAttributes.h"
 #include "app/AtlasBuilderTab.h"
 #include "app/AtlasConversationPanel.h"
 #include "app/MainWindow.h"
@@ -11,6 +12,7 @@
 
 #include <QAbstractButton>
 #include <QAction>
+#include <QApplication>
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
@@ -153,6 +155,11 @@ class AtlasWorkspaceTest final : public QObject {
             qunsetenv("KETPLUS_KETATLAS_CLI");
         else
             qputenv("KETPLUS_KETATLAS_CLI", priorCli);
+        QList<QWidget*> nativeBefore;
+        for (QWidget* page = workspaceView; page != nullptr && page != &window;
+             page = page->parentWidget())
+            if (page->internalWinId() != 0)
+                nativeBefore << page;
         auto* edit = panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasEdit"));
         QVERIFY(edit);
         edit->click();
@@ -163,6 +170,17 @@ class AtlasWorkspaceTest final : public QObject {
         QTRY_COMPARE(
             builder->atlasPath(),
             QFileInfo(workspace.filePath("sample.ketatlas/atlas.json")).canonicalFilePath());
+        // The builder chat is a native window. Its siblings must stay as they were: the page
+        // around the Agent Workspace's QQuickView, made native, covered the conversation and
+        // every other page after an Atlas had been opened.
+        for (QWidget* page = workspaceView; page != nullptr && page != &window;
+             page = page->parentWidget())
+            // The builder's own ancestors turn native with it; they cover nothing.
+            QVERIFY2(page->internalWinId() == 0 || nativeBefore.contains(page) ||
+                         page->isAncestorOf(builder),
+                     page->metaObject()->className());
+        agentButton->click();
+        QTRY_VERIFY(workspaceView->isVisible());
     }
 
     void mockSidebarGeometryAtDesktopViewport() {
@@ -599,5 +617,11 @@ class AtlasWorkspaceTest final : public QObject {
     }
 };
 
-QTEST_MAIN(AtlasWorkspaceTest)
+int main(int argc, char** argv) {
+    ketplus::applyApplicationAttributes();
+    QApplication app(argc, argv);
+    AtlasWorkspaceTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 #include "AtlasWorkspaceTest.moc"

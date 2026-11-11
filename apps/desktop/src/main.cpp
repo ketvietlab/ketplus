@@ -1,3 +1,4 @@
+#include "app/ApplicationAttributes.h"
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "ui/InterfaceFont.h"
@@ -28,6 +29,7 @@ int main(int argc, char* argv[]) {
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Metal);
 #endif
     QtWebView::initialize();
+    ketplus::applyApplicationAttributes();
     QApplication app(argc, argv);
     // The name keeps the settings location of existing installs; users see KétPlus Pro.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
