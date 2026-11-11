@@ -62,6 +62,39 @@ Rectangle {
         const to = folder.mapToItem(null, folder.width / 2, px(12))
         return [Math.round(from.x), Math.round(from.y), Math.round(to.x), Math.round(to.y)]
     }
+    // What the list is built on, checked by --smoke: a repository's name and its
+    // conversations' titles share a left edge; a team's name and its members' the same; and
+    // every conversation is one line high.
+    function layoutProblems() {
+        const problems = []
+        const left = (item, x) => Math.round(item.mapToItem(sidebar, x, 0).x * 10) / 10
+        const near = (a, b) => Math.abs(a - b) <= 0.5
+        let rows = 0
+        // A repository's heading is a sibling of what it heads; a team's folder contains it.
+        const walk = (root, heading) => {
+            for (const item of root.children) {
+                const name = item.objectName || ""
+                if (name.startsWith("repository-")) {
+                    heading = { name: name, x: left(item, item.textLeft) }
+                } else if (name.startsWith("team-")) {
+                    walk(item, { name: name, x: left(item, item.textLeft) })
+                } else if (name.startsWith("conversation-") || name.startsWith("member-")) {
+                    ++rows
+                    const x = left(item, item.textLeft)
+                    if (heading && !near(x, heading.x))
+                        problems.push(name + " starts at " + x + ", its heading " + heading.name + " at " + heading.x)
+                    if (!near(item.height, px(30)))
+                        problems.push(name + " is " + item.height + " high: every row is one line")
+                } else {
+                    walk(item, heading)
+                }
+            }
+        }
+        walk(sidebar, null)
+        if (!rows)
+            problems.push("no conversation rows to check")
+        return problems
+    }
     function openMenu(name) {
         const repository = Fixtures.repositories[0]
         const team = sidebar.window.teamList[0]
@@ -71,6 +104,12 @@ Rectangle {
         } else if (name === "team-menu" && team) {
             teamMenu.team = team
             teamMenu.popup(sidebar, px(150), px(326))
+        } else if (name === "repo-folded") {
+            // Every repository folded: the headings alone say what runs and what waits.
+            const next = {}
+            for (const r of Fixtures.repositories)
+                next[r.name] = false
+            expanded = next
         } else if (name === "drag-member") {
             // A conversation held over the first team's folder.
             dragPoint = Qt.point(px(96), px(318))
@@ -312,6 +351,7 @@ Rectangle {
                     Column {
                         id: repo
                         required property var modelData
+                        required property int index
                         readonly property bool open: sidebar.expanded[modelData.name] !== false
                         readonly property bool all: !!sidebar.showAll[modelData.name]
                         readonly property int limit: 7
@@ -327,13 +367,25 @@ Rectangle {
                         }
                         width: parent.width
 
-                        KetGroupHeader {
+                        SidebarRepoHeader {
+                            id: repoHeader
+                            objectName: "repository-" + repo.modelData.name
+                            readonly property var every: sidebar.window.conversationsOf(repo.modelData.name)
+                            function statusOf(c) {
+                                return sidebar.window.planStatus ? sidebar.window.planStatus(c.number, c.status) : c.status
+                            }
                             x: sidebar.inset
                             width: parent.width - 2 * sidebar.inset
                             name: repo.modelData.name
+                            divider: repo.index > 0
                             expanded: repo.open
                             selected: sidebar.window.repository === repo.modelData.name
-                            onExpandedChanged: {
+                            count: every.length
+                            waiting: every.filter(c => [KetTheme.ConversationStatus.NeedsInput,
+                                                        KetTheme.ConversationStatus.AwaitingReply,
+                                                        KetTheme.ConversationStatus.Error].includes(statusOf(c))
+                                                       || (!!c.unread && statusOf(c) === KetTheme.ConversationStatus.Completed)).length
+                            onToggled: expanded => {
                                 const next = Object.assign({}, sidebar.expanded)
                                 next[repo.modelData.name] = expanded
                                 sidebar.expanded = next
@@ -387,9 +439,11 @@ Rectangle {
                                    : repo.all ? repo.loose
                                    : repo.loose.slice(0, repo.limit)
 
-                            KetConversationRow {
+                            SidebarRow {
                                 id: row
                                 required property var modelData
+                                unread: !!modelData.unread
+                                detail: modelData.from ? "from " + modelData.from : ""
                                 objectName: "conversation-" + modelData.number
                                 x: sidebar.inset
                                 width: repo.width - 2 * sidebar.inset
@@ -399,16 +453,7 @@ Rectangle {
                                 status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
-                                // The worktree hint waits for a resting pointer, and a press hides it
-                                // until the pointer leaves the row: clicking never raises it.
-                                property bool tipDismissed: false
-                                onHoveredChanged: if (!hovered) tipDismissed = false
-                                onPressedChanged: if (pressed) tipDismissed = true
-                                KetToolTip {
-                                    visible: row.hovered && !row.pressed && !row.tipDismissed
-                                    delay: 1200
-                                    text: row.modelData.worktree
-                                }
+                                worktree: modelData.worktree
                                 onClicked: sidebar.window.openConversation(repo.modelData.name,
                                                                            modelData)
                                 // Dragged onto a team's folder, the conversation joins that team.
@@ -439,10 +484,11 @@ Rectangle {
                         Basic.AbstractButton {
                             visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
                                      && repo.loose.length > repo.limit
-                            x: sidebar.px(28)
+                            // Under the titles, and it says how many it adds.
+                            x: sidebar.inset + sidebar.px(30)
                             height: sidebar.px(28)
                             hoverEnabled: true
-                            text: "Show more"
+                            text: "Show " + (repo.loose.length - repo.limit) + " more"
                             onClicked: {
                                 const next = Object.assign({}, sidebar.showAll)
                                 next[repo.modelData.name] = true
@@ -453,13 +499,13 @@ Rectangle {
                                 text: parent.text
                                 color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                 font.family: KetTheme.fontFamily
-                                font.pixelSize: sidebar.px(13)
+                                font.pixelSize: sidebar.px(12)
                                 font.weight: Font.Medium
                             }
                             background: null
                         }
 
-                        Item { width: 1; height: sidebar.px(6) }
+                        Item { width: 1; height: sidebar.px(4) }
                     }
                 }
             }

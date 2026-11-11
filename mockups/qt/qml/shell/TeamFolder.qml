@@ -29,6 +29,8 @@ Column {
     readonly property var recipe: KetTheme.groupHeaderRecipe(
         KetTheme.dark, KetTheme.zoom, selected, hot, name.down, true, name.visualFocus)
     readonly property real indent: KetTheme.px(12, KetTheme.zoom)
+    // Where the name and the members' titles start, for the sidebar's alignment check.
+    readonly property real textLeft: px(30)
     // Leader, developers, then reviewers. A tag filter keeps the members that carry the tag.
     readonly property var shown: ["leader", "developer", "reviewer"]
         .reduce((list, role) => list.concat(team.members.filter(m => m.role === role)), [])
@@ -83,7 +85,9 @@ Column {
 
         Basic.AbstractButton {
             id: fold
-            x: folder.recipe.paddingStart
+            // The team's icon stands in the rows' state column, so the name and the
+            // members' titles share one left edge.
+            x: folder.px(8) + (folder.px(14) - width) / 2
             width: folder.recipe.iconSize + 2
             height: parent.height
             checkable: true
@@ -109,7 +113,8 @@ Column {
 
         Basic.AbstractButton {
             id: name
-            x: fold.x + fold.width + folder.recipe.nameGap - 1
+            x: folder.textLeft
+            padding: 0
             width: actions.x - x - folder.px(4)
             height: parent.height
             text: folder.team.name
@@ -119,10 +124,12 @@ Column {
                 verticalAlignment: Text.AlignVCenter
                 text: name.text
                 elide: Text.ElideRight
-                color: folder.selected ? KetTheme.t.accentText : folder.recipe.text
+                // A heading one level below the repository's: the main colour, so it does
+                // not read as a row's second line, and medium where the repository is semibold.
+                color: folder.selected ? KetTheme.t.accentText : KetTheme.t.textMain
                 font.family: KetTheme.fontFamily
-                font.pixelSize: folder.recipe.fontPixels
-                font.weight: folder.recipe.fontWeight
+                font.pixelSize: folder.px(13)
+                font.weight: Font.Medium
             }
             background: Rectangle {
                 radius: folder.px(KetTheme.t.radiusSm)
@@ -183,27 +190,23 @@ Column {
     Repeater {
         model: folder.expanded ? folder.shown : []
 
-        KetConversationRow {
+        SidebarRow {
             id: row
+            objectName: "member-" + modelData.number
             required property var modelData
             readonly property var item: folder.conversation(modelData.number)
-            x: folder.indent
-            width: folder.width - folder.indent
+            unread: !!item.unread
+            detail: item.from ? "from " + item.from : ""
+            width: folder.width
             text: item.title
             number: item.number
-            tags: [folder.roleTags[modelData.role]].concat(item.tags)
+            tags: item.tags
             status: folder.window.planStatus ? folder.window.planStatus(item.number, item.status) : item.status
             checked: folder.window.screen === "workspace"
                      && folder.window.conversation.number === item.number
-            property bool tipDismissed: false
-            onHoveredChanged: if (!hovered) tipDismissed = false
-            onPressedChanged: if (pressed) tipDismissed = true
-            KetToolTip {
-                visible: row.hovered && !row.pressed && !row.tipDismissed
-                delay: 1200
-                text: row.modelData.role === "developer" ? row.modelData.lane + " · " + row.item.worktree
-                                                         : row.item.worktree
-            }
+            role: folder.roleTags[modelData.role].label
+            worktree: modelData.role === "developer" ? modelData.lane + " · " + item.worktree
+                                                     : item.worktree
             onClicked: folder.window.openTeamMember(folder.team.id, item.number)
             TapHandler {
                 acceptedButtons: Qt.RightButton
@@ -214,7 +217,7 @@ Column {
 
     Text {
         visible: folder.expanded && folder.team.members.length === 0
-        x: folder.indent + folder.px(8)
+        x: folder.px(30)
         height: folder.px(24)
         verticalAlignment: Text.AlignVCenter
         text: "No member yet"

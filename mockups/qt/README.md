@@ -268,6 +268,33 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
+## Sidebar list (concept)
+
+The repository list is drawn by two mock-local parts until the design is approved; they then
+move into ket-qt as changes to `KetGroupHeader` and `KetConversationRow` (both layers). An
+earlier concept with second lines, tag chips and a summary in the heading was dropped as
+cluttered (#535). This one draws less:
+
+- **Every conversation is one line** (`qml/shell/SidebarRow.qml`): a state mark, the title,
+  the number. No second line, no tags, no role chip, no state in words. Those are in the
+  hint of a resting pointer and in the accessible description: role, state and what started
+  the turn, tags, worktree.
+- **Colour is on the mark alone**, and only for a conversation that runs or waits for the
+  user. Finished, stopped and not started have a grey mark and recede. Finished and unread
+  is the one emphasis: a dot and a semibold title.
+- **A repository is a label** (`qml/shell/SidebarRepoHeader.qml`): small capitals with letter
+  spacing in the secondary colour, set apart from the rows by its form. Space separates the
+  repositories; there is no rule, no icon and no summary. Folded, it shows the number of
+  conversations and one dot when any waits for the user. `+` shows on hover or focus.
+- **A team is a row that heads its members** (`qml/shell/TeamFolder.qml`): the main colour,
+  medium, its icon in the state column, the whole team one step in.
+- **One left edge per level.** A repository's name and its conversations' titles start
+  together; so do a team's name and its members'. `--smoke` checks these edges and that
+  every conversation is one line high (`Sidebar.layoutProblems`).
+- "Show N more" says how many it adds.
+
+`--open=repo-folded` folds every repository for a capture of the labels alone.
+
 The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
 the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
 (`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
