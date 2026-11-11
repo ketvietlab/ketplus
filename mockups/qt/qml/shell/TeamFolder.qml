@@ -83,7 +83,9 @@ Column {
 
         Basic.AbstractButton {
             id: fold
-            x: folder.recipe.paddingStart
+            // The team's icon stands in the rows' state column, so the name and the
+            // members' titles share one left edge.
+            x: folder.px(8) + (folder.px(14) - width) / 2
             width: folder.recipe.iconSize + 2
             height: parent.height
             checkable: true
@@ -109,7 +111,8 @@ Column {
 
         Basic.AbstractButton {
             id: name
-            x: fold.x + fold.width + folder.recipe.nameGap - 1
+            x: folder.px(30)
+            padding: 0
             width: actions.x - x - folder.px(4)
             height: parent.height
             text: folder.team.name
@@ -189,8 +192,7 @@ Column {
             readonly property var item: folder.conversation(modelData.number)
             unread: !!item.unread
             detail: item.from ? "from " + item.from : ""
-            x: folder.indent
-            width: folder.width - folder.indent
+            width: folder.width
             text: item.title
             number: item.number
             tags: [folder.roleTags[modelData.role]].concat(item.tags)
