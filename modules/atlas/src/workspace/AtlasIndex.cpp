@@ -120,7 +120,10 @@ AtlasDescriptor parseManifest(const QFileInfo& info, const QString& root) {
     QFile file(info.absoluteFilePath());
     if (!file.open(QIODevice::ReadOnly))
         return {};
-    const auto object = QJsonDocument::fromJson(file.readAll()).object();
+    const auto bytes = file.read(AtlasIndex::maximumManifestBytes + 1);
+    if (bytes.size() > AtlasIndex::maximumManifestBytes)
+        return {};
+    const auto object = QJsonDocument::fromJson(bytes).object();
     if (object.value(QStringLiteral("version")).toInt() != 1 ||
         !object.value(QStringLiteral("title")).isString() ||
         !object.value(QStringLiteral("screens")).isArray() ||
@@ -156,12 +159,29 @@ AtlasDescriptor parseManifest(const QFileInfo& info, const QString& root) {
         const auto flow = value.toObject();
         const QString id = flow.value(QStringLiteral("id")).toString();
         const QString title = flow.value(QStringLiteral("title")).toString();
+        QSet<QString> screens;
+        for (const auto& node : flow.value(QStringLiteral("nodes")).toArray()) {
+            const QString screen = node.toObject().value(QStringLiteral("screen")).toString();
+            if (!screen.isEmpty())
+                screens.insert(screen);
+        }
         if (!id.isEmpty())
-            descriptor.flows.append({id, title.isEmpty() ? id : title});
+            descriptor.flows.append({id, title.isEmpty() ? id : title, int(screens.size())});
     }
     return descriptor;
 }
 } // namespace
+
+AtlasDescriptor AtlasIndex::readManifest(const QString& path, const QString& root) {
+    const auto canonicalRoot = QFileInfo(root).canonicalFilePath();
+    const QFileInfo info(path);
+    const auto canonicalPath = info.canonicalFilePath();
+    if (canonicalRoot.isEmpty() || !info.isFile() || info.isSymLink() ||
+        !canonicalPath.startsWith(canonicalRoot + QDir::separator()) ||
+        !canonicalPath.endsWith(".ketatlas/atlas.json") || info.size() > maximumManifestBytes)
+        return {};
+    return parseManifest(QFileInfo(canonicalPath), canonicalRoot);
+}
 
 QVector<AtlasDescriptor> AtlasIndex::visibleAtlases(const QVector<AtlasDescriptor>& manifests) {
     QVector<AtlasDescriptor> result;

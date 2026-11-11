@@ -1,4 +1,14 @@
+The unreviewed transcript UI layer consumes kit bubble, Markdown and code recipes,
+syntax colours and gallery geometry. Journal-dated user messages show day dividers;
+legacy undated messages do not. Streaming, original-source copy, local links,
+image viewing and Mermaid remain on the existing document/virtualization path.
+This is implementation evidence, not native acceptance or release completion.
+
 # Project status
+
+The Lite model layer adds recipe-based Explorer/Git rows, Git decorations, inline file/folder creation, stage/unstage and commit-staged actions, and independent embedded terminal tabs. Markdown headings/code use the kit recipe and bundled mono preference; new preview defaults are 15/26 px while saved overrides remain intact. Git action failures stay visible and preserve the commit message. These changes are part of the unreviewed UI stack, not a released acceptance claim.
+
+The UI stack now composes shared pane headers, find controls, Quick Open, Markdown mode switching, Settings controls and core confirmation dialogs from ket-qt. Quick Open retains fuzzy ranking and keyboard paging; Settings applies every change as it is made, with Restore defaults and extension pages (ADR 0103). Core synchronous document commands use a kit Dialog adapter that returns the existing explicit choices; dismissing it returns Cancel. The broader UI migration and later native acceptance remain open.
 
 This file distinguishes current code from target architecture. Update it when a
 milestone changes state.
@@ -14,9 +24,84 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Agent teams, store (ADR 0112, #455): the daemon keeps teams in the journal
+  (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
+  their error codes; a member cannot be archived, its own Reviewer setting is refused
+  with `team_member` and does not run, and a deleted member leaves its team.
+  The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
+  local clients; `team.create` starts every member as a named conversation (no turn),
+  all or nothing, and `team.changed` / `team.removed` reach every local client.
+  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
+  criteria only the leader or the user writes, an append-only history, dependencies,
+  and a handover that moves the task's own worktree and branch to the new owner.
+  Agent tools (#458): members get the `team_*` tools of the ketplus_agents server, the
+  daemon checks the caller's role on every call (`role_forbidden` names the role that
+  may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
+  role and lane, and each member's instructions explain its role. The leader's first
+  turn carries the goal.
+  Automatic turns (#459): only an assignment, a handover, a review and an answered
+  decision start a member's turn; every other change waits in Updates for the leader's
+  digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
+  holds every team message in order until Resume, and 40 automatic turns pause the team
+  with one decision.
+
+- The unreviewed workspaces UI layer consumes kit worktree actions/badges,
+  searchable picker rows and Connections controls. Repository/worktree switching
+  still waits for the existing revisioned acknowledgment. Linux pairing continues
+  through authenticated outbound Relay; this layer does not add SSH setup.
+  There is no Worktrees page (ADR 0111): worktrees are created for a
+  conversation, from New conversation or the repository picker's Create
+  worktree… card, which moves that conversation to the new worktree, and
+  switched from inside the conversation.
+  Connections follows the mock's signed-in page: a page up to 1000 px wide, one
+  card per phone and per Linux machine, kit badge metrics, inset activity
+  separators and the kit empty state and avatar. Linux machines connect only
+  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
+  details and Disconnect, and its phone pairing dialog now follows the app's
+  scan, compare and approve flow (no typed pairing code).
+
+- The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
+  Compact conversation window preserves the mounted session/draft and restores
+  window geometry. The repository/worktree picker follows the mock: it lists
+  another repository before switching (ADR 0105). Native acceptance and release
+  remain deferred.
+
+- Pro header/composer now compose kit buttons, model-search field, usage ring,
+  meters and composer/attachment recipes. The header stays 44 px, with number,
+  compact title, filterable tags and an Add tag menu; the daemon stores the tags
+  (`session.tags.set`, ADR 0107). The input retains IME/draft/steering
+  behavior and a caret-aligned placeholder. This is implementation work in the
+  unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
+
+- Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
+  the mock's field-styled Quick search, a machine header with its chevron, and update
+  pills. A tag chosen in the conversation header filters the sidebar and shows as the
+  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
+  local daemon's existing size-status contract. Tags come from the daemon catalog
+  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+  `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
+
+- Lite shell implementation now connects the Qt mock activity rail to Explorer,
+  Search, Source Control and Settings. First use opens a folder welcome surface;
+  file tabs show a kit breadcrumb outside the Scintilla document viewport. The
+  Explorer, activity bar, tab strip, breadcrumb View diff, terminal placement and
+  the single status bar follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
+  offscreen review captures (`docs/design-system.md`). Settings opens as a page of
+  the window, shared with Pro through `core/src/app/SettingsWorkspace` (#155).
+
+- Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
+  Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
+  14 px without rewriting saved choices. Interface zoom (90–125%) is a setting
+  apart from the interface font size (13–16 px) and is published to the
+  kit's Appearance (ADR 0104), terminal initial colours resolve tokens, and Mermaid theme
+  resources resolve token placeholders at rendering time. Overall UI acceptance
+  and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
+
 - The activity-index backfill runs after open in bounded passes (ADR 0097), so
   the first open after upgrade no longer indexes the whole history. A session's
   activity appears ungrouped until it is indexed; sessions with new events go first.
+  Groups indexed before `activity_files` existed list their changed files the
+  same way after the index drains (ADR 0102).
 
 - Legacy turn-number, title and turn-start backfills run only for journals below
   format 1 (ADR 0096), so opening a stamped journal no longer rescans history.
@@ -275,7 +360,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   receive them when the turn ends, or by steering when `urgent`; a final answer
   returns as the reply. Hop, chain and hourly limits hold runaway exchanges for
   the user's next turn, and requests expire after 24 hours. Delivered messages
-  show as labelled agent bubbles, the sender and receiver get "Sent to #N" and
+  show as labelled agent bubbles, the sender and receiver get "Sent to @agent/N" and
   "Sent as the reply" notes, a woken conversation's sidebar row names its sender
   while the turn runs, and `#` in the composer completes numbers that the daemon
   resolves into references for the agent. Verified with fake providers, a
@@ -283,6 +368,23 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `gpt-5.6-luna`): both directions of `agents_send`, the automatic reply,
   re-injection after a daemon restart and a fork's own number. Cursor live
   turns and Codex per-thread config on `thread/fork` alone are not verified.
+
+- Automatic turn review (ADR 0067, #120). A conversation can name a
+  Claude reviewer conversation, an existing one or a new read-only one, through
+  local `session.reviewer.get/set`. Each completed turn with changes sends the
+  reviewer one `review` request with the diff between two worktree snapshots
+  (tracked and untracked files). The review turn runs in Claude plan mode with
+  every permission request denied. Codex is not a reviewer yet, because its
+  process-wide browser MCP server approves itself. A reply with findings starts
+  the working agent's fix turn until `max_rounds` (default 2); "no findings",
+  auto-fix off or the last round only records the reply. Verified with the
+  scripted fake providers and sidecar tests. The chat header's Reviewer button
+  (#159, as in the mock's ConversationHeader) offers No reviewer, a new Claude
+  review agent or another Claude conversation. It is hidden in compact windows
+  and until the conversation's first turn. The transcript shows review requests,
+  skipped reviews and recorded reviews attributed to the reviewer. Verified
+  offscreen and against a real daemon with the fake provider. No live provider
+  run or native capture was made.
 
 - Claude usage separates SDK session estimates/tokens and query budget from optional
   Admin-key organization month-to-date cost/tokens. Admin credentials remain in a
@@ -389,9 +491,18 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   ACP has no system prompt, so it still arrives with each turn in the host block.
   The guidance asks for Vietnamese self-address "tui", light playful
   tone, accurate 🟢/🟡/🔴 progress and concrete next actions. The longer flirt-comedy
-  prompt is removed. Each turn ends with a localized task/status/evidence/next-action
-  matrix that carries unfinished requests forward and distinguishes implementation,
-  verification and delivery. Steered questions or added tasks resume the prior
+  prompt is removed. With the ketplus_agents tools (ADR 0106), each user-started
+  turn records its work with the `work_report` tool instead of a markdown matrix:
+  - the daemon merges items by key into the conversation's ledger, so unfinished work
+    carries forward and implementation, verification and delivery stay separate checks;
+  - the turn closes with the mock's report card, which counts the items itself;
+  - Copy conversation exports the report as a table.
+
+  Without the tools, or when the call fails, the turn still ends with the localized
+  task/status/evidence/next-action matrix. The header's Work report button and the
+  card's footer open one Report tab in the right pane. It shows the selected
+  conversation's whole ledger (`session.work_report.read`), with Open and All filters,
+  and follows its live `work_report.updated` events. Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,
   absolute worktree path, branch and next task before resuming mutations.
@@ -477,9 +588,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   name and transcript right-click menus copies an idle Codex or Claude
   conversation through the provider's native fork and a journal copy. Cursor
   has no fork operation; forking from an earlier message is not offered yet.
-- The product sidebar opens a dedicated Worktrees workspace with live
-  conversation/activity state, create/manage actions, and the archived-items
-  route. Settings is a full workspace page rather than a modal popup while
+- Worktrees have no workspace of their own (ADR 0111); conversations create
+  and switch them. Settings is a full workspace page rather than a modal popup while
   continuing to reuse the public KetPlus CM settings controls and persistence.
 - Streaming presentation is coalesced, offscreen Markdown work is deferred, and
   an anchored live response can retain its displayed source while the user reads
@@ -512,6 +622,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   QR-confirmed mobile pairing, device revocation, and reconnect visibility.
 
 ## Planned
+
+- Agent teams ([ADR 0112](decisions/0112-agent-teams.md), epic #450): a leader, one
+  to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
+  review, decisions on the team page and a digest instead of status messages. Each
+  step of #450 moves its part to Implemented.
 
 - Cache/payer-aware automatic compact-window selection and UI policy/reason
   controls, based on actual runtime retention and occupancy rather than a shared
@@ -602,8 +717,21 @@ outside this visual alignment and would increase the scroll/streaming regression
 Desktop outgoing messages use a darker primary surface (1.35 darkening factor) with white text, content-sized width,
 12-point horizontal padding and no visual author row. They cap at 80% of the
 reading column and collapse after 20 lines with a reversible Show more control.
-Collapsed activity rows keep one title line; browser-open rows retain an Open
-action. Composer block line-height matches
+Activity rows read as the mock's steps: one line with a short title ("Read", "Ran" or a
+command's description) and what the step acted on beside it, every grouped step keeps its
+kind's icon, and a failure adds a line with its exit code and duration while the group
+summary stays neutral. Provider items map to the mock's step titles: Codex command actions
+read as Read, Searched code or Listed files; Codex web actions as Opened a page or Found in
+page; Claude Write, Edit and MultiEdit as file changes with line counts; MCP tools as
+"Used server: tool". A turn that edited files closes with the mock's changed-files card
+above its end: its file-change rows and its daemon groups' `files` (ADR 0022), merged by path;
+a row opens the file's diff and Review changes opens Source Control. A steer stays in its turn,
+counts the daemon could not tell show no numbers, and a list a group cut short (50 files) reads
+"N+ files changed" without totals. Its footer reads "Not committed", as in the mock, while
+Source Control shows one of the files uncommitted in the conversation's checkout. Browser-open rows retain
+an Open action. A provider failure reads as the kit's danger banner; on the latest failed turn,
+while the conversation is idle, Retry sends that turn's prompt again as a new turn (not for
+a prompt with images, one from another agent, or while the composer holds attachments). Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 
 ## Qt design mock
@@ -638,3 +766,20 @@ and update Files/Source Control and file search. Local repositories include both
 recent folders and the daemon’s enrolled catalog. Cross-repository remote use
 requires the companion relay target-grant authorization update; deployment and
 installed-bundle verification remain separate from source/build verification.
+
+
+The unreviewed UI stack adds local Desktop release of explicitly selected held
+agent messages (#130 / #163). The daemon authenticates the UI, checks message IDs
+and conversation generation, persists authorization/claims, queues busy receivers
+and reconciles a journaled input after restart before any repeat invocation.
+The transcript action observes status without granting authorization; only a
+click may start a turn. This does not add conversation Plan/harness behavior,
+remote mobile authorization or an installed daemon update. ADR 0027 documents
+the protocol and limits; tests use fake providers only.
+
+Completed assistant Markdown links to local Atlas manifests now render compact
+result cards with current manifest counts and explicit Edit/Open actions. The
+receipt identifies a linked artifact, not successful preview validation. Invalid,
+missing, oversized or out-of-worktree manifests are unavailable; ambiguous
+relative links after a context change are blocked. No provider invocation is
+required to inspect a receipt.

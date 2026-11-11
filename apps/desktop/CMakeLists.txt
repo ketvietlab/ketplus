@@ -20,9 +20,14 @@ add_library(ketplus_desktop_support STATIC
     src/app/RepositoryRouter.h
     src/app/SpotlightDialog.cpp
     src/app/SpotlightDialog.h
+    src/app/WaitingBadge.cpp
+    src/app/WaitingBadge.h
     src/workspace/ActivityBar.cpp
+    src/workspace/ActivityBarAppearance.cpp
+    src/workspace/SidebarControls.cpp
+    src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
-    src/workspace/LucideIcons.h
+    src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
 )
@@ -95,21 +100,31 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindow.cpp
     src/app/MainWindow.h
     src/app/MainWindowActions.cpp
+    src/app/MainWindowStorage.cpp
+    src/app/MainWindowAccount.cpp
+    src/app/MainWindowCompact.cpp
     src/app/MainWindowAgent.cpp
+    src/app/MainWindowConversationActions.cpp
+    src/app/ConversationMenu.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp
     src/app/TranscriptFileType.h
     src/app/MainWindowAtlas.cpp
+    src/app/MainWindowAtlasResults.cpp
     src/app/MainWindowDefinition.cpp
     src/app/MainWindowDocuments.cpp
     src/app/MainWindowLayout.cpp
     src/app/MainWindowNavigation.cpp
     src/app/MainWindowPanels.cpp
+    src/app/MainWindowDetailActions.cpp
+    src/app/MainWindowWorkReport.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
     src/app/MainWindowSearch.cpp
     src/app/MainWindowWorkspace.cpp
     src/app/MainWindowWorktrees.cpp
+    src/app/SettingsAccountPage.cpp
+    src/app/SettingsAccountPage.h
     src/app/SettingsBrowserPage.cpp
     src/app/SettingsBrowserPage.h
     src/app/SettingsClaudeAnalytics.cpp
@@ -119,17 +134,20 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsComputerPage.cpp
     src/app/SettingsComputerPage.h
     src/app/SettingsStoragePage.cpp
+    src/app/SettingsStorageOverview.cpp
     src/app/SettingsStoragePage.h
+    src/app/ProviderSetupCard.cpp
+    src/app/ProviderSetupCard.h
     src/app/SettingsProvidersPage.cpp
     src/app/SettingsProvidersPage.h
     src/app/SettingsUpdatesPage.cpp
     src/app/SettingsUpdatesPage.h
     src/app/AgentConversationWidth.cpp
     src/app/AgentConversationWidth.h
+    src/app/SettingsRows.cpp
+    src/app/SettingsRows.h
     src/app/SettingsWorkspacePage.cpp
     src/app/SettingsWorkspacePage.h
-    src/app/WorktreesWorkspacePage.cpp
-    src/app/WorktreesWorkspacePage.h
 )
 target_link_libraries(ketplus_desktop_shell PUBLIC
     Qt6::Concurrent
@@ -174,14 +192,14 @@ qt_add_executable(ketplus WIN32 MACOSX_BUNDLE
 )
 target_link_libraries(ketplus PRIVATE ketplus_desktop_shell ketplus_product_version)
 ketplus_enable_warnings(ketplus)
-ketplus_cm_add_font_resources(ketplus)
 
 qt_add_resources(ketplus "ketplus_brand"
     PREFIX "/brand"
     BASE "${PROJECT_SOURCE_DIR}/assets/brand"
     FILES
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
 )
 
 qt_add_resources(ketplus "ketplus_wordmarks"

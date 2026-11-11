@@ -40,14 +40,12 @@ application.
 | Lexilla | `rel-5-5-2`, commit `3e6f317eed854bc312b4c4453206189d381c7ae7` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
 | KetPlus Syntax | commit `cb7435c1e9237ee32d3459a58917b0e84b8b6025` | Compiled statically; brings Lexilla as its submodule | MPL 2.0 | Ship the license text; publish source for any modified file |
-| KetQt | commit `d47638214f80695524cd2724996674da7afdbb6a` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
+| KetQt | commit `d6e77e26a70f14bf22d7eafdaad5e842fae20458` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
-| Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
-| Inter | 4.1 archive pinned by SHA-256 | Font embedded in Qt resources | SIL OFL 1.1 | Include the copyright and complete OFL text in an easily accessible form |
+| Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/*.svg`, `assets/brand/*.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus and Terminal app icons | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Qt resources of KétPlus, KétPlus Terminal and KétPlus Pro | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | Ship the copyright and complete OFL text; a modified font must not use the reserved names |
 | KÉT Sans Mono | 0.10.4 Medium TTF in `core/assets/fonts` | Embedded in the same Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | As KÉT Sans; never use 0.10.3, which carries the old licence |
 | Két Design System | 0.1.44 Mermaid snapshots in `core/resources/mermaid` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
-| Lucide Static | 1.40.0 assets | Vendored SVG path data | ISC, plus Feather MIT for derived icons | Include both applicable notices |
 | Sparkle | 2.10.0 release archive pinned by SHA-256 | Unmodified framework in `Contents/Frameworks`, only when `KETPLUS_UPDATE_FEED_URL` is set (ADR 0019) | MIT, plus the bsdiff and other notices in its `LICENSE` | Ship `Sparkle-MIT.txt` complete |
 
 Scintilla and Lexilla license:
@@ -55,12 +53,6 @@ https://www.scintilla.org/License.txt
 
 libvterm license:
 https://github.com/neovim/libvterm/blob/v0.3.3/LICENSE
-
-Inter license and reserved font name information:
-https://github.com/rsms/inter
-
-Lucide license, including the Feather-derived icon list:
-https://github.com/lucide-icons/lucide/blob/main/LICENSE
 
 ### Daemon WebRTC dependencies
 
@@ -245,13 +237,11 @@ licenses/
   Lexilla.txt
   KetPlus-Syntax-MPL-2.0.txt
   libvterm-MIT.txt
-  Inter-OFL-1.1.txt
   KET-Sans-OFL-1.1.txt
   KET-Sans-Mono-OFL-1.1.txt
   KetQt-MPL-2.0.txt
   Ket-Design-System-MIT.txt
   Ket-Symbol-CC-BY-4.0.txt
-  Lucide-ISC-and-Feather-MIT.txt
 THIRD_PARTY_NOTICES.md
 SBOM.spdx.json
 ```

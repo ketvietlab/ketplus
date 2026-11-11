@@ -389,6 +389,55 @@ class JournalUsageRetentionTest final : public QObject {
         }
     }
 
+    // The Storage page's "Generated images" option (ADR 0108), through the configured pass.
+    void generatedImagesFollowTheStorageOption() {
+        const auto configuredSweep = [](LocalJournal& journal) {
+            for (int pass = 0; pass < 32; ++pass)
+                if (!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc(), 256))
+                    return false;
+            return true;
+        };
+        {
+            QTemporaryDir directory;
+            const auto path = directory.filePath("journal.sqlite");
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, path, true, 24, QString(1500 * 1024, 'A'), false, true));
+            JournalStorageOptions full;
+            full.generatedImages = JournalStorageOptions::GeneratedImages::Full;
+            QVERIFY(journal.setStorageOptions(full, 0));
+            Database database(path);
+            QVERIFY(configuredSweep(journal));
+            // Keep full image: every picture stays, though older usage samples still go.
+            QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), 24);
+            QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                     "json_extract(payload,'$.item.compacted') IS NOT NULL"),
+                     0);
+        }
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter("/nonexistent/codex");
+        SessionHost host(&journal, &adapter); // installs the preview writer
+        QImage picture(1024, 768, QImage::Format_RGB32);
+        picture.fill(QColor(40, 160, 40));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"));
+        QVERIFY(seed(journal, path, true, 24, QString::fromLatin1(png.toBase64()), false, true));
+        JournalStorageOptions caption;
+        caption.generatedImages = JournalStorageOptions::GeneratedImages::Caption;
+        QVERIFY(journal.setStorageOptions(caption, 0));
+        Database database(path);
+        QVERIFY(configuredSweep(journal));
+        // Caption only: no preview, even though the host could write one.
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-pixels-v1'"),
+                 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-preview-v1'"),
+                 0);
+    }
+
     void toolResultImagesKeepAPreview() {
         QTemporaryDir directory;
         const auto path = directory.filePath("journal.sqlite");
@@ -1025,6 +1074,114 @@ class JournalUsageRetentionTest final : public QObject {
         const auto before = withoutUsage(allReplay(journal));
         QCOMPARE(sweep(journal), 24); // only intermediate usage is changed
         QCOMPARE(withoutUsage(allReplay(journal)), before);
+    }
+
+    void turnEndSaysWhatRetentionTrimmed() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 24, QString(50000, QLatin1Char('x'))));
+        const auto turnEnd = [&journal](qint64 turn) {
+            for (const auto& value : allReplay(journal)) {
+                const auto event = value.toObject();
+                if (event.value("event_type") == "turn.completed" &&
+                    event.value("turn_sequence").toInteger() == turn)
+                    return journal.activitySummaryEvent(event)
+                        .value("payload")
+                        .toObject()
+                        .value("detail_trimmed")
+                        .toObject();
+            }
+            return QJsonObject{};
+        };
+        // Nothing is trimmed yet, so no turn claims it was.
+        QVERIFY(turnEnd(1).isEmpty());
+        QVERIFY(sweep(journal) > 0);
+        const auto trimmed = turnEnd(1);
+        QCOMPARE(trimmed.value("commands").toInt(), 1);
+        QCOMPARE(trimmed.value("diffs").toInt(), 0);
+        QCOMPARE(trimmed.value("tool_results").toInt(), 0);
+        // Retention keeps the output's first 4 KB and last 16 KB.
+        QCOMPARE(trimmed.value("bytes").toInteger(), 50000 - 20 * 1024);
+        QCOMPARE(trimmed.value("older_than_days").toInt(), 30);
+        // The recent turns keep their detail.
+        QVERIFY(turnEnd(24).isEmpty());
+    }
+
+    // Each part retention trimmed counts once: a tool's text, arguments and structured result,
+    // and each file of a diff.
+    void turnEndCountsEachTrimmedPart_data() {
+        QTest::addColumn<QJsonObject>("fields");
+        QTest::addColumn<int>("results");
+        QTest::addColumn<int>("inputs");
+        QTest::addColumn<int>("diffs");
+        QTest::addColumn<qint64>("minimumBytes");
+        QTest::addColumn<qint64>("maximumBytes");
+        const QJsonArray text{QJsonObject{{"type", "text"}, {"text", QString(20000, 'x')}}};
+        // Originals: 20000 text bytes, 16012 argument bytes, 16011 structured bytes. Each part
+        // keeps an excerpt of at most 4 KiB.
+        QTest::newRow("tool text, arguments and structured result")
+            << QJsonObject{{"type", "mcpToolCall"},
+                           {"status", "completed"},
+                           {"arguments", QJsonObject{{"query", QString(16000, 'x')}}},
+                           {"result", QJsonObject{{"content", text},
+                                                  {"structuredContent",
+                                                   QJsonObject{{"rows", QString(16000, 'x')}}}}}}
+            << 1 << 1 << 0 << qint64(52023 - 3 * 4096) << qint64(52023);
+        // Only the input is trimmed; the result is the provider's whole answer.
+        QTest::newRow("arguments only")
+            << QJsonObject{{"type", "mcpToolCall"},
+                           {"status", "completed"},
+                           {"arguments", QJsonObject{{"query", QString(16000, 'x')}}},
+                           {"result",
+                            QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"},
+                                                                           {"text", "OK"}}}}}}}
+            << 0 << 1 << 0 << qint64(16012 - 4096) << qint64(16012);
+        const QJsonObject kind{{"type", "update"}};
+        QTest::newRow("two files of one diff")
+            << QJsonObject{{"type", "fileChange"},
+                           {"status", "completed"},
+                           {"changes", QJsonArray{QJsonObject{{"path", "a.txt"},
+                                                              {"kind", kind},
+                                                              {"diff", QString(70000, 'x')}},
+                                                  QJsonObject{{"path", "b.txt"},
+                                                              {"kind", kind},
+                                                              {"diff", QString(70000, 'x')}}}}}
+            << 0 << 0 << 2 << qint64(2 * (70000 - 63 * 1024)) << qint64(2 * (70000 - 63 * 1024));
+    }
+    void turnEndCountsEachTrimmedPart() {
+        QFETCH(QJsonObject, fields);
+        QFETCH(int, results);
+        QFETCH(int, inputs);
+        QFETCH(int, diffs);
+        QFETCH(qint64, minimumBytes);
+        QFETCH(qint64, maximumBytes);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path));
+        Database database(path);
+        QVERIFY(database.exec("UPDATE replay_events SET payload=json_remove(payload,'$.item.text') "
+                              "WHERE event_type='item.completed'"));
+        QVERIFY(database.patchItems(fields));
+        QVERIFY(sweep(journal) > 0);
+        QJsonObject trimmed;
+        for (const auto& value : allReplay(journal)) {
+            const auto event = value.toObject();
+            if (event.value("event_type") == "turn.completed" &&
+                event.value("turn_sequence").toInteger() == 1)
+                trimmed = journal.activitySummaryEvent(event)
+                              .value("payload")
+                              .toObject()
+                              .value("detail_trimmed")
+                              .toObject();
+        }
+        QCOMPARE(trimmed.value("tool_results").toInt(), results);
+        QCOMPARE(trimmed.value("tool_inputs").toInt(), inputs);
+        QCOMPARE(trimmed.value("diffs").toInt(), diffs);
+        const auto bytes = trimmed.value("bytes").toInteger();
+        QVERIFY2(bytes >= minimumBytes && bytes <= maximumBytes,
+                 qPrintable(QString::number(bytes)));
     }
 
     void structuredRetentionUsesTurnGuards_data() {

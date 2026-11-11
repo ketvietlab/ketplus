@@ -640,6 +640,218 @@ class ProviderCompatibilityTest final : public QObject {
         const QJsonObject cursor = providers.at(2).toObject();
         QCOMPARE(cursor.value(QStringLiteral("provider")).toString(), QStringLiteral("cursor"));
         QCOMPARE(cursor.value(QStringLiteral("status")).toString(), QStringLiteral("missing"));
+
+        // #170: every provider says whether it can start a turn, and how to fix it.
+        const auto readiness = [](const QJsonObject& provider) {
+            return provider.value(QStringLiteral("readiness")).toObject();
+        };
+        QCOMPARE(readiness(codex).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("ready"));
+        QCOMPARE(readiness(codex).value(QStringLiteral("account")).toString(),
+                 QStringLiteral("dev@example.com"));
+        QCOMPARE(readiness(providers.at(1).toObject()).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("runtime_missing"));
+        QCOMPARE(readiness(cursor).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("missing"));
+        QVERIFY(!readiness(cursor).value(QStringLiteral("install_command")).toString().isEmpty());
+        QCOMPARE(readiness(cursor).value(QStringLiteral("login_command")).toString(),
+                 QStringLiteral("agent login"));
+    }
+
+    // #170: `codex login` in a terminal sends account/updated; the failure reported for the
+    // old account goes, and the next read reports the probe's answer.
+    void anAccountChangeClearsAReportedFailure() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter adapter(executable);
+        const auto stopProvider = qScopeGuard([&adapter] { adapter.stop(); });
+        SessionHost host(&journal, &adapter);
+        const auto status = [&host](bool recheck) {
+            std::optional<QJsonObject> answer;
+            host.handleProviderQuery(
+                request(QStringLiteral("provider.runtime_status"), QStringLiteral("account"),
+                        {{QStringLiteral("recheck"), recheck}}),
+                [&answer](const QJsonObject& result, const QString&) { answer = result; });
+            [&answer] { QTRY_VERIFY(answer.has_value()); }();
+            return answer.value_or(QJsonObject{})
+                .value(QStringLiteral("providers"))
+                .toArray()
+                .at(0)
+                .toObject()
+                .value(QStringLiteral("readiness"))
+                .toObject();
+        };
+
+        const QJsonObject started = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("start-account"),
+                    {{QStringLiteral("worktree_path"), directory.path()},
+                     {QStringLiteral("prompt"), QStringLiteral("limit-final")}}),
+            QStringLiteral("desktop-test"));
+        QVERIFY(started.value(QStringLiteral("ok")).toBool());
+        const QString sessionId = started.value(QStringLiteral("session_id")).toString();
+        QTRY_COMPARE_WITH_TIMEOUT(
+            eventsOfType(journal, sessionId, QStringLiteral("runtime.error")).size(), 1, 10000);
+        const QJsonObject error = eventsOfType(journal, sessionId, QStringLiteral("runtime.error"))
+                                      .first()
+                                      .toObject()
+                                      .value(QStringLiteral("payload"))
+                                      .toObject();
+        QCOMPARE(error.value(QStringLiteral("code")).toString(), QStringLiteral("limit_reached"));
+        QCOMPARE(error.value(QStringLiteral("message")).toString(),
+                 QStringLiteral("You've hit your weekly limit"));
+        // The account is fine, but the limit outranks it, with the reset from the rate limits.
+        QTRY_VERIFY(status(false).value(QStringLiteral("resets_at")).toInteger() > 0);
+        QJsonObject readiness = status(false);
+        QCOMPARE(readiness.value(QStringLiteral("state")).toString(),
+                 QStringLiteral("limit_reached"));
+        QCOMPARE(readiness.value(QStringLiteral("message")).toString(),
+                 QStringLiteral("You've hit your weekly limit"));
+        emit adapter.notificationReceived(
+            QStringLiteral("account/updated"),
+            {{QStringLiteral("authMode"), QStringLiteral("chatgpt")}});
+        readiness = status(false);
+        QCOMPARE(readiness.value(QStringLiteral("state")).toString(), QStringLiteral("ready"));
+        QCOMPARE(readiness.value(QStringLiteral("account")).toString(),
+                 QStringLiteral("dev@example.com"));
+        QFile saved(directory.filePath(QStringLiteral("provider-readiness.json")));
+        QVERIFY(!saved.open(QIODevice::ReadOnly) || !saved.readAll().contains("limit_reached"));
+    }
+
+    void aLimitedTurnIsCodedAndKeptUntilItResets() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter adapter(executable);
+        const auto stopProvider = qScopeGuard([&adapter] { adapter.stop(); });
+        SessionHost host(&journal, &adapter);
+        const auto status = [&host](bool recheck) {
+            std::optional<QJsonObject> answer;
+            host.handleProviderQuery(
+                request(QStringLiteral("provider.runtime_status"), QStringLiteral("limit"),
+                        {{QStringLiteral("recheck"), recheck}}),
+                [&answer](const QJsonObject& result, const QString&) { answer = result; });
+            [&answer] { QTRY_VERIFY(answer.has_value()); }();
+            return answer.value_or(QJsonObject{})
+                .value(QStringLiteral("providers"))
+                .toArray()
+                .at(0)
+                .toObject()
+                .value(QStringLiteral("readiness"))
+                .toObject();
+        };
+
+        const QJsonObject started = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("start-limit"),
+                    {{QStringLiteral("worktree_path"), directory.path()},
+                     {QStringLiteral("prompt"), QStringLiteral("limit-final")}}),
+            QStringLiteral("desktop-test"));
+        QVERIFY(started.value(QStringLiteral("ok")).toBool());
+        const QString sessionId = started.value(QStringLiteral("session_id")).toString();
+        QTRY_COMPARE_WITH_TIMEOUT(
+            eventsOfType(journal, sessionId, QStringLiteral("runtime.error")).size(), 1, 10000);
+        const QJsonObject error = eventsOfType(journal, sessionId, QStringLiteral("runtime.error"))
+                                      .first()
+                                      .toObject()
+                                      .value(QStringLiteral("payload"))
+                                      .toObject();
+        QCOMPARE(error.value(QStringLiteral("code")).toString(), QStringLiteral("limit_reached"));
+        QCOMPARE(error.value(QStringLiteral("message")).toString(),
+                 QStringLiteral("You've hit your weekly limit"));
+        // The account is fine, but the limit outranks it, with the reset from the rate limits.
+        QTRY_VERIFY(status(false).value(QStringLiteral("resets_at")).toInteger() > 0);
+        QJsonObject readiness = status(false);
+        QCOMPARE(readiness.value(QStringLiteral("state")).toString(),
+                 QStringLiteral("limit_reached"));
+        QCOMPARE(readiness.value(QStringLiteral("message")).toString(),
+                 QStringLiteral("You've hit your weekly limit"));
+        // Check again keeps a limit that has not reset.
+        QCOMPARE(status(true).value(QStringLiteral("state")).toString(),
+                 QStringLiteral("limit_reached"));
+        // It persists for the next daemon.
+        QFile saved(directory.filePath(QStringLiteral("provider-readiness.json")));
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        QVERIFY(saved.readAll().contains("limit_reached"));
+    }
+
+    void aWorkingTurnClearsAReportedFailure() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
+        {
+            QFile seeded(directory.filePath(QStringLiteral("provider-readiness.json")));
+            QVERIFY(seeded.open(QIODevice::WriteOnly));
+            seeded.write(R"({"codex":{"state":"expired","since":10,"message":"token expired"}})");
+        }
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter adapter(executable);
+        const auto stopProvider = qScopeGuard([&adapter] { adapter.stop(); });
+        SessionHost host(&journal, &adapter);
+        const auto state = [&host] {
+            std::optional<QJsonObject> answer;
+            host.handleProviderQuery(
+                request(QStringLiteral("provider.runtime_status"), QStringLiteral("state")),
+                [&answer](const QJsonObject& result, const QString&) { answer = result; });
+            [&answer] { QTRY_VERIFY(answer.has_value()); }();
+            return answer.value_or(QJsonObject{})
+                .value(QStringLiteral("providers"))
+                .toArray()
+                .at(0)
+                .toObject()
+                .value(QStringLiteral("readiness"))
+                .toObject()
+                .value(QStringLiteral("state"))
+                .toString();
+        };
+        QCOMPARE(state(), QStringLiteral("expired"));
+        const QJsonObject started = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("start-ok"),
+                    {{QStringLiteral("worktree_path"), directory.path()},
+                     {QStringLiteral("prompt"), QStringLiteral("Hello")}}),
+            QStringLiteral("desktop-test"));
+        QVERIFY(started.value(QStringLiteral("ok")).toBool());
+        const QString sessionId = started.value(QStringLiteral("session_id")).toString();
+        QTRY_COMPARE_WITH_TIMEOUT(
+            eventsOfType(journal, sessionId, QStringLiteral("turn.completed")).size(), 1, 10000);
+        QCOMPARE(state(), QStringLiteral("ready"));
+    }
+
+    void reportsASignedOutCodex() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
+        qputenv("KETPLUS_FAKE_CODEX_SIGNED_OUT", "1");
+        const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_SIGNED_OUT"); });
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+
+        std::optional<QJsonObject> answer;
+        host.handleProviderQuery(
+            request(QStringLiteral("provider.runtime_status"), QStringLiteral("signed-out")),
+            [&answer](const QJsonObject& result, const QString&) { answer = result; });
+        QTRY_VERIFY(answer.has_value());
+        const QJsonObject codex =
+            answer->value(QStringLiteral("providers")).toArray().at(0).toObject();
+        const QJsonObject readiness = codex.value(QStringLiteral("readiness")).toObject();
+        QCOMPARE(readiness.value(QStringLiteral("state")).toString(), QStringLiteral("signed_out"));
+        QCOMPARE(readiness.value(QStringLiteral("login_command")).toString(),
+                 QStringLiteral("codex login"));
+        QVERIFY(!readiness.contains(QStringLiteral("account")));
+        // Reading readiness starts no turn.
+        QFile log(directory.filePath(QStringLiteral("provider.log")));
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QVERIFY(!log.readAll().contains("turn-start:"));
     }
 };
 

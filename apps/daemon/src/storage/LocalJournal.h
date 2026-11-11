@@ -1,9 +1,11 @@
 #pragma once
 
 #include "storage/AgentMessageRecord.h"
+#include "storage/ConversationReviewer.h"
 #include "storage/JournalRetentionPolicy.h"
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
+#include "storage/JournalStorageOptions.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -53,6 +55,12 @@ struct StoredSession final {
     // UTC ISO time the conversation was archived, empty when it is not. Written only by
     // setSessionArchived; upsertSession leaves it as it is.
     QString archivedAt;
+    // The user's labels for this conversation, in the order they were added. Written only by
+    // setSessionTags; upsertSession leaves them as they are.
+    QStringList tags;
+    // #125: the last turn ended asking the user to approve or decide. Written only by
+    // setSessionAwaitingReply; upsertSession leaves it as it is.
+    bool awaitingReply{false};
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -87,6 +95,8 @@ struct ForkCopy final {
     int table{0};
     QVariantList after;
     qint64 copiedRows{0};
+    // The source's activity_files were still being listed when the snapshot was taken.
+    bool filesPending{false};
     bool settled{false};
 };
 
@@ -169,6 +179,21 @@ struct LargeEventFragment final {
     QString errorMessage;
 };
 
+// ADR 0112: one entry of a team's append-only Updates log.
+struct TeamUpdateRecord final {
+    qint64 id{0};
+    qint64 teamId{0};
+    QString at;
+    QString actor;
+    QString kind;
+    QString taskId;
+    QString text;
+    QJsonObject data;
+    // Starts the leader's digest (ADR 0112 §7); other updates ride along.
+    bool actionable{false};
+    bool digested{false};
+};
+
 class LocalJournal final {
   public:
     // 2: mcpToolCall metadata-only projection with sanitized argument summaries (ADR 0008).
@@ -235,6 +260,13 @@ class LocalJournal final {
     [[nodiscard]] QList<StoredSession> sessions() const;
     // Records or clears (empty archivedAt) the time this generation was archived.
     bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
+    // Replaces the labels of this generation.
+    bool setSessionTags(const QString& sessionId, qint64 generation, const QStringList& tags);
+    // #429: the labels this Mac offers, [{label, color}] in order. Until a catalog is stored
+    // (or when it cannot be read) the defaults; an empty array is a catalog with no tags.
+    [[nodiscard]] QJsonArray tagCatalog();
+    bool setTagCatalog(const QJsonArray& catalog);
+    bool setSessionAwaitingReply(const QString& sessionId, qint64 generation, bool awaiting);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;
@@ -290,6 +322,10 @@ class LocalJournal final {
                           int eventLimit = 128) const;
     // Summary projection and bounded, revision-fenced on-demand group events.
     [[nodiscard]] QJsonObject activitySummaryEvent(const QJsonObject& event) const;
+    // What detail retention reduced in one turn: counts by kind and the bytes it freed. Empty
+    // when the turn still holds all of its detail.
+    [[nodiscard]] QJsonObject turnDetailTrimmed(const QString& sessionId, qint64 generation,
+                                                qint64 turnSequence) const;
     [[nodiscard]] QJsonObject activityGroupPage(const QString& sessionId, qint64 generation,
                                                 const QJsonObject& params) const;
     static constexpr int maximumTranscriptWindowTurns = 20;
@@ -331,7 +367,16 @@ class LocalJournal final {
     [[nodiscard]] std::optional<JournalSizePolicy> sizePolicy() const;
     bool setSizePolicy(const JournalSizePolicy& policy, qint64 expectedRevision);
     bool setRetentionPolicy(const JournalRetentionPolicy& policy, qint64 expectedRevision);
-    std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now);
+    [[nodiscard]] std::optional<JournalStorageOptions> storageOptions() const;
+    bool setStorageOptions(const JournalStorageOptions& options, qint64 expectedRevision);
+    // The last Compact now run (ADR 0108): an empty object when none has finished.
+    [[nodiscard]] std::optional<QJsonObject> lastCompaction() const;
+    bool recordCompaction(const QDateTime& completedAt, qint64 beforeBytes, qint64 afterBytes);
+    std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now, int maximumRows = 128);
+    // Counts detail sweeps that reached the end of the replay rows (or had nothing to scan
+    // because detail is kept forever), and how far the current one has come, from 0 to 1.
+    [[nodiscard]] qint64 completedDetailSweeps() const { return completedDetailSweeps_; }
+    [[nodiscard]] double detailSweepProgress() const;
     // Scan at most maximumRows replay rows per idle pass, retaining the last usage sample
     // of each type in old, acknowledged completed turns outside the newest 20 turns.
     // Also trim eligible completed command output to UTF-8 head/tail with an explicit marker.
@@ -405,6 +450,13 @@ class LocalJournal final {
     // ADR 0027: agent-to-agent messages.
     bool insertAgentMessage(const AgentMessageRecord& message, QString* error = nullptr);
     bool updateAgentMessage(const AgentMessageRecord& message, QString* error = nullptr);
+    // Local UI authorization of exactly these held messages. All-or-nothing, generation fenced.
+    bool authorizeAgentMessages(const QString& sessionId, qint64 generation, const QStringList& ids,
+                                const QString& authorizationId, QString* error = nullptr);
+    bool claimAgentRelease(const QList<AgentMessageRecord>& messages, qint64 turnSequence,
+                           QString* error = nullptr);
+    [[nodiscard]] std::optional<bool>
+    agentReleaseJournaled(const AgentMessageRecord& message) const;
     [[nodiscard]] std::optional<AgentMessageRecord> agentMessage(const QString& id) const;
     // Messages addressed to a conversation in the given states, oldest first.
     [[nodiscard]] QList<AgentMessageRecord>
@@ -421,9 +473,42 @@ class LocalJournal final {
                                                const QString& toSession, qint64 toGeneration) const;
     [[nodiscard]] QList<AgentMessageRecord> overdueAgentRequests(const QDateTime& now) const;
     [[nodiscard]] QStringList sessionsWithQueuedAgentMessages() const;
+    // ADR 0067: the conversation that reviews another's finished turns.
+    bool setConversationReviewer(const ConversationReviewer& reviewer, QString* error = nullptr);
+    bool clearConversationReviewer(const QString& sessionId, QString* error = nullptr);
+    [[nodiscard]] std::optional<ConversationReviewer>
+    conversationReviewer(const QString& sessionId) const;
+    // Whether the conversation reviews another conversation's turns.
+    [[nodiscard]] bool isConversationReviewer(const QString& sessionId) const;
+    // Review requests a conversation sent in one chain of turns.
+    [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
+    // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at
+    // most one team. insertTeam returns the new id, which is never reused.
+    [[nodiscard]] std::optional<qint64> insertTeam(const QString& repository, QJsonObject document,
+                                                   const QStringList& sessions,
+                                                   QString* error = nullptr);
+    // Replaces the document when the stored revision is `expectedRevision`.
+    bool saveTeam(qint64 teamId, qint64 expectedRevision, const QJsonObject& document,
+                  const QStringList& sessions, QString* error = nullptr);
+    bool deleteTeam(qint64 teamId, QString* error = nullptr);
+    [[nodiscard]] QList<QJsonObject> teamDocuments() const;
+    [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
+    [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
+                                                         QString* error = nullptr);
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
+                                                      int limit) const;
+    bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
+    // ADR 0106: the conversation's current work report ledger, empty before its first report.
+    [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
+    // Stores a ledger whose version is newer than the stored one.
+    bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
+                         QString* error = nullptr);
 
   private:
     bool initializeAgents();
+    bool initializeTeams();
+    bool writeTeamMembers(qint64 teamId, const QStringList& sessions, QString* error);
     bool initializeRemoteAudit();
     // The audit's eventual 90-day, 10,000-row cap. Run from pruneRetention and every 256 audit
     // rows, because commands refused before they ran store no command result to trigger it.
@@ -446,6 +531,12 @@ class LocalJournal final {
     bool activityBackfillPending(const QString& session, qint64 generation, bool* pending,
                                  QString* error) const;
     // `deferred` when the session is still marked; its event is then indexed by the backfill.
+    // Groups are projected only once both the index and the files listing are drained. Live
+    // events defer only to the index (deferActivityToBackfill): the listing reads its own rows.
+    bool activityProjectionPending(const QString& session, qint64 generation, bool* pending) const;
+    // One bounded pass listing the files of groups indexed before activity_files existed.
+    bool listActivityFiles(const QString& session, qint64 generation, bool* listed,
+                           QSqlError* error);
     bool deferActivityToBackfill(const QString& session, qint64 generation, bool* deferred,
                                  QString* error);
     // At open: turns interrupted fork copies into purge work, or keeps them staged.
@@ -461,6 +552,7 @@ class LocalJournal final {
                                                  const std::function<bool()>& mutation,
                                                  bool ownTransaction = true);
     bool initializeContexts();
+    bool initializeWorkReports();
     [[nodiscard]] TranscriptWindow transcriptWindowImpl(const QString& sessionId, qint64 generation,
                                                         qint64 beforeCursor, qint64 snapshotCursor,
                                                         qint64 projectionRevision, int turnLimit,
@@ -482,9 +574,17 @@ class LocalJournal final {
     bool pruneUnreferencedLargePayloads(const QString& sessionId, qint64 generation,
                                         const QStringList& transferIds);
     bool initializeActivityGroups();
+    // The group an event's item belongs to (0 for none), and whether it has left it.
+    [[nodiscard]] std::pair<qint64, bool> activityMembership(const QJsonObject& event,
+                                                             const QString& itemId) const;
+    [[nodiscard]] QJsonObject activityGroupSummary(const QJsonObject& event, qint64 group) const;
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,
                               QString* error);
+    // Replaces the files one completed fileChange item changed in its activity group.
+    bool recordActivityFiles(const QString& sessionId, qint64 generation, qint64 group,
+                             const QString& itemId, qint64 itemCursor,
+                             const QJsonObject& fileChange, QString* error);
     void setError(const QString& error) const;
 
     QString connectionName_;
@@ -501,6 +601,9 @@ class LocalJournal final {
     ImagePreviewWriter imagePreview_;
     bool sizePressureRecent_{false};
     bool sizePressureActive_{false};
+    qint64 completedDetailSweeps_{0};
+    JournalStorageOptions::GeneratedImages generatedImages_{
+        JournalStorageOptions::GeneratedImages::Preview};
 };
 
 } // namespace ketplus::daemon

@@ -1,7 +1,7 @@
 # KétPlus editor core
 
 <p align="center">
-  <img src="assets/brand/ketplus-mark.png" alt="KétPlus logo" width="144">
+  <img src="assets/brand/ketplus.svg" alt="KétPlus logo" width="144">
 </p>
 
 `core/` is the fast, lightweight, cross-platform editor shared by both editions
@@ -21,8 +21,8 @@ UTF-8, syntax lexing, and a native desktop experience without a browser runtime.
 - CMake
 
 Scintilla, Lexilla, and libvterm are fetched automatically at configure time and
-pinned to known revisions. The Inter variable font is bundled for the
-application chrome.
+pinned to known revisions. KÉT Sans and KÉT Sans Mono are bundled for the
+application chrome and source text.
 
 ## Prerequisites
 
@@ -143,7 +143,7 @@ npm install -g @mermaid-js/mermaid-cli
 KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is needed.
 
 Diagrams use the canonical Két Design System Mermaid theme in light and dark mode:
-Inter 13px, compact spacing, 12px corners and shared semantic role colors. The resolved
+KÉT Sans 13px, compact spacing, 12px corners and shared semantic role colors. The resolved
 configuration snapshots and upstream revision are recorded in `resources/mermaid/`.
 Qt SVG compatibility preserves explicit label fills and existing pill-shaped nodes.
 

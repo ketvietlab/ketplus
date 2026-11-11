@@ -1,8 +1,13 @@
 #include "agent/AgentSessionManager.h"
+#include "agent/DaemonTranscriptNotices.h"
+#include "agent/ProviderRuntimeStatus.h"
+#include "agent/ReasoningHeading.h"
 
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include <QDateTime>
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -30,6 +35,17 @@ namespace ketplus {
 using namespace agent_message;
 
 namespace {
+// The row of a sent agent message's note, or -1.
+int agentNoteRow(const QVector<QVariantMap>& messages, const QString& messageId) {
+    if (messageId.isEmpty())
+        return -1;
+    for (int index = messages.size() - 1; index >= 0; --index) {
+        const auto& entry = messages.at(index);
+        if (entry.value("subtype") == "agentNote" && entry.value("agentMessageId") == messageId)
+            return index;
+    }
+    return -1;
+}
 
 QString stableOptionId(const QString& questionId, const int index, const QString& label) {
     return QStringLiteral("option_%1")
@@ -152,6 +168,8 @@ void AgentSessionManager::handleUserInputRequest(const QJsonValue& requestId,
                      params.value(QStringLiteral("approvalReason")).toString());
         entry.insert(QStringLiteral("command"),
                      params.value(QStringLiteral("approvalCommand")).toString());
+        entry.insert(QStringLiteral("target"),
+                     params.value(QStringLiteral("approvalTool")).toString());
     }
     const int index = appendMessage(session, entry);
     session->messageIndexByItem.insert(itemId, index);
@@ -269,6 +287,11 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         session->agentTurnTitle = sender.value("title").toString();
         session->agentTurnReply = sender.value("kind").toString() == QStringLiteral("reply");
         emit conversationsChanged(session->path, conversations(session->path));
+        return;
+    }
+    if (method == "daemon/workReport") {
+        emit workReportChanged(session->path, session->id,
+                               params.value("report").toObject().toVariantMap(), {});
         return;
     }
     if (method == "daemon/activityGroup") {
@@ -416,7 +439,30 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 ? agent_message::providerNoticeMessage(params.value("text").toString(), itemId)
                 : agent_message::providerNoticeMessage(params.value("text").toString(), itemId,
                                                        title);
-        if (!session->turnId.isEmpty())
+        if (params.value("presentation").isObject()) {
+            entry = params.value("presentation").toObject().toVariantMap();
+            if (entry.value("subtype") == "turnEnd") {
+                // The same line a reloaded window projects from the journal: the daemon
+                // times and sizes the turn, the session supplies its running cost.
+                agent_message::TurnFacts turn;
+                turn.durationMs = entry.value("durationMs", -1).toLongLong();
+                turn.contextTokens = entry.value("contextTokens", -1).toLongLong();
+                turn.stoppedByUser = entry.value("stoppedByUser").toBool();
+                const auto detail = agent_message::turnEndText(
+                    turn, QJsonObject::fromVariantMap(session->sessionUsage));
+                entry.insert("body", detail);
+                entry.insert("summary", detail);
+            }
+        }
+        // A later state of a sent message updates its note, as the journal's projection does.
+        if (const int note =
+                agentNoteRow(session->messages, entry.value("agentMessageId").toString());
+            note >= 0) {
+            updateMessage(session, note,
+                          agent_message::mergedAgentNote(session->messages.at(note), entry));
+            return;
+        }
+        if (!entry.contains("turnId") && !session->turnId.isEmpty())
             entry.insert(QStringLiteral("turnId"), session->turnId);
         session->messageIndexByItem.insert(itemId, appendMessage(session, entry));
         return;
@@ -446,10 +492,18 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 break;
             }
         }
+        // A reply marks the note of the message it answers.
+        for (const auto& id :
+             agent_message::agentRepliesTo(params.value("agentMessages").toArray()))
+            if (const int note = agentNoteRow(session->messages, id); note >= 0)
+                updateMessage(session, note,
+                              agent_message::repliedAgentNote(session->messages.at(note)));
         if (match < 0) {
             handleItem(session,
                        {{QStringLiteral("id"), itemId},
                         {QStringLiteral("type"), QStringLiteral("daemonUserMessage")},
+                        {QStringLiteral("timestamp"), params.value("timestamp")},
+                        {QStringLiteral("eventType"), params.value("eventType")},
                         {QStringLiteral("text"), text},
                         {QStringLiteral("images"), params.value("images")},
                         {QStringLiteral("agentMessages"), params.value("agentMessages")}},
@@ -458,6 +512,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         }
         auto& entry = session->messages[match];
         entry.insert("itemId", itemId);
+        entry.insert("timestamp", params.value("timestamp").toString());
         // The daemon's copy outlives the composer's attachment files.
         const auto images = mcp_media::messageImages(params.value("images").toArray());
         if (!images.isEmpty())
@@ -521,9 +576,13 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
             if (entry.value(QStringLiteral("messageKey")).toString() != key)
                 continue;
             entry.insert(QStringLiteral("running"), false);
-            entry.insert(QStringLiteral("status"), params.value(QStringLiteral("expired")).toBool()
-                                                       ? QStringLiteral("expired")
-                                                       : QStringLiteral("resolved"));
+            // An approval knows how it ended, even when another client decided it.
+            const QString outcome = params.value(QStringLiteral("outcome")).toString();
+            entry.insert(QStringLiteral("status"),
+                         !outcome.isEmpty() ? outcome
+                         : params.value(QStringLiteral("expired")).toBool()
+                             ? QStringLiteral("expired")
+                             : QStringLiteral("resolved"));
             entry.insert(QStringLiteral("meta"), QStringLiteral("Question no longer pending"));
             updateMessage(session, index, entry);
             break;
@@ -542,6 +601,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         session->turnId =
             params.value(QStringLiteral("turn")).toObject().value(QStringLiteral("id")).toString();
         session->loadedTurns.insert(session->turnId);
+        setWorkingDetail(session, {});
         updateState(session, QStringLiteral("Working…"), true);
         if (session->cancelRequested) {
             cancelSession(session);
@@ -607,6 +667,8 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         if (turnStatus != QStringLiteral("failed"))
             publishDeferredFinal(session);
         session->completed = turnStatus == QStringLiteral("completed");
+        session->awaitingReply =
+            session->completed && turn.value(QStringLiteral("awaitingReply")).toBool();
         session->turnId.clear();
         session->cancelRequested = false;
         if (session->completed && session->lastEventCursor <= session->lastSeenCursor)
@@ -626,6 +688,9 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
             updateState(session, QStringLiteral("Stopped"), false);
         } else {
             updateState(session, QStringLiteral("Ready"), false);
+            // ADR 0110: a completed turn clears a failure the provider reported.
+            if (session->completed && providerStatus_->hasSetup(session->daemonAdapter))
+                providerStatus_->refresh();
         }
         session->agentMessagePhaseByItem.clear();
         session->deferredAgentTextByItem.clear();
@@ -637,15 +702,18 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("error")) {
-        const QString detail = errorMessage(params.value(QStringLiteral("error")).toObject());
+        const QJsonObject error = params.value(QStringLiteral("error")).toObject();
+        const QString detail = errorMessage(error);
+        const QString code = error.value(QStringLiteral("code")).toString();
+        const QString model = error.value(QStringLiteral("model")).toString();
         const bool replayed = params.value(QStringLiteral("replayed")).toBool();
         if (replayed || params.value(QStringLiteral("nonFatal")).toBool()) {
             // History replay already restored the session state, and non-fatal failures leave
             // the turn running: keep the transcript row without ending the turn.
-            recordSessionError(session, detail, !replayed);
+            recordSessionError(session, detail, !replayed, code, model, !replayed);
             return;
         }
-        failSession(session, detail);
+        failSession(session, detail, code, model);
     }
 }
 
@@ -734,9 +802,11 @@ void AgentSessionManager::handleItem(const SessionPtr& session, const QJsonObjec
         return;
     }
     if (type == QStringLiteral("reasoning")) {
+        // The heading stays until a later thought names another one (Codex CLI's status line).
+        if (const QString heading = agent_message::reasoningHeading(item); !heading.isEmpty())
+            setWorkingDetail(session, heading);
         updateState(session, completed ? QStringLiteral("Working…") : QStringLiteral("Reasoning…"),
                     true);
-        return;
     }
     const auto event = ActivityNormalizer::normalize(
         item, completed ? TranscriptPhase::Completed : TranscriptPhase::Started,
@@ -745,6 +815,18 @@ void AgentSessionManager::handleItem(const SessionPtr& session, const QJsonObjec
                     : session->messages.size(),
          1});
     QVariantMap entry = event.toVariantMap();
+    // A thought's duration runs from when its start arrived to its completion.
+    if (type == QStringLiteral("reasoning")) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 startedAt =
+            index >= 0
+                ? session->messages.at(index).value(QStringLiteral("startedAt"), -1).toLongLong()
+                : -1;
+        if (!completed)
+            entry.insert(QStringLiteral("startedAt"), now);
+        else if (startedAt >= 0)
+            entry.insert(QStringLiteral("durationMs"), now - startedAt);
+    }
     if (entry.value(QStringLiteral("eventType")).toString() == QStringLiteral("image.view")) {
         if (index >= 0) {
             QVariantMap grouped = session->messages.at(index);

@@ -28,7 +28,7 @@ def log(value):
 
 log('args:' + json.dumps(sys.argv[1:]))
 
-def finish(session_id, turn_id, thread_id):
+def finish(session_id, turn_id, thread_id, text='finished'):
     item_id = 'claude-answer-' + turn_id
     emit({'method': 'event', 'params': {
         'sessionId': session_id, 'type': 'turn.started',
@@ -40,11 +40,11 @@ def finish(session_id, turn_id, thread_id):
                              'status': 'inProgress'}}}})
     emit({'method': 'event', 'params': {
         'sessionId': session_id, 'type': 'assistant.delta',
-        'payload': {'item_id': item_id, 'delta': 'finished'}}})
+        'payload': {'item_id': item_id, 'delta': text}}})
     emit({'method': 'event', 'params': {
         'sessionId': session_id, 'type': 'item.completed',
-        'payload': {'item_id': item_id, 'item_type': 'agentMessage', 'text': 'finished',
-                    'item': {'id': item_id, 'type': 'agentMessage', 'text': 'finished',
+        'payload': {'item_id': item_id, 'item_type': 'agentMessage', 'text': text,
+                    'item': {'id': item_id, 'type': 'agentMessage', 'text': text,
                              'status': 'completed'}}}})
     emit({'method': 'event', 'params': {
         'sessionId': session_id, 'type': 'usage.session',
@@ -135,6 +135,12 @@ for line in sys.stdin:
             def late(session_id=session_id, turn_id=turn_id, thread_id=thread_id):
                 finish(session_id, turn_id, thread_id)
             threading.Timer(0.2, late).start()
+        elif params.get('prompt') == 'ask-approval':
+            finish(session_id, turn_id, thread_id,
+                   'The PR is ready.\n\n| Task | Status |\n|---|---|\n| Tests | done |\n\n'
+                   'Should I push and open the PR?')
+        elif 'no-findings' in params.get('prompt', ''):
+            finish(session_id, turn_id, thread_id, 'Looks fine.\nVerdict: no findings')
         else:
             finish(session_id, turn_id, thread_id)
     elif method == 'thread/fork':

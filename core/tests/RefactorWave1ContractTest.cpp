@@ -6,13 +6,14 @@
 #include "KetTokens.h"
 #include "app/SettingsDialog.h"
 #include "git/GitParser.h"
+#include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDialogButtonBox>
 #include <QFontInfo>
 #include <QListWidget>
-#include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QToolTip>
@@ -75,18 +76,17 @@ class SyntheticSettingsPage final : public ketplus::SettingsPage {
     int bufferedValue_{0};
 };
 
-QPushButton* findButton(ketplus::SettingsDialog& dialog,
-                        const QDialogButtonBox::StandardButton role,
-                        const QString& fallbackRole = {}) {
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+QAbstractButton* findButton(ketplus::SettingsDialog& dialog,
+                            const QDialogButtonBox::StandardButton role,
+                            const QString& fallbackRole = {}) {
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     if (buttons == nullptr) {
         return nullptr;
     }
-    if (auto* button = buttons->button(role); button != nullptr) {
-        return button;
-    }
-    for (auto* button : buttons->findChildren<QPushButton*>()) {
-        if (!fallbackRole.isEmpty() && button->property("kvRole") == fallbackRole) {
+    for (auto* button : buttons->findChildren<QAbstractButton*>()) {
+        if ((role != QDialogButtonBox::NoButton &&
+             button->property("standardButton").toInt() == int(role)) ||
+            (!fallbackRole.isEmpty() && button->property("kvRole") == fallbackRole)) {
             return button;
         }
     }
@@ -99,39 +99,41 @@ class RefactorWave1ContractTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void cancelDoesNotApplyOrPersistExtensionState();
-    void resetBuffersExtensionDefaultsUntilSave();
-    void themePreviewRollsBackOnCancel();
-    void saveCurrentlyAppliesEveryExtensionPage();
+    void extensionChangesApplyAndPersistAtOnce();
+    void restoreDefaultsAppliesAtOnce();
+    void themeChoiceAppliesAndSurvivesClosing();
+    void onlyChangedExtensionPagesApply();
     void currentNativePaletteBaseline();
     void themeFollowsKetAppearance();
     void themeInstallsTheKetStyle();
+    void interfaceZoomUpdatesKitZoom();
     void parserReadsObservedWorktreeFlags();
 };
 
-void RefactorWave1ContractTest::cancelDoesNotApplyOrPersistExtensionState() {
+// Every settings change applies as it is made (Jay, 2026-11-10): there is no draft, Save or
+// Cancel, and closing the dialog keeps what was applied.
+void RefactorWave1ContractTest::extensionChangesApplyAndPersistAtOnce() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    QSettings storage(directory.filePath(QStringLiteral("cancel.ini")), QSettings::IniFormat);
+    QSettings storage(directory.filePath(QStringLiteral("apply.ini")), QSettings::IniFormat);
     storage.setValue(QStringLiteral("extension/value"), 7);
     storage.sync();
 
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults().editor);
-    auto* page = new SyntheticSettingsPage(QStringLiteral("synthetic/cancel"),
-                                           QStringLiteral("Synthetic cancel page"), storage,
+    auto* page = new SyntheticSettingsPage(QStringLiteral("synthetic/apply"),
+                                           QStringLiteral("Synthetic apply page"), storage,
                                            QStringLiteral("extension/value"));
     dialog.addPage(page);
+    QCOMPARE(page->applyCount, 0);
     page->setBufferedValue(42);
 
-    auto* cancel = findButton(dialog, QDialogButtonBox::Cancel);
-    QVERIFY(cancel != nullptr);
-    cancel->click();
-
-    QCOMPARE(page->applyCount, 0);
-    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 7);
+    QCOMPARE(page->applyCount, 1);
+    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 42);
+    QVERIFY(findButton(dialog, QDialogButtonBox::Cancel) == nullptr);
+    QVERIFY(findButton(dialog, QDialogButtonBox::Save, QStringLiteral("primaryAction")) == nullptr);
 }
 
-void RefactorWave1ContractTest::resetBuffersExtensionDefaultsUntilSave() {
+void RefactorWave1ContractTest::restoreDefaultsAppliesAtOnce() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("reset.ini")), QSettings::IniFormat);
@@ -146,51 +148,33 @@ void RefactorWave1ContractTest::resetBuffersExtensionDefaultsUntilSave() {
 
     auto* reset = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("settingsReset"));
     QVERIFY(reset != nullptr);
+    QCOMPARE(reset->text(), QStringLiteral("Restore defaults"));
     reset->click();
 
     QCOMPARE(page->resetCount, 1);
     QCOMPARE(page->bufferedValue(), 3);
-    QCOMPARE(page->applyCount, 0);
-    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 17);
-
-    auto* save = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("primaryAction"));
-    QVERIFY(save != nullptr);
-    QVERIFY(save->isEnabled());
-    save->click();
-
     QCOMPARE(page->applyCount, 1);
     QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 3);
 }
 
-void RefactorWave1ContractTest::themePreviewRollsBackOnCancel() {
+void RefactorWave1ContractTest::themeChoiceAppliesAndSurvivesClosing() {
     ketplus::ThemeManager theme(*qApp);
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults(), theme);
 
-    auto* themes = dialog.findChild<QListWidget*>(QStringLiteral("installedThemeList"));
-    QVERIFY(themes != nullptr);
-    QListWidgetItem* darkTheme = nullptr;
-    for (int row = 0; row < themes->count(); ++row) {
-        if (themes->item(row)->data(Qt::UserRole).toInt() ==
-            static_cast<int>(ketplus::ThemeManager::Mode::Dark)) {
-            darkTheme = themes->item(row);
-            break;
-        }
-    }
+    auto* darkTheme = dialog.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
     QVERIFY(darkTheme != nullptr);
-    themes->setCurrentItem(darkTheme);
+    darkTheme->click();
     QVERIFY(theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
 
-    auto* cancel = findButton(dialog, QDialogButtonBox::Cancel);
-    QVERIFY(cancel != nullptr);
-    cancel->click();
-
-    QVERIFY(!theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    dialog.show();
+    QTest::keyClick(&dialog, Qt::Key_Escape);
+    QVERIFY(theme.palette().dark);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
 }
 
-void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
+void RefactorWave1ContractTest::onlyChangedExtensionPagesApply() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("multiple-pages.ini")),
@@ -208,11 +192,9 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
                                                 QStringLiteral("clean/value"));
     dialog.addPage(dirtyPage);
     dialog.addPage(cleanPage);
-    dirtyPage->setBufferedValue(9);
 
     auto* navigation = dialog.findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     QVERIFY(navigation != nullptr);
-
     QStringList extensionIds;
     for (int row = 0; row < navigation->count(); ++row) {
         const QString id = navigation->item(row)->data(Qt::UserRole).toString();
@@ -223,13 +205,9 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
     QCOMPARE(extensionIds,
              (QStringList{QStringLiteral("synthetic/dirty"), QStringLiteral("synthetic/clean")}));
 
-    auto* save = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("primaryAction"));
-    QVERIFY(save != nullptr);
-    QVERIFY(save->isEnabled());
-    save->click();
-
+    dirtyPage->setBufferedValue(9);
     QCOMPARE(dirtyPage->applyCount, 1);
-    QCOMPARE(cleanPage->applyCount, 1);
+    QCOMPARE(cleanPage->applyCount, 0);
     QCOMPARE(storage.value(QStringLiteral("dirty/value")).toInt(), 9);
     QCOMPARE(storage.value(QStringLiteral("clean/value")).toInt(), 2);
 }
@@ -272,12 +250,61 @@ void RefactorWave1ContractTest::themeFollowsKetAppearance() {
     QVERIFY(theme.palette().dark);
 }
 
+void RefactorWave1ContractTest::interfaceZoomUpdatesKitZoom() {
+    ketplus::ThemeManager theme(*qApp);
+    auto& appearance = ket::Appearance::instance();
+    QSignalSpy changes(&appearance, &ket::Appearance::zoomChanged);
+    // Every zoom step. Repeat to catch compounded scaling, and preserve the current zoom
+    // across theme changes (ADR 0104).
+    for (int zoom : {90, 110, 125, 100, 90, 110, 100}) {
+        theme.setInterfaceScale(14, zoom);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(QToolTip::font().pixelSize(), qRound(13.0 * zoom / 100));
+        QCOMPARE(qApp->font().pixelSize(), qRound(14.0 * zoom / 100));
+        theme.setMode(ketplus::ThemeManager::Mode::Dark);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
+        theme.setInterfaceScale(14, zoom);
+        QCOMPARE(changes.size(), 1);
+        changes.clear();
+    }
+    // A surface restyling on the application font change already reads the new zoom; the
+    // kit's zoomChanged comes after it.
+    struct FontChangeProbe final : QWidget {
+        int seen = 0;
+        bool event(QEvent* event) override {
+            if (event->type() == QEvent::ApplicationFontChange ||
+                event->type() == QEvent::FontChange)
+                seen = ketplus::InterfaceZoomMetrics::current();
+            return QWidget::event(event);
+        }
+    } probe;
+    probe.show();
+    theme.setInterfaceScale(14, 125);
+    QCOMPARE(probe.seen, 125);
+    QCOMPARE(ketplus::InterfaceZoomMetrics::current(), 125);
+    theme.setInterfaceScale(14, 90);
+    QCOMPARE(probe.seen, 90);
+
+    // The interface size sets the application text at the zoom and leaves the chrome.
+    theme.setInterfaceScale(16, 125);
+    changes.clear();
+    theme.setInterfaceScale(13, 125);
+    QVERIFY(changes.isEmpty());
+    QCOMPARE(appearance.zoom(), 1.25);
+    QCOMPARE(theme.interfaceTextPixels(), 16);
+    QCOMPARE(qApp->font().pixelSize(), 16);
+    theme.setInterfaceScale(14, 100);
+}
+
 void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
     // KétPlus metrics (code at 14 px) and the kit's style: it keeps the application and
     // tooltip palettes on ket::Appearance, and draws menus, tooltips and tab bars, which the
     // stylesheet leaves to it.
     ketplus::ThemeManager theme(*qApp);
-    QCOMPARE(ket::Profile::current().codePixels, ket::Profile::ketPlus().codePixels);
+    QCOMPARE(ket::Profile::current().codePixels, 14.0);
     for (const auto mode :
          {ketplus::ThemeManager::Mode::Dark, ketplus::ThemeManager::Mode::Light}) {
         theme.setMode(mode);
@@ -298,19 +325,27 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
             ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels));
     };
     // The label a tooltip shows: the stylesheet's base QWidget size must not reach it.
-    const auto shownTooltipPixels = [] {
+    const auto shownTooltipPixels = [&] {
         QWidget anchor;
         anchor.resize(80, 40);
         anchor.show();
         QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
+        // On Windows the label is parented to the screen's desktop widget, so it is not a
+        // top-level widget there.
         int pixels = -1;
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
+        for (QWidget* widget : QApplication::allWidgets()) {
             if (widget->inherits("QTipLabel") && widget->isVisible()) {
                 widget->ensurePolished();
                 pixels = QFontInfo(widget->font()).pixelSize();
             }
         }
         QToolTip::hideText();
+#if defined(Q_OS_WIN)
+        // The offscreen platform on Windows shows no tooltip at all; the size it would have is
+        // still checked through QToolTip::font() and tooltipFontPixels().
+        if (pixels < 0)
+            return tooltipPixels();
+#endif
         return pixels;
     };
     {
@@ -319,7 +354,7 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         ketplus::ThemeManager fresh(*qApp);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
         QCOMPARE(shownTooltipPixels(), tooltipPixels());
-        fresh.setInterfaceFontSizePixels(fresh.interfaceFontSizePixels() + 4);
+        fresh.setInterfaceScale(fresh.interfaceFontSizePixels(), 125);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
         QCOMPARE(shownTooltipPixels(), tooltipPixels());
         QCOMPARE(ketplus::tooltipFontPixels(), tooltipPixels());

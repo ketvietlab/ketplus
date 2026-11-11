@@ -6,6 +6,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QScopeGuard>
 #include <QSqlError>
@@ -24,6 +25,13 @@ QJsonObject parseObject(const QString& value) {
 
 QString compact(const QJsonObject& value) {
     return QString::fromUtf8(QJsonDocument(value).toJson(QJsonDocument::Compact));
+}
+
+QStringList storedTags(const QString& column) {
+    QStringList tags;
+    for (const auto& value : QJsonDocument::fromJson(column.toUtf8()).array())
+        tags.append(value.toString());
+    return tags;
 }
 
 QString eventItemId(const QJsonObject& payload) {
@@ -71,7 +79,7 @@ LocalJournal::LocalJournal(const QString& path)
     // Operations reset their own errors. Keep failed startup unusable even if a later
     // operation clears that diagnostic; recovery requires a freshly initialized journal.
     if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
-        !markFormat())
+        !initializeTeams() || !markFormat())
         database_.close();
 }
 
@@ -104,6 +112,15 @@ bool LocalJournal::initialize() {
             "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
             "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
             "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS journal_storage_options ("
+            "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+            "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
+            "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_compaction_state ("
+                       "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                       "completed_at TEXT NOT NULL, before_bytes INTEGER NOT NULL, "
+                       "after_bytes INTEGER NOT NULL)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS journal_attachment_gc ("
                        "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
                        "manifest_row INTEGER NOT NULL DEFAULT 0 CHECK(manifest_row>=0), "
@@ -307,6 +324,10 @@ bool LocalJournal::migrateTranscriptSchema() {
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
         !ensureColumn(QStringLiteral("sessions"), QStringLiteral("archived_at"),
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
+        !ensureColumn(QStringLiteral("sessions"), QStringLiteral("tags"),
+                      QStringLiteral("TEXT NOT NULL DEFAULT '[]'")) ||
+        !ensureColumn(QStringLiteral("sessions"), QStringLiteral("awaiting_reply"),
+                      QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("replay_projection_state"), QStringLiteral("revision"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         // The repository a linked worktree belonged to, kept for after the worktree is deleted.
@@ -344,7 +365,7 @@ bool LocalJournal::migrateTranscriptSchema() {
         setError(turnStarts.lastError().text());
         return false;
     }
-    if (!initializeContexts())
+    if (!initializeContexts() || !initializeWorkReports())
         return false;
     QSqlQuery index(database_);
     // Retention probes a specific turn, not the whole session's raw backlog.
@@ -869,9 +890,10 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     // a purge marker for the rest (ADR 0093). The commit makes all of it unreachable.
     for (const QString& table :
          {QStringLiteral("background_tasks"), QStringLiteral("activity_heads"),
-          QStringLiteral("activity_backfill"), QStringLiteral("replay_projection_state"),
-          QStringLiteral("client_cursors"), QStringLiteral("staged_attachments"),
-          QStringLiteral("session_contexts")}) {
+          QStringLiteral("activity_backfill"), QStringLiteral("activity_files_backfill"),
+          QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
+          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts"),
+          QStringLiteral("work_reports")}) {
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral("DELETE FROM %1 WHERE session_id = ? AND generation = ?").arg(table));
@@ -1030,7 +1052,7 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
             "SELECT id, worktree_path, adapter, thread_id, turn_id, state, generation, "
             "last_cursor, current_turn_sequence, title, configuration_revision, model, effort, "
             "execution_policy, mode, provider_threads, last_seen_cursor, last_turn_started_at, "
-            "context_revision, compact_window, archived_at "
+            "context_revision, compact_window, archived_at, tags, awaiting_reply "
             "FROM sessions ORDER BY id"))) {
         setError(query.lastError().text());
         return std::nullopt;
@@ -1046,7 +1068,8 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
                        query.value(14).toString(),   query.value(15).toString(),
                        query.value(16).toLongLong(), query.value(17).toString(),
                        query.value(18).toLongLong(), query.value(19).toLongLong(),
-                       query.value(20).toString()});
+                       query.value(20).toString(),   storedTags(query.value(21).toString()),
+                       query.value(22).toBool()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());

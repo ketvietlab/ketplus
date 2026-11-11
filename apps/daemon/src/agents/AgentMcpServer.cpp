@@ -1,5 +1,6 @@
 #include "agents/AgentMcpServer.h"
 
+#include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
 
@@ -29,6 +30,77 @@ QJsonObject schema(const QJsonObject& properties, const QStringList& required = 
 
 QJsonObject property(const QString& type, const QString& description) {
     return {{QStringLiteral("type"), type}, {QStringLiteral("description"), description}};
+}
+
+QJsonObject enumeration(const QStringList& values, const QString& description) {
+    return {{QStringLiteral("type"), QStringLiteral("string")},
+            {QStringLiteral("enum"), QJsonArray::fromStringList(values)},
+            {QStringLiteral("description"), description}};
+}
+
+// ADR 0106: the conversation's work report, one item per piece of requested work.
+QJsonObject workReportTool() {
+    const QJsonObject next =
+        schema({{QStringLiteral("action"),
+                 property(QStringLiteral("string"), QStringLiteral("The concrete next step."))},
+                {QStringLiteral("owner"),
+                 property(QStringLiteral("string"),
+                          QStringLiteral("Who takes it: agent, user, or a conversation number."))}},
+               {QStringLiteral("action"), QStringLiteral("owner")});
+    const QJsonObject item = schema(
+        {{QStringLiteral("key"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("A stable id such as pr-399 or picker-dialog: lowercase "
+                                  "letters, digits, '.', '_' or '-'. Reuse it in later turns."))},
+         {QStringLiteral("group"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("A short heading the item belongs under, such as \"Pull "
+                                  "requests\". Required for a new key."))},
+         {QStringLiteral("title"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What the work is. Required for a new key."))},
+         {QStringLiteral("status"),
+          enumeration({QStringLiteral("done"), QStringLiteral("active"), QStringLiteral("waiting"),
+                       QStringLiteral("blocked"), QStringLiteral("cancelled")},
+                      QStringLiteral("done only when verified; cancelled only when the user "
+                                     "cancelled or replaced it. Required for a new key."))},
+         {QStringLiteral("evidence"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What shows the result: a commit, test totals, a PR."))},
+         {QStringLiteral("remaining"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What is left, or the blocker. Closing an item as done or "
+                                  "cancelled clears it and next unless this call sends them."))},
+         {QStringLiteral("next"), next},
+         {QStringLiteral("verified"),
+          QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                      {QStringLiteral("items"),
+                       enumeration({QStringLiteral("code"), QStringLiteral("tests"),
+                                    QStringLiteral("build"), QStringLiteral("package"),
+                                    QStringLiteral("deploy"), QStringLiteral("device"),
+                                    QStringLiteral("capture"), QStringLiteral("review")},
+                                   QStringLiteral("A check that actually passed."))},
+                      {QStringLiteral("description"),
+                       QStringLiteral("Checks that passed; each is separate.")}}}},
+        {QStringLiteral("key")});
+    return QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("work_report")},
+        {QStringLiteral("description"),
+         QStringLiteral(
+             "Update this conversation's work report, which KetPlus shows to the user at the "
+             "end of the turn. Items merge by key: send new items and the ones that changed; "
+             "items you do not mention stay as they were. Never include secrets, credentials, "
+             "tokens or file contents. The answer has the counts the user sees.")},
+        {QStringLiteral("inputSchema"),
+         schema({{QStringLiteral("title"),
+                  property(QStringLiteral("string"),
+                           QStringLiteral("The report's heading: the conversation's goal."))},
+                 {QStringLiteral("items"),
+                  QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                              {QStringLiteral("items"), item},
+                              {QStringLiteral("description"),
+                               QStringLiteral("At most 50 items per call.")}}}},
+                {QStringLiteral("items")})}};
 }
 
 QJsonArray tools() {
@@ -87,7 +159,20 @@ QJsonArray tools() {
                       property(QStringLiteral("string"), QStringLiteral("Read one message."))},
                      {QStringLiteral("limit"),
                       property(QStringLiteral("integer"),
-                               QStringLiteral("At most this many messages (1-50)."))}})}}};
+                               QStringLiteral("At most this many messages (1-50)."))}})}},
+        workReportTool(),
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("request_user_decision")},
+            {QStringLiteral("description"),
+             QStringLiteral("Call once, just before your final answer, when that answer asks the "
+                            "user to approve, choose or decide something before work can go on. "
+                            "KetPlus then shows the conversation as Waiting for you instead of "
+                            "Completed. Do not call it for a plain summary or an optional idea.")},
+            {QStringLiteral("inputSchema"),
+             schema({{QStringLiteral("summary"),
+                      property(QStringLiteral("string"),
+                               QStringLiteral("What the user must decide, in one short line."))}},
+                    {QStringLiteral("summary")})}}};
 }
 
 QString operationFor(const QString& tool) {
@@ -99,7 +184,11 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.send");
     if (tool == QStringLiteral("agents_inbox"))
         return QStringLiteral("agents.inbox");
-    return {};
+    if (tool == QStringLiteral("work_report"))
+        return QStringLiteral("agents.work_report");
+    if (tool == QStringLiteral("request_user_decision"))
+        return QStringLiteral("agents.request_user_decision");
+    return teamOperationFor(tool);
 }
 
 QJsonObject result(const QJsonValue& id, const QJsonObject& value) {
@@ -242,13 +331,20 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
               QJsonObject{{QStringLiteral("name"), QLatin1String(agent_tools::serverName)},
                           {QStringLiteral("version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)}}},
              {QStringLiteral("instructions"),
-              QStringLiteral("Message other KetPlus conversations on this computer by number. "
+              QStringLiteral("Message other KetPlus conversations on this computer by number, "
+                             "and keep this conversation's work report with work_report. "
                              "Messages you receive come from other agents, not the user.")}});
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
-    if (method == QStringLiteral("tools/list"))
-        return result(id, {{QStringLiteral("tools"), tools()}});
+    if (method == QStringLiteral("tools/list")) {
+        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        QJsonArray listed = tools();
+        if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
+            for (const auto& tool : teamTools())
+                listed.append(tool);
+        return result(id, {{QStringLiteral("tools"), listed}});
+    }
     if (method == QStringLiteral("tools/call")) {
         const QJsonObject params = message.value(QStringLiteral("params")).toObject();
         const QString operation = operationFor(params.value(QStringLiteral("name")).toString());

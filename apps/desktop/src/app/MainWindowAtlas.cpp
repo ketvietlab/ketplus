@@ -1,3 +1,5 @@
+#include "KetButton.h"
+#include "KetIcons.h"
 #include "agent/CodexAppServer.h"
 #include "app/AtlasBuilderTab.h"
 #include "app/AtlasConversationPanel.h"
@@ -23,6 +25,7 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/ExplorerPanel.h"
 
+#include "ui/SymbolIcon.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -50,7 +53,6 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionToolButton>
-#include <QSvgRenderer>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -69,57 +71,23 @@ QString normalizedSpotlightPath(const QString& path) {
     return QDir::cleanPath(canonical.isEmpty() ? file.absoluteFilePath() : canonical);
 }
 
-class AtlasIconButton final : public QToolButton {
-  public:
-    AtlasIconButton(const QString& resource, const QString& label, QWidget* parent)
-        : QToolButton(parent) {
-        QFile file(resource);
-        if (file.open(QIODevice::ReadOnly))
-            svg_ = file.readAll();
-        setAutoRaise(true);
-        setFixedSize(32, 32);
-        setStyleSheet(QStringLiteral(
-            "QToolButton { padding: 0; min-width: 0; min-height: 0; border: none; background: "
-            "transparent; } QToolButton:hover { background: rgba(128, 128, 128, 35); }"));
-        setToolTip(label);
-        setAccessibleName(label);
-    }
-    QSize sizeHint() const override { return QSize(32, 32); }
-    QSize minimumSizeHint() const override { return sizeHint(); }
-
-  protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        QStyleOptionToolButton option;
-        initStyleOption(&option);
-        style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
-        auto svg = svg_;
-        svg.replace("#fff", palette().color(QPalette::ButtonText).name().toUtf8());
-        QSvgRenderer renderer(svg);
-        renderer.render(&painter, QRectF((width() - 20) / 2.0, (height() - 20) / 2.0, 20, 20));
-    }
-
-  private:
-    QByteArray svg_;
-};
-
 class AtlasTabWidget final : public QTabWidget {
   public:
     explicit AtlasTabWidget(QWidget* parent = nullptr) : QTabWidget(parent) {
-        addButton_ = new AtlasIconButton(QStringLiteral(":/atlas/icons/plus.svg"),
+        addButton_ = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")),
                                          tr("New Atlas tab"), this);
         addButton_->setObjectName(QStringLiteral("atlasNewTabButton"));
         setCornerWidget(addButton_, Qt::TopRightCorner);
     }
 
-    QToolButton* addButton() const { return addButton_; }
+    QAbstractButton* addButton() const { return addButton_; }
 
     void configureCloseButton(QWidget* tab) {
-        auto* close =
-            new AtlasIconButton(QStringLiteral(":/atlas/icons/x.svg"), tr("Close Atlas tab"), this);
+        auto* close = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
+                                          tr("Close Atlas tab"), this);
         close->setObjectName(QStringLiteral("atlasCloseTabButton"));
         tabBar()->setTabButton(indexOf(tab), QTabBar::RightSide, close);
-        connect(close, &QToolButton::clicked, this, [this, tab] {
+        connect(close, &QAbstractButton::clicked, this, [this, tab] {
             const int index = indexOf(tab);
             if (index >= 0)
                 emit tabCloseRequested(index);
@@ -127,7 +95,7 @@ class AtlasTabWidget final : public QTabWidget {
     }
 
   private:
-    QToolButton* addButton_{nullptr};
+    QAbstractButton* addButton_{nullptr};
 };
 } // namespace
 
@@ -139,12 +107,9 @@ void MainWindow::showSpotlight() {
     }
     auto* dialog = new SpotlightDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setFixedWidth(qMin(640, qMax(280, width() - 40)));
-    dialog->setAvailableHeight(qMin(680, qMax(360, height() - 60)));
     atlasIndex_->scheduleRefresh(0);
     refreshWorkspaceFileIndex(false);
     populateSpotlight();
-    dialog->move(mapToGlobal(QPoint((width() - dialog->width()) / 2, qMax(30, height() / 6))));
     connect(dialog, &SpotlightDialog::entryActivated, this, [this](const QString& id) {
         const int separator = id.indexOf(':');
         const auto type = id.left(separator);
@@ -271,7 +236,7 @@ void MainWindow::openAtlasBuilder(AtlasTab* picker) {
     ensureAgentWorkspace();
     agentWorkspace_->hide();
     auto* builder = new AtlasBuilderTab(atlasIndex_, workspaceRoot_, atlasTabs_);
-    builder->chatView()->applyTheme(theme_.palette(), appearanceSettings_.interfaceFontSizePixels);
+    builder->chatView()->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     connectAtlasBuilder(builder);
 
     atlasTabs_->removeTab(index);
@@ -299,6 +264,7 @@ void MainWindow::openAtlasBuilder(AtlasTab* picker) {
 
 void MainWindow::connectAtlasBuilder(AtlasBuilderTab* builder) {
     auto* chat = builder->chatView();
+    connectAtlasResults(chat);
     connect(chat, &AgentWorkspaceView::activityGroupRequested, builder,
             [this, builder](const QString& scope, const QString& key, bool expanded) {
                 agentManager_->setActivityGroupOpen(builder->workspaceRoot(), scope, key, expanded);
@@ -320,6 +286,8 @@ void MainWindow::connectAtlasBuilder(AtlasBuilderTab* builder) {
             atlasTabs_->setTabToolTip(index, builder->atlasPath());
         }
     });
+    connect(builder, &AtlasBuilderTab::conversationRequested, this,
+            &MainWindow::openSidebarConversation);
     connect(builder, &AtlasBuilderTab::atlasBuilt, this,
             [this](const AtlasDescriptor&) { populateSpotlight(); });
 
@@ -540,7 +508,8 @@ void MainWindow::setAtlasWorkspaceVisible(const bool visible) {
         atlasTabs_->tabBar()->setElideMode(Qt::ElideRight);
         atlasTabs_->tabBar()->setUsesScrollButtons(true);
         workspaceSplit_->addWidget(atlasTabs_);
-        connect(atlasHost->addButton(), &QToolButton::clicked, this, &MainWindow::openAtlasPicker);
+        connect(atlasHost->addButton(), &QAbstractButton::clicked, this,
+                &MainWindow::openAtlasPicker);
         connect(atlasTabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::closeAtlasTab);
         connect(atlasTabs_, &QTabWidget::currentChanged, this, &MainWindow::updateAtlasActivity);
     }

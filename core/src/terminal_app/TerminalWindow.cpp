@@ -1,7 +1,8 @@
 #include "terminal_app/TerminalWindow.h"
 
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-#include "terminal_app/TerminalTab.h"
+#include "ui/MessageDialog.h"
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
@@ -23,7 +24,6 @@
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QPainter>
 #include <QSettings>
 #include <QTabBar>
@@ -38,6 +38,7 @@ namespace {
 
 constexpr auto appearanceKey = "appearance/theme";
 constexpr auto fontFamilyKey = "terminal/fontFamily";
+constexpr auto interfaceZoomKey = "appearance/interfaceZoom";
 
 // The names ThemeManager saved, so an existing preference survives the move to the kit.
 constexpr std::array<std::pair<const char*, ket::Appearance::Mode>, 3> appearanceModes{{
@@ -87,6 +88,8 @@ ket::IconButton* actionButton(const QString& code, const QString& label, QWidget
 } // namespace
 
 void restoreTerminalAppearance() {
+    const qreal savedZoom = QSettings().value(QLatin1StringView(interfaceZoomKey), 1.0).toDouble();
+    ket::Appearance::instance().setZoom(qBound(0.75, savedZoom, 2.0));
     const QString saved = QSettings().value(QLatin1StringView(appearanceKey)).toString();
     for (const auto& [name, mode] : appearanceModes) {
         if (saved == QLatin1StringView(name)) {
@@ -258,6 +261,26 @@ void TerminalWindow::createMenus() {
     add(viewMenu, QStringLiteral("Enter Full Screen"), QKeySequence::FullScreen,
         [this] { isFullScreen() ? showNormal() : showFullScreen(); });
 
+    QMenu* zoomMenu = viewMenu->addMenu(QStringLiteral("Interface Zoom"));
+    auto* zoomGroup = new QActionGroup(this);
+    zoomGroup->setExclusive(true);
+    for (int percent : {75, 100, 125, 150, 200}) {
+        QAction* zoom = zoomMenu->addAction(QStringLiteral("%1%").arg(percent));
+        zoom->setObjectName(QStringLiteral("terminalInterfaceZoom%1").arg(percent));
+        zoom->setCheckable(true);
+        zoomGroup->addAction(zoom);
+        const qreal factor = percent / 100.0;
+        const auto synchronize = [zoom, factor] {
+            zoom->setChecked(qFuzzyCompare(ket::Appearance::instance().zoom(), factor));
+        };
+        synchronize();
+        connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, zoom, synchronize);
+        connect(zoom, &QAction::triggered, this, [factor] {
+            QSettings().setValue(QLatin1StringView(interfaceZoomKey), factor);
+            ket::Appearance::instance().setZoom(factor);
+        });
+    }
+
     QMenu* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
@@ -278,14 +301,11 @@ void TerminalWindow::createMenus() {
     QAction* aboutAction = helpMenu->addAction(QStringLiteral("About KétPlus Terminal"));
     aboutAction->setMenuRole(QAction::AboutRole);
     connect(aboutAction, &QAction::triggered, this, [this] {
-        QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("About KétPlus Terminal"));
-        box.setIconPixmap(windowIcon().pixmap(64, 64));
-        box.setText(
-            QStringLiteral("KétPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
-        box.setInformativeText(QStringLiteral("A lightweight native terminal for macOS.\n\n"
-                                              "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0."));
-        box.exec();
+        message_dialog::information(
+            this, QStringLiteral("About KétPlus Terminal"),
+            QStringLiteral("KétPlus Terminal %1\n\nA lightweight native terminal for macOS.\n\n"
+                           "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0.")
+                .arg(QCoreApplication::applicationVersion()));
     });
 }
 

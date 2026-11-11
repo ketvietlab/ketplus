@@ -1,25 +1,54 @@
 #include "remote/RemoteControlView.h"
+#include "control/ControlV2Client.h"
+#include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
+#include "ui/InterfaceZoom.h"
+#include "ui/Theme.h"
+
+#include "KetAppearance.h"
+#include "KetAvatar.h"
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "KetEmptyState.h"
+#include "KetFieldRow.h"
+#include "KetRecipes.h"
 
 #include <QAccessible>
 #include <QJsonArray>
 #include <QTimeZone>
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDateTime>
 #include <QDialog>
+#include <QDir>
+#include <QFontInfo>
 #include <QGridLayout>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPixmap>
-#include <QPushButton>
+#include <QScrollArea>
+#include <QSettings>
+#include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include <algorithm>
+
+namespace ketplus::remote {
+// Signs a client in for this process only; nothing reaches the keychain.
+class RemoteControlTestAccess {
+  public:
+    static void signIn(ControlV2Client& client) {
+        client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
+    }
+};
+} // namespace ketplus::remote
 
 namespace ketplus {
 
@@ -27,7 +56,11 @@ class RemoteControlViewTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase();
     void opensOnSignInPrompt();
+    void sectionsFollowTheMock();
+    void linuxPairingStaysReachableWithoutThePhoneRelay();
+    void linuxMachineIconsFollowTheTheme();
     void signedOutIntroFollowsTheMockAtEveryWidth();
     void signInFormIsAnExplicitSecondaryFlow();
     void demoSignInOpensAddDeviceQr();
@@ -39,7 +72,42 @@ class RemoteControlViewTest final : public QObject {
     void activityDropsRepliesFromBeforeSignOut();
 };
 
+// The view reads the account, host pins and daemon socket under the daemon's data directory.
+// A temporary one keeps a signed-in Mac's own account and daemon out of these tests.
 namespace {
+// The application's theme, as main() has it: the palette and stylesheet follow ket::Appearance.
+ThemeManager* appTheme = nullptr;
+} // namespace
+
+void RemoteControlViewTest::initTestCase() {
+    static QTemporaryDir data;
+    QVERIFY(data.isValid());
+    qputenv("KETPLUS_DAEMON_DATA_DIR", data.path().toUtf8());
+    qputenv("KETPLUS_DAEMON_SOCKET", data.filePath(QStringLiteral("no-daemon")).toUtf8());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, data.path());
+    // Before any widget: a view built first keeps the palette it was polished with.
+    appTheme = new ThemeManager(*qApp, qApp);
+}
+
+namespace {
+// KETPLUS_CONNECTIONS_CAPTURE=<dir> also saves each dialog over the window in both themes,
+// for the side by side with `KetPlusMock --screen=connections --open=pair|linux|signin`.
+void captureWindow(QWidget& view, const QString& name) {
+    const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE");
+    if (dir.isEmpty() || appTheme == nullptr)
+        return;
+    for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
+        appTheme->previewMode(mode);
+        QTest::qWait(50);
+        view.window()->grab().save(QDir(dir).filePath(name + (mode == ThemeManager::Mode::Light
+                                                                  ? QStringLiteral("-light.png")
+                                                                  : QStringLiteral("-dark.png"))));
+    }
+    appTheme->cancelPreview();
+    QTest::qWait(50);
+}
+
 QJsonObject auditEntry(const QString& id, const QString& kind, const QString& device,
                        const QString& result, const QDateTime& at, const QString& session = {},
                        const bool exists = true, const QString& title = {}) {
@@ -113,7 +181,7 @@ void RemoteControlViewTest::activityRowsAreReadableFromTheKeyboardAndScreenReade
         }
         return found;
     };
-    auto* showAll = section.findChild<QPushButton*>(QStringLiteral("remoteActivityShowAll"));
+    auto* showAll = section.findChild<QAbstractButton*>(QStringLiteral("remoteActivityShowAll"));
     QVERIFY(showAll);
 
     section.render({});
@@ -301,20 +369,186 @@ void RemoteControlViewTest::pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTic
     QVERIFY(view.pairingCode_->text().isEmpty());
 }
 
+void RemoteControlViewTest::sectionsFollowTheMock() {
+    RemoteControlView view;
+    view.resize(840, 720);
+    view.show();
+    QStringList titles;
+    for (auto* label : view.findChildren<QLabel*>())
+        if (label->property("remoteRole").toString() == QStringLiteral("sectionTitle"))
+            titles.append(label->text());
+    QVERIFY(titles.contains(QStringLiteral("Phones & tablets")));
+    QVERIFY(titles.contains(QStringLiteral("Linux machines")));
+    QVERIFY(!titles.contains(QStringLiteral("Your devices")));
+
+    // Linux machines read "N trusted", and the page's Add menu starts pairing.
+    auto* linux = view.findChild<QWidget*>(QStringLiteral("linuxMachinesSection"));
+    QVERIFY(linux);
+    QCOMPARE(linux->findChild<QLabel*>(QStringLiteral("linuxMachinesCount"))->text(),
+             QStringLiteral("0 trusted"));
+    for (auto* button : linux->findChildren<QAbstractButton*>())
+        QVERIFY2(!button->text().contains(QStringLiteral("Connect Linux machine")),
+                 qPrintable(button->text()));
+    // The account and history close the page, below Linux machines.
+    auto* footer = view.findChild<QWidget*>(QStringLiteral("remoteLinkedFooter"));
+    QVERIFY(footer);
+    auto* body = linux->parentWidget();
+    QCOMPARE(footer->parentWidget(), body);
+    QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(linux));
+    QVERIFY(footer->isAncestorOf(view.findChild<QWidget*>(QStringLiteral("remoteAccountStrip"))));
+
+    // The strip names the account the daemon reports, never a fixture (ADR 0109).
+    const auto text = [&view](const char* name) {
+        return view.findChild<QLabel*>(QLatin1String(name))->text();
+    };
+    QSignalSpy accounts(&view, &ketplus::RemoteControlView::accountChanged);
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("Minh Tran")},
+                                   {QStringLiteral("username"), QStringLiteral("minh")}}}});
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("Minh Tran"));
+    QCOMPARE(accounts.constLast().at(0).toString(), QStringLiteral("Minh Tran")); // the sidebar
+    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · KétPlus Pro"));
+    QCOMPARE(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->initials(),
+             QStringLiteral("MT"));
+    // A name that looks like markup is shown as typed.
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("<b>Lan</b>")},
+                                   {QStringLiteral("username"), QStringLiteral("<i>lan</i>")}}}});
+    for (const char* name : {"remoteAccountName", "remoteAccountMeta"})
+        QCOMPARE(view.findChild<QLabel*>(QLatin1String(name))->textFormat(), Qt::PlainText);
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("<b>Lan</b>"));
+    // An enrollment from before the daemon kept the name.
+    view.applyStatus({{QStringLiteral("configured"), true}});
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("Signed in"));
+    QCOMPARE(accounts.constLast().at(0).toString(), QString()); // the sidebar keeps "KetPlus"
+    view.applyStatus({{QStringLiteral("configured"), false},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("Stale")}}}});
+    QCOMPARE(accounts.constLast().at(0).toString(), QString());
+    view.applyStatus({{QStringLiteral("configured"), true}});
+    QVERIFY(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->isHidden());
+    for (auto* label : view.findChildren<QLabel*>())
+        QVERIFY2(!label->text().contains(QStringLiteral("example.test")),
+                 qPrintable(label->text()));
+}
+
+void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
+    RemoteControlView view;
+    view.resize(840, 720);
+    view.show();
+    auto* linux = view.linuxMachines_;
+    remote::RemoteControlTestAccess::signIn(*linux->client_);
+    linux->render();
+    const auto connectButton = [linux] {
+        return linux->findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));
+    };
+
+    // This Mac's relay is not linked: the page has no Add menu, so the section offers its own.
+    view.applyStatus({{QStringLiteral("configured"), false}});
+    QVERIFY(!view.pageHeader_->isVisible());
+    // A widget added to a shown layout becomes visible on the next event loop pass.
+    QTRY_VERIFY(connectButton() && connectButton()->isVisible());
+    QTest::mouseClick(connectButton(), Qt::LeftButton);
+    // The card covers the window it opened in, as the mock's modal does (#422).
+    auto* pairing = view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog"));
+    QVERIFY(pairing && pairing->isOpen());
+    QCOMPARE(pairing->parentWidget(), view.window());
+    QCOMPARE(pairing->title(), QStringLiteral("Connect a Linux machine"));
+    // The link field sits in the kit's field row, as the mock's dialog.
+    auto* pairingRow = pairing->findChild<ket::FieldRow*>(QStringLiteral("linuxPairingRow"));
+    QVERIFY(pairingRow);
+    QCOMPARE(pairingRow->control()->objectName(), QStringLiteral("linuxPairingLink"));
+    // The feedback line takes no room until there is something to say.
+    auto* pairingFeedback = pairing->findChild<QLabel*>(QStringLiteral("linuxPairingFeedback"));
+    QVERIFY(pairingFeedback && pairingFeedback->isHidden());
+    QCOMPARE(pairing->card()->width(), 500); // the mock's dialog width
+    captureWindow(view, QStringLiteral("linux-pairing"));
+    for (auto* button : pairing->findChildren<QAbstractButton*>())
+        if (button->text() == QStringLiteral("Check link"))
+            button->click();
+    QVERIFY(!pairingFeedback->isHidden());
+    QVERIFY(pairingFeedback->text().contains(QStringLiteral("pairing link")));
+    pairing->reject();
+    QTRY_VERIFY(!view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog")));
+
+    // Linked but offline: phones wait for the relay, Linux pairing does not.
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("last_error"), QStringLiteral("Relay unreachable")}});
+    QVERIFY(!connectButton());
+    auto* add = view.pairButton_;
+    QVERIFY(add->isVisible() && add->isEnabled());
+    bool checked = false;
+    QTimer::singleShot(0, add, [add, &checked] {
+        auto* menu = add->findChild<QMenu*>();
+        QVERIFY(menu && menu->isVisible());
+        const auto actions = menu->actions();
+        QCOMPARE(actions.size(), 2);
+        QCOMPARE(actions.at(0)->text(), QStringLiteral("Pair a phone or tablet"));
+        QVERIFY(!actions.at(0)->isEnabled());
+        QCOMPARE(actions.at(1)->text(), QStringLiteral("Connect a Linux machine"));
+        QVERIFY(actions.at(1)->isEnabled());
+        checked = true;
+        menu->close();
+    });
+    QTest::mouseClick(add, Qt::LeftButton);
+    QVERIFY(checked);
+}
+
+void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
+    auto& appearance = ket::Appearance::instance();
+    appearance.setMode(ket::Appearance::Mode::Light);
+    LinuxMachinesSection section;
+    section.resize(640, 320);
+    section.show();
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    section.machineIds_ = {QStringLiteral("build-box")};
+    section.render();
+    // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
+    const auto iconInk = [&section] {
+        auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));
+        QLabel* icon = nullptr;
+        for (auto* label : row ? row->findChildren<QLabel*>() : QList<QLabel*>{})
+            if (!label->pixmap().isNull())
+                icon = label;
+        if (!icon)
+            return QColor();
+        const QImage image = icon->pixmap().toImage();
+        QColor ink;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() >= 160 && (!ink.isValid() || pixel.lightness() < ink.lightness()))
+                    ink = pixel;
+            }
+        return ink;
+    };
+    const QColor light = iconInk();
+    QVERIFY(light.isValid());
+    QVERIFY2(light.lightness() < 128, qPrintable(light.name()));
+    appearance.setMode(ket::Appearance::Mode::Dark);
+    const QColor dark = iconInk();
+    QVERIFY(dark.isValid());
+    QVERIFY2(dark.lightness() > 128, qPrintable(dark.name()));
+    appearance.setMode(ket::Appearance::Mode::Light);
+}
+
 void RemoteControlViewTest::opensOnSignInPrompt() {
     RemoteControlView view;
     view.resize(840, 720);
     view.show();
     QTest::qWait(1);
 
-    auto* signInPrompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signInPrompt =
+        view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
     QVERIFY(signInPrompt);
     QVERIFY(signInPrompt->isVisible());
-    const auto buttons = view.findChildren<QPushButton*>();
+    const auto buttons = view.findChildren<QAbstractButton*>();
     QVERIFY(std::count_if(buttons.cbegin(), buttons.cend(),
-                          [](const QPushButton* button) { return button->isVisible(); }) >= 2);
+                          [](const QAbstractButton* button) { return button->isVisible(); }) >= 2);
     QVERIFY(view.findChild<QWidget*>(QStringLiteral("linuxMachinesSection")));
-    auto* pair = view.findChild<QPushButton*>(QStringLiteral("remotePairButton"));
+    auto* pair = view.findChild<QAbstractButton*>(QStringLiteral("remotePairButton"));
     QVERIFY(pair);
     QVERIFY(!pair->isVisible());
     QVERIFY(!pair->isEnabled());
@@ -325,7 +559,8 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     QVERIFY(text->text().startsWith(QStringLiteral("Continue a conversation from your phone")));
     auto* headline = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeHeadline"));
     QVERIFY(headline);
-    QVERIFY(headline->font().pixelSize() >= 28);
+    QCOMPARE(headline->font().pixelSize(),
+             InterfaceZoomMetrics::geometry(40, InterfaceZoomMetrics::current()));
     QCOMPARE(signInPrompt->text(), QStringLiteral("Sign in"));
     QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remotePageTitle"))->isVisible());
 }
@@ -392,25 +627,59 @@ void RemoteControlViewTest::signedOutIntroFollowsTheMockAtEveryWidth() {
 }
 
 void RemoteControlViewTest::signInFormIsAnExplicitSecondaryFlow() {
-    RemoteControlView view;
-    view.resize(1100, 720);
-    view.show();
+    // Inside a window, as in the app: the dialogs then belong to the window, not the view.
+    QWidget window;
+    auto* windowLayout = new QVBoxLayout(&window);
+    windowLayout->setContentsMargins(0, 0, 0, 0);
+    auto* hosted = new RemoteControlView(&window);
+    windowLayout->addWidget(hosted);
+    RemoteControlView& view = *hosted;
+    window.resize(1100, 720);
+    window.show();
     QTest::qWait(1);
 
-    auto* signInPrompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* back = view.findChild<QPushButton*>(QStringLiteral("remoteSignInBackButton"));
-    auto* dialog = view.findChild<QDialog*>(QStringLiteral("remoteSignInDialog"));
+    auto* signInPrompt =
+        view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = window.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* dialog = window.findChild<ket::Dialog*>(QStringLiteral("remoteSignInDialog"));
     QVERIFY(signInPrompt);
     QVERIFY(signIn);
-    QVERIFY(back);
     QVERIFY(dialog);
+    QCOMPARE(dialog->parentWidget(), &window);
+    // The mock's sign-in is a plain dialog: the card's close, the action in its footer.
+    QAbstractButton* back = nullptr;
+    for (auto* button : dialog->card()->findChildren<QAbstractButton*>())
+        if (button->accessibleName() == QStringLiteral("Close"))
+            back = button;
+    QVERIFY(back && !back->icon().isNull());
+    QVERIFY(!dialog->body()->isAncestorOf(signIn));
     QVERIFY(!signIn->isVisible());
 
     QTest::mouseClick(signInPrompt, Qt::LeftButton);
     QVERIFY(signIn->isVisible());
+    QVERIFY(dialog->isOpen() && !dialog->isChromeless());
     QCOMPARE(dialog->focusWidget(), signIn);
-    QCOMPARE(dialog->width(), 500);
+    QCOMPARE(dialog->card()->width(), 500);
+    // The view's stylesheet reaches the card; the kit's title keeps its own type.
+    QLabel* signInTitle = nullptr;
+    for (auto* candidate : dialog->card()->findChildren<QLabel*>())
+        if (candidate->text() == QStringLiteral("Sign in"))
+            signInTitle = candidate;
+    QVERIFY(signInTitle);
+    const auto recipe = ket::dialogRecipe(ket::Appearance::instance().theme());
+    QCOMPARE(QFontInfo(signInTitle->font()).pixelSize(),
+             qRound(ket::Appearance::instance().scaled(recipe.titlePixels)));
+    QCOMPARE(int(signInTitle->font().weight()), int(recipe.titleWeight));
+    captureWindow(view, QStringLiteral("sign-in"));
+    // The page and its cards change theme together, both ways.
+    appTheme->previewMode(ThemeManager::Mode::Light);
+    const QString lightSheet = view.styleSheet();
+    appTheme->previewMode(ThemeManager::Mode::Dark);
+    QVERIFY(view.styleSheet() != lightSheet);
+    QVERIFY(dialog->body()->styleSheet().startsWith(view.styleSheet()));
+    appTheme->previewMode(ThemeManager::Mode::Light);
+    QCOMPARE(view.styleSheet(), lightSheet);
+    appTheme->cancelPreview();
     QCOMPARE(signIn->text(), QStringLiteral("Continue in browser"));
     // The password is typed only on the tenant's own sign-in page, never into KetPlus.
     QVERIFY(dialog->findChildren<QLineEdit*>().isEmpty());
@@ -428,24 +697,37 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     view.show();
     QTest::qWait(1);
 
-    auto* prompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* add = view.findChild<QPushButton*>(QStringLiteral("remotePairButton"));
-    auto* dialog = view.findChild<QDialog*>(QStringLiteral("remotePairingDialog"));
+    auto* prompt = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* add = view.findChild<QAbstractButton*>(QStringLiteral("remotePairButton"));
+    auto* dialog = view.findChild<ket::Dialog*>(QStringLiteral("remotePairingDialog"));
     auto* qr = view.findChild<QLabel*>(QStringLiteral("remotePairingQr"));
-    auto* close = view.findChild<QPushButton*>(QStringLiteral("remotePairingCloseButton"));
+    auto* close = view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCloseButton"));
     auto* pairTitle = view.findChild<QLabel*>(QStringLiteral("remotePairingState"));
     auto* pairDialogTitle = view.findChild<QLabel*>(QStringLiteral("remotePairingDialogTitle"));
     auto* pairHelp = view.findChild<QLabel*>(QStringLiteral("remotePairingHelp"));
     auto* pairTimer = view.findChild<QLabel*>(QStringLiteral("remotePairingTimer"));
     auto* pairSteps = view.findChild<QLabel*>(QStringLiteral("remotePairingSteps"));
     auto* pairCode = view.findChild<QLabel*>(QStringLiteral("remotePairingConfirmationCode"));
-    auto* pairAction = view.findChild<QPushButton*>(QStringLiteral("remoteApproveButton"));
-    auto* pairCancel = view.findChild<QPushButton*>(QStringLiteral("remotePairingCancelButton"));
+    auto* pairAction = view.findChild<QAbstractButton*>(QStringLiteral("remoteApproveButton"));
+    auto* pairCancel =
+        view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCancelButton"));
+    // The page's own close draws a glyph (the icon name was wrong, so it was blank).
+    QVERIFY(close && !close->icon().isNull());
     QVERIFY(prompt && signIn && add && dialog && qr && close && pairTitle && pairDialogTitle &&
             pairHelp && pairTimer && pairSteps && pairCode && pairAction && pairCancel);
     QCOMPARE(add->text(), QStringLiteral("Add"));
     QCOMPARE(qr->size(), QSize(204, 204));
+    // Chooses the Add menu's first entry once it opens. The menu is found through its button,
+    // since an offscreen platform reports no active popup, and Return closes it as a click does.
+    const auto chooseFirstAdd = [add] {
+        QTimer::singleShot(0, add, [add] {
+            auto* menu = add->findChild<QMenu*>();
+            QVERIFY(menu && menu->isVisible());
+            menu->setActiveAction(menu->actions().first());
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+    };
 
     QTest::mouseClick(prompt, Qt::LeftButton);
     QTest::mouseClick(signIn, Qt::LeftButton);
@@ -463,22 +745,61 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     QCOMPARE(overviewDescription->text(), QStringLiteral("Ready for your connected devices"));
     auto* overview = view.findChild<QWidget*>(QStringLiteral("remoteConnectionOverview"));
     QVERIFY(overview && overview->isVisible());
-    auto* emptyDevices = view.findChild<QLabel*>(QStringLiteral("remoteDevicesEmpty"));
+    // The mock's empty Phones & tablets, with the way to start pairing.
+    auto* emptyDevices = view.findChild<ket::EmptyState*>(QStringLiteral("remoteDevicesEmpty"));
     QVERIFY(emptyDevices && emptyDevices->isVisible());
-    QCOMPARE(emptyDevices->text(), QStringLiteral("No devices connected yet."));
+    QCOMPARE(emptyDevices->title(), QStringLiteral("No phone paired"));
+    QVERIFY(emptyDevices->action() && emptyDevices->action()->isEnabled());
     auto* devices = view.findChild<QWidget*>(QStringLiteral("remoteDevicesPanel"));
     QVERIFY(devices);
     QVERIFY(devices->width() >= 650);
     QVERIFY(devices->width() < view.width());
+    // KETPLUS_CONNECTIONS_CAPTURE=<dir> saves the signed-in page in both themes, at the mock's
+    // 1280 × 820, for the side by side with `KetPlusMock --screen=connections`.
+    if (const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE"); !dir.isEmpty()) {
+        const QSize size = view.size();
+        view.resize(1280 - 240, 820);
+        // The mock's page: one paired phone, its activity and one trusted Linux machine.
+        view.renderDevices({QJsonObject{{"id", "phone-1"}, {"displayName", "iPhone 16"}}});
+        view.activity_->setDeviceNames({{"phone-1", "iPhone 16"}, {"tablet-1", "iPad Air"}});
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        view.activity_->render(
+            {auditEntry("m1", "session.start_turn", "phone-1", "ok", now.addSecs(-120), "s1", true,
+                        "Fix login timeout"),
+             auditEntry("m2", "session.create", "phone-1", "ok", now.addSecs(-18 * 60), "s2", true,
+                        "New worktree feature/offline-cache"),
+             auditEntry("m3", "session.interrupt", "phone-1", "ok", now.addSecs(-3600), "s3", true,
+                        "Refactor sync engine"),
+             auditEntry("m4", "session.create", "phone-1", "worktree_quota_exceeded",
+                        now.addDays(-1), "s4", true, "New worktree experiment/parser"),
+             auditEntry("m5", "session.configuration.apply", "tablet-1", "ok", now.addDays(-3),
+                        "s5", true, "Release notes draft")});
+        remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->client_);
+        view.linuxMachines_->machineIds_ = {QStringLiteral("build-node-01")};
+        view.linuxMachines_->render();
+        QTest::qWait(50);
+        for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
+            appTheme->previewMode(mode);
+            QTest::qWait(50);
+            // The whole page, not the scrolled viewport.
+            auto* page = view.findChild<QScrollArea*>()->widget();
+            page->grab().save(QDir(dir).filePath(mode == ThemeManager::Mode::Light
+                                                     ? QStringLiteral("connections-light.png")
+                                                     : QStringLiteral("connections-dark.png")));
+        }
+        appTheme->cancelPreview();
+        view.renderDevices({});
+        view.activity_->render({});
+        view.linuxMachines_->machineIds_.clear();
+        view.linuxMachines_->render();
+        view.resize(size);
+    }
 
-    QTimer::singleShot(0, &view, [] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        QVERIFY(menu);
-        menu->actions().first()->trigger();
-    });
+    chooseFirstAdd();
     QTest::mouseClick(add, Qt::LeftButton);
-    QVERIFY(dialog->isVisible());
-    QCOMPARE(dialog->width(), 500);
+    QVERIFY(dialog->isOpen() && dialog->isChromeless());
+    QCOMPARE(dialog->card()->width(), 500);
+    captureWindow(view, QStringLiteral("pairing"));
     QVERIFY(!qr->pixmap().isNull());
     QCOMPARE(pairTitle->text(), QStringLiteral("Take your workspace with you."));
     QCOMPARE(pairHelp->text(), QStringLiteral("In KetPlus on your phone, choose Scan QR code."));
@@ -495,11 +816,7 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     QTRY_VERIFY(!dialog->isVisible());
     QTest::mouseClick(close, Qt::LeftButton);
     QVERIFY(!dialog->isVisible());
-    QTimer::singleShot(0, &view, [] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        QVERIFY(menu);
-        menu->actions().first()->trigger();
-    });
+    chooseFirstAdd();
     QTest::mouseClick(add, Qt::LeftButton);
     QVERIFY(dialog->isVisible());
     QCOMPARE(pairCancel->text(), QStringLiteral("Expire code"));
@@ -520,9 +837,9 @@ void RemoteControlViewTest::demoSignOutReturnsToSingleAction() {
     RemoteControlView view;
     view.resize(840, 720);
     view.show();
-    auto* prompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* signOut = view.findChild<QPushButton*>(QStringLiteral("remoteSignOutButton"));
+    auto* prompt = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* signOut = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignOutButton"));
     QVERIFY(prompt && signIn && signOut);
     QTest::mouseClick(prompt, Qt::LeftButton);
     QTest::mouseClick(signIn, Qt::LeftButton);

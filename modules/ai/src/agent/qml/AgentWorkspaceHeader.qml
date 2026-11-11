@@ -1,5 +1,6 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
@@ -7,35 +8,73 @@ Item {
     id: header
     required property var workspace
     objectName: "agentWorkspaceHeader"
-    implicitHeight: Metrics.px(44, workspace.t)
+    implicitHeight: KetTheme.px(44, KetTheme.zoom)
 
+    readonly property var selectedConversation: {
+        for (const conversation of agentHost.conversations || [])
+            if (conversation.active)
+                return conversation;
+        return ({});
+    }
+    readonly property var tags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
+            label: tag,
+            color: KetTheme.t.accent
+        } : tag)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
-            if (candidate.selected) return candidate
+            if (candidate.selected)
+                return candidate;
         }
-        return ({})
+        return ({});
     }
-    readonly property real maximumTitleWidth: Math.max(Metrics.px(160, workspace.t), Math.min(Metrics.px(420, workspace.t), width * 0.45))
-    readonly property string scopeLabel: {
-        const branch = agentHost.executionBranch || selectedWorktree.branch || "workspace"
-        const repository = agentHost.repositoryName || "Repository"
-        return repository + " · " + branch
+    readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
+    readonly property string scopeBranch: agentHost.executionBranch || selectedWorktree.branch || "workspace"
+    // The header gives way from the right as it narrows, in the mock's order: the tags and Add
+    // tag first, then the Reviewer label, then the title and the worktree elide, then the
+    // worktree keeps only its icon, then the number leaves (the sidebar shows it), then Compact
+    // window and New conversation (the sidebar and the menus have both). Each step is measured
+    // from implicit widths, so hiding an item cannot feed back into its own test.
+    readonly property real gap: titleRow.spacing
+    readonly property real statusWidth: Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth)
+    readonly property real numberWidth: conversationNumber.number.length > 0 ? conversationNumber.implicitWidth + gap : 0
+    readonly property real fixedWidth: numberWidth + Math.min(conversationTitle.implicitWidth, maximumTitleWidth) + gap + statusWidth + gap + (scopeChip.visible ? scopeChip.fullWidth + gap : 0)
+    readonly property real minimumTitle: KetTheme.px(80, KetTheme.zoom)
+    // What the row needs besides the worktree with the title at its minimum.
+    readonly property real narrowWidth: numberWidth + minimumTitle + gap + statusWidth + gap + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + slack
+    readonly property bool fullWorktree: titleRow.width >= narrowWidth + Math.min(scopeChip.fullWidth, minimumTitle) + gap
+    readonly property bool showNumber: titleRow.width >= narrowWidth + scopeChip.iconWidth + gap
+    // The row layout rounds every item to whole pixels, so a fit needs that much to spare.
+    readonly property real slack: KetTheme.px(8, KetTheme.zoom)
+    readonly property bool fullReviewer: titleRow.width >= fixedWidth + reviewerProbe.implicitWidth + gap + slack
+    readonly property bool tagsEditable: !agentHost.compactWindow && selectedConversation.tagsEditable === true
+    readonly property real tagGroupWidth: (tags.length > 0 ? conversationTags.implicitWidth + gap : 0) + (tagsEditable ? addTagButton.implicitWidth + gap : 0)
+    readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
+    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : agentHost.detailsOpen ? 1 : 4)
+    readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
+    readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
+    // "Claude · Opus 5.5": the provider and its default model, when the catalog has it.
+    function reviewerTitle(provider, title) {
+        for (let model of agentHost.models)
+            if (model.provider === provider && model.isDefault)
+                return title + " · " + (model.displayName || model.model)
+        return title
     }
+    readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
     RowLayout {
         id: titleRow
         anchors.left: parent.left
         anchors.right: headerActions.left
-        anchors.leftMargin: Metrics.px(16, workspace.t)
-        anchors.rightMargin: Metrics.px(8, workspace.t)
+        anchors.leftMargin: KetTheme.px(16, KetTheme.zoom)
+        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Metrics.px(8, workspace.t)
+        spacing: KetTheme.px(8, KetTheme.zoom)
 
         Text {
             id: conversationNumber
             objectName: "conversationNumber"
-            // ADR 0027: the number other conversations and `#` references use.
+            // ADR 0027: the number other conversations use to address this one.
             readonly property string number: {
                 const conversations = agentHost.conversations || [];
                 for (let index = 0; index < conversations.length; ++index) {
@@ -44,92 +83,149 @@ Item {
                 }
                 return "";
             }
-            visible: number.length > 0
-            text: "#" + number
-            color: workspace.t.textMuted
-            font.family: workspace.t.monoFont
-            font.pixelSize: workspace.t.body
-            font.weight: Font.Medium
+            visible: number.length > 0 && (agentHost.compactWindow || header.showNumber)
+            // Jay's choice for agent references, as in the mock's header and the sidebar.
+            text: "@agent/" + number
+            color: KetTheme.t.textMuted
+            font.family: agentHost.monoFontFamily
+            font.pixelSize: KetTheme.px(14, KetTheme.zoom)
             Accessible.name: "Conversation number " + number
         }
         Text {
             id: conversationTitle
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width
-                                             - Math.min(scopeChip.implicitWidth, 80)
-                                             - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0)
-                                             - titleRow.spacing * 2))
+            // Everything else at its narrowest, each with its spacing; the trailing filler adds one more.
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - (addTagButton.visible ? addTagButton.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
             text: agentHost.sessionTitle
-            color: workspace.t.textMain
+            color: KetTheme.t.textMain
             elide: Text.ElideRight
-            font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.title
-            font.weight: Font.DemiBold
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
+            font.weight: Font.Medium
             Accessible.role: Accessible.Heading
             Accessible.name: text
         }
         Rectangle {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
-            Layout.preferredHeight: Metrics.px(18, workspace.t)
-            Layout.preferredWidth: statusText.implicitWidth + Metrics.px(12, workspace.t)
-            Layout.maximumWidth: Metrics.px(120, workspace.t)
-            radius: Metrics.px(4, workspace.t)
-            color: agentHost.sessionRunning ? workspace.t.accentSubtle : "transparent"
-            border.color: agentHost.sessionRunning ? workspace.t.accent : workspace.t.border
+            // The mock's KetBadge: the conversation's status in the kit's words and tone, read
+            // from the same facts as its sidebar row. Long statuses still elide.
+            // #125: a finished turn that asks the user to decide reads "Waiting for you" (Info).
+            readonly property bool awaiting: !agentHost.sessionRunning && header.selectedConversation.awaitingReply === true
+            readonly property string sessionText: String(agentHost.sessionStatus || "")
+            readonly property int status: {
+                const conversation = header.selectedConversation
+                const text = String(conversation.status || sessionText).toLowerCase()
+                if (conversation.needsInput === true || text.indexOf("input") >= 0 || text.indexOf("question") >= 0)
+                    return KetTheme.ConversationStatus.NeedsInput
+                if (awaiting)
+                    return KetTheme.ConversationStatus.AwaitingReply
+                if (agentHost.sessionRunning)
+                    return KetTheme.ConversationStatus.Working
+                if (/fail|error|disconnect|missing|not found/.test(text))
+                    return KetTheme.ConversationStatus.Error
+                if (text.indexOf("stop") >= 0)
+                    return KetTheme.ConversationStatus.Stopped
+                return conversation.started === true ? KetTheme.ConversationStatus.Completed : KetTheme.ConversationStatus.NotStarted
+            }
+            // A failed reply reads as the kit's "Reply failed"; another fault (a missing worktree,
+            // a lost connection) and a conversation not started yet keep the session's own words.
+            readonly property string label: status === KetTheme.ConversationStatus.Error && /disconnect|missing|not found/.test(String(header.selectedConversation.status || sessionText).toLowerCase())
+                ? sessionText
+                : status === KetTheme.ConversationStatus.NotStarted && sessionText.length > 0 ? sessionText
+                : KetTheme.conversationStatusLabel(status)
+            readonly property int tone: {
+                switch (status) {
+                case KetTheme.ConversationStatus.Completed: return KetTheme.BadgeTone.Success
+                case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
+                case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
+                case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
+                case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
+                }
+                return KetTheme.BadgeTone.Neutral
+            }
+            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, tone)
+            Layout.preferredHeight: recipe.height
+            Layout.preferredWidth: statusText.implicitWidth + 2 * recipe.paddingInline
+            Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
+            radius: recipe.radius
+            color: recipe.background
+            border.width: 1
+            border.color: recipe.border
             Text {
                 id: statusText
                 anchors.centerIn: parent
-                width: Math.min(implicitWidth, parent.width - Metrics.px(12, workspace.t))
-                text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
-                color: agentHost.sessionRunning ? workspace.t.accentHover
-                                                : workspace.t.textMuted
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.micro
-                font.weight: Font.DemiBold
+                width: Math.min(implicitWidth, parent.width - 2 * conversationStatusBadge.recipe.paddingInline)
+                text: conversationStatusBadge.label
+                color: conversationStatusBadge.recipe.text
+                font.family: KetTheme.fontFamily
+                font.pixelSize: conversationStatusBadge.recipe.fontPixels
+                font.weight: conversationStatusBadge.recipe.fontWeight
                 elide: Text.ElideRight
             }
             Accessible.role: Accessible.StaticText
             Accessible.name: statusText.text
         }
+        // The mock's worktree KetButton (Secondary, Small): the branch, with the repository in its tooltip.
         Rectangle {
             id: scopeChip
             objectName: "workspaceScopeChip"
+            readonly property var recipe: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Small, scopeMouse.containsMouse, scopeMouse.pressed, true, activeFocus)
+            readonly property real chrome: 2 * recipe.paddingInline + recipe.iconSize + 2 * recipe.spacing + scopeChevron.implicitWidth
+            visible: !agentHost.compactWindow
             // Measure the unelided text independently of the allocated chip width.
-            implicitWidth: scopeText.implicitWidth + Metrics.px(30, workspace.t)
-            Layout.preferredHeight: Metrics.px(20, workspace.t)
+            readonly property real fullWidth: scopeText.implicitWidth + chrome
+            // The mock's narrow step: the icon and the chevron, the branch in the tooltip.
+            readonly property real iconWidth: chrome - recipe.spacing
+            readonly property bool iconOnly: !header.fullWorktree
+            implicitWidth: iconOnly ? iconWidth : fullWidth
+            Layout.preferredHeight: recipe.height
             Layout.preferredWidth: implicitWidth
-            Layout.fillWidth: false
+            // Shrinks (its label elides) before the title and Reviewer button run out of room.
+            Layout.fillWidth: true
             Layout.maximumWidth: implicitWidth
-            Layout.minimumWidth: 0
-            radius: Metrics.px(5, workspace.t)
-            color: workspace.t.interactiveBackground
-            border.color: workspace.t.border
+            Layout.minimumWidth: Math.min(implicitWidth, header.minimumTitle)
+            radius: recipe.radius
+            color: recipe.background
+            border.width: 1
+            border.color: recipe.focusRing.a > 0 ? recipe.focusRing : recipe.border
+            opacity: recipe.opacity
             clip: true
             Row {
                 id: scopeRow
                 anchors.left: parent.left
-                anchors.leftMargin: Metrics.px(6, workspace.t)
+                anchors.leftMargin: scopeChip.recipe.paddingInline
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Metrics.px(4, workspace.t)
-                TintedIcon {
+                spacing: scopeChip.recipe.spacing
+                KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Metrics.px(14, workspace.t)
-                    height: Metrics.px(14, workspace.t)
-                    source: "qrc:/agent/icons/git-branch.svg"
-                    color: workspace.t.textMuted
+                    width: scopeChip.recipe.iconSize
+                    height: scopeChip.recipe.iconSize
+                    name: "branch"
+                    color: scopeChip.recipe.text
+                    box: scopeChip.recipe.iconSize
                 }
                 Text {
                     id: scopeText
                     objectName: "workspaceScopeLabel"
+                    visible: !scopeChip.iconOnly
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - Metrics.px(30, workspace.t)))
-                    text: header.scopeLabel
-                    color: workspace.t.textSecondary
+                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - scopeChip.chrome))
+                    text: header.scopeBranch
+                    color: scopeChip.recipe.text
                     elide: Text.ElideMiddle
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.caption
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: scopeChip.recipe.fontPixels
+                    font.weight: scopeChip.recipe.fontWeight
+                }
+                Text {
+                    id: scopeChevron
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "\u25BE"
+                    color: scopeChip.recipe.text
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: scopeChip.recipe.fontPixels
                 }
             }
             MouseArea {
@@ -140,13 +236,66 @@ Item {
                 onClicked: agentHost.requestExecutionWorktree()
             }
             KetToolTip {
-                tokens: workspace.t
+                objectName: "ketToolTip"
                 visible: scopeMouse.containsMouse
                 text: header.scopeLabel
             }
             Accessible.role: Accessible.Button
             Accessible.name: "Choose Files and Source Control worktree"
+            Accessible.description: header.scopeLabel
             Accessible.onPressAction: agentHost.requestExecutionWorktree()
+        }
+        Kit.KetButton {
+            id: reviewerButton
+            objectName: "headerReviewerButton"
+            // ADR 0067: the conversation that reviews each finished turn and replies here.
+            readonly property var assigned: agentHost.reviewerState.reviewer || null
+            readonly property string name: assigned ? "@agent/" + assigned.number : ""
+            readonly property bool full: header.fullReviewer
+            readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
+            readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
+            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
+            enabled: agentHost.reviewerState.pending !== true
+            controlSize: Kit.KetTheme.ControlSize.Small
+            variant: assigned ? Kit.KetTheme.ButtonVariant.Secondary : Kit.KetTheme.ButtonVariant.Ghost
+            iconName: "eye"
+            text: full ? fullText : "▾"
+            onClicked: header.openReviewerMenu()
+            KetToolTip {
+                objectName: "reviewerToolTip"
+                visible: reviewerButton.hovered && !reviewerMenu.visible
+                text: agentHost.reviewerState.error ? agentHost.reviewerState.error : (reviewerButton.full ? "" : (reviewerButton.assigned ? "Reviewer: " + reviewerButton.name + ". " : "Reviewer. ")) + reviewerButton.detail
+            }
+            Accessible.name: assigned ? "Reviewer: " + name : "Reviewer"
+            Accessible.description: detail
+        }
+        Row {
+            id: conversationTags
+            visible: header.tags.length > 0 && header.showTags
+            spacing: KetTheme.px(4, KetTheme.zoom)
+            Repeater {
+                // Every tag, as the mock: they show together when they fit and leave together.
+                model: header.tags
+                Kit.KetTag {
+                    required property var modelData
+                    objectName: "conversationTag_" + modelData.label
+                    text: modelData.label
+                    tagColor: modelData.color || KetTheme.t.accent
+                    maxWidth: KetTheme.px(100, KetTheme.zoom)
+                    filterable: true
+                    onClicked: agentHost.requestTagFilter(text)
+                }
+            }
+        }
+        Kit.KetIconButton {
+            id: addTagButton
+            objectName: "headerAddTagButton"
+            // The daemon stores a conversation's tags, so there is none to tag before it starts.
+            visible: header.tagsEditable && header.showTags
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: "plus"
+            text: "Add tag"
+            onClicked: tagMenu.popup(addTagButton, 0, addTagButton.height)
         }
         Item {
             Layout.fillWidth: true
@@ -156,110 +305,194 @@ Item {
     Row {
         id: headerActions
         anchors.right: parent.right
-        anchors.rightMargin: Metrics.px(8, workspace.t)
+        anchors.rightMargin: KetTheme.px(10, KetTheme.zoom)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Metrics.px(2, workspace.t)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
-        Basic.ToolButton {
+        Kit.KetIconButton {
+            objectName: "headerCompactWindowButton"
+            visible: !agentHost.compactMode && header.globalActions
+            iconName: agentHost.compactWindow ? "fullscreen" : "panel-left"
+            text: agentHost.compactWindow ? "Leave compact window" : "Compact window"
+            onClicked: agentHost.requestCompactWindow()
+        }
+        Kit.KetIconButton {
+            objectName: "headerNewConversationButton"
+            visible: !agentHost.compactMode && !agentHost.compactWindow && header.globalActions
+            iconName: "compose"
+            text: "New conversation"
+            onClicked: agentHost.requestNewSession()
+        }
+        Kit.KetIconButton {
             id: atlasButton
             objectName: "headerAtlasButton"
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
+            visible: !agentHost.compactWindow
+            iconName: "layers"
+            text: agentHost.atlasRunningCount > 0 ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees" : "Atlases"
             onClicked: agentHost.requestProductNavigation("atlas")
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/network.svg"
-                color: workspace.t.textSecondary
-            }
-            background: Rectangle {
-                radius: Metrics.px(5, workspace.t)
-                color: atlasButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: atlasButton.visualFocus ? workspace.t.focus : "transparent"
-            }
             Text {
                 objectName: "headerAtlasRunningBadge"
                 visible: agentHost.atlasRunningCount > 0
                 anchors.right: parent.right
-                anchors.rightMargin: -Metrics.px(4, workspace.t)
                 anchors.top: parent.top
-                anchors.topMargin: -Metrics.px(4, workspace.t)
-                text: agentHost.atlasRunningCount > 9 ? "9+" : String(agentHost.atlasRunningCount)
-                color: "#ffffff"
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.micro
-                font.weight: Font.DemiBold
-                horizontalAlignment: Text.AlignHCenter
-                width: Math.max(implicitWidth + Metrics.px(6, workspace.t), Metrics.px(14, workspace.t))
-                height: Metrics.px(14, workspace.t)
-                Rectangle {
-                    anchors.fill: parent
-                    z: -1
-                    radius: height / 2
-                    color: workspace.t.accent
-                }
-            }
-            Accessible.name: agentHost.atlasRunningCount > 0
-                             ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees"
-                             : "Atlases"
-            KetToolTip {
-                tokens: workspace.t
-                visible: atlasButton.hovered
-                text: "Atlases"
+                text: agentHost.atlasRunningCount
+                color: KetTheme.t.accent
+                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
             }
         }
-
-        Basic.ToolButton {
-            id: newConversationButton
-            objectName: "headerNewConversationButton"
-            visible: !agentHost.compactMode
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
-            onClicked: agentHost.requestNewSession()
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/square-pen.svg"
-                color: workspace.t.textSecondary
-            }
-            background: Rectangle {
-                anchors.centerIn: parent
-                width: Metrics.px(28, workspace.t)
-                height: Metrics.px(28, workspace.t)
-                radius: Metrics.px(5, workspace.t)
-                color: newConversationButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: newConversationButton.visualFocus ? workspace.t.focus : "transparent"
-            }
-            Accessible.name: "New conversation"
-            KetToolTip {
-                tokens: workspace.t
-                visible: newConversationButton.hovered
-                text: "New conversation"
-            }
+        Kit.KetIconButton {
+            objectName: "headerChangesButton"
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
+            iconName: "compare"
+            text: "Changes"
+            onClicked: agentHost.requestChanges()
         }
-        Basic.ToolButton {
-            id: terminalButton
+        Kit.KetIconButton {
             objectName: "headerTerminalButton"
-            visible: !agentHost.compactMode
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
+            iconName: "terminal"
+            text: "Open terminal"
             onClicked: agentHost.requestTerminal()
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/square-terminal.svg"
-                color: workspace.t.textSecondary
+        }
+        Kit.KetIconButton {
+            objectName: "headerWorkReportButton"
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
+            iconName: "view-list"
+            text: "Work report"
+            onClicked: agentHost.requestWorkReport()
+        }
+    }
+
+    // Off-screen measure of the full Reviewer button.
+    Kit.KetButton {
+        id: reviewerProbe
+        visible: false
+        controlSize: Kit.KetTheme.ControlSize.Small
+        iconName: "eye"
+        text: reviewerButton.fullText
+    }
+
+    Kit.KetButton {
+        id: collapsedReviewerProbe
+        visible: false
+        controlSize: Kit.KetTheme.ControlSize.Small
+        iconName: "eye"
+        text: "▾"
+    }
+
+    function openReviewerMenu() {
+        reviewerMenu.candidates = agentHost.reviewerCandidates();
+        reviewerMenu.popup(reviewerButton, 0, reviewerButton.height);
+    }
+
+    Kit.KetMenu {
+        id: tagMenu
+        objectName: "conversationTagMenu"
+        // Checks are set on every open: triggering a checkable item replaces a binding.
+        onAboutToShow: {
+            for (let index = 0; index < count; ++index) {
+                const item = itemAt(index);
+                if (item && item.tagLabel)
+                    item.checked = header.tags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
             }
-            background: Rectangle {
-                anchors.centerIn: parent
-                width: Metrics.px(28, workspace.t)
-                height: Metrics.px(28, workspace.t)
-                radius: Metrics.px(5, workspace.t)
-                color: terminalButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: terminalButton.visualFocus ? workspace.t.focus : "transparent"
+        }
+        Instantiator {
+            model: agentHost.tagCatalog
+            // Above the separator and Manage tags…, which stay last.
+            onObjectAdded: (index, object) => tagMenu.insertItem(index, object)
+            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                readonly property string tagLabel: modelData.label
+                objectName: "conversationTagItem_" + tagLabel
+                text: tagLabel
+                iconName: "tag"
+                checkable: true
+                onTriggered: agentHost.requestConversationTag(header.selectedConversation.id, tagLabel, checked)
             }
-            Accessible.name: "Open terminal"
-            KetToolTip {
-                tokens: workspace.t
-                visible: terminalButton.hovered
-                text: "Open terminal"
+        }
+        Kit.KetMenuSeparator {}
+        Kit.KetMenuItem {
+            objectName: "conversationManageTagsItem"
+            text: "Manage tags…"
+            iconName: "settings"
+            onTriggered: manageTagsDialog.open()
+        }
+    }
+
+    ManageTagsDialog {
+        id: manageTagsDialog
+        objectName: "manageTagsDialog"
+        parent: Basic.Overlay.overlay
+        tags: agentHost.tagCatalog
+        onSaved: (tags, renames) => agentHost.requestTagCatalogSave(tags, renames)
+    }
+
+    Kit.KetMenu {
+        id: reviewerMenu
+        objectName: "reviewerMenu"
+        property var candidates: []
+        readonly property string assignedNumber: reviewerButton.assigned ? String(reviewerButton.assigned.number) : ""
+        // Checks are set on every open: triggering a checkable item replaces a binding.
+        onAboutToShow: {
+            noReviewerItem.checked = assignedNumber.length === 0;
+            for (let index = 0; index < count; ++index) {
+                const item = itemAt(index);
+                if (item && item.reviewerNumber)
+                    item.checked = item.reviewerNumber === assignedNumber;
+            }
+        }
+        Kit.KetMenuItem {
+            id: noReviewerItem
+            objectName: "noReviewerItem"
+            text: "No reviewer"
+            description: "Turns finish without a review"
+            checkable: true
+            onTriggered: agentHost.chooseReviewer("", "")
+        }
+        Kit.KetMenuSection {
+            text: "New review agent"
+        }
+        // As the mock, each provider names the model a new reviewer starts with: the
+        // provider's default, which the daemon uses.
+        Kit.KetMenuItem {
+            objectName: "newClaudeReviewerItem"
+            text: header.reviewerTitle("claude", "Claude")
+            description: "Starts a reviewer in this worktree, read only"
+            iconName: "bot"
+            onTriggered: agentHost.chooseReviewer("", "claude")
+        }
+        // ADR 0067: Codex cannot be held read only yet, so it is listed but cannot review.
+        Kit.KetMenuItem {
+            objectName: "newCodexReviewerItem"
+            text: header.reviewerTitle("codex", "Codex")
+            description: "Cannot review yet: Codex cannot be held read only"
+            iconName: "bot"
+            enabled: false
+        }
+        Kit.KetMenuSection {
+            text: "Existing conversation"
+        }
+        // Appended in order after the section: a Repeater inside a Menu misplaces its items.
+        Instantiator {
+            model: reviewerMenu.candidates.length > 0 ? reviewerMenu.candidates : [
+                {
+                    number: "",
+                    title: "No other Claude conversation"
+                }
+            ]
+            onObjectAdded: (index, object) => reviewerMenu.addItem(object)
+            onObjectRemoved: (index, object) => reviewerMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                readonly property string reviewerNumber: String(modelData.number)
+                objectName: "existingReviewerItem_" + reviewerNumber
+                enabled: reviewerNumber.length > 0
+                text: modelData.title
+                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.worktree].filter(part => part).join(" · ") : ""
+                iconName: "chat"
+                checkable: reviewerNumber.length > 0
+                onTriggered: agentHost.chooseReviewer(reviewerNumber, "")
             }
         }
     }
@@ -268,6 +501,6 @@ Item {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 1
-        color: workspace.t.border
+        color: KetTheme.t.panelBorder
     }
 }

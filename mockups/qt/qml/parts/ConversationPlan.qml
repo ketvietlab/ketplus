@@ -36,7 +36,7 @@ Item {
             KetBadge { visible: run.planCreated; text: run.completed + "/4 verified"; tone: run.completed === 4 ? KetTheme.BadgeTone.Success : KetTheme.BadgeTone.Neutral }
             Label { visible: run.planCreated; text: "Follow-ups " + run.followUps + "/" + run.followUpLimit; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             Item { Layout.fillWidth: true }
-            KetButton { visible: run.status === "ready"; text: "Send sample prompt"; iconName: "arrow-right"; onClicked: run.submitPrompt() }
+            KetButton { visible: run.status === "ready"; text: "Send sample prompt"; iconName: "arrow-right"; onClicked: { run.presented = true; run.submitPrompt() } }
             KetButton { visible: run.active; text: "Stop run"; iconName: "stop-circle"; variant: KetTheme.ButtonVariant.Ghost; onClicked: run.stop() }
             KetButton { visible: run.status === "paused"; text: "Resume plan"; onClicked: run.resume() }
             KetButton { visible: run.status === "blocked"; text: "Retry check"; onClicked: run.retryBlocker() }
@@ -182,12 +182,16 @@ Item {
                 Layout.preferredWidth: screen.px(145)
                 model: ["Before prompt", "Planning", "Working", "Early finish", "Blocked", "Stopped", "Limit reached", "Complete"]
                 currentIndex: ["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"].indexOf(run.status)
-                onActivated: index => run.load(["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"][index])
+                // A preview state replays the run in the transcript as well.
+                onActivated: index => {
+                    run.load(["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"][index])
+                    run.presented = true
+                }
             }
             KetButton {
                 visible: (run.status === "continuing" || run.status === "planning") && !run.autoplay
                 text: "Play"; variant: KetTheme.ButtonVariant.Ghost
-                onClicked: run.autoplay = true
+                onClicked: { run.presented = true; run.autoplay = true }
             }
             Item { Layout.fillWidth: true }
             Label { text: "Concept · sample data"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }

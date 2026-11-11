@@ -23,8 +23,10 @@ const QStringList& historyTables() {
                                     QStringLiteral("activity_heads"),
                                     QStringLiteral("activity_items"),
                                     QStringLiteral("activity_summaries"),
+                                    QStringLiteral("activity_files"),
                                     QStringLiteral("large_event_payloads"),
-                                    QStringLiteral("large_event_payload_chunks")};
+                                    QStringLiteral("large_event_payload_chunks"),
+                                    QStringLiteral("work_reports")};
     return tables;
 }
 
@@ -186,6 +188,15 @@ std::unique_ptr<ForkCopy> LocalJournal::beginFork(const QString& sourceId,
         return abandon(QStringLiteral("The source session has unsupported journal counters."));
     copy->lastCursor = source.value(0).toLongLong();
     copy->currentTurnSequence = source.value(1).toLongLong();
+    // A snapshot taken before the source's files were listed copies them incomplete.
+    QSqlQuery files(reader);
+    files.prepare(QStringLiteral(
+        "SELECT 1 FROM activity_files_backfill WHERE session_id = ? AND generation = ? LIMIT 1"));
+    files.addBindValue(sourceId);
+    files.addBindValue(sourceGeneration);
+    if (!files.exec())
+        return abandon(files.lastError().text());
+    copy->filesPending = files.next();
     fork.lastCursor = copy->lastCursor;
     fork.currentTurnSequence = copy->currentTurnSequence;
     fork.lastSeenCursor = fork.lastCursor;
@@ -391,6 +402,16 @@ bool LocalJournal::finishFork(ForkCopy& copy, StoredSession& fork, QString* erro
     backfill.addBindValue(fork.generation);
     if (!backfill.exec())
         return fail(backfill.lastError().text());
+    // Likewise its files, even when its activity index is complete.
+    if (copy.filesPending) {
+        QSqlQuery files(database_);
+        files.prepare(QStringLiteral(
+            "INSERT OR IGNORE INTO activity_files_backfill(session_id,generation) VALUES(?,?)"));
+        files.addBindValue(fork.id);
+        files.addBindValue(fork.generation);
+        if (!files.exec())
+            return fail(files.lastError().text());
+    }
     QString preparationError;
     if (beforeCommit && !beforeCommit(&preparationError))
         return fail(preparationError.isEmpty()

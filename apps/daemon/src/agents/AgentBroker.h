@@ -9,6 +9,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <functional>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -48,6 +49,43 @@ class AgentHostPort {
     [[nodiscard]] virtual qint64 agentTurnSequence(const QString& sessionId) const = 0;
     virtual void appendAgentNotice(const QString& sessionId, qint64 generation,
                                    const QJsonObject& payload) = 0;
+    // ADR 0106: merges a work_report call into the conversation's ledger and journals it.
+    // Returns the tool's answer, ok or failure.
+    virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
+                                         const QJsonObject& payload) = 0;
+    // ADR 0112: the caller's team, role and lane for agents_whoami and agents_list; empty for
+    // a conversation on no team.
+    [[nodiscard]] virtual QJsonObject teamMembership(const QString& sessionId) const {
+        (void)sessionId;
+        return {};
+    }
+    // The number of the caller's team's `role` ("leader" or "reviewer"), empty off a team.
+    [[nodiscard]] virtual QString teamRoleNumber(const QString& sessionId,
+                                                 const QString& role) const {
+        (void)sessionId;
+        (void)role;
+        return {};
+    }
+    // A team_* tool call (`operation` without the "agents." prefix) by the conversation.
+    virtual QJsonObject teamOperation(const QString& sessionId, const QString& operation,
+                                      const QJsonObject& payload) {
+        (void)sessionId;
+        (void)operation;
+        (void)payload;
+        return {
+            {QStringLiteral("ok"), false},
+            {QStringLiteral("error_code"), QStringLiteral("not_on_team")},
+            {QStringLiteral("error_message"), QStringLiteral("This conversation is on no team.")}};
+    }
+    // ADR 0112: a member of a team. Its own reviewer (ADR 0067) does not run meanwhile.
+    [[nodiscard]] virtual bool onTeam(const QString& sessionId) const {
+        (void)sessionId;
+        return false;
+    }
+    // #125: the turn's answer asks the user to approve or decide, so it ends as
+    // "Waiting for you". Returns the tool's answer.
+    virtual QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
+                                           const QJsonObject& payload) = 0;
 };
 
 // Brokers messages between conversations on this host: capability tokens for the injected
@@ -75,7 +113,8 @@ class AgentBroker final : public QObject {
     [[nodiscard]] QString tokenFor(const QString& sessionId, qint64 generation);
     [[nodiscard]] std::optional<std::pair<QString, qint64>>
     sessionForToken(const QString& token) const;
-    // agents.whoami, agents.list, agents.send and agents.inbox for the token's conversation.
+    // agents.whoami, agents.list, agents.send, agents.inbox and agents.work_report for the
+    // token's conversation.
     [[nodiscard]] QJsonObject handle(const QString& token, const QString& operation,
                                      const QJsonObject& payload);
     [[nodiscard]] static bool isOperation(const QString& type);
@@ -92,9 +131,27 @@ class AgentBroker final : public QObject {
     void forget(const QString& sessionId);
     // Delivers messages that were queued while the daemon was not running.
     void resume();
+    // Called only by authenticated local UI IPC, never by the agents.* dispatcher.
+    [[nodiscard]] QJsonObject heldMessages(const QString& sessionId, qint64 generation,
+                                           const QStringList& ids) const;
+    [[nodiscard]] QJsonObject releaseHeldMessages(const QString& sessionId, qint64 generation,
+                                                  const QStringList& ids,
+                                                  const QString& authorizationId);
     // Conversations whose running turn a message started, by session id: the first sender's
     // `number`, `title` and `kind`. Clients show the sender on the conversation's row.
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
+    // ADR 0112: a message of the team (assignment, digest, review, decision) to a member. It
+    // starts its own chain at hop 1, so the loop guard still applies. Returns an error.
+    QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
+                            const QString& toSession, const QString& kind, const QString& body,
+                            bool expectReply, QString* messageId = nullptr);
+    // ADR 0067: a reviewer was assigned; the next finished turn is compared with this moment.
+    void noteReviewerAssigned(const QString& sessionId);
+    // ADR 0067: only Claude enforces the read-only review guard on every tool call. Codex keeps
+    // process-wide MCP servers (the browser) that approve themselves; Cursor forwards prompts.
+    [[nodiscard]] static bool enforcesReviewGuard(const QString& provider) {
+        return provider == QStringLiteral("claude");
+    }
 
   private:
     struct TurnOrigin final {
@@ -106,6 +163,8 @@ class AgentBroker final : public QObject {
         QStringList expectReply;
         QString lastItemId;
         QString lastText;
+        // Started by a review request: read-only, and never itself reviewed (ADR 0067).
+        bool review{false};
     };
 
     [[nodiscard]] QJsonObject whoami(const AgentConversation& caller) const;
@@ -127,6 +186,16 @@ class AgentBroker final : public QObject {
     void notice(const AgentMessageRecord& message, const QString& state, const QString& reason);
     [[nodiscard]] static QJsonObject messageJson(const AgentMessageRecord& message);
     [[nodiscard]] static QJsonObject conversationJson(const AgentConversation& conversation);
+    // ADR 0067, in AgentBrokerReviews.cpp.
+    // `done` receives the tree of the worktree's files, or nothing when git failed.
+    void snapshotWorktree(const QString& worktree,
+                          std::function<void(std::optional<QString>)> done);
+    void reviewFinishedTurn(const QString& sessionId, qint64 generation, const QString& status,
+                            const TurnOrigin& origin);
+    void postReview(const QString& sessionId, qint64 generation, const TurnOrigin& origin,
+                    const QString& base, const QString& diff, const QStringList& files);
+    // Records a review reply that should not start a turn. False when it is delivered as usual.
+    bool recordReviewReply(AgentMessageRecord& reply, const AgentMessageRecord& request);
 
     LocalJournal* journal_{nullptr};
     AgentHostPort* host_{nullptr};
@@ -134,6 +203,12 @@ class AgentBroker final : public QObject {
     QHash<QString, QString> tokenBySession_;
     QHash<QString, TurnOrigin> turns_;
     QSet<QString> pendingDeliveries_;
+    // The tree each conversation's next finished turn is compared with, and the latest
+    // snapshot started for it, so an older one finishing later cannot replace it.
+    QHash<QString, QString> reviewSnapshots_;
+    QHash<QString, qint64> snapshotEpochs_;
+    // The latest request a user typed in each conversation, for its review.
+    QHash<QString, QString> userRequests_;
     QTimer deliveryTimer_;
     QTimer expiryTimer_;
 };

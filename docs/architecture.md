@@ -18,7 +18,7 @@ Qt application shell
         -> QFileSystemModel (lazy directory loading, no content index)
     -> Agent Workspace (lazy)
         -> Qt Quick scene graph (Metal on macOS)
-        -> virtualized chat transcript and worktree rail
+        -> virtualized chat transcript and repository/conversation sidebar
         -> per-worktree conversation registry
             -> one long-lived Codex app-server JSONL process
             -> persistent Codex thread id per worktree
@@ -75,7 +75,7 @@ Qt application shell
   Search decodes files as the editor does. Replace All is off when results reached
   the match limit.
 - `modules/ai/src` owns the GPU-rendered Agent Workspace shell. QML consumes semantic
-  KetJS-derived tokens from `ThemeManager`; it does not own file persistence,
+  `KetTheme.t` tokens and kit recipes under the shared `ket::Appearance`; it does not own file persistence,
   terminal processes, or editor state. `AgentSessionManager` owns the transcript
   and per-worktree lifecycle. Its `CodexAppServer` compatibility facade maps the
   existing UI lifecycle to the authenticated `DaemonClient`; only the daemon
@@ -94,36 +94,28 @@ Qt application shell
   process transport. `PtyProcess` isolates platform process creation from the
   renderer so a ConPTY backend can be added without changing terminal UI code.
 - `core/src/app/SettingsDialog` owns the reusable settings shell and
-  public appearance persistence. The Pro desktop recomposes its live theme
-  and typography controls inside the non-modal, full-page Két settings
-  workspace, while the hidden public host continues to own preview, validation,
-  reset, and save behavior. Private chrome type embeds KÉT Sans 1.1 (the hinted
-  static TTF Light/Regular/Medium/Bold faces), then falls back to SF Pro (named face, or the
-  macOS system UI font), then the bundled Inter face, then the platform UI
-  font; the Pro shell rewrites the live QWidget
-  family after ThemeManager applies, and Agent Workspace reads the same
-  `InterfaceUiFont` resolver for `uiFont`. The product sidebar (`ActivityBar`)
-  and Agent Workspace transcript text add a +2px bias on TypeScale sizes at
-  every Interface zoom step (glyph steps stay unbiased). Transcript mono type uses the
-  Settings editor font family (refreshed on appearance updates; Menlo on macOS when empty). Agent
-  Workspace QML sizes come from `TypeScale` named steps (7 text + 2 glyph)
-  merged into the theme map and scale with `appearance/interfaceFontSizePixels`
-  (Medium = 14). Private QWidget chrome QSS sizes also flow through
-  `TypeScale` token expansion (`{{micro}}` … `{{display}}`, `{{glyphSmall}}`,
-  `{{glyphLarge}}`); temporary `px*` aliases were collapsed onto those steps.
-  The CM Theme sheet is scaled via `TypeScale::scaleLiteralFontSizes` until a
-  public token migration, preserving the already-resolved base QWidget size.
-  Product geometry uses explicit Medium-based `chrome_geometry` bindings and QML
-  `ChromeMetrics.px` under the same zoom factor. Saved snapshots publish to all
-  live MainWindow instances before theme signals and propagate to the additional editor,
-  diff, preview, and Agent Workspace terminal surfaces without duplicating
-  persistence code.
+  public appearance persistence. `core/src/app/SettingsWorkspace` recomposes its
+  live theme and typography controls as the non-modal, full-page Két settings
+  page that both editions show inside the window; the Pro
+  `SettingsWorkspacePage` derives from it and adds its own sections, while the hidden public host continues to own preview, validation,
+  reset, and save behavior. Both editions embed KÉT Sans and fall back to the
+  platform UI face. Agent Workspace uses `KetTheme.fontFamily`, `KetTheme.t` and
+  component recipe typography directly; it does not receive a host palette/type
+  map. The host exposes only the configured editor mono family for transcript
+  code and conversation numbers, and retains the HTML/Mermaid renderer palette.
+  Shared Appearance theme/zoom changes reformat mounted documents and update QML
+  without a per-view theme call. `TypeScale` remains a QWidget compatibility
+  adapter to kit profile roles. Product geometry uses the same shared interface
+  zoom through `chrome_geometry` in Widgets and `KetTheme.px` in QML. Saved
+  snapshots publish to all live MainWindow instances before theme signals and
+  propagate to editor, diff, preview and Agent Workspace terminal surfaces
+  without duplicating persistence code.
   The private Archived page owns conversation/worktree visibility restoration;
   it stays open after restoring and can stop a still-running archived turn.
-- The desktop shell owns the full Worktrees workspace. It combines linked Git
-  worktrees from the public read-only Git service with private conversation and
-  running-session counts, while create/archive/delete actions remain explicit
-  private-shell workflows.
+- The desktop shell has no Worktrees workspace (ADR 0111). Linked Git
+  worktrees from the public read-only Git service feed the conversation's
+  execution picker; creating a worktree and removing it with its conversation
+  remain explicit private-shell workflows.
 - Terminal creation is lazy. Hiding its panel only detaches the visible area; it
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.
@@ -156,6 +148,18 @@ Qt application shell
   renderer only when the bundle has `atlas.renderer.json`, tracks running viewers
   across worktrees, and stops them on a browser close or KétPlus Stop command.
   Edit opens the existing in-app Atlas Builder in the current worktree.
+- Completed assistant messages can show compact Atlas result cards from explicit
+  local Markdown links to `*.ketatlas/atlas.json`. The original message remains
+  the receipt source for live and replay; code blocks, raw HTML, remote URLs and
+  filesystem discovery do not create receipts. Parsing is bounded to 128 K characters and
+  eight distinct links per message. This attributes a link to the conversation,
+  not proof that the conversation created or validated the bundle.
+  The desktop composition reads manifest metadata through `AtlasIndex` (4 MiB
+  maximum), fenced to the current canonical worktree, and routes explicit Edit /
+  Open actions to the existing builder / managed viewer. Both actions recheck
+  availability. Relative links after an execution-context change fail closed
+  until historical source roots are available; the Atlas list remains usable.
+  Missing or invalid manifests show an unavailable state, never a validated badge.
 - Atlas creation is composed by the proprietary desktop shell because it crosses
   the AI and Atlas module boundaries. Atlas tab add/close controls use theme-colored
   Lucide SVGs; the add button occupies reserved corner space, and close controls
@@ -179,8 +183,11 @@ Qt application shell
   width. The toggle pulses while running and labels pending questions without
   automatically opening chat or stealing focus; Stop remains a separate action.
   The preview's stable bundle path plus selected flow ID and Builder conversation
-  form the prompt context. `@Flow` is a preferred focus hint, never a filesystem
-  isolation or authorization boundary.
+  form the prompt context. The selected flow is a preferred focus hint, never a
+  filesystem isolation or authorization boundary. As in the mock's `--screen=atlas`, the
+  header names it with its screen count ("Getting started · 2 screens"). It also shows
+  "Validated preview", or "Checking changes" while a manifest is mid-write. The composer
+  asks "Ask for a change to <flow>…".
 - The root CMake build selects the edition (ADR 0029). Pro composes its targets
   with the `KetPlusCM::*` targets of `core/`. Product code must not include files by reaching through
   `core/`; exported include paths and targets form the boundary.
@@ -244,6 +251,13 @@ run and journal one `provider.runtime` notice per session. The
 `provider.runtime_status` query also reports Claude's bundled SDK and Claude
 Code versions, and Settings > Providers shows the result. The supported window is
 releases from the last three months, reviewed monthly.
+Each provider entry also carries `readiness` (ADR 0110). It says whether the
+provider can start a turn (`ready`, `missing`, `outdated`, `signed_out`, `expired`,
+`key_rejected`, `limit_reached`, `runtime_missing` or `unknown`) and gives the
+install, sign-in and update commands, which KetPlus shows but never runs.
+Readiness comes from the version check, quota-free sign-in probes (Codex
+`account/read`, Cursor `cli-config.json`) and the states providers reported. Those
+are kept in the owner-only `provider-readiness.json` beside the journal.
 
 Features are gated on capability names, never version numbers. The manifest
 maps each version range to a dialect with a baseline capability list; adapters
@@ -393,3 +407,44 @@ boundary. `ClaudeCredentials` owns storage and fixed-endpoint validation;
 `LocalIpcServer` routes authenticated local credential commands without SessionHost
 journaling; `ClaudeAdapter` supplies settings only to its sidecar's new SDK query.
 The desktop composes the native credential form in Settings → Providers.
+
+### Shared model-backed Két UI
+
+Explorer and Source Control render Két row recipes through Qt item delegates, retaining lazy filesystem loading, stable selection and inline rename. Explorer creates entries through an inline Két field and only writes after confirmation. Git mutations live in `GitService`: paths use the same canonical-entry normalization as diff requests, use literal Git pathspecs, serialize operations and suppress stale completion notifications after a workspace switch. Commit acts on the existing index only; it never stages files implicitly.
+
+`terminal/TerminalTab` now owns the shared session/view lifecycle for the standalone Terminal window and the embedded multi-tab `TerminalPanel`. Closing a tab stops only that session; hiding the panel preserves sessions. The shared terminal target exports the tab implementation, so Pro does not depend on the standalone app target.
+
+### Pro sidebar presentation
+
+The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Tags are rendered and filtered from supplied metadata; this UI does not invent tags or infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
+
+The sidebar reads the local daemon's `storage.size.read` capability through the existing CodexAppServer facade. The adapter accepts only read/apply operation names and requires a ready daemon advertising the exact operation. A visible window refreshes advisory status at most once a minute, with one in-flight request, a deadline and stale-response fencing. It shows the warning only from an authoritative successful response, hides stale status on disconnect, and links to Settings. This does not change retention policy or start a provider turn.
+
+Question and approval presentation uses the shared kit question-card recipe.
+Answer IDs and pending/closed state still come from the transcript broker; the
+UI preserves drafts and guards repeated submission. Completed background task
+receipts can be hidden locally per conversation/task incarnation; this never
+deletes daemon task history or stops a running task.
+
+The standalone Agent Workspace sidebar also uses repository → conversation
+composition. It does not render a worktree rail; the execution picker owns
+checkout selection, and worktrees are created for a conversation (ADR 0111). The native shell retains
+its multi-repository grouping.
+
+Pro Quick search wraps the kit CommandPalette in a transparent native popup so it
+stays above the embedded QQuickView. Product filtering retains ranked name/path
+matches and Atlas IDs; unavailable entries cannot activate and produce an explicit
+empty-state explanation when they are the only matches. Context menus use kit
+recipes and route Change worktree through the existing revisioned execution picker.
+
+Compact conversation window (Shift+Cmd/Ctrl+M or the header icon) is desktop
+presentation only: the same view, conversation and composer draft remain mounted.
+It hides sidebar/details, restores prior geometry on exit and expands when opening
+a file detail. This is distinct from the provider context-token compactWindow in
+ADR 0021 and from Atlas Builder's restricted compactMode.
+
+Worktree and Connections presentation consumes kit buttons, inputs/selects,
+status badges and palette/profile values. The execution picker retains its
+paginated QListWidget model and paints visible rows from treeItemRecipe; search,
+revision fencing and acknowledgment-driven context changes retain their existing
+ownership. Pairing confirmation and changed-claim rejection remain daemon-backed.

@@ -12,6 +12,7 @@
 #include <sqlite3.h>
 
 #include <functional>
+#include <utility>
 
 using namespace ketplus::daemon;
 
@@ -126,6 +127,7 @@ class JournalQueryAuditTest final : public QObject {
                                  "fork",
                                  "delete-and-purge",
                                  "activity-backfill",
+                                 "activity-files-backfill",
                                  "retention",
                                  "acknowledged-events",
                                  "disk-usage"})
@@ -379,6 +381,24 @@ class JournalQueryAuditTest final : public QObject {
                  exec("DELETE FROM activity_heads WHERE session_id='b9'");
                  exec("INSERT INTO activity_backfill(session_id,generation) VALUES('b9',1)");
                  QCOMPARE(j.backfillActivityGroups(), LocalJournal::ActivityBackfill::Progress);
+             }},
+            {"activity-files-backfill",
+             [this, &j] {
+                 // Five groups of 20k items, so pages fall inside one group, and a listing
+                 // marker near the end: the pass must seek to it, not walk the items before.
+                 // Only the pass is audited.
+                 auto* const audited = std::exchange(recording, nullptr);
+                 QVERIFY(j.upsertSession({"files", dir_.path(), "codex", {}, {}, "ready"}));
+                 exec(sqlRange(100000) +
+                      "INSERT INTO activity_items(session_id,generation,turn_sequence,item_id,"
+                      "first_cursor,last_cursor,group_cursor,family,running,failed) SELECT "
+                      "'files',1,i,'f'||i,i,i,1+((i-1)/20000)*20000,'command',0,0 FROM n");
+                 exec("DELETE FROM activity_backfill");
+                 exec("INSERT INTO activity_files_backfill(session_id,generation,after_group,"
+                      "after_cursor) VALUES('files',1,80001,99000)");
+                 recording = audited;
+                 QCOMPARE(j.backfillActivityGroups(), LocalJournal::ActivityBackfill::Progress);
+                 QVERIFY(!j.hasPendingActivityBackfill());
              }},
             {"retention", [&j] { QVERIFY(j.pruneRetention()); }},
             {"payload-garbage",

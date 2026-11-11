@@ -8,8 +8,8 @@
 #include "KetRecipes.h"
 #include "KetToast.h"
 #include "KetTokens.h"
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-#include "terminal_app/TerminalTab.h"
 #include "ui/Theme.h"
 
 #include <QActionGroup>

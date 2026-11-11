@@ -590,6 +590,9 @@ class CursorAdapterTest final : public QObject {
         QCOMPARE(
             events("turn.completed").first().toObject().value("payload").toObject().value("status"),
             "interrupted");
+        QCOMPARE(
+            events("turn.completed").first().toObject().value("payload").toObject().value("reason"),
+            "user");
         QVERIFY(logText(logPath).contains("reject-once"));
         QVERIFY(logText(logPath).contains("cancel:"));
         adapter.stop();

@@ -1,8 +1,19 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetAppearance.h"
+#include "KetConversationRecipes.h"
+#include "KetProfile.h"
+#include "KetRecipes.h"
+#include "KetRichRecipes.h"
+#include "KetSyntax.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/ConversationTags.h"
+#include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
+#include <QPointer>
+#include <QScopeGuard>
+#include <functional>
 
 #include <QAbstractItemModelTester>
 #include <QAbstractTextDocumentLayout>
@@ -13,6 +24,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickItemGrabResult>
 #include <QQuickTextDocument>
@@ -151,10 +163,11 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     };
     QTest::qWait(100);
     QVERIFY(capture(".dark"));
-    QCOMPARE(qRound(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble()),
-             qRound(root->width()));
-    QCOMPARE(qRound(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble()),
-             qRound(root->height()));
+    // Centred on whole pixels: an odd remainder leaves at most one pixel of difference.
+    QVERIFY(qAbs(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble() -
+                 root->width()) <= 1.0);
+    QVERIFY(qAbs(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble() -
+                 root->height()) <= 1.0);
     search->setProperty("text", "  LUNA  ");
     QTRY_COMPARE(list->property("count").toInt(), 1);
     QTest::keyClick(view.quickView(), Qt::Key_Down);
@@ -204,17 +217,17 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     QVERIFY(slider->isEnabled());
     slider->setProperty("value", 1);
     QVERIFY(QMetaObject::invokeMethod(slider, "moved"));
-    auto* effortHandle = findVisualItem(popupContent, "effortHandle");
-    auto* selectedEffortTick = findVisualItem(popupContent, "effortTickLabel_1");
-    QVERIFY(effortHandle && selectedEffortTick);
-    const auto handleCenter =
-        effortHandle->mapToItem(root, QPointF(effortHandle->width() / 2.0, 0.0)).x();
-    const auto labelCenter =
-        selectedEffortTick->mapToItem(root, QPointF(selectedEffortTick->width() / 2.0, 0.0)).x();
-    QVERIFY2(qAbs(labelCenter - handleCenter) <= 1.0,
-             qPrintable(QStringLiteral("Effort label center %1 must match handle center %2")
-                            .arg(labelCenter)
-                            .arg(handleCenter)));
+    auto* minLabel = findVisualItem(popupContent, "effortMinLabel");
+    auto* maxLabel = findVisualItem(popupContent, "effortMaxLabel");
+    QVERIFY(minLabel && maxLabel);
+    QVERIFY(!minLabel->property("text").toString().isEmpty());
+    QVERIFY(!maxLabel->property("text").toString().isEmpty());
+    const auto sliderLeft = slider->mapToItem(root, QPointF(0, 0)).x();
+    const auto sliderRight = slider->mapToItem(root, QPointF(slider->width(), 0)).x();
+    QVERIFY(qAbs(minLabel->mapToItem(root, QPointF(0, 0)).x() - sliderLeft) <= 1.0);
+    QVERIFY(qAbs(maxLabel->mapToItem(root, QPointF(maxLabel->width(), 0)).x() - sliderRight) <=
+            1.0);
+    QVERIFY(!findVisualItem(popupContent, "effortTickLabel_1"));
     slider->setProperty("value", 2);
     QVERIFY(QMetaObject::invokeMethod(slider, "moved"));
     search->setProperty("text", "");
@@ -234,21 +247,8 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     QVERIFY(tabs->implicitWidth() < popup->property("width").toDouble());
     QVERIFY(capture(".narrow"));
     view.resize(1000, 740);
-    ketplus::ThemePalette light = testPalette();
-    light.dark = false;
-    light.pageBackground = "#ffffff";
-    light.sidebarBackground = "#f4f5f7";
-    light.surfaceRaised = "#ffffff";
-    light.surfaceHover = "#edf0f4";
-    light.textMain = "#20242b";
-    light.textSecondary = "#424955";
-    light.textMuted = "#657080";
-    light.interactiveActive = "#e8ebf0";
-    light.interactiveBackground = "#f5f6f8";
-    light.accentSubtle = "#edf0ff";
-    light.accentMuted = "#c5ceff";
-    light.border = "#e0e3e9";
-    light.borderStrong = "#bcc3cf";
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    const auto light = ketplus::currentThemePalette();
     view.applyTheme(light);
     QTest::qWait(100);
     QCOMPARE(view.conversationModel(), QStringLiteral("astra"));
@@ -385,10 +385,15 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     view.applyTheme(testPalette());
     view.setSessionState("CRM Refactor", "Working", true);
     view.setExecutionBranch("feat/customer-care-routine-workflow");
+    view.setConversations({QVariantMap{{"id", "crm"}, {"number", "4821"}, {"active", true}}});
     view.resize(1200, 700);
     view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
+    // Agent references read @agent/NNNN, as in the mock and the sidebar.
+    auto* number = root->findChild<QQuickItem*>("conversationNumber");
+    QVERIFY(number);
+    QTRY_COMPARE(number->property("text").toString(), QStringLiteral("@agent/4821"));
     auto* label = root->findChild<QQuickItem*>("workspaceScopeLabel");
     auto* chip = root->findChild<QQuickItem*>("workspaceScopeChip");
     QVERIFY(label && chip);
@@ -402,6 +407,28 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     view.setExecutionBranch("fix/short");
     QTRY_VERIFY(label->property("text").toString().endsWith("fix/short"));
     QTRY_VERIFY(label->width() > 40);
+    // Narrower still, as the mock: the worktree keeps its icon, then the number leaves.
+    QTRY_VERIFY(qAbs(chip->width() - chip->implicitWidth()) < 1); // settled on the short branch
+    const qreal fullChip = chip->width();
+    QVERIFY(number->isVisible());
+    int iconOnlyAt = 0;
+    int numberGoneAt = 0;
+    for (int width = 900; width >= 420; width -= 10) {
+        view.resize(width, 700);
+        QTest::qWait(20);
+        if (iconOnlyAt == 0 && !label->isVisible())
+            iconOnlyAt = width;
+        if (numberGoneAt == 0 && !number->isVisible())
+            numberGoneAt = width;
+    }
+    QVERIFY2(iconOnlyAt > 0, "the worktree never gave up its label");
+    QVERIFY2(numberGoneAt > 0, "the number never left");
+    QVERIFY2(iconOnlyAt > numberGoneAt, "the worktree gives way before the number");
+    QVERIFY(chip->isVisible());
+    QVERIFY(chip->width() < fullChip && chip->width() >= 30);
+    view.resize(1200, 700);
+    QTRY_VERIFY(label->isVisible() && number->isVisible());
+    QTRY_COMPARE(chip->width(), fullChip);
     const auto capture = qEnvironmentVariable("KETPLUS_HEADER_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(100);
@@ -409,7 +436,193 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     }
 }
 
+void AgentWorkspaceViewTest::permissionMenuFitsSmallZoomedWorkspace() {
+    // Wrapped mode descriptions make the menu taller than a short, zoomed workspace.
+    ket::Appearance::instance().setZoom(1.5);
+    const auto restoreZoom = qScopeGuard([] { ket::Appearance::instance().setZoom(1.0); });
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette(), 21);
+    view.setAgentAvailable(true);
+    view.setModels({QVariantMap{{"provider", "codex"},
+                                {"model", "astra"},
+                                {"displayName", "Astra"},
+                                {"defaultReasoningEffort", "medium"},
+                                {"permissions", ketplus::CodexAppServer::permissionProfiles()},
+                                {"defaultPermission", "workspace-write"}}});
+    view.resize(420, 420);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* button = root->findChild<QQuickItem*>("permissionButton");
+    auto* menu = root->findChild<QObject*>("permissionMenu");
+    QVERIFY(button && menu);
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QTRY_VERIFY(menu->property("opened").toBool());
+    auto* scroll = qvariant_cast<QQuickItem*>(menu->property("contentItem"));
+    QVERIFY(scroll);
+    QTRY_VERIFY(scroll->height() > 0 && scroll->property("contentHeight").toDouble() > 0);
+    // This size overflows, so the menu must scroll rather than grow past the window.
+    QVERIFY(scroll->property("contentHeight").toDouble() > scroll->height());
+    const auto top = scroll->mapToItem(root, QPointF(0, 0)).y();
+    QVERIFY2(top >= 0, qPrintable(QStringLiteral("Mode menu starts at y = %1").arg(top)));
+    QVERIFY(top + scroll->height() <= root->height());
+    const auto profiles = root->property("permissionProfiles").toList();
+    QVERIFY(profiles.size() >= 3);
+    const auto maximum = qMax(0.0, scroll->property("contentHeight").toDouble() - scroll->height());
+    for (const auto& profile : profiles) {
+        auto* option = findVisualItem(scroll, QStringLiteral("permissionOption_") +
+                                                  profile.toMap().value("id").toString());
+        QVERIFY(option);
+        // Every mode can be scrolled fully into view.
+        const auto y =
+            option->mapToItem(scroll, QPointF(0, 0)).y() + scroll->property("contentY").toDouble();
+        scroll->setProperty("contentY",
+                            qBound(0.0, y + option->height() - scroll->height(), maximum));
+        const auto shown = option->mapToItem(scroll, QPointF(0, 0)).y();
+        QVERIFY2(shown >= -1.0 && shown + option->height() <= scroll->height() + 1.0,
+                 qPrintable(QStringLiteral("option at %1, height %2, viewport %3, content %4")
+                                .arg(shown)
+                                .arg(option->height())
+                                .arg(scroll->height())
+                                .arg(scroll->property("contentHeight").toDouble())));
+    }
+}
+
+void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
+    // An emptied transcript has almost no content height; the welcome must still fill the view.
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setRepositoryName("ketplus-app");
+    view.setExecutionBranch("develop");
+    view.resetMessages({}, "welcome");
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* header = root->findChild<QQuickItem*>("agentWorkspaceHeader");
+    auto* composer = root->findChild<QQuickItem*>("agentComposer");
+    QQuickItem* title = nullptr;
+    QTRY_VERIFY((title = findVisualItem(root, QStringLiteral("agentEmptyStateTitle"))) &&
+                title->isVisible());
+    QVERIFY(header && composer);
+    QTest::qWait(50);
+    const auto headerBottom = header->mapToItem(root, QPointF(0, header->height())).y();
+    const auto titleTop = title->mapToItem(root, QPointF()).y();
+    QVERIFY2(titleTop >= headerBottom,
+             qPrintable(QStringLiteral("Welcome title at y = %1, header ends at %2")
+                            .arg(titleTop)
+                            .arg(headerBottom)));
+    const auto composerTop = composer->mapToItem(root, QPointF()).y();
+    QList<QQuickItem*> starters;
+    const auto collect = [&](auto&& self, QQuickItem* item) -> void {
+        if (item->objectName() == QStringLiteral("workspaceSuggestion"))
+            starters.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    collect(collect, root);
+    QCOMPARE(starters.size(), 4);
+    auto* state = findVisualItem(root, QStringLiteral("agentEmptyState"));
+    QVERIFY(state);
+    const auto stateBottom = state->mapToItem(root, QPointF(0, state->height())).y();
+    for (auto* starter : starters) {
+        const auto bottom = starter->mapToItem(root, QPointF(0, starter->height())).y();
+        QVERIFY(bottom <= composerTop);
+        // The welcome's own item holds its starters, so they stay inside it for input.
+        QVERIFY2(
+            bottom <= stateBottom,
+            qPrintable(
+                QStringLiteral("Starter ends at %1, welcome at %2").arg(bottom).arg(stateBottom)));
+    }
+    auto* place = findVisualItem(root, QStringLiteral("agentEmptyStatePlace"));
+    QVERIFY(place);
+    QVERIFY(place->property("text").toString().startsWith(
+        QStringLiteral("Your Agent works in ketplus-app on develop.")));
+}
+
+void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter_data() {
+    QTest::addColumn<QSize>("size");
+    QTest::addColumn<qreal>("zoom");
+    QTest::addColumn<bool>("paired");
+    QTest::newRow("short") << QSize(720, 520) << qreal(1) << true;
+    QTest::newRow("short, large") << QSize(720, 520) << qreal(1.25) << true;
+    QTest::newRow("largest") << QSize(1200, 800) << qreal(1.5) << true;
+    QTest::newRow("narrow, largest") << QSize(720, 560) << qreal(1.5) << false;
+}
+
+// A short or zoomed viewport scrolls the welcome, and every starter can be clicked.
+void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter() {
+    QFETCH(QSize, size);
+    QFETCH(qreal, zoom);
+    QFETCH(bool, paired);
+    auto& appearance = ket::Appearance::instance();
+    const qreal previousZoom = appearance.zoom();
+    appearance.setZoom(zoom);
+    const auto restoreZoom = qScopeGuard([&] { appearance.setZoom(previousZoom); });
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setProductSidebarVisible(false);
+    view.resetMessages({}, "welcome");
+    view.resize(size);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* prompt = root->findChild<QQuickItem*>("agentPrompt");
+    auto* composer = root->findChild<QQuickItem*>("agentComposer");
+    QQuickItem* welcome = nullptr;
+    QTRY_VERIFY((welcome = findVisualItem(root, QStringLiteral("agentEmptyState"))) &&
+                welcome->isVisible() && welcome->height() > 0);
+    QVERIFY(prompt && composer);
+    QTest::qWait(50);
+    QList<QQuickItem*> starters;
+    const auto collect = [&](auto&& self, QQuickItem* item) -> void {
+        if (item->objectName() == QStringLiteral("workspaceSuggestion"))
+            starters.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    collect(collect, welcome);
+    QCOMPARE(starters.size(), 4);
+    QCOMPARE(starters.at(0)->x() != starters.at(1)->x(), paired);
+    const auto viewportTop = welcome->mapToItem(root, QPointF()).y();
+    const auto viewportBottom = qMin(welcome->mapToItem(root, QPointF(0, welcome->height())).y(),
+                                     composer->mapToItem(root, QPointF()).y());
+    const auto maximum =
+        qMax(0.0, welcome->property("contentHeight").toDouble() - welcome->height());
+    for (auto* starter : starters) {
+        const auto contentTop =
+            starter->mapToItem(welcome, QPointF()).y() + welcome->property("contentY").toDouble();
+        welcome->setProperty(
+            "contentY",
+            qBound(0.0, contentTop + starter->height() - (viewportBottom - viewportTop), maximum));
+        QTest::qWait(20);
+        const auto top = starter->mapToItem(root, QPointF()).y();
+        const auto bottom = top + starter->height();
+        QVERIFY2(top >= viewportTop - 1 && bottom <= viewportBottom + 1,
+                 qPrintable(QStringLiteral("%1 at %2–%3, visible %4–%5")
+                                .arg(starter->property("text").toString())
+                                .arg(top)
+                                .arg(bottom)
+                                .arg(viewportTop)
+                                .arg(viewportBottom)));
+        const auto centre =
+            starter->mapToScene(QPointF(starter->width() / 2, starter->height() / 2)).toPoint();
+        QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre);
+        QTRY_COMPARE(prompt->property("text").toString(), starter->property("text").toString());
+        prompt->setProperty("text", QString{});
+    }
+}
+
 void AgentWorkspaceViewTest::composerPreview() {
+    auto& appearance = ket::Appearance::instance();
+    const auto previousMode = appearance.mode();
+    const auto restoreAppearance = qScopeGuard([&] { appearance.setMode(previousMode); });
+    appearance.setMode(ket::Appearance::Mode::Dark);
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.setAgentAvailable(true);
@@ -430,7 +643,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QVERIFY(root);
     auto* composer = root->findChild<QQuickItem*>("agentComposer");
     auto* prompt = root->findChild<QQuickItem*>("agentPrompt");
-    auto* sidebar = root->findChild<QQuickItem*>("worktreeSidebar");
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
     auto* productNavigationLayout = root->findChild<QQuickItem*>("agentProductNavigation");
     auto* brand = root->findChild<QQuickItem*>("productBrand");
     auto* quickSearch = root->findChild<QQuickItem*>("productQuickSearch");
@@ -459,7 +672,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QCOMPARE(productNavigationLayout->height(), productNavigationLayout->implicitHeight());
     QVERIFY(productNavigationLayout->mapToItem(sidebar, QPointF()).y() >= 0.0);
     QCOMPARE(brand->height(), 54.0);
-    QCOMPARE(quickSearch->height(), 32.0);
+    QCOMPARE(quickSearch->height(), quickSearch->implicitHeight());
     QVERIFY(composerFooter->isVisible());
     QTRY_VERIFY(identity->mapToItem(sidebar, QPointF(0, identity->height())).y() <=
                 sidebar->height() + 1.0);
@@ -473,7 +686,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QCOMPARE(productNavigation.constFirst().constFirst().toString(), QStringLiteral("search"));
     view.resize(1200, 900);
     QTRY_COMPARE(brand->height(), 67.0);
-    QTRY_COMPARE(composer->width(), 720.0);
+    QTRY_COMPARE(composer->width(), 760.0 - 2 * ket::Profile::current().composerRingWidth);
     QTRY_VERIFY(identity->mapToItem(sidebar, QPointF(0, identity->height())).y() <=
                 sidebar->height() + 1.0);
     auto* suggestion = findVisualItem(root, QStringLiteral("workspaceSuggestion"));
@@ -572,6 +785,8 @@ void AgentWorkspaceViewTest::composerPreview() {
         const auto shot = view.quickView()->grabWindow();
         QVERIFY(!shot.isNull());
         QVERIFY(shot.save(capture));
+        // Opt-in time for native computer-use inspection of this synthetic fixture.
+        QTest::qWait(qBound(0, qEnvironmentVariableIntValue("KETPLUS_COMPOSER_INSPECT_MS"), 60000));
     }
     auto* permissionButton = root->findChild<QQuickItem*>("permissionButton");
     QVERIFY(permissionButton);
@@ -579,6 +794,19 @@ void AgentWorkspaceViewTest::composerPreview() {
     QTest::qWait(100);
     if (!capture.isEmpty())
         QVERIFY(view.quickView()->grabWindow().save(capture + ".permissions.png"));
+    {
+        // The chosen mode is checked in the leading column, before its icon, as in the mock.
+        auto* menu = root->findChild<QObject*>("permissionMenu");
+        QVERIFY(menu && menu->property("visible").toBool());
+        QVERIFY(!permissionButton->property("previewState").isNull());
+        auto* menuContent = qvariant_cast<QQuickItem*>(menu->property("contentItem"));
+        const QString chosen = root->property("permission").toString();
+        auto* option = findVisualItem(menuContent, QStringLiteral("permissionOption_") + chosen);
+        QVERIFY(option);
+        auto* check = findVisualItem(option, QStringLiteral("permissionCheck"));
+        QVERIFY(check && check->isVisible());
+        QVERIFY(check->mapToItem(option, QPointF(0, 0)).x() < option->width() / 4);
+    }
     QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("permissionMenu"), "close"));
     QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("modelPopup"), "close"));
     view.setModels({QVariantMap{
@@ -690,18 +918,16 @@ void AgentWorkspaceViewTest::tooltipsFollowDesignSystem() {
     auto* tooltip = attachButton->findChild<QObject*>(QStringLiteral("ketToolTip"));
     QVERIFY(tooltip);
 
-    QCOMPARE(tooltip->property("backgroundColor").value<QColor>(), QColor(palette.accent));
-    QCOMPARE(tooltip->property("labelColor").value<QColor>(), QColor(Qt::white));
-    QCOMPARE(tooltip->property("cornerRadius").toDouble(), 5.0);
-    QCOMPARE(tooltip->property("opacity").toDouble(), 1.0);
-
+    const auto recipe = ket::tooltipRecipe(ket::Appearance::instance().theme());
+    const auto zoom = ket::Appearance::instance().zoom();
     auto* background = qvariant_cast<QObject*>(tooltip->property("background"));
     auto* contentItem = qvariant_cast<QObject*>(tooltip->property("contentItem"));
     QVERIFY(background);
     QVERIFY(contentItem);
-    QCOMPARE(background->property("color").value<QColor>(), QColor(palette.accent));
-    QCOMPARE(background->property("radius").toDouble(), 5.0);
-    QCOMPARE(contentItem->property("color").value<QColor>(), QColor(Qt::white));
+    QCOMPARE(background->property("color").value<QColor>(), recipe.background);
+    QCOMPARE(background->property("radius").toDouble(),
+             ket::Appearance::scale(recipe.radius, zoom));
+    QCOMPARE(contentItem->property("color").value<QColor>(), recipe.text);
 
     tooltip->setProperty("visible", true);
     QTRY_VERIFY(tooltip->property("visible").toBool());
@@ -735,33 +961,33 @@ void AgentWorkspaceViewTest::contextMenuFollowsDesignSystem() {
         (conversationRow = findVisualItem(root, QStringLiteral("conversationRow_conversation"))));
     auto* menu = qvariant_cast<QObject*>(conversationRow->property("contextMenu"));
     QVERIFY(menu);
-    QCOMPARE(menu->property("backgroundColor").value<QColor>(), QColor(palette.panelBackground));
-    QCOMPARE(menu->property("borderColor").value<QColor>(), QColor(palette.borderStrong));
-    QCOMPARE(menu->property("cornerRadius").toDouble(), 7.0);
-    QCOMPARE(menu->property("padding").toDouble(), 5.0);
-    QCOMPARE(menu->property("opacity").toDouble(), 1.0);
-
-    auto* menuBackground = qvariant_cast<QObject*>(menu->property("background"));
+    const auto menuRecipe = ket::menuRecipe(ket::Appearance::instance().theme());
+    const auto zoom = ket::Appearance::instance().zoom();
+    QCOMPARE(menu->property("padding").toDouble(),
+             ket::Appearance::scale(menuRecipe.padding, zoom));
     auto* renameItem = qvariant_cast<QObject*>(conversationRow->property("renameMenuItem"));
-    QVERIFY(menuBackground);
     QVERIFY(renameItem);
-    QCOMPARE(menuBackground->property("color").value<QColor>(), QColor(palette.panelBackground));
-    QCOMPARE(menuBackground->property("radius").toDouble(), 7.0);
-    QCOMPARE(renameItem->property("implicitHeight").toDouble(), 34.0);
-
-    auto* itemContent = qvariant_cast<QObject*>(renameItem->property("contentItem"));
     auto* itemBackground = qvariant_cast<QObject*>(renameItem->property("background"));
-    QVERIFY(itemContent);
     QVERIFY(itemBackground);
-    QCOMPARE(itemContent->property("color").value<QColor>(), QColor(palette.textMain));
-    QCOMPARE(itemBackground->property("radius").toDouble(), 5.0);
-
+    const auto itemRecipe = ket::menuItemRecipe(false, true, ket::MenuItemTone::Normal,
+                                                ket::Appearance::instance().theme());
+    QCOMPARE(itemBackground->property("radius").toDouble(),
+             ket::Appearance::scale(itemRecipe.radius, zoom));
+    QVERIFY(renameItem->property("implicitHeight").toDouble() >=
+            ket::Appearance::scale(itemRecipe.height, zoom));
     QVERIFY(QMetaObject::invokeMethod(menu, "open"));
     QTRY_VERIFY(menu->property("visible").toBool());
     menu->setProperty("currentIndex", 0);
     QTRY_VERIFY(renameItem->property("highlighted").toBool());
-    QTRY_COMPARE(itemContent->property("color").value<QColor>(), QColor(palette.accentText));
-    QTRY_COMPARE(itemBackground->property("color").value<QColor>(), QColor(palette.accentSubtle));
+    const auto selected = ket::menuItemRecipe(true, true, ket::MenuItemTone::Normal,
+                                              ket::Appearance::instance().theme());
+    QTRY_COMPARE(itemBackground->property("color").value<QColor>(), selected.background);
+    auto* worktree = menu->findChild<QObject*>("changeConversationWorktreeMenuItem");
+    QVERIFY(worktree);
+    QSignalSpy requested(&view, &ketplus::AgentWorkspaceView::conversationWorktreeRequested);
+    QVERIFY(QMetaObject::invokeMethod(worktree, "triggered"));
+    QTRY_COMPARE(requested.count(), 1);
+    QCOMPARE(requested.first().first().toString(), QStringLiteral("conversation"));
     const QString capture = qEnvironmentVariable("KETPLUS_CONTEXT_MENU_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(100);
@@ -829,11 +1055,9 @@ void AgentWorkspaceViewTest::copiesConversationTranscript() {
              {QStringLiteral("meta"), QStringLiteral("Changed files")},
              {QStringLiteral("filePath"), QString()}}});
     QTest::qWait(100);
-    // The footer button and the transcript's context menu both copy the conversation; while a
-    // turn runs they copy what is loaded.
-    auto* copyButton = root->findChild<QQuickItem*>(QStringLiteral("copyConversationButton"));
-    QVERIFY(copyButton);
-    QVERIFY(copyButton->isVisible());
+    // The transcript's context menu copies the conversation, as the mock has no footer button
+    // for it; while a turn runs it copies what is loaded.
+    QVERIFY(!root->findChild<QQuickItem*>(QStringLiteral("copyConversationButton")));
     auto* menu = root->findChild<QObject*>(QStringLiteral("transcriptContextMenu"));
     QVERIFY(menu);
     auto* copyItem =
@@ -842,7 +1066,6 @@ void AgentWorkspaceViewTest::copiesConversationTranscript() {
     QCOMPARE(copyItem->property("text").toString(), QStringLiteral("Copy conversation"));
     view.setSessionState(QStringLiteral("Copy test"), QStringLiteral("Working..."), true);
     QTRY_COMPARE(copyItem->property("text").toString(), QStringLiteral("Copy loaded conversation"));
-    QVERIFY(copyButton->isVisible());
     view.setSessionState(QStringLiteral("Copy test"), QStringLiteral("Ready"), false);
     QTRY_COMPARE(copyItem->property("text").toString(), QStringLiteral("Copy conversation"));
     QVariant selectable;
@@ -1012,6 +1235,202 @@ void AgentWorkspaceViewTest::streamingResponseStaysAnchoredAboveRunStatus() {
                             .arg(responseBottom)));
 }
 
+void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(theme.palette());
+    view.setProductSidebarVisible(false);
+    view.setAgentAvailable(true);
+    view.setSessionState("Polish the workspace", "Ready", false);
+    view.setConversations(
+        {QVariantMap{{"id", "ui"},
+                     {"active", true},
+                     {"number", "42"},
+                     {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}}});
+    view.resize(1000, 700);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* input = root->findChild<QQuickItem*>("agentPrompt");
+    auto* placeholder = root->findChild<QQuickItem*>("composerPlaceholder");
+    QVERIFY(input && placeholder);
+    auto* tag = root->findChild<QQuickItem*>("conversationTag_UI");
+    QSignalSpy filtered(&view, &ketplus::AgentWorkspaceView::tagFilterRequested);
+    QTRY_VERIFY((tag = findVisualItem(root, "conversationTag_UI")));
+    QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
+    QCOMPARE(filtered.count(), 1);
+    QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
+    // Add tag waits for a daemon that stores tags (before the first turn too, #429).
+    auto* addTag = root->findChild<QQuickItem*>("headerAddTagButton");
+    QVERIFY(addTag && !addTag->isVisible());
+    view.setConversations(
+        {QVariantMap{{"id", "ui"},
+                     {"active", true},
+                     {"number", "42"},
+                     {"tagsEditable", true},
+                     {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}}});
+    QTRY_VERIFY(addTag->isVisible());
+    QSignalSpy tagged(&view, &ketplus::AgentWorkspaceView::conversationTagRequested);
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    auto* tagMenu = root->findChild<QObject*>("conversationTagMenu");
+    QVERIFY(tagMenu);
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    const auto tagItem = [tagMenu](const char* name) {
+        QObject* found = nullptr;
+        for (int index = 0; index < tagMenu->property("count").toInt() && !found; ++index) {
+            QQuickItem* item = nullptr;
+            QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, item),
+                                      Q_ARG(int, index));
+            if (item && item->objectName() == QLatin1StringView(name))
+                found = item;
+        }
+        return found;
+    };
+    // The catalog, then a separator and Manage tags… (#429).
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
+    QVERIFY(tagItem("conversationTagItem_UI")->property("checked").toBool());
+    auto* review = tagItem("conversationTagItem_Review");
+    QVERIFY(review && !review->property("checked").toBool());
+    review->setProperty("checked", true); // a click toggles the check before it triggers
+    QVERIFY(QMetaObject::invokeMethod(review, "triggered"));
+    QCOMPARE(tagged.count(), 1);
+    QCOMPARE(tagged.first().at(0).toString(), QStringLiteral("ui"));
+    QCOMPARE(tagged.first().at(1).toString(), QStringLiteral("Review"));
+    QVERIFY(tagged.first().at(2).toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Manage tags… edits a draft of the catalog and saves it whole, with the renames.
+    QSignalSpy catalogSaved(&view, &ketplus::AgentWorkspaceView::tagCatalogSaveRequested);
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagItem("conversationManageTagsItem"), "triggered"));
+    auto* manage = root->findChild<QObject*>("manageTagsDialog");
+    QVERIFY(manage);
+    QTRY_VERIFY(manage->property("visible").toBool());
+    QCOMPARE(manage->property("draft").toList().size(), view.tagCatalog().size());
+    // KETPLUS_MANAGE_TAGS_CAPTURE=<file.png> saves it beside KetPlusMock --open=manage-tags.
+    if (const auto capture = qEnvironmentVariable("KETPLUS_MANAGE_TAGS_CAPTURE");
+        !capture.isEmpty()) {
+        QTest::qWait(300);
+        QVERIFY(root->window()->grabWindow().save(capture));
+    }
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 0),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Interface"))));
+    // Popups draw in the window's overlay, outside the header's item tree.
+    auto* save = findVisualItem(root->window()->contentItem(), "manageTagsSave");
+    QVERIFY(save && save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("interface"))));
+    QTRY_VERIFY(!save->property("enabled").toBool()); // the same name twice
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Speed"))));
+    QTRY_VERIFY(save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
+    QCOMPARE(catalogSaved.count(), 1);
+    const auto savedTags = catalogSaved.first().at(0).toList();
+    QCOMPARE(savedTags.size(), view.tagCatalog().size());
+    QCOMPARE(savedTags.first().toMap().value("label").toString(), QStringLiteral("Interface"));
+    const auto renames = catalogSaved.first().at(1).toMap();
+    QCOMPARE(renames.value(view.tagCatalog().first().toMap().value("label").toString()).toString(),
+             QStringLiteral("Interface"));
+    QCOMPARE(renames.size(), 2);
+    QTRY_VERIFY(!manage->property("visible").toBool());
+    // A catalog from the daemon replaces the menu's labels.
+    view.setTagCatalog({QVariantMap{{"label", "Release"}, {"color", "#d1453b"}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QTRY_COMPARE(tagMenu->property("count").toInt(), 3);
+    QVERIFY(tagItem("conversationTagItem_Release"));
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    view.setTagCatalog(ketplus::conversation_tags::catalog());
+    // Another client may have stored the label in another case; it is the same tag.
+    view.setConversations({QVariantMap{{"id", "ui"},
+                                       {"active", true},
+                                       {"number", "42"},
+                                       {"tagsEditable", true},
+                                       {"tags", QVariantList{QVariantMap{{"label", "review"}}}}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(tagItem("conversationTagItem_Review")->property("checked").toBool());
+    QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Every tag shows when the header has room, and they leave together when it has not.
+    view.setConversations({QVariantMap{
+        {"id", "ui"},
+        {"active", true},
+        {"number", "42"},
+        {"tagsEditable", true},
+        {"tags", QVariantList{QVariantMap{{"label", "UI"}}, QVariantMap{{"label", "Review"}},
+                              QVariantMap{{"label", "Docs"}}}}}});
+    view.resize(1400, 700);
+    for (const auto* name :
+         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
+        QTRY_VERIFY2(findVisibleItem(root, name), name);
+    view.resize(480, 700);
+    for (const auto* name :
+         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
+        QTRY_VERIFY2(!findVisibleItem(root, name), name);
+    view.resize(1000, 700);
+    // The mock's header actions, in its order and with its symbols.
+    const QList<std::pair<const char*, const char*>> actions{
+        {"headerCompactWindowButton", "panel-left"},
+        {"headerNewConversationButton", "compose"},
+        {"headerAtlasButton", "layers"},
+        {"headerChangesButton", "compare"},
+        {"headerTerminalButton", "terminal"},
+        {"headerWorkReportButton", "view-list"}};
+    qreal previousX = -1;
+    for (const auto& [name, icon] : actions) {
+        auto* action = root->findChild<QQuickItem*>(name);
+        QVERIFY2(action && action->isVisible(), name);
+        QCOMPARE(action->property("iconName").toString(), QLatin1StringView(icon));
+        QVERIFY2(action->x() > previousX, name);
+        previousX = action->x();
+    }
+    // As the mock: Changes opens the details pane's Changes tab, not Source Control.
+    QSignalSpy navigated(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    QSignalSpy changes(&view, &ketplus::AgentWorkspaceView::changesRequested);
+    QVERIFY(
+        QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(navigated.count(), 0);
+    // With the details pane open, its Open content menu replaces the three openers.
+    view.setDetailsOpen(true);
+    for (const char* name :
+         {"headerChangesButton", "headerTerminalButton", "headerWorkReportButton"})
+        QTRY_VERIFY2(!root->findChild<QQuickItem*>(name)->isVisible(), name);
+    QVERIFY(root->findChild<QQuickItem*>("headerAtlasButton") == nullptr ||
+            root->findChild<QQuickItem*>("headerAtlasButton")->isVisible());
+    view.setDetailsOpen(false);
+    QTRY_VERIFY(root->findChild<QQuickItem*>("headerChangesButton")->isVisible());
+    QTRY_VERIFY(placeholder->isVisible());
+    QTest::qWait(30);
+    QRectF caret;
+    QVERIFY(QMetaObject::invokeMethod(input, "positionToRectangle", Q_RETURN_ARG(QRectF, caret),
+                                      Q_ARG(int, 0)));
+    QTRY_VERIFY(qAbs(placeholder->y() - caret.y()) < 0.5);
+    input->setProperty("text", "Draft");
+    QTRY_VERIFY(!placeholder->isVisible());
+    input->setProperty("text", "");
+    QTRY_VERIFY(placeholder->isVisible());
+    const auto capture = qEnvironmentVariable("KETPLUS_COMPOSER_CORE_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(30);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    // As in the mock: a new conversation asks what to build; later turns name the provider.
+    QTRY_COMPARE(placeholder->property("text").toString(),
+                 QStringLiteral("Describe what you want to build…"));
+    view.resetMessages({QVariantMap{{"kind", "user"}, {"messageKey", "first"}, {"body", "Hi"}}},
+                       "placeholder");
+    QTRY_COMPARE(placeholder->property("text").toString(), QStringLiteral("Message Codex…"));
+}
+
 void AgentWorkspaceViewTest::composerFormattingSettles() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -1026,12 +1445,14 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     const auto verifyHeight = [&](qreal size) {
         for (auto block = document->begin(); block.isValid(); block = block.next()) {
             QCOMPARE(block.blockFormat().lineHeightType(), QTextBlockFormat::FixedHeight);
-            QCOMPARE(block.blockFormat().lineHeight(), size * 1.45);
+            QCOMPARE(block.blockFormat().lineHeight(),
+                     qFloor(size * ket::Profile::current().composerLineHeight));
         }
     };
 
     prompt->setProperty("text", QStringLiteral("First line\nSecond line"));
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), pixelSize * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 qFloor(pixelSize * ket::Profile::current().composerLineHeight));
     verifyHeight(pixelSize);
     QSignalSpy documentChanges(document, &QTextDocument::contentsChanged);
     QSignalSpy textChanges(prompt, SIGNAL(textChanged()));
@@ -1065,7 +1486,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     QTextCursor cursor(document);
     cursor.movePosition(QTextCursor::End);
     cursor.insertText(QStringLiteral("\nThird line"));
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), pixelSize * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 qFloor(pixelSize * ket::Profile::current().composerLineHeight));
     verifyHeight(pixelSize);
     document->undo();
     QTRY_COMPARE(document->toPlainText(), QStringLiteral("First line\nSecond line"));
@@ -1073,7 +1495,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     auto font = prompt->property("font").value<QFont>();
     font.setPixelSize(static_cast<int>(pixelSize) + 2);
     prompt->setProperty("font", font);
-    QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(), font.pixelSize() * 1.45);
+    QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(),
+                 qFloor(font.pixelSize() * ket::Profile::current().composerLineHeight));
     verifyHeight(font.pixelSize());
     documentChanges.clear();
     textChanges.clear();
@@ -1085,7 +1508,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
 void AgentWorkspaceViewTest::formatsStreamingText() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
-    view.resize(900, 640);
+    // The transcript keeps the width this gallery layout was written for.
+    view.resize(924, 640);
     view.show();
     auto message = QVariantMap{{"kind", "assistant"},
                                {"meta", "Agent"},
@@ -1106,17 +1530,20 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
     QVERIFY(quickDocument);
     auto* document = quickDocument->textDocument();
-    const qreal lineHeight = body->property("font").value<QFont>().pixelSize() * 1.45;
+    const qreal lineHeight = body->property("font").value<QFont>().pixelSize() *
+                             ket::Profile::current().readingLineHeight;
     QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(), lineHeight);
     QCOMPARE(document->firstBlock().blockFormat().lineHeightType(), QTextBlockFormat::FixedHeight);
-    QCOMPARE(document->firstBlock().blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(document->firstBlock().blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
     QCOMPARE(document->toPlainText(), QStringLiteral("First paragraph.\nSecond bold paragraph."));
     QVERIFY(body->property("selectByMouse").toBool());
     message["body"] = "First paragraph.\n\nSecond **bold** paragraph.\n\nStreaming addition.";
     view.updateMessage(0, message);
     QTRY_VERIFY(document->toPlainText().endsWith("Streaming addition."));
     QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), lineHeight);
-    QCOMPARE(document->lastBlock().blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(document->lastBlock().blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
 
     message["body"] = "Intro.\n\n## Heading\n\nParagraph.\n\n- First\n- Second\n\nLast.";
     view.updateMessage(0, message);
@@ -1126,12 +1553,16 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     const QTextBlock paragraph = heading.next();
     const QTextBlock firstListItem = paragraph.next();
     const QTextBlock secondListItem = firstListItem.next();
-    QCOMPARE(intro.blockFormat().bottomMargin(), 10.0);
-    QCOMPARE(heading.blockFormat().topMargin(), 14.0);
-    QCOMPARE(heading.blockFormat().bottomMargin(), 8.0);
-    QCOMPARE(paragraph.blockFormat().bottomMargin(), 10.0);
-    QCOMPARE(firstListItem.blockFormat().bottomMargin(), 4.0);
-    QCOMPARE(secondListItem.blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(intro.blockFormat().bottomMargin(), ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(heading.blockFormat().topMargin(), ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(heading.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownHeadingSpacingAfter);
+    QCOMPARE(paragraph.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(firstListItem.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownListItemGap);
+    QCOMPARE(secondListItem.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
 
     message["body"] = "| Name | State |\n| --- | --- |\n| Desktop | Ready |";
     view.updateMessage(0, message);
@@ -1142,13 +1573,12 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
         }
         return QColor{};
     };
-    QTRY_COMPARE(tableBorderColor(), QColor(testPalette().border));
+    QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Dark).tableBorder);
 
-    auto lightPalette = testPalette();
-    lightPalette.dark = false;
-    lightPalette.border = QStringLiteral("#e0e3e9");
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    const auto lightPalette = ketplus::currentThemePalette();
     view.applyTheme(lightPalette);
-    QTRY_COMPARE(tableBorderColor(), QColor(lightPalette.border));
+    QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Light).tableBorder);
 
     QTemporaryDir images;
     QImage sample(600, 200, QImage::Format_RGB32);
@@ -1208,8 +1638,8 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     QTRY_VERIFY((attachment = findImage(findImage, activeTranscript)));
     QTRY_COMPARE(attachment->property("status").toInt(), 1);
     QCOMPARE(attachment->property("source").toUrl().toLocalFile(), imagePath);
-    QCOMPARE(attachment->parentItem()->width(), 88.0);
-    QCOMPARE(attachment->parentItem()->height(), 88.0);
+    QCOMPARE(attachment->parentItem()->width(), 120.0);
+    QCOMPARE(attachment->parentItem()->height(), 78.0);
     QTest::qWait(150);
     QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
                       attachment->mapToScene(QPointF(20, 20)).toPoint());
@@ -1228,9 +1658,9 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     QCOMPARE(moreImages->property("text").toString(), QString("+1"));
     QVERIFY(QMetaObject::invokeMethod(moreImages, "clicked"));
     QTRY_VERIFY(!moreImages->isVisible());
-    gallery->setWidth(200); // An expanded gallery wraps when the column narrows.
+    gallery->setWidth(248); // An expanded gallery wraps when the column narrows.
     QTRY_COMPARE(gallery->property("columns").toInt(), 2);
-    QTRY_COMPARE(gallery->height(), 182.0);
+    QTRY_COMPARE(gallery->height(), 164.0);
     QList<QQuickItem*> thumbnails;
     const auto collectImages = [&](const auto& self, QQuickItem* item) -> void {
         if (item->objectName() == "messageAttachmentImage")
@@ -1244,8 +1674,8 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
         return thumbnails.size() == 4;
     })());
     for (auto* thumbnail : thumbnails) {
-        QVERIFY(thumbnail->width() <= 88.0);
-        QVERIFY(thumbnail->height() <= 88.0);
+        QVERIFY(thumbnail->width() <= 120.0);
+        QVERIFY(thumbnail->height() <= 78.0);
     }
     // The row is reused rather than rebuilt when its images change, so the grid
     // re-positions its cells on the next polish instead of at creation.
@@ -1255,14 +1685,14 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
                 thumbnails.at(0)->mapToItem(gallery, QPointF()).y());
 
     // Restore the explicit test width before reusing this delegate for an assistant.
-    gallery->setWidth(370);
+    gallery->setWidth(504);
     message["kind"] = "assistant";
     view.resetMessages({message});
     QQuickItem* assistantGallery = nullptr;
     QTRY_VERIFY((assistantGallery = findVisualItem(view.quickView()->rootObject(),
                                                    QStringLiteral("messageImageGallery"))));
     QCOMPARE(assistantGallery->property("columns").toInt(), 4);
-    QVERIFY(assistantGallery->width() <= 370.0);
+    QVERIFY(assistantGallery->width() <= 504.0);
 }
 
 void AgentWorkspaceViewTest::linksInlineCodeOnceFilesAreListed() {
@@ -1374,17 +1804,38 @@ void AgentWorkspaceViewTest::conversationColumnFollowsConfiguredWidth() {
         auto* body = findVisualItem(root, "messageBody");
         return body ? body->width() : -1.0;
     };
-    const qreal zoom = view.tokens().value("zoomFactor", 1.0).toReal();
+    const qreal zoom = ket::Appearance::instance().zoom();
     const qreal defaultWidth = bodyWidth();
     QVERIFY(defaultWidth > 0);
-    QVERIFY(defaultWidth < ketplus::AgentWorkspaceView::defaultConversationWidth * zoom);
-    QCOMPARE(composer->width(),
-             std::round(ketplus::AgentWorkspaceView::defaultConversationWidth * zoom) -
-                 std::round(40 * zoom));
+    // As in the mock, the answer and the composer share the whole reading column.
+    const qreal column = ketplus::AgentWorkspaceView::defaultConversationWidth * zoom;
+    QVERIFY2(qAbs(defaultWidth - column) <= 1.0,
+             qPrintable(QStringLiteral("answer %1, column %2").arg(defaultWidth).arg(column)));
+    // The composer's focus ring surrounds its card inside the column, as in ket's KetComposer.
+    const qreal ring = ket::Appearance::scale(ket::Profile::current().composerRingWidth, zoom);
+    QCOMPARE(composer->width() + 2 * ring, std::round(column));
+    auto* body = findVisualItem(root, "messageBody");
+    QVERIFY(qAbs(body->mapToItem(root, QPointF()).x() -
+                 (composer->mapToItem(root, QPointF()).x() - ring)) <= 1.0);
 
+    view.resetMessages({QVariantMap{{"kind", "assistant"},
+                                    {"meta", "Claude"},
+                                    {"body", QString("Some text. ").repeated(20) +
+                                                 "\n\n```qml\nrotation: 360\n```\n"}}},
+                       "conversation-width-code");
+    QQuickItem* frame = nullptr;
+    QTRY_VERIFY((frame = findVisualItem(root, "messageCodeBlockFrame")));
+    QTest::qWait(100);
+    auto* codeBody = findVisualItem(root, "messageBody");
+    // Code frames span the reading column, as the mock's code blocks do.
+    QVERIFY2(qAbs(frame->x()) <= 0.5 && qAbs(frame->width() - codeBody->width()) <= 1.0,
+             qPrintable(QStringLiteral("code frame %1 + %2, body %3")
+                            .arg(frame->x())
+                            .arg(frame->width())
+                            .arg(codeBody->width())));
     view.setConversationWidth(1200);
     QTRY_VERIFY(bodyWidth() > defaultWidth + 400 * zoom);
-    QCOMPARE(composer->width(), std::round(1200 * zoom) - std::round(40 * zoom));
+    QCOMPARE(composer->width() + 2 * ring, std::round(1200 * zoom));
 
     // Zero fills the pane: wider than any fixed column on this 1500px view.
     view.setConversationWidth(0);
@@ -1418,16 +1869,18 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         return block.begin().fragment().charFormat();
     };
     auto block = document->firstBlock();
-    const QList<qreal> scales{1.25, 1.125, 1.0};
+    const auto recipe = ket::markdownRecipe(ket::Theme::Dark);
+    const QList<qreal> headingSizes{recipe.heading1Pixels, recipe.heading2Pixels,
+                                    recipe.heading3Pixels};
     for (int level = 1; level <= 3; ++level, block = block.next()) {
         QCOMPARE(block.blockFormat().headingLevel(), level);
         const auto format = firstFormat(block);
-        const int expected = qRound(bodyPixels * scales.at(level - 1));
+        const int expected = qRound(headingSizes.at(level - 1));
         // Qt's importer would leave a +3..+1 size adjustment that doubles an H1.
         QCOMPARE(format.intProperty(QTextFormat::FontSizeAdjustment), 0);
         QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), expected);
-        QCOMPARE(format.fontWeight(), int(QFont::DemiBold));
-        QCOMPARE(block.blockFormat().lineHeight(), std::ceil(expected * 1.3));
+        QCOMPARE(format.fontWeight(), recipe.headingWeight);
+        QCOMPARE(block.blockFormat().lineHeight(), std::ceil(expected * recipe.headingLineHeight));
     }
 
     QString code;
@@ -1437,61 +1890,27 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         const auto format = fragment.charFormat();
         if (format.fontFixedPitch()) {
             code += fragment.text();
-            QCOMPARE(format.intProperty(QTextFormat::FontPixelSize),
-                     qRound(bodyPixels * 0.875) - 1);
-            // Code keeps the body colour; a rounded chip drawn behind it sets it apart.
+            QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), qRound(recipe.codePixels));
+            // Code keeps the body colour and has no chip, as the kit and the mock draw it.
             QVERIFY(!format.hasProperty(QTextFormat::ForegroundBrush));
             QVERIFY(!format.hasProperty(QTextFormat::BackgroundBrush));
             QVERIFY(format.fontFixedPitch());
         } else if (fragment.text() == "strong") {
             sawStrong = true;
-            QCOMPARE(format.fontWeight(), int(QFont::DemiBold));
+            QCOMPARE(format.fontWeight(), recipe.strongWeight);
         }
     }
     QCOMPARE(code, QStringLiteral("inline_code"));
     QVERIFY(sawStrong);
-    // The space before the code and the code's last character are tracked by the
-    // chip padding, so the chip leaves the neighbouring text uncovered.
+    // No chip and no tracking around it: the text lays out as written.
     const int codeStart = document->toPlainText().indexOf("inline_code");
     QVERIFY(codeStart > 0);
-    for (const int position : {codeStart - 1, codeStart + 10}) {
+    for (const int position : {codeStart - 1, codeStart + 5, codeStart + 10}) {
         QTextCursor cursor(document);
         cursor.setPosition(position + 1);
-        QCOMPARE(cursor.charFormat().fontLetterSpacingType(), QFont::AbsoluteSpacing);
-        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 4.0);
+        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 0.0);
     }
-    QTextCursor inside(document);
-    inside.setPosition(codeStart + 5);
-    QVERIFY(inside.charFormat().fontLetterSpacing() == 0.0);
-
-    // One chip, hugging the code's glyphs with a little room on each side.
-    const auto chips = view.messageInlineCode(quickDocument);
-    QCOMPARE(chips.size(), 1);
-    const auto chip = chips.first().toMap();
-    QRectF before;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, before),
-                                      Q_ARG(int, codeStart - 1)));
-    QRectF first;
-    QRectF last;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, first),
-                                      Q_ARG(int, codeStart)));
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, last),
-                                      Q_ARG(int, codeStart + 11)));
-    QCOMPARE(chip.value("x").toDouble(), first.x() - 4);
-    // The right edge already includes the last character's tracking.
-    QCOMPARE(chip.value("width").toDouble(), last.x() - first.x() + 4);
-    QVERIFY(chip.value("x").toDouble() > before.x());
-    const double top = chip.value("y").toDouble() + body->property("topPadding").toDouble();
-    const double bottom = top + chip.value("height").toDouble();
-    // The chip wraps the smaller code glyphs plus padding, so it stays within a
-    // couple of pixels of the body text's own line box.
-    QVERIFY2(top >= first.y() - 2 && bottom <= first.y() + first.height() + 2,
-             qPrintable(QStringLiteral("chip %1..%2 outside line %3..%4")
-                            .arg(top)
-                            .arg(bottom)
-                            .arg(first.y())
-                            .arg(first.y() + first.height())));
-    QTRY_VERIFY(findVisualItem(body, "messageInlineCodeChip") != nullptr);
+    QVERIFY(findVisualItem(body, "messageInlineCodeChip") == nullptr);
     if (const auto capturePath = qEnvironmentVariable("KETPLUS_INLINE_CODE_CAPTURE");
         !capturePath.isEmpty()) {
         QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
@@ -1553,14 +1972,16 @@ void AgentWorkspaceViewTest::compactCodeBlocks_data() {
 void AgentWorkspaceViewTest::compactCodeBlocks() {
     QFETCH(int, width);
     QFETCH(bool, dark);
+    const auto previousMode = ket::Appearance::instance().mode();
+    const auto restoreMode =
+        qScopeGuard([previousMode] { ket::Appearance::instance().setMode(previousMode); });
+    ket::Appearance::instance().setMode(dark ? ket::Appearance::Mode::Dark
+                                             : ket::Appearance::Mode::Light);
     ketplus::AgentWorkspaceView view;
     auto palette = testPalette();
     if (!dark) {
-        palette.dark = false;
-        palette.pageBackground = "#ffffff";
-        palette.surfaceRaised = "#eef1f4";
-        palette.borderStrong = "#a1a8b0";
-        palette.textMain = "#20252b";
+        ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+        palette = ketplus::currentThemePalette();
     }
     view.applyTheme(palette);
     view.resize(width, 900);
@@ -1593,11 +2014,14 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     // follow the body rather than a fixed pixel size.
     const int bodyPixels = body->property("font").value<QFont>().pixelSize();
     QVERIFY(bodyPixels > 0);
-    QCOMPARE(codeFont, bodyPixels - 2);
-    // Code blocks already sit in a frame; they get no inline chips.
-    QVERIFY(view.messageInlineCode(quickDocument).isEmpty());
-    QCOMPARE(document->firstBlock().blockFormat().lineHeight(), bodyPixels * 1.45);
-    QCOMPARE(code.blockFormat().lineHeight(), std::ceil((bodyPixels - 2) * 1.45));
+    QCOMPARE(codeFont, qRound(ket::Profile::current().codePixels));
+    QTRY_VERIFY(!code.layout()->formats().isEmpty());
+    QCOMPARE(code.layout()->formats().first().format.foreground().color(),
+             ket::syntaxRecipe(dark ? ket::Theme::Dark : ket::Theme::Light).comment);
+    QCOMPARE(document->firstBlock().blockFormat().lineHeight(),
+             bodyPixels * ket::Profile::current().readingLineHeight);
+    QCOMPARE(code.blockFormat().lineHeight(),
+             std::floor(codeFont * ket::Profile::current().codeLineHeight));
     QCOMPARE(code.next().blockFormat().bottomMargin(), 0.0);
     const auto height = body->height();
     view.formatMessageDocument(quickDocument, bodyPixels, body->width());
@@ -1632,7 +2056,7 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
                     first.value("y").toDouble() + first.value("height").toDouble() / 2));
         const auto scale = image.devicePixelRatio();
         QCOMPARE(image.pixelColor(qRound(origin.x() * scale), qRound(origin.y() * scale)),
-                 QColor(view.tokens().value("codeBlockBackground").toString()));
+                 ket::codeBlockRecipe(ket::Appearance::instance().theme()).background);
     }
     message["body"] = "```sh\nfirst line\n";
     view.updateMessage(0, message);
@@ -1640,16 +2064,16 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     QTest::qWait(50);
     auto* standaloneFrame = findVisualItem(body, "messageCodeBlockFrame");
     QVERIFY(standaloneFrame);
-    // Code blocks sit darker than the page in both themes, not on the raised surface.
+    // Both themes use the kit recipe, including its panel-subtle fill.
     const QColor frameColor = standaloneFrame->property("color").value<QColor>();
-    QCOMPARE(frameColor, QColor(view.tokens().value("codeBlockBackground").toString()));
-    QVERIFY(frameColor.lightnessF() < QColor(palette.pageBackground).lightnessF());
+    QCOMPARE(frameColor, ket::codeBlockRecipe(ket::Appearance::instance().theme()).background);
     QVERIFY(standaloneFrame->y() >= 0);
     QVERIFY(standaloneFrame->y() + standaloneFrame->height() <= body->height() + 1);
     message["body"] = "```sh\nfirst line\nsecond line\n```\n\nDone.";
     view.updateMessage(0, message);
     QTRY_COMPARE(view.messageCodeBlocks(quickDocument).size(), 1);
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), bodyPixels * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 bodyPixels * ket::Profile::current().readingLineHeight);
     message["body"] = "Inline `code` stays in its paragraph.";
     view.updateMessage(0, message);
     QTRY_VERIFY(view.messageCodeBlocks(quickDocument).isEmpty());
@@ -1781,7 +2205,11 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
     QSignalSpy opened(&view, &ketplus::AgentWorkspaceView::fileDiffRequested);
     for (int index = 0; index < rows.size(); ++index) {
         const auto* row = rows.at(index);
-        QCOMPARE(row->height(), 24.0);
+        const auto* label = row->findChild<QQuickItem*>("changedFileLabel");
+        QVERIFY(label);
+        QVERIFY(row->height() >= label->height());
+        QCOMPARE(row->height(), rows.first()->height());
+        QVERIFY(label->y() >= 0 && label->y() + label->height() <= row->height());
         auto* added = row->findChild<QQuickItem*>("fileAdditions");
         auto* removed = row->findChild<QQuickItem*>("fileDeletions");
         QVERIFY(added && removed);
@@ -1791,7 +2219,7 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
         QCOMPARE(removed->property("text").toString(), "-" + QString::number(index));
         QVERIFY(removed->mapToItem(row, QPointF(removed->width(), 0)).x() <= row->width() + 1);
         if (index > 0)
-            QCOMPARE(row->y(), rows.at(index - 1)->y() + rows.at(index - 1)->height() + 2);
+            QCOMPARE(row->y(), rows.at(index - 1)->y() + rows.at(index - 1)->height());
         QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
                           row->mapToScene(QPointF(30, row->height() / 2)).toPoint());
         QCOMPARE(opened.size(), index + 1);
@@ -1825,9 +2253,13 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
     QCOMPARE(firstLabel->property("text").toString(), QStringLiteral("worktree-a/src/first.cpp"));
     auto* fileTooltip = rows.constFirst()->findChild<QObject*>(QStringLiteral("ketToolTip"));
     QVERIFY(fileTooltip);
-    QCOMPARE(fileTooltip->property("backgroundColor").value<QColor>(),
-             QColor(testPalette().accent));
-    QCOMPARE(fileTooltip->property("labelColor").value<QColor>(), QColor(Qt::white));
+    auto* tooltipBackground = qvariant_cast<QObject*>(fileTooltip->property("background"));
+    auto* tooltipLabel = qvariant_cast<QObject*>(fileTooltip->property("contentItem"));
+    QVERIFY(tooltipBackground && tooltipLabel);
+    QCOMPARE(tooltipBackground->property("color").value<QColor>(),
+             ket::tooltipRecipe(ket::Appearance::instance().theme()).background);
+    QCOMPARE(tooltipLabel->property("color").value<QColor>(),
+             ket::tooltipRecipe(ket::Appearance::instance().theme()).text);
     QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier,
                       rows.constFirst()->mapToScene(QPointF(30, 12)).toPoint());
     auto* contextMenu = rows.constFirst()->findChild<QObject*>("changedFileContextMenu");
@@ -1906,8 +2338,10 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(shortBody->property("textDocument"));
     QVERIFY(quickDocument);
     QTRY_COMPARE(quickDocument->textDocument()->begin().layout()->lineCount(), 1);
-    QCOMPARE(shortBody->property("color").value<QColor>(), QColor(Qt::white));
-    QCOMPARE(surface->property("color").value<QColor>(), QColor("#4f6fff").darker(135));
+    QCOMPARE(shortBody->property("color").value<QColor>(),
+             ket::userMessageRecipe(ket::Theme::Dark).text);
+    QCOMPARE(surface->property("color").value<QColor>(),
+             ket::userMessageRecipe(ket::Theme::Dark).background);
     const auto capture = qEnvironmentVariable("KETPLUS_USER_BUBBLE_CAPTURE");
     if (!capture.isEmpty()) {
         QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
@@ -1942,7 +2376,7 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     QVERIFY(composer);
     const auto font = prompt->property("font").value<QFont>();
     QTRY_COMPARE(composer->textDocument()->begin().blockFormat().lineHeight(),
-                 font.pixelSize() * 1.45);
+                 qFloor(font.pixelSize() * ket::Profile::current().composerLineHeight));
     auto* document = composer->textDocument();
     document->clearUndoRedoStacks();
     QTextCursor edit(document);
@@ -1951,4 +2385,631 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     view.formatComposerDocument(composer, font.pixelSize());
     document->undo();
     QCOMPARE(document->toPlainText(), QString("one\ntwo"));
+}
+
+void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    QTemporaryDir images;
+    QImage sample(240, 156, QImage::Format_RGB32);
+    sample.fill(Qt::green);
+    const auto imagePath = images.filePath("capture.png");
+    QVERIFY(sample.save(imagePath));
+    const QString image = QUrl::fromLocalFile(imagePath).toString();
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Check it against this capture."},
+                                    {"messageKey", "prompt"},
+                                    {"images", QStringList{image}}}},
+                       "lead-images");
+    auto* root = view.quickView()->rootObject();
+    // The bubble of the row that holds an item, whether the item sits in it or beside it.
+    const auto bubbleOf = [](QQuickItem* item) -> QQuickItem* {
+        for (; item; item = item->parentItem())
+            for (auto* child : item->childItems())
+                if (child->objectName() == "messageSurface")
+                    return child;
+        return nullptr;
+    };
+    auto* activeTranscript = root->findChild<QQuickItem*>(QStringLiteral("agentTranscript"));
+    QVERIFY(activeTranscript);
+    QQuickItem* gallery = nullptr;
+    QQuickItem* surface = nullptr;
+    QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
+                (surface = bubbleOf(gallery)));
+    // The mock's prompt: thumbnails right-aligned above the bubble, not inside it.
+    QTRY_VERIFY(gallery->height() > 0);
+    const QRectF shot = gallery->mapRectToScene(gallery->childrenRect());
+    const QRectF bubble =
+        surface->mapRectToScene(QRectF(0, 0, surface->width(), surface->height()));
+    QVERIFY2(shot.bottom() <= bubble.top(),
+             qPrintable(QString("%1 > %2").arg(shot.bottom()).arg(bubble.top())));
+    QCOMPARE(qRound(shot.right()), qRound(bubble.right()));
+
+    // A prompt of only images keeps no empty bubble.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", ""},
+                                    {"messageKey", "only"},
+                                    {"images", QStringList{image}}}},
+                       "images-only");
+    QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
+                (surface = bubbleOf(gallery)) && !surface->isVisible());
+
+    // Another agent's message names its sender above a plain bubble; a steer says so below.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Keep 4 behind another app."},
+                                    {"messageKey", "reply"},
+                                    {"subtype", "agentMessage"},
+                                    {"meta", "Reply from @agent/8941 · DS Icon · Claude"}},
+                        QVariantMap{{"kind", "user"},
+                                    {"body", "Also check dark mode."},
+                                    {"messageKey", "steer"},
+                                    {"eventType", "turn.steered"},
+                                    {"provider", "claude"}}},
+                       "agent-and-steer");
+    const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child, name))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* origin = nullptr;
+    QQuickItem* steer = nullptr;
+    QTRY_VERIFY((origin = shown(shown, activeTranscript, "agentMessageOrigin")));
+    QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")));
+    QCOMPARE(origin->property("text").toString(),
+             QString("Reply from @agent/8941 · DS Icon · Claude"));
+    QCOMPARE(origin->property("color").value<QColor>(), steer->property("color").value<QColor>());
+    auto* replyBubble = bubbleOf(origin);
+    auto* steerBubble = bubbleOf(steer);
+    QVERIFY(replyBubble && steerBubble);
+    QCOMPARE(QQmlProperty::read(replyBubble, "border.color").value<QColor>(),
+             QQmlProperty::read(steerBubble, "border.color").value<QColor>());
+    QCOMPARE(replyBubble->property("color"), steerBubble->property("color"));
+    QVERIFY(origin->mapToScene(QPointF(0, origin->height())).y() <=
+            replyBubble->mapToScene(QPointF()).y());
+    QVERIFY(steer->mapToScene(QPointF()).y() >=
+            steerBubble->mapToScene(QPointF(0, steerBubble->height())).y());
+    // The note names the provider of the steered turn; choosing another provider for the
+    // next turn leaves history as it was.
+    QCOMPARE(steer->property("text").toString(),
+             QString("Sent while Claude was working · joined the running turn"));
+    QVERIFY(root->setProperty("selectedProvider", "codex"));
+    QCOMPARE(steer->property("text").toString(),
+             QString("Sent while Claude was working · joined the running turn"));
+    // Steers journaled before the provider was recorded stay neutral.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Also check dark mode."},
+                                    {"messageKey", "legacy-steer"},
+                                    {"eventType", "turn.steered"}}},
+                       "legacy-steer");
+    QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")) &&
+                steer->property("text").toString() ==
+                    "Sent while the agent was working · joined the running turn");
+}
+
+void AgentWorkspaceViewTest::imageViewerOpensTheRowsImages() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    QTemporaryDir images;
+    QStringList sources;
+    for (const auto& [name, colour] :
+         {std::pair{"first.png", Qt::green}, std::pair{"second.png", Qt::blue}}) {
+        QImage sample(240, 156, QImage::Format_RGB32);
+        sample.fill(colour);
+        QVERIFY(sample.save(images.filePath(name)));
+        sources.append(QUrl::fromLocalFile(images.filePath(name)).toString());
+    }
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Compare these."},
+                                    {"messageKey", "pair"},
+                                    {"images", sources}}},
+                       "viewer");
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>(QStringLiteral("agentTranscript"));
+    QVERIFY(transcript);
+    QList<QQuickItem*> frames;
+    QTRY_VERIFY(([&] {
+        frames.clear();
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (item->objectName() == "messageAttachmentFrame" && item->isVisible())
+                frames.append(item);
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, transcript);
+        return frames.size() == 2;
+    })());
+    QTest::qWait(150);
+    // The second thumbnail opens the Két lightbox on it, with its neighbour one step away.
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
+                      frames.at(1)->mapToScene(QPointF(20, 20)).toPoint());
+    auto* viewer = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(viewer);
+    QTRY_VERIFY(viewer->property("visible").toBool());
+    QCOMPARE(viewer->property("count").toInt(), 2);
+    QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+    QCOMPARE(viewer->property("imageSource").toUrl().toString(), sources.at(1));
+    QCOMPARE(viewer->property("item").toMap().value("caption").toString(), QString("second.png"));
+    // The mock's tools: zoom, rotate, copy, download, print and fullscreen.
+    QCOMPARE(viewer->property("tools").toInt(), 0xff);
+    // Copy puts the picture on the clipboard and says so.
+    QGuiApplication::clipboard()->clear();
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x10))); // Copy
+    QTRY_VERIFY(!QGuiApplication::clipboard()->image().isNull());
+    QCOMPARE(QGuiApplication::clipboard()->image().pixelColor(5, 5), QColor(Qt::blue));
+    auto* toast = root->findChild<QObject*>(QStringLiteral("imageToast"));
+    QVERIFY(toast);
+    QCOMPARE(toast->property("text").toString(), QString("Copied the image"));
+    // Fullscreen turns the top-level window, not the Quick window inside it.
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x40)));
+    QVERIFY(view.window()->windowState().testFlag(Qt::WindowFullScreen));
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x40)));
+    QVERIFY(!view.window()->windowState().testFlag(Qt::WindowFullScreen));
+    // A narrow pane keeps every tool reachable: what does not fit moves into More.
+    QVERIFY(viewer->property("overflowTools").toList().isEmpty());
+    ket::Appearance::instance().setZoom(1.5);
+    view.resize(420, 700);
+    QTRY_VERIFY(!viewer->property("overflowTools").toList().isEmpty());
+    auto* more = qvariant_cast<QQuickItem*>(viewer->property("moreButton"));
+    QVERIFY(more && more->isVisible());
+    QVERIFY(more->mapToScene(QPointF()).x() >= 0);
+    QCOMPARE(viewer->property("shownToolCount").toInt() +
+                 viewer->property("overflowTools").toList().size(),
+             8);
+    ket::Appearance::instance().setZoom(1.0);
+    QVERIFY(QMetaObject::invokeMethod(viewer, "close"));
+}
+
+void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    const auto user = [](const char* key, const char* date) {
+        return QVariantMap{
+            {"kind", "user"}, {"body", "A prompt"}, {"messageKey", key}, {"timestamp", date}};
+    };
+    view.resetMessages({user("one", "2025-11-01T12:00:00Z"), user("two", "2025-11-01T13:00:00Z"),
+                        user("three", "2025-11-02T12:00:00Z"), user("legacy", "")},
+                       "dated-transcript");
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    const auto visibleDates = [&] {
+        QStringList dates;
+        const auto visit = [&](auto&& self, QQuickItem* item) -> void {
+            if (item->objectName() == "transcriptDayDivider" && item->isVisible())
+                dates.append(item->property("text").toString());
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        visit(visit, root);
+        return dates;
+    };
+    QTRY_COMPARE(visibleDates().size(), 2);
+    QCOMPARE(visibleDates(), (QStringList{"Saturday, 1 November 2025", "Sunday, 2 November 2025"}));
+    // Recent days read as words; the current year drops from older dates.
+    const auto now = QDateTime::currentDateTime();
+    const auto stamp = [](const QDateTime& at) { return at.toUTC().toString(Qt::ISODate); };
+    const QDate thisYear(now.date().year(), now.date().month() == 1 ? 12 : 1, 15);
+    view.resetMessages({user("older", stamp(QDateTime(thisYear, QTime(12, 0))).toUtf8()),
+                        user("yesterday", stamp(now.addDays(-1)).toUtf8()),
+                        user("today", stamp(now).toUtf8())},
+                       "relative-transcript");
+    QTRY_COMPARE(visibleDates().size(), 3);
+    QCOMPARE(visibleDates().mid(1), (QStringList{"Yesterday", "Today"}));
+    QCOMPARE(visibleDates().first(),
+             QLocale(QLocale::English, QLocale::UnitedKingdom).toString(thisYear, "dddd, d MMMM"));
+    // Reformatting a live document after a numeric zoom must not compound insets.
+    view.resetMessages({QVariantMap{{"kind", "assistant"}, {"body", "```cpp\nreturn 42;\n```"}}},
+                       "zoomed-code");
+    QQuickItem* body = nullptr;
+    QTRY_VERIFY((body = findVisualItem(root, "messageBody")));
+    ket::Appearance::instance().setZoom(18.0 / 14);
+    view.applyTheme(testPalette(), 18);
+    QTest::qWait(50);
+    auto* doc = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+    QVERIFY(doc);
+    const auto pixels = body->property("font").value<QFont>().pixelSize();
+    view.formatMessageDocument(doc, pixels, body->width());
+    const auto before = doc->textDocument()->firstBlock().blockFormat();
+    view.formatMessageDocument(doc, pixels, body->width());
+    QCOMPARE(doc->textDocument()->firstBlock().blockFormat(), before);
+    QCOMPARE(before.leftMargin(),
+             ket::Appearance::scale(ket::Profile::current().codePadding, 18.0 / 14));
+    QCOMPARE(doc->textDocument()->toPlainText(), QString("return 42;"));
+}
+
+void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages({QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "event"},
+                                    {"title", "Switched from Claude to Codex"},
+                                    {"body", "The conversation history comes along"}},
+                        QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "reconnecting"},
+                                    {"title", "Reconnecting"},
+                                    {"body", "Reconnecting… 2/5 · the daemon closed the "
+                                             "connection to wss://relay.example.test/v1/"
+                                             "sessions/0123456789abcdef0123456789abcdef while "
+                                             "the turn was streaming its answer"},
+                                    {"status", "running"}},
+                        QVariantMap{{"kind", "error"},
+                                    {"category", "system"},
+                                    {"title", "Agent error"},
+                                    {"body", "<b>Untrusted error text</b>"},
+                                    {"status", "failed"}},
+                        QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "turnEnd"},
+                                    {"title", "Turn completed"},
+                                    {"body", "6m 20s · 141k context · <$2.08> session"},
+                                    {"status", "completed"}}},
+                       "notices");
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    QStringList titles, bodies;
+    const auto collect = [&] {
+        titles.clear();
+        bodies.clear();
+        const auto visit = [&](auto&& self, QQuickItem* item) -> void {
+            if (item->isVisible() && item->objectName() == "transcriptNoticeTitle")
+                titles << item->property("text").toString();
+            if (item->isVisible() && item->objectName() == "transcriptNoticeBody") {
+                bodies << item->property("text").toString();
+                QVERIFY(item->property("readOnly").toBool());
+                QVERIFY(item->property("selectByMouse").toBool());
+            }
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        visit(visit, root);
+        return titles.size();
+    };
+    // The event and the reconnect are lines, as in the mock; only the failure is a banner.
+    QTRY_COMPARE(collect(), 1);
+    QVERIFY(bodies.contains("<b>Untrusted error text</b>"));
+    // Every notice holds these lines; only the shown one counts.
+    const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child, name))
+                return match;
+        return nullptr;
+    };
+    auto* eventLine = shown(shown, root, "transcriptEventLine");
+    QVERIFY(eventLine);
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDivider")->property("text").toString(),
+             QStringLiteral("Switched from Claude to Codex"));
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDetail")->property("text").toString(),
+             QStringLiteral("The conversation history comes along"));
+    // A long reconnect message wraps inside its row instead of running past the pane.
+    for (const int width : {900, 420}) {
+        view.resize(width, 900);
+        QTRY_COMPARE(view.quickView()->width(), width);
+        QQuickItem* line = nullptr;
+        QQuickItem* text = nullptr;
+        const auto fits = [&] {
+            line = shown(shown, root, "transcriptReconnectLine");
+            text = line ? findVisualItem(line, "transcriptReconnectText") : nullptr;
+            if (!text)
+                return false;
+            auto* pane = line->parentItem();
+            const auto scene = [](QQuickItem* item) {
+                return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+            };
+            return pane->width() < width && scene(text).right() <= scene(pane).right() + 0.5;
+        };
+        QTRY_VERIFY(fits());
+        QVERIFY(text->property("lineCount").toInt() > 1);
+        QVERIFY(text->property("contentWidth").toReal() <= text->width() + 0.5);
+    }
+    view.resize(900, 900);
+    // The mock's turn end: one line, the status in bold and the details as plain text.
+    const auto visibleTurnEnd = [](const auto& self, QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == "transcriptTurnEnd")
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* turnEnd = nullptr;
+    QTRY_VERIFY((turnEnd = visibleTurnEnd(visibleTurnEnd, root)));
+    QCOMPARE(turnEnd->property("text").toString(),
+             QString("<b>Completed</b>&nbsp;&nbsp;6m 20s · 141k context · &lt;$2.08> session"));
+    // A failure reads as the kit's danger banner: its symbol and text colour, spanning the
+    // reading column like the turn end beside it.
+    const auto danger =
+        ket::bannerRecipe(ket::BannerTone::Danger, ket::Appearance::instance().theme());
+    const auto failedNotice = [](const auto& self, QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == "transcriptNotice" &&
+            item->property("status").toString() == "failed" &&
+            item->property("subtype").toString() != "turnEnd")
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* failure = failedNotice(failedNotice, root);
+    QVERIFY(failure);
+    auto* icon = findVisualItem(failure, "transcriptNoticeIcon");
+    QVERIFY(icon);
+    QCOMPARE(icon->property("name").toString(), danger.icon);
+    QCOMPARE(icon->property("color").value<QColor>(), danger.text);
+    QCOMPARE(findVisualItem(failure, "transcriptNoticeBody")->property("color").value<QColor>(),
+             danger.text);
+    QQuickItem* turnNotice = turnEnd;
+    while (turnNotice && turnNotice->objectName() != "transcriptNotice")
+        turnNotice = turnNotice->parentItem();
+    QVERIFY(turnNotice);
+    QCOMPARE(failure->mapToScene(QPointF()).x(), turnNotice->mapToScene(QPointF()).x());
+    QCOMPARE(failure->width(), turnNotice->width());
+    const auto capture = qEnvironmentVariable("KETPLUS_NOTICE_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(80);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+}
+
+// The mock's changed-files card closes a turn that edited files: one row per file with its
+// counts, a row opens its diff and Review changes opens Source Control.
+void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const auto change = [](const QString& path, int added, int removed, const QString& operation) {
+        return QVariantMap{{"path", path},   {"destination", ""},  {"operation", operation},
+                           {"added", added}, {"removed", removed}, {"known", true}};
+    };
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Fix it"}, {"turnId", "t"}},
+         QVariantMap{
+             {"messageKey", "g"},
+             {"kind", "tool"},
+             {"subtype", "daemonGroup"},
+             {"turnId", "t"},
+             {"groupRole", "leader"},
+             {"groupKey", "g"},
+             {"groupSummary", "Edited 2 files"},
+             {"groupSize", 2},
+             {"groupFiles",
+              QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 3, 1, "Edited"),
+                           change("modules/ai/src/agent/qml/SpinClock.qml", 48, 0, "Created")}}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"title", "Turn completed"},
+                     {"body", "4m 12s"},
+                     {"status", "completed"}}},
+        "changes");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisualItem(root, "transcriptTurnChanges")) && card->isVisible());
+    const QVariantList files = card->property("files").toList();
+    QCOMPARE(files.size(), 2);
+    QCOMPARE(files.at(0).toMap().value("name").toString(), QStringLiteral("AgentSidebar.qml"));
+    QCOMPARE(files.at(0).toMap().value("path").toString(),
+             QStringLiteral("modules/ai/src/agent/qml"));
+    QCOMPARE(files.at(1).toMap().value("added").toInt(), 48);
+    QSignalSpy diffs(&view, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(card, "fileActivated", Q_ARG(int, 1)));
+    QCOMPARE(diffs.count(), 1);
+    QCOMPARE(diffs.first().at(0).toString(),
+             QStringLiteral("modules/ai/src/agent/qml/SpinClock.qml"));
+    QSignalSpy navigation(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    auto* review = findVisualItem(card, "transcriptReviewChanges");
+    QVERIFY(review);
+    QVERIFY(QMetaObject::invokeMethod(review, "clicked"));
+    QCOMPARE(navigation.count(), 1);
+    QCOMPARE(navigation.first().at(0).toString(), QStringLiteral("source-control"));
+    QVERIFY(card->property("countsKnown").toBool());
+    QVERIFY(card->property("complete").toBool());
+    // "Not committed", as in the mock, while Source Control shows one of the files uncommitted
+    // in this conversation's checkout; nothing once committed or for another checkout.
+    QTemporaryDir checkout;
+    view.setActivePath(checkout.path());
+    QCOMPARE(card->property("note").toString(), QString());
+    view.setWorkingChanges(checkout.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setWorkingChanges(checkout.path(), {"README.md"});
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    QTemporaryDir elsewhere;
+    view.setWorkingChanges(elsewhere.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTest::qWait(50);
+    QCOMPARE(card->property("note").toString(), QString());
+    // Moving the conversation between checkouts re-evaluates the same snapshot.
+    view.setWorkingChanges(checkout.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch("other", elsewhere.path(), 2);
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setExecutionBranch("main", checkout.path(), 3);
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch({}, {}, 4);
+    view.setActivePath(elsewhere.path());
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setActivePath(checkout.path());
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setWorkingChanges(checkout.path(), {});
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    // A group's update keeps the row count and the delegate; the card follows its files.
+    const QPointer<QQuickItem> shown(card);
+    auto updated = QVariantMap{{"messageKey", "g"},
+                               {"kind", "tool"},
+                               {"subtype", "daemonGroup"},
+                               {"turnId", "t"},
+                               {"groupRole", "leader"},
+                               {"groupKey", "g"},
+                               {"groupSummary", "Edited 2 files"},
+                               {"groupSize", 2}};
+    auto unknown = change("modules/ai/src/agent/qml/SpinClock.qml", 0, 0, "Created");
+    unknown.insert("known", false);
+    updated.insert(
+        "groupFiles",
+        QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 8, 1, "Edited"), unknown});
+    updated.insert("groupFilesTotal", 60);
+    view.updateMessage(1, updated);
+    QTRY_COMPARE(card->property("files").toList().at(0).toMap().value("added").toInt(), 8);
+    QCOMPARE(shown.data(), card);
+    // Counts it could not tell are not shown as numbers, and a list the daemon cut short
+    // says so instead of reading as complete.
+    QVERIFY(!card->property("files").toList().at(1).toMap().value("known").toBool());
+    QVERIFY(!card->property("countsKnown").toBool());
+    QVERIFY(!card->property("complete").toBool());
+    QCOMPARE(card->property("title").toString(), QStringLiteral("2+ files changed"));
+    // A turn without edits has no card.
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Hi"}, {"turnId", "t"}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"status", "completed"}}},
+        "changes");
+    QTRY_VERIFY(!findVisualItem(root, "transcriptTurnChanges") ||
+                !findVisualItem(root, "transcriptTurnChanges")->isVisible());
+}
+
+// The mock's workspace/error: Retry on the latest failure sends its prompt again, only while
+// the conversation is idle and only for the turn that failed last.
+void AgentWorkspaceViewTest::retryResendsTheLatestFailedPrompt() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const QVariantMap prompt{{"messageKey", "u1"}, {"kind", "user"}, {"body", "Profile it"}};
+    const QVariantMap failure{{"messageKey", "e1"},
+                              {"kind", "error"},
+                              {"category", "system"},
+                              {"title", "The provider stopped with an error"},
+                              {"body", "No answer"}};
+    view.resetMessages({prompt, failure}, "retry");
+    auto* root = view.quickView()->rootObject();
+    // Rebuilt transcripts may leave a hidden, pooled notice before the shown one.
+    std::function<QQuickItem*(QQuickItem*)> shownAction = [&](QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == QLatin1String("transcriptNoticeAction"))
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = shownAction(child))
+                return match;
+        return nullptr;
+    };
+    const auto action = [&] { return shownAction(root); };
+    QQuickItem* retry = nullptr;
+    QTRY_VERIFY((retry = action()));
+    QCOMPARE(retry->property("text").toString(), QStringLiteral("Retry"));
+    QSignalSpy sent(&view, &ketplus::AgentWorkspaceView::configuredPromptSubmitted);
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
+    // Not while a turn runs, nor once a newer prompt follows the failure.
+    view.setSessionState("Retry", "Working", true);
+    QTRY_VERIFY(!action());
+    view.setSessionState("Retry", "Ready", false);
+    QTRY_VERIFY(action());
+    view.resetMessages(
+        {prompt, failure, QVariantMap{{"messageKey", "u2"}, {"kind", "user"}, {"body", "Next"}}},
+        "retry");
+    QTRY_VERIFY(!action());
+    // A prompt with images could not be sent as it was.
+    auto withImage = prompt;
+    withImage.insert("images", QVariantList{"file:///tmp/shot.png"});
+    view.resetMessages({withImage, failure}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+    // An update that keeps the row count still counts: an image arriving on the prompt.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.updateMessage(0, withImage);
+    QTRY_VERIFY(!action());
+    // Not while older history is shown instead of the latest turn.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.setHistoryState({{"hasNewer", true}});
+    QTRY_VERIFY(!action());
+    view.setHistoryState({});
+    QTRY_VERIFY(action());
+    // A turn that completed despite an error needs no retry.
+    const QVariantMap completed{{"messageKey", "t1"},
+                                {"kind", "system"},
+                                {"subtype", "turnEnd"},
+                                {"status", "completed"},
+                                {"title", "Turn completed"}};
+    view.resetMessages({prompt, failure, completed}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+    // A steer belongs to the failed turn; Retry resends the prompt that opened it.
+    const QVariantMap steer{
+        {"messageKey", "s1"}, {"kind", "user"}, {"eventType", "turn.steered"}, {"body", "Also X"}};
+    view.resetMessages({prompt, steer, failure}, "retry");
+    QTRY_VERIFY((retry = action()));
+    sent.clear();
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
+}
+
+void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {
+    for (const auto& header : {QString("Surface"), QString{}}) {
+        QTextDocument document;
+        document.setMarkdown("```cpp\nreturn 42;\n```\n\n| " + header +
+                             " | State |\n| --- | --- |\n| Conversation | Ready |");
+        QTextTable* table = nullptr;
+        for (auto* frame : document.rootFrame()->childFrames())
+            if (auto* candidate = qobject_cast<QTextTable*>(frame))
+                table = candidate;
+        QVERIFY(table);
+        const auto recipe = ket::markdownRecipe(ket::Theme::Dark);
+        ketplus::styleTranscriptTables(&document, recipe, 1, ket::Profile::current().codePadding);
+        const auto normalized = document.toPlainText();
+        QCOMPARE(table->rows(), 2);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->cellAt(0, 0).firstCursorPosition().block().text(), header);
+        if (!header.isEmpty())
+            QCOMPARE(table->cellAt(0, 0)
+                         .firstCursorPosition()
+                         .block()
+                         .begin()
+                         .fragment()
+                         .charFormat()
+                         .fontWeight(),
+                     recipe.strongWeight);
+        QCOMPARE(table->cellAt(0, 1).firstCursorPosition().block().text(), QString("State"));
+        QCOMPARE(table->cellAt(1, 0).firstCursorPosition().block().text(), QString("Conversation"));
+        ketplus::styleTranscriptTables(
+            &document, recipe, 1.25,
+            ket::Appearance::scale(ket::Profile::current().codePadding, 1.25));
+        QCOMPARE(document.toPlainText(), normalized);
+        QCOMPARE(table->cellAt(0, 0).firstCursorPosition().block().text(), header);
+    }
 }

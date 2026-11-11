@@ -17,7 +17,22 @@ target_link_libraries(ketplus_agent_benchmark PRIVATE
     KetPlusCM::ui
 )
 ketplus_enable_warnings(ketplus_agent_benchmark)
-ketplus_cm_add_font_resources(ketplus_agent_benchmark)
+
+qt_add_executable(ketplus_agent_idle_benchmark AgentIdleBenchmark.cpp AgentTranscriptFixture.cpp)
+target_link_libraries(ketplus_agent_idle_benchmark PRIVATE
+    Qt6::Quick Qt6::Widgets ketplus_ai KetPlusCM::ui
+)
+# The mock's screenshots, for --transcript captures.
+target_compile_definitions(ketplus_agent_idle_benchmark PRIVATE
+    KETPLUS_MOCK_ASSETS="${PROJECT_SOURCE_DIR}/mockups/qt/assets")
+ketplus_enable_warnings(ketplus_agent_idle_benchmark)
+if(APPLE)
+    set_target_properties(ketplus_agent_idle_benchmark PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER dev.ketplus.benchmark.idle
+        MACOSX_BUNDLE_BUNDLE_NAME "KetPlus Idle Benchmark"
+    )
+endif()
 
 qt_add_executable(ketplus_daemon_restore_benchmark DaemonRestoreBenchmark.cpp)
 target_link_libraries(ketplus_daemon_restore_benchmark PRIVATE
@@ -45,7 +60,7 @@ target_link_libraries(ketplus_conversation_return_benchmark PRIVATE
     KetPlusCM::ui
 )
 ketplus_enable_warnings(ketplus_conversation_return_benchmark)
-ketplus_cm_add_font_resources(ketplus_conversation_return_benchmark)
+
 
 # Needs a private daemon journal to replay, so it is never part of a default
 # build: enable it explicitly when measuring transcript scroll behaviour.
@@ -72,5 +87,5 @@ if(KETPLUS_BUILD_TRANSCRIPT_SCROLL_BENCH)
     )
     target_link_libraries(ketplus_synthetic_transcript_journal PRIVATE ketplus_daemon_core)
     ketplus_enable_warnings(ketplus_synthetic_transcript_journal)
-    ketplus_cm_add_font_resources(ketplus_transcript_scroll_benchmark)
+
 endif()

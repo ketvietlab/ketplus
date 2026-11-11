@@ -13,7 +13,14 @@
 namespace ketplus::daemon {
 namespace {
 
+// ADR 0067: a review of another conversation's turn is read-only whatever the reviewer's mode.
+bool reviewGuard(const QJsonObject& options) {
+    return options.value(QStringLiteral("review_guard")).toBool();
+}
+
 QString sandboxName(const QJsonObject& options) {
+    if (reviewGuard(options))
+        return QStringLiteral("read-only");
     if (options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full"))
         return QStringLiteral("danger-full-access");
     if (options.value("execution_policy").toString() == "read-only")
@@ -26,6 +33,9 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
+    // Defence in depth: reviews only reach Claude (AgentBroker::enforcesReviewGuard).
+    if (reviewGuard(options))
+        return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")
                ? QStringLiteral("never")
                : QStringLiteral("on-request");
@@ -182,6 +192,8 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                        // reaches the agent as its prompt-free mode, not only Codex's sandbox.
                        {QStringLiteral("permission"), sandboxName(options)},
                        {QStringLiteral("images"), imagePaths(input)}};
+    if (reviewGuard(options))
+        params.insert(QStringLiteral("reviewGuard"), true);
     params.insert(QStringLiteral("freshContext"), it->stored.threadId.isEmpty());
     // The handoff transcript lives outside the worktree; Claude may read it without asking.
     const QString handoff = handoffDirectory(sessionId);
@@ -427,6 +439,30 @@ void SessionHost::providerReloaded(const QString& reason) {
             session.completedItemOrder.clear();
         }
     }
+}
+
+QJsonObject SessionHost::turnCompletion(Session& session, const QString& status) {
+    QJsonObject completed{{QStringLiteral("status"), status}};
+    // Only an interrupted end is the Stop's; a turn that finished first keeps its own status.
+    if (std::exchange(session.stopRequested, false) &&
+        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
+        completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
+    // The end row shows the turn's report even when a history page splits it from the turn's
+    // work_report.updated event.
+    const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);
+    if (!report.isEmpty() &&
+        report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)
+        completed.insert(QStringLiteral("work_report"), report);
+    // #125: a finished turn whose answer asks the user to decide ends as Waiting for you.
+    const bool finished = status.isEmpty() || status == QStringLiteral("completed") ||
+                          status == QStringLiteral("ready");
+    const bool awaiting = finished && endsWaitingForUser(session);
+    setAwaitingReply(session, awaiting);
+    if (awaiting)
+        completed.insert(QStringLiteral("awaiting_reply"), true);
+    session.lastAnswerText.clear();
+    session.decisionRequested = false;
+    return completed;
 }
 
 } // namespace ketplus::daemon

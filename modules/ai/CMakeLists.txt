@@ -1,6 +1,16 @@
 add_library(ketplus_ai STATIC
     src/agent/AgentMessageFormatter.cpp
     src/agent/AgentMessageFormatter.h
+    src/agent/TranscriptStepItems.cpp
+    src/agent/TranscriptTurnFiles.cpp
+    src/agent/TranscriptTurnFiles.h
+    src/agent/ConversationChangesPane.cpp
+    src/agent/ConversationChangesPane.h
+    src/agent/WorkReportPane.cpp
+    src/agent/WorkReportPane.h
+    src/agent/WorkReportText.cpp
+    src/agent/WorkReportText.h
+    src/agent/TranscriptStepItems.h
     src/agent/AgentMessageModel.cpp
     src/agent/AgentMessageModel.h
     src/agent/McpToolResultMedia.cpp
@@ -23,13 +33,22 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionHistory.cpp
     src/agent/AgentSessionDaemonHistory.cpp
     src/agent/AgentSessionDaemonCatchup.cpp
+    src/agent/DaemonAgentNotes.cpp
+    src/agent/DaemonAgentNotes.h
+    src/agent/DaemonTranscriptNotices.cpp
+    src/agent/DaemonTranscriptNotices.h
     src/agent/DaemonTranscriptProjection.cpp
     src/agent/DaemonTranscriptProjection.h
     src/agent/AgentSessionManager.cpp
     src/agent/AgentSessionArchive.cpp
+    src/agent/AgentSessionTags.cpp
+    src/agent/AgentSessionReviewers.cpp
+    src/agent/AgentSessionWorkReports.cpp
     src/agent/AgentSessionConfiguration.cpp
     src/agent/AgentSessionManager.h
     src/agent/AgentSessionNotifications.cpp
+    src/agent/ReasoningHeading.cpp
+    src/agent/ReasoningHeading.h
     src/agent/AgentSessionState.cpp
     src/agent/AgentSessionState.h
     src/agent/AgentSessionTurns.cpp
@@ -49,21 +68,32 @@ add_library(ketplus_ai STATIC
     src/agent/MermaidLabelContrast.h
     src/agent/TranscriptFileLinks.cpp
     src/agent/TranscriptFileLinks.h
+    src/agent/TranscriptNetworkPolicy.cpp
+    src/agent/TranscriptNetworkPolicy.h
     src/agent/TranscriptTrace.cpp
     src/agent/TranscriptTrace.h
     src/agent/ChatMarkdown.cpp
     src/agent/ChatMarkdown.h
     src/agent/TranscriptWindowModel.cpp
     src/agent/TranscriptWindowModel.h
+    src/agent/TranscriptSyntax.cpp
+    src/agent/TranscriptSyntax.h
+    src/agent/TranscriptTableStyle.cpp
+    src/agent/TranscriptTableStyle.h
     src/agent/AgentWorkspaceMedia.cpp
+    src/agent/AgentWorkspaceWorkingChanges.cpp
+    src/agent/AgentWorkspaceImages.cpp
     src/agent/AgentWorkspaceMentions.cpp
     src/agent/AgentWorkspaceRenderCache.cpp
     src/agent/AgentWorkspaceSkills.cpp
     src/agent/AgentWorkspaceStreaming.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
-    src/agent/LucideImageProvider.cpp
-    src/agent/LucideImageProvider.h
+    src/agent/AgentWorkspaceHeldMessages.cpp
+    src/agent/AgentWorkspaceReviewers.cpp
+    src/agent/AgentWorkspaceAtlasResults.cpp
+    src/agent/TranscriptAtlasLinks.cpp
+    src/agent/TranscriptAtlasLinks.h
     src/agent/AgentWorkspaceView.h
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h
@@ -76,6 +106,8 @@ add_library(ketplus_ai STATIC
     src/agent/CodexRateLimits.h
     src/agent/ProviderRuntimeStatus.cpp
     src/agent/ProviderRuntimeStatus.h
+    src/agent/ProviderSetupGuide.cpp
+    src/agent/ProviderSetupGuide.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp
@@ -83,9 +115,13 @@ add_library(ketplus_ai STATIC
 )
 target_link_libraries(ketplus_ai
     PUBLIC
+        Qt6::Network
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
+        KetQt::Quick
+        KetQt::QuickPlugin
+        KetQt::Widgets
         Qt6::Sql
         Qt6::Widgets
         ketplus_browser_tools
@@ -114,7 +150,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar)
+        BackgroundTaskBar AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -131,23 +167,42 @@ set_source_files_properties(
     src/agent/qml/UsageRingButton.qml
     PROPERTIES QT_RESOURCE_ALIAS "UsageRingButton.qml"
 )
-set_source_files_properties(
-    src/agent/qml/TintedIcon.qml
-    PROPERTIES QT_RESOURCE_ALIAS "TintedIcon.qml"
-)
 set_source_files_properties(src/agent/qml/CompactWindowControl.qml PROPERTIES QT_RESOURCE_ALIAS "CompactWindowControl.qml")
 set_source_files_properties(
     src/agent/qml/ModelPicker.qml
     PROPERTIES QT_RESOURCE_ALIAS "ModelPicker.qml"
 )
 set_source_files_properties(
+    src/agent/qml/ModelProviderTabs.qml
+    PROPERTIES QT_RESOURCE_ALIAS "ModelProviderTabs.qml"
+)
+set_source_files_properties(
     src/agent/qml/MessageImageGallery.qml
     PROPERTIES QT_RESOURCE_ALIAS "MessageImageGallery.qml"
+)
+set_source_files_properties(
+    src/agent/qml/TranscriptMessageImages.qml
+    PROPERTIES QT_RESOURCE_ALIAS "TranscriptMessageImages.qml"
 )
 set_source_files_properties(
     src/agent/qml/TranscriptRemoteGroup.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptRemoteGroup.qml"
 )
+set_source_files_properties(src/agent/qml/AtlasResultCard.qml PROPERTIES QT_RESOURCE_ALIAS "AtlasResultCard.qml")
+set_source_files_properties(src/agent/qml/HeldMessageAction.qml PROPERTIES QT_RESOURCE_ALIAS "HeldMessageAction.qml")
+set_source_files_properties(src/agent/qml/AgentProviderSetupCard.qml PROPERTIES QT_RESOURCE_ALIAS "AgentProviderSetupCard.qml")
+set_source_files_properties(src/agent/qml/TranscriptNotice.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptNotice.qml")
+set_source_files_properties(src/agent/qml/TranscriptActivityHeader.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityHeader.qml")
+set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptChangedFiles.qml")
+set_source_files_properties(src/agent/qml/TranscriptFileStep.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileStep.qml")
+set_source_files_properties(src/agent/qml/TranscriptFileDiff.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileDiff.qml")
+set_source_files_properties(src/agent/qml/TranscriptFileMenu.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileMenu.qml")
+set_source_files_properties(src/agent/qml/TranscriptAgentNote.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptAgentNote.qml")
+set_source_files_properties(src/agent/qml/TranscriptWorkReport.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptWorkReport.qml")
+set_source_files_properties(src/agent/qml/WorkReportPane.qml PROPERTIES QT_RESOURCE_ALIAS "WorkReportPane.qml")
+set_source_files_properties(src/agent/qml/ConversationChangesPane.qml PROPERTIES QT_RESOURCE_ALIAS "ConversationChangesPane.qml")
+set_source_files_properties(src/agent/qml/ManageTagsDialog.qml PROPERTIES QT_RESOURCE_ALIAS "ManageTagsDialog.qml")
+set_source_files_properties(src/agent/qml/TranscriptTrimmedDetail.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTrimmedDetail.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityRow.qml"
@@ -159,10 +214,6 @@ set_source_files_properties(
 set_source_files_properties(
     src/agent/qml/TranscriptMermaidSwitch.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptMermaidSwitch.qml"
-)
-set_source_files_properties(
-    src/agent/qml/KetToolTip.qml
-    PROPERTIES QT_RESOURCE_ALIAS "KetToolTip.qml"
 )
 set_source_files_properties(
     src/agent/qml/AgentQuestionCard.qml
@@ -209,16 +260,17 @@ set_source_files_properties(
     src/agent/mermaid-pending.svg
     PROPERTIES QT_RESOURCE_ALIAS "mermaid-pending.svg"
 )
-set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
-    PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark.png"
-)
-
-foreach(icon zap shield lock arrow-up send square git-branch bot square-terminal file-code image search copy play)
-    set_source_files_properties(src/agent/icons/${icon}.svg
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
+foreach(theme light dark)
+    set_source_files_properties(
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-${theme}.svg"
+        PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-${theme}.svg"
     )
 endforeach()
+set_source_files_properties(
+    "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
+    PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-tile.svg"
+)
+
 set_source_files_properties(
     "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-light.png"
@@ -227,18 +279,7 @@ set_source_files_properties(
     "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-dark.png"
 )
-foreach(icon messages-square folder network unplug settings chevron-down chevron-right square-pen paperclip sparkles)
-    set_source_files_properties(src/agent/icons/${icon}.svg
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
-foreach(icon plus rotate-ccw check)
-    set_source_files_properties("${PROJECT_SOURCE_DIR}/assets/icons/lucide/${icon}.svg"
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
 
-set_source_files_properties(src/agent/qml/ChromeMetrics.js PROPERTIES QT_RESOURCE_ALIAS "ChromeMetrics.js")
 
 qt_add_resources(ketplus_ai "ketplus_ai_resources"
     PREFIX "/agent"
@@ -251,22 +292,41 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentScopeNotice.qml
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskBar.qml
+        src/agent/qml/AgentComposer.qml
+        src/agent/qml/AgentComposerAction.qml
+        src/agent/qml/AgentAttachmentChip.qml
+        src/agent/qml/AgentPermissionMenu.qml
+        src/agent/qml/AgentSkillsMenu.qml
         src/agent/qml/UsageLimitsPopover.qml
         src/agent/qml/ClaudeUsageSection.qml
         src/agent/qml/UsageRingButton.qml
-        src/agent/qml/TintedIcon.qml
         src/agent/qml/CompactWindowControl.qml
         src/agent/qml/ModelPicker.qml
+        src/agent/qml/ModelProviderTabs.qml
         src/agent/qml/MessageImageGallery.qml
+        src/agent/qml/TranscriptMessageImages.qml
         src/agent/qml/TranscriptRemoteGroup.qml
+        src/agent/qml/TranscriptNotice.qml
+    src/agent/qml/HeldMessageAction.qml
+    src/agent/qml/AgentProviderSetupCard.qml
+    src/agent/qml/AtlasResultCard.qml
         src/agent/qml/TranscriptActivityRow.qml
+        src/agent/qml/TranscriptActivityHeader.qml
+        src/agent/qml/TranscriptChangedFiles.qml
+        src/agent/qml/TranscriptFileDiff.qml
+        src/agent/qml/TranscriptFileMenu.qml
+        src/agent/qml/TranscriptFileStep.qml
+        src/agent/qml/TranscriptAgentNote.qml
+        src/agent/qml/TranscriptWorkReport.qml
+        src/agent/qml/WorkReportPane.qml
+        src/agent/qml/ConversationChangesPane.qml
+        src/agent/qml/ManageTagsDialog.qml
+        src/agent/qml/TranscriptTrimmedDetail.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml
-        src/agent/qml/KetToolTip.qml
         src/agent/qml/AgentQuestionCard.qml
         src/agent/qml/AgentApprovalCard.qml
         src/agent/qml/WarmTranscriptHost.qml
-        src/agent/qml/ChromeMetrics.js
         src/agent/qml/TranscriptPosition.js
         src/agent/qml/TranscriptRenderers.js
         src/agent/qml/TranscriptScrollController.qml
@@ -275,34 +335,36 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptMessage.qml
         src/agent/mermaid-placeholder.svg
         src/agent/mermaid-pending.svg
-        src/agent/icons/zap.svg
-        src/agent/icons/shield.svg
-        src/agent/icons/lock.svg
-        src/agent/icons/arrow-up.svg
-        src/agent/icons/send.svg
-        src/agent/icons/square.svg
-        src/agent/icons/git-branch.svg
-        src/agent/icons/bot.svg
-        src/agent/icons/sparkles.svg
-        src/agent/icons/square-terminal.svg
-        src/agent/icons/file-code.svg
-        src/agent/icons/image.svg
-        src/agent/icons/search.svg
-        src/agent/icons/copy.svg
-        src/agent/icons/play.svg
-        src/agent/icons/messages-square.svg
-        src/agent/icons/folder.svg
-        src/agent/icons/network.svg
-        src/agent/icons/unplug.svg
-        src/agent/icons/settings.svg
-        src/agent/icons/chevron-down.svg
-        src/agent/icons/chevron-right.svg
-        src/agent/icons/square-pen.svg
-        src/agent/icons/paperclip.svg
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
         "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/plus.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/rotate-ccw.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/check.svg"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
+
+
+
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
 )

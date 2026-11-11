@@ -1,3 +1,5 @@
+#include "KetIcons.h"
+#include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AtlasBuilderTab.h"
 #include "app/AtlasConversationPanel.h"
@@ -7,6 +9,7 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/AtlasIndex.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -15,16 +18,15 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QPushButton>
 #include <QQuickItem>
 #include <QQuickView>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTemporaryDir>
-#include <QToolButton>
 #include <QWebView>
 #include <QtTest>
 
@@ -42,6 +44,57 @@ class AtlasWorkspaceTest final : public QObject {
     }
 
   private slots:
+    void transcriptAtlasResultOpensExistingBuilder() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QVERIFY(writeAtlas(workspace.filePath("sample.ketatlas/atlas.json"), "Sample Atlas"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        auto* bar = window.findChild<ketplus::ActivityBar*>();
+        QVERIFY(bar);
+        auto* agentButton = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agentButton);
+        agentButton->click();
+        auto* chat = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(chat);
+        chat->setActivePath(workspace.path());
+        chat->setExecutionBranch("main", workspace.path(), 1);
+        const auto receipt = chat->inspectAtlasResult("sample.ketatlas/atlas.json");
+        QVERIFY(receipt.value("available").toBool());
+        QCOMPARE(receipt.value("title").toString(), QString("Sample Atlas"));
+        QCOMPARE(receipt.value("screens").toInt(), 0);
+        QCOMPARE(receipt.value("flows").toInt(), 1);
+        const auto previousCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restoreCli = qScopeGuard([previousCli] {
+            if (previousCli.isNull())
+                qunsetenv("KETPLUS_KETATLAS_CLI");
+            else
+                qputenv("KETPLUS_KETATLAS_CLI", previousCli);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", "/missing/ketatlas");
+        QSignalSpy viewerChanges(chat, &ketplus::AgentWorkspaceView::atlasResultsChanged);
+        chat->openAtlasResult("sample.ketatlas/atlas.json", true);
+        QVERIFY(!viewerChanges.isEmpty());
+        QVERIFY(!chat->inspectAtlasResult("sample.ketatlas/atlas.json")
+                     .value("viewerError")
+                     .toString()
+                     .isEmpty());
+        chat->openAtlasResult("sample.ketatlas/atlas.json", false);
+        auto* tabs = window.findChild<QTabWidget*>("atlasWorkspaceTabs");
+        QVERIFY(tabs);
+        auto* builder = qobject_cast<ketplus::AtlasBuilderTab*>(tabs->currentWidget());
+        QVERIFY(builder);
+        QTRY_COMPARE(
+            builder->atlasPath(),
+            QFileInfo(workspace.filePath("sample.ketatlas/atlas.json")).canonicalFilePath());
+        QVERIFY(builder->chatView()
+                    ->inspectAtlasResult("sample.ketatlas/atlas.json")
+                    .value("available")
+                    .toBool());
+    }
     void conversationHeaderOpensAtlasListAndEdit() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -56,9 +109,9 @@ class AtlasWorkspaceTest final : public QObject {
         window.show();
         auto* bar = window.findChild<ketplus::ActivityBar*>();
         QVERIFY(bar);
-        QVERIFY(!bar->findChild<QToolButton*>(QStringLiteral("atlasActivityButton")));
+        QVERIFY(!bar->findChild<QAbstractButton*>(QStringLiteral("atlasActivityButton")));
         auto* agentButton =
-            bar->findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            bar->findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agentButton);
         agentButton->click();
         auto* workspaceView = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -91,15 +144,16 @@ class AtlasWorkspaceTest final : public QObject {
                      1);
         const auto priorCli = qgetenv("KETPLUS_KETATLAS_CLI");
         qputenv("KETPLUS_KETATLAS_CLI", "/missing/ketatlas");
-        auto* open = panel->findChild<QPushButton*>(QStringLiteral("conversationAtlasOpen"));
+        auto* open = panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasOpen"));
         QVERIFY(open);
         open->click();
-        QTRY_VERIFY(panel->findChild<QPushButton*>(QStringLiteral("conversationAtlasInstallCli")));
+        QTRY_VERIFY(
+            panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasInstallCli")));
         if (priorCli.isNull())
             qunsetenv("KETPLUS_KETATLAS_CLI");
         else
             qputenv("KETPLUS_KETATLAS_CLI", priorCli);
-        auto* edit = panel->findChild<QPushButton*>(QStringLiteral("conversationAtlasEdit"));
+        auto* edit = panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasEdit"));
         QVERIFY(edit);
         edit->click();
         auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("atlasWorkspaceTabs"));
@@ -146,7 +200,7 @@ class AtlasWorkspaceTest final : public QObject {
         QCOMPARE(machineSelect->currentData().toString(), QStringLiteral("linux-1"));
         bar->setRemoteMachineSelected(true);
         QVERIFY(bar->findChild<QLabel*>(QStringLiteral("productMachineNotice"))->isVisible());
-        QVERIFY(!bar->findChild<QToolButton*>(QStringLiteral("productAddRepositoryButton"))
+        QVERIFY(!bar->findChild<QAbstractButton*>(QStringLiteral("productAddRepositoryButton"))
                      ->isEnabled());
     }
 
@@ -167,18 +221,18 @@ class AtlasWorkspaceTest final : public QObject {
         window.resize(1000, 700);
         window.show();
         auto* bar = window.findChild<ketplus::ActivityBar*>();
-        auto* atlasButton = window.findChild<QToolButton*>("atlasActivityButton");
-        auto* explorerButton = window.findChild<QToolButton*>("explorerActivityButton");
+        auto* atlasButton = window.findChild<QAbstractButton*>("atlasActivityButton");
+        auto* explorerButton = window.findChild<QAbstractButton*>("explorerActivityButton");
         auto* newAtlas = window.findChild<QAction*>("newAtlasTabAction");
         QVERIFY(bar && explorerButton && newAtlas);
         QVERIFY(!atlasButton); // Atlas is reached from the conversation header, not the sidebar.
         newAtlas->trigger();
         auto* tabs = window.findChild<QTabWidget*>("atlasWorkspaceTabs");
-        auto* addTab = window.findChild<QToolButton*>("atlasNewTabButton");
+        auto* addTab = window.findChild<QAbstractButton*>("atlasNewTabButton");
         QVERIFY(tabs);
         QVERIFY(addTab);
-        QVERIFY(QFile::exists(":/atlas/icons/plus.svg"));
-        QVERIFY(QFile::exists(":/atlas/icons/x.svg"));
+        QVERIFY(!ket::Icons::codeForLucide(u"plus").isEmpty());
+        QVERIFY(!ket::Icons::codeForLucide(u"x").isEmpty());
         QCOMPARE(tabs->cornerWidget(Qt::TopRightCorner), addTab);
         QTRY_VERIFY(tabs->rect().contains(QRect(addTab->mapTo(tabs, QPoint()), addTab->size())));
         QVERIFY(tabs->isVisible());
@@ -191,19 +245,23 @@ class AtlasWorkspaceTest final : public QObject {
         auto* firstGrid = first->findChild<QListWidget*>("atlasGrid");
         QTRY_COMPARE(firstGrid->count(), 2);
         theme.setMode(ketplus::ThemeManager::Mode::Dark);
-        QTRY_VERIFY(first->styleSheet().contains(QStringLiteral("#1B1F24")));
+        QTRY_VERIFY(first->styleSheet().contains(
+            ket::Tokens::color(u"page-bg", ket::Theme::Dark).name(QColor::HexArgb)));
         theme.setMode(ketplus::ThemeManager::Mode::Light);
-        QTRY_VERIFY(first->styleSheet().contains(QStringLiteral("#F7F5F5")));
-        auto* createAtlas = first->findChild<QPushButton*>("atlasCreateButton");
+        QTRY_VERIFY(first->styleSheet().contains(
+            ket::Tokens::color(u"page-bg", ket::Theme::Light).name(QColor::HexArgb)));
+        auto* createAtlas = first->findChild<QAbstractButton*>("atlasCreateButton");
         QVERIFY(createAtlas);
         createAtlas->click();
         QCOMPARE(tabs->count(), 1);
         auto* builder = qobject_cast<ketplus::AtlasBuilderTab*>(tabs->currentWidget());
         QVERIFY(builder);
         theme.setMode(ketplus::ThemeManager::Mode::Dark);
-        QTRY_VERIFY(builder->styleSheet().contains(QStringLiteral("#1B1F24")));
+        QTRY_VERIFY(builder->styleSheet().contains(
+            ket::Tokens::color(u"page-bg", ket::Theme::Dark).name(QColor::HexArgb)));
         theme.setMode(ketplus::ThemeManager::Mode::Light);
-        QTRY_VERIFY(builder->styleSheet().contains(QStringLiteral("#F7F5F5")));
+        QTRY_VERIFY(builder->styleSheet().contains(
+            ket::Tokens::color(u"page-bg", ket::Theme::Light).name(QColor::HexArgb)));
         QVERIFY(builder->conversationId().size() > 0);
         QVERIFY(builder->chatView()->compactMode());
         auto* placeholder = builder->findChild<QLabel*>("atlasBuilderPlaceholderTitle");
@@ -242,12 +300,12 @@ class AtlasWorkspaceTest final : public QObject {
         QCOMPARE(tabs->count(), 2);
         auto* duplicatePicker = qobject_cast<ketplus::AtlasTab*>(tabs->currentWidget());
         QVERIFY(duplicatePicker);
-        auto* duplicateCreate = duplicatePicker->findChild<QPushButton*>("atlasCreateButton");
+        auto* duplicateCreate = duplicatePicker->findChild<QAbstractButton*>("atlasCreateButton");
         QVERIFY(duplicateCreate);
         duplicateCreate->click();
         QCOMPARE(tabs->count(), 1);
         QCOMPARE(tabs->currentWidget(), builder);
-        auto* builderClose = qobject_cast<QToolButton*>(
+        auto* builderClose = qobject_cast<QAbstractButton*>(
             tabs->tabBar()->tabButton(tabs->indexOf(builder), QTabBar::RightSide));
         QVERIFY(builderClose);
         QCOMPARE(builderClose->objectName(), QStringLiteral("atlasCloseTabButton"));
@@ -279,7 +337,8 @@ class AtlasWorkspaceTest final : public QObject {
         QVERIFY(tabs->isVisible());
         QCOMPARE(tabs->widget(0), first);
         tabs->setCurrentWidget(second);
-        auto* close = qobject_cast<QToolButton*>(tabs->tabBar()->tabButton(1, QTabBar::RightSide));
+        auto* close =
+            qobject_cast<QAbstractButton*>(tabs->tabBar()->tabButton(1, QTabBar::RightSide));
         QVERIFY(close);
         QCOMPARE(close->objectName(), QStringLiteral("atlasCloseTabButton"));
         close->click();
@@ -329,7 +388,7 @@ class AtlasWorkspaceTest final : public QObject {
         QVERIFY(tabs);
         auto* picker = qobject_cast<ketplus::AtlasTab*>(tabs->currentWidget());
         QVERIFY(picker);
-        auto* create = picker->findChild<QPushButton*>("atlasCreateButton");
+        auto* create = picker->findChild<QAbstractButton*>("atlasCreateButton");
         QVERIFY(create && create->isVisible());
         create->click();
 
@@ -356,7 +415,7 @@ class AtlasWorkspaceTest final : public QObject {
         QCOMPARE(
             builder->atlasPath(),
             QFileInfo(workspace.filePath("a-created.ketatlas/atlas.json")).canonicalFilePath());
-        auto* collapse = builder->findChild<QToolButton*>("atlasBuilderChatCollapse");
+        auto* collapse = builder->findChild<QAbstractButton*>("atlasBuilderChatCollapse");
         QVERIFY(collapse && collapse->isVisible());
         auto* preview = builder->findChild<ketplus::AtlasTab*>("atlasBuilderPreview");
         QVERIFY(preview);
@@ -365,11 +424,18 @@ class AtlasWorkspaceTest final : public QObject {
         QCOMPARE(tabs->currentWidget(), builder);
         QCOMPARE(frame->geometry(), chatGeometry);
         QVERIFY(chat->isVisible());
-        QVERIFY(preview->geometry().contains(frame->geometry()));
-        QVERIFY(frame->width() <= 400);
-        auto* flow = builder->findChild<QLabel*>("atlasBuilderFlowContext");
-        QVERIFY(flow);
-        QCOMPARE(flow->text(), QStringLiteral("@Flow · Primary flow"));
+        QVERIFY(!preview->geometry().intersects(frame->geometry()));
+        QVERIFY(frame->width() <= 410);
+        // The mock names the flow under the Atlas and asks for a change to it in the composer.
+        auto* subtitle = builder->findChild<QLabel*>("atlasBuilderToolbarSubtitle");
+        QVERIFY(subtitle);
+        QCOMPARE(subtitle->text(), QStringLiteral("Primary flow · 0 screens"));
+        QCOMPARE(chat->composerHint(), QStringLiteral("Ask for a change to Primary flow…"));
+        auto* validated = builder->findChild<QWidget*>("atlasBuilderValidated");
+        QVERIFY(validated && validated->isVisible());
+        if (const auto capture = qEnvironmentVariable("KETPLUS_ATLAS_BUILDER_CAPTURE");
+            !capture.isEmpty())
+            QVERIFY(window.grab().save(capture));
         QCOMPARE(builder->promptContext().value("atlasFlowId").toString(),
                  QStringLiteral("primary"));
         QCOMPARE(builder->promptContext().value("atlasConversationId").toString(), conversation);
@@ -391,7 +457,7 @@ class AtlasWorkspaceTest final : public QObject {
         collapse->click();
         QVERIFY(!chat->isVisible());
         QCOMPARE(preview->width(), builder->width());
-        auto* aiButton = builder->findChild<QToolButton*>("atlasBuilderAiButton");
+        auto* aiButton = builder->findChild<QAbstractButton*>("atlasBuilderAiButton");
         QVERIFY(aiButton && aiButton->isVisible());
         aiButton->click();
         QVERIFY(chat->isVisible());
@@ -399,7 +465,7 @@ class AtlasWorkspaceTest final : public QObject {
 
         QVERIFY(QFile::remove(builder->atlasPath()));
         atlasIndex->scheduleRefresh(0);
-        auto* chooseAnother = builder->findChild<QPushButton*>("atlasChooseAnotherButton");
+        auto* chooseAnother = builder->findChild<QAbstractButton*>("atlasChooseAnotherButton");
         QVERIFY(chooseAnother);
         QTRY_VERIFY_WITH_TIMEOUT(chooseAnother->isVisible(), 5000);
         chooseAnother->click();
@@ -427,8 +493,18 @@ class AtlasWorkspaceTest final : public QObject {
         builder.resize(1100, 750);
         builder.show();
         auto* chat = builder.chatView();
-        auto* collapse = builder.findChild<QToolButton*>("atlasBuilderChatCollapse");
-        auto* ai = builder.findChild<QToolButton*>("atlasBuilderAiButton");
+        auto* back = builder.findChild<QAbstractButton*>("atlasBackToConversation");
+        QVERIFY(back);
+        QVERIFY(!back->isEnabled());
+        builder.setConversationId(QStringLiteral("atlas-conversation"));
+        QVERIFY(back->isEnabled());
+        QSignalSpy backRequested(&builder, &ketplus::AtlasBuilderTab::conversationRequested);
+        back->click();
+        QCOMPARE(backRequested.count(), 1);
+        QCOMPARE(backRequested.first().at(0).toString(), workspace.path());
+        QCOMPARE(backRequested.first().at(1).toString(), QStringLiteral("atlas-conversation"));
+        auto* collapse = builder.findChild<QAbstractButton*>("atlasBuilderChatCollapse");
+        auto* ai = builder.findChild<QAbstractButton*>("atlasBuilderAiButton");
         auto* prompt = chat->quickView()->rootObject()->findChild<QObject*>("agentPrompt");
         QVERIFY(collapse && ai && prompt);
         QVERIFY(chat->isVisible());
@@ -501,11 +577,25 @@ class AtlasWorkspaceTest final : public QObject {
         QCOMPARE(builder.conversationId(), QStringLiteral("live-builder"));
         QVERIFY(chat->isVisible());
         auto* frame = builder.findChild<QWidget*>("atlasBuilderChatFrame");
-        QVERIFY(frame && preview->geometry().contains(frame->geometry()));
-        QVERIFY(frame->width() <= 400);
+        QVERIFY(frame && !preview->geometry().intersects(frame->geometry()));
+        QVERIFY(frame->width() <= 410);
         if (const auto path = qEnvironmentVariable("KETPLUS_ATLAS_BUILDER_SCREENSHOT");
             !path.isEmpty())
             QVERIFY(builder.screen()->grabWindow(builder.winId()).save(path));
+    }
+
+    // #155 follow-up: an Atlas opened after choosing a zoom starts at it, not at 100%.
+    void atlasTabsOpenAtTheCurrentZoom() {
+        ketplus::ThemeManager theme(*qApp);
+        const auto restore = qScopeGuard([&theme] { theme.setInterfaceScale(14, 100); });
+        theme.setInterfaceScale(14, 125);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        ketplus::AtlasIndex index;
+        ketplus::AtlasTab atlas(&index);
+        QCOMPARE(atlas.property("_ketChromeZoom").toInt(), 125);
+        ketplus::AtlasBuilderTab builder(&index, root.path());
+        QCOMPARE(builder.property("_ketChromeZoom").toInt(), 125);
     }
 };
 

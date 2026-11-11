@@ -108,6 +108,8 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
       }) {
     machineId_ = storedString(QStringLiteral("machine-id"));
     workspaceId_ = storedString(QStringLiteral("workspace-id"));
+    accountName_ = storedString(QStringLiteral("account-name"));
+    accountUsername_ = storedString(QStringLiteral("account-username"));
     machineKeyVersion_ = storedString(QStringLiteral("machine-key-version")).toInt();
     if (machineKeyVersion_ < 1)
         machineKeyVersion_ = 1;
@@ -366,9 +368,11 @@ void CloudControlClient::signOut(LocalCallback callback) {
     // that enrollment and its upload progress stay for a build that talks to it.
     // The enrollment and its upload progress (see clearUploadProgress) go in one rewrite of the
     // credential file.
-    const QSet<QString> enrollment{QStringLiteral("machine-id"), QStringLiteral("workspace-id"),
-                                   QStringLiteral("machine-key-version"),
-                                   QStringLiteral("control-url"), QStringLiteral("device-pins")};
+    const QSet<QString> enrollment{
+        QStringLiteral("machine-id"),          QStringLiteral("workspace-id"),
+        QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
+        QStringLiteral("device-pins"),         QStringLiteral("account-name"),
+        QStringLiteral("account-username")};
     if (otherRelay_.isEmpty() && !credentials_.removeIf(
                                      [&enrollment](const QString& account) {
                                          return enrollment.contains(account) ||
@@ -383,6 +387,8 @@ void CloudControlClient::signOut(LocalCallback callback) {
     finishCredentialWaiters(false, QStringLiteral("Signed out."));
     machineId_.clear();
     workspaceId_.clear();
+    accountName_.clear();
+    accountUsername_.clear();
     daemonToken_.clear();
     registeredCloudCursors_.clear();
     eventUploadLimits_.clear();
@@ -430,6 +436,11 @@ QJsonObject CloudControlClient::status() const {
                        {QStringLiteral("sign_in_error"), signInError_}};
     if (!otherRelay_.isEmpty())
         values.insert(QStringLiteral("enrolled_control_url"), otherRelay_);
+    // Enrollments from before ADR 0109 have no name until the next sign-in.
+    if (!machineId_.isEmpty() && (!accountName_.isEmpty() || !accountUsername_.isEmpty()))
+        values.insert(QStringLiteral("account"),
+                      QJsonObject{{QStringLiteral("display_name"), accountName_},
+                                  {QStringLiteral("username"), accountUsername_}});
     return values;
 }
 
@@ -745,7 +756,8 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
 QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
-    QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata) {
+    QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata,
+    const QHash<QString, QString>& tagColors) {
     QJsonArray sessions;
     const QString machineName = QHostInfo::localHostName().left(128);
     QHash<QString, QString> revisions;
@@ -788,6 +800,19 @@ QJsonArray CloudControlClient::sessionSnapshots(
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.
+            // #125 and #429: the phone counts the conversations waiting for the user and
+            // shows each conversation's tags in their colours (lower-case label -> colour).
+            if (session.awaitingReply)
+                (*metadata)[session.id].insert(QStringLiteral("awaitingReply"), true);
+            if (!session.tags.isEmpty()) {
+                QJsonArray tags;
+                for (const QString& tag : session.tags)
+                    tags.append(
+                        QJsonObject{{QStringLiteral("label"), tag},
+                                    {QStringLiteral("color"),
+                                     tagColors.value(tag.toLower(), QStringLiteral("#5b6b7f"))}});
+                (*metadata)[session.id].insert(QStringLiteral("tags"), tags);
+            }
             const QJsonObject agent = agentMetadata.value(session.id);
             for (auto it = agent.constBegin(); it != agent.constEnd(); ++it)
                 (*metadata)[session.id].insert(it.key(), it.value());

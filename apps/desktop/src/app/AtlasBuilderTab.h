@@ -11,7 +11,11 @@
 class QFrame;
 class QLabel;
 class QPalette;
-class QToolButton;
+class QAbstractButton;
+
+namespace ket {
+class Badge;
+}
 
 namespace ketplus {
 
@@ -34,11 +38,12 @@ class AtlasBuilderTab final : public QWidget {
 
     void setConversationId(const QString& conversationId);
     void openExistingAtlas(const AtlasDescriptor& atlas);
-    void applyPalette(const QPalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const QPalette& palette, int zoomPercent = 100);
     void setActive(bool active);
 
   signals:
     void titleChanged(const QString& title);
+    void conversationRequested(const QString& workspaceRoot, const QString& conversationId);
     void atlasBuilt(const AtlasDescriptor& atlas);
 
   protected:
@@ -55,6 +60,8 @@ class AtlasBuilderTab final : public QWidget {
     void watchBundle();
     void refreshPreview();
     void updateAiButton();
+    void updateFlowContext();
+    void setPreviewValidated(bool validated);
     void observeMessages();
 
     AtlasIndex* index_{nullptr};
@@ -65,14 +72,18 @@ class AtlasBuilderTab final : public QWidget {
     QLabel* explanation_{nullptr};
     QLabel* guidance_{nullptr};
     QLabel* samplePrompt_{nullptr};
-    QLabel* flowContext_{nullptr};
+    QLabel* flowGlyph_{nullptr};
+    QLabel* subtitle_{nullptr};
+    ket::Badge* validated_{nullptr};
     QFrame* chatFrame_{nullptr};
     AgentWorkspaceView* chat_{nullptr};
-    QToolButton* collapse_{nullptr};
+    QAbstractButton* collapse_{nullptr};
     QWidget* toolbar_{nullptr};
-    QToolButton* aiButton_{nullptr};
+    QAbstractButton* back_{nullptr};
+    QAbstractButton* aiButton_{nullptr};
     QTimer activityPulse_;
     bool pulseBright_{true};
+    int zoomPercent_{100};
     QMetaObject::Connection messageChanged_;
     QMetaObject::Connection messageCountChanged_;
     QSet<QString> initialAtlasPaths_;

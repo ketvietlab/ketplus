@@ -1,6 +1,10 @@
 #include "app/MainWindow.h"
+#include "app/ReviewCapture.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
+#include <QSettings>
+#include <QTemporaryDir>
+#include <memory>
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -27,6 +31,19 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 
+    // Capture/benchmark runs use a clean temporary preference store and cannot
+    // overwrite the installed application's session, theme or window state.
+    std::unique_ptr<QTemporaryDir> captureSettings;
+    if (qEnvironmentVariableIsSet("KETPLUS_CAPTURE") ||
+        qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_STARTUP")) {
+        captureSettings = std::make_unique<QTemporaryDir>();
+        if (!captureSettings->isValid())
+            return 1;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, captureSettings->path());
+        ketplus::prepareReviewCapture();
+    }
+
     ketplus::registerKetFonts();
     ketplus::ThemeManager theme(app);
     ketplus::MainWindow window(theme);
@@ -43,22 +60,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Review evidence without a screen: with QT_QPA_PLATFORM=offscreen, KETPLUS_CAPTURE=<file>
-    // saves the window once it has laid out, then quits. KETPLUS_CAPTURE_THEME=light|dark
-    // previews that theme without saving it.
-    if (const QString capture = qEnvironmentVariable("KETPLUS_CAPTURE"); !capture.isEmpty()) {
-        const QString captureTheme = qEnvironmentVariable("KETPLUS_CAPTURE_THEME");
-        if (captureTheme == QLatin1String("light")) {
-            theme.previewMode(ketplus::ThemeManager::Mode::Light);
-        } else if (captureTheme == QLatin1String("dark")) {
-            theme.previewMode(ketplus::ThemeManager::Mode::Dark);
-        }
-        QTimer::singleShot(700, &app, [&app, &window, capture] {
-            const bool saved = window.grab().save(capture);
-            std::fprintf(stderr, "KETPLUS_CAPTURE %s: %s\n", saved ? "saved" : "failed",
-                         qPrintable(capture));
-            app.exit(saved ? 0 : 1);
-        });
-    }
+    // saves the window once it has laid out, then quits (docs/design-system.md).
+    if (const QString capture = qEnvironmentVariable("KETPLUS_CAPTURE"); !capture.isEmpty())
+        ketplus::runReviewCapture(theme, window, capture);
 
     if (qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_STARTUP")) {
         QTimer::singleShot(0, &app, [&app, &startupTimer] {

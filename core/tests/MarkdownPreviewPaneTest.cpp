@@ -1,8 +1,10 @@
 #include "preview/MarkdownPreviewPane.h"
+#include "KetRichRecipes.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QGraphicsSvgItem>
@@ -12,7 +14,6 @@
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPointingDevice>
-#include <QPushButton>
 #include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextBlock>
@@ -28,6 +29,7 @@ class MarkdownPreviewPaneTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase() { new ketplus::ThemeManager(*qApp, qApp); }
     void rendersMarkdownFromTheLiveBuffer();
     void appliesReadableDocumentTypography();
     void appliesCustomDocumentTypography();
@@ -96,10 +98,10 @@ preview.applyTheme(theme.palette());
     QTRY_VERIFY(browser->toPlainText().contains(QStringLiteral("A paragraph with")));
     QCOMPARE(browser->document()->documentMargin(), 28.0);
     const QString style = browser->document()->defaultStyleSheet();
-    QVERIFY(style.contains(QStringLiteral("font-size: 14px")));
-    QVERIFY(style.contains(QStringLiteral("line-height: 22px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 26px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 20px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 15px")));
+    QVERIFY(style.contains(QStringLiteral("line-height: 26px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 24px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 21px")));
     QVERIFY(style.contains(QStringLiteral("border-bottom: 1px solid")));
     QVERIFY(style.contains(QStringLiteral("font-family: \"")));
     QVERIFY(style.contains(QStringLiteral("margin: 0")));
@@ -116,7 +118,8 @@ preview.applyTheme(theme.palette());
         const bool isEmptySpacer = block.text().isEmpty() && currentTable == nullptr;
         table = table != nullptr ? table : currentTable;
         const qreal expectedLineHeight =
-            isHeading ? 24.0 : (isCodeBlock ? 21.0 : (isEmptySpacer ? 60.0 : 22.0));
+            isHeading ? (block.blockFormat().headingLevel() == 1 ? 34.0 : 29.0)
+                      : (isCodeBlock ? 25.0 : (isEmptySpacer ? 60.0 : 26.0));
         QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
         const auto expectedLineHeightType =
             isEmptySpacer ? QTextBlockFormat::ProportionalHeight : QTextBlockFormat::FixedHeight;
@@ -165,8 +168,8 @@ void MarkdownPreviewPaneTest::appliesCustomDocumentTypography() {
     const QString style = browser->document()->defaultStyleSheet();
     QVERIFY(style.contains(QStringLiteral("font-size: 17px")));
     QVERIFY(style.contains(QStringLiteral("line-height: 29px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 29px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 23px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 27px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 24px")));
 
     for (QTextBlock block = browser->document()->begin(); block.isValid(); block = block.next()) {
         const bool isCodeBlock = block.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
@@ -174,7 +177,7 @@ void MarkdownPreviewPaneTest::appliesCustomDocumentTypography() {
         const bool isEmptySpacer =
             block.text().isEmpty() && QTextCursor(block).currentTable() == nullptr;
         const qreal expectedLineHeight = block.blockFormat().headingLevel() > 0
-                                             ? 31.0
+                                             ? 38.0
                                              : (isCodeBlock ? 28.0 : (isEmptySpacer ? 60.0 : 29.0));
         QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
         const auto expectedLineHeightType =
@@ -270,6 +273,9 @@ done
 if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#f2f4f7"' "$config"; then
   exit 12
 fi
+if grep -q '{{' "$config"; then
+  exit 15
+fi
 if ! grep -q '"primaryColor":"#202c4b"' "$config"; then
   exit 14
 fi
@@ -341,7 +347,7 @@ void MarkdownPreviewPaneTest::opensVectorDiagramWithPanControls() {
 
     ketplus::MermaidDiagramDialog dialog(svgPath, ketplus::ThemePalette{});
     auto* view = dialog.findChild<QGraphicsView*>(QStringLiteral("mermaidDiagramView"));
-    auto* zoomIn = dialog.findChild<QPushButton*>(QStringLiteral("mermaidZoomIn"));
+    auto* zoomIn = dialog.findChild<QAbstractButton*>(QStringLiteral("mermaidZoomIn"));
     QVERIFY(view != nullptr);
     QVERIFY(zoomIn != nullptr);
     QCOMPARE(view->dragMode(), QGraphicsView::ScrollHandDrag);

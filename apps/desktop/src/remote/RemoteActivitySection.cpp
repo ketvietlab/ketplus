@@ -1,8 +1,13 @@
 #include "remote/RemoteActivitySection.h"
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "DaemonClient.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include <QAccessible>
 #include <QAccessibleWidget>
@@ -103,21 +108,16 @@ QString device(const QJsonObject& entry, const QHash<QString, QString>& names) {
 
 namespace {
 
-// Lucide ISC path data for the kinds of request.
-constexpr auto sendIcon =
-    R"(<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>)";
-constexpr auto stopIcon =
-    R"(<circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/>)";
-constexpr auto branchIcon =
-    R"(<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>)";
-constexpr auto trashIcon =
-    R"(<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>)";
-constexpr auto slidersIcon =
-    R"(<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>)";
-constexpr auto checkIcon = R"(<path d="M20 6 9 17l-5-5"/>)";
-constexpr auto terminalIcon =
-    R"(<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>)";
-constexpr auto closeIcon = R"(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)";
+// Semantic symbol names for the kinds of request.
+constexpr auto sendIcon = "send";
+constexpr auto stopIcon = "stop-circle";
+constexpr auto shieldIcon = "shield";
+constexpr auto branchIcon = "git-branch";
+constexpr auto trashIcon = "trash-2";
+constexpr auto slidersIcon = "sliders-horizontal";
+constexpr auto checkIcon = "check";
+constexpr auto terminalIcon = "square-terminal";
+constexpr auto closeIcon = "x";
 
 QByteArray actionIcon(const QString& kind) {
     if (kind == QStringLiteral("session.start_turn") || kind == QStringLiteral("session.steer"))
@@ -143,7 +143,7 @@ QLabel* label(const QString& text, const char* role, QWidget* parent = nullptr) 
     return value;
 }
 
-// Draws a Lucide glyph in the label's style-sheet colour.
+// Draws a Két Symbol in the label's style-sheet colour.
 class GlyphLabel final : public QLabel {
   public:
     GlyphLabel(QByteArray body, QWidget* parent = nullptr)
@@ -152,7 +152,7 @@ class GlyphLabel final : public QLabel {
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        lucide_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
+        symbol_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
     }
 
   private:
@@ -171,7 +171,9 @@ class ElidedLabel final : public QLabel {
     [[nodiscard]] bool elided() const { return text() != full_; }
     // As wide as the whole text, and able to shrink to nothing.
     [[nodiscard]] QSize sizeHint() const override {
-        return {fontMetrics().horizontalAdvance(full_), QLabel::sizeHint().height()};
+        // With the style sheet's font: the unpolished one is narrower and cut the title short.
+        const_cast<ElidedLabel*>(this)->ensurePolished();
+        return {fontMetrics().horizontalAdvance(full_) + 1, QLabel::sizeHint().height()};
     }
     [[nodiscard]] QSize minimumSizeHint() const override {
         return {0, QLabel::minimumSizeHint().height()};
@@ -259,6 +261,16 @@ class ActivityRow final : public QFrame {
     [[nodiscard]] QString fullText() const { return full_; }
 
   protected:
+    // The mock's separator: between rows, inset 18 px from both ends.
+    void paintEvent(QPaintEvent* event) override {
+        QFrame::paintEvent(event);
+        if (property("remoteFirst").toBool())
+            return;
+        QPainter painter(this);
+        const qreal inset = ket::Appearance::instance().scaled(18);
+        painter.fillRect(QRectF(inset, 0, width() - 2 * inset, 1),
+                         ket::Tokens::color(u"panel-border", ket::Appearance::instance().theme()));
+    }
     void resizeEvent(QResizeEvent* event) override {
         QFrame::resizeEvent(event);
         setToolTip(cut() ? full_ : QString());
@@ -333,7 +345,7 @@ RemoteActivitySection::RemoteActivitySection(remote::DaemonClient* daemon, QWidg
     setObjectName(QStringLiteral("remoteActivitySection"));
     auto* layout = new QVBoxLayout(this);
     chrome_geometry::margins(layout, 0, 0, 0, 0);
-    chrome_geometry::spacing(layout, 12);
+    chrome_geometry::spacing(layout, 18); // the page's rhythm
     auto* header = new QHBoxLayout;
     header->addWidget(label(QStringLiteral("Activity from paired devices"), "sectionTitle"));
     header->addStretch();
@@ -349,19 +361,31 @@ RemoteActivitySection::RemoteActivitySection(remote::DaemonClient* daemon, QWidg
     chrome_geometry::spacing(rows_, 0);
     layout->addWidget(panel);
 
-    auto* footer = new QHBoxLayout;
+    // As tall as Show all whether or not it shows, as the mock.
+    auto* footerRow = new QWidget(this);
+    chrome_geometry::minimumHeight(footerRow, 28);
+    auto* footer = new QHBoxLayout(footerRow);
+    chrome_geometry::margins(footer, 0, 0, 0, 0);
+    chrome_geometry::spacing(footer, 8);
+    // The mock's shield before the note.
+    auto* shield = new GlyphLabel(shieldIcon, this);
+    shield->setProperty("remoteRole", QStringLiteral("activityIcon"));
+    chrome_geometry::fixedSize(shield, 13, 13);
+    footer->addWidget(shield);
     auto* note = label(QStringLiteral("Recorded on this Mac as each request finishes. Reading "
                                       "files and transcripts is not listed."),
                        "trustNote");
     note->setWordWrap(true);
     footer->addWidget(note, 1);
-    showAll_ = new QPushButton(QStringLiteral("Show all"), this);
+    auto* showAll = new ket::Button(QStringLiteral("Show all"), ket::ButtonVariant::Ghost, this);
+    showAll->setControlSize(ket::ControlSize::Small);
+    showAll_ = showAll;
     showAll_->setObjectName(QStringLiteral("remoteActivityShowAll"));
     showAll_->setProperty("remoteTertiary", true);
     showAll_->hide();
-    connect(showAll_, &QPushButton::clicked, this, &RemoteActivitySection::showAll);
+    connect(showAll_, &QAbstractButton::clicked, this, &RemoteActivitySection::showAll);
     footer->addWidget(showAll_);
-    layout->addLayout(footer);
+    layout->addWidget(footerRow);
     render({});
 }
 
@@ -483,13 +507,13 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     auto* headerLayout = new QHBoxLayout(header);
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new QPushButton(header);
+    auto* close = new ket::IconButton(ket::Icons::icon(u"close"), QStringLiteral("Close"), header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     close->setIcon(QIcon(
-        lucide_icon::pixmap(closeIcon, palette().color(QPalette::WindowText), QSize(16, 16))));
+        symbol_icon::pixmap(closeIcon, palette().color(QPalette::WindowText), QSize(16, 16))));
     chrome_geometry::fixedSize(close, 30, 30);
-    connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(close, &QAbstractButton::clicked, &dialog, &QDialog::reject);
     headerLayout->addWidget(close);
     root->addWidget(header);
 
@@ -530,19 +554,20 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     actions->addStretch();
     bool revoking = false;
     if (revoke) {
-        auto* revokeButton = new QPushButton(QStringLiteral("Revoke access"), footer);
+        auto* revokeButton =
+            new ket::Button(QStringLiteral("Revoke access"), ket::ButtonVariant::Danger, footer);
         revokeButton->setObjectName(QStringLiteral("remoteActivityRevoke"));
         revokeButton->setProperty("remoteDanger", true);
-        connect(revokeButton, &QPushButton::clicked, &dialog, [&dialog, &revoking] {
+        connect(revokeButton, &QAbstractButton::clicked, &dialog, [&dialog, &revoking] {
             revoking = true;
             dialog.accept();
         });
         actions->addWidget(revokeButton);
     }
-    auto* done = new QPushButton(QStringLiteral("Close"), footer);
+    auto* done = new ket::Button(QStringLiteral("Close"), ket::ButtonVariant::Primary, footer);
     done->setObjectName(QStringLiteral("remoteActivityClose"));
     done->setProperty("remotePrimary", true);
-    connect(done, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(done, &QAbstractButton::clicked, &dialog, &QDialog::accept);
     actions->addWidget(done);
     root->addWidget(footer);
 

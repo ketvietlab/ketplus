@@ -42,16 +42,26 @@ path that must not trust the download server or the network.
   builds and other platforms use a disabled implementation, and tests install a
   fake.
 - Sparkle's standard windows show release notes, download progress and the
-  install prompt. KetPlus adds Settings → Updates (version, last check, Check
-  for Updates, automatic checks, background downloads), a "Check for Updates…"
+  install prompt. KetPlus adds Settings → Updates, a "Check for Updates…"
   item in the application menu and the sidebar user menu, and a sidebar
-  reminder.
+  reminder. Since #166 the page follows the design mock. It has:
+  - a version card: "Up to date" with the last check, "Available", or "Ready"
+    with Restart now (Sparkle's install prompt) and Later;
+  - "Check for updates automatically" and "Download updates automatically"
+    checkboxes. Turning checks off also turns downloads off, and turning
+    downloads on also turns checks on. The mock shows only the second one; the
+    first keeps the scheduled check under the user's control;
+  - a "Check for updates" button.
+
+  The mock's Channel select is left out, because the feed has a single channel.
 - Automatic checks are on by default (`SUEnableAutomaticChecks`), so Sparkle
   never asks for permission on the second launch. Background downloads are off
   until the user turns them on. KetPlus always asks before relaunching.
 - Scheduled checks use Sparkle's gentle reminders: if KetPlus is not in focus,
-  Sparkle does not raise a modal alert. The sidebar shows "Update available"
-  until the user opens it or Sparkle ends the update session.
+  Sparkle does not raise a modal alert. The sidebar shows "Update ready" until
+  the user opens it or Sparkle ends the update session. Its detail reads
+  "Restart to install" once Sparkle has downloaded the update, and "Review and
+  install" before that (2026-11-10, #164).
 - Installing an update relaunches only the Desktop. The running daemon keeps
   serving its turns. The new Desktop then performs the ADR 0003
   `prepare_upgrade` handshake: an idle daemon is replaced, and a busy daemon

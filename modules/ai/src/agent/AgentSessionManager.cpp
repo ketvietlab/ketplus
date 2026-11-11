@@ -20,6 +20,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <utility>
 
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionState.h"
@@ -228,6 +229,16 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
+    installTagCatalog();
+    // A reviewer or work report read sent before the daemon listed its sessions is answered
+    // "unknown session".
+    connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
+        if (restoring)
+            return;
+        retryReviewerReads();
+        for (const QString& path : std::exchange(workReportReadsToRetry_, {}))
+            readWorkReport(path);
+    });
     connect(server_, &CodexAppServer::readyChanged, this, [this](const bool ready) {
         if (ready)
             loadModels();
@@ -284,6 +295,9 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
+            {QStringLiteral("tags"), listedTags(session)},
+            // Before the first turn the labels wait here (#429); they go out with the start.
+            {QStringLiteral("tagsEditable"), server_->hasTagSupport()},
             {QStringLiteral("agentTurnNumber"), session->agentTurnNumber},
             {QStringLiteral("agentTurnTitle"), session->agentTurnTitle},
             {QStringLiteral("agentTurnReply"), session->agentTurnReply},
@@ -294,6 +308,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
              session->running && (!session->pendingQuestionRequests.isEmpty() ||
                                   !session->pendingInputIds.isEmpty())},
             {QStringLiteral("completed"), session->completed},
+            {QStringLiteral("awaitingReply"), session->awaitingReply && !session->running},
             {QStringLiteral("seen"), session->lastSeenCursor >= session->lastEventCursor},
             {QStringLiteral("lastTurnStartedAt"), session->lastTurnStartedAt},
             {QStringLiteral("ownsWorktree"), session->ownsWorktree},
@@ -338,6 +353,8 @@ QVariantList AgentSessionManager::archivedConversations() const {
                 QVariantMap{{QStringLiteral("id"), session->id},
                             {QStringLiteral("path"), path.key()},
                             {QStringLiteral("title"), session->title},
+                            {QStringLiteral("number"), session->number},
+                            {QStringLiteral("archived_at"), session->archivedAt},
                             {QStringLiteral("provider"), listedProvider(session->options)},
                             {QStringLiteral("running"), session->running}});
         }
@@ -395,6 +412,39 @@ QVariantMap AgentSessionManager::conversationConfiguration(const QString& worktr
 QVariantList AgentSessionManager::backgroundTasks(const QString& worktreePath) const {
     const auto found = sessions_.constFind(normalizedPath(worktreePath));
     return found == sessions_.cend() ? QVariantList{} : (*found)->backgroundTasks;
+}
+
+void AgentSessionManager::heldMessageAction(const QString& worktreePath, const QString& messageId,
+                                            bool release) {
+    const QString path = normalizedPath(worktreePath);
+    const SessionPtr session = sessions_.value(path);
+    if (!session || session->threadId.isEmpty() || !server_->usesDaemon()) {
+        emit heldMessageResult(path, session ? session->threadId : QString{}, messageId,
+                               {{"error", "Held-message delivery needs a daemon conversation."}});
+        return;
+    }
+    const QString conversation = session->threadId;
+    server_->call(
+        release ? QStringLiteral("agentMessages/release") : QStringLiteral("agentMessages/read"),
+        {{"threadId", conversation}, {"messageIds", QJsonArray{messageId}}},
+        [this, path, conversation, messageId](const QJsonObject& result,
+                                              const QString& transportError) {
+            // A delayed reply cannot update a different conversation selected in this workspace.
+            const auto current = sessions_.value(path);
+            if (!current || current->threadId != conversation)
+                return;
+            const QString error = !transportError.isEmpty() ? transportError
+                                  : result.value("ok").toBool()
+                                      ? QString{}
+                                      : result.value("error_message").toString();
+            const auto messages = result.value("messages").toArray();
+            emit heldMessageResult(
+                path, conversation, messageId,
+                error.isEmpty() && !messages.isEmpty()
+                    ? messages.first().toObject().toVariantMap()
+                    : QVariantMap{
+                          {"error", error.isEmpty() ? "Message status is unavailable." : error}});
+        });
 }
 
 void AgentSessionManager::stopBackgroundTask(const QString& worktreePath, const QString& taskId) {
@@ -701,7 +751,9 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
                 "bundle. Every manifest "
                 "must contain a non-empty title plus `screens` and `flows` arrays. Do not modify "
                 "an existing Atlas unless the user explicitly asks. Keep all writes inside the "
-                "active worktree, and verify the generated manifest before finishing. Do not ask "
+                "active worktree, and verify the generated manifest before finishing. Finish with "
+                "an explicit Markdown link to each resulting `<slug>.ketatlas/atlas.json`. Do not "
+                "ask "
                 "the user to choose filenames or implementation details when a safe, reasonable "
                 "choice can be inferred. When KetPlus lists the ket-atlas default skill, follow "
                 "it.%1\nUser request:\n%2")
@@ -875,6 +927,11 @@ void AgentSessionManager::steerPrompt(const QString& worktreePath, const QString
             session->steeringPending = false;
             if (error.isEmpty()) {
                 auto steered = message(QStringLiteral("user"), shown, QStringLiteral("You"));
+                steered.insert("eventType", "turn.steered");
+                // Sessions without a provider option are Codex, as labelProvider reads them.
+                const QString provider =
+                    session->options.value(QStringLiteral("provider")).toString();
+                steered.insert("provider", provider.isEmpty() ? QStringLiteral("codex") : provider);
                 if (!imageSources.isEmpty())
                     steered.insert(QStringLiteral("images"), imageSources);
                 appendMessage(session, steered);
@@ -1487,6 +1544,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     // settings were reset.
     const bool discovered = !session;
     const bool archivedByDaemon = stored.contains(QStringLiteral("archived_at"));
+    const QDateTime archivedAt = QDateTime::fromString(
+        stored.value(QStringLiteral("archived_at")).toString(), Qt::ISODateWithMs);
     if (!session) {
         auto& conversations = conversationsByPath_[path];
         if (!archivedByDaemon && conversations.size() == 1 &&
@@ -1520,6 +1579,10 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
                                         {"adapter", stored.value("adapter")}});
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
+    // A change of this desktop's own is on its way; its answer carries the newer list.
+    session->awaitingReply = stored.value(QStringLiteral("awaiting_reply")).toBool();
+    if (stored.contains(QStringLiteral("tags")) && !session->tagSyncPending)
+        session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();
     session->agentTurnNumber = agentTurn.value(QStringLiteral("number")).toString();
     session->agentTurnTitle = agentTurn.value(QStringLiteral("title")).toString();
@@ -1554,6 +1617,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     session->daemonGeneration = generation;
     if (!discovered)
         applyDaemonArchiveState(session, archivedByDaemon);
+    session->archivedAt = archivedByDaemon ? archivedAt : QDateTime();
     session->lastEventCursor = qMax(session->lastEventCursor,
                                     stored.value(QStringLiteral("last_event_cursor")).toInteger());
     session->lastSeenCursor =

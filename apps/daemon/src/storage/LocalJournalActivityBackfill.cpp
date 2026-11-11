@@ -6,6 +6,8 @@
 #include <QSqlQuery>
 #include <QVariant>
 
+#include <limits>
+
 namespace ketplus::daemon {
 namespace {
 // Replay rows indexed per background pass; each row costs a few indexed statements.
@@ -20,10 +22,9 @@ bool isBusy(const QSqlError& error) {
 }
 
 bool removeMarker(QSqlDatabase& database, const QString& session, const qint64 generation,
-                  QSqlError* error) {
+                  QSqlError* error, const QString& table = QStringLiteral("activity_backfill")) {
     QSqlQuery marker(database);
-    marker.prepare(
-        QStringLiteral("DELETE FROM activity_backfill WHERE session_id=? AND generation=?"));
+    marker.prepare(QStringLiteral("DELETE FROM %1 WHERE session_id=? AND generation=?").arg(table));
     marker.addBindValue(session);
     marker.addBindValue(generation);
     if (!marker.exec()) {
@@ -110,6 +111,126 @@ bool LocalJournal::catchUpActivity(const QString& session, const qint64 generati
     return removeMarker(database_, session, generation, error);
 }
 
+bool LocalJournal::listActivityFiles(const QString& session, const qint64 generation, bool* listed,
+                                     QSqlError* error) {
+    *listed = false;
+    QSqlQuery position(database_);
+    position.prepare(QStringLiteral("SELECT after_group,after_cursor FROM activity_files_backfill "
+                                    "WHERE session_id=? AND generation=?"));
+    position.addBindValue(session);
+    position.addBindValue(generation);
+    if (!position.exec() || !position.next()) {
+        *error = position.lastError();
+        return false;
+    }
+    const qint64 afterGroup = position.value(0).toLongLong();
+    const qint64 afterCursor = position.value(1).toLongLong();
+    position.finish();
+    // Keys first, in index order: a pass reads at most passRows items whatever their family.
+    // The row value seeks activity_items_group to the marker, so a late pass does not walk the
+    // items before it. Ungrouped items have group 0; the first pass starts after all of them.
+    QSqlQuery keys(database_);
+    keys.prepare(QStringLiteral(
+        "SELECT group_cursor,first_cursor,item_id,family,last_cursor FROM activity_items "
+        "WHERE session_id=? AND generation=? AND (group_cursor,first_cursor)>(?,?) ORDER BY "
+        "group_cursor,first_cursor LIMIT ?"));
+    const qint64 seekCursor = afterGroup > 0 ? afterCursor : std::numeric_limits<qint64>::max();
+    for (const QVariant& value :
+         QVariantList{session, generation, afterGroup, seekCursor, passRows})
+        keys.addBindValue(value);
+    if (!keys.exec()) {
+        *error = keys.lastError();
+        return false;
+    }
+    struct Edit {
+        qint64 group;
+        qint64 first;
+        QString item;
+        qint64 last;
+    };
+    QList<Edit> edits;
+    int scanned = 0;
+    qint64 lastGroup = afterGroup, lastFirst = afterCursor;
+    while (keys.next()) {
+        ++scanned;
+        lastGroup = keys.value(0).toLongLong();
+        lastFirst = keys.value(1).toLongLong();
+        if (keys.value(3).toString() == QLatin1String("edit"))
+            edits.append(
+                {lastGroup, lastFirst, keys.value(2).toString(), keys.value(4).toLongLong()});
+    }
+    if (keys.lastError().isValid()) {
+        *error = keys.lastError();
+        return false;
+    }
+    keys.finish();
+    // Each edit's current completion, read in this pass's write transaction, so a live
+    // completion journaled meanwhile is not overwritten by an older read.
+    qsizetype bytes = 0;
+    bool exhausted = scanned < passRows;
+    for (qsizetype index = 0; index < edits.size(); ++index) {
+        const auto& edit = edits.at(index);
+        QSqlQuery completion(database_);
+        completion.prepare(QStringLiteral(
+            "SELECT payload FROM replay_events WHERE session_id=? AND generation=? AND cursor=? "
+            "AND event_type='item.completed'"));
+        completion.addBindValue(session);
+        completion.addBindValue(generation);
+        completion.addBindValue(edit.last);
+        if (!completion.exec()) {
+            *error = completion.lastError();
+            return false;
+        }
+        if (!completion.next())
+            continue;
+        const QByteArray payload = completion.value(0).toByteArray();
+        completion.finish();
+        QString failure;
+        if (!recordActivityFiles(session, generation, edit.group, edit.item, edit.first,
+                                 QJsonDocument::fromJson(payload).object().value("item").toObject(),
+                                 &failure)) {
+            *error = QSqlError(QString(), failure, QSqlError::StatementError);
+            return false;
+        }
+        *listed = true;
+        bytes += payload.size();
+        // The edit that crosses the byte budget is the last one this pass lists.
+        if (bytes >= passBytes && index + 1 < edits.size()) {
+            lastGroup = edit.group;
+            lastFirst = edit.first;
+            exhausted = false;
+            break;
+        }
+    }
+    if (exhausted)
+        return removeMarker(database_, session, generation, error,
+                            QStringLiteral("activity_files_backfill"));
+    QSqlQuery advance(database_);
+    advance.prepare(QStringLiteral("UPDATE activity_files_backfill SET after_group=?, "
+                                   "after_cursor=? WHERE session_id=? AND generation=?"));
+    for (const QVariant& value : QVariantList{lastGroup, lastFirst, session, generation})
+        advance.addBindValue(value);
+    if (!advance.exec()) {
+        *error = advance.lastError();
+        return false;
+    }
+    return true;
+}
+
+bool LocalJournal::activityProjectionPending(const QString& session, const qint64 generation,
+                                             bool* pending) const {
+    QSqlQuery marker(database_);
+    marker.prepare(QStringLiteral(
+        "SELECT EXISTS(SELECT 1 FROM activity_backfill WHERE session_id=? AND generation=?) OR "
+        "EXISTS(SELECT 1 FROM activity_files_backfill WHERE session_id=? AND generation=?)"));
+    for (const QVariant& value : QVariantList{session, generation, session, generation})
+        marker.addBindValue(value);
+    if (!marker.exec() || !marker.next())
+        return false;
+    *pending = marker.value(0).toBool();
+    return true;
+}
+
 bool LocalJournal::activityBackfillPending(const QString& session, const qint64 generation,
                                            bool* pending, QString* error) const {
     QSqlQuery marker(database_);
@@ -187,7 +308,52 @@ LocalJournal::ActivityBackfill LocalJournal::backfillActivityGroups() {
     if (!next.next()) {
         if (next.lastError().isValid())
             return fail(next.lastError());
-        return ActivityBackfill::Idle;
+        next.finish();
+        // The index is drained; list the files of groups indexed before activity_files.
+        QSqlQuery files(database_);
+        if (!files.exec(QStringLiteral(
+                "SELECT f.session_id,f.generation,s.id IS NOT NULL FROM activity_files_backfill f "
+                "LEFT JOIN sessions s ON s.id=f.session_id AND s.generation=f.generation ORDER BY "
+                "f.rowid LIMIT 1")))
+            return fail(files.lastError());
+        if (!files.next()) {
+            if (files.lastError().isValid())
+                return fail(files.lastError());
+            return ActivityBackfill::Idle;
+        }
+        const QString session = files.value(0).toString();
+        const qint64 generation = files.value(1).toLongLong();
+        const bool live = files.value(2).toBool();
+        files.finish();
+        QSqlError failure;
+        if (live) {
+            bool listed = false;
+            if (!listActivityFiles(session, generation, &listed, &failure))
+                return fail(failure);
+            bool pending = true;
+            if (!activityProjectionPending(session, generation, &pending))
+                return fail(QSqlError(QString(), QStringLiteral("Activity files state unreadable."),
+                                      QSqlError::StatementError));
+            // New files, or the listing finished and groups become visible: snapshots reload.
+            if (listed || !pending) {
+                QSqlQuery revision(database_);
+                revision.prepare(QStringLiteral("UPDATE replay_projection_state SET "
+                                                "revision=revision+1 WHERE session_id=? AND "
+                                                "generation=?"));
+                revision.addBindValue(session);
+                revision.addBindValue(generation);
+                if (!revision.exec())
+                    return fail(revision.lastError());
+            }
+        } else if (!removeMarker(database_, session, generation, &failure,
+                                 QStringLiteral("activity_files_backfill"))) {
+            return fail(failure);
+        }
+        QSqlQuery commit(database_);
+        if (!commit.exec(QStringLiteral("COMMIT")))
+            return fail(commit.lastError());
+        transaction = false;
+        return ActivityBackfill::Progress;
     }
     const QString session = next.value(0).toString();
     const qint64 generation = next.value(1).toLongLong();
@@ -221,7 +387,9 @@ LocalJournal::ActivityBackfill LocalJournal::backfillActivityGroups() {
 
 bool LocalJournal::hasPendingActivityBackfill() const {
     QSqlQuery query(database_);
-    return query.exec(QStringLiteral("SELECT 1 FROM activity_backfill LIMIT 1")) && query.next();
+    return query.exec(QStringLiteral("SELECT 1 FROM activity_backfill UNION ALL SELECT 1 FROM "
+                                     "activity_files_backfill LIMIT 1")) &&
+           query.next();
 }
 
 } // namespace ketplus::daemon

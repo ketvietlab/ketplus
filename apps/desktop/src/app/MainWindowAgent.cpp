@@ -1,3 +1,4 @@
+#include "KetDialog.h"
 #include "agent/CodexAppServer.h"
 #include "app/AgentConversationWidth.h"
 #include "app/AgentWorktreeCreator.h"
@@ -5,7 +6,7 @@
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
-#include "app/WorktreesWorkspacePage.h"
+#include "app/WaitingBadge.h"
 #include "atlas/AtlasTab.h"
 #include "atlas/ManagedAtlasViewers.h"
 #include "workspace/AtlasIndex.h"
@@ -111,6 +112,7 @@ void MainWindow::ensureAgentWorkspace() {
     }
 
     agentWorkspace_ = new AgentWorkspaceView(workspaceSplit_);
+    connectAtlasResults(agentWorkspace_);
     auto* atlasViewers = ManagedAtlasViewers::instance();
     agentWorkspace_->setAtlasRunningCount(atlasViewers->runningCount());
     connect(atlasViewers, &ManagedAtlasViewers::changed, agentWorkspace_, [this, atlasViewers] {
@@ -145,6 +147,10 @@ void MainWindow::ensureAgentWorkspace() {
     updateRepositoryName();
     agentWorktreeCreator_ = new AgentWorktreeCreator(this);
     agentManager_ = new AgentSessionManager(this);
+    connect(this, &QObject::destroyed,
+            [owner = static_cast<QObject*>(this)] { WaitingBadge::instance().forget(owner); });
+    setupSidebarStorage();
+    setupSidebarAccount();
     connect(
         agentManager_, &AgentSessionManager::executionContextChanged, this,
         [this](const QString& path, const QString& conversation, const QString& branch,
@@ -167,8 +173,11 @@ void MainWindow::ensureAgentWorkspace() {
                                                      ? agentManager_->status(path)
                                                      : QStringLiteral("Worktree missing"),
                                                  agentManager_->isRunning(path));
+                agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
             }
         });
+    connect(agentWorkspace_, &AgentWorkspaceView::compactWindowRequested, this,
+            [this] { setCompactConversationWindow(!compactConversationWindow_); });
     connect(agentWorkspace_, &AgentWorkspaceView::executionWorktreeRequested, this, [this] {
         const auto path = agentWorkspace_->activePath();
         const auto conversation = agentManager_->activeConversationId(path);
@@ -195,7 +204,11 @@ void MainWindow::ensureAgentWorkspace() {
                 promotedSidebarRepository_ = sidebarRepositoryForPath(selectedPath);
                 scheduleSidebarRefresh(true);
             },
-            agentWorkspace_->executionPath(), roots, currentRepository);
+            agentWorkspace_->executionPath(), roots, currentRepository,
+            // Worktrees are made here, for the conversation; there is no Worktrees screen.
+            [this](const QString& repository, qint64 revision) {
+                createConversationWorktree(repository, revision);
+            });
     });
     connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
             [this] { agentWorkspace_->setExecutionBranch({}); });
@@ -210,7 +223,7 @@ void MainWindow::ensureAgentWorkspace() {
         return agentManager_->transcriptPayload(agentWorkspace_->activePath(), scope, key, kind);
     });
     workspaceSplit_->insertWidget(0, agentWorkspace_);
-    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceFontSizePixels);
+    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     agentWorkspace_->setAgentAvailable(agentManager_->isAvailable());
     // ADR 0027: `#` completion lists every numbered conversation on this computer.
     agentWorkspace_->setConversationDirectory(
@@ -227,6 +240,17 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setProviderRuntime);
     agentWorkspace_->setProviderRuntime(agentManager_->providerStatus()->state());
     agentManager_->providerStatus()->refresh();
+    // ADR 0110: the provider setup guide in the conversation.
+    agentWorkspace_->setTurnGuide(
+        [status = agentManager_->providerStatus()](const QString& provider, const QString& code,
+                                                   const QString& message, const QString& model) {
+            return status->turnGuide(provider, code, message, model);
+        });
+    connect(agentWorkspace_, &AgentWorkspaceView::providerRecheckRequested,
+            agentManager_->providerStatus(),
+            [status = agentManager_->providerStatus()] { status->refresh(true); });
+    connect(agentWorkspace_, &AgentWorkspaceView::typeInTerminalRequested, this,
+            &MainWindow::typeInTerminal);
     agentWorkspace_->setClaudeUsageRequester([this](AgentWorkspaceView::UsageReply reply) {
         agentManager_->appServer()->call("provider/claudeCredentials/analytics.refresh", {},
                                          std::move(reply));
@@ -251,6 +275,32 @@ void MainWindow::ensureAgentWorkspace() {
             [this](const QString& message) {
                 statusBar()->showMessage(tr("Unable to stop the background task: %1").arg(message),
                                          7000);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::heldMessageActionRequested, this,
+            [this](const QString& messageId, bool release) {
+                agentManager_->heldMessageAction(agentWorkspace_->activePath(), messageId, release);
+            });
+    connect(agentManager_, &AgentSessionManager::heldMessageResult, this,
+            [this](const QString& path, const QString&, const QString& messageId,
+                   const QVariantMap& result) {
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                    agentWorkspace_->acceptHeldMessageState(messageId, result);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::reviewerRequested, this,
+            [this] { agentManager_->readReviewer(agentWorkspace_->activePath()); });
+    connect(agentWorkspace_, &AgentWorkspaceView::reviewerChangeRequested, this,
+            [this](const QString& number, const QString& newProvider) {
+                agentManager_->setReviewer(agentWorkspace_->activePath(), number, newProvider);
+            });
+    connect(agentManager_, &AgentSessionManager::reviewerResult, this,
+            [this](const QString& path, const QString&, const QVariantMap& result) {
+                if (normalizedPath(path) != normalizedPath(agentWorkspace_->activePath()))
+                    return;
+                agentWorkspace_->acceptReviewerState(result);
+                if (const QString error = result.value("error").toString();
+                    !error.isEmpty() && result.value("change").toBool())
+                    statusBar()->showMessage(tr("Unable to change the reviewer: %1").arg(error),
+                                             7000);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskStopRequested, this,
             [this](const QString& taskId) {
@@ -332,8 +382,11 @@ void MainWindow::ensureAgentWorkspace() {
         }
         openAgentTerminalTab();
     });
+    connectAgentWorkReport();
+    connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
+            &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,
-            &MainWindow::showSettings);
+            &MainWindow::showSettingsSection);
     connect(agentWorkspace_, &AgentWorkspaceView::productNavigationRequested, this,
             [this](const QString& destination) {
                 if (destination == QStringLiteral("search"))
@@ -370,23 +423,29 @@ void MainWindow::ensureAgentWorkspace() {
                 statusBar()->showMessage(QStringLiteral("Created worktree for %1").arg(branchName),
                                          3000);
                 promotedWorktreePath_ = normalizedPath(path);
+                if (!pickerWorktreeAgentPath_.isEmpty()) {
+                    moveConversationToCreatedWorktree(path, branchName);
+                    git_->scheduleRefresh(0);
+                    return;
+                }
                 const bool forConversation = pendingConversationWorktree_;
                 pendingConversationWorktree_ = false;
                 switchToWorktree(path);
                 if (forConversation && agentManager_ != nullptr)
                     agentManager_->markActiveConversationOwnsWorktree(path);
+                // "Start a conversation in it": open the new worktree's conversation.
+                if (std::exchange(openCreatedWorktree_, false) && !forConversation)
+                    setAgentWorkspaceVisible(true);
                 git_->scheduleRefresh(0);
             });
-    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this, [this] {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->setPruning(false);
-        git_->scheduleRefresh(0);
-    });
+    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this,
+            [this] { git_->scheduleRefresh(0); });
     connect(agentWorktreeCreator_, &AgentWorktreeCreator::failed, this,
             [this](const QString& error) {
                 pendingConversationWorktree_ = false;
-                if (worktreesWorkspace_ != nullptr)
-                    worktreesWorkspace_->setPruning(false);
+                openCreatedWorktree_ = false;
+                pickerWorktreeAgentPath_.clear();
+                pickerWorktreeConversation_.clear();
                 if (!pendingDeleteConversationPath_.isEmpty() ||
                     !pendingDeleteWorktreePaths_.isEmpty()) {
                     clearPendingWorktreeDeletion();
@@ -422,11 +481,25 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentWorkspace_, &AgentWorkspaceView::stopRequested, this,
             [this] { agentManager_->cancel(agentWorkspace_->activePath()); });
+    connect(agentWorkspace_, &AgentWorkspaceView::conversationWorktreeRequested, this,
+            [this](const QString& id) {
+                changeAgentConversationWorktree(agentWorkspace_->activePath(), id);
+            });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationRenameRequested, this,
             [this](const QString& conversationId) {
                 QTimer::singleShot(0, this, [this, conversationId] {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
+            });
+    agentWorkspace_->setTagCatalog(agentManager_->tagCatalog());
+    connect(agentManager_, &AgentSessionManager::tagCatalogChanged, agentWorkspace_,
+            &AgentWorkspaceView::setTagCatalog);
+    connect(agentWorkspace_, &AgentWorkspaceView::tagCatalogSaveRequested, agentManager_,
+            &AgentSessionManager::saveTagCatalog);
+    connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
+            [this](const QString& conversationId, const QString& label, const bool tagged) {
+                agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,
+                                                  label, tagged);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationArchiveRequested, this,
             [this](const QString& conversationId) {
@@ -515,6 +588,11 @@ void MainWindow::ensureAgentWorkspace() {
                     git_->scheduleRefresh(350);
                 }
             });
+    connect(agentManager_, &AgentSessionManager::workingDetailChanged, this,
+            [this](const QString& path, const QString& detail) {
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                    agentWorkspace_->setWorkingDetail(detail);
+            });
     connect(agentManager_, &AgentSessionManager::sessionStateChanged, this,
             [this](const QString& path, const QString& title, const QString& status,
                    const bool running) {
@@ -527,12 +605,15 @@ void MainWindow::ensureAgentWorkspace() {
                             ? status
                             : QStringLiteral("Worktree missing"),
                         running);
+                    agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
                 }
             });
     connect(agentManager_, &AgentSessionManager::conversationsChanged, this,
             [this](const QString& path, const QVariantList& conversations) {
                 if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
                     agentWorkspace_->setConversations(conversations);
+                WaitingBadge::instance().report(this, normalizedPath(path),
+                                                WaitingBadge::countWaiting(conversations));
                 // The sidebar lists every repository's conversations, not only this worktree's.
                 scheduleSidebarRefresh();
             });
@@ -550,7 +631,6 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentManager_, &AgentSessionManager::activityChanged, this, [this] {
         refreshAgentWorktrees();
-        refreshWorktreesWorkspace();
         // A completed agent turn may have created or removed linked worktrees.
         git_->scheduleRefresh(200);
     });
@@ -594,14 +674,19 @@ void MainWindow::createAgentWorktree() {
         return;
     }
 
-    const QString repositoryPath = workspaceRoot_;
-    AgentWorktreeDialog dialog(repositoryPath, this);
-    if (dialog.exec() != QDialog::Accepted || workspaceRoot_ != repositoryPath) {
+    // A shortcut can ask again while the card is open.
+    if (agentDialogOpen(this, QStringLiteral("agentWorktreeDialogCard")))
         return;
-    }
-
-    agentWorktreeCreator_->create(repositoryPath, primaryWorktreePath(), dialog.branchName(),
-                                  dialog.baseBranch());
+    const QString repositoryPath = workspaceRoot_;
+    auto* form = new AgentWorktreeDialog(repositoryPath);
+    connect(form->present(this), &ket::Dialog::accepted, this, [this, form, repositoryPath] {
+        // The folder can change while the card is open.
+        if (workspaceRoot_ != repositoryPath)
+            return;
+        openCreatedWorktree_ = form->startConversation();
+        agentWorktreeCreator_->create(repositoryPath, primaryWorktreePath(), form->branchName(),
+                                      form->baseBranch());
+    });
 }
 
 QString MainWindow::primaryWorktreePath() const {
@@ -623,6 +708,9 @@ void MainWindow::startNewAgentConversation() {
         agentManager_->newSession(activePath);
         return;
     }
+    // A shortcut can ask again while the card is open.
+    if (agentDialogOpen(this, QStringLiteral("agentConversationDialogCard")))
+        return;
     const QString repositoryPath = workspaceRoot_;
     // The sidebar selects by the conversation on screen, which can sit in another
     // worktree of this repository than the open folder; the dialog opens on the
@@ -636,32 +724,37 @@ void MainWindow::startNewAgentConversation() {
             continue;
         choices.append(worktree);
     }
-    AgentWorktreeDialog dialog(anchorPath, this, AgentWorktreeDialog::Purpose::Conversation,
-                               primaryWorktreePath(), choices);
+    auto* form =
+        new AgentWorktreeDialog(anchorPath, nullptr, AgentWorktreeDialog::Purpose::Conversation,
+                                primaryWorktreePath(), choices);
     // Worktrees made outside KetPlus (another agent, a terminal) change nothing the
     // repository watcher sees, so the cached list can miss them: list them again and
-    // update the dialog in place rather than delay it.
-    connect(git_, &GitService::worktreesChanged, &dialog,
-            [&dialog](const QVector<GitWorktree>& worktrees) { dialog.setWorktrees(worktrees); });
+    // update the form in place rather than delay it.
+    connect(git_, &GitService::worktreesChanged, form, &AgentWorktreeDialog::setWorktrees);
+    connect(form->present(this), &ket::Dialog::accepted, this, [this, form, repositoryPath] {
+        // The worktree list belongs to the repository the card opened on.
+        if (workspaceRoot_ != repositoryPath)
+            return;
+        if (!form->createWorktree()) {
+            const QString selected = form->selectedWorktreePath();
+            if (!selected.isEmpty())
+                switchToWorktree(selected);
+            agentManager_->newSession(selected.isEmpty() ? agentWorkspace_->activePath()
+                                                         : selected);
+            return;
+        }
+        pendingConversationWorktree_ = true;
+        // A new worktree is cut from a branch, not from another worktree: Git resolves
+        // the base ref the same way in any checkout of the repository.
+        agentWorktreeCreator_->create(primaryWorktreePath(), primaryWorktreePath(),
+                                      form->branchName(), form->baseBranch());
+    });
     git_->refresh();
-    // The worktree list belongs to the repository the dialog opened on.
-    if (dialog.exec() != QDialog::Accepted || workspaceRoot_ != repositoryPath)
-        return;
-    if (!dialog.createWorktree()) {
-        const QString selected = dialog.selectedWorktreePath();
-        if (!selected.isEmpty())
-            switchToWorktree(selected);
-        agentManager_->newSession(selected.isEmpty() ? agentWorkspace_->activePath() : selected);
-        return;
-    }
-    pendingConversationWorktree_ = true;
-    // A new worktree is cut from a branch, not from another worktree: Git resolves
-    // the base ref the same way in any checkout of the repository.
-    agentWorktreeCreator_->create(primaryWorktreePath(), primaryWorktreePath(), dialog.branchName(),
-                                  dialog.baseBranch());
 }
 
 void MainWindow::setAgentWorkspaceVisible(const bool visible) {
+    if (!visible && compactConversationWindow_)
+        setCompactConversationWindow(false);
     // Sidebar navigation selects its target after showing the workspace. When
     // it already shows this workspace, activating the previous session resets
     // and hydrates a transcript that will immediately be replaced. A retained
@@ -742,121 +835,6 @@ void MainWindow::syncAgentWorkspaceContext(const bool loadTranscript) {
     agentWorkspace_->setActivePath(workspaceRoot_);
     agentManager_->activate(workspaceRoot_, loadTranscript, navigatingConversationId_);
     refreshAgentWorktrees();
-}
-
-void MainWindow::renameAgentConversation(const QString& worktreePath,
-                                         const QString& conversationId) {
-    if (agentManager_ == nullptr || conversationId.isEmpty())
-        return;
-    for (const QVariant& value : agentManager_->conversations(worktreePath)) {
-        const QVariantMap conversation = value.toMap();
-        if (conversation.value(QStringLiteral("id")).toString() != conversationId)
-            continue;
-        bool accepted = false;
-        const QString title = QInputDialog::getText(
-            this, QStringLiteral("Rename Conversation"), QStringLiteral("Name:"), QLineEdit::Normal,
-            conversation.value(QStringLiteral("title")).toString(), &accepted);
-        if (accepted)
-            agentManager_->renameConversation(worktreePath, conversationId, title);
-        return;
-    }
-}
-
-// Conversation actions take the conversation's own worktree: the sidebar lists conversations of
-// every worktree and repository, not only the one open in this window.
-void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
-                                                  const QString& conversationId) {
-    if (agentManager_ == nullptr || conversationId.isEmpty())
-        return;
-    const QString path = worktreePath;
-    bool known = false;
-    bool running = false;
-    bool forkable = false;
-    for (const QVariant& value : agentManager_->conversations(path)) {
-        const QVariantMap conversation = value.toMap();
-        if (conversation.value(QStringLiteral("id")).toString() != conversationId)
-            continue;
-        known = true;
-        running = conversation.value(QStringLiteral("running")).toBool();
-        forkable = conversation.value(QStringLiteral("forkable")).toBool();
-        break;
-    }
-    if (!known)
-        return;
-
-    QMenu menu(this);
-    auto* fork = menu.addAction(tr("Fork this conversation"));
-    fork->setObjectName(QStringLiteral("forkConversationAction"));
-    fork->setEnabled(forkable);
-    menu.addSeparator();
-    auto* archive = menu.addAction(tr("Archive conversation"));
-    archive->setObjectName(QStringLiteral("archiveConversationAction"));
-    auto* remove = menu.addAction(tr("Delete conversation…"));
-    remove->setObjectName(QStringLiteral("deleteConversationAction"));
-    remove->setEnabled(!running);
-    if (running) {
-        auto* reason = menu.addAction(tr("Stop the conversation before deleting it."));
-        reason->setEnabled(false);
-    }
-    QAction* selected = menu.exec(QCursor::pos());
-    if (selected == fork)
-        forkAgentConversation(path, conversationId);
-    else if (selected == archive)
-        archiveAgentConversation(path, conversationId);
-    else if (selected == remove)
-        deleteAgentConversation(path, conversationId);
-}
-
-void MainWindow::forkAgentConversation(const QString& worktreePath, const QString& conversationId) {
-    if (agentManager_ == nullptr || conversationId.isEmpty())
-        return;
-    statusBar()->showMessage(tr("Forking the conversation…"));
-    agentManager_->forkConversation(worktreePath, conversationId);
-}
-
-void MainWindow::archiveAgentConversation(const QString& worktreePath,
-                                          const QString& conversationId) {
-    if (agentManager_ == nullptr || conversationId.isEmpty())
-        return;
-    if (!agentManager_->archiveConversation(worktreePath, conversationId)) {
-        statusBar()->showMessage(QStringLiteral("The conversation could not be archived."), 5000);
-        return;
-    }
-    statusBar()->showMessage(QStringLiteral("Conversation archived. Restore it from Settings."),
-                             5000);
-}
-
-void MainWindow::deleteAgentConversation(const QString& worktreePath,
-                                         const QString& conversationId) {
-    if (agentManager_ == nullptr || conversationId.isEmpty())
-        return;
-    const QString path = worktreePath;
-    const QString id = conversationId;
-    QStringList owned = agentManager_->conversationOwnedWorktreePaths(path, id);
-    const bool hasLinkedWorktree = agentManager_->conversationOwnsWorktree(path, id);
-    if (hasLinkedWorktree && owned.isEmpty())
-        owned = QStringList{path};
-    AgentConversationDeleteDialog dialog(hasLinkedWorktree ? owned : QStringList{}, this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    clearPendingWorktreeDeletion();
-    if (dialog.deleteLinkedWorktree()) {
-        if (!hasLinkedWorktree) {
-            auto* notice =
-                new QMessageBox(QMessageBox::Warning, tr("Unable to delete worktree"),
-                                tr("This conversation is not linked to a dedicated worktree."),
-                                QMessageBox::Ok, this);
-            notice->setObjectName(QStringLiteral("worktreeDeletionError"));
-            notice->setAttribute(Qt::WA_DeleteOnClose);
-            notice->open();
-            return;
-        }
-        pendingDeleteConversationPath_ = path;
-        pendingDeleteWorktreePaths_ = owned;
-        pendingDeleteWorktreeRepository_ = primaryWorktreePath();
-        pendingDeleteWorktreeForce_ = dialog.forceDeleteWorktree();
-    }
-    agentManager_->deleteConversation(path, id);
 }
 
 void MainWindow::clearPendingWorktreeDeletion() {
@@ -941,6 +919,7 @@ void MainWindow::refreshAgentWorktrees() {
                                              ? agentManager_->status(path)
                                              : QStringLiteral("Worktree missing"),
                                          agentManager_->isRunning(path));
+        agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
     }
 }
 

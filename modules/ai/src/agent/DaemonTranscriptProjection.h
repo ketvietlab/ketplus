@@ -26,6 +26,22 @@ QString providerProtocolErrorText(const QJsonObject& data);
 QString providerProtocolErrorTitle();
 // Title of the note for a `provider.runtime` event (an untested or unreadable CLI version).
 QString providerRuntimeNoticeTitle();
+// Title of a provider failure's row, live or projected from `runtime.error`.
+QString agentErrorTitle();
+// What an approval asks to use, as the mock's "Approval needed · <tool>": Command, File
+// change, an MCP server's tool, or the Claude or Cursor tool.
+QString approvalToolLabel(const QJsonObject& details);
+// An approval's end: "approved", "denied" or "expired"; "resolved" when the journal predates
+// the decision.
+QString approvalOutcome(const QString& eventType, const QJsonObject& data);
+// One approval from two rows with its key: a request and its receipt from different pages, or
+// a pending card and the receipt that settled it. The receipt wins; the request keeps its
+// tool and command. A row without them stays hidden until its request is read.
+QVariantMap joinedApprovalRows(const QVariantMap& older, const QVariantMap& newer);
+// A failure's row as the mock words it when the provider's message says what happened: its
+// process exited, or the model is at capacity (subtype "modelCapacity", which offers to
+// switch the model). Other failures keep agentErrorTitle() and the message.
+void presentAgentError(QVariantMap& entry, const QString& message);
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.
@@ -33,6 +49,7 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages);
 // Note and title for an `agent_message.state` event (held, failed or expired message).
 QString agentMessageStateText(const QJsonObject& data);
 QString agentMessageNoticeTitle();
+QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId);
 
 // Pure presentation projection. Historical events must never change runtime
 // lifecycle or submit/resolve approvals.

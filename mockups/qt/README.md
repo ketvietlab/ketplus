@@ -23,25 +23,26 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ## Evidence
 
 ```sh
-KetPlusMock --smoke                                    # every screen, fails on QML warnings
+KetPlusMock --smoke                                    # every screen and the teams checks, fails on QML warnings
 KetPlusMock --edition=lite --smoke                     # the same for KétPlus, and every Search result
 KetPlusMock --edition=lite --smoke --keys              # also chooses View > Search in Files by keyboard
 KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer) or mermaid (diagrams instead of their source)
+KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
 ```
 
 Screens and states (`--screen` / `--state`):
 
 | Screen | States | Covers |
 |---|---|---|
-| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), details pane (changes, Atlas, terminal) |
+| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `report`, `report-running`, `report-details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), work report at the end of a turn (counted by the app from the agent's items; live activity while running), right pane with closable document tabs (changes, Atlas, terminal, file, plan and the work report; `report-details` opens the Report tab, also in the pane's Open content menu) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `worktrees` | | Manage worktrees, create dialog, manage menu |
+| `teams` | `task`, `large`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team. `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
@@ -59,7 +60,9 @@ Screens and states (`--screen` / `--state`):
 
 KétPlus (Lite) runs with `--edition=lite` (`qml/LiteMain.qml`): the editor of
 `core/src/app` with one side panel at a time, the terminal and the two Settings
-pages Lite has. `--chrome=windows` or `--chrome=linux` draws the title bar and
+pages Lite has. The window opens on the editor with the side panel closed; an
+activity-bar button or its shortcut (⌘B, ⇧⌘F, ⇧⌘G) opens that panel, and the same
+button or shortcut again closes it. `--chrome=windows` or `--chrome=linux` draws the title bar and
 the in-window menu bar (File, Edit, Go, Git, View, with the labels and
 shortcuts of `core/src/app/MainWindowActions.cpp`); macOS keeps the system's.
 The menu bar works without a pointer: F10 focuses File, Alt with the app's
@@ -68,10 +71,12 @@ Enter, Space or Down opens one. `--keys` activates the window to check this, so
 it takes the keyboard focus for a moment; without an active window it reports
 "skipped". Search reads the editor's own file sources, so each result opens its
 file at a line that holds the match (Markdown in Source); the Lite smoke checks
-every result.
+every result. Closing the terminal's last tab hides the terminal, as in the app;
+showing it again opens a new tab. The Lite smoke checks this too.
 
 | Screen (`--edition=lite`) | States | Covers |
 |---|---|---|
+| `editor` | | The default: the editor with the side panel closed |
 | `explorer` | `terminal`, `markdown` | Activity bar, explorer, tabs, editor, the terminal below it, `docs/licensing.md` in Preview |
 | `explorer` | `welcome` | No folder open: Open Folder and recent folders |
 | `explorer` | `windows`, `linux` | The same window with that platform's chrome, whatever `--chrome` says |
@@ -79,7 +84,9 @@ every result.
 | `changes` | | Source Control, as in Pro |
 | `settings` | `typography` | Appearance and Typography only |
 
-App-wide: Quick search (⌘K), the repository and worktree picker, conversation
+There is no Worktrees screen: a worktree is made when a conversation needs one
+(Repository & worktree → Create worktree…, or the New conversation card) and
+switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
 context menu (rename, fork, change worktree, archive, delete), tag filter
 (click a tag in the header), compact window (⇧⌘M), update notice and toasts.
 
@@ -115,6 +122,61 @@ the steps of an activity group.
 | Reconnecting, turn-ending error | `runtime.error` (`will_retry`) | ✓ | ✓ | ✓ |
 | Turn end: completed, stopped, failed; Claude cost | `turn.completed`, `usage.session` | ✓ | ✓ | ✓ |
 | Detail trimmed by journal compaction | ketvietlab/ketplus#128 | ✓ | – | – |
+
+## Teams
+
+A concept, not built in the app: several conversations that share one goal. Agent messaging
+(ADR 0027) has no owner of a task, no roles and no shared view of the work; a team adds them.
+
+- **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
+  the conversations that belong to no team. The folder lists its members' conversations (leader,
+  developers, reviewer), each with its role as its first tag. The icon folds it, the name opens
+  the team's page, and the count is the decisions that wait for the user. A conversation belongs to one team at a time.
+- **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
+  offers New conversation and New team…. A team has one leader and one reviewer, always; New team
+  asks for a name, a goal, an integration branch, who merges a reviewed task into it (the leader or
+  the user; the team menu changes it later), the number of developers (one to five) and the
+  model and effort each role uses, from the app's Model & context dialog. The reviewer's dialog
+  offers Claude only, the provider that keeps a review read-only (ADR 0067). Create starts every
+  member as a named conversation (Lead *team*, Developer 1, Reviewer 1); developers have no lane
+  until the leader gives one. Add member starts one more developer: its lane, its agent and a
+  required name. A conversation that already exists joins without a dialog, as a developer:
+  dragged onto the team's folder, or from its menu's Add to *team*. The role is the
+  conversation's first tag, in the sidebar and in its header; the team sets it, so the tag menu
+  lists it locked and cannot remove it. A member's header has no Reviewer choice: its
+  team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
+  Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
+  has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove
+  from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the
+  conversations; a removed member's open tasks become unassigned. A team keeps its leader, its
+  reviewer and at least one developer, and has five developers at most; an action that would break
+  that is disabled and says why. A conversation joins only a team of its own repository. The
+  conversations New team and Add member start are kept beside the fixtures' (`Main.started`), so
+  they outlive their team.
+- **Checks**: `--smoke` drags a conversation onto a team's folder with the pointer, then runs
+  `TeamsScreen.selfCheck`: a removed member and a deleted team leave their conversations, team ids
+  stay unique after a deletion, one to five developers, no join across repositories.
+- **The page** (`qml/screens/TeamsScreen.qml`) answers three questions in order: what waits for
+  the user, where every task stands, and who holds what.
+- **Leader**: one conversation that assigns tasks, orders the merges into the team's integration
+  branch and is the only one that reports to the user. It also writes the requirements (the
+  acceptance criteria of each task) unless New team turns that off. It neither codes nor reviews.
+- **Developer**: owns a lane, a named set of path prefixes. An edit outside the lane is flagged on
+  the task ("Outside its lane"); the leader decides who makes that change.
+- **Reviewer**: one conversation that checks every lane against the acceptance criteria and never
+  merges. It keeps up with two or three developers; at four the page says reviews will queue and
+  suggests a second team (`teams/large`).
+- **Task**: one owner, who also holds its worktree; To do, In progress, In review, Blocked or Done;
+  its branch, worktree, pull request and what it depends on. Only the leader changes the
+  acceptance criteria, and a change is recorded in the task's history. Hand over changes the owner,
+  who receives all of that.
+- **Waiting for you**: a question that changes the product waits here with its choices instead of
+  in one conversation. The answer goes to the leader and to the owner of the task it blocks.
+- **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
+
+Not drawn yet: the leader's digest and a task assignment in a transcript, and a team on the
+phone. Before the app builds this, ket-qt needs a group
+header whose name activates instead of folding, and Két Symbol a team icon (the mock uses `bot`).
 
 ## Provider setup
 

@@ -36,7 +36,10 @@ by conversation, generation and context revision. There is no history backfill.
 Existing sessions retain a default pointer but acquire recorded context only on a
 new submission or switch, starting after the current cursor. Switch pointer, context history, normalized
 `conversation.context_changed` event and successful idempotency result commit in
-one transaction. A stale stored session cannot overwrite a later context.
+one transaction. A stale stored session cannot overwrite a later context. Since
+2026-11-09 the event also names the target's `branch` and `worktree_name`, the folder's
+name, so Desktop reads "Moved to worktree feat/x · The agent now works in name". The
+path itself stays in `session_contexts` and never enters the event.
 
 New user-message and queued-turn events pin their default `context_revision` at
 submission. Codex provider events with a known turn ID reuse that turn's explicit
@@ -149,3 +152,6 @@ original root; next-turn preparation uses the newly selected root. Startup,
 shutdown and pending approvals remain fenced, and unsupported providers remain
 explicitly unavailable. Qt rejects stale context read responses; iOS retains
 verified result metadata until the relay reports an equal/newer context revision.
+
+ADR 0105 (2026-11-10) lets local IPC list another repository's worktrees with
+`repository_path` before switching, as the mock's picker does.

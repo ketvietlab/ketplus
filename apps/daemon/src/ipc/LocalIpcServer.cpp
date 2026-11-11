@@ -53,6 +53,8 @@ LocalIpcServer::LocalIpcServer(SessionHost* host, const QString& serverName,
     server_->setSocketOptions(QLocalServer::UserAccessOption);
     connect(server_, &QLocalServer::newConnection, this, &LocalIpcServer::acceptConnections);
     connect(host_, &SessionHost::eventReady, this, &LocalIpcServer::broadcastEvent);
+    connect(host_, &SessionHost::teamEvent, this, &LocalIpcServer::broadcastTeamEvent);
+    connect(host_, &SessionHost::noticeReady, this, &LocalIpcServer::broadcastNotice);
 }
 
 LocalIpcServer::~LocalIpcServer() { close(); }
@@ -288,23 +290,35 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                   {QStringLiteral("maximum_frame_bytes"),
                    static_cast<qint64>(protocol::maximumFrameBytes)},
                   {QStringLiteral("capabilities"),
-                   QJsonArray{
-                       QStringLiteral("storage.size.read"), QStringLiteral("storage.size.apply"),
-                       QStringLiteral("storage.retention.read"),
-                       QStringLiteral("storage.retention.apply"), QStringLiteral("session.read"),
-                       QStringLiteral("session.control"), QStringLiteral("session.delete"),
-                       QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
-                       QStringLiteral("session.configuration.read"),
-                       QStringLiteral("session.configuration.apply"),
-                       QStringLiteral("session.execution_policy.apply"),
-                       QStringLiteral("session.mode.apply"),
-                       QStringLiteral("attachment.stage.begin"),
-                       QStringLiteral("attachment.stage.chunk"),
-                       QStringLiteral("attachment.stage.commit"),
-                       QStringLiteral("attachment.stage.cancel"),
-                       // MCP media is journaled as media_ref blocks resolved from the
-                       // owner-only <state dir>/media store (same user; no IPC bytes).
-                       QStringLiteral("media.local_store")}}}));
+                   QJsonArray{QStringLiteral("storage.size.read"),
+                              QStringLiteral("storage.size.apply"),
+                              QStringLiteral("storage.retention.read"),
+                              QStringLiteral("storage.retention.apply"),
+                              QStringLiteral("storage.options.read"),
+                              QStringLiteral("storage.options.apply"),
+                              QStringLiteral("storage.compaction.start"),
+                              QStringLiteral("storage.compaction.read"),
+                              QStringLiteral("storage.breakdown.read"),
+                              QStringLiteral("storage.export.start"),
+                              QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
+                              QStringLiteral("session.control"), QStringLiteral("session.delete"),
+                              QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
+                              QStringLiteral("session.agent_messages.read"),
+                              QStringLiteral("session.agent_messages.release"),
+                              QStringLiteral("session.reviewer.get"),
+                              QStringLiteral("session.reviewer.set"),
+                              QStringLiteral("session.work_report.read"),
+                              QStringLiteral("session.configuration.read"),
+                              QStringLiteral("session.configuration.apply"),
+                              QStringLiteral("session.execution_policy.apply"),
+                              QStringLiteral("session.mode.apply"),
+                              QStringLiteral("attachment.stage.begin"),
+                              QStringLiteral("attachment.stage.chunk"),
+                              QStringLiteral("attachment.stage.commit"),
+                              QStringLiteral("attachment.stage.cancel"),
+                              // MCP media is journaled as media_ref blocks resolved from the
+                              // owner-only <state dir>/media store (same user; no IPC bytes).
+                              QStringLiteral("media.local_store")}}}));
         return;
     }
     if (type == QStringLiteral("daemon.hello")) {
@@ -479,6 +493,22 @@ void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
     socket->write(frame);
 }
 
+// ADR 0112: team.changed and team.removed reach every authenticated client, never an agent.
+void LocalIpcServer::broadcastTeamEvent(const QString& type, const QJsonObject& payload) {
+    const QJsonObject envelope{
+        {QStringLiteral("protocol_version"), protocol::currentVersion},
+        {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("message_type"), type},
+        {QStringLiteral("sent_at"), protocol::timestamp()},
+        {QStringLiteral("payload"), payload}};
+    const QList<QLocalSocket*> sockets = connections_.keys();
+    for (QLocalSocket* socket : sockets) {
+        const auto it = connections_.constFind(socket);
+        if (it != connections_.cend() && it->authenticated && it->agentToken.isEmpty())
+            send(socket, envelope);
+    }
+}
+
 void LocalIpcServer::broadcastEvent(const QJsonObject& event) {
     QJsonObject envelope{
         {QStringLiteral("protocol_version"), protocol::currentVersion},
@@ -507,6 +537,21 @@ void LocalIpcServer::broadcastEvent(const QJsonObject& event) {
             }
             send(socket, outgoing);
         }
+    }
+}
+
+// Not journaled and not replayed: a client that misses one reads the state again on connect.
+void LocalIpcServer::broadcastNotice(const QString& type, const QJsonObject& payload) {
+    const QJsonObject envelope{
+        {QStringLiteral("protocol_version"), protocol::currentVersion},
+        {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("message_type"), type},
+        {QStringLiteral("payload"), payload}};
+    const QList<QLocalSocket*> sockets = connections_.keys();
+    for (QLocalSocket* socket : sockets) {
+        const auto it = connections_.constFind(socket);
+        if (it != connections_.cend() && it->authenticated && it->agentToken.isEmpty())
+            send(socket, envelope);
     }
 }
 

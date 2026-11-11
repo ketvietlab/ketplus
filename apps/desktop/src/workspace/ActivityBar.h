@@ -14,8 +14,16 @@ class QLabel;
 class QMenu;
 class QResizeEvent;
 class QToolButton;
+namespace ket {
+class NavItem;
+class UpdatePill;
+class Banner;
+} // namespace ket
 
 namespace ketplus {
+
+class SidebarSearchButton;
+class SidebarTagFilterChip;
 
 struct ThemePalette;
 
@@ -26,7 +34,8 @@ class ActivityBar final : public QWidget {
     enum class Mode { Explorer, Search, SourceControl, AgentWorkspace, Atlas, Remote, Settings };
     Q_ENUM(Mode)
 
-    static constexpr int kWidth = 214;
+    // Medium logical pixels; the shown width follows interface zoom, as in the mock.
+    static constexpr int kWidth = 240;
     static constexpr int kMinWidth = 180;
     static constexpr int kMaxWidth = 360;
 
@@ -34,16 +43,22 @@ class ActivityBar final : public QWidget {
 
     void setMode(Mode mode);
     void setSidebarWidth(int width);
+    // Unscaled (Medium) width, persisted as `sidebar/width`.
     [[nodiscard]] int sidebarWidth() const noexcept { return sidebarWidth_; }
     void setSourceControlAvailable(bool available);
     void setSourceControlCount(int count);
     void setRepositories(const QVector<SidebarRepository>& repositories);
+    void setTagFilter(const QString& tag);
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
     void setRemoteMachineSelected(bool selected);
     // Shows the "Update ready" reminder above the identity button; empty hides it.
-    void setPendingUpdate(const QString& version);
-    void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void setStorageStatus(const QVariantMap& result);
+    // `downloaded` reads "Restart to install"; otherwise the update still needs a review.
+    void setPendingUpdate(const QString& version, bool downloaded = false);
+    // The signed-in account from remote.status (ADR 0109); empty shows the product name.
+    void setAccount(const QString& name);
+    void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
     [[nodiscard]] Mode mode() const noexcept;
 
   signals:
@@ -58,35 +73,47 @@ class ActivityBar final : public QWidget {
     void conversationContextMenuRequested(const QString& worktreePath,
                                           const QString& conversationId);
     void settingsRequested();
+    void settingsSectionRequested(const QString& id);
     void identityRequested();
     void updatesRequested();
+    // The shown width, after a drag or an interface zoom change.
     void sidebarWidthChanged(int width);
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
-    QToolButton* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
+    void syncShownWidth();
+    void refreshIdentityText();
+    ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
     void refreshIcons();
 
     QButtonGroup* group_{nullptr};
-    QToolButton* quickSearchButton_{nullptr};
+    SidebarSearchButton* quickSearchButton_{nullptr};
     QLabel* brandWordmark_{nullptr};
-    QLabel* quickSearchShortcut_{nullptr};
-    QToolButton* explorerButton_{nullptr};
-    QToolButton* sourceControlButton_{nullptr};
-    QLabel* sourceControlCount_{nullptr};
-    QToolButton* agentButton_{nullptr};
-    QToolButton* remoteButton_{nullptr};
+    ket::NavItem* explorerButton_{nullptr};
+    ket::NavItem* sourceControlButton_{nullptr};
+    ket::NavItem* agentButton_{nullptr};
+    ket::NavItem* remoteButton_{nullptr};
+    SidebarTagFilterChip* tagFilter_{nullptr};
+    QWidget* tagFilterRow_{nullptr};
+    QWidget* storageNotice_{nullptr};
+    ket::Banner* storageBanner_{nullptr};
     SidebarRepositoryList* repositoryList_{nullptr};
     QComboBox* machineSelect_{nullptr};
     QToolButton* repositoryAction_{nullptr};
     QLabel* machineNotice_{nullptr};
-    QToolButton* updateReadyButton_{nullptr};
+    ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
+    QLabel* identityAvatar_{nullptr};
+    QLabel* identityName_{nullptr};
+    QLabel* identitySubtitle_{nullptr};
+    QString accountName_;
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};
     int sidebarWidth_{kWidth};
+    int shownWidth_{0};
     QString iconMainColor_;
     QString iconMutedColor_;
     QString iconDisabledColor_;

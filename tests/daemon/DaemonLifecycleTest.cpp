@@ -351,6 +351,87 @@ class DaemonLifecycleTest final : public QObject {
         }
     }
 
+    void tagsAreStoredPerConversationAndSurviveRestart() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        StoredSession session;
+        session.id = QStringLiteral("tagged");
+        session.worktreePath = directory.path();
+        session.adapter = QStringLiteral("codex");
+        session.state = QStringLiteral("ready");
+        const auto listedTags = [](SessionHost& host) {
+            return host
+                .handleCommand(request(QStringLiteral("session.list"), QStringLiteral("list")),
+                               QStringLiteral("desktop-test"))
+                .value(QStringLiteral("sessions"))
+                .toArray()
+                .first()
+                .toObject()
+                .value(QStringLiteral("tags"))
+                .toVariant()
+                .toStringList();
+        };
+        QVERIFY(protocol::features(1).contains(QStringLiteral("session.tags/1")));
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.upsertSession(session));
+            CodexAdapter adapter(QStringLiteral("/missing-codex-for-tags"));
+            SessionHost host(&journal, &adapter);
+            const auto tag = [&](const QString& id, const QJsonValue& tags) {
+                return host.handleCommand(request(QStringLiteral("session.tags.set"), id,
+                                                  {{QStringLiteral("tags"), tags}}, session.id, 1),
+                                          QStringLiteral("desktop-test"));
+            };
+            QVERIFY(listedTags(host).isEmpty());
+            QJsonArray tooMany;
+            for (int index = 0; index < 9; ++index)
+                tooMany.append(QStringLiteral("tag-%1").arg(index));
+            for (const QJsonValue& invalid :
+                 {QJsonValue(QStringLiteral("Review")), QJsonValue(tooMany),
+                  QJsonValue(QJsonArray{1}), QJsonValue(QJsonArray{QStringLiteral("  ")}),
+                  QJsonValue(QJsonArray{QString(65, QLatin1Char('a'))}),
+                  QJsonValue(QJsonArray{QStringLiteral("a\nb")})}) {
+                QCOMPARE(tag(QStringLiteral("bad-%1").arg(QUuid::createUuid().toString()), invalid)
+                             .value(QStringLiteral("error_code"))
+                             .toString(),
+                         QStringLiteral("invalid_payload"));
+            }
+            QVERIFY(listedTags(host).isEmpty());
+            // Trimmed, in the order given; the same label in another case is one tag.
+            const QJsonObject stored =
+                tag(QStringLiteral("tags-1"),
+                    QJsonArray{QStringLiteral(" Review "), QStringLiteral("UI"),
+                               QStringLiteral("review")});
+            QVERIFY2(stored.value(QStringLiteral("ok")).toBool(),
+                     QJsonDocument(stored).toJson(QJsonDocument::Compact).constData());
+            const QStringList expected{QStringLiteral("Review"), QStringLiteral("UI")};
+            QCOMPARE(stored.value(QStringLiteral("tags")).toVariant().toStringList(), expected);
+            QCOMPARE(listedTags(host), expected);
+            // Other writes of the session row leave them alone.
+            auto row = journal.sessions().first();
+            row.title = QStringLiteral("renamed");
+            row.tags.clear();
+            QVERIFY(journal.upsertSession(row));
+        }
+        {
+            LocalJournal journal(path);
+            const QStringList expected{QStringLiteral("Review"), QStringLiteral("UI")};
+            QCOMPARE(journal.sessions().first().tags, expected);
+            CodexAdapter adapter(QStringLiteral("/missing-codex-for-tags"));
+            SessionHost host(&journal, &adapter);
+            QCOMPARE(listedTags(host), expected);
+            const QJsonObject cleared = host.handleCommand(
+                request(QStringLiteral("session.tags.set"), QStringLiteral("clear"),
+                        {{QStringLiteral("tags"), QJsonArray{}}}, session.id, 1),
+                QStringLiteral("desktop-test"));
+            QVERIFY2(cleared.value(QStringLiteral("ok")).toBool(),
+                     QJsonDocument(cleared).toJson(QJsonDocument::Compact).constData());
+            QVERIFY(listedTags(host).isEmpty());
+            QVERIFY(journal.sessions().first().tags.isEmpty());
+        }
+    }
+
     void archivedConversationsAreDeletedAfterThirtyDays() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -370,6 +451,12 @@ class DaemonLifecycleTest final : public QObject {
                    (!archivedAt.isValid() ||
                     journal.setSessionArchived(id, 1, archivedAt.toString(Qt::ISODateWithMs)));
         };
+        // The default keeps archived history for 90 days; this test uses the 30-day option.
+        QCOMPARE(JournalStorageOptions{}.archivedHistoryDays, 90);
+        JournalStorageOptions thirtyDays;
+        thirtyDays.archivedHistoryDays = 30;
+        QVERIFY(journal.setStorageOptions(thirtyDays, 0));
+        QVERIFY(!journal.setStorageOptions(thirtyDays, 0)); // stale revision
         QVERIFY(add(QStringLiteral("older"), now.addDays(-45)));
         QVERIFY(add(QStringLiteral("old"), now.addDays(-31)));
         QVERIFY(add(QStringLiteral("recent"), now.addDays(-29)));
@@ -396,6 +483,13 @@ class DaemonLifecycleTest final : public QObject {
         QVERIFY(!host.expireArchivedSessions(now.addDays(400)));
         QCOMPARE(ids(), QStringList{QStringLiteral("visible")});
         QVERIFY(!host.expireArchivedSessions(QDateTime()));
+        // Never keeps an archived conversation however old it is.
+        QVERIFY(add(QStringLiteral("kept"), now.addDays(-400)));
+        JournalStorageOptions never = thirtyDays;
+        never.archivedHistoryDays = 0;
+        QVERIFY(journal.setStorageOptions(never, 1));
+        QVERIFY(!host.expireArchivedSessions(now));
+        QCOMPARE(ids(), (QStringList{QStringLiteral("kept"), QStringLiteral("visible")}));
     }
 
     void busyArchivedConversationWaitsWithoutBlockingOthers() {
@@ -404,7 +498,7 @@ class DaemonLifecycleTest final : public QObject {
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         const QDateTime now = QDateTime::currentDateTimeUtc();
         for (const auto& [id, age] :
-             {std::pair{QStringLiteral("busy"), 60}, std::pair{QStringLiteral("idle"), 40}}) {
+             {std::pair{QStringLiteral("busy"), 160}, std::pair{QStringLiteral("idle"), 140}}) {
             StoredSession session;
             session.id = id;
             session.worktreePath = directory.path();
@@ -1389,6 +1483,11 @@ class DaemonLifecycleTest final : public QObject {
                     ? R"(response:other:{"action": "accept", "content": {}})"
                     : R"(response:other:{"action": "decline"})";
             QTRY_VERIFY_WITH_TIMEOUT(logText().contains(expected), 2000);
+            // The journal keeps the decision, so a restored transcript says how it ended.
+            QCOMPARE(events(sessionId, "approval.resolved")
+                         .first()["payload"]["answers"]["decision"]
+                         .toString(),
+                     decision);
             QTRY_COMPARE_WITH_TIMEOUT(events(sessionId, "turn.completed").size(), 1, 2000);
             QCOMPARE(events(sessionId, "runtime.error").size(), 0);
         }

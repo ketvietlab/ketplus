@@ -1,18 +1,28 @@
 #include "app/SettingsDialog.h"
 
+#include "ui/InterfaceZoom.h"
+
 #include "ui/Theme.h"
 
-#include <QCheckBox>
-#include <QDialogButtonBox>
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetNavItem.h"
+#include "KetSegmentedControl.h"
+#include "KetThemeCard.h"
+#include "app/PixelSelect.h"
+#include "app/SettingsFontNames.h"
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
+#include <QPersistentModelIndex>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -28,18 +38,6 @@ QLabel* makeLabel(const QString& text, const QString& role, QWidget* parent) {
     label->setProperty("kvRole", role);
     label->setWordWrap(true);
     return label;
-}
-
-QWidget* makePageHeading(const QString& eyebrow, const QString& title, const QString& description,
-                         QWidget* parent) {
-    auto* heading = new QWidget(parent);
-    auto* layout = new QVBoxLayout(heading);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(5);
-    layout->addWidget(makeLabel(eyebrow, QStringLiteral("settingsEyebrow"), heading));
-    layout->addWidget(makeLabel(title, QStringLiteral("settingsTitle"), heading));
-    layout->addWidget(makeLabel(description, QStringLiteral("settingsDescription"), heading));
-    return heading;
 }
 
 } // namespace
@@ -102,9 +100,9 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
 
     pages_ = new QStackedWidget(this);
     pages_->setObjectName(QStringLiteral("settingsPages"));
-    addNavigationPage(QStringLiteral("general"), QStringLiteral("General"), createGeneralPage());
     addNavigationPage(QStringLiteral("appearance"), QStringLiteral("Appearance"),
                       createAppearancePage());
+    addNavigationPage(QStringLiteral("typography"), tr("Typography"), createTypographyCard());
 
     auto* body = new QWidget(this);
     auto* bodyLayout = new QHBoxLayout(body);
@@ -113,13 +111,16 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     bodyLayout->addWidget(navigation_);
     bodyLayout->addWidget(pages_, 1);
 
-    buttons_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    resetButton_ =
-        buttons_->addButton(QStringLiteral("Reset defaults"), QDialogButtonBox::ResetRole);
+    buttons_ = new QWidget(this);
+    buttons_->setObjectName(QStringLiteral("settingsButtons"));
+    auto* actions = new QHBoxLayout(buttons_);
+    actions->setContentsMargins(0, 0, 0, 0);
+    // Every change applies as it is made (Jay, 2026-11-10), so the row holds only the reset.
+    resetButton_ = new ket::Button(tr("Restore defaults"), ket::ButtonVariant::Ghost, buttons_);
     resetButton_->setProperty("kvRole", QStringLiteral("settingsReset"));
-    saveButton_ = buttons_->addButton(QStringLiteral("Save changes"), QDialogButtonBox::AcceptRole);
-    saveButton_->setProperty("kvRole", QStringLiteral("primaryAction"));
-    saveButton_->setDefault(true);
+    resetButton_->setObjectName(QStringLiteral("settingsResetButton"));
+    actions->addWidget(resetButton_);
+    actions->addStretch();
 
     auto* footer = new QWidget(this);
     footer->setProperty("kvRole", QStringLiteral("settingsFooter"));
@@ -135,56 +136,54 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     layout->addWidget(footer);
 
     connect(navigation_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
-    connect(buttons_, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
-    connect(resetButton_, &QPushButton::clicked, this, [this] {
+    connect(resetButton_, &QAbstractButton::clicked, this, [this] {
         setAppearanceSettings(AppearanceSettings::defaults());
         selectThemeMode(static_cast<int>(ThemeManager::Mode::System));
         for (SettingsPage* page : std::as_const(extensionPages_)) {
             page->resetToDefaults();
         }
-        updateDirtyState();
+        applyChanges();
     });
-    connect(saveButton_, &QPushButton::clicked, this, [this] {
-        const auto appearance = appearanceSettings();
-        for (SettingsPage* page : std::as_const(extensionPages_)) {
-            page->apply();
-        }
-        if (theme_ != nullptr) {
-            theme_->setMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
-        }
-        emit appearanceSettingsSaved(appearance);
-        emit settingsSaved(appearance.editor);
-        accept();
-    });
-
     setAppearanceSettings(initialSettings_);
-    navigation_->setCurrentRow(1);
-    updateThemePreview();
-    updateDirtyState();
-}
-
-QWidget* SettingsDialog::createGeneralPage() {
-    auto* page = new QWidget(this);
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(30, 26, 30, 30);
-    layout->setSpacing(18);
-    layout->addWidget(makePageHeading(
-        QStringLiteral("GENERAL"), QStringLiteral("Application preferences"),
-        QStringLiteral("Shared startup, workspace and update settings will appear here."), page));
-    auto* card = new QFrame(page);
-    card->setProperty("kvRole", QStringLiteral("settingsCard"));
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(18, 20, 18, 20);
-    cardLayout->addWidget(makeLabel(QStringLiteral("No general preferences are configurable yet."),
-                                    QStringLiteral("settingsDescription"), card));
-    layout->addWidget(card);
-    layout->addStretch(1);
-    return page;
+    navigation_->setCurrentRow(0);
+    // What the controls show is applied already; later edits apply as they are made.
+    appliedSettings_ = appearanceSettings();
+    ready_ = true;
+    updateThemeCards();
+    // The system, or another window, can change the theme while this dialog is open; the
+    // selection and its marks follow the mode in use.
+    if (theme_ != nullptr)
+        connect(theme_, &ThemeManager::themeChanged, this, [this] {
+            selectedThemeMode_ = static_cast<int>(theme_->mode());
+            updateThemeCards();
+        });
 }
 
 void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
     auto* item = new QListWidgetItem(title, navigation_);
     item->setData(Qt::UserRole, id);
+    auto* row = new ket::NavItem(
+        title,
+        ket::Icons::codeForLucide(id == QStringLiteral("appearance") ? u"palette" : u"settings"),
+        navigation_);
+    item->setSizeHint(row->sizeHint());
+    navigation_->setItemWidget(item, row);
+    const QPersistentModelIndex index(navigation_->indexFromItem(item));
+    const QPointer<QListWidget> navigation(navigation_);
+    connect(row, &QAbstractButton::clicked, navigation_, [navigation, index] {
+        if (navigation && index.isValid())
+            navigation->setCurrentIndex(index);
+    });
+    connect(navigation_, &QListWidget::currentItemChanged, row, [navigation, row, index] {
+        row->setChecked(navigation && index.isValid() && navigation->currentIndex() == index);
+    });
+    // QListWidget deletes items immediately but defers deleting their widgets. A zoom
+    // signal can arrive in that interval while Pro rebuilds its extension pages.
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, row,
+            [navigation, row, index] {
+                if (navigation && index.isValid())
+                    navigation->item(index.row())->setSizeHint(row->sizeHint());
+            });
     pages_->addWidget(page);
 }
 
@@ -215,6 +214,7 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
         return SettingsRegistrationResult::InvalidId;
     }
     if (id == QStringLiteral("general") || id == QStringLiteral("appearance") ||
+        id == QStringLiteral("typography") ||
         std::any_of(registeredPages_.cbegin(), registeredPages_.cend(),
                     [&id](const RegisteredPage& value) { return value.descriptor.id == id; })) {
         return SettingsRegistrationResult::DuplicateId;
@@ -228,7 +228,7 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
     registeredPages_.append(
         RegisteredPage{std::move(registration.descriptor), page, nextRegistrationSequence_++});
     extensionPages_.append(page);
-    connect(page, &SettingsPage::changed, this, &SettingsDialog::updateDirtyState);
+    connect(page, &SettingsPage::changed, this, &SettingsDialog::applyChanges);
     connect(page, &QObject::destroyed, this, [this, page, registeredId] {
         const bool selectedWasDestroyed = selectedPageId() == registeredId;
         extensionPages_.removeAll(page);
@@ -240,10 +240,10 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
         if (selectedWasDestroyed && navigation_->count() > 0) {
             navigation_->setCurrentRow(0);
         }
-        updateDirtyState();
+        applyChanges();
     });
     rebuildExtensionNavigation();
-    updateDirtyState();
+    applyChanges();
     return SettingsRegistrationResult::Registered;
 }
 
@@ -290,21 +290,20 @@ void SettingsDialog::rebuildExtensionNavigation() {
 }
 
 AppearanceSettings SettingsDialog::appearanceSettings() const {
+    const auto zoomSteps = InterfaceZoomMetrics::steps();
     return AppearanceSettings{
+        .interfaceZoomPercent =
+            zoomSteps.value(zoomControl_->currentIndex(), InterfaceZoomMetrics::defaultPercent),
         .interfaceFontSizePixels = interfaceFontSizeBox_->value(),
         .editor =
             EditorSettings{
-                .fontFamily = editorFontBox_->currentText().isEmpty()
+                .fontFamily = settings_fonts::selectedFamily(editorFontBox_).isEmpty()
                                   ? editorFontFamily_
-                                  : editorFontBox_->currentText(),
+                                  : settings_fonts::selectedFamily(editorFontBox_),
                 .fontSizePixels = editorFontSizeBox_->value(),
                 .lineHeightPixels = editorLineHeightBox_->value(),
             },
-        .terminal =
-            TextTypographySettings{terminalFontSizeBox_->value(), terminalLineHeightBox_->value()},
         .terminalFontFamily = terminalFontFamily_,
-        .preview =
-            TextTypographySettings{previewFontSizeBox_->value(), previewLineHeightBox_->value()},
     }
         .normalized();
 }
@@ -315,74 +314,75 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     const auto value = settings.normalized();
     editorFontFamily_ = value.editor.fontFamily;
     terminalFontFamily_ = value.terminalFontFamily;
-    const int existingFont = editorFontBox_->findText(editorFontFamily_);
-    if (existingFont < 0) {
-        editorFontBox_->addItem(editorFontFamily_);
-    }
-    editorFontBox_->setCurrentText(editorFontFamily_);
+    settings_fonts::selectFamily(editorFontBox_, editorFontFamily_);
+    zoomControl_->setCurrentIndex(
+        int(InterfaceZoomMetrics::steps().indexOf(value.interfaceZoomPercent)));
     interfaceFontSizeBox_->setValue(value.interfaceFontSizePixels);
     editorFontSizeBox_->setValue(value.editor.fontSizePixels);
     editorLineHeightBox_->setMinimum(
         qMax(EditorSettings::minimumLineHeightPixels, value.editor.fontSizePixels));
     editorLineHeightBox_->setValue(value.editor.lineHeightPixels);
-    terminalFontSizeBox_->setValue(value.terminal.fontSizePixels);
-    terminalLineHeightBox_->setMinimum(
-        qMax(TextTypographySettings::minimumLineHeightPixels, value.terminal.fontSizePixels));
-    terminalLineHeightBox_->setValue(value.terminal.lineHeightPixels);
-    previewFontSizeBox_->setValue(value.preview.fontSizePixels);
-    previewLineHeightBox_->setMinimum(
-        qMax(TextTypographySettings::minimumLineHeightPixels, value.preview.fontSizePixels));
-    previewLineHeightBox_->setValue(value.preview.lineHeightPixels);
     updatePreview();
 }
 
-void SettingsDialog::updateDirtyState() {
-    if (saveButton_ == nullptr) {
+void SettingsDialog::applyChanges() {
+    // Applies what changed since the last call: appearance fields and extension pages. The theme
+    // applies in selectThemeMode(), since another window may have changed it meanwhile.
+    if (!ready_)
         return;
+    const auto appearance = appearanceSettings();
+    if (appearance != appliedSettings_) {
+        appliedSettings_ = appearance;
+        emit appearanceSettingsSaved(appearance);
+        emit settingsSaved(appearance.editor);
     }
-    bool extensionChanged = false;
-    for (const SettingsPage* page : std::as_const(extensionPages_)) {
-        extensionChanged = extensionChanged || page->hasChanges();
+    for (SettingsPage* page : std::as_const(extensionPages_)) {
+        if (page->hasChanges())
+            page->apply();
     }
-    const bool changed = appearanceSettings() != initialSettings_ ||
-                         selectedThemeMode_ != initialThemeMode_ || extensionChanged;
-    saveButton_->setEnabled(changed);
 }
 
-void SettingsDialog::updateThemePreview() {
+void SettingsDialog::updateThemeCards() {
     const bool followsSystem = selectedThemeMode_ == static_cast<int>(ThemeManager::Mode::System);
     {
         const QSignalBlocker blocker(followSystem_);
         followSystem_->setChecked(followsSystem);
     }
-    themeList_->setEnabled(!followsSystem && theme_ != nullptr);
-    for (int index = 0; index < themeList_->count(); ++index) {
-        auto* item = themeList_->item(index);
-        if (item->data(Qt::UserRole).toInt() == selectedThemeMode_) {
-            const QSignalBlocker blocker(themeList_);
-            themeList_->setCurrentItem(item);
-            break;
-        }
-    }
-    if (theme_ != nullptr) {
-        theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
-    } else {
-        followSystem_->setEnabled(false);
-        themeList_->setEnabled(false);
+    followSystem_->setEnabled(theme_ != nullptr);
+    // While following the system, the card of the theme in use stays marked.
+    const int shownMode =
+        followsSystem ? static_cast<int>(currentThemePalette().dark ? ThemeManager::Mode::Dark
+                                                                    : ThemeManager::Mode::Light)
+                      : selectedThemeMode_;
+    for (auto* card : themeCards_) {
+        card->setEnabled(theme_ != nullptr);
+        card->setChecked(card->property("themeMode").toInt() == shownMode);
     }
 }
 
 void SettingsDialog::selectThemeMode(const int mode) {
+    // A choice is explicit: it applies even when it matches what this dialog last chose.
     selectedThemeMode_ = mode;
-    updateThemePreview();
-    updateDirtyState();
+    if (theme_ != nullptr)
+        theme_->setMode(static_cast<ThemeManager::Mode>(mode));
+    applyChanges();
+    updateThemeCards();
 }
 
 void SettingsDialog::reject() {
-    if (theme_ != nullptr) {
-        theme_->cancelPreview();
-    }
+    // Closing keeps what was applied; there is nothing left to cancel.
     QDialog::reject();
+}
+
+void SettingsDialog::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        auto* button = qobject_cast<QAbstractButton*>(focusWidget());
+        if (button && button->isEnabled())
+            button->click();
+        event->accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 } // namespace ketplus

@@ -1,5 +1,6 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
@@ -9,22 +10,24 @@ ColumnLayout {
     required property var workspace
     required property bool compactHeight
     spacing: 0
-    implicitHeight: compactHeight ? Metrics.px(259, workspace.t) : Metrics.px(293, workspace.t)
+    implicitHeight: compactHeight ? KetTheme.px(259, KetTheme.zoom) : KetTheme.px(293, KetTheme.zoom)
     Layout.minimumHeight: implicitHeight
 
     Item {
         id: brand
         objectName: "productBrand"
         Layout.fillWidth: true
-        Layout.preferredHeight: navigation.compactHeight ? Metrics.px(54, workspace.t) : Metrics.px(67, workspace.t)
+        Layout.preferredHeight: navigation.compactHeight ? KetTheme.px(54, KetTheme.zoom) : KetTheme.px(67, KetTheme.zoom)
 
         Image {
+            objectName: "productBrandImage"
             anchors.left: parent.left
-            anchors.leftMargin: Metrics.px(13, workspace.t)
+            anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
             anchors.verticalCenter: parent.verticalCenter
-            width: Metrics.px(176, workspace.t)
-            height: Metrics.px(44, workspace.t)
-            source: navigation.workspace.t.dark
+            width: Math.min(KetTheme.px(176, KetTheme.zoom),
+                            Math.max(0, parent.width - 2 * anchors.leftMargin))
+            height: KetTheme.px(44, KetTheme.zoom)
+            source: KetTheme.dark
                     ? "qrc:/agent/brand/ketplus-logo-dark.png"
                     : "qrc:/agent/brand/ketplus-logo-light.png"
             fillMode: Image.PreserveAspectFit
@@ -35,109 +38,45 @@ ColumnLayout {
         }
     }
 
-    Basic.Button {
+    Kit.KetNavItem {
         id: quickSearch
         objectName: "productQuickSearch"
         Layout.fillWidth: true
-        Layout.preferredHeight: Metrics.px(32, workspace.t)
-        Layout.leftMargin: Metrics.px(9, workspace.t)
-        Layout.rightMargin: Metrics.px(9, workspace.t)
-        Layout.bottomMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(19, workspace.t)
-        padding: 0
+        Layout.leftMargin: KetTheme.px(9, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(9, KetTheme.zoom)
+        Layout.bottomMargin: KetTheme.px(10, KetTheme.zoom)
+        text: "Quick search"
+        iconName: Kit.KetTheme.iconForLucide("search")
+        shortcut: "⌘ K"
+        checkable: false
         onClicked: agentHost.requestProductNavigation("search")
-        contentItem: RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Metrics.px(9, workspace.t)
-            anchors.rightMargin: Metrics.px(9, workspace.t)
-            spacing: Metrics.px(8, workspace.t)
-            TintedIcon {
-                Layout.preferredWidth: Metrics.px(14, workspace.t)
-                Layout.preferredHeight: Metrics.px(14, workspace.t)
-                source: "qrc:/agent/icons/search.svg"
-                color: navigation.workspace.t.textMuted
-            }
-            Text {
-                Layout.fillWidth: true
-                text: "Quick search"
-                color: navigation.workspace.t.textSecondary
-                font.family: navigation.workspace.t.uiFont
-                font.pixelSize: navigation.workspace.t.body
-            }
-            Text {
-                text: "⌘ K"
-                color: navigation.workspace.t.textMuted
-                font.family: navigation.workspace.t.uiFont
-                font.pixelSize: navigation.workspace.t.micro
-            }
-        }
-        background: Rectangle {
-            radius: Metrics.px(5, workspace.t)
-            color: quickSearch.hovered ? navigation.workspace.t.surfaceHover
-                                       : navigation.workspace.t.panelBackground
-                                         || navigation.workspace.t.pageBackground
-            border.color: quickSearch.visualFocus ? navigation.workspace.t.focus
-                                                   : navigation.workspace.t.border
-        }
-        Accessible.name: "Quick search"
     }
 
     Column {
         id: productNavigation
         objectName: "productNavigation"
         Layout.fillWidth: true
-        Layout.leftMargin: Metrics.px(8, workspace.t)
-        Layout.rightMargin: Metrics.px(8, workspace.t)
-        spacing: Metrics.px(2, workspace.t)
+        Layout.leftMargin: KetTheme.px(8, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(8, KetTheme.zoom)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
         Repeater {
             objectName: "productNavigationRepeater"
             model: [
-                { id: "workspace", label: "Agent Workspace", icon: "messages-square.svg" },
-                { id: "explorer", label: "Files & Editor", icon: "folder.svg" },
-                { id: "source-control", label: "Source Control", icon: "git-branch.svg" },
-                { id: "connections", label: "Connections", icon: "unplug.svg" }
+                // Két Symbol names, as in the mock's sidebar.
+                { id: "workspace", label: "Agent Workspace", icon: "chats" },
+                { id: "explorer", label: "Files & Editor", icon: "folder" },
+                { id: "source-control", label: "Source Control", icon: "branch" },
+                { id: "connections", label: "Connections", icon: "network" }
             ]
-            delegate: Basic.Button {
-                id: navigationButton
+            delegate: Kit.KetNavItem {
                 required property var modelData
                 objectName: "productNavigation_" + modelData.id
                 width: parent.width
-                height: Metrics.px(34, workspace.t)
-                padding: 0
+                text: modelData.label
+                iconName: modelData.icon
                 checked: modelData.id === "workspace"
                 onClicked: agentHost.requestProductNavigation(modelData.id)
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Metrics.px(9, workspace.t)
-                    anchors.rightMargin: Metrics.px(9, workspace.t)
-                    spacing: Metrics.px(9, workspace.t)
-                    TintedIcon {
-                        Layout.preferredWidth: Metrics.px(16, workspace.t)
-                        Layout.preferredHeight: Metrics.px(16, workspace.t)
-                        source: "qrc:/agent/icons/" + navigationButton.modelData.icon
-                        color: navigationButton.checked ? navigation.workspace.t.accentText
-                                                        : navigation.workspace.t.textMuted
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: navigationButton.modelData.label
-                        color: navigationButton.checked ? navigation.workspace.t.accentText
-                                                        : navigation.workspace.t.textSecondary
-                        elide: Text.ElideRight
-                        font.family: navigation.workspace.t.uiFont
-                        font.pixelSize: navigation.workspace.t.body
-                        font.weight: navigationButton.checked ? Font.DemiBold : Font.Medium
-                    }
-                }
-                background: Rectangle {
-                    radius: Metrics.px(5, workspace.t)
-                    color: navigationButton.checked ? navigation.workspace.t.accentSubtle
-                           : navigationButton.hovered ? navigation.workspace.t.surfaceHover
-                                                      : "transparent"
-                    border.color: navigationButton.visualFocus ? navigation.workspace.t.focus
-                                                                : "transparent"
-                }
-                Accessible.name: modelData.label
             }
         }
     }
@@ -146,10 +85,10 @@ ColumnLayout {
         id: divider
         Layout.fillWidth: true
         Layout.preferredHeight: 1
-        Layout.leftMargin: Metrics.px(11, workspace.t)
-        Layout.rightMargin: Metrics.px(11, workspace.t)
-        Layout.topMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(18, workspace.t)
-        Layout.bottomMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(14, workspace.t)
-        color: navigation.workspace.t.border
+        Layout.leftMargin: KetTheme.px(11, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(11, KetTheme.zoom)
+        Layout.topMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(18, KetTheme.zoom)
+        Layout.bottomMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(14, KetTheme.zoom)
+        color: KetTheme.t.panelBorder
     }
 }

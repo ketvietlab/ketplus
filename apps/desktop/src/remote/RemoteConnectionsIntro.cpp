@@ -1,7 +1,11 @@
 #include "remote/RemoteConnectionsIntro.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 #include "ui/TypeScale.h"
 
 #include <QBoxLayout>
@@ -20,21 +24,16 @@
 namespace ketplus {
 namespace {
 
-constexpr auto displayIcon =
-    R"(<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>)";
-constexpr auto chatsIcon =
-    R"(<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>)";
-constexpr auto shieldIcon =
-    R"(<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>)";
-constexpr auto unplugIcon =
-    R"(<path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/>)";
-constexpr auto logInIcon =
-    R"(<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>)";
+constexpr auto displayIcon = "monitor";
+constexpr auto chatsIcon = "messages-square";
+constexpr auto shieldIcon = "shield";
+constexpr auto unplugIcon = "unplug";
+constexpr auto logInIcon = "log-in";
 
 // Below this width (Medium pixels) the scene goes under the copy and the steps stack.
 constexpr int narrowWidth = 860;
 
-// A Lucide glyph in the stylesheet's text colour for its role.
+// A Két Symbol glyph in the stylesheet's text colour for its role.
 class GlyphLabel final : public QLabel {
   public:
     GlyphLabel(QByteArray body, const int size, QWidget* parent = nullptr)
@@ -46,7 +45,7 @@ class GlyphLabel final : public QLabel {
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        lucide_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
+        symbol_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
     }
 
   private:
@@ -102,7 +101,7 @@ class ConnectionsScene final : public QWidget {
 
     // The narrow scene is as wide as the mock's, or the space it has.
     [[nodiscard]] QSize sizeHint() const override {
-        return {InterfaceZoomMetrics::geometry(500, chrome_geometry::basePixels(this)), height()};
+        return {InterfaceZoomMetrics::geometry(500, chrome_geometry::zoomPercent(this)), height()};
     }
 
     void setNarrow(const bool narrow) {
@@ -113,7 +112,7 @@ class ConnectionsScene final : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent*) override {
-        const double s = InterfaceZoomMetrics::factor(chrome_geometry::basePixels(this));
+        const double s = InterfaceZoomMetrics::factor(chrome_geometry::zoomPercent(this));
         QPainter painter(this);
         painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 
@@ -164,8 +163,8 @@ class ConnectionsScene final : public QWidget {
         shadow(painter, phone, 26 * s, 18 * s, 0.16);
         QPainterPath body;
         body.addRoundedRect(phone, 26 * s, 26 * s);
-        painter.fillPath(body, QColor(0x11, 0x12, 0x14));
-        painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+        painter.fillPath(body, ket::Tokens::color(u"page-bg", ket::Theme::Dark));
+        painter.setPen(QPen(ket::Tokens::color(u"panel-border", ket::Theme::Dark), 1));
         painter.drawPath(body);
         const QRectF screen = phone.adjusted(bezel, bezel, -bezel, -bezel);
         QPainterPath screenPath;
@@ -204,7 +203,7 @@ class ConnectionsScene final : public QWidget {
     // Muted text after a glyph, centred in `area` or from its left edge.
     void caption(QPainter& painter, const QRectF& area, const char* icon, const int iconSize,
                  const QString& value, const Qt::Alignment alignment) const {
-        const int base = chrome_geometry::basePixels(this);
+        const int base = chrome_geometry::zoomPercent(this);
         const double s = InterfaceZoomMetrics::factor(base);
         QFont font = this->font();
         font.setPixelSize(TypeScale::pixels(TypeStep::Caption, base));
@@ -214,7 +213,7 @@ class ConnectionsScene final : public QWidget {
         const double total = glyph + gap + metrics.horizontalAdvance(value);
         const double left =
             alignment & Qt::AlignHCenter ? area.center().x() - total / 2 : area.left();
-        lucide_icon::paint(painter, icon, colors_.muted,
+        symbol_icon::paint(painter, icon, colors_.muted,
                            QRectF(left, area.center().y() - glyph / 2, glyph, glyph));
         painter.save();
         painter.setFont(font);
@@ -314,12 +313,13 @@ RemoteConnectionsIntro::RemoteConnectionsIntro(QWidget* parent) : QWidget(parent
     heroText_->setObjectName(QStringLiteral("remoteWelcomeText"));
     copy->addWidget(heroText_);
     chrome_geometry::addSpacing(copy, 28);
-    signIn_ = new QPushButton(QStringLiteral("Sign in"), copy_);
+    signIn_ = new ket::Button(QStringLiteral("Sign in"), ket::ButtonVariant::Primary, copy_);
     signIn_->setObjectName(QStringLiteral("remoteSignInPromptButton"));
     signIn_->setProperty("remotePrimary", true);
-    signIn_->setIcon(QIcon(lucide_icon::pixmap(logInIcon, Qt::white, QSize(16, 16))));
+    signIn_->setIcon(
+        QIcon(symbol_icon::pixmap(logInIcon, symbol_icon::primaryButtonInk(), QSize(16, 16))));
     chrome_geometry::iconSize(signIn_, QSize(15, 15));
-    connect(signIn_, &QPushButton::clicked, this, &RemoteConnectionsIntro::signInRequested);
+    connect(signIn_, &QAbstractButton::clicked, this, &RemoteConnectionsIntro::signInRequested);
     copy->addWidget(signIn_, 0, Qt::AlignLeft);
     chrome_geometry::addSpacing(copy, 11);
     copy->addWidget(
@@ -417,7 +417,7 @@ void RemoteConnectionsIntro::changeEvent(QEvent* event) {
 }
 
 void RemoteConnectionsIntro::applyWidth() {
-    const int base = chrome_geometry::basePixels(this);
+    const int base = chrome_geometry::zoomPercent(this);
     const bool narrow = width() < InterfaceZoomMetrics::geometry(narrowWidth, base);
     if (laidOut_ && narrow == narrow_)
         return;

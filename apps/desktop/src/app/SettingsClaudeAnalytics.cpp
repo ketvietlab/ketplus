@@ -1,21 +1,22 @@
 #include "app/SettingsClaudeAnalytics.h"
-#include <QGridLayout>
+#include "KetButton.h"
+#include "KetTextField.h"
+#include "app/SettingsRows.h"
+#include <QAbstractButton>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
-#include <QPushButton>
 #include <QTimer>
+#include <QVBoxLayout>
 namespace ketplus {
 SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requester requester,
                                                  QWidget* parent)
     : QWidget(parent), requester_(std::move(requester)) {
-    auto* grid = new QGridLayout(this);
-    grid->setContentsMargins(0, 16, 0, 0);
-    grid->setHorizontalSpacing(20);
-    grid->setVerticalSpacing(8);
-    grid->setColumnMinimumWidth(0, 145);
-    grid->setColumnStretch(1, 1);
+    auto* column = new QVBoxLayout(this);
+    column->setContentsMargins(0, 20, 0, 0);
+    column->setSpacing(14);
     const auto label = [this](const QString& text, const QString& name) {
         auto* result = new QLabel(text, this);
         result->setObjectName(name);
@@ -23,53 +24,51 @@ SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requ
         result->setWordWrap(true);
         return result;
     };
-    grid->addWidget(label(tr("Claude organization usage"), "settingsWorkspaceSubheading"), 0, 0, 1,
-                    2);
-    grid->addWidget(label(tr("Optional Admin API key for organization-wide monthly usage and cost. "
-                             "Stored separately in macOS Keychain; never sent to the agent. This "
-                             "key may belong to a "
-                             "different organization from your inference key. Reports include all "
-                             "organization products and keys."),
-                          "settingsWorkspaceHelp"),
-                    1, 0, 1, 2);
-    key_ = new QLineEdit(this);
+    // The mock's section: a divider, the heading and help, the key's row and one row of actions.
+    column->addWidget(settings_rows::divider(this));
+    column->addWidget(label(tr("Claude organization usage"), "settingsWorkspaceSubheading"));
+    column->addWidget(label(tr("Optional Admin API key for organization-wide monthly usage and "
+                               "cost. Stored separately in macOS Keychain; never sent to the "
+                               "agent. This key may belong to a different organization from "
+                               "your inference key. Reports include all organization products "
+                               "and keys."),
+                            "settingsWorkspaceHelp"));
+    key_ = new ket::TextField(this);
     key_->setObjectName("claudeAdminKey");
     key_->setEchoMode(QLineEdit::Password);
     key_->setMaxLength(512);
     key_->setPlaceholderText(tr("sk-ant-admin01-…"));
     key_->setInputMethodHints(Qt::ImhHiddenText | Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
-    auto* name = label(tr("Admin API key"), "settingsWorkspaceFieldLabel");
-    name->setBuddy(key_);
-    grid->addWidget(name, 2, 0);
-    grid->addWidget(key_, 2, 1);
+    column->addWidget(settings_rows::field(tr("Admin API key"), {}, key_, this));
     auto* actions = new QWidget(this);
-    auto* buttons = new QGridLayout(actions);
+    auto* buttons = new QHBoxLayout(actions);
     buttons->setContentsMargins(0, 0, 0, 0);
-    save_ = new QPushButton(tr("Save Admin key"), this);
+    buttons->setSpacing(8);
+    save_ = new ket::Button(tr("Save Admin key"), ket::ButtonVariant::Secondary, actions);
     save_->setObjectName("claudeAdminSave");
-    remove_ = new QPushButton(tr("Remove Admin key…"), this);
+    remove_ = new ket::Button(tr("Remove Admin key…"), ket::ButtonVariant::GhostDanger, actions);
     remove_->setObjectName("claudeAdminRemove");
-    refresh_ = new QPushButton(tr("Refresh organization usage"), this);
+    refresh_ =
+        new ket::Button(tr("Refresh organization usage"), ket::ButtonVariant::Ghost, actions);
     refresh_->setObjectName("claudeAdminRefresh");
-    buttons->addWidget(save_, 0, 0);
-    buttons->addWidget(remove_, 0, 1);
-    buttons->addWidget(refresh_, 1, 0, 1, 2);
-    grid->addWidget(actions, 3, 1, Qt::AlignLeft);
+    for (QWidget* button : {save_, remove_, refresh_})
+        buttons->addWidget(button);
+    buttons->addStretch(1);
+    column->addWidget(actions);
     status_ = label(tr("Loading organization settings…"), "claudeAdminStatus");
-    grid->addWidget(status_, 4, 0, 1, 2);
-    grid->addWidget(
+    column->addWidget(status_);
+    column->addWidget(
         label(tr("Month-to-date is measured in UTC. Cost is after discounts and before "
                  "credits; it is not your credit balance. Refreshes are cached for five minutes. "
                  "Billing balance and account spending limits remain in Anthropic Console."),
-              "settingsWorkspaceHelp"),
-        5, 0, 1, 2);
-    connect(save_, &QPushButton::clicked, this, [this] {
+              "settingsWorkspaceHelp"));
+    connect(save_, &QAbstractButton::clicked, this, [this] {
         const QJsonObject payload{{"key", key_->text()}};
         key_->clear();
         request("save", payload);
     });
-    connect(refresh_, &QPushButton::clicked, this, [this] { request("refresh"); });
-    connect(remove_, &QPushButton::clicked, this, [this] {
+    connect(refresh_, &QAbstractButton::clicked, this, [this] { request("refresh"); });
+    connect(remove_, &QAbstractButton::clicked, this, [this] {
         if (QMessageBox::question(this, tr("Remove Admin API key?"),
                                   tr("Organization reports will be disconnected. Your inference "
                                      "API key is unchanged."),

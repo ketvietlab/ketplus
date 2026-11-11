@@ -35,29 +35,17 @@ include(cmake/Dependencies.cmake)
 include(cmake/KetFonts.cmake)
 include(cmake/Warnings.cmake)
 
-set_property(GLOBAL PROPERTY
-    KETPLUS_CM_INTER_FONT_SOURCE_DIR "${inter_font_SOURCE_DIR}"
-)
-
-function(ketplus_cm_add_font_resources target)
-    get_property(font_source_dir GLOBAL PROPERTY KETPLUS_CM_INTER_FONT_SOURCE_DIR)
-    qt_add_resources(${target} "ketplus_fonts"
-        PREFIX "/fonts"
-        BASE "${font_source_dir}"
-        FILES "${font_source_dir}/InterVariable.ttf"
-    )
-    qt_add_resources(${target} "ketplus_font_licenses"
-        PREFIX "/licenses/inter"
-        BASE "${font_source_dir}"
-        FILES "${font_source_dir}/LICENSE.txt"
-    )
-endfunction()
-
 add_library(ketplus_ui STATIC
+    src/ui/ChromeGeometry.cpp
+    src/ui/ChromeGeometry.h
+    src/ui/MessageDialog.cpp
+    src/ui/MessageDialog.h
     src/ui/FindReplaceBar.cpp
     src/ui/FindReplaceBar.h
     src/ui/Theme.cpp
     src/ui/Theme.h
+    src/ui/InterfaceZoom.h
+    src/ui/TypeScale.h
     src/ui/KetFonts.cpp
     src/ui/KetFonts.h
 )
@@ -85,6 +73,7 @@ add_library(ketplus_git STATIC
     src/git/GitParser.cpp
     src/git/GitParser.h
     src/git/GitService.cpp
+    src/git/GitServiceMutations.cpp
     src/git/GitService.h
     src/git/GitTypes.h
 )
@@ -97,6 +86,8 @@ add_library(KetPlusCM::git ALIAS ketplus_git)
 
 add_library(ketplus_workspace STATIC
     src/workspace/ExplorerPanel.cpp
+    src/workspace/ExplorerPanelRows.cpp
+    src/workspace/ExplorerPanelEntry.cpp
     src/workspace/ExplorerPanel.h
     src/workspace/FuzzyMatcher.cpp
     src/workspace/FuzzyMatcher.h
@@ -109,7 +100,7 @@ add_library(ketplus_workspace STATIC
     src/workspace/WorkspaceSearch.cpp
     src/workspace/WorkspaceSearch.h
 )
-target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets ketplus_core)
+target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets ketplus_core ketplus_ui)
 target_include_directories(ketplus_workspace PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -133,6 +124,8 @@ ketplus_enable_warnings(ketplus_terminal_core)
 add_library(KetPlusCM::terminal_core ALIAS ketplus_terminal_core)
 
 add_library(ketplus_terminal_ui STATIC
+    src/terminal/TerminalTab.cpp
+    src/terminal/TerminalTab.h
     src/terminal/TerminalPanel.cpp
     src/terminal/TerminalPanel.h
     src/terminal/TerminalView.cpp
@@ -183,10 +176,13 @@ add_library(ketplus_editor STATIC
     src/editor/DefinitionPattern.h
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
+    src/editor/DocumentTab.cpp
+    src/editor/DocumentTab.h
     src/editor/EditorSplitPane.cpp
     src/editor/EditorSplitPane.h
     src/editor/EditorViewOptions.cpp
     src/editor/EditorViewOptions.h
+    src/editor/EditorWidgetChrome.cpp
     src/editor/EditorWidget.cpp
     src/editor/EditorFileRefresh.cpp
     src/editor/EditorMarkdown.cpp
@@ -230,6 +226,7 @@ add_library(KetPlusCM::index ALIAS ketplus_index)
 
 add_library(ketplus_git_ui STATIC
     src/git/GitChangesPanel.cpp
+    src/git/GitChangesPanelActions.cpp
     src/git/GitChangesPanel.h
     src/git/GitDiffView.cpp
     src/git/GitDiffView.h
@@ -248,7 +245,15 @@ add_library(ketplus_settings_ui STATIC
     src/app/AppearanceSettings.h
     src/app/SettingsDialog.cpp
     src/app/SettingsDialogAppearance.cpp
+    src/app/SettingsDialogTypography.cpp
+    src/app/PixelSelect.cpp
+    src/app/PixelSelect.h
+    src/app/SettingsAppearancePreview.cpp
+    src/app/SettingsAppearancePreview.h
     src/app/SettingsDialog.h
+    src/app/SettingsWorkspace.cpp
+    src/app/SettingsWorkspace.h
+    src/app/SettingsFontNames.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)
 target_include_directories(ketplus_settings_ui PUBLIC
@@ -270,7 +275,9 @@ if(KETPLUS_CM_BUILD_APP)
         list(APPEND ketplus_platform_sources assets/icons/KetPlus.rc)
     endif()
 
-    qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+    # The Lite window, shared by the app and ketplus_lite_window_tests.
+    set(ketplus_lite_window_sources
+        src/app/MainWindowChrome.cpp
         src/app/MainWindow.cpp
         src/app/MainWindowActions.cpp
         src/app/MainWindowDocuments.cpp
@@ -279,28 +286,33 @@ if(KETPLUS_CM_BUILD_APP)
         src/app/MainWindowNavigation.cpp
         src/app/MainWindowPanels.cpp
         src/app/MainWindowSearch.cpp
+        src/app/ReviewCapture.cpp
+        src/app/ReviewCapture.h
+    )
+    set(ketplus_lite_window_libraries
+        Qt6::Widgets
+        KetPlusCM::core
+        KetPlusCM::editor
+        KetPlusCM::git
+        KetPlusCM::git_ui
+        KetPlusCM::index
+        KetPlusCM::preview
+        KetPlusCM::settings_ui
+        KetPlusCM::terminal
+        KetPlusCM::ui
+        KetPlusCM::workspace
+    )
+    qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+        ${ketplus_lite_window_sources}
         src/main.cpp
         ${ketplus_platform_sources}
     )
-    target_link_libraries(ketplus_cm
-        PRIVATE
-            Qt6::Widgets
-            KetPlusCM::core
-            KetPlusCM::editor
-            KetPlusCM::git
-            KetPlusCM::git_ui
-            KetPlusCM::index
-            KetPlusCM::preview
-            KetPlusCM::settings_ui
-            KetPlusCM::terminal
-            KetPlusCM::ui
-            KetPlusCM::workspace
-    )
+    target_link_libraries(ketplus_cm PRIVATE ${ketplus_lite_window_libraries})
     target_compile_definitions(ketplus_cm PRIVATE
         KETPLUS_CM_VERSION="${PROJECT_VERSION}"
     )
     ketplus_enable_warnings(ketplus_cm)
-    ketplus_cm_add_font_resources(ketplus_cm)
+
     ketplus_cm_add_ket_fonts(ketplus_cm ketplus_ket_fonts)
 
     qt_add_resources(ketplus_cm "ketplus_brand"
@@ -351,8 +363,6 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     )
 
     add_library(ketplus_terminal_app_ui STATIC
-        src/terminal_app/TerminalTab.cpp
-        src/terminal_app/TerminalTab.h
         src/terminal_app/TerminalWindow.cpp
         src/terminal_app/TerminalWindow.h
     )
@@ -379,7 +389,7 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
         KETPLUS_CM_VERSION="${PROJECT_VERSION}"
     )
     ketplus_enable_warnings(ketplus_terminal_app)
-    ketplus_cm_add_font_resources(ketplus_terminal_app)
+
     ketplus_cm_add_ket_fonts(ketplus_terminal_app ketplus_ket_fonts)
 
     # Finder shows the bundle's localized name instead of its ASCII file name (ADR 0029).
@@ -513,6 +523,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_settings_tests
         PRIVATE Qt6::Test KetPlusCM::settings_ui
     )
+    ketplus_cm_add_ket_fonts(ketplus_settings_tests ketplus_ket_fonts)
     ketplus_enable_warnings(ketplus_settings_tests)
 
     ketplus_cm_add_test(ketplus_settings_tests ketplus_settings_tests)
@@ -630,4 +641,20 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_preview_tests ketplus_preview_tests)
     set_tests_properties(ketplus_preview_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    if(KETPLUS_CM_BUILD_APP)
+        add_executable(ketplus_lite_window_tests
+            tests/LiteWindowTest.cpp
+            ${ketplus_lite_window_sources}
+        )
+        target_include_directories(ketplus_lite_window_tests PRIVATE src)
+        target_link_libraries(ketplus_lite_window_tests
+            PRIVATE Qt6::Test ${ketplus_lite_window_libraries}
+        )
+        ketplus_enable_warnings(ketplus_lite_window_tests)
+        ketplus_cm_add_test(ketplus_lite_window_tests ketplus_lite_window_tests)
+        set_tests_properties(ketplus_lite_window_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        )
+    endif()
 endif()

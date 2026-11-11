@@ -21,10 +21,10 @@
       "visible": true
     },
     {
-      "name": "reasoning-hidden",
+      "name": "reasoning-thought",
       "item": {"id": "reasoning", "type": "reasoning", "text": "Internal reasoning"},
       "expectedEventType": "assistant.reasoning",
-      "visible": false
+      "visible": true
     },
     {
       "name": "command-secret",

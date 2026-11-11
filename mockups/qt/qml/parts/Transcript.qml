@@ -5,8 +5,8 @@ import Ket
 import KetPlusMock
 
 // A conversation's transcript at the 760 px reading width. `kind` picks the fixture:
-// activity, running, question, atlas, error, setup, short or welcome; claude, codex and cursor
-// replay every content type of that provider's journal (TranscriptFixtures).
+// activity, running, question, atlas, error, setup, short, welcome, report or report-running;
+// claude, codex and cursor replay every content type of that provider's journal (TranscriptFixtures).
 Item {
     id: transcript
 
@@ -172,14 +172,19 @@ Item {
                 : transcript.kind === "error" ? "Profile the editor startup on a cold cache."
                 : transcript.kind === "short" ? "Check this worktree and tell me if anything is uncommitted."
                 : transcript.kind === "setup" ? (Fixtures.providerSetup[transcript.conversation.setup] || {}).prompt || ""
+                : transcript.kind === "report" ? "Finish the repository picker, then tell me what is left on the new UI."
+                : transcript.kind === "report-running" ? "Carry on with the dialog."
                 : "Make transcript activity explicit and easier to scan."
         }
 
         // The work performed, collapsed into groups.
         KetActivityGroup {
-            visible: ["activity", "running", "atlas", "error", "setup"].includes(transcript.kind)
+            visible: ["activity", "running", "atlas", "error", "setup", "report", "report-running"].includes(transcript.kind)
             width: parent.width
-            text: transcript.kind === "running" ? "Explored 6 files, ran 2 commands" : "Used KetPlus editor and browser"
+            text: transcript.kind === "running" ? "Explored 6 files, ran 2 commands"
+                : transcript.kind === "report" ? "Edited 4 files, ran 3 commands"
+                : transcript.kind === "report-running" ? "Explored 3 files, editing 1"
+                : "Used KetPlus editor and browser"
             expanded: transcript.kind === "running"
             KetActivityRow { text: "Read"; detail: "apps/desktop/src/main.cpp"; iconName: "file-code" }
             KetActivityRow { text: "Searched"; detail: "“indexAsync” in modules/"; iconName: "search" }
@@ -202,10 +207,11 @@ Item {
         }
 
         MarkdownView {
-            visible: ["activity", "running", "short"].includes(transcript.kind)
+            visible: ["activity", "running", "short", "report"].includes(transcript.kind)
             width: parent.width
             window: transcript.window
             markdown: transcript.kind === "running" ? Fixtures.runningAnswer
+                : transcript.kind === "report" ? "The daemon now lists another repository's worktrees without switching to it, and the dialog follows the mock flow. Its tests and the call site are next; two decisions are yours."
                 : transcript.kind === "short" ? "The worktree is **clean**: no staged or unstaged changes, and `develop` is even with `origin/develop`."
                 : Fixtures.activityAnswer
             onLinkActivated: link => transcript.window.notify("Opened " + link)
@@ -223,8 +229,19 @@ Item {
             }
         }
 
+        // The turn closes with the work report; while the next turn runs, it shows that turn's activity.
+        TurnReportCard {
+            visible: ["report", "report-running"].includes(transcript.kind)
+            width: parent.width
+            report: Fixtures.turnReport
+            running: transcript.kind === "report-running"
+            activity: Fixtures.turnReport.activity
+            openItem: "picker-dialog"
+            onOpenRequested: transcript.openDetails("report")
+        }
+
         KetIconButton {
-            visible: ["activity", "short"].includes(transcript.kind)
+            visible: ["activity", "short", "report"].includes(transcript.kind)
             iconName: "copy"
             text: "Copy answer"
             onClicked: transcript.window.notify("Copied the answer")

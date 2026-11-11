@@ -3,6 +3,9 @@
 Status: accepted
 Date: 2026-11-01
 
+See also: ADR 0112 (agent teams) adds roles, tasks, digests and role addressing on
+top of these messages; nothing here changes.
+
 ## Context
 
 Claude, Codex and Cursor conversations run under one daemon (ADR 0002), but an
@@ -120,6 +123,43 @@ are mandatory:
   never fit on its own; one accepted earlier that does not fit is marked
   `failed` alone instead of failing its batch.
 
+### Explicit Desktop release of held messages (#130)
+
+The UI implementation stack adds two authenticated **local Desktop** operations:
+`session.agent_messages.read` and `session.agent_messages.release`. Both take the
+receiving session/generation and `payload.message_ids` (1–100 unique IDs for
+release). They are separately advertised in `daemon.hello` capabilities. An old
+daemon leaves the UI with an update/status error, never an emulated user prompt.
+Agent-token connections and cloud-control clients cannot invoke these operations;
+the `agents.*` MCP surface does not expose them. Generation checks run before a
+cached command result can be returned.
+
+Desktop renders an incoming held notice with sender/reason, a one-message scope,
+and **Receive and continue**. Reading it only queries state. Clicking is the user
+authorization and states that an agent turn/provider quota may follow. Pending
+clicks are fenced, failures can refresh/retry, and a conversation switch rejects
+late responses. Multiple IDs are supported by the protocol, but the current UI
+explicitly releases one visible message per action.
+
+The journal atomically validates the whole selection, rejects stale/expired or
+already-delivered messages and marks only those IDs queued with
+`delivery=user_authorized:<command-id>`. The existing command result cache makes
+transport retries idempotent. The broker delivers one authorized batch separately
+from unrelated queued messages, bypassing hop/chain/hourly guards for that batch
+only. A busy receiver waits until its normal turn finishes, even for an urgent
+message. New automatic messages retain their existing limits and reply semantics.
+A new ordinary user turn can still consume pending held/authorized messages.
+
+Before invoking the provider, the broker persists a `releasing` claim and the
+expected turn sequence. The journaled input carries `user_release_id` and the
+original attributed message IDs. After a restart, that marker proves delivery:
+claimed inputs already journaled are not started again; a claim with no input is
+failed and requires another explicit retry. A journal read failure never grants
+permission to repeat the turn. Authorization, progress and outcome are separate
+`agent_message.state` notices, rather than forged user prose. No installed daemon
+is replaced by this implementation work; packaging/version distribution remains
+a later phase.
+
 ### Sender identity and trust
 
 - The daemon mints a random 256-bit capability token per conversation
@@ -201,13 +241,15 @@ as `ketplus_browser`:
   when the user asks it to. `#1234` can also be an issue or pull-request number,
   so the preamble says references are for contacting conversations on request.
 - Delivered agent messages appear as an outlined bubble labelled
-  "Message from #1093 · title · provider" (or "Reply from …").
+  "From @agent/1093 · title · provider", as the Qt mock draws it (earlier
+  builds wrote "Message from …" or "Reply from …").
 
 ### Transcript and clients
 
 - Delivery is the `user.message` (or `turn.steered`) described above. A new
   `agent_message.state` event tells the sender that a message was sent (`sent`,
-  with the receiver's number and title and the delivery state) or held, failed
+  with the receiver's number, title and provider, the delivery state and a
+  500-character excerpt of the text) or held, failed
   or expired, and tells the receiver that its final answer was sent as the reply
   (`replied`) or that a message is held. The broker emits `sent` and `replied`
   itself, because each provider presents its MCP call differently. Desktop

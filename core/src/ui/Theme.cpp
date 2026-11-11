@@ -1,4 +1,5 @@
 #include "ui/Theme.h"
+#include "ui/InterfaceZoom.h"
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
@@ -11,12 +12,17 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QToolTip>
 
 #include <utility>
 
 namespace ketplus {
+namespace {
+int appliedZoomPercent = InterfaceZoomMetrics::defaultPercent;
+}
+
 namespace {
 
 // One Két DS token in a theme, opaque: a translucent token (dark borders) is composited
@@ -108,6 +114,12 @@ ThemeManager::Mode modeFromName(const QString& name) {
 
 } // namespace
 
+QString themeTokenColor(const QString& name, bool dark) {
+    return tokenColor(name, dark ? ket::Theme::Dark : ket::Theme::Light);
+}
+
+ThemePalette currentThemePalette() { return paletteFor(ket::Appearance::instance().theme()); }
+
 // The tooltip size of the kit's recipe. The base QWidget rule would otherwise set tooltip
 // labels to the interface size: a stylesheet font wins over QToolTip::setFont.
 int tooltipFontPixels() {
@@ -117,23 +129,16 @@ int tooltipFontPixels() {
 
 namespace {
 
-QString styleSheetFor(const ThemePalette& palette, const QString& fontFamily,
-                      const int interfaceFontSizePixels) {
+QString styleSheetFor(const ThemePalette& palette, const int interfaceTextPixels,
+                      const int zoomPercent) {
     const QString terminalFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     QString style = QStringLiteral(R"QSS(
-QWidget {
-    color: {{textMain}};
-    font-family: "{{fontFamily}}";
-    font-size: {{interfaceFontSize}}px;
-    selection-background-color: {{accentMuted}};
-    selection-color: {{textMain}};
-}
-
 QToolTip {
     font-size: {{tooltipFontSize}}px;
 }
 
-QMainWindow, QDialog, QMessageBox {
+QMainWindow, QDialog, QMessageBox,
+QStackedWidget#liteWorkspacePages, QWidget#liteWelcome {
     background: {{pageBackground}};
 }
 
@@ -184,42 +189,6 @@ QSplitter::handle:hover {
     background: {{focus}};
 }
 
-QWidget[kvRole="activityBar"] {
-    border-right: 1px solid {{border}};
-    background: {{sidebarBackground}};
-}
-
-QToolButton[kvRole="activityButton"] {
-    min-width: 44px;
-    max-width: 44px;
-    min-height: 42px;
-    max-height: 42px;
-    padding: 0;
-    border: 0;
-    border-left: 2px solid transparent;
-    border-radius: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 17px;
-    font-weight: 600;
-}
-
-QToolButton[kvRole="activityButton"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
-QToolButton[kvRole="activityButton"]:checked {
-    border-left-color: {{accent}};
-    background: {{panelBackground}};
-    color: {{accentText}};
-}
-
-QToolButton[kvRole="activityButton"]:disabled {
-    background: transparent;
-    color: {{textDisabled}};
-}
-
 QWidget[kvRole="explorer"] {
     background: {{sidebarBackground}};
 }
@@ -233,88 +202,15 @@ QWidget[kvRole="terminalPanel"] {
     background: {{panelSubtle}};
 }
 
-QWidget[kvRole="terminalHeader"] {
-    min-height: 34px;
-    max-height: 34px;
-    border-bottom: 1px solid {{border}};
-    background: {{panelSubtle}};
-}
-
-QLabel[kvRole="terminalHeading"] {
-    color: {{textSecondary}};
-    font-size: 10px;
-    font-weight: 700;
-}
-
-QLabel[kvRole="terminalHeading"][terminalState="running"] {
-    color: {{tabActiveText}};
-}
-
-QLabel[kvRole="terminalHeading"][terminalState="exited"] {
-    color: {{textMuted}};
-}
-
-QLabel[kvRole="terminalPath"] {
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
 QAbstractScrollArea[kvRole="terminalView"] {
     border: 0;
     background: {{panelSubtle}};
     font-family: "{{terminalFontFamily}}";
 }
 
-QToolButton[kvRole="terminalAction"] {
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 16px;
-}
-
-QToolButton[kvRole="terminalAction"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
-QWidget[kvRole="previewHeader"] {
-    min-height: 34px;
-    max-height: 34px;
-    border-bottom: 1px solid {{border}};
-    background: {{panelSubtle}};
-}
-
-QLabel[kvRole="previewHeading"] {
-    color: {{textSecondary}};
-    font-size: 11px;
-    font-weight: 700;
-}
-
 QLabel[kvRole="previewHint"] {
     color: {{textMuted}};
     font-size: 11px;
-}
-
-QToolButton[kvRole="previewClose"] {
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 17px;
-}
-
-QToolButton[kvRole="previewClose"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
 }
 
 QLabel[kvRole="previewNotice"] {
@@ -327,23 +223,6 @@ QLabel[kvRole="previewNotice"] {
 
 QLabel[kvRole="previewNotice"][noticeState="error"] {
     color: {{danger}};
-}
-
-QLabel[kvRole="sidebarHeading"] {
-    color: {{textSecondary}};
-    font-size: 11px;
-    font-weight: 700;
-}
-
-QLabel[kvRole="sidebarFolder"] {
-    color: {{textMuted}};
-    font-size: 11px;
-}
-
-QLabel[kvRole="sourceControlHeading"] {
-    color: {{textMain}};
-    font-size: 11px;
-    font-weight: 600;
 }
 
 QLabel[kvRole="gitRepositoryName"] {
@@ -566,6 +445,14 @@ QPushButton:focus, QToolButton:focus, QComboBox:focus, QLineEdit:focus, QSpinBox
     border-color: {{focus}};
 }
 
+/* ket::TextField draws its own field and leading icon from the kit recipe. */
+ket--TextField, ket--TextField:hover, ket--TextField:focus {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
 QDialog[kvRole="settingsDialog"] {
     background: {{pageBackground}};
 }
@@ -596,53 +483,18 @@ QListWidget#settingsNavigation {
     outline: 0;
 }
 
-QListWidget#settingsNavigation::item {
-    min-height: 34px;
-    padding: 0 10px;
-    border-radius: 5px;
-    color: {{textSecondary}};
-}
-
-QListWidget#settingsNavigation::item:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
+QListWidget#settingsNavigation::item,
+QListWidget#settingsNavigation::item:hover,
 QListWidget#settingsNavigation::item:selected {
-    border-left: 2px solid {{focus}};
-    background: {{accentSubtle}};
-    color: {{tabActiveText}};
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
 }
 
-QScrollArea#appearanceSettingsScroll {
+QScrollArea#appearanceSettingsScroll, QScrollArea#typographySettingsScroll {
     border: 0;
     background: {{pageBackground}};
-}
-
-QListWidget[kvRole="themeList"] {
-    padding: 4px;
-    border: 1px solid {{border}};
-    border-radius: 6px;
-    background: {{panelSubtle}};
-    outline: 0;
-}
-
-QListWidget[kvRole="themeList"]::item {
-    min-height: 38px;
-    padding: 3px 9px;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: {{textSecondary}};
-}
-
-QListWidget[kvRole="themeList"]::item:hover {
-    background: {{surfaceHover}};
-}
-
-QListWidget[kvRole="themeList"]::item:selected {
-    border-color: {{accentMuted}};
-    background: {{accentSubtle}};
-    color: {{textMain}};
 }
 
 QLabel[kvRole="settingsEyebrow"] {
@@ -660,42 +512,6 @@ QLabel[kvRole="settingsTitle"] {
 QLabel[kvRole="settingsDescription"] {
     color: {{textSecondary}};
     font-size: 12px;
-}
-
-QFrame[kvRole="settingsCard"] {
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    background: {{panelBackground}};
-}
-
-QLabel[kvRole="settingsFieldLabel"] {
-    min-width: 92px;
-    padding-top: 7px;
-    color: {{textMain}};
-    font-size: 12px;
-    font-weight: 600;
-}
-
-QLabel[kvRole="settingsFieldHelp"] {
-    padding-bottom: 7px;
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
-QLabel[kvRole="settingsAutomaticValue"] {
-    min-height: 30px;
-    border: 1px solid {{border}};
-    border-radius: 5px;
-    background: {{panelSubtle}};
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
-QWidget[kvRole="settingsPreview"] {
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    background: {{panelBackground}};
-    color: {{textMain}};
 }
 
 QPushButton[kvRole="primaryAction"] {
@@ -818,11 +634,24 @@ QToolButton[kvRole="sidebarAction"]:hover {
 }
 )QSS");
 
+    // Scale legacy product text once, before token expansion. Kit controls own
+    // their fonts; the tooltip token deliberately keeps its recipe size.
+    static const QRegularExpression fontSize(QStringLiteral(R"((font-size:\s*)(\d+)px)"));
+    auto matches = fontSize.globalMatch(style);
+    QList<QRegularExpressionMatch> sizes;
+    while (matches.hasNext())
+        sizes.append(matches.next());
+    for (auto it = sizes.crbegin(); it != sizes.crend(); ++it)
+        style.replace(
+            it->capturedStart(2), it->capturedLength(2),
+            QString::number(InterfaceZoomMetrics::scale(it->captured(2).toInt(), zoomPercent)));
+
     const std::pair<const char*, QString> replacements[] = {
-        {"{{fontFamily}}", fontFamily},
         {"{{terminalFontFamily}}", terminalFontFamily},
-        {"{{interfaceFontSize}}", QString::number(interfaceFontSizePixels)},
-        {"{{tooltipFontSize}}", QString::number(tooltipFontPixels())},
+        {"{{interfaceFontSize}}", QString::number(interfaceTextPixels)},
+        {"{{tooltipFontSize}}",
+         QString::number(qRound(ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels *
+                                InterfaceZoomMetrics::factor(zoomPercent)))},
         {"{{pageBackground}}", palette.pageBackground},
         {"{{panelBackground}}", palette.panelBackground},
         {"{{panelSubtle}}", palette.panelSubtle},
@@ -865,9 +694,19 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     // The kit's style draws menus, tooltips, tab bars, select popups, progress bars and
     // sliders from Két DS recipes, and keeps the application palette on ket::Appearance;
     // the stylesheet below styles the rest. The profile goes first: the style reads it.
-    ket::Profile::setCurrent(ket::Profile::ketPlus());
+    auto profile = ket::Profile::ketPlus();
+    profile.codePixels = 14;
+    profile.conversationNumberPixels = 14;
+    profile.usageRingSize = 15;
+    profile.usageRingStroke = 2;
+    profile.conversationTitleWeight = 500;
+    profile.conversationSelectedTitleWeight = 500;
+    profile.conversationMetaWeight = 500;
+    profile.navItemActiveWeight = 500;
+    ket::Profile::setCurrent(profile);
+    ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(interfaceZoomPercent_));
     ket::Style::install(application_);
-    loadInterFont();
+    loadInterfaceFont();
 
     QSettings settings;
     mode_ = modeFromName(
@@ -875,11 +714,8 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
 
     // ket::Appearance owns light, dark and following the system; QML (KetTheme), the kit's
     // style and KétPlus Terminal read it, so the palette follows it too.
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this, [this] {
-        if (!syncingAppearance_) {
-            apply();
-        }
-    });
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            [this] { apply(); });
     syncAppearance();
 }
 
@@ -888,6 +724,14 @@ ThemeManager::Mode ThemeManager::mode() const noexcept { return mode_; }
 const ThemePalette& ThemeManager::palette() const noexcept { return palette_; }
 
 int ThemeManager::interfaceFontSizePixels() const noexcept { return interfaceFontSizePixels_; }
+
+int ThemeManager::interfaceZoomPercent() const noexcept { return interfaceZoomPercent_; }
+
+int InterfaceZoomMetrics::current() { return appliedZoomPercent; }
+
+int ThemeManager::interfaceTextPixels() const noexcept {
+    return InterfaceZoomMetrics::scale(interfaceFontSizePixels_, interfaceZoomPercent_);
+}
 
 void ThemeManager::setMode(const Mode mode) {
     const bool needsApply = mode_ != mode || previewMode_.has_value();
@@ -916,52 +760,62 @@ void ThemeManager::cancelPreview() {
     syncAppearance();
 }
 
-void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
-    const int normalized = qBound(8, fontSizePixels, 24);
-    if (interfaceFontSizePixels_ == normalized) {
+void ThemeManager::setInterfaceScale(const int fontSizePixels, const int zoomPercent) {
+    const int size = qBound(8, fontSizePixels, 24);
+    const int zoom = InterfaceZoomMetrics::snap(zoomPercent);
+    if (interfaceFontSizePixels_ == size && interfaceZoomPercent_ == zoom) {
         return;
     }
-    interfaceFontSizePixels_ = normalized;
+    interfaceFontSizePixels_ = size;
+    interfaceZoomPercent_ = zoom;
+    appliedZoomPercent = zoom;
+    // Finish QApplication/QSS propagation before notifying kit widgets. Qt's
+    // stylesheet repolish resets child fonts, including explicit recipe fonts.
     QFont font = application_.font();
-    font.setPixelSize(interfaceFontSizePixels_);
+    font.setPixelSize(interfaceTextPixels());
     setApplicationFont(font);
-    apply();
+    apply(false);
+    ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(zoom));
+    // apply() sized the tooltip font from the previous zoom.
+    restoreTooltipFont();
+    emit themeChanged();
 }
 
 void ThemeManager::syncAppearance() {
     const Mode mode = effectiveMode();
-    syncingAppearance_ = true;
+    const auto previousTheme = ket::Appearance::instance().theme();
     ket::Appearance::instance().setMode(mode == Mode::Dark    ? ket::Appearance::Mode::Dark
                                         : mode == Mode::Light ? ket::Appearance::Mode::Light
                                                               : ket::Appearance::Mode::System);
-    syncingAppearance_ = false;
-    apply();
+    // A changed theme already calls apply() before the kit widgets' observers.
+    // Reapplying afterwards would overwrite the fonts they just refreshed.
+    if (previousTheme == ket::Appearance::instance().theme())
+        apply();
 }
 
-void ThemeManager::apply() {
+void ThemeManager::apply(const bool notify) {
     palette_ = paletteFor(ket::Appearance::instance().theme());
 
-    application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
+    const auto sheet = styleSheetFor(palette_, interfaceTextPixels(), interfaceZoomPercent_);
+    if (application_.styleSheet() != sheet)
+        application_.setStyleSheet(sheet);
     restoreTooltipFont();
 
-    emit themeChanged();
+    if (notify)
+        emit themeChanged();
 }
 
 ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
     return previewMode_.value_or(mode_);
 }
 
-void ThemeManager::loadInterFont() {
-    uiFontFamily_ = QStringLiteral("Inter");
-    const int fontId =
-        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
-    const auto families = QFontDatabase::applicationFontFamilies(fontId);
-    if (!families.isEmpty()) {
-        uiFontFamily_ = families.constFirst();
-    }
+void ThemeManager::loadInterfaceFont() {
+    uiFontFamily_ = QFontDatabase::hasFamily(QStringLiteral("KET Sans"))
+                        ? QStringLiteral("KET Sans")
+                        : QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
 
     QFont font(uiFontFamily_);
-    font.setPixelSize(interfaceFontSizePixels_);
+    font.setPixelSize(interfaceTextPixels());
     font.setWeight(QFont::Normal);
     setApplicationFont(font);
 }

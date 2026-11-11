@@ -5,6 +5,107 @@ class DesktopTranscriptCatchupTest final : public QObject {
   private slots:
     void cleanup() { transcript_paging::setPageCounts({}); }
 
+    // A card that waited while another client decided it becomes that decision when history
+    // is read again, never a second row beside it.
+    void restoredReceiptSettlesAWaitingApprovalCard() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        const QJsonObject request{{"approval_id", "a1"},
+                                  {"kind", "approval"},
+                                  {"request_type", "command"},
+                                  {"reason", "Codex wants network access."},
+                                  {"command", "curl https://example.test"},
+                                  {"revision", 1}};
+        bool decided = false;
+        FakeDaemon daemon(
+            env.directory.filePath("daemon.sock"),
+            [&](const QString& type, const QJsonObject& envelope) -> QJsonObject {
+                if (type == "session.list") {
+                    QJsonArray sessions;
+                    for (const auto* id : {"a", "b"})
+                        sessions.append(QJsonObject{{"session_id", id},
+                                                    {"worktree_path", path},
+                                                    {"session_generation", 1},
+                                                    {"state", "running"},
+                                                    {"last_event_cursor", decided ? 4 : 2}});
+                    return {{"transcript_window_version", 1}, {"sessions", sessions}};
+                }
+                if (type != "session.transcript_window")
+                    return {};
+                const auto id = envelope.value("session_id").toString();
+                QJsonArray events{windowEvent(id, "user.message", {{"text", "prompt"}}, 1, 1)};
+                QJsonArray pending;
+                if (id == "a") {
+                    events.append(windowEvent(id, "approval.requested", request, 2, 1));
+                    if (decided)
+                        events.append(
+                            windowEvent(id, "approval.resolved",
+                                        {{"approval_id", "a1"},
+                                         {"answers", QJsonObject{{"decision", "accept"}}}},
+                                        3, 1));
+                    else
+                        pending.append(request);
+                }
+                if (id == "a" && decided)
+                    events.append(windowEvent(
+                        id, "item.completed",
+                        {{"item_id", "thought"},
+                         {"item", QJsonObject{{"id", "thought"}, {"type", "reasoning"}}}},
+                        4, 1));
+                const qint64 head = id == "a" ? (decided ? 4 : 2) : 1;
+                return {{"transcript_window_version", 1},
+                        {"session_id", id},
+                        {"session_generation", 1},
+                        {"events", events},
+                        {"before_cursor", 1},
+                        {"after_cursor", head},
+                        {"snapshot_cursor", head},
+                        {"projection_revision", decided ? 2 : 1},
+                        {"current_turn_sequence", 1},
+                        {"active_turn_id", "turn-1"},
+                        {"state", "running"},
+                        {"has_more_before", false},
+                        {"has_more_after", false},
+                        {"pending_approvals", pending}};
+            });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        const auto approvals = [&] {
+            QVariantList rows;
+            for (const auto& row : desktop.messages(path))
+                if (row.toMap().value("subtype") == "approval")
+                    rows.append(row);
+            return rows;
+        };
+        QTRY_COMPARE(approvals().size(), 1);
+        QTRY_VERIFY(approvals().first().toMap().value("running").toBool());
+        QTRY_COMPARE(desktop.status(path), QStringLiteral("Waiting for your answer…"));
+
+        // Decided on the phone while this client missed the event; history is read again.
+        desktop.selectConversation(path, "b");
+        QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
+        decided = true;
+        daemon.push(liveEvent("a", "item.completed",
+                              {{"item_id", "thought"},
+                               {"item", QJsonObject{{"id", "thought"}, {"type", "reasoning"}}}},
+                              4, 1));
+        QTest::qWait(30);
+        desktop.selectConversation(path, "a");
+        QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
+        QTRY_COMPARE(approvals().size(), 1);
+        QTRY_VERIFY(!approvals().first().toMap().value("running").toBool());
+        const auto note = approvals().first().toMap();
+        QCOMPARE(note.value("status").toString(), QStringLiteral("approved"));
+        QVERIFY(!note.value("running").toBool());
+        QVERIFY(!note.value("presentationHidden").toBool());
+        QCOMPARE(note.value("command").toString(), QStringLiteral("curl https://example.test"));
+        QVERIFY(desktop.status(path) != QStringLiteral("Waiting for your answer…"));
+    }
+
     void compactionStatusFollowsRetainedWindow_data() {
         QTest::addColumn<bool>("restoredStart");
         QTest::addColumn<bool>("activityDuringRead");
@@ -88,7 +189,7 @@ class DesktopTranscriptCatchupTest final : public QObject {
         QTest::qWait(30);
         desktop.selectConversation(path, "a");
         QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
-        QTRY_COMPARE(desktop.messages(path).last().toMap().value("body").toString(),
+        QTRY_COMPARE(desktop.messages(path).last().toMap().value("title").toString(),
                      QStringLiteral("Context compacted"));
         QCOMPARE(desktop.messages(path).size(), 2);
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
@@ -99,8 +200,12 @@ class DesktopTranscriptCatchupTest final : public QObject {
                                          {{"threadId", "a"}, {"item", reasoning}});
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
         QVERIFY(desktop.isRunning(path));
+        // The reasoning reads as a "Thought" step; the compaction stays one row.
+        QCOMPARE(desktop.messages(path).size(), 3);
+        QCOMPARE(desktop.messages(path).last().toMap().value("title").toString(),
+                 QStringLiteral("Thought"));
         emit server.notificationReceived("item/completed", {{"threadId", "a"}, {"item", compact}});
-        QCOMPARE(desktop.messages(path).size(), 2);
+        QCOMPARE(desktop.messages(path).size(), 3);
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
 
         const auto compactEvent = [&](const QString& method, const QString& id) {
@@ -385,6 +490,132 @@ class DesktopTranscriptCatchupTest final : public QObject {
         QVERIFY(desktop.messages(path).size() > 128);
         QVERIFY(!desktop.historyState(path).value("hasNewer").toBool());
         QVERIFY(desktop.historyState(path).value("error").toString().isEmpty());
+    }
+
+    // A turn end delivered late reads as the journal timed it, not as the desktop received it.
+    void lateTurnEndUsesTheJournalTimes() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        FakeDaemon daemon(env.directory.filePath("daemon.sock"), [&](const QString& type,
+                                                                     const QJsonObject&) {
+            if (type == "session.list")
+                return QJsonObject{{"transcript_window_version", 1},
+                                   {"sessions", QJsonArray{QJsonObject{{"session_id", "a"},
+                                                                       {"worktree_path", path},
+                                                                       {"session_generation", 1},
+                                                                       {"state", "running"},
+                                                                       {"last_event_cursor", 1}}}}};
+            if (type != "session.transcript_window")
+                return QJsonObject{};
+            return QJsonObject{{"transcript_window_version", 1},
+                               {"session_id", "a"},
+                               {"session_generation", 1},
+                               {"events", QJsonArray{windowEvent("a", "user.message",
+                                                                 {{"text", "earlier"}}, 1, 1)}},
+                               {"before_cursor", 1},
+                               {"has_more_before", false},
+                               {"snapshot_cursor", 1},
+                               {"projection_revision", 1},
+                               {"current_turn_sequence", 1},
+                               {"state", "running"}};
+        });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        QTRY_COMPARE_WITH_TIMEOUT(desktop.messages(path).size(), 1, 5000);
+        const QDateTime start = QDateTime::currentDateTimeUtc().addSecs(-3600);
+        const auto sent = [&](QJsonObject event, int seconds) {
+            event.insert("sent_at", start.addSecs(seconds).toString(Qt::ISODateWithMs));
+            return event;
+        };
+        daemon.push(sent(liveEvent("a", "user.message", {{"text", "Fix the spinner"}}, 2, 2), 0));
+        daemon.push(sent(
+            liveEvent("a", "usage.context",
+                      {{"tokenUsage", QJsonObject{{"last", QJsonObject{{"totalTokens", 141200}}},
+                                                  {"modelContextWindow", 200000}}}},
+                      3, 2),
+            200));
+        daemon.push(sent(liveEvent("a", "turn.completed", {{"status", "completed"}}, 4, 2), 380));
+        const auto turnEnd = [&] {
+            QString last;
+            for (const auto& row : desktop.messages(path)) {
+                const auto entry = row.toMap();
+                if (entry.value("subtype") == "turnEnd")
+                    last = entry.value("body").toString();
+            }
+            return last;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("6m 20s · 141k context"), 5000);
+        // A live end the user stopped keeps saying so when it is worded with the session cost.
+        daemon.push(
+            sent(liveEvent("a", "user.message", {{"text", "Then the sidebar"}}, 5, 3), 400));
+        daemon.push(sent(
+            liveEvent("a", "turn.completed", {{"status", "interrupted"}, {"reason", "user"}}, 6, 3),
+            468));
+        QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("1m 08s · stopped by you"), 5000);
+    }
+
+    // A sent message's live states update one note, as a reloaded window shows it.
+    void liveAgentMessageStatesUpdateOneNote() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        FakeDaemon daemon(env.directory.filePath("daemon.sock"), [&](const QString& type,
+                                                                     const QJsonObject&) {
+            if (type == "session.list")
+                return QJsonObject{{"transcript_window_version", 1},
+                                   {"sessions", QJsonArray{QJsonObject{{"session_id", "a"},
+                                                                       {"worktree_path", path},
+                                                                       {"session_generation", 1},
+                                                                       {"state", "running"},
+                                                                       {"last_event_cursor", 1}}}}};
+            if (type != "session.transcript_window")
+                return QJsonObject{};
+            return QJsonObject{{"transcript_window_version", 1},
+                               {"session_id", "a"},
+                               {"session_generation", 1},
+                               {"events", QJsonArray{windowEvent("a", "user.message",
+                                                                 {{"text", "earlier"}}, 1, 1)}},
+                               {"before_cursor", 1},
+                               {"has_more_before", false},
+                               {"snapshot_cursor", 1},
+                               {"projection_revision", 1},
+                               {"current_turn_sequence", 1},
+                               {"state", "running"}};
+        });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        QTRY_COMPARE_WITH_TIMEOUT(desktop.messages(path).size(), 1, 5000);
+        const QJsonObject sent{
+            {"message_id", "q1"},    {"kind", "request"},       {"state", "sent"},
+            {"delivery", "queued"},  {"expect_reply", true},    {"direction", "outgoing"},
+            {"peer_number", "8941"}, {"peer_title", "DS Icon"}, {"text", "Is it fine?"}};
+        daemon.push(liveEvent("a", "agent_message.state", sent, 2, 1));
+        const auto notes = [&] {
+            QStringList found;
+            for (const auto& row : desktop.messages(path))
+                if (row.toMap().value("subtype") == "agentNote")
+                    found.append(row.toMap().value("meta").toString());
+            return found;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(
+            notes(), QStringList{"DS Icon · Sent · delivered when its turn ends · reply requested"},
+            5000);
+        daemon.push(liveEvent("a", "agent_message.state",
+                              {{"message_id", "q1"},
+                               {"kind", "request"},
+                               {"state", "failed"},
+                               {"reason", "no_reply"},
+                               {"direction", "outgoing"},
+                               {"peer_number", "8941"}},
+                              3, 1));
+        QTRY_COMPARE_WITH_TIMEOUT(notes(), QStringList{"DS Icon · Delivered · no reply"}, 5000);
     }
 };
 

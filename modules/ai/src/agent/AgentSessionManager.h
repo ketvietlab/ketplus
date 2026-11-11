@@ -45,6 +45,8 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QVariantList numberedConversations() const;
     [[nodiscard]] QString title(const QString& worktreePath) const;
     [[nodiscard]] QString status(const QString& worktreePath) const;
+    // The running turn's latest reasoning heading; empty when idle or unknown.
+    [[nodiscard]] QString workingDetail(const QString& worktreePath) const;
     [[nodiscard]] bool isRunning(const QString& worktreePath) const;
     [[nodiscard]] QSet<QString> runningPaths() const;
     // Checkouts a running agent uses: each running session's execution worktree (canonical),
@@ -56,6 +58,15 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QVariantMap conversationConfiguration(const QString& worktreePath) const;
     [[nodiscard]] QVariantMap usageSnapshot(const QString& worktreePath) const;
     [[nodiscard]] QVariantList backgroundTasks(const QString& worktreePath) const;
+    void heldMessageAction(const QString& worktreePath, const QString& messageId, bool release);
+    // ADR 0067. readReviewer only reads; setReviewer assigns conversation #reviewerNumber,
+    // starts a new reviewer with newProvider, or clears the reviewer when both are empty.
+    void readReviewer(const QString& worktreePath);
+    void setReviewer(const QString& worktreePath, const QString& reviewerNumber,
+                     const QString& newProvider);
+    // ADR 0106: reads the active conversation's work report; workReportChanged answers, and
+    // follows the conversation's later reports.
+    void readWorkReport(const QString& worktreePath);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
     void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
 
@@ -80,6 +91,15 @@ class AgentSessionManager final : public QObject {
     void markConversationSeen(const QString& worktreePath, const QString& conversationId);
     void renameConversation(const QString& worktreePath, const QString& conversationId,
                             const QString& title);
+    // Adds or removes one label; the daemon stores the result (`session.tags.set`).
+    void setConversationTag(const QString& worktreePath, const QString& conversationId,
+                            const QString& label, bool tagged);
+    // #429: every label this Mac offers, [{label, color}], as the daemon keeps them. Saving
+    // replaces the whole catalog; renames maps an old label to its new one.
+    [[nodiscard]] QVariantList tagCatalog() const { return tagCatalog_; }
+    void saveTagCatalog(const QVariantList& tags, const QVariantMap& renames);
+    // #125 "Mark as done": the conversation no longer waits for the user (`session.mark_done`).
+    void markConversationDone(const QString& worktreePath, const QString& conversationId);
     bool archiveConversation(const QString& worktreePath, const QString& conversationId);
     bool restoreConversation(const QString& worktreePath, const QString& conversationId);
     bool cancelConversation(const QString& worktreePath, const QString& conversationId);
@@ -95,6 +115,10 @@ class AgentSessionManager final : public QObject {
                                       const QVariantMap& changes = {});
     void newSession(const QString& worktreePath);
     void markActiveConversationOwnsWorktree(const QString& worktreePath);
+    // A worktree the user created for this conversation from its picker; deleting the
+    // conversation offers to remove it.
+    void claimConversationWorktree(const QString& worktreePath, const QString& conversationId,
+                                   const QString& ownedPath);
     [[nodiscard]] bool conversationOwnsWorktree(const QString& worktreePath,
                                                 const QString& conversationId) const;
     [[nodiscard]] QStringList conversationOwnedWorktreePaths(const QString& worktreePath,
@@ -150,7 +174,9 @@ class AgentSessionManager final : public QObject {
     void messageUpdated(const QString& worktreePath, int index, const QVariantMap& message);
     void sessionStateChanged(const QString& worktreePath, const QString& title,
                              const QString& status, bool running);
+    void workingDetailChanged(const QString& worktreePath, const QString& detail);
     void conversationsChanged(const QString& worktreePath, const QVariantList& conversations);
+    void tagCatalogChanged(const QVariantList& catalog);
     void conversationConfigurationChanged(const QString& worktreePath,
                                           const QVariantMap& configuration);
     void conversationConfigurationApplyFinished(const QString& path, const QString& conversationId,
@@ -158,6 +184,16 @@ class AgentSessionManager final : public QObject {
     void usageSnapshotChanged(const QString& worktreePath, const QVariantMap& snapshot);
     void backgroundTasksChanged(const QString& worktreePath, const QVariantList& tasks);
     // result: {output,total_bytes,truncated}, or {error} when the task cannot be read or stopped.
+    void heldMessageResult(const QString& worktreePath, const QString& conversationId,
+                           const QString& messageId, const QVariantMap& result);
+    // result: {available, reviewer: {number,title,provider,model} or absent}, or {error, change}
+    // where change tells a failed assignment from a failed read.
+    void reviewerResult(const QString& worktreePath, const QString& conversationId,
+                        const QVariantMap& result);
+    // report is the daemon ledger, empty before the first report. error is set when it cannot
+    // be read.
+    void workReportChanged(const QString& worktreePath, const QString& conversationId,
+                           const QVariantMap& report, const QString& error);
     void backgroundTaskResult(const QString& worktreePath, const QString& taskId,
                               const QString& action, const QVariantMap& result);
     void activityChanged();
@@ -282,6 +318,8 @@ class AgentSessionManager final : public QObject {
         QVariantList prefix;
         bool appended{false};
         QList<QPair<int, QVariantMap>> updates;
+        // Outstanding requests the journal shows were already decided or expired.
+        QSet<QString> settledPending;
     };
     static PreparedDaemonWindow
     prepareDaemonWindow(const QVariantList& batchMessages, const QVector<QVariantMap>& basis,
@@ -342,10 +380,26 @@ class AgentSessionManager final : public QObject {
     void publishDeferredFinal(const SessionPtr& session);
     void dismissPendingQuestions(const SessionPtr& session);
     void updateState(const SessionPtr& session, const QString& status, bool running);
-    void failSession(const SessionPtr& session, const QString& error);
-    void recordSessionError(const SessionPtr& session, const QString& error, bool notify);
+    void setWorkingDetail(const SessionPtr& session, const QString& detail);
+    // `code` is the daemon's runtime.error code (ADR 0110), when it gave one.
+    // A coded error (ADR 0110) keeps the provider's words and the failed turn's model.
+    void failSession(const SessionPtr& session, const QString& error, const QString& code = {},
+                     const QString& model = {});
+    void recordSessionError(const SessionPtr& session, const QString& error, bool notify,
+                            const QString& code = {}, const QString& model = {},
+                            bool refresh = true);
     void syncConversationTitle(const SessionPtr& session);
     void syncArchived(const SessionPtr& session);
+    [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;
+    void syncTags(const SessionPtr& session);
+    // #429, in AgentSessionTags.cpp.
+    void installTagCatalog();
+    void loadTagCatalog();
+    void setTagCatalogFromDaemon(const QJsonArray& catalog);
+    void applyTagChange(const QJsonObject& change);
+    // Labels chosen before the first turn go to the daemon once it knows the conversation.
+    void sendStartTags(const SessionPtr& session);
+    QVariantList tagCatalog_;
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
     void persistWorkspace(const QString& path) const;
@@ -362,6 +416,13 @@ class AgentSessionManager final : public QObject {
     bool markSeen(const SessionPtr& session);
     [[nodiscard]] bool isActiveSession(const SessionPtr& session) const;
     void applyModelOverride(QJsonObject& params, bool includeEffort) const;
+    void callReviewer(const QString& worktreePath, const QString& method,
+                      const QJsonObject& reviewer);
+    // Reads that failed, often because the daemon had not listed its sessions yet. Each is
+    // tried once more when the daemon finishes restoring.
+    void retryReviewerReads();
+    QSet<QString> reviewerReadsToRetry_;
+    QSet<QString> workReportReadsToRetry_;
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};

@@ -26,6 +26,25 @@ QJsonObject question(const QString& id = "async-question") {
 class AsyncQuestionLifetimeTest : public QObject {
     Q_OBJECT
   private slots:
+    // #126: the expiry timer wakes the daemon only while a request can expire.
+    void expiryTimerRunsOnlyWhileARequestCanExpire() {
+        ApprovalBroker broker;
+        QVERIFY(!broker.expiryTimerActive());
+        const QJsonObject details{{"request_type", "command"}, {"command", "ls"}};
+        QVERIFY(!broker.request("s", 1, 1, "approval", details).isEmpty());
+        QVERIFY(!broker.expiryTimerActive()); // no expiry, nothing to tick for
+        QSignalSpy expired(&broker, &ApprovalBroker::expired);
+        QVERIFY(!broker.request("s", 1, 2, "approval", details, 100).isEmpty());
+        QVERIFY(broker.expiryTimerActive());
+        QTRY_COMPARE_WITH_TIMEOUT(expired.size(), 1, 2000);
+        QVERIFY(!broker.expiryTimerActive());
+        // Answered before it expired: the next tick stops the timer.
+        const QString answered = broker.request("s", 1, 3, "approval", details, 60'000);
+        QVERIFY(broker.expiryTimerActive());
+        QVERIFY(broker.resolve(answered, "s", 1, "approval", {{"decision", "accept"}}).accepted);
+        QTRY_VERIFY_WITH_TIMEOUT(!broker.expiryTimerActive(), 2000);
+        QCOMPARE(expired.size(), 1);
+    }
     void onlyAsyncQuestionsInTheOwningGenerationExpire() {
         ApprovalBroker broker;
         QSignalSpy expired(&broker, &ApprovalBroker::expired);

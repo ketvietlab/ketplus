@@ -1,6 +1,6 @@
 # 0012: Product chrome zoom and appearance propagation
 
-Status: accepted
+Status: accepted; the single interface-size control is superseded by ADR 0104
 Date: 2026-09-19
 
 ## Context
@@ -39,3 +39,13 @@ New shared CM behavior must still be released in the public repository first.
 Regression tests exercise repeated zoom transitions, dynamic rows, inherited
 fonts, tiny gaps, elision, multiple windows, font-only changes and old Settings
 drafts. Native captures supplement the offscreen suite without model calls.
+
+## Két kit bridge (2026-11)
+
+The public Lite/Pro repository now owns the shared mapping in
+`core/src/ui/InterfaceZoom.h`. `ThemeManager` publishes interface pixels / 14 to
+`ket::Appearance`, so kit Widgets and `KetTheme.zoom` follow the same setting.
+The geometry adapter delegates rounding to `ket::Appearance::scale`; Pro keeps
+its named sizes and Lite keeps its existing numeric input. The legacy TypeScale
+roles remain until their consumers migrate to kit recipes. This bridge does not
+change editor/terminal text zoom or remove the remaining metric ladder.

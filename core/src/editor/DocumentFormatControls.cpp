@@ -3,10 +3,10 @@
 #include "editor/EditorWidget.h"
 #include "editor/SyntaxDefinition.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QMenu>
-#include <QMessageBox>
 #include <QToolButton>
 
 #include <utility>
@@ -70,9 +70,10 @@ void DocumentFormatControls::addMenus(QMenu* menu) {
 
 void DocumentFormatControls::addStatusButtons(
     const std::function<QToolButton*(QMenu*, const QString&)>& makeButton) {
+    // The mock's order: language, encoding, line endings.
+    languageButton_ = makeButton(languageMenu_, QStringLiteral("Language"));
     encodingButton_ = makeButton(encodingMenu_, QStringLiteral("File encoding"));
     lineEndingButton_ = makeButton(lineEndingMenu_, QStringLiteral("Line endings"));
-    languageButton_ = makeButton(languageMenu_, QStringLiteral("Language"));
 }
 
 void DocumentFormatControls::syncMenus() {
@@ -149,13 +150,13 @@ void DocumentFormatControls::reopenWithEncoding(const TextEncoding encoding) {
         return;
     }
     if (editor->document().isUntitled()) {
-        QMessageBox::information(
+        message_dialog::information(
             window_, QStringLiteral("Reopen with encoding"),
             QStringLiteral("Save the file before reopening it with another encoding."));
         return;
     }
     if (editor->document().isModified()) {
-        const auto answer = QMessageBox::warning(
+        const auto answer = message_dialog::warning(
             window_, QStringLiteral("Unsaved changes"),
             QStringLiteral("Reopening %1 as %2 discards your unsaved changes.")
                 .arg(editor->document().displayName(), textEncodingName(encoding)),
@@ -167,7 +168,7 @@ void DocumentFormatControls::reopenWithEncoding(const TextEncoding encoding) {
 
     const auto result = editor->reloadWithEncoding(encoding);
     if (!result.ok) {
-        QMessageBox::critical(window_, QStringLiteral("Unable to reopen file"), result.error);
+        message_dialog::critical(window_, QStringLiteral("Unable to reopen file"), result.error);
         return;
     }
     host_.restyle(editor);

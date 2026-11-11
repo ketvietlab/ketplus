@@ -24,6 +24,7 @@ class QLabel;
 class QMenu;
 class QPoint;
 class QSplitter;
+class QStackedWidget;
 class QString;
 class QTabWidget;
 class QShortcut;
@@ -31,6 +32,10 @@ class QThread;
 class QTimer;
 class QToolButton;
 class QVariant;
+
+namespace ket {
+class StatusItem;
+}
 
 namespace ketplus {
 
@@ -68,6 +73,13 @@ class MainWindow final : public QMainWindow {
 
   private:
     void createActions();
+    void createChrome();
+    void showEditorSurface();
+    // From Settings, a panel's button or shortcut shows the editor with that panel, even when
+    // the panel was open behind Settings and its action just unchecked.
+    bool panelStaysLeavingSettings(QAction* action, bool visible);
+    // Side panel actions change under signal blockers, so the activity bar repaints here.
+    void refreshActivityBar();
     void createNewDocument();
     void openDocument();
     void chooseFolder();
@@ -176,6 +188,7 @@ class MainWindow final : public QMainWindow {
     void updateWorktrees(const QVector<GitWorktree>& worktrees);
     void rebuildWorktreeMenu();
     void updateGitActions();
+    void addViewDiffButton(EditorWidget* editor);
     void switchToWorktree(const QString& path);
     void rememberActiveFileForWorktree();
     [[nodiscard]] QString currentWorkspaceRelativeFile() const;
@@ -201,13 +214,17 @@ class MainWindow final : public QMainWindow {
     ThemeManager& theme_;
     AppearanceSettings appearanceSettings_;
     EditorViewOptions viewOptions_;
+    QStackedWidget* chromePages_{nullptr};
+    QWidget* activityBar_{nullptr};
+    QWidget* editorColumn_{nullptr};
+    QWidget* settingsPage_{nullptr};
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};
     QTabWidget* tabs_{nullptr};
     FindReplaceBar* findBar_{nullptr};
-    QLabel* cursorPositionLabel_{nullptr};
-    QLabel* documentStateLabel_{nullptr};
+    ket::StatusItem* cursorPositionLabel_{nullptr};
+    ket::StatusItem* documentStateLabel_{nullptr};
     DocumentFormatControls* format_{nullptr};
     SearchPanel* searchPanel_{nullptr};
     QAction* searchPanelAction_{nullptr};

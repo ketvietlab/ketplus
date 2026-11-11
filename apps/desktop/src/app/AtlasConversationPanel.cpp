@@ -1,4 +1,9 @@
 #include "app/AtlasConversationPanel.h"
+#include "KetAppearance.h"
+#include "KetBadge.h"
+#include "KetButton.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "atlas/ManagedAtlasViewers.h"
 #include "ui/TypeScale.h"
@@ -32,12 +37,12 @@ AtlasConversationPanel::AtlasConversationPanel(AtlasIndex* index, QWidget* paren
     auto* title = new QLabel(tr("Atlases in this worktree"), this);
     title->setObjectName(QStringLiteral("conversationAtlasTitle"));
     heading->addWidget(title, 1);
-    auto* create = new QPushButton(tr("New Atlas"), this);
+    auto* create = new ket::Button(tr("New Atlas"), ket::ButtonVariant::Primary, this);
     create->setObjectName(QStringLiteral("conversationAtlasNew"));
-    connect(create, &QPushButton::clicked, this, &AtlasConversationPanel::newRequested);
+    connect(create, &QAbstractButton::clicked, this, &AtlasConversationPanel::newRequested);
     heading->addWidget(create);
     layout->addLayout(heading);
-    search_ = new QLineEdit(this);
+    search_ = new ket::TextField(this);
     search_->setObjectName(QStringLiteral("conversationAtlasSearch"));
     search_->setPlaceholderText(tr("Search Atlases"));
     search_->setAccessibleName(tr("Search Atlases"));
@@ -70,24 +75,16 @@ void AtlasConversationPanel::applyPalette(const QPalette& colors) {
     const auto text = colors.color(QPalette::WindowText).name();
     const auto muted = colors.color(QPalette::PlaceholderText).name();
     const auto border = colors.color(QPalette::Mid).name();
-    const auto accent = colors.color(QPalette::Highlight).name();
-    const int basePixels = QApplication::font().pixelSize() > 0
-                               ? QApplication::font().pixelSize()
-                               : InterfaceZoomMetrics::mediumPixels;
+    const int zoomPercent = InterfaceZoomMetrics::current();
     setStyleSheet(TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#conversationAtlasPanel, QWidget#conversationAtlasScroll { background:%1; color:%3; }
-QLabel#conversationAtlasTitle { font-weight:600; font-size:{{title}}px; }
+QLabel#conversationAtlasTitle { font-weight:600; font-size:{{px:18}}px; }
 QLabel#conversationAtlasCount, QLabel[atlasMeta="true"] { color:%4; }
 QWidget[atlasRow="true"] { background:%2; border:1px solid %5; border-radius:7px; }
-QLineEdit#conversationAtlasSearch { min-height:30px; background:%2; color:%3; border:1px solid %5; border-radius:5px; padding:0 8px; }
-QLineEdit#conversationAtlasSearch:focus { border-color:%6; }
-QPushButton { min-height:28px; padding:0 10px; border:1px solid %5; border-radius:5px; background:%2; color:%3; }
-QPushButton:hover { border-color:%6; }
-QPushButton:focus { border-color:%6; }
-QPushButton#conversationAtlasNew { background:%6; border-color:%6; color:white; font-weight:600; }
+
 )QSS")
-                                       .arg(page, surface, text, muted, border, accent),
-                                   basePixels));
+                                       .arg(page, surface, text, muted, border),
+                                   zoomPercent));
 }
 
 void AtlasConversationPanel::render() {
@@ -147,6 +144,11 @@ void AtlasConversationPanel::addAtlasRow(QVBoxLayout* layout, const AtlasDescrip
     title->setObjectName(QStringLiteral("conversationAtlasRowTitle"));
     title->setWordWrap(true);
     body->addWidget(title);
+    auto* stats =
+        new QLabel(tr("%1 flows · %2 screens").arg(atlas.flowCount).arg(atlas.screens.size()), row);
+    stats->setObjectName(QStringLiteral("conversationAtlasStats"));
+    stats->setProperty("atlasMeta", true);
+    body->addWidget(stats);
     auto* meta = new QLabel(elsewhere ? atlas.workspaceRoot : atlas.relativePath, row);
     meta->setProperty("atlasMeta", true);
     meta->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -160,11 +162,11 @@ void AtlasConversationPanel::addAtlasRow(QVBoxLayout* layout, const AtlasDescrip
     const bool ready = active && viewer->state == ManagedAtlasViewers::State::Running;
     const auto error = ManagedAtlasViewers::instance()->errorFor(atlas.path);
     if (active) {
-        auto* status =
-            new QLabel(ready                                                   ? tr("Running")
-                       : viewer->state == ManagedAtlasViewers::State::Starting ? tr("Starting…")
-                                                                               : tr("Stopping…"),
-                       row);
+        auto* status = new ket::Badge(
+            ready                                                   ? tr("Running")
+            : viewer->state == ManagedAtlasViewers::State::Starting ? tr("Starting…")
+                                                                    : tr("Stopping…"),
+            ready ? ket::BadgeTone::Success : ket::BadgeTone::Neutral, row);
         status->setProperty("atlasMeta", true);
         actions->addWidget(status);
     } else if (!error.isEmpty()) {
@@ -173,32 +175,35 @@ void AtlasConversationPanel::addAtlasRow(QVBoxLayout* layout, const AtlasDescrip
         status->setWordWrap(true);
         body->addWidget(status);
         if (error.contains(QStringLiteral("0.6.1"))) {
-            auto* install = new QPushButton(tr("Install KetAtlas 0.6.1"), row);
+            auto* install =
+                new ket::Button(tr("Install KetAtlas 0.6.1"), ket::ButtonVariant::Secondary, row);
             install->setObjectName(QStringLiteral("conversationAtlasInstallCli"));
-            connect(install, &QPushButton::clicked, this, [this, atlas] { installCli(atlas); });
+            connect(install, &QAbstractButton::clicked, this, [this, atlas] { installCli(atlas); });
             actions->addWidget(install);
         }
     }
     actions->addStretch();
     if (!elsewhere) {
-        auto* edit = new QPushButton(tr("Edit"), row);
+        auto* edit = new ket::Button(tr("Edit"), ket::ButtonVariant::Primary, row);
         edit->setObjectName(QStringLiteral("conversationAtlasEdit"));
         edit->setAccessibleName(tr("Edit %1 in KétPlus").arg(atlas.title));
-        connect(edit, &QPushButton::clicked, this, [this, atlas] { emit editRequested(atlas); });
+        connect(edit, &QAbstractButton::clicked, this,
+                [this, atlas] { emit editRequested(atlas); });
         actions->addWidget(edit);
-        auto* open = new QPushButton(ready ? tr("Focus browser") : tr("Open in browser"), row);
+        auto* open = new ket::Button(ready ? tr("Focus browser") : tr("Open in browser"),
+                                     ket::ButtonVariant::Secondary, row);
         open->setObjectName(QStringLiteral("conversationAtlasOpen"));
         open->setEnabled(!active || ready);
-        connect(open, &QPushButton::clicked, this,
+        connect(open, &QAbstractButton::clicked, this,
                 [atlas] { ManagedAtlasViewers::instance()->open(atlas); });
         actions->addWidget(open);
     }
     if (active) {
-        auto* stop = new QPushButton(tr("Stop"), row);
+        auto* stop = new ket::Button(tr("Stop"), ket::ButtonVariant::GhostDanger, row);
         stop->setObjectName(QStringLiteral("conversationAtlasStop"));
         stop->setEnabled(viewer->state != ManagedAtlasViewers::State::Stopping);
         stop->setAccessibleName(tr("Stop viewer for %1").arg(atlas.title));
-        connect(stop, &QPushButton::clicked, this,
+        connect(stop, &QAbstractButton::clicked, this,
                 [atlas] { ManagedAtlasViewers::instance()->stop(atlas.path); });
         actions->addWidget(stop);
     }

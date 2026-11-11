@@ -1,7 +1,9 @@
+#include "KetChrome.h"
 #include "app/MainWindow.h"
 
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
+#include "editor/DocumentTab.h"
 
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
@@ -16,6 +18,7 @@
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -24,13 +27,11 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QList>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -72,8 +73,9 @@ void rememberRecentPath(const QString& key, const QString& path, const int maxim
 } // namespace
 
 void MainWindow::createNewDocument() {
+    showEditorSurface();
     auto* editor = createEditor();
-    const int index = tabs_->addTab(editor, editor->document().displayName());
+    const int index = tabs_->addTab(editor, documentTabIcon(editor), documentTabTitle(editor));
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);
     editor->setFocus();
@@ -159,7 +161,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     const QByteArray content = editor->text();
     const auto result = document.saveAs(path, content);
     if (!result.ok) {
-        QMessageBox::critical(this, QStringLiteral("Unable to save file"), result.error);
+        message_dialog::critical(this, QStringLiteral("Unable to save file"), result.error);
         return false;
     }
 
@@ -195,7 +197,7 @@ bool MainWindow::maybeCloseEditor(EditorWidget* editor) {
         return true;
     }
 
-    const auto answer = QMessageBox::warning(
+    const auto answer = message_dialog::warning(
         this, QStringLiteral("Unsaved changes"),
         QStringLiteral("Save changes to %1?").arg(editor->document().displayName()),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
@@ -403,6 +405,8 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
+    editor->setBreadcrumbPath(editor->document().displayName());
+    addViewDiffButton(editor);
     editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                  appearanceSettings_.preview.lineHeightPixels);
     connect(editor, &EditorWidget::previewFileOpenRequested, this, &MainWindow::openFile);
@@ -451,6 +455,16 @@ EditorWidget* MainWindow::createEditor() {
 }
 
 void MainWindow::updateTabTitle(EditorWidget* editor) {
+    const QString path = editor->document().filePath();
+    // Files outside the open folder keep their full path rather than a chain of "..".
+    const QString relative =
+        workspaceRoot_.isEmpty() ? QString() : QDir(workspaceRoot_).relativeFilePath(path);
+    const bool inside = !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
+                        relative != QStringLiteral("..") &&
+                        !relative.startsWith(QStringLiteral("../"));
+    editor->setBreadcrumbPath(path.isEmpty() ? editor->document().displayName()
+                              : inside       ? relative
+                                             : path);
     if (splitPane_ != nullptr) {
         splitPane_->updateSourceTitle(editor);
     }
@@ -459,11 +473,8 @@ void MainWindow::updateTabTitle(EditorWidget* editor) {
         return;
     }
 
-    auto title = editor->document().displayName();
-    if (editor->document().isModified()) {
-        title.append(QStringLiteral(" •"));
-    }
-    tabs_->setTabText(index, title);
+    tabs_->setTabText(index, documentTabTitle(editor));
+    tabs_->setTabIcon(index, documentTabIcon(editor));
     if (auto* button =
             qobject_cast<QToolButton*>(tabs_->tabBar()->tabButton(index, QTabBar::RightSide))) {
         button->setAccessibleName(QStringLiteral("Close %1").arg(editor->document().displayName()));
@@ -504,6 +515,8 @@ void MainWindow::updateDocumentState() {
 }
 
 void MainWindow::activateCurrentTab() {
+    if (tabs_->count() > 0)
+        showEditorSurface();
     auto* editor = currentEditor();
     if (editor == nullptr) {
         return;
@@ -512,7 +525,7 @@ void MainWindow::activateCurrentTab() {
     if (editor->isHibernated()) {
         const auto result = editor->restoreFromDisk();
         if (!result.ok) {
-            QMessageBox::critical(
+            message_dialog::critical(
                 this, QStringLiteral("Unable to restore tab"),
                 QStringLiteral("%1\n\nThe tab stays read-only until the file can be read.")
                     .arg(result.error));
@@ -733,14 +746,13 @@ void MainWindow::goToLine() {
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
-    bool accepted = false;
-    const int line =
-        QInputDialog::getInt(this, QStringLiteral("Go to Line"),
-                             QStringLiteral("Line number (1–%1):").arg(editor->lineCount()),
-                             editor->currentLine(), 1, editor->lineCount(), 1, &accepted);
-    if (accepted) {
+    const auto line =
+        message_dialog::number(this, QStringLiteral("Go to Line"),
+                               QStringLiteral("Line number (1–%1)").arg(editor->lineCount()),
+                               editor->currentLine(), 1, editor->lineCount(), QStringLiteral("Go"));
+    if (line) {
         pushNavigationLocation(locationOf(editor));
-        editor->goToLine(line);
+        editor->goToLine(*line);
         editor->setFocus();
     }
 }
@@ -918,17 +930,11 @@ void MainWindow::syncEditorZoom(EditorWidget* editor) {
     });
 }
 
-void MainWindow::showSettings() {
-    SettingsDialog dialog(appearanceSettings_, theme_, this);
-    connect(&dialog, &SettingsDialog::appearanceSettingsSaved, this,
-            &MainWindow::applyAppearanceSettings);
-    dialog.exec();
-}
-
 void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     appearanceSettings_ = settings.normalized();
     appearanceSettings_.save();
-    theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
+    theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
+                             appearanceSettings_.interfaceZoomPercent);
 
     auto* activeEditor = currentEditor();
     for (int index = 0; index < tabs_->count(); ++index) {

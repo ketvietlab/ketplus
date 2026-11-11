@@ -1,5 +1,11 @@
 #include "workspace/ExplorerPanel.h"
 
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetEmptyState.h"
+#include "KetFileRow.h"
+#include "KetIcons.h"
+#include "ui/MessageDialog.h"
 #include <QAbstractItemModel>
 #include <QAbstractItemView>
 #include <QAction>
@@ -16,8 +22,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
-#include <QMessageBox>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTimer>
@@ -39,17 +43,12 @@ QDir::Filters explorerFilters(const bool showHiddenFiles) {
     return filters;
 }
 
-bool isValidEntryName(const QString& name) {
-    return !name.isEmpty() && name != QStringLiteral(".") && name != QStringLiteral("..") &&
-           !name.contains(QLatin1Char('/')) && !name.contains(QLatin1Char('\\'));
-}
-
 } // namespace
 
 ExplorerPanel::ExplorerPanel(QWidget* parent)
     : QWidget(parent), model_(new QFileSystemModel(this)), tree_(new QTreeView(this)),
       pages_(new QStackedWidget(this)), emptyPage_(new QWidget(this)),
-      folderLabel_(new QLabel(this)) {
+      rootRow_(new ket::FileRow({}, ket::FileRow::Kind::Folder, 0, this)) {
     setProperty("kvRole", QStringLiteral("explorer"));
     setAttribute(Qt::WA_StyledBackground, true);
     setMinimumWidth(190);
@@ -66,10 +65,13 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
 
     tree_->setObjectName(QStringLiteral("explorerTree"));
     tree_->setModel(model_);
+    installRowDelegate();
     tree_->setHeaderHidden(true);
     tree_->setAnimated(false);
     tree_->setExpandsOnDoubleClick(false);
-    tree_->setIndentation(14);
+    // The delegate draws the kit's indent and chevrons (ExplorerPanelRows.cpp).
+    tree_->setIndentation(0);
+    tree_->setRootIsDecorated(false);
     tree_->setUniformRowHeights(true);
     tree_->setSortingEnabled(true);
     tree_->sortByColumn(0, Qt::AscendingOrder);
@@ -80,49 +82,24 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
         tree_->hideColumn(column);
     }
 
-    auto* heading = new QLabel(QStringLiteral("EXPLORER"), this);
-    heading->setProperty("kvRole", QStringLiteral("sidebarHeading"));
-    folderLabel_->setProperty("kvRole", QStringLiteral("sidebarFolder"));
-    folderLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-
-    auto* collapseButton = new QToolButton(this);
-    collapseButton->setText(QString::fromUtf8("⌃"));
-    collapseButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    collapseButton->setToolTip(QStringLiteral("Collapse folders"));
-    collapseButton->setAccessibleName(QStringLiteral("Collapse folders"));
-
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
-    refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    refreshButton->setToolTip(QStringLiteral("Refresh Explorer"));
-    refreshButton->setAccessibleName(QStringLiteral("Refresh Explorer"));
-
-    auto* closeButton = new QToolButton(this);
-    closeButton->setText(QString::fromUtf8("×"));
-    closeButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    closeButton->setToolTip(QStringLiteral("Hide Explorer"));
-    closeButton->setAccessibleName(QStringLiteral("Hide Explorer"));
-
-    auto* headerLayout = new QHBoxLayout;
-    headerLayout->setContentsMargins(10, 6, 6, 6);
-    headerLayout->setSpacing(4);
-    headerLayout->addWidget(heading);
-    headerLayout->addWidget(folderLabel_, 1);
-    headerLayout->addWidget(collapseButton);
-    headerLayout->addWidget(refreshButton);
-    headerLayout->addWidget(closeButton);
-
-    auto* emptyLabel = new QLabel(QStringLiteral("No folder open"), emptyPage_);
-    emptyLabel->setAlignment(Qt::AlignCenter);
-    emptyLabel->setProperty("kvRole", QStringLiteral("emptyTitle"));
-    auto* openButton = new QPushButton(QStringLiteral("Open Folder"), emptyPage_);
+    // As the mock's EXPLORER pane: refresh in the header; New File, New Folder and Collapse
+    // Folders are in the context menu, and the activity bar hides the pane.
+    auto* header = new ket::PaneHeader(tr("EXPLORER"), {}, this);
+    auto* refreshButton = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")), tr("Refresh Explorer"), header);
+    header->actions()->addWidget(refreshButton);
+    // The open folder is the tree's expanded root row; unchecking it folds the tree away.
+    rootRow_->setObjectName(QStringLiteral("explorerRoot"));
+    rootRow_->setChecked(true);
+    rootRow_->setContextMenuPolicy(Qt::CustomContextMenu);
+    rootRow_->hide();
+    auto* emptyState =
+        new ket::EmptyState(ket::Icons::codeForLucide(u"folder"), tr("No folder open"),
+                            tr("Open a folder to browse files."), emptyPage_);
+    auto* openButton = emptyState->setAction(tr("Open Folder"));
     auto* emptyLayout = new QVBoxLayout(emptyPage_);
-    emptyLayout->setContentsMargins(24, 24, 24, 24);
-    emptyLayout->addStretch();
-    emptyLayout->addWidget(emptyLabel);
-    emptyLayout->addSpacing(8);
-    emptyLayout->addWidget(openButton, 0, Qt::AlignHCenter);
-    emptyLayout->addStretch();
+    emptyLayout->setContentsMargins(0, 0, 0, 0);
+    emptyLayout->addWidget(emptyState);
 
     pages_->addWidget(emptyPage_);
     pages_->addWidget(tree_);
@@ -131,15 +108,20 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addLayout(headerLayout);
+    layout->addWidget(header);
+    layout->addWidget(rootRow_);
     layout->addWidget(pages_, 1);
 
     connect(tree_, &QTreeView::clicked, this, &ExplorerPanel::activateIndex);
     connect(tree_, &QTreeView::customContextMenuRequested, this, &ExplorerPanel::showContextMenu);
-    connect(openButton, &QPushButton::clicked, this, &ExplorerPanel::openFolderRequested);
-    connect(collapseButton, &QToolButton::clicked, tree_, &QTreeView::collapseAll);
-    connect(refreshButton, &QToolButton::clicked, this, &ExplorerPanel::refresh);
-    connect(closeButton, &QToolButton::clicked, this, &ExplorerPanel::hideRequested);
+    connect(openButton, &QAbstractButton::clicked, this, &ExplorerPanel::openFolderRequested);
+    connect(refreshButton, &QAbstractButton::clicked, this, &ExplorerPanel::refresh);
+    connect(rootRow_, &QAbstractButton::toggled, tree_, &QWidget::setVisible);
+    connect(rootRow_, &QWidget::customContextMenuRequested, this, [this](const QPoint& position) {
+        // The folder itself: no row of the tree is the target.
+        tree_->setCurrentIndex({});
+        showContextMenu(tree_->viewport()->mapFrom(rootRow_, position));
+    });
     connect(model_, &QFileSystemModel::directoryLoaded, this, [this](const QString&) {
         if (!pendingReveal_.isEmpty() && tryRevealPath(pendingReveal_)) {
             pendingReveal_.clear();
@@ -155,10 +137,15 @@ void ExplorerPanel::setRootPath(const QString& path) {
         return;
     }
 
+    if (entryRow_)
+        entryRow_->hide();
     rootPath_ = root.absoluteFilePath();
     pendingReveal_.clear();
-    folderLabel_->setText(root.fileName().isEmpty() ? rootPath_ : root.fileName());
-    folderLabel_->setToolTip(rootPath_);
+    rootRow_->setText((root.fileName().isEmpty() ? rootPath_ : root.fileName()).toUpper());
+    rootRow_->setAccessibleName(root.fileName().isEmpty() ? rootPath_ : root.fileName());
+    rootRow_->setToolTip(rootPath_);
+    rootRow_->setChecked(true);
+    rootRow_->show();
     tree_->setRootIndex(model_->setRootPath(rootPath_));
     pages_->setCurrentWidget(tree_);
 }
@@ -173,6 +160,8 @@ void ExplorerPanel::revealPath(const QString& path) {
         // A file outside the open folder has nothing to select here.
         return;
     }
+    // A collapsed root hides the tree; open it so the revealed file is on screen.
+    rootRow_->setChecked(true);
     if (!tryRevealPath(target)) {
         // The folders on the way are still loading; directoryLoaded finishes the job.
         pendingReveal_ = target;
@@ -263,59 +252,12 @@ void ExplorerPanel::showContextMenu(const QPoint& position) {
     hiddenAction->setCheckable(true);
     hiddenAction->setChecked(showHiddenFiles_);
     connect(hiddenAction, &QAction::toggled, this, &ExplorerPanel::setShowHiddenFiles);
+    auto* collapseAction = menu.addAction(QStringLiteral("Collapse Folders"));
+    connect(collapseAction, &QAction::triggered, tree_, &QTreeView::collapseAll);
     auto* refreshAction = menu.addAction(QStringLiteral("Refresh"));
     connect(refreshAction, &QAction::triggered, this, &ExplorerPanel::refresh);
 
     menu.exec(tree_->viewport()->mapToGlobal(position));
-}
-
-void ExplorerPanel::createEntry(const bool directory) {
-    const QString parentPath = targetDirectory();
-    if (parentPath.isEmpty()) {
-        return;
-    }
-
-    bool accepted = false;
-    const QString title = directory ? QStringLiteral("New Folder") : QStringLiteral("New File");
-    const QString name = QInputDialog::getText(this, title, QStringLiteral("Name:"),
-                                               QLineEdit::Normal, {}, &accepted)
-                             .trimmed();
-    if (!accepted) {
-        return;
-    }
-    if (!isValidEntryName(name)) {
-        QMessageBox::warning(this, title, QStringLiteral("Enter a valid name without slashes."));
-        return;
-    }
-
-    const QString path = QDir(parentPath).filePath(name);
-    if (QFileInfo::exists(path)) {
-        QMessageBox::warning(this, title, QStringLiteral("An item with this name already exists."));
-        return;
-    }
-
-    bool created = false;
-    if (directory) {
-        created = QDir(parentPath).mkdir(name);
-    } else {
-        QFile file(path);
-        created = file.open(QIODevice::WriteOnly | QIODevice::NewOnly);
-    }
-    if (!created) {
-        QMessageBox::critical(this, title, QStringLiteral("Unable to create %1.").arg(path));
-        return;
-    }
-
-    QTimer::singleShot(100, this, [this, path, directory] {
-        const QModelIndex index = model_->index(path);
-        if (index.isValid()) {
-            tree_->setCurrentIndex(index);
-            tree_->scrollTo(index);
-            if (!directory) {
-                emit fileOpenRequested(path);
-            }
-        }
-    });
 }
 
 void ExplorerPanel::renameSelected() {
@@ -340,14 +282,14 @@ void ExplorerPanel::moveSelectedToTrash() {
                 .arg(unsaved == 1 ? QStringLiteral("It stays") : QStringLiteral("They stay"));
     }
     const auto answer =
-        QMessageBox::question(this, QStringLiteral("Move to Trash"), question,
-                              QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
+        message_dialog::question(this, QStringLiteral("Move to Trash"), question,
+                                 QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
     if (answer != QMessageBox::Yes) {
         return;
     }
     if (!QFile::moveToTrash(path)) {
-        QMessageBox::critical(this, QStringLiteral("Move to Trash"),
-                              QStringLiteral("Unable to move this item to Trash."));
+        message_dialog::critical(this, QStringLiteral("Move to Trash"),
+                                 QStringLiteral("Unable to move this item to Trash."));
         return;
     }
     emit pathTrashed(path);

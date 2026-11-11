@@ -1,5 +1,7 @@
-#include "agent/CodexAppServer.h"
 #include "BrowserAgentInstructions.h"
+#include "agent/CodexAppServer.h"
+#include "agent/DaemonAgentNotes.h"
+#include "agent/DaemonTranscriptNotices.h"
 
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
@@ -106,6 +108,72 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     const QJsonObject payload = envelope.value(QStringLiteral("payload")).toObject();
     const QString type = payload.value(QStringLiteral("event_type")).toString();
     const QJsonObject data = payload.value(QStringLiteral("data")).toObject();
+    // Time and size the turn from the daemon's own journal, so a late or replayed end reads
+    // as it does after a reload.
+    const qint64 sequence = envelope.value(QStringLiteral("turn_sequence")).toInteger();
+    const QDateTime sentAt = QDateTime::fromString(
+        envelope.value(QStringLiteral("sent_at")).toString(), Qt::ISODateWithMs);
+    if (agent_message::daemonTurnStarts(type) && sequence != found->turnSequence) {
+        found->turnSequence = sequence;
+        found->turnStartedAt = sentAt;
+        found->turnContextTokens = -1;
+        found->turnReport = {};
+    }
+    // ADR 0106: the ledger joins the turn's end row; the Report tab follows it live.
+    if (type == QStringLiteral("work_report.updated")) {
+        if (sequence == found->turnSequence)
+            found->turnReport = data;
+        emit notificationReceived(
+            QStringLiteral("daemon/workReport"),
+            {{QStringLiteral("threadId"), sessionId}, {QStringLiteral("report"), data}});
+        return;
+    }
+    if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)
+        found->turnContextTokens = agent_message::daemonContextTokens(data);
+    const auto emitNotice = [&] {
+        agent_message::TurnFacts turn;
+        if (type == QStringLiteral("turn.completed") && sequence == found->turnSequence) {
+            if (found->turnStartedAt.isValid() && sentAt.isValid())
+                turn.durationMs = found->turnStartedAt.msecsTo(sentAt);
+            turn.contextTokens = found->turnContextTokens;
+        }
+        auto notice = agent_message::daemonEventNotice(
+            type, data, agent_message::daemonNoticeItemId(cursor), {}, turn);
+        if (turn.durationMs >= 0)
+            notice.insert(QStringLiteral("durationMs"), turn.durationMs);
+        if (turn.contextTokens >= 0)
+            notice.insert(QStringLiteral("contextTokens"), turn.contextTokens);
+        if (notice.isEmpty())
+            return;
+        if (type == QStringLiteral("turn.completed")) {
+            const QJsonObject report =
+                data.contains(QStringLiteral("work_report"))
+                    ? data.value(QStringLiteral("work_report")).toObject()
+                    : (sequence == found->turnSequence ? found->turnReport : QJsonObject{});
+            if (!report.isEmpty())
+                notice.insert(QStringLiteral("workReport"), report.toVariantMap());
+        }
+        if (daemonHasTranscriptWindow_ &&
+            (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {
+            if (found->windowReady) {
+                found->windowReady = false;
+                emit daemonTranscriptInvalidated(sessionId);
+            }
+            return;
+        }
+        notice.insert("messageKey",
+                      agent_message::daemonMessageKey(envelope.value("turn_sequence").toInteger(),
+                                                      notice.value("itemId").toString()));
+        notice.insert("turnId",
+                      agent_message::daemonTurnId(envelope.value("turn_sequence").toInteger()));
+        emit notificationReceived("daemon/providerNotice",
+                                  {{"threadId", sessionId},
+                                   {"itemId", notice.value("itemId").toString()},
+                                   {"presentation", QJsonObject::fromVariantMap(notice)}});
+    };
+    if (type != "turn.completed")
+        emitNotice();
+
     if (type == "session.deleted") {
         daemonSessions_.remove(sessionId);
         emit daemonSessionDeleted(sessionId, generation);
@@ -262,6 +330,7 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), agent_message::daemonUserItemId(cursor)},
              {QStringLiteral("clientMessageId"), data.value(QStringLiteral("client_message_id"))},
+             {QStringLiteral("timestamp"), envelope.value(QStringLiteral("sent_at"))},
              {QStringLiteral("text"), data.value(QStringLiteral("text"))},
              {QStringLiteral("images"), data.value(QStringLiteral("images"))},
              {QStringLiteral("agentMessages"), data.value(QStringLiteral("agent_messages"))}});
@@ -274,17 +343,24 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             QStringLiteral("daemon/userMessage"),
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), QStringLiteral("steer:%1").arg(cursor)},
+             {QStringLiteral("eventType"), QStringLiteral("turn.steered")},
              {QStringLiteral("text"), data.value(QStringLiteral("text"))},
              {QStringLiteral("agentMessages"), data.value(QStringLiteral("agent_messages"))}});
         return;
     }
     if (type == QStringLiteral("agent_message.state")) {
+        // A sent message is one note, as the journal projects it; each state updates it.
+        const QString itemId = agent_message::daemonNoticeItemId(cursor);
+        auto presentation = agent_message::agentNote(data, agent_message::agentNoteItemId(data));
+        if (presentation.isEmpty())
+            presentation = agent_message::agentMessageNotice(data, itemId);
         emit notificationReceived(
             QStringLiteral("daemon/providerNotice"),
             {{QStringLiteral("threadId"), sessionId},
-             {QStringLiteral("itemId"), agent_message::daemonNoticeItemId(cursor)},
+             {QStringLiteral("itemId"), itemId},
              {QStringLiteral("title"), agent_message::agentMessageNoticeTitle()},
-             {QStringLiteral("text"), agent_message::agentMessageStateText(data)}});
+             {QStringLiteral("text"), agent_message::agentMessageStateText(data)},
+             {QStringLiteral("presentation"), QJsonObject::fromVariantMap(presentation)}});
         return;
     }
     if (type == QStringLiteral("turn.started")) {
@@ -302,6 +378,13 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
                                    {"summary", data}});
         return;
     }
+    // A step that left its group when it returned images: the group's line drops it first,
+    // then the step shows on its own.
+    if (const auto left = data.value("left_activity_group").toObject(); !left.isEmpty())
+        emit notificationReceived("daemon/activityGroup",
+                                  {{"threadId", sessionId},
+                                   {"turnSequence", envelope.value("turn_sequence")},
+                                   {"summary", left}});
     if (type == QStringLiteral("assistant.delta")) {
         emit notificationReceived(
             QStringLiteral("item/agentMessage/delta"),
@@ -339,7 +422,11 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("turn"),
               QJsonObject{{QStringLiteral("id"), found->turnId},
-                          {QStringLiteral("status"), data.value(QStringLiteral("status"))}}}});
+                          {QStringLiteral("status"), data.value(QStringLiteral("status"))},
+                          // #125: the answer asks the user to decide.
+                          {QStringLiteral("awaitingReply"),
+                           data.value(QStringLiteral("awaiting_reply")).toBool()}}}});
+        emitNotice();
         found->turnId.clear();
         return;
     }
@@ -387,6 +474,8 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         return;
     }
     if (type == QStringLiteral("runtime.error") || type == QStringLiteral("runtime.stopped")) {
+        if (data.value("will_retry").toBool() || data.value("willRetry").toBool())
+            return;
         emit notificationReceived(
             QStringLiteral("error"),
             {{QStringLiteral("threadId"), sessionId},
@@ -394,7 +483,8 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
              {QStringLiteral("replayed"), found->replaying},
              {QStringLiteral("error"),
               QJsonObject{{QStringLiteral("code"), data.value(QStringLiteral("code"))},
-                          {QStringLiteral("message"), data.value(QStringLiteral("message"))}}}});
+                          {QStringLiteral("message"), data.value(QStringLiteral("message"))},
+                          {QStringLiteral("model"), data.value(QStringLiteral("model"))}}}});
         return;
     }
     if (type == QStringLiteral("approval.requested")) {
@@ -412,7 +502,10 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             QStringLiteral("userInput/resolved"),
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("requestId"), approvalId},
-             {QStringLiteral("expired"), type.endsWith(QStringLiteral("expired"))}});
+             {QStringLiteral("expired"), type.endsWith(QStringLiteral("expired"))},
+             {QStringLiteral("outcome"), type.startsWith(QStringLiteral("approval."))
+                                             ? agent_message::approvalOutcome(type, data)
+                                             : QString()}});
         emit notificationReceived("daemon/approvalEnded",
                                   {{"threadId", sessionId}, {"approvalId", approvalId}});
     }
@@ -463,6 +556,7 @@ void CodexAppServer::dispatchDaemonApproval(const QString& sessionId, const QJso
           kind == QStringLiteral("input") ? QString{} : QStringLiteral("approval")},
          {QStringLiteral("approvalReason"), data.value(QStringLiteral("reason"))},
          {QStringLiteral("approvalCommand"), data.value(QStringLiteral("command"))},
+         {QStringLiteral("approvalTool"), agent_message::approvalToolLabel(data)},
          {QStringLiteral("isBlocking"), data.value(QStringLiteral("is_blocking")).toBool(true)},
          {QStringLiteral("questions"), questions}});
 }

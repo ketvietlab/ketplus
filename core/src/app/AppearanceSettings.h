@@ -23,15 +23,23 @@ struct TextTypographySettings final {
 };
 
 struct AppearanceSettings final {
-    static constexpr int minimumInterfaceFontSizePixels = 8;
-    static constexpr int maximumInterfaceFontSizePixels = 24;
+    static constexpr int minimumInterfaceFontSizePixels = 13;
+    static constexpr int maximumInterfaceFontSizePixels = 16;
+    // Markdown reads one pixel larger than the interface, at the former 15/26 rhythm.
+    static constexpr int markdownOffsetPixels = 1;
+    static constexpr double markdownLineHeightRatio = 26.0 / 15.0;
 
+    // One of InterfaceZoomMetrics::steps(); scales the chrome (ADR 0104).
+    int interfaceZoomPercent{100};
+    // The application text before the zoom.
     int interfaceFontSizePixels{14};
     EditorSettings editor{EditorSettings::defaults()};
-    TextTypographySettings terminal{13, 20};
-    // The terminal's font family; empty uses the platform's fixed-pitch font.
+    // Derived by normalized(): the editor's size and line height.
+    TextTypographySettings terminal{14, 24};
+    // Empty uses the KétPlus profile's bundled monospace family.
     QString terminalFontFamily;
-    TextTypographySettings preview{14, 22};
+    // Derived by normalized(): the interface size plus markdownOffsetPixels, at the zoom.
+    TextTypographySettings preview{15, 26};
 
     [[nodiscard]] static AppearanceSettings defaults();
     [[nodiscard]] static AppearanceSettings load();

@@ -1,14 +1,19 @@
 #include "AgentWorkspaceViewTest.h"
 #include "CodexBrowserTools.h"
+#include "KetAppearance.h"
+#include "KetRecipes.h"
+#include "KetTokens.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/FileMentions.h"
 #include "agent/MermaidLabelContrast.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "agent/TranscriptFileLinks.h"
 #include "ui/Theme.h"
+#include <QQmlComponent>
 #include <QScopeGuard>
 
 #include <QAbstractItemModelTester>
@@ -30,6 +35,8 @@
 #include <QTextDocument>
 #include <QTextImageFormat>
 #include <QtTest>
+
+#include <cmath>
 
 #include <algorithm>
 
@@ -135,6 +142,11 @@ for line in sys.stdin:
     };
     itemEvent("item/completed", "manual", "reason", "reasoning");
     QCOMPARE(manager.status(path), QStringLiteral("Compacting context…"));
+    // The reasoning reads as a "Thought" step after the compaction row.
+    QCOMPARE(manager.messages(path).size(), 3);
+    QCOMPARE(manager.messages(path).last().toMap().value("title").toString(),
+             QStringLiteral("Thought"));
+    const auto compactionRow = [&] { return manager.messages(path).at(1).toMap(); };
     itemEvent("item/completed", "stale-turn", "c1", "contextCompaction");
     QCOMPARE(manager.status(path), QStringLiteral("Compacting context…"));
     manager.steerPrompt(path, "/compact");
@@ -145,11 +157,12 @@ for line in sys.stdin:
     itemEvent("item/completed", "manual", "c1", "contextCompaction");
     QCOMPARE(manager.status(path), QStringLiteral("Ready"));
     manager.selectConversation(path, original);
-    QCOMPARE(manager.messages(path).last().toMap().value("body").toString(),
-             QStringLiteral("Context compacted"));
+    QCOMPARE(compactionRow().value("title").toString(), QStringLiteral("Context compacted"));
+    QCOMPARE(compactionRow().value("body").toString(),
+             QStringLiteral("Older steps are summarised; the conversation continues."));
     QVERIFY(manager.isRunning(path));
     itemEvent("item/started", "manual", "c1", "contextCompaction");
-    QCOMPARE(manager.messages(path).size(), 2);
+    QCOMPARE(manager.messages(path).size(), 3);
     QCOMPARE(manager.status(path), QStringLiteral("Working…"));
     if (!capture.isEmpty()) {
         view.resetMessages(manager.messages(path));
@@ -161,7 +174,7 @@ for line in sys.stdin:
                            {"turn", QJsonObject{{"id", "manual"}, {"status", "completed"}}}});
     QVERIFY(!manager.isRunning(path));
     itemEvent("item/started", "manual", "late", "contextCompaction");
-    QCOMPARE(manager.messages(path).size(), 2);
+    QCOMPARE(manager.messages(path).size(), 3);
 
     manager.submitPrompt(path, "/compact");
     QTRY_COMPARE(manager.status(path), QStringLiteral("Error"));
@@ -179,13 +192,13 @@ for line in sys.stdin:
                            {"turn", QJsonObject{{"id", "automatic"}, {"status", "interrupted"}}}});
     QCOMPARE(manager.status(path), QStringLiteral("Stopped"));
     QVERIFY(!manager.messages(path).last().toMap().value("running").toBool());
-    QVERIFY(manager.messages(path).last().toMap().value("body").toString() != "Context compacted");
+    QVERIFY(manager.messages(path).last().toMap().value("title").toString() != "Context compacted");
 
     ketplus::CodexAppServer restoredServer(serverPath);
     ketplus::AgentSessionManager restored(&restoredServer);
     restored.activate(path);
     QTRY_COMPARE(restored.messages(path).size(), 1);
-    QCOMPARE(restored.messages(path).first().toMap().value("body").toString(),
+    QCOMPARE(restored.messages(path).first().toMap().value("title").toString(),
              QStringLiteral("Context compacted"));
 }
 
@@ -258,6 +271,10 @@ for line in sys.stdin:
 }
 
 void AgentWorkspaceViewTest::answersAgentQuestionsSequentially() {
+    const auto previousMode = ket::Appearance::instance().mode();
+    const auto restoreTheme =
+        qScopeGuard([previousMode] { ket::Appearance::instance().setMode(previousMode); });
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const auto serverPath = directory.filePath("fake-codex-question");
@@ -398,8 +415,15 @@ for line in sys.stdin:
     QCOMPARE(question.value("questionAnswers").toMap().value("behavior").toString(),
              QStringLiteral("Keep the compact receipt"));
     QCOMPARE(messages.last().toMap().value("body").toString(), QStringLiteral("Answers received"));
-    QTRY_VERIFY(card->property("answered").toBool());
-    QVERIFY(findVisualItem(card, QStringLiteral("questionReceipt"))->isVisible());
+    // Answered, the card folds into the mock's note: what was asked and what was chosen.
+    QQuickItem* answeredNote = nullptr;
+    QTRY_VERIFY((answeredNote = findVisualItem(root, QStringLiteral("closedQuestionNote"))));
+    QVERIFY(!findVisualItem(root, QStringLiteral("messageQuestionCard")));
+    QCOMPARE(answeredNote->property("label").toString(), QStringLiteral("Answered"));
+    QVERIFY2(answeredNote->property("details").toString().contains(QStringLiteral("In timeline")),
+             qPrintable(answeredNote->property("details").toString()));
+    QVERIFY(answeredNote->property("details").toString().contains(
+        QStringLiteral("Keep the compact receipt")));
     if (!capturePath.isEmpty()) {
         QTest::qWait(100);
         QVERIFY(view.quickView()->grabWindow().save(capturePath + ".answered.png"));
@@ -432,6 +456,74 @@ for line in sys.stdin:
                                {{"decision", "Accept"}});
         QCOMPARE(errors.size(), 1);
     }
+    // An approval names what it asked to use, and another client's decision says how it ended.
+    appServer.userInputRequested(
+        "remote-approval",
+        {{"threadId", "question-thread"},
+         {"itemId", "remote-approval"},
+         {"approvalKind", "approval"},
+         {"approvalReason", "Codex wants network access."},
+         {"approvalCommand", "curl https://example.test"},
+         {"approvalTool", "Command"},
+         {"questions",
+          QJsonArray{QJsonObject{{"id", "decision"},
+                                 {"question", "Allow?"},
+                                 {"options", QJsonArray{QJsonObject{{"label", "Accept"}},
+                                                        QJsonObject{{"label", "Decline"}}}}}}}});
+    QCOMPARE(manager.messages(path).last().toMap().value("target").toString(), "Command");
+    appServer.notificationReceived("userInput/resolved", {{"threadId", "question-thread"},
+                                                          {"requestId", "remote-approval"},
+                                                          {"expired", false},
+                                                          {"outcome", "denied"}});
+    QCOMPARE(manager.messages(path).last().toMap().value("status").toString(), "denied");
+    // A sent agent message is one live note: its expiry and its reply update it in place.
+    const auto noteRows = [&] {
+        QVariantList notes;
+        for (const auto& row : manager.messages(path))
+            if (row.toMap().value("subtype") == "agentNote")
+                notes.append(row);
+        return notes;
+    };
+    const auto notice = [&](const QString& itemId, const QJsonObject& data) {
+        appServer.notificationReceived(
+            "daemon/providerNotice",
+            {{"threadId", "question-thread"},
+             {"itemId", itemId},
+             {"presentation",
+              QJsonObject::fromVariantMap(ketplus::agent_message::agentNote(data, itemId))}});
+    };
+    notice("notice:sent", {{"message_id", "live-q"},
+                           {"kind", "request"},
+                           {"state", "sent"},
+                           {"expect_reply", true},
+                           {"direction", "outgoing"},
+                           {"peer_number", "8941"},
+                           {"peer_title", "DS Icon"},
+                           {"peer_provider", "claude"},
+                           {"text", "Is it fine?"}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(),
+             "DS Icon · Claude · Sent · reply requested");
+    notice("notice:held", {{"message_id", "live-q"},
+                           {"kind", "request"},
+                           {"state", "held"},
+                           {"direction", "outgoing"},
+                           {"peer_number", "8941"}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(),
+             "DS Icon · Claude · Held · waiting for approval there");
+    appServer.notificationReceived(
+        "daemon/userMessage", {{"threadId", "question-thread"},
+                               {"itemId", "user:live-reply"},
+                               {"text", "Yes"},
+                               {"agentMessages", QJsonArray{QJsonObject{{"message_id", "live-r"},
+                                                                        {"kind", "reply"},
+                                                                        {"reply_to", "live-q"},
+                                                                        {"from_number", "8941"},
+                                                                        {"body", "Yes"}}}}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(), "DS Icon · Claude · Replied");
+    QCOMPARE(noteRows().first().toMap().value("body").toString(), "Is it fine?");
 }
 
 void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
@@ -443,21 +535,18 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QVERIFY(root);
     auto* handle = root->findChild<QQuickItem*>("sidebarResizeHandle");
     auto* divider = root->findChild<QQuickItem*>("sidebarDivider");
-    auto* sidebar = root->findChild<QQuickItem*>("worktreeSidebar");
-    auto* addWorktree = root->findChild<QQuickItem*>("addWorktreeButton");
-    auto* addConversation = root->findChild<QQuickItem*>("addConversationButton");
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
     QVERIFY(handle);
     QVERIFY(divider);
     QVERIFY(sidebar);
-    QVERIFY(addWorktree);
-    QVERIFY(addConversation);
-    QTRY_COMPARE(handle->width(), 6.0);
+    // The divider takes one pixel of layout, as the mock; the grab area stays 6 px.
+    QTRY_COMPARE(handle->width(), 1.0);
     QCOMPARE(divider->width(), 1.0);
-    QCOMPARE(addConversation->size(), addWorktree->size());
-    QCOMPARE(addConversation->mapToScene(QPointF(addConversation->width(), 0)).x(),
-             addWorktree->mapToScene(QPointF(addWorktree->width(), 0)).x());
     QTRY_VERIFY(handle->height() > 0);
     QCOMPARE(divider->height(), handle->height());
+    QTRY_VERIFY(handle->contains(QPointF(3, 100)));
+    QVERIFY(handle->contains(QPointF(-2, 100)));
+    QVERIFY(!handle->contains(QPointF(5, 100)));
     const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
     const auto originalWidth = sidebar->width();
     QTest::mousePress(view.quickView(), Qt::LeftButton, Qt::NoModifier, start);
@@ -465,6 +554,52 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QTest::mouseRelease(view.quickView(), Qt::LeftButton, Qt::NoModifier, start + QPoint(80, 0));
     QTRY_VERIFY(sidebar->width() > originalWidth + 40);
     QCOMPARE(divider->width(), 1.0);
+}
+
+void AgentWorkspaceViewTest::sidebarMatchesMockAtEveryZoom() {
+    auto& appearance = ket::Appearance::instance();
+    const qreal originalZoom = appearance.zoom();
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1440, 900);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
+    auto* indicator = root->findChild<QQuickItem*>("workingAnimationIcon");
+    QVERIFY(sidebar);
+    QVERIFY(indicator);
+    // The mock's sidebar recipe: 240 px scaled by interface zoom.
+    for (const qreal zoom : {1.0, 1.25}) {
+        appearance.setZoom(zoom);
+        QTRY_COMPARE(sidebar->width(), ket::Appearance::scale(240, zoom));
+    }
+    // A dragged width survives zoom changes in both directions.
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), 240.0);
+    auto* handle = root->findChild<QQuickItem*>("sidebarResizeHandle");
+    QVERIFY(handle);
+    const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
+    QTest::mousePress(view.quickView(), Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(view.quickView(), start + QPoint(70, 0), 30);
+    QTest::mouseRelease(view.quickView(), Qt::LeftButton, Qt::NoModifier, start + QPoint(70, 0));
+    QTRY_VERIFY(sidebar->width() > 290);
+    const qreal dragged = sidebar->width();
+    appearance.setZoom(1.25);
+    QTRY_COMPARE(sidebar->width(), std::min(ket::Appearance::scale(dragged, 1.25),
+                                            ket::Appearance::scale(320, 1.25)));
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), dragged);
+    appearance.setZoom(originalZoom);
+    // The working bars keep the recipe's success colour, as in the mock.
+    QCOMPARE(indicator->property("color").value<QColor>(), QColor(Qt::transparent));
+    QStringList icons;
+    for (const auto* id : {"workspace", "explorer", "source-control", "connections"}) {
+        auto* item = findVisualItem(root, QStringLiteral("productNavigation_") + id);
+        QVERIFY(item);
+        icons << item->property("iconName").toString();
+    }
+    QCOMPARE(icons, (QStringList{"chats", "folder", "branch", "network"}));
 }
 
 void AgentWorkspaceViewTest::preservesQuestionDraftsAcrossScope() {
@@ -573,8 +708,39 @@ void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {
                                            "  classDef named fill:pink,color:#000\n"
                                            "  style A stroke:#333");
     const QStringList lines = withReadableMermaidLabels(diagram).split('\n');
-    QCOMPARE(lines.at(2), QStringLiteral("  style B fill:#fdd,stroke:#c33,color:#1f2328"));
-    QCOMPARE(lines.at(3), QStringLiteral("  classDef bad fill:#7a1f1f,color:#f0f3f6"));
+    // Labels take Két DS main text: the light theme's on a light fill, the dark theme's on a
+    // dark one.
+    const QString onLight = ket::Tokens::color(u"text-main", ket::Theme::Light).name();
+    const QString onDark = ket::Tokens::color(u"text-main", ket::Theme::Dark).name();
+    QVERIFY(onLight != onDark);
+    QCOMPARE(lines.at(2), QStringLiteral("  style B fill:#fdd,stroke:#c33,color:") + onLight);
+    QCOMPARE(lines.at(3), QStringLiteral("  classDef bad fill:#7a1f1f,color:") + onDark);
+    // A mid-grey fill where neither theme text reaches 4.5:1 takes black or white, and every
+    // fill gets a label at 4.5:1 or more.
+    const auto luminance = [](const QColor& colour) {
+        const auto channel = [](const qreal value) {
+            return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(colour.redF()) + 0.7152 * channel(colour.greenF()) +
+               0.0722 * channel(colour.blueF());
+    };
+    const auto labelContrast = [&luminance](const QString& fill) {
+        const QString line = withReadableMermaidLabels(QStringLiteral("style A fill:") + fill);
+        const QColor label(line.section(QStringLiteral("color:"), 1));
+        const qreal a = luminance(QColor(fill));
+        const qreal b = luminance(label);
+        return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
+    };
+    QVERIFY(labelContrast(QStringLiteral("#8b8b8b")) >=
+            ketplus::agent_message::minimumLabelContrast);
+    for (int grey = 0; grey < 256; grey += 3) {
+        for (const QColor& fill : {QColor(grey, grey, grey), QColor(grey, 255 - grey, 128),
+                                   QColor(255 - grey, 64, grey)}) {
+            const qreal ratio = labelContrast(fill.name());
+            QVERIFY2(ratio >= ketplus::agent_message::minimumLabelContrast,
+                     qPrintable(fill.name() + QStringLiteral(" %1").arg(ratio)));
+        }
+    }
     // An author's own text colour and a style without a fill stay as written.
     QCOMPARE(lines.at(4), QStringLiteral("  classDef named fill:pink,color:#000"));
     QCOMPARE(lines.at(5), QStringLiteral("  style A stroke:#333"));
@@ -787,6 +953,94 @@ void AgentWorkspaceViewTest::usageLimitsPopover() {
     QCOMPARE(submitted.constFirst().at(0).toString(), QStringLiteral("/compact"));
 }
 
+void AgentWorkspaceViewTest::heldMessageNoticeRendersInTranscript() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setActivePath(QDir::tempPath());
+    view.resize(900, 680);
+    view.show();
+    QSignalSpy actions(&view, &ketplus::AgentWorkspaceView::heldMessageActionRequested);
+    view.resetMessages(
+        {QVariantMap{
+            {"id", "held-notice"},
+            {"itemId", "held-notice"},
+            {"kind", "system"},
+            {"category", "system"},
+            {"subtype", "heldAgentMessage"},
+            {"title", "Agent message"},
+            {"body", "A message from #1093 is held because automatic exchanges reached the limit."},
+            {"sanitizedPayload", QVariantMap{{"messageId", "actual-held"}}}}},
+        "receiver");
+    auto* root = view.quickView()->rootObject();
+    QTRY_VERIFY(findVisualItem(root, "heldMessageAction"));
+    QTRY_VERIFY(!actions.isEmpty());
+    QCOMPARE(actions.first().at(0).toString(), QString("actual-held"));
+    QCOMPARE(actions.first().at(1).toBool(), false);
+    view.acceptHeldMessageState("actual-held", {{"state", "held"}, {"can_release", true}});
+    QTRY_VERIFY(findVisualItem(root, "receiveHeldMessageButton"));
+    QVERIFY(findVisualItem(root, "receiveHeldMessageButton")->isVisible());
+}
+
+void AgentWorkspaceViewTest::heldMessageRequiresExplicitClickAndFencesDuplicates() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 680);
+    view.show();
+    QSignalSpy actions(&view, &ketplus::AgentWorkspaceView::heldMessageActionRequested);
+    QQmlComponent component(view.quickView()->engine(), QUrl("qrc:/agent/HeldMessageAction.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QQuickItem> card(qobject_cast<QQuickItem*>(
+        component.createWithInitialProperties({{"width", 600}, {"messageId", "held-1"}})));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QCOMPARE(actions.size(), 1);
+    QCOMPARE(actions.first().at(0).toString(), QString("held-1"));
+    QCOMPARE(actions.first().at(1).toBool(), false); // observing is a read, never authorization
+    view.acceptHeldMessageState("held-1", {{"state", "held"}, {"can_release", true}});
+    auto* button = findVisualItem(card.data(), "receiveHeldMessageButton");
+    QVERIFY(button);
+    QTRY_VERIFY(button->isVisible() && button->isEnabled());
+    QVERIFY(button->width() <= card->width());
+    if (const auto capture = qEnvironmentVariable("KETPLUS_HELD_NOTICE_CAPTURE");
+        !capture.isEmpty()) {
+        for (auto* child : view.quickView()->rootObject()->childItems())
+            if (child != card.data())
+                child->setVisible(false);
+        card->setPosition({24, 24});
+        view.resize(660, 140);
+        QTest::qWait(80);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(actions.size(), 2);
+    QCOMPARE(actions.last().at(1).toBool(), true);
+    QVERIFY(!button->isEnabled());
+    view.releaseHeldMessage("held-1");
+    QCOMPARE(actions.size(), 2);
+    view.acceptHeldMessageState("held-1", {{"state", "delivered"}, {"can_release", false}});
+    QTRY_VERIFY(!button->isVisible());
+    view.releaseHeldMessage("held-1");
+    QCOMPARE(actions.size(), 2);
+    view.acceptHeldMessageState(
+        "held-1", {{"state", "failed"}, {"can_release", true}, {"reason", "Provider unavailable"}});
+    QTRY_COMPARE(button->property("text").toString(), QString("Retry receiving"));
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(actions.size(), 3);
+    view.acceptHeldMessageState("held-1", {{"state", "queued"}, {"can_release", false}});
+    auto* refresh = card->findChild<QObject*>("heldMessageRefreshTimer");
+    QVERIFY(refresh);
+    QTRY_VERIFY(refresh->property("running").toBool());
+    view.hide();
+    QTRY_VERIFY(!refresh->property("running").toBool());
+    view.show();
+    QTRY_VERIFY(refresh->property("running").toBool());
+    view.acceptHeldMessageState("held-1", {{"state", "delivered"}, {"can_release", false}});
+    QTRY_VERIFY(!refresh->property("running").toBool());
+    view.resetMessages({}, "different-conversation");
+    QVERIFY(view.heldMessageStates().isEmpty());
+}
+
 void AgentWorkspaceViewTest::backgroundTaskBar() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -811,9 +1065,21 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     view.setBackgroundTasks({shell, agent});
     QTRY_VERIFY(bar->isVisible());
     QTRY_COMPARE(bar->property("headline").toString(),
-                 QStringLiteral("Turn finished · 2 tasks running in background"));
+                 QStringLiteral("Turn finished · 2 background tasks"));
     QTRY_VERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_build")));
     QVERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_review")));
+    // A finished task reads as the mock words it: what it reported, else how long it took.
+    const auto meta = [bar](const QVariantMap& task) {
+        QVariant text;
+        QMetaObject::invokeMethod(bar, "meta", Q_RETURN_ARG(QVariant, text),
+                                  Q_ARG(QVariant, QVariant(task)));
+        return text.toString();
+    };
+    QCOMPARE(meta({{"status", "completed"}, {"duration_ms", 48000}}), QString("Completed in 48s"));
+    QCOMPARE(meta({{"status", "failed"}, {"duration_ms", 10000}, {"result", "2 tests failed"}}),
+             QString("2 tests failed"));
+    QCOMPARE(meta({{"status", "stopped"}, {"duration_ms", 75000}}),
+             QString("Stopped after 1m 15s"));
 
     // Stop asks first, then sends the task id.
     QSignalSpy stops(&view, &ketplus::AgentWorkspaceView::backgroundTaskStopRequested);
@@ -829,8 +1095,51 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     // The output pane shows the read tail, ignores answers for a task it no longer shows,
     // and closes when its task leaves the report.
     QSignalSpy reads(&view, &ketplus::AgentWorkspaceView::backgroundTaskOutputRequested);
+    // The row itself opens its output, as the mock's current row; there is no Output button.
+    auto* buildRow = findVisualItem(bar, QStringLiteral("backgroundTaskCard_build"));
+    QVERIFY(buildRow);
+    auto* reviewRow = findVisualItem(bar, QStringLiteral("backgroundTaskCard_review"));
+    QVERIFY(reviewRow);
+    // Wait for the strip's layout: the rows stack once it is polished.
+    QTRY_VERIFY(reviewRow->mapToScene(QPointF()).y() > buildRow->mapToScene(QPointF()).y());
+    const QPoint rowCenter =
+        buildRow->mapToScene(QPointF(buildRow->width() / 2, buildRow->height() / 2)).toPoint();
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, rowCenter);
+    QTRY_COMPARE(reads.count(), 1);
+    QCOMPARE(reads.constFirst().at(0).toString(), QStringLiteral("build"));
+    // Keys: Return on the row opens it; on Stop it keeps Stop's meaning and Space asks to
+    // stop. The row shows a focus ring of its own, apart from the open output's border.
+    view.quickView()->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+    const auto actionOf = [](QQuickItem* card) -> QQuickItem* {
+        for (auto* child : card->childItems())
+            if (child->property("iconName").isValid())
+                return child;
+        return nullptr;
+    };
+    auto* ring = findVisualItem(buildRow, QStringLiteral("backgroundTaskFocusRing"));
+    QVERIFY(ring);
+    QVERIFY(!ring->isVisible());
+    view.closeBackgroundTaskOutput();
+    buildRow->forceActiveFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(ring->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTRY_COMPARE(reads.count(), 2);
+    QCOMPARE(reads.last().at(0).toString(), QStringLiteral("build"));
+    view.closeBackgroundTaskOutput();
+    auto* stop = actionOf(buildRow);
+    QVERIFY(stop);
+    stop->forceActiveFocus(Qt::TabFocusReason);
+    QVERIFY(!ring->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTest::qWait(50);
+    QCOMPARE(reads.count(), 2);
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
+    QTRY_COMPARE(bar->property("confirmingStop").toString(), QStringLiteral("build"));
+    QCOMPARE(reads.count(), 2);
+    bar->setProperty("confirmingStop", QString());
     view.requestBackgroundTaskOutput(QStringLiteral("build"));
-    QCOMPARE(reads.count(), 1);
+    QCOMPARE(reads.count(), 3);
     QVERIFY(view.backgroundTaskOutput().value("loading").toBool());
     view.acceptBackgroundTaskResult(QStringLiteral("review"), QStringLiteral("output"),
                                     {{"output", "wrong"}});
@@ -857,6 +1166,28 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     view.setBackgroundTasks({agent});
     QVERIFY(view.backgroundTaskOutput().isEmpty());
     QTRY_VERIFY(!pane->isVisible());
+
+    // Dismiss hides a finished receipt locally, without deleting daemon task history.
+    auto finished = shell;
+    finished.insert("status", "completed");
+    finished.insert("ended_at", QDateTime::currentMSecsSinceEpoch());
+    view.setBackgroundTasks({finished});
+    QQuickItem* taskCard = nullptr;
+    QTRY_VERIFY((taskCard = findVisualItem(bar, "backgroundTaskCard_build")));
+    // Return on Dismiss neither opens the output nor dismisses; Space dismisses.
+    QQuickItem* dismiss = nullptr;
+    QTRY_VERIFY((dismiss = actionOf(taskCard)) && dismiss->isVisible());
+    const int readsBeforeDismiss = reads.count();
+    dismiss->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTest::qWait(50);
+    QCOMPARE(reads.count(), readsBeforeDismiss);
+    QVERIFY(bar->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
+    QTRY_VERIFY(!bar->isVisible());
+    QCOMPARE(view.backgroundTasks().size(), 1);
+    view.setBackgroundTasks({shell});
+    QTRY_VERIFY(bar->isVisible()); // A running incarnation is never hidden.
 
     // Another worktree never shows this conversation's tasks.
     view.setActivePath(QDir::homePath());
@@ -945,36 +1276,42 @@ void AgentWorkspaceViewTest::loadsQmlAndMapsWorktrees() {
                 .contains(QStringLiteral("feature/agent-ui")));
 }
 
-void AgentWorkspaceViewTest::hidesWorktreesWithoutConversationsByDefault() {
-    QTemporaryDir repository;
-    QVERIFY(repository.isValid());
-    const QString otherPath = repository.filePath(QStringLiteral("detached-review"));
-    QVERIFY(QDir().mkpath(otherPath));
-
+void AgentWorkspaceViewTest::sidebarGroupsConversationsWithoutWorktreeRail() {
+    const auto previousAppearance = ket::Appearance::instance().mode();
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
+    const auto restoreAppearance = qScopeGuard(
+        [previousAppearance] { ket::Appearance::instance().setMode(previousAppearance); });
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
-    const QVector<ketplus::GitWorktree> worktrees{
-        {.path = repository.path(), .head = QStringLiteral("11111111"), .branch = "develop"},
-        {.path = otherPath, .head = QStringLiteral("22222222")},
-    };
-    view.setWorktrees(worktrees, repository.path(), {}, {repository.path()});
-
+    view.setRepositoryName(QStringLiteral("sample-repository"));
+    view.setConversations({QVariantMap{
+        {"id", "thread-a"}, {"title", "Implement sidebar"}, {"active", true}, {"started", true}}});
+    view.resize(1000, 700);
+    view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    QCOMPARE(root->property("filteredWorktrees").toList().size(), 1);
-    QCOMPARE(
-        root->property("filteredWorktrees").toList().first().toMap().value("branch").toString(),
-        QStringLiteral("develop"));
-
-    root->setProperty("worktreeQuery", QStringLiteral("Detached"));
-    QTRY_COMPARE(root->property("filteredWorktrees").toList().size(), 1);
-    QCOMPARE(
-        root->property("filteredWorktrees").toList().first().toMap().value("branch").toString(),
-        QStringLiteral("Detached 22222222"));
-
-    root->setProperty("worktreeQuery", QString{});
-    root->setProperty("showAllWorktrees", true);
-    QTRY_COMPARE(root->property("filteredWorktrees").toList().size(), 2);
+    auto* group = root->findChild<QQuickItem*>("sidebarRepositoryGroup");
+    auto* list = root->findChild<QQuickItem*>("sidebarConversationList");
+    QVERIFY(group);
+    QVERIFY(list);
+    QCOMPARE(group->property("name").toString(), QStringLiteral("sample-repository"));
+    QTRY_COMPARE(list->property("count").toInt(), 1);
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeList"));
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeSearch"));
+    QVERIFY(!root->findChild<QQuickItem*>("addWorktreeButton"));
+    QVERIFY(!root->findChild<QQuickItem*>("allWorktreesButton"));
+    group->setProperty("expanded", false);
+    QTRY_VERIFY(!list->isVisible());
+    group->setProperty("expanded", true);
+    QTRY_VERIFY(list->isVisible());
+    QSignalSpy create(&view, &ketplus::AgentWorkspaceView::newSessionRequested);
+    QVERIFY(QMetaObject::invokeMethod(group, "actionTriggered"));
+    QCOMPARE(create.count(), 1);
+    const auto capture = qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(40);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
 }
 
 void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
@@ -994,8 +1331,12 @@ void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
     QVERIFY(header);
     QVERIFY(newConversation);
     QVERIFY(terminal);
-    QCOMPARE(newConversation->size(), QSizeF(28, 28));
-    QCOMPARE(terminal->size(), QSizeF(28, 28));
+    const auto headerRecipe =
+        ket::iconButtonRecipe(ket::ControlSize::Medium, {}, ket::Appearance::instance().theme());
+    const auto headerSize =
+        ket::Appearance::scale(headerRecipe.height, ket::Appearance::instance().zoom());
+    QCOMPARE(newConversation->size(), QSizeF(headerSize, headerSize));
+    QCOMPARE(terminal->size(), QSizeF(headerSize, headerSize));
 
     // Transcripts restore fast enough that a full-pane overlay only caused a flash.
     QSignalSpy changed(&view, &ketplus::AgentWorkspaceView::restoringChanged);
@@ -1012,7 +1353,7 @@ void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
     QVERIFY(!view.restoring());
 }
 
-void AgentWorkspaceViewTest::filtersLargeWorktreeSets() {
+void AgentWorkspaceViewTest::largeWorktreeCatalogDoesNotCreateSidebarRail() {
     QTemporaryDir repository;
     QVERIFY(repository.isValid());
 
@@ -1057,30 +1398,12 @@ void AgentWorkspaceViewTest::filtersLargeWorktreeSets() {
 
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    auto* worktreeList = root->findChild<QQuickItem*>(QStringLiteral("worktreeList"));
-    auto* worktreeSearch = root->findChild<QQuickItem*>(QStringLiteral("worktreeSearch"));
-    QVERIFY(worktreeList);
-    QVERIFY(worktreeSearch);
-    QCOMPARE(worktreeList->property("currentIndex").toInt(), 94);
-    QVERIFY2(
-        worktreeList->height() > 240.0,
-        qPrintable(QStringLiteral("Worktree list should use more than the old 174 px cap; got %1.")
-                       .arg(worktreeList->height())));
-
-    worktreeSearch->setProperty("text", QStringLiteral("worktree-119"));
-    QTest::qWait(100);
-    const QVariantList filtered = root->property("filteredWorktrees").toList();
-    QCOMPARE(filtered.size(), 1);
-    QCOMPARE(filtered.constFirst().toMap().value(QStringLiteral("branch")).toString(),
-             QStringLiteral("feature/worktree-119"));
-    QSignalSpy menuRequested(&view, &ketplus::AgentWorkspaceView::worktreeContextMenuRequested);
-    const auto activeBeforeClick = view.activePath();
-    const QPoint clickPoint = worktreeList->mapToScene(QPointF(30, 20)).toPoint();
-    QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier, clickPoint);
-    QTRY_COMPARE(menuRequested.count(), 1);
-    QCOMPARE(menuRequested.first().first().toString(),
-             QFileInfo(worktrees.at(119).path).canonicalFilePath());
-    QCOMPARE(view.activePath(), activeBeforeClick);
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeList"));
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeSearch"));
+    auto* list = root->findChild<QQuickItem*>("sidebarConversationList");
+    QVERIFY(list);
+    QTRY_VERIFY(list->height() > 250);
+    QCOMPARE(view.worktrees().size(), 120); // Catalog remains available to the execution picker.
 }
 
 void AgentWorkspaceViewTest::exposesUiInteractions() {
@@ -1511,4 +1834,51 @@ void AgentWorkspaceViewTest::claudeUsageBudget() {
     QTRY_VERIFY(findVisualItem(content, "claudeQueryBudget"));
     QTRY_COMPARE(findVisualItem(content, "claudeQueryBudget")->property("text").toString(),
                  "Not reported");
+}
+
+void AgentWorkspaceViewTest::questionCardSingleClickAndFreeText() {
+    ketplus::AgentWorkspaceView view;
+    view.resize(900, 700);
+    view.show();
+    QQmlComponent component(view.quickView()->engine(), QUrl("qrc:/agent/AgentQuestionCard.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList options{QVariantMap{{"id", "yes-original"}, {"label", "Yes"}},
+                               QVariantMap{{"id", "no-original"}, {"label", "No"}}};
+    auto makeCard = [&](const QVariantList& choices, bool secret) {
+        return qobject_cast<QQuickItem*>(component.createWithInitialProperties(
+            {{"width", 640},
+             {"questions", QVariantList{QVariantMap{{"id", "choice"},
+                                                    {"question", "Continue?"},
+                                                    {"selection", "single"},
+                                                    {"isOther", true},
+                                                    {"isSecret", secret},
+                                                    {"options", choices}}}},
+             {"pending", true},
+             {"answerData", QVariantMap{}},
+             {"messageKey", "single-click"}}));
+    };
+    QScopedPointer<QQuickItem> card(makeCard(options, false));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QSignalSpy sent(card.data(), SIGNAL(answersSubmitted(QVariant)));
+    QVERIFY(sent.isValid());
+    QVERIFY(card->property("confirmation").toBool());
+    auto* button = findVisualItem(card.data(), "questionConfirmOption");
+    QVERIFY(button);
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(sent.size(), 1);
+    const auto answer = sent.first().first().toMap().value("choice").toMap();
+    QCOMPARE(answer.value("option_ids").toList().first().toString(), "yes-original");
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(sent.size(), 1); // Programmatic second activation is fenced too.
+    card.reset(makeCard({}, true));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QVERIFY(!card->property("confirmation").toBool());
+    QVERIFY(!findVisualItem(card.data(), "questionOtherOption")->isVisible());
+    auto* input = findVisualItem(card.data(), "questionOtherInput");
+    QVERIFY(input && input->isVisible());
+    QCOMPARE(input->property("echoMode").toInt(), 2); // QQuickTextInput::Password
+    input->setProperty("text", "custom answer");
+    QTRY_VERIFY(findVisualItem(card.data(), "questionContinueButton")->isEnabled());
 }

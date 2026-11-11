@@ -3,7 +3,6 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/FileMentions.h"
-#include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QProcess>
 #include <QProcessEnvironment>

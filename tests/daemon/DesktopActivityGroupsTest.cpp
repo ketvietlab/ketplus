@@ -127,7 +127,7 @@ class DesktopActivityGroupsTest : public QObject {
         desktop.copyConversation(canonical);
         QTRY_COMPARE(copied.size(), 1);
         const auto exported = copied.first().at(2).toString();
-        QVERIFY(exported.contains("observe"));
+        QVERIFY(exported.contains("Observed the page"));
         QVERIFY(!view.messageModel()->groupExpanded(key));
         // An explicitly opted-out client still sees raw lifecycle events on the same daemon.
         bool replied = false;
@@ -142,6 +142,35 @@ class DesktopActivityGroupsTest : public QObject {
         QCOMPARE(raw.value("events").toArray().size(), 4);
         QCOMPARE(raw.value("events").toArray().last().toObject().value("event_type"),
                  "item.completed");
+
+        // A server's step joins the line while it runs; returning images, it leaves the line
+        // and shows on its own, live.
+        const auto repl = [](const QString& status, bool image) {
+            QJsonObject body{{"id", "shot"},
+                             {"type", "mcpToolCall"},
+                             {"server", "node_repl"},
+                             {"tool", "js"},
+                             {"status", status}};
+            if (image)
+                body.insert(
+                    "result",
+                    QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                   {"data", "iVBORw0KGgo="},
+                                                                   {"mimeType", "image/png"}}}}});
+            return QJsonObject{{"item", body}};
+        };
+        const auto joined =
+            journal.appendEvent("grouped", 1, "item.started", repl("inProgress", false));
+        host.eventReady(journal.eventsAfter("grouped", 1, joined - 1, 1).first().toObject());
+        QTRY_COMPARE(desktop.messages(canonical).at(1).toMap().value("groupSize").toInt(), 4);
+        QCOMPARE(desktop.messages(canonical).size(), 2);
+        const auto evidence =
+            journal.appendEvent("grouped", 1, "item.completed", repl("completed", true));
+        host.eventReady(journal.eventsAfter("grouped", 1, evidence - 1, 1).first().toObject());
+        QTRY_COMPARE(desktop.messages(canonical).size(), 3);
+        QCOMPARE(desktop.messages(canonical).at(1).toMap().value("groupSize").toInt(), 3);
+        QVERIFY(!desktop.messages(canonical).at(1).toMap().value("running").toBool());
+        QCOMPARE(desktop.messages(canonical).last().toMap().value("itemId").toString(), "shot");
         server.stop();
     }
 };

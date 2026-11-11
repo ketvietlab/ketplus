@@ -1,5 +1,8 @@
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/AgentMessageModel.h"
+#include "agent/DaemonTranscriptProjection.h"
+#include "agent/TranscriptTurnFiles.h"
 
 #include <QtTest>
 
@@ -36,6 +39,132 @@ class TranscriptActivityGroupsTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    // The turn's changed files: its file-change rows and its daemon groups' files, merged by
+    // path in the order first changed, never another turn's and never a failed change.
+    void turnFilesGatherOnlyThisTurnsChanges() {
+        using namespace ketplus::agent_message;
+        const auto stats = [](const QString& path, int added, int removed,
+                              const QString& operation = "Edited", bool known = true) {
+            return QVariantMap{{"path", path},   {"destination", ""},  {"operation", operation},
+                               {"added", added}, {"removed", removed}, {"known", known}};
+        };
+        const QList<QVariantMap> rows{
+            {{"kind", "user"}, {"turnId", "t1"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t1"},
+             {"fileChanges", QVariantList{stats("old.cpp", 1, 0)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t1"}},
+            {{"kind", "user"}, {"turnId", "t2"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t2"},
+             {"fileChanges", QVariantList{stats("src/a.cpp", 1, 0)}}},
+            {{"subtype", "daemonGroup"},
+             {"turnId", "t2"},
+             {"groupFiles", QVariantList{stats("src/a.cpp", 2, 1, "Edited", false),
+                                         stats("src/b.cpp", 4, 0, "Created")}}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t2"},
+             {"status", "failed"},
+             {"fileChanges", QVariantList{stats("src/c.cpp", 9, 9)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t2"}}};
+        const QVariantList files = turnChangedFiles(rows, rows.size() - 1);
+        QCOMPARE(files.size(), 2);
+        QCOMPARE(files.at(0).toMap(), stats("src/a.cpp", 3, 1, "Edited", false));
+        QCOMPARE(files.at(1).toMap(), stats("src/b.cpp", 4, 0, "Created"));
+        QCOMPARE(turnChangedFiles(rows, 2).size(), 1);
+        QVERIFY(turnChangedFiles(rows, 99).isEmpty());
+        // ADR 0022: a daemon group row carries its summary's files.
+        const auto group = daemonActivityGroupMessage(
+            {{"item_id", "activity-group:7"},
+             {"group_id", "7"},
+             {"count", 1},
+             {"families", QJsonArray{QJsonObject{{"family", "edit"}, {"count", 1}}}},
+             {"files", QJsonArray{QJsonObject{{"path", "src/a.cpp"}, {"added", 2}}}}},
+            3);
+        QCOMPARE(group.value("groupFiles").toList().size(), 1);
+        QCOMPARE(group.value("groupFiles").toList().first().toMap().value("added").toInt(), 2);
+        QCOMPARE(group.value("groupFilesTotal").toInt(), 1);
+        // A steer stays in the turn it steers: the changes before and after it both count.
+        const QList<QVariantMap> steered{
+            {{"kind", "user"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("before.cpp", 1, 0)}}},
+            {{"kind", "user"}, {"eventType", "turn.steered"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("after.cpp", 2, 0)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t3"}}};
+        bool complete = false;
+        const QVariantList both = turnChangedFiles(steered, steered.size() - 1, &complete);
+        QCOMPARE(both.size(), 2);
+        QCOMPARE(both.at(0).toMap().value("path").toString(), QStringLiteral("before.cpp"));
+        QVERIFY(complete);
+        // A group that listed only some of its files leaves the turn's list incomplete.
+        const auto bounded = daemonActivityGroupMessage(
+            {{"item_id", "activity-group:8"},
+             {"group_id", "8"},
+             {"count", 1},
+             {"families", QJsonArray{QJsonObject{{"family", "edit"}, {"count", 60}}}},
+             {"files", QJsonArray{QJsonObject{{"path", "gen/0.cpp"}, {"added", 1}}}},
+             {"files_total", 60}},
+            3);
+        QCOMPARE(bounded.value("groupFilesTotal").toInt(), 60);
+        auto truncated = steered;
+        truncated.insert(4, {{"subtype", "daemonGroup"},
+                             {"turnId", "t3"},
+                             {"groupFiles", bounded.value("groupFiles")},
+                             {"groupFilesTotal", 60}});
+        QCOMPARE(turnChangedFiles(truncated, truncated.size() - 1, &complete).size(), 3);
+        QVERIFY(!complete);
+    }
+    void daemonGroupsReadAsLocalGroups() {
+        const auto summary = [](const QJsonArray& families, const QJsonObject& extra = {}) {
+            QJsonObject data{
+                {"item_id", "activity-group:9"}, {"group_id", "9"}, {"families", families}};
+            for (auto it = extra.begin(); it != extra.end(); ++it)
+                data.insert(it.key(), it.value());
+            return daemonActivityGroupMessage(data, 1).value("groupSummary").toString();
+        };
+        const auto family = [](const QString& name, int count) {
+            return QJsonObject{{"family", name}, {"count", count}};
+        };
+        QCOMPARE(
+            summary({family("command", 2), family("edit", 1)},
+                    {{"files_total", 2},
+                     {"files",
+                      QJsonArray{
+                          QJsonObject{{"path", "a"}, {"added", 4}, {"removed", 1}, {"known", true}},
+                          QJsonObject{{"path", "b"}, {"added", 1}, {"known", true}}}}}),
+            QStringLiteral("Ran 2 commands, edited 2 files +5 -1"));
+        QCOMPARE(summary({family("browser", 3), family("tool:node_repl", 2)}),
+                 QStringLiteral("Used ketplus_browser, node_repl · 5 steps"));
+        QCOMPARE(
+            summary({family("command", 1), family("tool:node_repl", 1), family("subagent", 1),
+                     family("subagent.step", 2), family("wait", 1)},
+                    {{"failed_count", 1}}),
+            QStringLiteral("Ran a command, used node_repl, used a subagent, waited (1 failed)"));
+        QCOMPARE(summary({family("codeSearch", 2), family("fileSearch", 1), family("read", 1)}),
+                 QStringLiteral("Searched code 2 times, searched files, explored a file"));
+        // Totals only when every file is listed and counted.
+        const QJsonObject four{{"path", "a"}, {"added", 4}, {"known", true}};
+        QCOMPARE(
+            summary({family("edit", 2)},
+                    {{"files_total", 2},
+                     {"files", QJsonArray{four, QJsonObject{{"path", "b"}, {"known", false}}}}}),
+            QStringLiteral("Edited 2 files"));
+        QCOMPARE(summary({family("edit", 51)}, {{"files_total", 51}, {"files", QJsonArray{four}}}),
+                 QStringLiteral("Edited 51 files"));
+        QList<QVariantMap> local{fileChange("e1", 4, 0), fileChange("e2", 1, 0)};
+        auto unknown = local.at(1).value("fileChanges").toList().first().toMap();
+        unknown.insert("path", "b.cpp");
+        unknown.insert("known", false);
+        local[1].insert("fileChanges", QVariantList{unknown});
+        QCOMPARE(activityGroupSummary(local, 0, 2), QStringLiteral("Edited 2 files"));
+        QCOMPARE(summary({family("webSearch", 1), family("search", 2)}),
+                 QStringLiteral("Searched the web, searched 2 times"));
+    }
+
     void groupsConsecutiveActivityWithinATurn() {
         QList<QVariantMap> rows{text("user", "user"),       activity("c1", "fileRead"),
                                 activity("r1", "fileRead"), activity("c2", "fileRead"),
@@ -48,7 +177,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(rows.at(1).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(1).value("groupSize").toInt(), 6);
         QCOMPARE(rows.at(1).value("groupSummary").toString(),
-                 QStringLiteral("Read 5 files, edited a file +1 -1"));
+                 QStringLiteral("Explored 5 files, edited a file +1 -1"));
         QCOMPARE(rows.at(4).value("groupRole").toString(), QStringLiteral("member"));
         QCOMPARE(rows.at(6).value("groupRole").toString(), QStringLiteral("member"));
         QCOMPARE(rows.at(7).value("groupRole").toString(), QString());
@@ -66,7 +195,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         // A single activity row between boundaries stays ungrouped.
         QCOMPARE(rows.at(3).value("groupRole").toString(), QString());
         QCOMPARE(rows.at(4).value("groupRole").toString(), QStringLiteral("leader"));
-        QCOMPARE(rows.at(4).value("groupSummary").toString(), QStringLiteral("Read 2 files"));
+        QCOMPARE(rows.at(4).value("groupSummary").toString(), QStringLiteral("Explored 2 files"));
         // Questions stay visible and are never folded into a group.
         QCOMPARE(rows.at(6).value("groupRole").toString(), QString());
         QCOMPARE(rows.at(7).value("groupRole").toString(), QString());
@@ -95,7 +224,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         assignActivityGroups(rows);
 
         QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Read 5 files (1 failed)"));
+                 QStringLiteral("Explored 5 files (1 failed)"));
         QCOMPARE(rows.at(0).value("groupFailed").toInt(), 1);
         QVERIFY(rows.at(0).value("groupRunning").toBool());
     }
@@ -109,7 +238,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         const QList<int> changed = assignActivityGroups(rows);
         // The leader's summary and the new member change; the existing member does not.
         QCOMPARE(changed, QList<int>({0, 2}));
-        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Read 3 files"));
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Explored 3 files"));
     }
 
     void rangedRecomputeTouchesOnlyTheAffectedRun() {
@@ -185,18 +314,162 @@ class TranscriptActivityGroupsTest final : public QObject {
         assignActivityGroups(rows);
         QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 6);
-        QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Ran 2 commands, used the browser, searched the web, read a "
-                                "file, used a tool"));
+        QCOMPARE(
+            rows.at(0).value("groupSummary").toString(),
+            QStringLiteral("Ran 2 commands, used ketplus_browser, searched the web, explored a "
+                           "file, used a tool"));
     }
 
-    void evidenceAndUnknownRowsRemainIndividuallyVisible() {
-        QVariantMap capture = activity("b1", "ketplusBrowser");
-        capture.insert("eventType", "browser.screenshot");
-        QList<QVariantMap> rows{activity("c1", "command"), capture,
-                                activity("c2", "command"), activity("u1", "futureTool"),
-                                activity("c3", "command"), activity("q1", "question"),
-                                activity("c4", "command")};
+    // As in the mock, MCP tool calls, image steps, waits and subagents stay in the group, and
+    // its line names the servers used: "Used ketplus_browser, node_repl · 5 steps".
+    void toolServersImagesAndWaitsCollapseIntoTheGroup() {
+        const auto served = [](const QString& key, const QString& subtype, const QString& server) {
+            auto row = activity(key, subtype);
+            row.insert("activityFacts", QVariantMap{{"server", server}});
+            return row;
+        };
+        QList<QVariantMap> rows{served("b1", "ketplusBrowser", "ketplus_browser"),
+                                served("b2", "ketplusBrowser", "ketplus_browser"),
+                                served("m1", "integration", "node_repl"),
+                                served("m2", "integration", "node_repl"),
+                                activity("w1", "webSearch"),
+                                activity("v1", "imageView"),
+                                activity("i1", "imageGeneration"),
+                                activity("z1", "wait"),
+                                activity("a1", "collaboration")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 9);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Used ketplus_browser, node_repl, searched the web, "
+                                "viewed an image, generated an image, waited, used a subagent"));
+    }
+
+    void groupsUseTheMocksWording() {
+        // "Thought, explored 4 files, listed 1 folder" and "Searched the web, loaded tools, used
+        // a skill": reads explore, Codex listings list folders, and text-only steps group.
+        auto listing = activity("l1", "fileSearch");
+        listing.insert("activityFacts", QVariantMap{{"listedFolders", 1}});
+        QList<QVariantMap> rows{
+            activity("r1", "fileRead"),  activity("r2", "fileRead"), listing,
+            activity("w1", "webSearch"), activity("f1", "webFetch"), activity("t1", "toolsLoaded"),
+            activity("s1", "skill"),     activity("m1", "monitor"),  activity("x1", "taskStopped")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 9);
+        QCOMPARE(
+            rows.at(0).value("groupSummary").toString(),
+            QStringLiteral("Explored 2 files, listed 1 folder, searched the web, fetched a "
+                           "page, loaded tools, used a skill, waited, stopped a background task"));
+        QCOMPARE(daemonActivityGroupMessage(
+                     {{"item_id", "activity-group:3"},
+                      {"group_id", "3"},
+                      {"families", QJsonArray{QJsonObject{{"family", "read"}, {"count", 4}},
+                                              QJsonObject{{"family", "list"}, {"count", 2}},
+                                              QJsonObject{{"family", "skill"}, {"count", 1}}}}},
+                     1)
+                     .value("groupSummary")
+                     .toString(),
+                 QStringLiteral("Explored 4 files, listed 2 folders, used a skill"));
+        // "list:2" is one command that listed two folders: "ls src && ls tests".
+        QCOMPARE(daemonActivityGroupMessage(
+                     {{"item_id", "activity-group:4"},
+                      {"group_id", "4"},
+                      {"families", QJsonArray{QJsonObject{{"family", "list"}, {"count", 1}},
+                                              QJsonObject{{"family", "list:2"}, {"count", 1}},
+                                              QJsonObject{{"family", "command"}, {"count", 1}}}}},
+                     1)
+                     .value("groupSummary")
+                     .toString(),
+                 QStringLiteral("Listed 3 folders, ran a command"));
+    }
+
+    void summaryFactsSurviveTheProjectionAndTheModel() {
+        // Rows reach the grouping after the projection and the model moved details out; the
+        // server, the agents and the listing must still read in the group line.
+        const auto completed = [](qint64 cursor, const QJsonObject& item) {
+            return QJsonObject{
+                {"cursor", cursor},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload", QJsonObject{{"item_id", item.value("id")}, {"item", item}}}};
+        };
+        const QJsonArray events{
+            completed(1, {{"id", "repl"},
+                          {"type", "mcpToolCall"},
+                          {"server", "node_repl"},
+                          {"tool", "js"},
+                          {"status", "completed"}}),
+            completed(2, {{"id", "spawn"},
+                          {"type", "collabAgentToolCall"},
+                          {"tool", "spawnAgent"},
+                          {"receiverThreadIds", QJsonArray{"agent-1"}},
+                          {"status", "completed"}}),
+            completed(3, {{"id", "wait"},
+                          {"type", "collabAgentToolCall"},
+                          {"tool", "wait"},
+                          {"receiverThreadIds", QJsonArray{"agent-1"}},
+                          {"status", "completed"}}),
+            completed(4, {{"id", "ls"},
+                          {"type", "commandExecution"},
+                          {"command", "ls src"},
+                          {"exitCode", 0},
+                          {"status", "completed"},
+                          {"commandActions",
+                           QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}}}}})};
+        ketplus::AgentMessageModel model;
+        model.reset(daemonWindowMessages({{"events", events}}));
+        QCOMPARE(model.get(0).value("groupSize").toInt(), 4);
+        QCOMPARE(model.get(0).value("groupSummary").toString(),
+                 QStringLiteral("Used node_repl, used a subagent, listed 1 folder"));
+    }
+
+    void thoughtsCollapseWithTheirSteps() {
+        // The mock's "Thought, …": a thought is a step of the group it starts.
+        QList<QVariantMap> rows{activity("t1", "thought"), activity("r1", "fileRead"),
+                                activity("r2", "fileRead")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Thought, explored 2 files"));
+    }
+
+    void subagentsCollapseWithCommands() {
+        // The mock's Cursor turn: "Ran 3 commands, used a subagent".
+        QList<QVariantMap> rows{activity("c1", "command"), activity("c2", "command"),
+                                activity("s1", "subAgent"), activity("c3", "command")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 4);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Ran 3 commands, used a subagent"));
+    }
+
+    void collaborationStepsCountDistinctAgents() {
+        // Spawning and waiting on one agent is one subagent, as the formatter's rows carry it.
+        const auto step = [](const QString& id, const QString& tool, const QString& receiver) {
+            auto row = activityMessage({{"id", id},
+                                        {"type", "collabAgentToolCall"},
+                                        {"tool", tool},
+                                        {"status", "completed"},
+                                        {"receiverThreadIds", QJsonArray{receiver}}},
+                                       true);
+            row.insert("messageKey", id);
+            row.insert("turnId", "turn-1");
+            return row;
+        };
+        QList<QVariantMap> rows{step("s1", "spawnAgent", "same-agent"),
+                                step("w1", "wait", "same-agent")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 2);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Used a subagent"));
+        rows.append(step("s2", "spawnAgent", "other-agent"));
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Used 2 subagents"));
+    }
+
+    void unknownRowsAndQuestionsRemainIndividuallyVisible() {
+        QList<QVariantMap> rows{activity("c1", "command"), activity("u1", "futureTool"),
+                                activity("c2", "command"), activity("q1", "question"),
+                                activity("c3", "command")};
         assignActivityGroups(rows);
         for (const auto& row : rows)
             QVERIFY(row.value("groupRole").toString().isEmpty());
@@ -220,20 +493,22 @@ class TranscriptActivityGroupsTest final : public QObject {
             QList<QVariantMap> rows{activity("before", "ketplusBrowser"), step,
                                     activity("after", "ketplusBrowser")};
             assignActivityGroups(rows);
-            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used the browser");
+            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used ketplus_browser · 3 steps");
             QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
             QCOMPARE(rows.at(1).value("groupRole").toString(), "member");
             QCOMPARE(rows.at(0).value("groupRunning").toBool(), !completed);
         }
     }
 
-    void captureAndComparisonAlwaysSplitBrowserGroups_data() {
+    void captureAndComparisonAreBrowserSteps_data() {
         QTest::addColumn<QString>("tool");
         QTest::newRow("capture") << QStringLiteral("browser_capture");
         QTest::newRow("compare") << QStringLiteral("visual_compare");
     }
 
-    void captureAndComparisonAlwaysSplitBrowserGroups() {
+    // As in the mock ("Used ketplus_browser, node_repl · 5 steps" with its Captured step),
+    // a capture or comparison is a step of its group; the open group shows its image.
+    void captureAndComparisonAreBrowserSteps() {
         QFETCH(QString, tool);
         auto capture = activityMessage({{"id", "capture"},
                                         {"type", "mcpToolCall"},
@@ -245,24 +520,13 @@ class TranscriptActivityGroupsTest final : public QObject {
             auto evidence = activity("evidence", "ketplusBrowser");
             evidence.insert("eventType", event);
             evidence.insert("images", QVariantList{"ketplus-media-unavailable:0"});
-            QList<QVariantMap> rows{activity("before-1", "ketplusBrowser"),
-                                    activity("before-2", "ketplusBrowser"),
-                                    capture,
-                                    activity("middle-1", "ketplusBrowser"),
-                                    activity("middle-2", "ketplusBrowser"),
-                                    evidence,
-                                    activity("after-1", "ketplusBrowser"),
-                                    activity("after-2", "ketplusBrowser")};
+            QList<QVariantMap> rows{activity("before", "ketplusBrowser"), capture,
+                                    activity("middle", "ketplusBrowser"), evidence,
+                                    activity("after", "ketplusBrowser")};
             assignActivityGroups(rows);
-            for (const int leader : {0, 3, 6})
-                QCOMPARE(rows.at(leader).value("groupSize").toInt(), 2);
-            QVERIFY(rows.at(2).value("groupRole").toString().isEmpty());
-            QVERIFY(rows.at(5).value("groupRole").toString().isEmpty());
-            // An empty/failed capture or comparison stays outside the group as well.
-            rows[2].insert("running", false);
-            rows[2].insert("status", "failed");
-            assignActivityGroups(rows, 2, 2);
-            QVERIFY(rows.at(2).value("groupRole").toString().isEmpty());
+            QCOMPARE(rows.at(0).value("groupSize").toInt(), 5);
+            for (const int member : {1, 2, 3, 4})
+                QCOMPARE(rows.at(member).value("groupRole").toString(), "member");
         }
     }
 
@@ -293,10 +557,10 @@ class TranscriptActivityGroupsTest final : public QObject {
             << "ps -o pid -p $(pgrep -f daemon | head -1) 2>&1" << "command" << QString();
         QTest::newRow("file after a count flag")
             << "head -8 modules/ai/src/agent/AgentSessionHistory.cpp" << "fileRead"
-            << "Read AgentSessionHistory.cpp";
+            << "Read: AgentSessionHistory.cpp";
         QTest::newRow("file after a valued flag")
-            << "head -n 20 src/main.cpp" << "fileRead" << "Read main.cpp";
-        QTest::newRow("file with no flag") << "cat /tmp/out.txt" << "fileRead" << "Read out.txt";
+            << "head -n 20 src/main.cpp" << "fileRead" << "Read: main.cpp";
+        QTest::newRow("file with no flag") << "cat /tmp/out.txt" << "fileRead" << "Read: out.txt";
     }
 
     void readerTitlesNeedAFileOperandRatherThanAFlag() {

@@ -9,6 +9,9 @@
 #include <ScintillaMessages.h>
 #include <ScintillaStructures.h>
 
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetSurfaceRecipes.h"
 #include <QAbstractTableModel>
 #include <QApplication>
 #include <QClipboard>
@@ -26,7 +29,6 @@
 #include <QTableView>
 #include <QTextCharFormat>
 #include <QTextLayout>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -60,14 +62,6 @@ constexpr unsigned int message(const Scintilla::Message value) {
 QColor qtColor(const sptr_t value) {
     return QColor(static_cast<int>(value & 0xff), static_cast<int>((value >> 8) & 0xff),
                   static_cast<int>((value >> 16) & 0xff));
-}
-
-QColor blended(const QString& baseValue, const QString& accentValue, const qreal amount) {
-    const QColor base(baseValue);
-    const QColor accent(accentValue);
-    return QColor::fromRgbF(base.redF() * (1.0 - amount) + accent.redF() * amount,
-                            base.greenF() * (1.0 - amount) + accent.greenF() * amount,
-                            base.blueF() * (1.0 - amount) + accent.blueF() * amount);
 }
 
 QString scopeText(const GitDiffMode mode) {
@@ -145,36 +139,22 @@ class GitDiffModel final : public QAbstractTableModel {
         }
 
         if (role == Qt::ForegroundRole) {
-            if (line.kind == DiffLineKind::Hunk) {
-                return QColor(palette_.accentActive);
-            }
-            if (line.kind == DiffLineKind::Meta || index.column() < 3) {
-                return QColor(palette_.textMuted);
-            }
-            return QColor(palette_.textMain);
+            if (line.kind == DiffLineKind::Hunk || line.kind == DiffLineKind::Meta)
+                return recipe_.hunkText;
+            if (index.column() == 2 && line.kind == DiffLineKind::Addition)
+                return recipe_.addSign;
+            if (index.column() == 2 && line.kind == DiffLineKind::Deletion)
+                return recipe_.removeSign;
+            return index.column() < 3 ? recipe_.number : recipe_.text;
         }
-
         if (role == Qt::BackgroundRole) {
-            const qreal tint = palette_.dark ? 0.15 : 0.12;
-            const qreal gutterTint = palette_.dark ? 0.24 : 0.18;
-            if (line.kind == DiffLineKind::Addition) {
-                return blended(palette_.panelBackground, palette_.positive,
-                               index.column() < 3 ? gutterTint : tint);
-            }
-            if (line.kind == DiffLineKind::Deletion) {
-                return blended(palette_.panelBackground, palette_.danger,
-                               index.column() < 3 ? gutterTint : tint);
-            }
-            if (line.kind == DiffLineKind::Hunk) {
-                return QColor(palette_.accentSubtle);
-            }
-            if (line.kind == DiffLineKind::Meta) {
-                return QColor(palette_.panelSubtle);
-            }
-            if (index.column() < 2) {
-                return QColor(palette_.panelSubtle);
-            }
-            return QColor(palette_.panelBackground);
+            if (line.kind == DiffLineKind::Addition)
+                return recipe_.addBackground;
+            if (line.kind == DiffLineKind::Deletion)
+                return recipe_.removeBackground;
+            if (line.kind == DiffLineKind::Hunk || line.kind == DiffLineKind::Meta)
+                return recipe_.hunkBackground;
+            return recipe_.background;
         }
 
         if (role == Qt::ToolTipRole && index.column() >= 2) {
@@ -352,6 +332,20 @@ class GitDiffModel final : public QAbstractTableModel {
 
     void applyTheme(const ThemePalette& palette) {
         palette_ = palette;
+        recipe_ = ket::diffRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light);
+        // A supplied theme may override semantic text/panel roles (installable themes).
+        recipe_.text = QColor(palette.textMain);
+        recipe_.number = QColor(palette.textMuted);
+        recipe_.background = QColor(palette.panelBackground);
+        const auto opaque = [base = recipe_.background](const QColor& tint) {
+            const qreal a = tint.alphaF();
+            return QColor::fromRgbF(tint.redF() * a + base.redF() * (1 - a),
+                                    tint.greenF() * a + base.greenF() * (1 - a),
+                                    tint.blueF() * a + base.blueF() * (1 - a));
+        };
+        recipe_.addBackground = opaque(recipe_.addBackground);
+        recipe_.removeBackground = opaque(recipe_.removeBackground);
+        recipe_.hunkBackground = opaque(recipe_.hunkBackground);
         if (!lines_.isEmpty()) {
             emit dataChanged(index(0, 0), index(lines_.size() - 1, 3),
                              {Qt::ForegroundRole, Qt::BackgroundRole});
@@ -425,6 +419,7 @@ class GitDiffModel final : public QAbstractTableModel {
     QVector<DiffLine> lines_;
     QString rawDiff_;
     ThemePalette palette_;
+    ket::DiffRecipe recipe_{ket::diffRecipe(ket::Theme::Light)};
     QFont codeFont_;
     int additions_{0};
     int deletions_{0};
@@ -484,7 +479,8 @@ GitDiffView::GitDiffView(QWidget* parent)
     : QWidget(parent), model_(new GitDiffModel(this)), table_(new QTableView(this)),
       syntaxEngine_(new EditorWidget(this)), fileLabel_(new QLabel(this)),
       pathLabel_(new QLabel(this)), scopeLabel_(new QLabel(this)), statsLabel_(new QLabel(this)),
-      openButton_(new QToolButton(this)), contextButton_(new QToolButton(this)) {
+      openButton_(new ket::Button({}, ket::ButtonVariant::Ghost, this)),
+      contextButton_(new ket::Button({}, ket::ButtonVariant::Ghost, this)) {
     revisionContent_ = new GitRevisionContent(this);
     markdownModes_ = new MarkdownModeController(table_, [this] { return revisionText_; }, true);
     connect(markdownModes_, &MarkdownModeController::fileOpenRequested, this,
@@ -521,12 +517,12 @@ GitDiffView::GitDiffView(QWidget* parent)
     contextButton_->setToolTip(QStringLiteral("Toggle unchanged context rows"));
     updateContextButton();
 
-    auto* copyButton = new QToolButton(this);
+    auto* copyButton = new ket::Button({}, ket::ButtonVariant::Ghost, this);
     copyButton->setText(QStringLiteral("Copy Diff"));
     copyButton->setProperty("kvRole", QStringLiteral("diffAction"));
 
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
+    auto* refreshButton = new ket::Button({}, ket::ButtonVariant::Ghost, this);
+    refreshButton->setIcon(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")));
     refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
     refreshButton->setToolTip(QStringLiteral("Refresh this diff"));
     refreshButton->setAccessibleName(QStringLiteral("Refresh this diff"));
@@ -579,9 +575,9 @@ GitDiffView::GitDiffView(QWidget* parent)
     layout->addWidget(header);
     layout->addWidget(table_, 1);
 
-    connect(openButton_, &QToolButton::clicked, this,
+    connect(openButton_, &QAbstractButton::clicked, this,
             [this] { emit openFileRequested(filePath_); });
-    connect(contextButton_, &QToolButton::toggled, this, [this](const bool checked) {
+    connect(contextButton_, &QAbstractButton::toggled, this, [this](const bool checked) {
         hideUnchangedRows_ = checked;
         model_->setHideUnchangedRows(hideUnchangedRows_);
         model_->applySyntax(filePath_, *syntaxEngine_, palette_);
@@ -589,9 +585,9 @@ GitDiffView::GitDiffView(QWidget* parent)
         updateContextButton();
         updateSpans();
     });
-    connect(copyButton, &QToolButton::clicked, this,
+    connect(copyButton, &QAbstractButton::clicked, this,
             [this] { QApplication::clipboard()->setText(rawDiff_); });
-    connect(refreshButton, &QToolButton::clicked, this,
+    connect(refreshButton, &QAbstractButton::clicked, this,
             [this] { emit refreshRequested(filePath_, mode_); });
 }
 

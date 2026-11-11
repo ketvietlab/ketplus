@@ -23,12 +23,14 @@ QVariantMap ActivityGroupLoader::details(const QString& session, const QString& 
 }
 
 void ActivityGroupLoader::setOpen(const QString& session, const QString& group, qint64 watermark,
-                                  bool open) {
+                                  bool open, qint64 membership) {
     const auto id = key(session, group);
     auto& state = states_[id];
     state.session = session;
     state.group = group;
     state.desired = qMax(state.desired, watermark);
+    // Opening reads the group afresh, already without the steps that left it.
+    state.membership = qMax(state.membership, membership);
     if (state.open != open) {
         ++state.epoch;
         state.open = open;
@@ -45,12 +47,23 @@ void ActivityGroupLoader::setOpen(const QString& session, const QString& group, 
 }
 
 void ActivityGroupLoader::updateSummary(const QString& session, const QString& group,
-                                        qint64 watermark) {
+                                        qint64 watermark, qint64 membership) {
     const auto id = key(session, group);
     auto found = states_.find(id);
     if (found == states_.end())
         return;
     found->desired = qMax(found->desired, watermark);
+    // A step left the group: loaded rows only ever grow, so start over. A page in flight
+    // belongs to the old membership; the new epoch drops it and asks again.
+    if (membership > found->membership) {
+        found->membership = membership;
+        ++found->epoch;
+        found->rows.clear();
+        found->applied = 0;
+        found->snapshot = -1;
+        found->revision = -1;
+        emit changed(session, group);
+    }
     if (found->open)
         request(id);
 }

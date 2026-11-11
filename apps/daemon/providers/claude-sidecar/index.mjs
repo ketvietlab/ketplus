@@ -391,6 +391,7 @@ function launchKey(params) {
     params.readableDirectories || [],
     params.compactWindow || 0,
     params.authentication?.revision || "",
+    params.reviewGuard === true,
   ]);
 }
 
@@ -526,7 +527,7 @@ async function continueRun(run, messageId, params, prompt, images) {
   }
   const q = run.query;
   const effort = typeof params.effort === "string" ? params.effort : "";
-  run.permissionMode = permissionMode(params.permission);
+  run.permissionMode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
   for (const change of [
     () => q.applyFlagSettings
       ? q.applyFlagSettings({ model: params.model || "sonnet", effortLevel: effort || null })
@@ -551,7 +552,7 @@ async function continueRun(run, messageId, params, prompt, images) {
 
 async function startRun(messageId, params, prompt, images) {
   const sessionId = params.sessionId;
-  const mode = permissionMode(params.permission);
+  const mode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
   const abortController = new AbortController();
   const stop = {};
   let release;
@@ -585,7 +586,9 @@ async function startRun(messageId, params, prompt, images) {
   const agentsInjected = Object.hasOwn(mcpServers, "ketplus_agents");
   // KetPlus Computer enforces per-app grants itself, so its tools need no prompt.
   const computerInjected = Object.hasOwn(mcpServers, "ketplus_computer");
-  const hostTools = [
+  // ADR 0067: a review of another conversation's turn may read and reply, nothing else.
+  const reviewGuard = params.reviewGuard === true;
+  const hostTools = reviewGuard ? (agentsInjected ? ["mcp__ketplus_agents__*"] : []) : [
     ...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
     ...(agentsInjected ? ["mcp__ketplus_agents__*"] : []),
     ...(computerInjected ? ["mcp__ketplus_computer__*"] : []),
@@ -619,8 +622,8 @@ async function startRun(messageId, params, prompt, images) {
         ...(Array.isArray(params.readableDirectories) && params.readableDirectories.length > 0
           ? { additionalDirectories: params.readableDirectories }
           : {}),
-        permissionMode: mode,
-        allowDangerouslySkipPermissions: mode === "bypassPermissions",
+        permissionMode: reviewGuard ? "plan" : mode,
+        allowDangerouslySkipPermissions: !reviewGuard && mode === "bypassPermissions",
         includePartialMessages: true,
         persistSession: true,
         resume: params.resume || undefined,
@@ -628,6 +631,12 @@ async function startRun(messageId, params, prompt, images) {
         canUseTool: async (tool, toolInput) => {
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
+          if (reviewGuard) {
+            // Refused without a prompt, so the user cannot grant a reviewer write access.
+            return agentsInjected && tool.startsWith("mcp__ketplus_agents__")
+              ? { behavior: "allow", updatedInput: input }
+              : { behavior: "deny", message: "A review is read-only: reply with your findings instead." };
+          }
           if ((browserInjected && tool.startsWith("mcp__ketplus_browser__")) ||
               (computerInjected && tool.startsWith("mcp__ketplus_computer__")))
             return { behavior: "allow", updatedInput: input };

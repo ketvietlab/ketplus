@@ -13,7 +13,8 @@ void AgentSessionManager::setActivityGroupOpen(const QString& path, const QStrin
         if (row.value("messageKey").toString() != key || row.value("subtype") != "daemonGroup")
             continue;
         activityGroups_->setOpen(session->threadId, row.value("daemonGroupId").toString(),
-                                 row.value("groupCursor").toLongLong(), expanded);
+                                 row.value("groupCursor").toLongLong(), expanded,
+                                 row.value("groupMembership").toLongLong());
         return;
     }
 }
@@ -67,6 +68,7 @@ void AgentSessionManager::acceptActivityGroup(const SessionPtr& session,
     else
         updateMessage(session, existing, row);
     activityGroups_->updateSummary(session->threadId, group,
-                                   summary.value("last_change_cursor").toInteger());
+                                   summary.value("last_change_cursor").toInteger(),
+                                   summary.value("membership_cursor").toInteger());
 }
 } // namespace ketplus

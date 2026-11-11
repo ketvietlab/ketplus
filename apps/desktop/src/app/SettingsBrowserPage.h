@@ -6,10 +6,9 @@
 
 #include <functional>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
 class QLineEdit;
-class QRadioButton;
 
 namespace ketplus {
 
@@ -49,6 +48,7 @@ class SettingsBrowserPage final : public QWidget {
     void saveOriginsByUser();
     void saveAppPathByUser();
     void updateOriginControls();
+    void setStatus(const QString& text);
     // Re-reads browser-tools.json, applies only the edited fields and writes it back, so a
     // refresh or another writer's fields are never overwritten with stale page state.
     bool saveFields(const std::function<void(browser_tools::Settings&)>& edit);
@@ -61,9 +61,9 @@ class SettingsBrowserPage final : public QWidget {
     QString runtimeSource_;
     quint64 generation_{0};
     bool checking_{false};
-    QCheckBox* enabled_{nullptr};
-    QRadioButton* allOrigins_{nullptr};
-    QRadioButton* onlyOrigins_{nullptr};
+    QAbstractButton* enabled_{nullptr};
+    QAbstractButton* allOrigins_{nullptr};
+    QAbstractButton* onlyOrigins_{nullptr};
     QLineEdit* origins_{nullptr};
     QLineEdit* appPath_{nullptr};
     QLabel* status_{nullptr};

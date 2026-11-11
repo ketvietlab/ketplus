@@ -5,11 +5,16 @@
 #include "providers/CursorAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
+#include "runtime/ProviderErrorCode.h"
 
+#include <QDateTime>
+#include <QDir>
 #include <QJsonArray>
 #include <QPointer>
+#include <QTimer>
 
 #include <memory>
+#include <utility>
 
 namespace ketplus::daemon {
 
@@ -29,33 +34,146 @@ void SessionHost::providerRuntimeStatus(
         const ProviderAdapter* const claudeProvider = self->provider(QStringLiteral("claude"));
         const compat::Runtime claude =
             compat::bundledClaude(claudeProvider ? claudeProvider->executable() : QString());
+        QJsonObject claudeJson = claude.toJson();
+        // Claude's sign-in is what its last query reported (#170); KetPlus never reads Claude
+        // Code's credentials.
+        claudeJson.insert(QStringLiteral("readiness"),
+                          self->readiness_.compose(claude, {}, QDateTime::currentSecsSinceEpoch()));
         callback({{QStringLiteral("ok"), true},
                   {QStringLiteral("providers"),
-                   QJsonArray{pending->codex, claude.toJson(), pending->cursor}}},
+                   QJsonArray{pending->codex, claudeJson, pending->cursor}}},
                  {});
     };
     adapter_->runtimeStatus([self, pending, finish](const compat::Runtime& runtime) {
         pending->codex = runtime.toJson();
-        if (!self.isNull()) {
-            // ADR 0015 §5: Codex notifications KetPlus did not act on, per method.
-            QJsonObject ignored;
-            for (auto it = self->ignoredNotifications_.cbegin();
-                 it != self->ignoredNotifications_.cend(); ++it)
-                ignored.insert(it.key(), it.value());
-            pending->codex.insert(QStringLiteral("ignored_notifications"), ignored);
+        if (self.isNull()) {
+            finish();
+            return;
         }
-        finish();
+        // ADR 0015 §5: Codex notifications KetPlus did not act on, per method.
+        QJsonObject ignored;
+        for (auto it = self->ignoredNotifications_.cbegin();
+             it != self->ignoredNotifications_.cend(); ++it)
+            ignored.insert(it.key(), it.value());
+        pending->codex.insert(QStringLiteral("ignored_notifications"), ignored);
+        self->codexReadiness(runtime, [self, pending, finish](const QJsonObject& readiness) {
+            pending->codex.insert(QStringLiteral("readiness"), readiness);
+            finish();
+        });
     });
     ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
-    if (cursor == nullptr) {
-        pending->cursor = compat::missing(compat::policy(QStringLiteral("cursor"))).toJson();
+    const auto cursorDone = [self, pending, finish](const compat::Runtime& runtime) {
+        pending->cursor = runtime.toJson();
+        if (!self.isNull()) {
+            const ProviderReadiness::Probe probe =
+                runtime.status == compat::SupportStatus::Missing
+                    ? ProviderReadiness::Probe{}
+                    : ProviderReadiness::cursorProbe(
+                          QDir::home().filePath(QStringLiteral(".cursor/cli-config.json")),
+                          !qEnvironmentVariableIsEmpty("CURSOR_API_KEY"));
+            pending->cursor.insert(
+                QStringLiteral("readiness"),
+                self->readiness_.compose(runtime, probe, QDateTime::currentSecsSinceEpoch()));
+        }
         finish();
+    };
+    if (cursor == nullptr) {
+        cursorDone(compat::missing(compat::policy(QStringLiteral("cursor"))));
         return;
     }
-    cursor->runtimeStatus([pending, finish](const compat::Runtime& runtime) {
-        pending->cursor = runtime.toJson();
-        finish();
+    cursor->runtimeStatus(cursorDone);
+}
+
+void SessionHost::codexReadiness(const compat::Runtime& runtime,
+                                 std::function<void(const QJsonObject&)> callback) {
+    const auto compose = [this, runtime](const ProviderReadiness::Probe& probe) {
+        return readiness_.compose(runtime, probe, QDateTime::currentSecsSinceEpoch());
+    };
+    if (runtime.status == compat::SupportStatus::Missing ||
+        runtime.status == compat::SupportStatus::Outdated) {
+        callback(compose({}));
+        return;
+    }
+    // account/read spends no quota. An app server that does not answer in time leaves the sign-in
+    // unknown rather than holding up Settings.
+    struct Once final {
+        bool done{false};
+    };
+    auto once = std::make_shared<Once>();
+    auto shared = std::make_shared<std::function<void(const QJsonObject&)>>(std::move(callback));
+    const QPointer<SessionHost> self(this);
+    QTimer::singleShot(codexAccountReadTimeoutMs, this, [once, shared, compose] {
+        if (std::exchange(once->done, true))
+            return;
+        (*shared)(compose({}));
     });
+    adapter_->call(QStringLiteral("account/read"), {{QStringLiteral("refreshToken"), false}},
+                   [self, once, shared, compose](const QJsonObject& result, const QString& error) {
+                       if (self.isNull() || std::exchange(once->done, true))
+                           return;
+                       (*shared)(compose(error.isEmpty() ? ProviderReadiness::codexProbe(result)
+                                                         : ProviderReadiness::Probe{}));
+                   });
+}
+
+QJsonObject SessionHost::noteProviderOutcome(const Session& session, const QString& type,
+                                             const QJsonObject& payload) {
+    const QString adapter =
+        session.stored.adapter.isEmpty() ? QStringLiteral("codex") : session.stored.adapter;
+    if (type == QStringLiteral("turn.completed")) {
+        if (payload.value(QStringLiteral("status")).toString() == QStringLiteral("completed"))
+            readiness_.observe(adapter, QStringLiteral("ready"));
+        return payload;
+    }
+    if (type != QStringLiteral("runtime.error"))
+        return payload;
+    QJsonObject classified = payload;
+    const QString message = payload.value(QStringLiteral("message")).toString();
+    // Only the daemon sets `code`; anything a provider put there is reclassified.
+    const QString code =
+        providerErrorCode(adapter, payload.value(QStringLiteral("provider_info")), message);
+    if (code.isEmpty()) {
+        classified.remove(QStringLiteral("code"));
+        return classified;
+    }
+    classified.insert(QStringLiteral("code"), code);
+    // The guide names the provider and model of the turn that failed, not the ones the
+    // conversation has switched to since.
+    classified.insert(QStringLiteral("provider"), adapter);
+    if (!session.stored.model.isEmpty())
+        classified.insert(QStringLiteral("model"), session.stored.model);
+    const qint64 resetsAt = payload.value(QStringLiteral("resets_at")).toInteger();
+    const QString state = readinessForErrorCode(code);
+    if (!state.isEmpty())
+        readiness_.observe(adapter, state, message, resetsAt);
+    if (code == QStringLiteral("limit_reached") && resetsAt == 0 &&
+        adapter == QStringLiteral("codex"))
+        readCodexLimitReset(message);
+    return classified;
+}
+
+void SessionHost::readCodexLimitReset(const QString& message) {
+    const QPointer<SessionHost> self(this);
+    adapter_->call(
+        QStringLiteral("account/rateLimits/read"), {},
+        [self, message](const QJsonObject& result, const QString& error) {
+            // A turn that worked, or Check again, may have ended the limit meanwhile.
+            if (self.isNull() || !error.isEmpty() ||
+                self->readiness_.reportedState(QStringLiteral("codex")) !=
+                    QStringLiteral("limit_reached"))
+                return;
+            // The window that is used up resets last; its reset ends the limit.
+            qint64 resetsAt = 0;
+            const QJsonObject limits = result.value(QStringLiteral("rateLimits")).toObject();
+            for (const char* window : {"primary", "secondary"}) {
+                const QJsonObject value = limits.value(QLatin1String(window)).toObject();
+                if (value.value(QStringLiteral("usedPercent")).toDouble() >= 100)
+                    resetsAt = qMax(resetsAt, value.value(QStringLiteral("resetsAt")).toInteger());
+            }
+            if (resetsAt > 0)
+                self->readiness_.observe(QStringLiteral("codex"), QStringLiteral("limit_reached"),
+                                         message, resetsAt);
+        });
 }
 
 ProviderAdapter* SessionHost::provider(const QString& adapter) const {

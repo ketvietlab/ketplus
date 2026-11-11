@@ -1833,7 +1833,7 @@ class DaemonProtocolTest final : public QObject {
                 action = "UPDATE";
                 if (fault.contains("-one-"))
                     condition = table == "activity_items" ? "WHEN OLD.item_id='probe-2'"
-                                                          : "WHEN OLD.family='search'";
+                                                          : "WHEN OLD.family='fileSearch'";
             }
             QVERIFY(q.exec(QString("CREATE TRIGGER fail_append BEFORE %1 ON %2 %3 "
                                    "BEGIN SELECT RAISE(IGNORE); END")

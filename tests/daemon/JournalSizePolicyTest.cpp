@@ -96,7 +96,8 @@ class JournalSizePolicyTest final : public QObject {
         SessionHost host(&journal, &adapter);
         const auto read = host.handleCommand(request("storage.size.read"), "local");
         QVERIFY(read.value("ok").toBool());
-        QVERIFY(!read.value("status").toObject().value("pressure_enabled").toBool());
+        // The default 5 GB target is enforced without a save (ADR 0108).
+        QVERIFY(read.value("status").toObject().value("pressure_enabled").toBool());
         QCOMPARE(read.value("policy").toObject().value("limit_bytes").toInteger(), 5'000'000'000LL);
         QCOMPARE(read.value("status").toObject().value("target_scope"), QJsonValue("sqlite_pages"));
         const auto write =

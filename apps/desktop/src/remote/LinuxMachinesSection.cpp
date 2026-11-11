@@ -1,12 +1,17 @@
 #include "remote/LinuxMachinesSection.h"
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "KetFieldRow.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "KetPlusProductVersion.h"
 #include "control/ControlV2Client.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -23,26 +28,33 @@
 #include <memory>
 
 namespace ketplus {
+namespace {
+
+void showFeedback(QLabel* feedback, const QString& text) {
+    feedback->setText(text);
+    feedback->setVisible(!text.isEmpty());
+}
+
+} // namespace
 
 LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     : QWidget(parent), client_(new remote::ControlV2Client(
                            QUrl(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL)), this)) {
     setObjectName(QStringLiteral("linuxMachinesSection"));
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 6, 0, 0);
-    outer->setSpacing(10);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(18); // the page's rhythm
+    // The mock's section: "Linux machines · N trusted"; the page's Add menu starts pairing.
     auto* heading = new QHBoxLayout;
     auto* title = new QLabel(tr("Linux machines"), this);
     title->setObjectName(QStringLiteral("linuxMachinesTitle"));
+    title->setProperty("remoteRole", QStringLiteral("sectionTitle"));
     heading->addWidget(title);
-    count_ = new QLabel(tr("0 available"), this);
-    count_->setObjectName(QStringLiteral("linuxMachinesCount"));
-    heading->addWidget(count_);
     heading->addStretch();
-    add_ = new QPushButton(tr("Connect Linux machine"), this);
-    add_->setObjectName(QStringLiteral("linuxMachinesAdd"));
-    connect(add_, &QPushButton::clicked, this, &LinuxMachinesSection::startPairing);
-    heading->addWidget(add_);
+    count_ = new QLabel(tr("0 trusted"), this);
+    count_->setObjectName(QStringLiteral("linuxMachinesCount"));
+    count_->setProperty("remoteRole", QStringLiteral("sectionCount"));
+    heading->addWidget(count_);
     outer->addLayout(heading);
     notice_ = new QLabel(this);
     notice_->setObjectName(QStringLiteral("linuxMachinesNotice"));
@@ -51,18 +63,32 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     outer->addWidget(notice_);
     auto* surface = new QFrame(this);
     surface->setObjectName(QStringLiteral("linuxMachinesSurface"));
-    surface->setProperty("remoteRole", QStringLiteral("surface"));
+    // One card for each machine, as the mock; a message is a card of its own.
     rows_ = new QVBoxLayout(surface);
-    rows_->setContentsMargins(12, 12, 12, 12);
-    rows_->setSpacing(8);
+    rows_->setContentsMargins(0, 0, 0, 0);
+    rows_->setSpacing(18);
     outer->addWidget(surface);
+    auto* footnoteRow = new QHBoxLayout;
+    footnoteRow->setSpacing(8);
+    auto* shield = new QLabel(this);
+    shield->setFixedSize(13, 13);
+    const auto inkShield = [this, shield] {
+        shield->setPixmap(ket::Icons::pixmap(
+            QStringLiteral("shield"), 13, devicePixelRatioF(),
+            ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme())));
+    };
+    inkShield();
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, shield, inkShield);
+    footnoteRow->addWidget(shield, 0, Qt::AlignTop);
     auto* footnote =
         new QLabel(tr("Linux machines connect through an authenticated outbound relay. "
                       "Compare the identity shown here with ketplusctl on Linux."),
                    this);
     footnote->setObjectName(QStringLiteral("linuxMachinesFootnote"));
+    footnote->setProperty("remoteRole", QStringLiteral("trustNote"));
     footnote->setWordWrap(true);
-    outer->addWidget(footnote);
+    footnoteRow->addWidget(footnote, 1);
+    outer->addLayout(footnoteRow);
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
         setNotice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,
                   !error.isEmpty());
@@ -70,6 +96,9 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
         if (error.isEmpty())
             refreshMachines();
     });
+    // The rows' icons are drawn in the theme's ink.
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &LinuxMachinesSection::render);
     render();
 }
 
@@ -79,6 +108,13 @@ void LinuxMachinesSection::activate() {
     render();
     if (client_->signedIn())
         refreshMachines();
+}
+
+void LinuxMachinesSection::setPairingEntryShown(const bool shown) {
+    if (pairingEntryShown_ == shown)
+        return;
+    pairingEntryShown_ = shown;
+    render();
 }
 
 void LinuxMachinesSection::setNotice(const QString& message, const bool error) {
@@ -95,43 +131,105 @@ void LinuxMachinesSection::render() {
         delete item->widget();
         delete item;
     }
-    count_->setText(tr("%1 available").arg(machineIds_.size()));
-    add_->setVisible(client_->signedIn());
+    count_->setText(tr("%1 trusted").arg(machineIds_.size()));
+    const auto message = [this](const QString& text) {
+        auto* box = new QFrame(this);
+        box->setProperty("remoteRole", QStringLiteral("surface"));
+        auto* layout = new QVBoxLayout(box);
+        layout->setContentsMargins(22, 20, 22, 20);
+        layout->setSpacing(12);
+        auto* label = new QLabel(text, box);
+        label->setProperty("remoteRole", QStringLiteral("emptyText"));
+        label->setWordWrap(true);
+        layout->addWidget(label);
+        rows_->addWidget(box);
+        return layout;
+    };
     if (!client_->signedIn()) {
-        auto* description = new QLabel(tr("Sign in with the same KetSuite account used by the "
-                                          "headless Linux daemon."),
-                                       this);
-        description->setWordWrap(true);
-        rows_->addWidget(description);
-        auto* signInButton = new QPushButton(tr("Sign in to connect a Linux machine"), this);
-        connect(signInButton, &QPushButton::clicked, this, &LinuxMachinesSection::signIn);
-        rows_->addWidget(signInButton, 0, Qt::AlignLeft);
+        auto* layout = message(tr("Sign in with the same KetSuite account used by the headless "
+                                  "Linux daemon."));
+        auto* signInButton = new ket::Button(tr("Sign in to connect a Linux machine"),
+                                             ket::ButtonVariant::Primary, this);
+        connect(signInButton, &QAbstractButton::clicked, this, &LinuxMachinesSection::signIn);
+        layout->addWidget(signInButton, 0, Qt::AlignLeft);
         return;
     }
     if (loading_) {
-        rows_->addWidget(new QLabel(tr("Loading trusted machines…"), this));
+        message(tr("Loading trusted machines…"));
         return;
     }
+    const auto addConnectButton = [this](QBoxLayout* layout) {
+        auto* connectButton =
+            new ket::Button(tr("Connect a Linux machine"), ket::ButtonVariant::Secondary, this);
+        connectButton->setObjectName(QStringLiteral("linuxMachinesConnect"));
+        connect(connectButton, &QAbstractButton::clicked, this,
+                &LinuxMachinesSection::beginPairing);
+        layout->addWidget(connectButton, 0, Qt::AlignLeft);
+    };
     if (machineIds_.isEmpty()) {
-        auto* empty = new QLabel(tr("No Linux machines yet. Start pairing on the Linux daemon, "
-                                    "then paste its one-time pairing link here."),
-                                 this);
-        empty->setWordWrap(true);
-        rows_->addWidget(empty);
+        if (pairingEntryShown_) {
+            addConnectButton(message(tr("No Linux machines yet. Start pairing on the Linux "
+                                        "daemon, then paste its one-time pairing link here.")));
+        } else {
+            message(tr("No Linux machines yet. Start pairing on the Linux daemon, then choose "
+                       "Add › Connect a Linux machine and paste its one-time pairing link."));
+        }
         return;
     }
+    // A device row as the phones above: icon, name, how it connects, and its state.
+    const auto theme = ket::Appearance::instance().theme();
     for (const auto& id : machineIds_) {
-        auto* row = new QWidget(this);
+        auto* row = new QFrame(this);
         row->setObjectName(QStringLiteral("linuxMachineRow"));
+        row->setProperty("remoteRole", QStringLiteral("deviceRow"));
         auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(6, 8, 6, 8);
+        row->setFixedHeight(94);
+        layout->setContentsMargins(22, 0, 22, 0);
+        layout->setSpacing(18);
+        auto* iconSurface = new QFrame(row);
+        iconSurface->setProperty("remoteRole", QStringLiteral("deviceIconSurface"));
+        iconSurface->setFixedSize(40, 40);
+        auto* iconLayout = new QVBoxLayout(iconSurface);
+        iconLayout->setContentsMargins(10, 10, 10, 10);
+        auto* icon = new QLabel(iconSurface);
+        icon->setPixmap(ket::Icons::pixmap(ket::Icons::codeForLucide(u"terminal"), 18,
+                                           devicePixelRatioF(),
+                                           ket::Tokens::color(u"text-secondary", theme)));
+        iconLayout->addWidget(icon, 0, Qt::AlignCenter);
+        layout->addWidget(iconSurface);
+        auto* copy = new QVBoxLayout;
+        copy->setSpacing(6);
+        copy->addStretch(1);
+        // The name with its state and how it connects, as the mock's badges.
+        auto* nameLine = new QHBoxLayout;
+        nameLine->setSpacing(8);
         auto* name = new QLabel(id, row);
+        name->setProperty("remoteRole", QStringLiteral("deviceName"));
         name->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(name, 1);
+        nameLine->addWidget(name);
         auto* status = new QLabel(tr("Available"), row);
+        status->setProperty("remoteRole", QStringLiteral("badge"));
+        status->setProperty("remoteTone", QStringLiteral("positive"));
         status->setAccessibleName(tr("Machine %1 is available").arg(id));
-        layout->addWidget(status);
+        nameLine->addWidget(status);
+        auto* via = new QLabel(tr("Relay"), row);
+        via->setProperty("remoteRole", QStringLiteral("badge"));
+        nameLine->addWidget(via);
+        nameLine->addStretch(1);
+        copy->addLayout(nameLine);
+        auto* meta = new QLabel(tr("Linux · Trusted"), row);
+        meta->setProperty("remoteRole", QStringLiteral("deviceMeta"));
+        copy->addWidget(meta);
+        copy->addStretch(1);
+        layout->addLayout(copy, 1);
         rows_->addWidget(row);
+    }
+    if (pairingEntryShown_) {
+        auto* footer = new QWidget(this);
+        auto* layout = new QHBoxLayout(footer);
+        layout->setContentsMargins(0, 0, 0, 0);
+        addConnectButton(layout);
+        rows_->addWidget(footer);
     }
 }
 
@@ -152,46 +250,53 @@ void LinuxMachinesSection::signIn() {
     });
 }
 
+LinuxMachinesSection::~LinuxMachinesSection() { delete pairingDialog_.data(); }
+
 void LinuxMachinesSection::startPairing() {
-    auto* dialog = new QDialog(this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(tr("Pair a Linux machine"));
-    dialog->setModal(true);
-    dialog->setMinimumWidth(470);
-    auto* layout = new QVBoxLayout(dialog);
-    auto* instructions = new QLabel(tr("Run ketplusctl pairing create on the Linux machine, "
-                                       "then paste the full ketplus:// pairing link."),
-                                    dialog);
-    instructions->setWordWrap(true);
-    layout->addWidget(instructions);
-    auto* input = new QLineEdit(dialog);
+    if (pairingDialog_)
+        return;
+    // An in-window card like the other dialogs (#422); it goes once it finishes.
+    auto* dialog = new ket::Dialog(tr("Connect a Linux machine"), this);
+    dialog->setObjectName(QStringLiteral("linuxPairingDialog"));
+    pairingDialog_ = dialog;
+    dialog->setCardWidth(500);
+    connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
+    auto* body = new QWidget;
+    auto* layout = new QVBoxLayout(body);
+    layout->setContentsMargins(QMargins());
+    auto* input = new ket::TextField(body);
     input->setObjectName(QStringLiteral("linuxPairingLink"));
     input->setAccessibleName(tr("One-time Linux pairing link"));
     input->setEchoMode(QLineEdit::Password);
     input->setPlaceholderText(QStringLiteral("ketplus://pair?ticket=…&secret=…"));
-    layout->addWidget(input);
-    auto* feedback = new QLabel(dialog);
+    // The mock's field row: the label beside the field, the instruction as its help.
+    auto* row = new ket::FieldRow(tr("Pairing link"), input,
+                                  tr("Run ketplusctl pairing create on the machine and paste "
+                                     "the ketplus:// link it shows."),
+                                  body);
+    row->setObjectName(QStringLiteral("linuxPairingRow"));
+    layout->addWidget(row);
+    auto* feedback = new QLabel(body);
     feedback->setObjectName(QStringLiteral("linuxPairingFeedback"));
     feedback->setWordWrap(true);
+    feedback->hide(); // no gap under the field until there is something to say
     layout->addWidget(feedback);
-    auto* match = new QCheckBox(tr("I checked the identity on both machines."), dialog);
+    auto* match = new QCheckBox(tr("I checked the identity on both machines."), body);
     match->hide();
     layout->addWidget(match);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, dialog);
-    auto* check = buttons->addButton(tr("Check link"), QDialogButtonBox::ActionRole);
-    auto* approve = buttons->addButton(tr("Check approval"), QDialogButtonBox::AcceptRole);
+    dialog->setBody(body);
+    auto* cancel = dialog->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
+    auto* check = dialog->addButton(tr("Check link"));
+    auto* approve = dialog->addButton(tr("Check approval"), ket::ButtonVariant::Primary);
     approve->setEnabled(false);
-    layout->addWidget(buttons);
     auto ticketId = std::make_shared<QString>();
-    const QPointer<QDialog> dialogGuard(dialog);
+    const QPointer<ket::Dialog> dialogGuard(dialog);
     connect(dialog, &QObject::destroyed, this, [this] { client_->cancelPairing(); });
-    connect(buttons, &QDialogButtonBox::rejected, dialog, [this, dialog] {
-        client_->cancelPairing();
-        dialog->reject();
-    });
-    connect(match, &QCheckBox::toggled, approve, &QPushButton::setEnabled);
+    connect(dialog, &ket::Dialog::rejected, this, [this] { client_->cancelPairing(); });
+    connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
+    connect(match, &QCheckBox::toggled, approve, &QAbstractButton::setEnabled);
     connect(
-        check, &QPushButton::clicked, dialog,
+        check, &QAbstractButton::clicked, dialog,
         [this, input, feedback, match, check, ticketId, dialogGuard] {
             const QUrl link(input->text().trimmed());
             input->clear();
@@ -200,12 +305,13 @@ void LinuxMachinesSection::startPairing() {
             const auto secret = query.queryItemValue(QStringLiteral("secret"));
             if (link.scheme() != QStringLiteral("ketplus") ||
                 link.host() != QStringLiteral("pair") || ticket.isEmpty() || secret.size() < 32) {
-                feedback->setText(tr("Paste the complete, unexpired pairing link from Linux."));
+                showFeedback(feedback,
+                             tr("Paste the complete, unexpired pairing link from Linux."));
                 input->setFocus();
                 return;
             }
             check->setEnabled(false);
-            feedback->setText(tr("Checking the Linux pairing request…"));
+            showFeedback(feedback, tr("Checking the Linux pairing request…"));
             // The link names the Linux host's keys; the client pins them (#88).
             const QJsonObject host{
                 {QStringLiteral("machineId"),
@@ -220,49 +326,50 @@ void LinuxMachinesSection::startPairing() {
                         return;
                     check->setEnabled(true);
                     if (!error.isEmpty()) {
-                        feedback->setText(error);
+                        showFeedback(feedback, error);
                         return;
                     }
                     *ticketId = ticket;
                     const auto digest =
                         value.toObject().value(QStringLiteral("claimDigest")).toString();
-                    feedback->setText(QObject::tr("Compare the first six characters of claimDigest "
-                                                  "shown by ketplusctl pairing status: %1")
-                                          .arg(digest.left(6).toUpper()));
+                    showFeedback(feedback,
+                                 QObject::tr("Compare the first six characters of claimDigest "
+                                             "shown by ketplusctl pairing status: %1")
+                                     .arg(digest.left(6).toUpper()));
                     match->show();
                 });
         });
-    connect(approve, &QPushButton::clicked, dialog,
-            [this, dialog, feedback, approve, ticketId, dialogGuard] {
-                approve->setEnabled(false);
-                client_->pairingStatus(*ticketId, [this, dialog, feedback, approve,
-                                                   dialogGuard](const QJsonValue& value,
-                                                                const QString& error) {
-                    if (!dialogGuard)
-                        return;
-                    if (!error.isEmpty()) {
-                        feedback->setText(error);
-                        approve->setEnabled(true);
-                        return;
-                    }
-                    const auto ticket = value.toObject();
-                    if (ticket.value(QStringLiteral("status")) != QStringLiteral("approved")) {
-                        feedback->setText(tr("Approve the request on Linux, then check again."));
-                        approve->setEnabled(true);
-                        return;
-                    }
-                    QString failure;
-                    if (!client_->acceptPairing(ticket, &failure)) {
-                        feedback->setText(failure);
-                        approve->setEnabled(true);
-                        return;
-                    }
-                    setNotice(tr("Linux machine trusted."));
-                    dialog->accept();
-                    refreshMachines();
-                });
+    connect(
+        approve, &QAbstractButton::clicked, dialog,
+        [this, dialog, feedback, approve, ticketId, dialogGuard] {
+            approve->setEnabled(false);
+            client_->pairingStatus(*ticketId, [this, dialog, feedback, approve, dialogGuard](
+                                                  const QJsonValue& value, const QString& error) {
+                if (!dialogGuard)
+                    return;
+                if (!error.isEmpty()) {
+                    showFeedback(feedback, error);
+                    approve->setEnabled(true);
+                    return;
+                }
+                const auto ticket = value.toObject();
+                if (ticket.value(QStringLiteral("status")) != QStringLiteral("approved")) {
+                    showFeedback(feedback, tr("Approve the request on Linux, then check again."));
+                    approve->setEnabled(true);
+                    return;
+                }
+                QString failure;
+                if (!client_->acceptPairing(ticket, &failure)) {
+                    showFeedback(feedback, failure);
+                    approve->setEnabled(true);
+                    return;
+                }
+                setNotice(tr("Linux machine trusted."));
+                dialog->accept();
+                refreshMachines();
             });
-    dialog->show();
+        });
+    dialog->open();
     input->setFocus();
 }
 

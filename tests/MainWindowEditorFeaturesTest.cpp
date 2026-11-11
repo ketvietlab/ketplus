@@ -1,3 +1,4 @@
+#include "KetCommandPalette.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/MainWindow.h"
 #include "app/SpotlightDialog.h"
@@ -9,6 +10,7 @@
 
 #include <ScintillaMessages.h>
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QDir>
@@ -184,14 +186,14 @@ void MainWindowEditorFeaturesTest::findsFilesInSpotlightAndNavigatesBack() {
     auto* dialog = window.findChild<ketplus::SpotlightDialog*>(QStringLiteral("spotlightDialog"));
     QVERIFY(dialog);
     auto* query = dialog->findChild<QLineEdit*>(QStringLiteral("spotlightQuery"));
-    auto* results = dialog->findChild<QListWidget*>(QStringLiteral("spotlightResults"));
+    auto* results = dialog->commandPalette();
     QVERIFY(query && results);
 
     // The path index is collected off the UI thread and fills Spotlight when ready.
     query->setText(QStringLiteral("MainWindow"));
-    QTRY_COMPARE(results->count(), 1);
-    QCOMPARE(results->currentItem()->data(Qt::UserRole).toString(),
-             QStringLiteral("file:") + source);
+    QTRY_COMPARE(results->groups().size(), 1);
+    QTRY_COMPARE(results->groups().first().items.size(), 1);
+    QCOMPARE(results->groups().first().items.first().id, QStringLiteral("file:") + source);
     QTest::keyClick(query, Qt::Key_Return);
     QTRY_COMPARE(visibleFilePath(window), source);
 
@@ -231,8 +233,7 @@ void MainWindowEditorFeaturesTest::splitsViewsAndSharesTheDocument() {
     QVERIFY(tabEditor->document().isModified());
 
     closeSplit->trigger();
-    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) ==
-                nullptr);
+    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) == nullptr);
     QVERIFY(!closeSplit->isEnabled());
     QCOMPARE(tabEditor->text(), QByteArray("int a;\nx"));
 
@@ -241,12 +242,10 @@ void MainWindowEditorFeaturesTest::splitsViewsAndSharesTheDocument() {
     auto* splitTabs = window.findChild<QTabBar*>(QStringLiteral("splitTabBar"));
     QVERIFY(splitTabs && splitTabs->isVisible());
     QCOMPARE(splitTabs->count(), 1);
-    auto* closeButton =
-        qobject_cast<QToolButton*>(splitTabs->tabButton(0, QTabBar::RightSide));
+    auto* closeButton = qobject_cast<QToolButton*>(splitTabs->tabButton(0, QTabBar::RightSide));
     QVERIFY(closeButton);
     closeButton->click();
-    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) ==
-                nullptr);
+    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) == nullptr);
     QVERIFY(!closeSplit->isEnabled());
 }
 
@@ -322,14 +321,15 @@ void MainWindowEditorFeaturesTest::searchesAndReplacesAcrossFiles() {
     QTimer confirm;
     connect(&confirm, &QTimer::timeout, &window, [] {
         for (auto* widget : QApplication::topLevelWidgets()) {
-            if (auto* box = qobject_cast<QMessageBox*>(widget); box != nullptr && box->isVisible()) {
+            if (auto* box = qobject_cast<QMessageBox*>(widget);
+                box != nullptr && box->isVisible()) {
                 box->button(QMessageBox::Yes)->click();
             }
         }
     });
     confirm.start(50);
-    QPushButton* replaceAll = nullptr;
-    for (auto* button : panel->findChildren<QPushButton*>()) {
+    QAbstractButton* replaceAll = nullptr;
+    for (auto* button : panel->findChildren<QAbstractButton*>()) {
         if (button->text() == QStringLiteral("Replace All")) {
             replaceAll = button;
         }
@@ -345,7 +345,8 @@ void MainWindowEditorFeaturesTest::searchesAndReplacesAcrossFiles() {
     QCOMPARE(readFile(closedPath), QByteArray("omega beta\r\n"));
     QTRY_VERIFY(!panel->isSearching());
 
-    auto* explorerButton = window.findChild<QToolButton*>(QStringLiteral("explorerActivityButton"));
+    auto* explorerButton =
+        window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
     QVERIFY(explorerButton);
     explorerButton->click();
     QVERIFY(!panel->isVisible());

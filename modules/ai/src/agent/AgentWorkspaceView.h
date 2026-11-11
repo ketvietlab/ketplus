@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/AgentMessageModel.h"
+#include "agent/ReasoningHeading.h"
 #include "agent/TranscriptFileLinks.h"
 #include "git/GitTypes.h"
 #include "ui/Theme.h"
@@ -45,12 +46,15 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(QVariantList worktrees READ worktrees NOTIFY worktreesChanged)
     Q_PROPERTY(QVariantList conversations READ conversations NOTIFY conversationsChanged)
     Q_PROPERTY(QString activePath READ activePath NOTIFY activePathChanged)
+    Q_PROPERTY(int workingChangesRevision READ workingChangesRevision NOTIFY workingChangesChanged)
     Q_PROPERTY(QString repositoryName READ repositoryName WRITE setRepositoryName NOTIFY
                    repositoryNameChanged)
     Q_PROPERTY(QUrl messageBaseUrl READ messageBaseUrl NOTIFY activePathChanged)
-    Q_PROPERTY(QVariantMap tokens READ tokens NOTIFY tokensChanged)
+    Q_PROPERTY(QString monoFontFamily READ monoFontFamily NOTIFY monoFontFamilyChanged)
     Q_PROPERTY(QString sessionTitle READ sessionTitle NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionStatus READ sessionStatus NOTIFY sessionChanged)
+    // The running line: "Working · <latest reasoning heading>" while one is known (#385).
+    Q_PROPERTY(QString runStatus READ runStatus NOTIFY sessionChanged)
     Q_PROPERTY(bool sessionRunning READ sessionRunning NOTIFY sessionChanged)
     Q_PROPERTY(int atlasRunningCount READ atlasRunningCount NOTIFY atlasRunningCountChanged)
     Q_PROPERTY(bool agentAvailable READ agentAvailable NOTIFY agentAvailableChanged)
@@ -101,6 +105,16 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(int fileMentionRevision READ fileMentionRevision NOTIFY fileMentionsChanged)
     Q_PROPERTY(QVariantList attachments READ attachments NOTIFY attachmentsChanged)
     Q_PROPERTY(bool compactMode READ compactMode WRITE setCompactMode NOTIFY compactModeChanged)
+    // What the empty composer asks for in place of its own wording, for example the Atlas
+    // builder's "Ask for a change to <flow>…". Empty keeps the composer's wording.
+    Q_PROPERTY(
+        QString composerHint READ composerHint WRITE setComposerHint NOTIFY composerHintChanged)
+    // The details pane is open: its Open content menu replaces the header's openers.
+    Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
+    // #429: the labels the header's Add tag menu offers, each as {label, color}.
+    Q_PROPERTY(QVariantList tagCatalog READ tagCatalog NOTIFY tagCatalogChanged)
+    Q_PROPERTY(
+        bool compactWindow READ compactWindow WRITE setCompactWindow NOTIFY compactWindowChanged)
     Q_PROPERTY(bool productSidebarVisible READ productSidebarVisible WRITE setProductSidebarVisible
                    NOTIFY productSidebarVisibleChanged)
     // Unscaled pixels; 0 lets the conversation fill the pane.
@@ -160,7 +174,10 @@ class AgentWorkspaceView final : public QWidget {
     // Where each Mermaid block of a rendered message sits, source or diagram, so the transcript
     // can frame it and offer the switch; and which source fence each code frame belongs to.
     Q_INVOKABLE QVariantMap mermaidLayout(QObject* document, const QString& messageKey) const;
-    Q_INVOKABLE bool openMermaidImage(const QUrl& url);
+    // The image viewer's item for a rendered diagram, as the mock opens one: { source, caption },
+    // or empty for any other image. The viewer scales its image, so the source is a raster large
+    // enough to stay sharp at twice the screen; it is the dark rendering once there is one.
+    Q_INVOKABLE QVariantMap mermaidViewerImage(const QUrl& url);
     Q_INVOKABLE void installMermaid();
     bool mermaidInstalling() const;
     QString mermaidInstallError() const { return mermaidInstallError_; }
@@ -193,8 +210,11 @@ class AgentWorkspaceView final : public QWidget {
         emit modelsChanged();
     }
     void setExecutionBranch(const QString& branch, const QString& path = {}, qint64 revision = 1) {
+        const QString previousPath = executionPath();
         executionBranch_ = branch;
         executionPath_ = path;
+        if (executionPath() != previousPath)
+            executionCheckoutChanged();
         if (!path.isEmpty())
             executionContextSwitched_ = revision > 1;
         emit executionBranchChanged();
@@ -204,6 +224,10 @@ class AgentWorkspaceView final : public QWidget {
         return executionPath_.isEmpty() ? activePath() : executionPath_;
     }
     Q_INVOKABLE void requestExecutionWorktree() { emit executionWorktreeRequested(); }
+    Q_INVOKABLE void requestConversationWorktree(const QString& id) {
+        if (!id.isEmpty())
+            emit conversationWorktreeRequested(id);
+    }
     Q_INVOKABLE void requestModels() { emit modelsRequested(); }
     QVariantMap weeklyLimit() const { return weeklyLimit_; }
     using UsageReply = std::function<void(const QJsonObject&, const QString&)>;
@@ -220,6 +244,21 @@ class AgentWorkspaceView final : public QWidget {
         emit weeklyLimitChanged();
     }
     QVariantMap providerRuntime() const { return providerRuntime_; }
+    // ADR 0110: the setup guide for a turn the provider ended with a coded error.
+    using TurnGuide = std::function<QVariantMap(const QString& provider, const QString& code,
+                                                const QString& message, const QString& model)>;
+    void setTurnGuide(TurnGuide guide) { turnGuide_ = std::move(guide); }
+    Q_INVOKABLE QVariantMap providerTurnGuide(const QString& provider, const QString& code,
+                                              const QString& message,
+                                              const QString& model = {}) const {
+        return turnGuide_ ? turnGuide_(provider, code, message, model) : QVariantMap{};
+    }
+    // Check again on a setup guide: the daemon forgets reported failures and probes again.
+    Q_INVOKABLE void recheckProviders() { emit providerRecheckRequested(); }
+    // A setup command typed into a terminal for the user to run with Return; never run.
+    Q_INVOKABLE void typeInTerminal(const QString& command) {
+        emit typeInTerminalRequested(command);
+    }
     void setProviderRuntime(const QVariantMap& value) {
         providerRuntime_ = value;
         emit providerRuntimeChanged();
@@ -242,6 +281,25 @@ class AgentWorkspaceView final : public QWidget {
             closeBackgroundTaskOutput();
     }
     QVariantMap backgroundTaskOutput() const { return backgroundTaskOutput_; }
+    Q_PROPERTY(QVariantMap heldMessageStates READ heldMessageStates NOTIFY heldMessageStatesChanged)
+    QVariantMap heldMessageStates() const { return heldMessageStates_; }
+    using AtlasResultInspector = std::function<QVariantMap(const QString&, const QString&)>;
+    void setAtlasResultInspector(AtlasResultInspector inspector) {
+        atlasResultInspector_ = std::move(inspector);
+    }
+    Q_INVOKABLE QVariantMap inspectAtlasResult(const QString& link) const;
+    Q_INVOKABLE void openAtlasResult(const QString& link, bool inBrowser);
+    Q_INVOKABLE void requestHeldMessageState(const QString& messageId);
+    Q_INVOKABLE void releaseHeldMessage(const QString& messageId);
+    void acceptHeldMessageState(const QString& messageId, const QVariantMap& value);
+    // ADR 0067: {available, pending, error, reviewer: {number,title,provider,model}}.
+    Q_PROPERTY(QVariantMap reviewerState READ reviewerState NOTIFY reviewerStateChanged)
+    QVariantMap reviewerState() const { return reviewerState_; }
+    // Claude conversations that can review the active one, newest first.
+    Q_INVOKABLE QVariantList reviewerCandidates() const;
+    // Assigns conversation #number, starts a new reviewer with newProvider, or clears it.
+    Q_INVOKABLE void chooseReviewer(const QString& number, const QString& newProvider);
+    void acceptReviewerState(const QVariantMap& value);
     Q_INVOKABLE void stopBackgroundTask(const QString& taskId) {
         emit backgroundTaskStopRequested(taskId);
     }
@@ -283,6 +341,13 @@ class AgentWorkspaceView final : public QWidget {
                       const QSet<QString>& liveSessionPaths = {},
                       const QSet<QString>& conversationPaths = {});
     void setActivePath(const QString& path);
+    // Source Control's uncommitted files in `root`, relative to it, for the changed-files
+    // card's "Not committed" note.
+    void setWorkingChanges(const QString& root, const QStringList& relativePaths);
+    int workingChangesRevision() const { return workingChangesRevision_; }
+    // Whether any of `paths` (relative to the conversation's checkout, or absolute) has
+    // uncommitted changes there; false while Source Control shows another checkout.
+    Q_INVOKABLE bool hasUncommittedChange(const QStringList& paths) const;
     QString repositoryName() const { return repositoryName_; }
     void setRepositoryName(const QString& name) {
         if (repositoryName_ == name)
@@ -290,6 +355,8 @@ class AgentWorkspaceView final : public QWidget {
         repositoryName_ = name;
         emit repositoryNameChanged();
     }
+    // Refresh renderer colours and editor mono preferences. Interface zoom is owned
+    // by ket::Appearance; the legacy size argument is retained for shell callers.
     void applyTheme(const ThemePalette& palette, int interfaceFontSizePixels = 14);
     void focusPrompt();
     void openModelPicker();
@@ -297,6 +364,16 @@ class AgentWorkspaceView final : public QWidget {
     void setRestoring(bool restoring);
     void setCompactMode(bool compact);
     void setProductSidebarVisible(bool visible);
+    void setCompactWindow(bool compact);
+    [[nodiscard]] bool compactWindow() const { return compactWindow_; }
+    [[nodiscard]] bool detailsOpen() const { return detailsOpen_; }
+    void setDetailsOpen(bool open) {
+        if (open == detailsOpen_)
+            return;
+        detailsOpen_ = open;
+        emit detailsOpenChanged();
+    }
+    Q_INVOKABLE void requestCompactWindow() { emit compactWindowRequested(); }
     void setConversationWidth(int pixels);
     void setConversations(const QVariantList& conversations);
     void setSessionState(const QString& title, const QString& status, bool running);
@@ -308,9 +385,18 @@ class AgentWorkspaceView final : public QWidget {
     [[nodiscard]] QVariantList worktrees() const;
     [[nodiscard]] QVariantList conversations() const;
     [[nodiscard]] QString activePath() const;
-    [[nodiscard]] QVariantMap tokens() const;
+    [[nodiscard]] QString monoFontFamily() const;
     [[nodiscard]] QString sessionTitle() const;
     [[nodiscard]] QString sessionStatus() const;
+    [[nodiscard]] QString runStatus() const {
+        return agent_message::workingLine(sessionStatus_, workingDetail_);
+    }
+    void setWorkingDetail(const QString& detail) {
+        if (workingDetail_ == detail)
+            return;
+        workingDetail_ = detail;
+        emit sessionChanged();
+    }
     [[nodiscard]] bool sessionRunning() const noexcept;
     [[nodiscard]] int atlasRunningCount() const noexcept { return atlasRunningCount_; }
     void setAtlasRunningCount(int count) {
@@ -326,6 +412,13 @@ class AgentWorkspaceView final : public QWidget {
     [[nodiscard]] bool workingMotionEnabled() const noexcept { return workingMotionEnabled_; }
     [[nodiscard]] QVariantMap presentationState() const;
     [[nodiscard]] bool compactMode() const noexcept { return compactMode_; }
+    [[nodiscard]] QString composerHint() const { return composerHint_; }
+    void setComposerHint(const QString& hint) {
+        if (composerHint_ == hint)
+            return;
+        composerHint_ = hint;
+        emit composerHintChanged();
+    }
     [[nodiscard]] bool productSidebarVisible() const noexcept { return productSidebarVisible_; }
     [[nodiscard]] int conversationWidth() const noexcept { return conversationWidth_; }
     [[nodiscard]] QString conversationModel() const;
@@ -346,7 +439,31 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void selectWorktree(const QString& path);
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
-    Q_INVOKABLE void requestSettings() { emit settingsRequested(); }
+    // ADR 0106: opens the details pane's Report tab for the active conversation.
+    Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
+    // The header's Changes: the details pane's Changes tab for the active worktree.
+    Q_INVOKABLE void requestChanges() { emit changesRequested(); }
+    // A section such as "storage" opens on it; none opens Settings where it was.
+    Q_INVOKABLE void requestSettings(const QString& section = {}) {
+        emit settingsRequested(section);
+    }
+    Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
+    [[nodiscard]] QVariantList tagCatalog() const;
+    void setTagCatalog(const QVariantList& catalog) {
+        if (tagCatalogSet_ && catalog == tagCatalog_)
+            return;
+        tagCatalogSet_ = true;
+        tagCatalog_ = catalog;
+        emit tagCatalogChanged();
+    }
+    // Manage tags… saves the whole catalog; renames maps an old label to its new one.
+    Q_INVOKABLE void requestTagCatalogSave(const QVariantList& tags, const QVariantMap& renames) {
+        emit tagCatalogSaveRequested(tags, renames);
+    }
+    Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
+                                            bool tagged) {
+        emit conversationTagRequested(conversationId, label, tagged);
+    }
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
         if (!destination.isEmpty())
             emit productNavigationRequested(destination);
@@ -369,6 +486,15 @@ class AgentWorkspaceView final : public QWidget {
     // until that check lands; pathStateRevision changes only when an answer flips.
     Q_INVOKABLE bool pathMissing(const QString& path);
     Q_INVOKABLE void copyText(const QString& text);
+    // The image viewer's host tools (AgentWorkspaceImages.cpp). `source` is a viewer item's
+    // URL and `rotation` the viewer's turn in degrees.
+    Q_INVOKABLE QString imageCaption(const QUrl& source) const;
+    Q_INVOKABLE bool copyImage(const QUrl& source, int rotation);
+    // The saved path, or empty when the image could not be written.
+    Q_INVOKABLE QString saveImageToDownloads(const QUrl& source);
+    Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title);
+    // The viewer's Fullscreen tool turns the top-level window, not the embedded Quick one.
+    Q_INVOKABLE void toggleWindowFullScreen();
     Q_INVOKABLE void copySelectedText(QString text);
     Q_INVOKABLE QString composerDraft(const QString& scope) const;
     Q_INVOKABLE void saveComposerDraft(const QString& scope, const QString& text) const;
@@ -379,8 +505,6 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void formatMessageDocument(QObject* document, qreal fontPixelSize,
                                            qreal availableWidth);
     Q_INVOKABLE QVariantList messageCodeBlocks(QObject* document) const;
-    // Rects for the rounded chips behind inline code, one per wrapped line.
-    Q_INVOKABLE QVariantList messageInlineCode(QObject* document) const;
     QUrl messageBaseUrl() const;
     Q_INVOKABLE QUrl messageImageAt(QObject* document, int position) const;
     Q_INVOKABLE QString messageLinkAt(QObject* document, int position) const;
@@ -432,6 +556,8 @@ class AgentWorkspaceView final : public QWidget {
     }
 
   signals:
+    void tagFilterRequested(const QString& tag);
+    void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
     void findActionsProvidedChanged();
@@ -460,6 +586,7 @@ class AgentWorkspaceView final : public QWidget {
     void modelsChanged();
     void skillsChanged();
     void executionWorktreeRequested();
+    void conversationWorktreeRequested(const QString& conversationId);
     void executionBranchChanged();
     void modelsRequested();
     void weeklyLimitChanged();
@@ -468,6 +595,14 @@ class AgentWorkspaceView final : public QWidget {
     void claudeAccountUsageChanged();
     void backgroundTasksChanged();
     void backgroundTaskOutputChanged();
+    void atlasResultsChanged();
+    void atlasResultOpenRequested(const QString& path, const QString& root, bool inBrowser);
+    void heldMessageStatesChanged();
+    void heldMessageActionRequested(const QString& messageId, bool release);
+    void reviewerStateChanged();
+    // Both empty reads the reviewer; otherwise as chooseReviewer.
+    void reviewerRequested();
+    void reviewerChangeRequested(const QString& number, const QString& newProvider);
     void backgroundTaskStopRequested(const QString& taskId);
     void backgroundTaskOutputRequested(const QString& taskId);
     void backgroundTaskFailed(const QString& message);
@@ -478,9 +613,11 @@ class AgentWorkspaceView final : public QWidget {
     void worktreesChanged();
     void conversationsChanged();
     void activePathChanged();
+    void workingChangesChanged();
     void repositoryNameChanged();
     void repositoryPickerRequested();
-    void tokensChanged();
+    void monoFontFamilyChanged();
+    void documentStyleChanged();
     void sessionChanged();
     void agentAvailableChanged();
     void restoringChanged();
@@ -490,7 +627,13 @@ class AgentWorkspaceView final : public QWidget {
     void modelConfigurationFinished(const QString& error);
     void messageModelChanged();
     void compactModeChanged();
+    void composerHintChanged();
     void productSidebarVisibleChanged();
+    void compactWindowChanged();
+    void detailsOpenChanged();
+    void tagCatalogChanged();
+    void tagCatalogSaveRequested(const QVariantList& tags, const QVariantMap& renames);
+    void compactWindowRequested();
     void conversationWidthChanged();
     void conversationConfigurationRequested(const QString& model, const QString& effort,
                                             const QString& permission, const QString& provider,
@@ -499,7 +642,11 @@ class AgentWorkspaceView final : public QWidget {
     void fileOpenRequested(const QString& relativePath);
     void fileDiffRequested(const QString& relativePath);
     void terminalRequested();
-    void settingsRequested();
+    void workReportRequested();
+    void changesRequested();
+    void settingsRequested(const QString& section);
+    void providerRecheckRequested();
+    void typeInTerminalRequested(const QString& command);
     void productNavigationRequested(const QString& destination);
     void atlasRunningCountChanged();
     void addWorktreeRequested();
@@ -523,6 +670,8 @@ class AgentWorkspaceView final : public QWidget {
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};
+    // hasUncommittedChange() reads the execution path, which QML cannot track.
+    void executionCheckoutChanged();
     void flushStreamingMessages();
     QTimer* streamUpdateTimer_{nullptr};
     QMap<int, QVariantMap> pendingStreamingMessages_;
@@ -535,6 +684,11 @@ class AgentWorkspaceView final : public QWidget {
     MermaidRenderer* mermaidRenderer_{nullptr};
     ThemePalette mermaidPalette_;
     QSet<QString> mermaidImages_;
+    QString workingChangesRoot_;
+    QSet<QString> workingChanges_;
+    int workingChangesRevision_{0};
+    // The diagram source behind each rendered image, for the viewer's dark rendering.
+    QHash<QString, QString> mermaidDiagrams_;
     // "messageKey#ordinal" of the Mermaid fences the reader switched to their diagram.
     QSet<QString> mermaidRendered_;
     // What each fence of a message turned into the last time it was rendered: kept as source
@@ -575,6 +729,7 @@ class AgentWorkspaceView final : public QWidget {
     // False when a mention points outside the conversation worktree; the error is emitted.
     [[nodiscard]] bool referencedPathsForPrompt(const QString& prompt, QVariantList& paths);
     void setComposerScope(const QString& scope);
+    void setReviewerScope(const QString& scope);
 
     QString composerScope_;
     bool steeringPending_{false};
@@ -589,7 +744,13 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap usageSnapshot_;
     QVariantMap claudeAccountUsage_;
     UsageRequester claudeUsageRequester_;
+    TurnGuide turnGuide_;
     QVariantList backgroundTasks_;
+    AtlasResultInspector atlasResultInspector_;
+    QVariantMap heldMessageStates_;
+    QString heldMessageScope_;
+    QVariantMap reviewerState_;
+    QString reviewerScope_;
     QVariantMap backgroundTaskOutput_;
     QVariantList skills_;
     QSet<QString> enabledSkillPaths_;
@@ -617,13 +778,14 @@ class AgentWorkspaceView final : public QWidget {
     QSet<QString> conversationPaths_;
     QVariantList worktrees_;
     QVariantList conversations_;
-    QVariantMap tokens_;
-    // The constructor's default tokens are not a theme: the first apply always runs.
+    QString monoFontFamily_;
+    // Bootstrap the HTML/Mermaid renderer even when the first palette is unchanged.
     bool themeApplied_{false};
     QString activePath_;
     QString repositoryName_;
     QString sessionTitle_{QStringLiteral("New conversation")};
     QString sessionStatus_{QStringLiteral("Ready")};
+    QString workingDetail_;
     bool sessionRunning_{false};
     int atlasRunningCount_{0};
     bool findActionsProvided_{false};
@@ -633,7 +795,12 @@ class AgentWorkspaceView final : public QWidget {
     bool motionEnabled_{false};
     bool workingMotionEnabled_{!qEnvironmentVariableIsSet("KETPLUS_REDUCED_MOTION")};
     bool compactMode_{false};
+    QString composerHint_;
     bool productSidebarVisible_{true};
+    bool compactWindow_{false};
+    bool detailsOpen_{false};
+    QVariantList tagCatalog_;
+    bool tagCatalogSet_{false};
     int conversationWidth_{defaultConversationWidth};
     qint64 conversationConfigurationRevision_{0};
     QVariant conversationCompactWindow_;

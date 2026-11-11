@@ -500,7 +500,7 @@ void AgentWorkspaceViewTest::promotesConversationWhenAgentStarts() {
     QCOMPARE(view.conversations().first().toMap().value("id").toString(), QStringLiteral("first"));
 }
 
-void AgentWorkspaceViewTest::workingOpacityAnimatorLifecycle() {
+void AgentWorkspaceViewTest::workingIndicatorClockLifecycle() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.resize(900, 640);
@@ -509,13 +509,12 @@ void AgentWorkspaceViewTest::workingOpacityAnimatorLifecycle() {
     QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
     view.quickView()->requestActivate();
     auto* root = view.quickView()->rootObject();
-    auto* animation = root->findChild<QObject*>("workingOpacityAnimator");
     auto* icon = root->findChild<QQuickItem*>("workingAnimationIcon");
     auto* label = root->findChild<QQuickItem*>("workingStatusLabel");
-    QVERIFY(animation && icon && label);
+    QVERIFY(icon && label);
     QVERIFY(view.workingMotionEnabled());
     QVERIFY(!view.motionEnabled()); // Sidebar and restore animations stay off.
-    QTRY_VERIFY(animation->property("running").toBool());
+    QTRY_VERIFY(icon->property("holdsClock").toBool());
     const auto labelPosition = label->mapToScene(QPointF{});
     QTest::qWait(160);
     QCOMPARE(icon->scale(), 1.0);
@@ -536,15 +535,15 @@ void AgentWorkspaceViewTest::workingOpacityAnimatorLifecycle() {
         QVERIFY(second.save(capture + "-second.png"));
     }
     view.setRestoring(true);
-    QTRY_VERIFY(!animation->property("running").toBool());
+    QTRY_VERIFY(!icon->property("holdsClock").toBool());
     view.setRestoring(false);
-    QTRY_VERIFY(animation->property("running").toBool());
+    QTRY_VERIFY(icon->property("holdsClock").toBool());
     view.setSessionState("Animation trial", "Ready", false);
-    QTRY_VERIFY(!animation->property("running").toBool());
+    QTRY_VERIFY(!icon->property("holdsClock").toBool());
     view.setSessionState("Animation trial", "Working…", true);
-    QTRY_VERIFY(animation->property("running").toBool());
+    QTRY_VERIFY(icon->property("holdsClock").toBool());
     view.hide();
-    QTRY_VERIFY(!animation->property("running").toBool());
+    QTRY_VERIFY(!icon->property("holdsClock").toBool());
     qputenv("KETPLUS_REDUCED_MOTION", "1");
     ketplus::AgentWorkspaceView reduced;
     qunsetenv("KETPLUS_REDUCED_MOTION");
@@ -564,27 +563,42 @@ void AgentWorkspaceViewTest::animatesRunningConversationStatus() {
     view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    const auto shine = [&]() {
-        return findVisualItem(root, QStringLiteral("conversationStatusShine_animated"));
+    const auto row = [&]() {
+        return findVisualItem(root, QStringLiteral("conversationRow_animated"));
     };
-    QTRY_VERIFY(shine());
+    QTRY_VERIFY(row());
+    // A working row spins on the shared clock like the transcript's Working indicator; the
+    // decorative motion switch (motionEnabled) does not stop it.
     QVERIFY(!view.motionEnabled());
-    QTRY_VERIFY(!shine()->property("animating").toBool());
-    const qreal initialX = shine()->x();
-    QTest::qWait(100);
-    QCOMPARE(shine()->x(), initialX);
+    QVERIFY(view.workingMotionEnabled());
+    QTRY_VERIFY(row()->property("holdsClock").toBool());
     conversation["status"] = "Reasoning";
     view.setConversations({conversation});
-    QTRY_VERIFY(shine() && !shine()->property("animating").toBool());
+    QTRY_VERIFY(row() && row()->property("holdsClock").toBool());
     view.hide();
-    QTRY_VERIFY(!shine()->property("animating").toBool());
+    QTRY_VERIFY(!row()->property("holdsClock").toBool());
     view.show();
-    QTRY_VERIFY(!shine()->property("animating").toBool());
+    QTRY_VERIFY(row()->property("holdsClock").toBool());
     conversation["running"] = false;
     conversation["status"] = "Ready";
     view.setConversations({conversation});
-    QTRY_VERIFY(shine() && !shine()->property("animating").toBool());
-    QVERIFY(!shine()->isVisible());
+    QTRY_VERIFY(row() && !row()->property("holdsClock").toBool());
+
+    // Reduced motion keeps the icon still.
+    qputenv("KETPLUS_REDUCED_MOTION", "1");
+    ketplus::AgentWorkspaceView reduced;
+    qunsetenv("KETPLUS_REDUCED_MOTION");
+    reduced.applyTheme(testPalette());
+    reduced.resize(1000, 700);
+    conversation["running"] = true;
+    conversation["status"] = "Working";
+    reduced.setConversations({conversation});
+    reduced.show();
+    QQuickItem* still = nullptr;
+    QTRY_VERIFY((still = findVisualItem(reduced.quickView()->rootObject(),
+                                        QStringLiteral("conversationRow_animated"))));
+    QTest::qWait(50);
+    QVERIFY(!still->property("holdsClock").toBool());
 }
 
 void AgentWorkspaceViewTest::restoresConversationScrollPosition() {
@@ -771,7 +785,9 @@ void AgentWorkspaceViewTest::streamingPreservesReadingPosition() {
     QVERIFY(bodyItem);
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(bodyItem->property("textDocument"));
     QVERIFY(quickDocument);
-    const qreal lineHeight = bodyItem->property("font").value<QFont>().pixelSize() * 1.45;
+    // Streaming must preserve the current kit typography, including custom zoom.
+    const qreal lineHeight = quickDocument->textDocument()->firstBlock().blockFormat().lineHeight();
+    QVERIFY(lineHeight > 0);
     auto capturePath = qEnvironmentVariable("KETPLUS_CHAT_CAPTURE");
     if (!capturePath.isEmpty())
         capturePath += QStringLiteral(".") + QTest::currentDataTag();
@@ -798,7 +814,8 @@ void AgentWorkspaceViewTest::streamingPreservesReadingPosition() {
         message["body"] = body;
         view.updateMessage(0, message);
         // Do not leave an unformatted document for a later event-loop turn to repair.
-        QCOMPARE(quickDocument->textDocument()->firstBlock().blockFormat().lineHeight(), lineHeight);
+        QCOMPARE(quickDocument->textDocument()->firstBlock().blockFormat().lineHeight(),
+                 lineHeight);
         for (int frameIndex = 0; frameIndex < 6; ++frameIndex) {
             QTest::qWait(8);
             if (!reference.isNull()) {

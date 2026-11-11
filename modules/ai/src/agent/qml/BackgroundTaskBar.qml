@@ -1,5 +1,5 @@
-import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -8,215 +8,254 @@ import QtQuick.Layouts
 Rectangle {
     id: bar
     required property var workspace
-    readonly property var t: workspace.t
-    readonly property var tasks: agentHost.backgroundTasks || []
+
+    property var dismissedTasks: []
+    function taskKey(task) {
+        return workspace.transcriptScope + ":" + String(task.task_id) + ":" + String(task.started_at || "") + ":" + String(task.ended_at || "");
+    }
+    readonly property var tasks: (agentHost.backgroundTasks || []).filter(task => live(task) || dismissedTasks.indexOf(taskKey(task)) < 0)
+    readonly property var barRecipe: KetTheme.taskBarRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
     readonly property var pane: agentHost.backgroundTaskOutput || ({})
     readonly property bool offline: agentHost.presentationState.connection === "unavailable"
     readonly property int liveCount: tasks.filter(task => bar.live(task)).length
     property bool collapsed: false
     property string confirmingStop: ""
     property real now: Date.now()
+    readonly property bool windowVisible: visible && Window.window !== null
+        && Window.window.visible && Window.window.visibility !== Window.Minimized
 
-    function live(task) { return task.status === "running" || task.status === "stopping" }
-    function plural(count, word) { return count + " " + word + (count === 1 ? "" : "s") }
-    function elapsed(task) {
-        const ms = task.duration_ms !== undefined && !live(task) ? task.duration_ms
-                 : task.started_at ? (task.ended_at || bar.now) - task.started_at : 0
-        const seconds = Math.max(0, Math.round(ms / 1000))
-        return seconds < 60 ? seconds + "s"
-             : Math.floor(seconds / 60) + "m " + (seconds % 60 < 10 ? "0" : "") + seconds % 60 + "s"
+    function live(task) {
+        return task.status === "running" || task.status === "stopping";
     }
-    function tokens(count) { return count >= 1000 ? Math.round(count / 1000) + "k" : String(count) }
+    function plural(count, word) {
+        return count + " " + word + (count === 1 ? "" : "s");
+    }
+    function elapsed(task) {
+        const ms = task.duration_ms !== undefined && !live(task) ? task.duration_ms : task.started_at ? (task.ended_at || bar.now) - task.started_at : 0;
+        const seconds = Math.max(0, Math.round(ms / 1000));
+        return seconds < 60 ? seconds + "s" : Math.floor(seconds / 60) + "m " + (seconds % 60 < 10 ? "0" : "") + seconds % 60 + "s";
+    }
+    function tokens(count) {
+        return count >= 1000 ? Math.round(count / 1000) + "k" : String(count);
+    }
     function meta(task) {
         if (task.status === "stopping")
-            return "Stopping…"
+            return "Stopping…";
         if (!live(task)) {
-            const outcome = task.reason === "worker_restart" ? "KetPlus restarted while it ran"
-                          : task.reason === "session_closed" ? "Ended with its conversation"
-                          : task.error || task.result
-                            || ({completed: "Completed", failed: "Failed", stopped: "Stopped"})[task.status]
-            return outcome + " · " + elapsed(task)
+            // As the mock words a finished task: what it reported, else how long it took.
+            const reported = task.reason === "worker_restart" ? "KetPlus restarted while it ran" : task.reason === "session_closed" ? "Ended with its conversation" : task.error || task.result || "";
+            if (reported.length > 0)
+                return reported;
+            return ({
+                    completed: "Completed in ",
+                    failed: "Failed after ",
+                    stopped: "Stopped after "
+                })[task.status] + elapsed(task);
         }
         if (task.kind === "agent")
-            return "Subagent · " + plural(task.tool_uses || 0, "tool") + " · "
-                   + tokens(task.total_tokens || 0) + " tokens · " + elapsed(task)
-        return "Shell · " + elapsed(task)
+            return "Subagent · " + plural(task.tool_uses || 0, "tool") + " · " + tokens(task.total_tokens || 0) + " tokens · " + elapsed(task);
+        return "Shell · " + elapsed(task);
     }
     function statusColor(task) {
         if (bar.offline && live(task))
-            return t.textMuted
-        return ({running: t.accent, stopping: t.warning, completed: t.positive,
-                 failed: t.danger, stopped: t.textMuted})[task.status] || t.textMuted
+            return KetTheme.t.textMuted;
+        return ({
+                running: KetTheme.t.accent,
+                stopping: KetTheme.t.warning,
+                completed: KetTheme.t.positive,
+                failed: KetTheme.t.danger,
+                stopped: KetTheme.t.textMuted
+            })[task.status] || KetTheme.t.textMuted;
     }
     function openTask(task) {
         if (pane.taskId === task.task_id)
-            agentHost.closeBackgroundTaskOutput()
+            agentHost.closeBackgroundTaskOutput();
         else
-            agentHost.requestBackgroundTaskOutput(task.task_id)
+            agentHost.requestBackgroundTaskOutput(task.task_id);
     }
     readonly property var openedTask: tasks.find(task => task.task_id === pane.taskId)
-    readonly property string headline: offline
-        ? plural(liveCount, "background task") + " · last known"
-        : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ")
-                          + plural(liveCount, "task") + " running in background"
-                        : "Background tasks finished"
+    // The kit's toggle (`.bg-toggle`) counts every task; the rows show which still run.
+    readonly property string headline: offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
 
     objectName: "backgroundTaskBar"
     visible: tasks.length > 0
-    implicitHeight: visible ? column.implicitHeight + Metrics.px(12, t) : 0
-    radius: Metrics.px(12, t)
-    color: t.surfaceRaised
-    border.width: 1
-    border.color: t.border
+    implicitHeight: visible ? column.implicitHeight : 0
+    // The mock's strip has no panel of its own: the toggle, then one row per task.
+    color: "transparent"
     Accessible.role: Accessible.Grouping
     Accessible.name: "Background tasks"
 
     Timer {
         // Elapsed time ticks locally; the daemon reports progress only every few seconds.
-        running: bar.visible && bar.liveCount > 0 && !bar.offline
+        objectName: "backgroundTaskElapsedTimer"
+        running: bar.windowVisible && bar.liveCount > 0 && !bar.offline
         interval: 1000
         repeat: true
         onTriggered: bar.now = Date.now()
     }
     Timer {
-        running: bar.visible && !bar.offline && bar.openedTask !== undefined
-                 && bar.openedTask.kind !== "agent" && bar.live(bar.openedTask) && !bar.pane.loading
+        running: bar.windowVisible && !bar.offline && bar.openedTask !== undefined && bar.openedTask.kind !== "agent" && bar.live(bar.openedTask) && !bar.pane.loading
         interval: 2000
         onTriggered: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
     }
-    onTasksChanged: if (confirmingStop && !tasks.some(task => task.task_id === confirmingStop
-                                                             && task.status === "running"))
-                        confirmingStop = ""
+    onTasksChanged: if (confirmingStop && !tasks.some(task => task.task_id === confirmingStop && task.status === "running"))
+        confirmingStop = ""
 
     ColumnLayout {
         id: column
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Metrics.px(6, bar.t)
-        spacing: Metrics.px(2, bar.t)
+        spacing: bar.barRecipe.rowGap
 
         AbstractButton {
+            id: toggle
             objectName: "backgroundTaskBarHeader"
-            Layout.fillWidth: true
-            implicitHeight: Metrics.px(26, bar.t)
+            readonly property var recipe: KetTheme.taskBarRecipe(KetTheme.dark, KetTheme.zoom, hovered, down, enabled, visualFocus)
+            Layout.maximumWidth: parent.width
+            hoverEnabled: true
+            opacity: recipe.opacity
+            leftPadding: recipe.paddingInline
+            rightPadding: recipe.paddingInline
+            implicitWidth: leftPadding + rightPadding + toggleContent.implicitWidth
+            implicitHeight: recipe.height
             Accessible.name: bar.headline + (bar.collapsed ? ", collapsed" : ", expanded")
             onClicked: bar.collapsed = !bar.collapsed
-            contentItem: RowLayout {
-                spacing: Metrics.px(6, bar.t)
-                TintedIcon {
-                    Layout.leftMargin: Metrics.px(4, bar.t)
-                    Layout.preferredWidth: Metrics.px(14, bar.t)
-                    Layout.preferredHeight: Metrics.px(14, bar.t)
-                    source: bar.collapsed ? "qrc:/agent/icons/chevron-right.svg"
-                                          : "qrc:/agent/icons/chevron-down.svg"
-                    color: bar.t.textMuted
+            contentItem: Row {
+                id: toggleContent
+                spacing: toggle.recipe.spacing
+                KetIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
+                    box: toggle.recipe.iconSize
+                    color: toggle.recipe.text
                 }
                 Text {
-                    Layout.fillWidth: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, toggle.Layout.maximumWidth - toggle.leftPadding - toggle.rightPadding - 2 * toggle.recipe.spacing - toggle.recipe.iconSize - toggle.recipe.chevronSize)
                     text: bar.headline
-                    color: bar.t.textSecondary
-                    font.family: bar.t.uiFont
-                    font.pixelSize: bar.t.caption
-                    font.weight: Font.DemiBold
+                    color: toggle.recipe.text
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: toggle.recipe.fontPixels
                     elide: Text.ElideRight
+                }
+                KetIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: bar.collapsed ? "chevron-up" : "chevron-down"
+                    box: toggle.recipe.chevronSize
+                    color: toggle.recipe.text
                 }
             }
             background: Rectangle {
-                radius: Metrics.px(7, bar.t)
-                color: parent.hovered ? bar.t.surfaceHover : "transparent"
+                radius: toggle.recipe.radius
+                color: toggle.recipe.background
+                border.width: toggle.recipe.focusRing.a > 0 ? 2 : 0
+                border.color: toggle.recipe.focusRing
             }
         }
 
         Repeater {
             model: bar.collapsed ? [] : bar.tasks
-            delegate: RowLayout {
+            delegate: ColumnLayout {
                 id: row
                 required property var modelData
                 readonly property bool confirming: bar.confirmingStop === modelData.task_id
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(6, bar.t)
-                spacing: Metrics.px(8, bar.t)
+                spacing: KetTheme.px(4, KetTheme.zoom)
                 objectName: "backgroundTask_" + modelData.task_id
-
-                Rectangle {
-                    Layout.preferredWidth: Metrics.px(8, bar.t)
-                    Layout.preferredHeight: Metrics.px(8, bar.t)
-                    radius: width / 2
-                    color: bar.statusColor(row.modelData)
-                    SequentialAnimation on opacity {
-                        running: row.modelData.status === "running" && !bar.offline
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.35; duration: 700 }
-                        NumberAnimation { to: 1; duration: 700 }
-                    }
+                KetTaskRow {
+                        id: taskRow
+                        objectName: "backgroundTaskCard_" + row.modelData.task_id
+                        Layout.fillWidth: true
+                        // A row opens its output or the subagent's progress, as the mock's
+                        // current row; Stop and Dismiss stay on top of it.
+                        readonly property string openLabel: (bar.pane.taskId === row.modelData.task_id ? "Hide " : "Show ") + (row.modelData.kind === "agent" ? "progress" : "output")
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: row.modelData.title + ", " + bar.meta(row.modelData)
+                        Accessible.description: openLabel
+                        Accessible.onPressAction: bar.openTask(row.modelData)
+                        // Only the row's own focus opens it: Return or Space on Stop or
+                        // Dismiss reaches here too and must keep that button's meaning.
+                        function activateFromKeys(event) {
+                            if (!taskRow.activeFocus) {
+                                event.accepted = false;
+                                return;
+                            }
+                            bar.openTask(row.modelData);
+                        }
+                        Keys.onReturnPressed: event => activateFromKeys(event)
+                        Keys.onSpacePressed: event => activateFromKeys(event)
+                        // The keyboard focus ring sits outside the row, apart from the
+                        // `current` border that marks the open output.
+                        Rectangle {
+                            objectName: "backgroundTaskFocusRing"
+                            anchors.fill: parent
+                            anchors.margins: -2
+                            z: 1
+                            visible: taskRow.activeFocus
+                            radius: taskRow.radius + 2
+                            color: "transparent"
+                            border.width: 2
+                            border.color: KetTheme.t.focusBorder
+                        }
+                        MouseArea {
+                            objectName: "backgroundTaskOpen"
+                            anchors.fill: parent
+                            z: -1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: bar.openTask(row.modelData)
+                        }
+                        enabled: !bar.offline || !bar.live(row.modelData)
+                        title: row.modelData.title
+                        meta: bar.meta(row.modelData)
+                        kindIcon: row.modelData.kind === "agent" ? "bot" : "terminal"
+                        current: bar.pane.taskId === row.modelData.task_id
+                        status: ({
+                                running: KetTheme.TaskStatus.Running,
+                                stopping: KetTheme.TaskStatus.Stopping,
+                                completed: KetTheme.TaskStatus.Completed,
+                                failed: KetTheme.TaskStatus.Failed,
+                                stopped: KetTheme.TaskStatus.Stopped
+                            })[row.modelData.status] ?? KetTheme.TaskStatus.Stopped
+                        onStopRequested: if (!bar.offline && row.modelData.status === "running")
+                            bar.confirmingStop = row.modelData.task_id
+                        onDismissRequested: {
+                            if (bar.live(row.modelData))
+                                return;
+                            const key = bar.taskKey(row.modelData);
+                            if (bar.pane.taskId === row.modelData.task_id)
+                                agentHost.closeBackgroundTaskOutput();
+                            // Updating the model can destroy this delegate immediately.
+                            bar.dismissedTasks = bar.dismissedTasks.concat([key]);
+                        }
                 }
-                TintedIcon {
-                    Layout.preferredWidth: Metrics.px(14, bar.t)
-                    Layout.preferredHeight: Metrics.px(14, bar.t)
-                    source: row.modelData.kind === "agent" ? "qrc:/agent/icons/bot.svg"
-                                                           : "qrc:/agent/icons/square-terminal.svg"
-                    color: bar.t.textMuted
-                }
-                Column {
+                Text {
+                    visible: row.confirming
                     Layout.fillWidth: true
-                    Text {
-                        width: parent.width
-                        text: row.confirming ? "Stop “" + row.modelData.title + "”?"
-                                             : row.modelData.title
-                        color: bar.t.textMain
-                        font.family: bar.t.uiFont
-                        font.pixelSize: bar.t.body
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        width: parent.width
-                        text: row.confirming
-                              ? (row.modelData.kind === "agent"
-                                 ? "The subagent stops after its current step."
-                                 : "The command is terminated. Output so far stays readable.")
-                              : bar.meta(row.modelData)
-                        color: bar.t.textMuted
-                        font.family: bar.t.uiFont
-                        font.pixelSize: bar.t.caption
-                        elide: Text.ElideRight
-                    }
+                    text: "Stop “" + row.modelData.title + "”? " + (row.modelData.kind === "agent" ? "The subagent stops after its current step." : "The command is terminated. Output so far stays readable.")
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                    wrapMode: Text.Wrap
                 }
-                Button {
-                    visible: !row.confirming
-                    flat: true
-                    text: bar.pane.taskId === row.modelData.task_id ? "Hide"
-                        : row.modelData.kind === "agent" ? "Progress" : "Output"
-                    font.pixelSize: bar.t.caption
-                    onClicked: bar.openTask(row.modelData)
-                }
-                Button {
-                    visible: !row.confirming && row.modelData.status === "running"
-                    enabled: !bar.offline
-                    flat: true
-                    text: "Stop"
-                    font.pixelSize: bar.t.caption
-                    Accessible.name: "Stop " + row.modelData.title
-                    ToolTip.visible: hovered && bar.offline
-                    ToolTip.text: "Stopping needs a live connection to the daemon."
-                    onClicked: bar.confirmingStop = row.modelData.task_id
-                }
-                Button {
+                RowLayout {
                     visible: row.confirming
-                    flat: true
-                    text: "Keep running"
-                    font.pixelSize: bar.t.caption
-                    onClicked: bar.confirmingStop = ""
-                }
-                Button {
-                    objectName: "confirmStopBackgroundTask"
-                    visible: row.confirming
-                    text: "Stop task"
-                    font.pixelSize: bar.t.caption
-                    palette.buttonText: bar.t.danger
-                    onClicked: {
-                        bar.confirmingStop = ""
-                        agentHost.stopBackgroundTask(row.modelData.task_id)
+                    KetButton {
+                        text: "Keep running"
+                        controlSize: KetTheme.ControlSize.Small
+                        onClicked: bar.confirmingStop = ""
+                    }
+                    KetButton {
+                        objectName: "confirmStopBackgroundTask"
+                        text: "Stop task"
+                        enabled: !bar.offline
+                        controlSize: KetTheme.ControlSize.Small
+                        variant: KetTheme.ButtonVariant.Danger
+                        onClicked: {
+                            bar.confirmingStop = "";
+                            agentHost.stopBackgroundTask(row.modelData.task_id);
+                        }
                     }
                 }
             }
@@ -228,35 +267,28 @@ Rectangle {
             readonly property var task: bar.openedTask
             visible: !bar.collapsed && task !== undefined
             Layout.fillWidth: true
-            Layout.topMargin: Metrics.px(4, bar.t)
-            Layout.preferredHeight: visible ? paneColumn.implicitHeight + Metrics.px(16, bar.t) : 0
-            radius: Metrics.px(8, bar.t)
-            color: bar.t.codeBlockBackground
+            Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
+            Layout.preferredHeight: visible ? paneColumn.implicitHeight + KetTheme.px(16, KetTheme.zoom) : 0
+            radius: KetTheme.px(8, KetTheme.zoom)
+            color: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background
             border.width: 1
-            border.color: bar.t.codeBlockBorder
+            border.color: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).border
 
             ColumnLayout {
                 id: paneColumn
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: Metrics.px(8, bar.t)
-                spacing: Metrics.px(6, bar.t)
+                anchors.margins: KetTheme.px(8, KetTheme.zoom)
+                spacing: KetTheme.px(6, KetTheme.zoom)
 
                 Text {
                     Layout.fillWidth: true
                     visible: text.length > 0
-                    text: !outputPane.task ? ""
-                        : outputPane.task.kind === "agent"
-                          ? [outputPane.task.summary,
-                             outputPane.task.last_tool ? "Last tool: " + outputPane.task.last_tool : "",
-                             outputPane.task.result || outputPane.task.error || ""]
-                            .filter(line => line).join("\n")
-                          : (outputPane.task.command || "")
-                    color: bar.t.textSecondary
-                    font.family: outputPane.task && outputPane.task.kind === "agent" ? bar.t.uiFont
-                                                                                    : bar.t.monoFont
-                    font.pixelSize: bar.t.caption
+                    text: !outputPane.task ? "" : outputPane.task.kind === "agent" ? [outputPane.task.summary, outputPane.task.last_tool ? "Last tool: " + outputPane.task.last_tool : "", outputPane.task.result || outputPane.task.error || ""].filter(line => line).join("\n") : (outputPane.task.command || "")
+                    color: KetTheme.t.textSecondary
+                    font.family: outputPane.task && outputPane.task.kind === "agent" ? KetTheme.fontFamily : agentHost.monoFontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     wrapMode: Text.Wrap
                     maximumLineCount: 6
                     elide: Text.ElideRight
@@ -265,7 +297,7 @@ Rectangle {
                     id: outputScroll
                     visible: outputPane.task !== undefined && outputPane.task.kind !== "agent"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(outputText.implicitHeight, Metrics.px(220, bar.t))
+                    Layout.preferredHeight: Math.min(outputText.implicitHeight, KetTheme.px(220, KetTheme.zoom))
                     clip: true
                     TextEdit {
                         id: outputText
@@ -273,16 +305,14 @@ Rectangle {
                         readOnly: true
                         selectByMouse: true
                         wrapMode: TextEdit.WrapAnywhere
-                        text: bar.pane.error ? bar.pane.error
-                            : bar.pane.output !== undefined ? (bar.pane.output || "No output yet.")
-                                                            : "Loading output…"
-                        color: bar.pane.error ? bar.t.danger : bar.t.textMain
-                        font.family: bar.t.monoFont
-                        font.pixelSize: bar.t.caption
+                        text: bar.pane.error ? bar.pane.error : bar.pane.output !== undefined ? (bar.pane.output || "No output yet.") : "Loading output…"
+                        color: bar.pane.error ? KetTheme.t.danger : KetTheme.t.textMain
+                        font.family: agentHost.monoFontFamily
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         // New output lands at the bottom; keep it in view as it refreshes.
                         onTextChanged: Qt.callLater(() => {
-                            const flick = outputScroll.contentItem
-                            flick.contentY = Math.max(0, flick.contentHeight - flick.height)
+                            const flick = outputScroll.contentItem;
+                            flick.contentY = Math.max(0, flick.contentHeight - flick.height);
                         })
                     }
                 }
@@ -291,19 +321,16 @@ Rectangle {
                     Layout.fillWidth: true
                     Text {
                         Layout.fillWidth: true
-                        text: (bar.pane.truncated ? "Last 8 KiB of " + Math.round((bar.pane.totalBytes || 0) / 1024) + " KiB"
-                                                  : "Full output")
-                              + (outputPane.task && bar.live(outputPane.task) && !bar.offline
-                                 ? " · refreshes every 2 s" : "")
-                        color: bar.t.textMuted
-                        font.family: bar.t.uiFont
-                        font.pixelSize: bar.t.caption
+                        text: (bar.pane.truncated ? "Last 8 KiB of " + Math.round((bar.pane.totalBytes || 0) / 1024) + " KiB" : "Full output") + (outputPane.task && bar.live(outputPane.task) && !bar.offline ? " · refreshes every 2 s" : "")
+                        color: KetTheme.t.textMuted
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         elide: Text.ElideRight
                     }
-                    Button {
-                        flat: true
+                    KetButton {
+                        variant: KetTheme.ButtonVariant.Ghost
                         text: "Copy output"
-                        font.pixelSize: bar.t.caption
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         onClicked: agentHost.copyText(bar.pane.output || "")
                     }
                 }
@@ -313,11 +340,11 @@ Rectangle {
         Text {
             visible: bar.offline && !bar.collapsed
             Layout.fillWidth: true
-            Layout.margins: Metrics.px(4, bar.t)
+            Layout.margins: KetTheme.px(4, KetTheme.zoom)
             text: "The daemon is unreachable. These tasks may have ended; Stop and live output return when it reconnects."
-            color: bar.t.textMuted
-            font.family: bar.t.uiFont
-            font.pixelSize: bar.t.caption
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             wrapMode: Text.Wrap
         }
     }

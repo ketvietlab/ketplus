@@ -1,5 +1,6 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -7,6 +8,8 @@ import QtQuick.Layouts
 Popup {
     id: root
     objectName: "usageLimitsPopover"
+    readonly property var look: Kit.KetTheme.menuRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom)
+    readonly property var contextLook: Kit.KetTheme.meterRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom, false, contextPercent / 100)
     property var workspace
     // Context is supplied only when a provider reports an exact active-window value.
     property var contextUsage: ({})
@@ -27,13 +30,13 @@ Popup {
                                            ? Math.max(0, Math.min(100,
                                                Number(contextUsage.usedTokens) * 100
                                                / Number(contextUsage.limitTokens))) : 0
-    readonly property color panelColor: workspace.t.interactiveBackground || "#20252b"
-    readonly property color trackColor: workspace.t.border || "#40464d"
-    readonly property color primaryColor: workspace.t.accent || "#5da2ff"
-    readonly property color mutedColor: workspace.t.textMuted || "#9aa1aa"
-    readonly property color mainColor: workspace.t.textMain || "#f1f3f5"
+    readonly property color panelColor: look.background
+    readonly property color trackColor: contextLook.track
+    readonly property color primaryColor: KetTheme.t.accent
+    readonly property color mutedColor: KetTheme.t.textMuted
+    readonly property color mainColor: KetTheme.t.textMain
 
-    width: Metrics.px(430, workspace.t)
+    width: KetTheme.px(430, KetTheme.zoom)
     padding: 0
     modal: false
     focus: true
@@ -74,16 +77,14 @@ Popup {
                                    : "Resets " + Qt.formatDateTime(date, "ddd, dd MMM  h:mm AP")
     }
     function progressColor(percent) {
-        if (percent >= 90) return workspace.t.warning || "#e45b5b"
-        if (percent >= 75) return "#d59a2a"
-        return primaryColor
+        return Kit.KetTheme.meterRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom, false, clamp(percent) / 100).fill
     }
 
     background: Rectangle {
         color: root.panelColor
-        radius: Metrics.px(10, workspace.t)
+        radius: root.look.radius
         border.width: 1
-        border.color: root.trackColor
+        border.color: root.look.border
     }
 
     contentItem: Flickable {
@@ -99,24 +100,24 @@ Popup {
             spacing: 0
             Item {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(15, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(15, KetTheme.zoom)
                 Layout.bottomMargin: root.contextAvailable ? 14 : 15
                 implicitHeight: contextColumn.implicitHeight
 
                 ColumnLayout {
                     id: contextColumn
                     anchors.fill: parent
-                    spacing: Metrics.px(8, workspace.t)
+                    spacing: KetTheme.px(8, KetTheme.zoom)
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: Metrics.px(8, workspace.t)
+                        spacing: KetTheme.px(8, KetTheme.zoom)
                         Text {
                             text: "Context window"
                             color: root.mainColor
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.reading
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                         }
                         Item { Layout.fillWidth: true }
                         Text {
@@ -126,16 +127,16 @@ Popup {
                                     + root.compactNumber(root.contextUsage.limitTokens) + " ("
                                     + Math.round(root.contextPercent) + "%)"
                                   : "Not reported"
-                            color: root.contextAvailable ? root.mutedColor : workspace.t.textDisabled
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.reading
+                            color: root.contextAvailable ? root.mutedColor : KetTheme.t.textDisabled
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                         }
                     }
 
                     Rectangle {
                         visible: root.contextAvailable
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Metrics.px(5, workspace.t)
+                        Layout.preferredHeight: root.contextLook.trackHeight
                         radius: height / 2
                         color: root.trackColor
                         Rectangle {
@@ -149,8 +150,8 @@ Popup {
                             visible: Number(root.contextUsage.autoCompactPercent) > 0
                             x: Math.max(0, Math.min(parent.width - width,
                                 parent.width * Number(root.contextUsage.autoCompactPercent) / 100))
-                            width: Metrics.px(2, workspace.t)
-                            height: parent.height + Metrics.px(4, workspace.t)
+                            width: KetTheme.px(2, KetTheme.zoom)
+                            height: parent.height + KetTheme.px(4, KetTheme.zoom)
                             anchors.verticalCenter: parent.verticalCenter
                             color: root.panelColor
                         }
@@ -159,7 +160,7 @@ Popup {
                     RowLayout {
                         visible: root.contextAvailable
                         Layout.fillWidth: true
-                        spacing: Metrics.px(8, workspace.t)
+                        spacing: KetTheme.px(8, KetTheme.zoom)
                         Text {
                             Layout.fillWidth: true
                             text: Number(root.contextUsage.autoCompactPercent) > 0
@@ -167,33 +168,33 @@ Popup {
                                     + Math.round(Number(root.contextUsage.autoCompactPercent)) + "%"
                                   : "Context compaction is managed by the provider"
                             color: root.mutedColor
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.body
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                         Basic.Button {
                             id: compactSessionButton
                             objectName: "compactSessionButton"
                             visible: root.compactEnabled
                             enabled: root.compactEnabled
-                            implicitWidth: compactText.implicitWidth + Metrics.px(12, workspace.t)
-                            implicitHeight: Metrics.px(24, workspace.t)
+                            implicitWidth: compactText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
+                            implicitHeight: KetTheme.px(24, KetTheme.zoom)
                             padding: 0
                             onClicked: root.compactRequested()
                             contentItem: Text {
                                 id: compactText
                                 text: "Compact session"
-                                color: workspace.t.accentText
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.body
+                                color: KetTheme.t.accentText
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
                             background: Rectangle {
-                                color: compactSessionButton.hovered ? workspace.t.accentSubtle : "transparent"
-                                radius: Metrics.px(4, workspace.t)
+                                color: compactSessionButton.hovered ? KetTheme.t.accentSubtle : "transparent"
+                                radius: KetTheme.px(4, KetTheme.zoom)
                             }
                             KetToolTip {
-                                tokens: workspace.t
+                                objectName: "ketToolTip"
                                 visible: compactSessionButton.hovered
                                 text: "Compact this Codex conversation"
                             }
@@ -204,8 +205,8 @@ Popup {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
                 Layout.preferredHeight: 1
                 color: root.trackColor
             }
@@ -216,22 +217,22 @@ Popup {
                 session: root.sessionUsage
                 account: root.accountUsage
                 Layout.fillWidth: true
-                Layout.margins: Metrics.px(16, workspace.t)
+                Layout.margins: KetTheme.px(16, KetTheme.zoom)
                 onRefreshRequested: root.accountRefreshRequested()
             }
             ColumnLayout {
                 visible: !root.claude || root.sessionUsage.mode !== "api_key"
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(13, workspace.t)
-                Layout.bottomMargin: Metrics.px(12, workspace.t)
-                spacing: Metrics.px(11, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(13, KetTheme.zoom)
+                Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+                spacing: KetTheme.px(11, KetTheme.zoom)
                 Text {
                     text: "Plan usage limits"
                     color: root.mutedColor
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.body
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
 
                 Repeater {
@@ -239,16 +240,16 @@ Popup {
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: Metrics.px(6, workspace.t)
+                        spacing: KetTheme.px(6, KetTheme.zoom)
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: Metrics.px(8, workspace.t)
+                            spacing: KetTheme.px(8, KetTheme.zoom)
                             Text {
                                 Layout.fillWidth: true
                                 text: modelData.label || "Usage limit"
                                 color: root.mainColor
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.reading
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                                 elide: Text.ElideRight
                             }
                             Text {
@@ -256,15 +257,15 @@ Popup {
                                       ? root.resetText(modelData.resetsAt) + "  "
                                         + Math.round(root.clamp(modelData.usedPercent)) + "%"
                                       : "Not reported"
-                                color: modelData.available ? root.mutedColor : workspace.t.textDisabled
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.body
+                                color: modelData.available ? root.mutedColor : KetTheme.t.textDisabled
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 horizontalAlignment: Text.AlignRight
                             }
                         }
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: Metrics.px(5, workspace.t)
+                            Layout.preferredHeight: root.contextLook.trackHeight
                             radius: height / 2
                             color: root.trackColor
                             Rectangle {
@@ -282,30 +283,30 @@ Popup {
                 Text {
                     visible: root.limitRows.length === 0
                     text: "No plan limits are available for this provider."
-                    color: workspace.t.textDisabled
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.body
+                    color: KetTheme.t.textDisabled
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
                 Layout.preferredHeight: 1
                 color: root.trackColor
             }
             Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(11, workspace.t)
-                Layout.bottomMargin: Metrics.px(13, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(11, KetTheme.zoom)
+                Layout.bottomMargin: KetTheme.px(13, KetTheme.zoom)
                 visible: !root.claude || root.sessionUsage.mode !== "api_key"
                 text: "Limits are shared across conversations for this provider."
                 color: root.mutedColor
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.caption
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.px(13, KetTheme.zoom)
                 wrapMode: Text.WordWrap
             }
         }

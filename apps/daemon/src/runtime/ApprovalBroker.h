@@ -42,6 +42,8 @@ class ApprovalBroker final : public QObject {
     [[nodiscard]] QJsonObject pendingPage(const QString& sessionId, qint64 generation,
                                           const QString& afterId = {}) const;
     void cancelPending(const QString& sessionId, qint64 generation);
+    // #126: true only while a pending request can expire.
+    [[nodiscard]] bool expiryTimerActive() const { return expiryTimer_.isActive(); }
     // Async assistant cards belong to one turn; closing them never answers a provider.
     void expireAssistantQuestions(const QString& sessionId, qint64 generation);
     // Expires pending requests without answering them: their provider process is gone or no
@@ -71,6 +73,7 @@ class ApprovalBroker final : public QObject {
     };
 
     void expireRequests();
+    void updateExpiryTimer();
     void rememberResolved(const QString& approvalId, const QString& kind);
 
     QHash<QString, Pending> pending_;

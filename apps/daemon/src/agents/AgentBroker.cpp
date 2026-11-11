@@ -73,8 +73,17 @@ QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
         entries.append(originEntry(message));
-    return {{QStringLiteral("origin"), QStringLiteral("agent")},
-            {QStringLiteral("agent_messages"), entries}};
+    QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
+                       {QStringLiteral("agent_messages"), entries}};
+    // ADR 0067: the turn reviews another conversation and runs read-only.
+    if (std::any_of(messages.cbegin(), messages.cend(), [](const AgentMessageRecord& message) {
+            return message.kind == QStringLiteral("review");
+        }))
+        origin.insert(QStringLiteral("review_guard"), true);
+    if (!messages.isEmpty() && messages.first().delivery.startsWith("user_authorized:"))
+        origin.insert(QStringLiteral("user_release_id"),
+                      messages.first().delivery.mid(QStringLiteral("user_authorized:").size()));
+    return origin;
 }
 
 // What one message adds to its turn's user.message: its prompt block and its agent_messages
@@ -119,7 +128,10 @@ std::optional<std::pair<QString, qint64>> AgentBroker::sessionForToken(const QSt
 
 bool AgentBroker::isOperation(const QString& type) {
     return type == QStringLiteral("agents.whoami") || type == QStringLiteral("agents.list") ||
-           type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox");
+           type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
+           type == QStringLiteral("agents.work_report") ||
+           type == QStringLiteral("agents.request_user_decision") ||
+           type.startsWith(QStringLiteral("agents.team_"));
 }
 
 QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
@@ -140,6 +152,12 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return send(*caller, payload);
     if (operation == QStringLiteral("agents.inbox"))
         return inbox(*caller, payload);
+    if (operation == QStringLiteral("agents.work_report"))
+        return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
+    if (operation == QStringLiteral("agents.request_user_decision"))
+        return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
+    if (operation.startsWith(QStringLiteral("agents.team_")))
+        return host_->teamOperation(caller->sessionId, operation.mid(7), payload);
     return failure(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown agent operation."));
 }
@@ -172,7 +190,10 @@ QJsonObject AgentBroker::messageJson(const AgentMessageRecord& message) {
 }
 
 QJsonObject AgentBroker::whoami(const AgentConversation& caller) const {
-    return ok(conversationJson(caller));
+    QJsonObject value = conversationJson(caller);
+    if (const QJsonObject team = host_->teamMembership(caller.sessionId); !team.isEmpty())
+        value.insert(QStringLiteral("team"), team);
+    return ok(value);
 }
 
 QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject& payload) const {
@@ -198,6 +219,14 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
         if (values.size() >= limit)
             continue;
         QJsonObject value = conversationJson(conversation);
+        // ADR 0112: a member's role and lane.
+        if (const QJsonObject team = host_->teamMembership(conversation.sessionId);
+            !team.isEmpty()) {
+            value.insert(QStringLiteral("team"), team.value(QStringLiteral("name")));
+            value.insert(QStringLiteral("role"), team.value(QStringLiteral("role")));
+            if (team.contains(QStringLiteral("lane")))
+                value.insert(QStringLiteral("lane"), team.value(QStringLiteral("lane")));
+        }
         if (conversation.sessionId == caller.sessionId)
             value.insert(QStringLiteral("self"), true);
         values.append(value);
@@ -205,7 +234,19 @@ QJsonObject AgentBroker::list(const AgentConversation& caller, const QJsonObject
     return ok({{QStringLiteral("conversations"), values}, {QStringLiteral("total"), total}});
 }
 
-QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& payload) {
+QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject& request) {
+    QJsonObject payload = request;
+    // ADR 0112: inside a team, "leader" and "reviewer" name the team's member.
+    if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
+        role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
+        const QString number = host_->teamRoleNumber(caller.sessionId, role);
+        if (number.isEmpty())
+            return failure(QStringLiteral("not_on_team"),
+                           QStringLiteral("\"%1\" names a member of your team, and this "
+                                          "conversation is on no team. Use a number.")
+                               .arg(role));
+        payload.insert(QStringLiteral("to"), number);
+    }
     const QString to = normalizedNumber(payload.value(QStringLiteral("to")));
     if (to.isEmpty())
         return failure(QStringLiteral("invalid_number"),
@@ -280,19 +321,29 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
         return failure(QStringLiteral("message_too_large"),
                        QStringLiteral("This message is too large to deliver once encoded. Shorten "
                                       "it or remove control characters."));
-    if (const QString error = post(message); !error.isEmpty())
-        return failure(QStringLiteral("journal_error"), error);
+    // A review's answer follows the verdict policy however it is sent (ADR 0067).
+    const bool recorded = replied && recordReviewReply(message, *replied);
+    if (!recorded)
+        if (const QString error = post(message); !error.isEmpty())
+            return failure(QStringLiteral("journal_error"), error);
     if (replied && replied->state != QStringLiteral("answered")) {
         markState(*replied, QStringLiteral("answered"));
         if (auto origin = turns_.find(caller.sessionId); origin != turns_.end())
             origin->expectReply.removeAll(replied->id);
     }
-    const QString delivery = receiver->idle                          ? QStringLiteral("starting")
+    const QString delivery = recorded                                ? QStringLiteral("recorded")
+                             : receiver->idle                        ? QStringLiteral("starting")
                              : message.urgent && receiver->steerable ? QStringLiteral("steering")
                                                                      : QStringLiteral("queued");
     // The sender's transcript names the receiver in words; its tool row is provider-specific.
+    // The note shows the start of what was sent, as the mock's.
+    constexpr qsizetype noteCharacters = 500;
+    const QString excerpt = text.size() > noteCharacters
+                                ? text.left(noteCharacters).trimmed() + QStringLiteral("…")
+                                : text;
     host_->appendAgentNotice(caller.sessionId, caller.generation,
                              {{QStringLiteral("message_id"), message.id},
+                              {QStringLiteral("text"), excerpt},
                               {QStringLiteral("kind"), message.kind},
                               {QStringLiteral("state"), QStringLiteral("sent")},
                               {QStringLiteral("delivery"), delivery},
@@ -359,6 +410,20 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     const auto receiver = host_->agentConversation(sessionId);
     if (!receiver)
         return;
+    // A crash after persisting a claim must never replay the provider turn. The
+    // durable user.message marker tells us whether that turn was already opened.
+    for (auto message : journal_->agentMessagesTo(sessionId, receiver->generation,
+                                                  {QStringLiteral("releasing")})) {
+        const auto journaled = journal_->agentReleaseJournaled(message);
+        if (!journaled.has_value())
+            return;
+        markState(
+            message, *journaled ? QStringLiteral("delivered") : QStringLiteral("failed"),
+            *journaled
+                ? QString{}
+                : QStringLiteral("Delivery was interrupted before a turn started. You can retry."));
+        notice(message, message.state, message.error);
+    }
     QList<AgentMessageRecord> queued =
         journal_->agentMessagesTo(sessionId, receiver->generation, {QStringLiteral("queued")});
     if (queued.isEmpty())
@@ -366,7 +431,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     if (!receiver->idle) {
         QList<AgentMessageRecord> urgent;
         for (const AgentMessageRecord& message : std::as_const(queued))
-            if (message.urgent)
+            if (message.urgent && !message.delivery.startsWith("user_authorized:"))
                 urgent.append(message);
         if (urgent.isEmpty() || !receiver->steerable)
             return;
@@ -388,10 +453,38 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         return;
     }
+    QString authorizedBatch;
+    for (const auto& message : std::as_const(queued)) {
+        if (message.delivery.startsWith("user_authorized:")) {
+            authorizedBatch = message.delivery;
+            break;
+        }
+    }
     const int hourly = journal_->automaticAgentTurnsSince(
         sessionId, receiver->generation, QDateTime::currentDateTimeUtc().addSecs(-3600));
     QList<AgentMessageRecord> deliverable;
     for (AgentMessageRecord& message : queued) {
+        // The receiver may have switched provider since the review was requested.
+        if (message.kind == QStringLiteral("review") && !enforcesReviewGuard(receiver->provider)) {
+            markState(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
+            notice(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
+            continue;
+        }
+        if (!authorizedBatch.isEmpty()) {
+            if (message.delivery == authorizedBatch && !message.expiresAt.isEmpty() &&
+                QDateTime::fromString(message.expiresAt, Qt::ISODateWithMs) <=
+                    QDateTime::currentDateTimeUtc()) {
+                markState(message, QStringLiteral("expired"),
+                          QStringLiteral("expired_before_delivery"));
+                notice(message, message.state, message.error);
+                scheduleDelivery(sessionId);
+                continue;
+            }
+            // A user's release authorizes exactly this batch, not other pending messages.
+            if (message.delivery == authorizedBatch)
+                deliverable.append(message);
+            continue;
+        }
         const QString reason =
             message.hop > maximumAutomaticHop ? QStringLiteral("hop_limit")
             : journal_->automaticAgentTurnsInChain(message.chainId) >= maximumChainTurns
@@ -410,6 +503,25 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     keepOneTurn(deliverable);
     if (deliverable.isEmpty())
         return;
+    if (!authorizedBatch.isEmpty()) {
+        const qint64 turn = host_->agentTurnSequence(sessionId) + 1;
+        QString claimError;
+        if (!journal_->claimAgentRelease(deliverable, turn, &claimError)) {
+            for (auto message : deliverable) {
+                const auto current = journal_->agentMessage(message.id);
+                if (current && current->state == "queued" && current->delivery == authorizedBatch) {
+                    markState(message, QStringLiteral("failed"), claimError);
+                    notice(message, message.state, claimError);
+                }
+            }
+            return;
+        }
+        for (auto& message : deliverable) {
+            message.state = QStringLiteral("releasing");
+            message.deliveredTurn = turn;
+            notice(message, message.state, {});
+        }
+    }
     TurnOrigin origin;
     origin.automatic = true;
     origin.sender = {{QStringLiteral("number"), deliverable.first().fromNumber},
@@ -422,6 +534,8 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         if (message.expectReply)
             origin.expectReply.append(message.id);
+        if (message.kind == QStringLiteral("review"))
+            origin.review = true;
     }
     turns_.insert(sessionId, origin);
     const QString error =
@@ -430,18 +544,29 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     if (!error.isEmpty()) {
         turns_.remove(sessionId);
         for (AgentMessageRecord& message : deliverable) {
-            markState(message, QStringLiteral("failed"), error);
-            notice(message, QStringLiteral("failed"), error);
+            // startAgentTurn can fail after journaling the input. Never make that
+            // already-opened turn eligible for a second provider invocation.
+            const auto journaled = authorizedBatch.isEmpty()
+                                       ? std::optional<bool>(false)
+                                       : journal_->agentReleaseJournaled(message);
+            if (!journaled.has_value())
+                continue;
+            markState(message, *journaled ? QStringLiteral("delivered") : QStringLiteral("failed"),
+                      error);
+            notice(message, message.state, error);
         }
         return;
     }
     const qint64 turn = host_->agentTurnSequence(sessionId);
     for (AgentMessageRecord& message : deliverable) {
         message.state = QStringLiteral("delivered");
-        message.delivery = QStringLiteral("auto");
+        if (authorizedBatch.isEmpty())
+            message.delivery = QStringLiteral("auto");
         message.deliveredTurn = turn;
         message.deliveredAt = nowIso();
         (void)journal_->updateAgentMessage(message);
+        if (!authorizedBatch.isEmpty())
+            notice(message, message.state, {});
     }
 }
 
@@ -451,6 +576,9 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
     turns_.insert(sessionId, origin);
     QList<AgentMessageRecord> pending = journal_->agentMessagesTo(
         sessionId, generation, {QStringLiteral("queued"), QStringLiteral("held")});
+    // A review request runs only in its own read-only turn (ADR 0067), never in the user's.
+    pending.removeIf(
+        [](const AgentMessageRecord& message) { return message.kind == QStringLiteral("review"); });
     if (pending.isEmpty())
         return {};
     // Messages left over are delivered when this turn ends.
@@ -515,6 +643,11 @@ void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, c
         origin->lastText = text.toString();
         return;
     }
+    if (type == QStringLiteral("user.message") &&
+        payload.value(QStringLiteral("origin")).toString() != QStringLiteral("agent")) {
+        userRequests_.insert(sessionId, payload.value(QStringLiteral("text")).toString());
+        return;
+    }
     if (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped")) {
         finishTurn(sessionId, generation,
                    type == QStringLiteral("runtime.stopped")
@@ -534,6 +667,8 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
         return;
     const TurnOrigin origin = found.value();
     turns_.erase(found);
+    if (!origin.review)
+        reviewFinishedTurn(sessionId, generation, status, origin);
     if (!origin.automatic || origin.expectReply.isEmpty())
         return;
     const bool completed = status.isEmpty() || status == QStringLiteral("completed");
@@ -571,7 +706,9 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
         reply.body = truncatedUtf8(text, maximumBodyBytes);
         reply.state = QStringLiteral("queued");
         reply.createdAt = nowIso();
-        if (const QString error = post(reply); !error.isEmpty()) {
+        if (recordReviewReply(reply, *request)) {
+            // Recorded in the working conversation without starting its turn.
+        } else if (const QString error = post(reply); !error.isEmpty()) {
             qWarning("Unable to queue the reply to agent message %s: %s", qUtf8Printable(id),
                      qUtf8Printable(error));
             continue;
@@ -643,7 +780,7 @@ void AgentBroker::notice(const AgentMessageRecord& message, const QString& state
     outgoing.insert(QStringLiteral("direction"), QStringLiteral("outgoing"));
     outgoing.insert(QStringLiteral("peer_number"), message.toNumber);
     host_->appendAgentNotice(message.fromSession, message.fromGeneration, outgoing);
-    if (state != QStringLiteral("held"))
+    if (state != QStringLiteral("held") && !message.delivery.startsWith("user_authorized:"))
         return;
     QJsonObject incoming = common;
     incoming.insert(QStringLiteral("direction"), QStringLiteral("incoming"));
@@ -664,6 +801,9 @@ void AgentBroker::forget(const QString& sessionId) {
     }
     turns_.remove(sessionId);
     pendingDeliveries_.remove(sessionId);
+    reviewSnapshots_.remove(sessionId);
+    snapshotEpochs_.remove(sessionId);
+    userRequests_.remove(sessionId);
 }
 
 void AgentBroker::resume() {

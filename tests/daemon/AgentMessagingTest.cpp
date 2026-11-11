@@ -9,9 +9,7 @@
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
 
-#include "FakeClaude.h"
-#include "FakeCodex.h"
-#include "FakeCursor.h"
+#include "AgentTestFixture.h"
 
 #include <QFile>
 #include <QJsonArray>
@@ -26,111 +24,7 @@
 
 using namespace ketplus::daemon;
 
-namespace {
-
-QJsonObject request(const QString& type, const QJsonObject& payload = {},
-                    const QString& sessionId = {}, const qint64 generation = -1) {
-    QJsonObject result{{"protocol_version", protocol::currentVersion},
-                       {"message_id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
-                       {"message_type", type},
-                       {"sent_at", protocol::timestamp()},
-                       {"payload", payload}};
-    if (!sessionId.isEmpty())
-        result.insert("session_id", sessionId);
-    if (generation >= 0)
-        result.insert("session_generation", generation);
-    return result;
-}
-
-QString text(const QJsonObject& object) {
-    return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
-}
-
-QByteArray logText(const QString& path) {
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
-}
-
-struct Fixture final {
-    QTemporaryDir directory;
-    QString codexLog;
-    QString claudeLog;
-    QString cursorLog;
-    std::unique_ptr<LocalJournal> journal;
-    std::unique_ptr<CodexAdapter> codex;
-    std::unique_ptr<ClaudeAdapter> claude;
-    std::unique_ptr<CursorAdapter> cursor;
-    std::unique_ptr<SessionHost> host;
-
-    bool open(const bool endpoint = false) {
-        if (!directory.isValid())
-            return false;
-        codexLog = directory.filePath("codex.log");
-        claudeLog = directory.filePath("claude.log");
-        cursorLog = directory.filePath("cursor.log");
-        if (!writeFakeCodex(directory.filePath("fake-codex"), codexLog) ||
-            !writeFakeClaude(directory.filePath("fake-claude"), claudeLog) ||
-            !writeFakeCursor(directory.filePath("fake-cursor"), cursorLog))
-            return false;
-        journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite3"));
-        codex = std::make_unique<CodexAdapter>(directory.filePath("fake-codex"));
-        claude = std::make_unique<ClaudeAdapter>(directory.filePath("fake-claude"));
-        cursor = std::make_unique<CursorAdapter>(directory.filePath("fake-cursor"));
-        restart(endpoint);
-        return journal->isOpen();
-    }
-
-    void restart(const bool endpoint = false) {
-        host.reset();
-        host =
-            std::make_unique<SessionHost>(journal.get(), codex.get(), claude.get(), cursor.get());
-        if (endpoint)
-            host->setAgentEndpoint(directory.filePath("daemon.sock"), "/opt/ketplus_daemon");
-    }
-
-    QString start(const QString& provider, const QString& prompt, const QString& sessionId = {}) {
-        const QJsonObject result = host->handleCommand(
-            request("session.start_turn",
-                    {{"worktree_path", directory.path()},
-                     {"prompt", prompt},
-                     {"options",
-                      QJsonObject{{"provider", provider}, {"permission", "workspace-write"}}}},
-                    sessionId, sessionId.isEmpty() ? -1 : 1),
-            "desktop-test");
-        return result.value("ok").toBool() ? result.value("session_id").toString() : QString{};
-    }
-
-    QJsonArray events(const QString& sessionId) const {
-        return journal->eventsAfter(sessionId, 1, 0);
-    }
-
-    int count(const QString& sessionId, const QString& type) const {
-        int total = 0;
-        for (const QJsonValue& value : events(sessionId))
-            if (value.toObject().value("event_type").toString() == type)
-                ++total;
-        return total;
-    }
-
-    QList<QJsonObject> payloads(const QString& sessionId, const QString& type) const {
-        QList<QJsonObject> result;
-        for (const QJsonValue& value : events(sessionId))
-            if (value.toObject().value("event_type").toString() == type)
-                result.append(value.toObject().value("payload").toObject());
-        return result;
-    }
-
-    QString number(const QString& sessionId) const {
-        return journal->conversationNumber(sessionId, 1);
-    }
-
-    QJsonObject agents(const QString& sessionId, const QString& operation,
-                       const QJsonObject& payload = {}) {
-        return host->handleAgentCommand(host->agentToken(sessionId), operation, payload);
-    }
-};
-
-} // namespace
+using namespace agent_test;
 
 class AgentMessagingTest final : public QObject {
     Q_OBJECT
@@ -207,6 +101,21 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(protocol::features(1).contains("agents.messaging/1"));
     }
 
+    void sentNoticeShowsABoundedExcerpt() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        const QJsonObject sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", "#" + fixture.number(receiver)}, {"text", QString(2000, QLatin1Char('x'))}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        QCOMPARE(fixture.payloads(sender, "agent_message.state").last().value("text").toString(),
+                 QString(500, QLatin1Char('x')) + QStringLiteral("…"));
+    }
+
     void messageStartsIdleTurnAndFinalAnswerReturnsAsReply() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -234,6 +143,8 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(sentNotice.value("peer_number").toString(), fixture.number(receiver));
         QCOMPARE(sentNotice.value("peer_title").toString(), "receiver");
         QVERIFY(sentNotice.value("expect_reply").toBool());
+        // The sender's note shows what it sent, bounded so a 32 KiB message stays small.
+        QCOMPARE(sentNotice.value("text").toString(), "Please review the parser.");
 
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
         const QJsonObject delivered = fixture.payloads(receiver, "user.message").last();
@@ -454,6 +365,183 @@ class AgentMessagingTest final : public QObject {
                  "steer");
         // The running turn was steered, not replaced by an automatic one.
         QCOMPARE(fixture.count(receiver, "user.message"), 1);
+    }
+
+    void heldReleaseWaitsForBusyReceiverAndValidatesTheWholeBatch() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        const auto receiver = fixture.start("claude", "slow-start");
+        AgentMessageRecord held;
+        held.id = "busy-held";
+        held.chainId = "chain";
+        held.hop = 7;
+        held.fromSession = sender;
+        held.fromGeneration = 1;
+        held.fromNumber = fixture.number(sender);
+        held.toSession = receiver;
+        held.toGeneration = 1;
+        held.toNumber = fixture.number(receiver);
+        held.kind = "notice";
+        held.body = "Release after this turn";
+        held.state = "held";
+        held.urgent = true; // explicit release never steers/interferes with the active turn
+        held.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(held));
+        auto expired = held;
+        expired.id = "expired-held";
+        expired.expiresAt =
+            QDateTime::currentDateTimeUtc().addSecs(-10).toString(Qt::ISODateWithMs);
+        QVERIFY(fixture.journal->insertAgentMessage(expired));
+        auto release = [&](QJsonArray ids) {
+            return fixture.host->handleCommand(
+                request("session.agent_messages.release", {{"message_ids", ids}}, receiver, 1),
+                "desktop");
+        };
+        QVERIFY(!release({held.id, expired.id}).value("ok").toBool());
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "held");
+        QVERIFY(!release({held.id, held.id}).value("ok").toBool());
+        QVERIFY(!release({held.id, "missing"}).value("ok").toBool());
+        const auto accepted = release({held.id});
+        QVERIFY2(accepted.value("ok").toBool(), qPrintable(text(accepted)));
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "queued");
+        QCOMPARE(fixture.count(receiver, "user.message"), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "delivered");
+        QVERIFY(fixture.journal->agentMessage(held.id)->delivery.startsWith("user_authorized:"));
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        QVERIFY(fixture.host->handleCommand(request("session.delete", {}, receiver, 1), "desktop")
+                    .value("ok")
+                    .toBool());
+        QVERIFY(!release({expired.id}).value("ok").toBool());
+    }
+
+    void userReleasesOnlyTheSelectedHeldBatch_data() {
+        QTest::addColumn<QString>("reason");
+        for (const auto* reason : {"hop_limit", "chain_limit", "hourly_limit"})
+            QTest::newRow(reason) << QString::fromLatin1(reason);
+    }
+
+    void userReleasesOnlyTheSelectedHeldBatch() {
+        QFETCH(QString, reason);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        const auto receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        AgentMessageRecord message;
+        message.id = "selected";
+        message.chainId = "held-chain";
+        message.hop = AgentBroker::maximumAutomaticHop + 1;
+        message.fromSession = sender;
+        message.fromGeneration = 1;
+        message.fromNumber = fixture.number(sender);
+        message.fromTitle = "sender";
+        message.toSession = receiver;
+        message.toGeneration = 1;
+        message.toNumber = fixture.number(receiver);
+        message.kind = "notice";
+        message.body = "Review findings";
+        message.state = "held";
+        message.error = reason;
+        message.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        message.id = "not-selected";
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        const auto command = request("session.agent_messages.release",
+                                     {{"message_ids", QJsonArray{"selected"}}}, receiver, 1);
+        QVERIFY(!fixture.host->handleCommand(command, "cloud-control-v2").value("ok").toBool());
+        QVERIFY(!fixture
+                     .agents(sender, "session.agent_messages.release",
+                             {{"message_ids", QJsonArray{"selected"}}})
+                     .value("ok")
+                     .toBool());
+        const auto first = fixture.host->handleCommand(command, "desktop-test");
+        QVERIFY2(first.value("ok").toBool(), qPrintable(text(first)));
+        QCOMPARE(fixture.host->handleCommand(command, "desktop-test"), first);
+        auto stale = command;
+        stale.insert("session_generation", 2);
+        QVERIFY(!fixture.host->handleCommand(stale, "desktop-test").value("ok").toBool());
+        fixture.restart(); // authorization survived before the delivery timer ran
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        QCOMPARE(fixture.journal->agentMessage("selected")->state, "delivered");
+        QCOMPARE(fixture.journal->agentMessage("not-selected")->state, "held");
+        const auto origin = fixture.payloads(receiver, "user.message").last();
+        QCOMPARE(origin.value("user_release_id"), command.value("message_id"));
+        QCOMPARE(origin.value("agent_messages").toArray().size(), 1);
+        QVERIFY(
+            !fixture.host
+                 ->handleCommand(request("session.agent_messages.release",
+                                         {{"message_ids", QJsonArray{"selected"}}}, receiver, 1),
+                                 "desktop-test")
+                 .value("ok")
+                 .toBool());
+        fixture.restart();
+        QTest::qWait(30);
+        QCOMPARE(fixture.count(receiver, "user.message"), 2);
+        // An unrelated later message still goes through the ordinary loop guard.
+        message.id = "future";
+        message.state = "queued";
+        message.error.clear();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        fixture.restart();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage("future")->state, QString("held"),
+                                  5000);
+    }
+
+    void interruptedReleaseHasNoDuplicateTurnAndRemainsRetryable_data() {
+        QTest::addColumn<bool>("journaled");
+        QTest::newRow("before-input") << false;
+        QTest::newRow("after-input") << true;
+    }
+
+    void interruptedReleaseHasNoDuplicateTurnAndRemainsRetryable() {
+        QFETCH(bool, journaled);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        const auto receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        AgentMessageRecord message;
+        message.id = "recover";
+        message.chainId = "chain";
+        message.hop = 7;
+        message.fromSession = sender;
+        message.fromGeneration = 1;
+        message.fromNumber = fixture.number(sender);
+        message.toSession = receiver;
+        message.toGeneration = 1;
+        message.toNumber = fixture.number(receiver);
+        message.kind = "notice";
+        message.body = "Results";
+        message.state = "held";
+        message.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        QVERIFY(fixture.journal->authorizeAgentMessages(receiver, 1, {"recover"}, "release-crash"));
+        message = *fixture.journal->agentMessage("recover");
+        QVERIFY(fixture.journal->claimAgentRelease({message}, 2));
+        if (journaled)
+            QVERIFY(fixture.journal->appendEvent(
+                        receiver, 1, "user.message",
+                        {{"origin", "agent"},
+                         {"user_release_id", "release-crash"},
+                         {"agent_messages", QJsonArray{QJsonObject{{"message_id", "recover"}}}}}) >
+                    0);
+        fixture.restart();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage("recover")->state,
+                                  journaled ? QString("delivered") : QString("failed"), 5000);
+        QCOMPARE(fixture.count(receiver, "user.message"), journaled ? 2 : 1);
+        if (!journaled) {
+            const auto result = fixture.host->handleCommand(
+                request("session.agent_messages.release", {{"message_ids", QJsonArray{"recover"}}},
+                        receiver, 1),
+                "desktop-test");
+            QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        }
     }
 
     void loopGuardHoldsMessagesForTheUsersNextTurn() {
@@ -758,6 +846,13 @@ class AgentMessagingTest final : public QObject {
                  "forbidden");
         QCOMPARE(roundTrip(agent, request("approval.resolve")).value("error_code").toString(),
                  "forbidden");
+        QCOMPARE(roundTrip(agent, request("session.agent_messages.release"))
+                     .value("error_code")
+                     .toString(),
+                 "forbidden");
+        QCOMPARE(
+            roundTrip(agent, request("session.agent_messages.read")).value("error_code").toString(),
+            "forbidden");
         QCOMPARE(roundTrip(agent, request("storage.retention.read")).value("error_code").toString(),
                  "forbidden");
         QCOMPARE(
@@ -804,7 +899,7 @@ class AgentMessagingTest final : public QObject {
                 .toObject()
                 .value("tools")
                 .toArray();
-        QCOMPARE(tools.size(), 4);
+        QCOMPARE(tools.size(), 6); // with work_report and request_user_decision
         const QJsonObject whoami = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"},
              {"id", 3},
@@ -838,7 +933,8 @@ class AgentMessagingTest final : public QObject {
                      .value("code")
                      .toInt(),
                  -32602);
-        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.send"}));
+        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send"}));
     }
 };
 

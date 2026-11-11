@@ -1,7 +1,7 @@
 #pragma once
-#include <QDialog>
 #include <QJsonObject>
 #include <QStringList>
+#include <QWidget>
 #include <functional>
 
 namespace ketplus {
@@ -11,5 +11,8 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                                  std::function<void(const QString&)> selected,
                                  const QString& fileContextPath = {},
                                  const QStringList& repositories = {},
-                                 const QString& currentRepository = {});
+                                 const QString& currentRepository = {},
+                                 // Create worktree… for this conversation: the repository the
+                                 // picker lists and the context revision it last read.
+                                 std::function<void(const QString&, qint64)> createWorktree = {});
 } // namespace ketplus

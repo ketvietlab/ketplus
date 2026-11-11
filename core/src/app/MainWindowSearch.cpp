@@ -1,17 +1,20 @@
 #include "app/MainWindow.h"
 
+#include "KetAppearance.h"
+
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
-#include "workspace/ExplorerPanel.h"
 #include "ui/Theme.h"
+#include "workspace/ExplorerPanel.h"
 #include "workspace/SearchPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
-#include <QMessageBox>
+#include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -20,8 +23,6 @@
 
 namespace ketplus {
 namespace {
-
-constexpr int searchPanelWidth = 320;
 
 QString comparablePath(const QString& path) {
     const QFileInfo file(path);
@@ -39,7 +40,7 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     searchPanel_ = new SearchPanel(workspaceSplit_);
     workspaceSplit_->insertWidget(0, searchPanel_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(searchPanel_), 0);
-    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
+    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorColumn_), 1);
     connect(searchPanel_, &SearchPanel::searchRequested, this,
             qOverload<>(&MainWindow::startWorkspaceSearch));
     connect(searchPanel_, &SearchPanel::cancelRequested, this, [this] {
@@ -47,11 +48,8 @@ SearchPanel* MainWindow::ensureSearchPanel() {
         searchPanel_->setSearching(false);
         searchPanel_->setStatusText(QStringLiteral("Search cancelled"));
     });
-    connect(searchPanel_, &SearchPanel::replaceAllRequested, this,
-            &MainWindow::replaceInWorkspace);
+    connect(searchPanel_, &SearchPanel::replaceAllRequested, this, &MainWindow::replaceInWorkspace);
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
-    connect(searchPanel_, &SearchPanel::hideRequested, this,
-            [this] { setSearchPanelVisible(false); });
     applySearchPanelColors();
     return searchPanel_;
 }
@@ -67,15 +65,19 @@ void MainWindow::applySearchPanelColors() {
                                   palette.textSecondary, palette.warning);
 }
 
-void MainWindow::setSearchPanelVisible(const bool visible) {
+void MainWindow::setSearchPanelVisible(bool visible) {
+    const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(searchPanelAction_, visible);
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* panel = ensureSearchPanel();
         if (!panel->isVisible()) {
             // Closing the search panel returns to whichever panel it replaced.
-            panelBeforeSearch_ = explorer_ != nullptr && explorer_->isVisible() ? SidePanel::Explorer
-                                 : gitChanges_ != nullptr && gitChanges_->isVisible()
-                                     ? SidePanel::SourceControl
-                                     : SidePanel::None;
+            panelBeforeSearch_ =
+                explorer_ != nullptr && explorer_->isVisible()       ? SidePanel::Explorer
+                : gitChanges_ != nullptr && gitChanges_->isVisible() ? SidePanel::SourceControl
+                                                                     : SidePanel::None;
         }
         if (explorer_ != nullptr) {
             explorer_->hide();
@@ -85,8 +87,10 @@ void MainWindow::setSearchPanelVisible(const bool visible) {
         }
         panel->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
+        // The mock's 280 px column, at the interface zoom.
+        const int searchPanelWidth = qRound(ket::Appearance::instance().scaled(280));
         sizes[workspaceSplit_->indexOf(panel)] = searchPanelWidth;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] =
+        sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - searchPanelWidth);
         workspaceSplit_->setSizes(sizes);
         {
@@ -283,8 +287,7 @@ void MainWindow::replaceInWorkspace() {
     // Replace with exactly what produced the listed results, never a query edited since.
     const WorkspaceSearchOptions options = lastSearchOptions_;
     if (panel->options() != options) {
-        panel->setStatusText(
-            QStringLiteral("The search changed. Search again before replacing."));
+        panel->setStatusText(QStringLiteral("The search changed. Search again before replacing."));
         return;
     }
     if (panel->resultsTruncated()) {
@@ -301,7 +304,7 @@ void MainWindow::replaceInWorkspace() {
     }
 
     const QString replacement = panel->replacement();
-    const auto answer = QMessageBox::question(
+    const auto answer = message_dialog::question(
         this, QStringLiteral("Replace in files"),
         QStringLiteral("Replace %L1 matches in %L2 files with “%3”?\n\n"
                        "Open files change in the editor and can be undone. Other files are "
@@ -355,9 +358,9 @@ void MainWindow::replaceInWorkspace() {
                                  .arg(changedFiles),
                              4000);
     if (!failures.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Some files were not changed"),
-                             QStringLiteral("These files could not be updated:\n%1")
-                                 .arg(failures.join(QLatin1Char('\n'))));
+        message_dialog::warning(this, QStringLiteral("Some files were not changed"),
+                                QStringLiteral("These files could not be updated:\n%1")
+                                    .arg(failures.join(QLatin1Char('\n'))));
     }
     git_->scheduleRefresh();
     startWorkspaceSearch();

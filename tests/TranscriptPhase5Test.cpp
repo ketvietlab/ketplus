@@ -133,7 +133,7 @@ void AgentWorkspaceViewTest::activityGroupRolesUpdateIncrementally() {
     QCOMPARE(model.count(), 2);
     QCOMPARE(model.renderedCount(), 3);
     QCOMPARE(roles(&model, 1).value("groupRole").toString(), QStringLiteral("leader"));
-    QCOMPARE(roles(&model, 1).value("groupSummary").toString(), QStringLiteral("Read 2 files"));
+    QCOMPARE(roles(&model, 1).value("groupSummary").toString(), QStringLiteral("Explored 2 files"));
     QCOMPARE(rendered(&model, 2).value("groupRole").toString(), QStringLiteral("member"));
 
     QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
@@ -270,6 +270,10 @@ void AgentWorkspaceViewTest::readerHeldWhenPrependTakesOverGroupLeader() {
     transcript->setProperty("followTail", false);
     QTRY_VERIFY(delegateForKey(transcript, "c0"));
     flushDeferredCalls();
+    // The reader has the first row at the top of the viewport, past the top padding.
+    transcript->setProperty("contentY", transcript->property("headerHeight"));
+    QCOMPARE(transcript->property("contentY").toDouble(),
+             transcript->property("headerHeight").toDouble());
     auto* geometry = model->geometry();
     const auto screenTop = [&](const QString& key) {
         return geometry->top(geometry->rowForKey(key)) -
@@ -435,22 +439,22 @@ void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
     // Collapsed: one summary line whose chevron follows the text, and no rail.
     QQuickItem* summary = nullptr;
     QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
-    QCOMPARE(summary->property("text").toString(), QStringLiteral("Read 3 files"));
+    QCOMPARE(summary->property("text").toString(), QStringLiteral("Explored 3 files"));
     auto* chevron = findVisualItem(root, "transcriptGroupChevron");
     QVERIFY(chevron);
     QVERIFY(chevron->x() > summary->x() + summary->width() - 0.5);
     QVERIFY(chevron->x() < summary->x() + summary->width() + 8);
-    QCOMPARE(chevron->rotation(), 0.0);
+    QCOMPARE(chevron->property("name").toString(), QStringLiteral("chevron-down"));
     QVERIFY(delegateAt(transcript, 1));
     auto* collapsedRail = findVisualItem(delegateAt(transcript, 1), "transcriptGroupRail");
     QVERIFY(collapsedRail && !collapsedRail->isVisible());
 
-    // Expanded: every member sits right of the rail and draws no icon of its own.
+    // Expanded: every member sits right of the rail with its kind's icon, as in the mock.
     QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "c1"),
                                       Q_ARG(QVariant, true)));
     QTRY_COMPARE(view.messageModel()->count(), 4);
     QTRY_VERIFY((chevron = findVisualItem(root, "transcriptGroupChevron")) &&
-                chevron->rotation() == 90.0);
+                chevron->property("name").toString() == QStringLiteral("chevron-up"));
     for (int index = 1; index <= 3; ++index) {
         QQuickItem* row = nullptr;
         QTRY_VERIFY((row = delegateAt(transcript, index)) != nullptr);
@@ -463,8 +467,66 @@ void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
                  qPrintable(QStringLiteral("title at %1, rail at %2").arg(titleX).arg(rail->x())));
         auto* header = findVisualItem(row, "transcriptActivityHeader");
         QVERIFY(header);
-        QCOMPARE(title->mapToItem(header, QPointF()).x(), 0.0);
+        QVERIFY(title->mapToItem(header, QPointF()).x() > 0.0);
     }
+}
+
+// The mock's step line (TranscriptActivityItem.qml): a short title, then what the step acted
+// on; a failure under it; a quiet group summary.
+void AgentWorkspaceViewTest::activityStepsReadAsTheMock() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    QVariantMap read = readRow("r", "Read: modules/ai/src/agent/qml/AgentSidebar.qml");
+    read["command"] = QString();
+    QVariantMap measure = readRow("m", "top -l 4");
+    measure["subtype"] = "command";
+    measure["commandDescription"] = "Measure idle CPU";
+    QVariantMap tests = readRow("t", "ctest -R sidebar");
+    tests["subtype"] = "command";
+    tests["status"] = "failed";
+    tests["exitCode"] = 8;
+    tests["durationMs"] = 12400;
+    // A failure leaves the summary's colour as it is without one.
+    QVariantMap passed = tests;
+    passed["status"] = "completed";
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, passed}, "workspace:quiet");
+    QQuickItem* summary = nullptr;
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    const QColor quiet = summary->property("color").value<QColor>();
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, tests}, "workspace:steps");
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr &&
+                summary->property("text").toString().contains("failed"));
+    QCOMPARE(summary->property("color").value<QColor>(), quiet);
+
+    QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "r"),
+                                      Q_ARG(QVariant, true)));
+    QTRY_COMPARE(view.messageModel()->count(), 4);
+    const auto line = [&](int index) {
+        QQuickItem* row = delegateAt(transcript, index);
+        const auto text = [&](const char* name) {
+            auto* item = row ? findVisualItem(row, name) : nullptr;
+            return item && item->isVisible() ? item->property("text").toString() : QString();
+        };
+        return QStringList{text("transcriptActivityTitle"), text("transcriptActivityDetail"),
+                           text("transcriptActivityStatus")};
+    };
+    QTRY_COMPARE(line(1), (QStringList{"Read", "modules/ai/src/agent/qml/AgentSidebar.qml", ""}));
+    QTRY_COMPARE(line(2), (QStringList{"Measure idle CPU", "top -l 4", ""}));
+    QTRY_COMPARE(line(3),
+                 (QStringList{"Ran", "ctest -R sidebar", "Failed · exit code 8 · 12.4 s"}));
+    // Seconds round before minutes split, so 119.6 s never reads "1m 60s".
+    tests["durationMs"] = 119600;
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, tests}, "workspace:minutes");
+    QTRY_VERIFY(findVisualItem(root, "transcriptGroupSummary") != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "r"),
+                                      Q_ARG(QVariant, true)));
+    QTRY_COMPARE(view.messageModel()->count(), 4);
+    QTRY_COMPARE(line(3).last(), QStringLiteral("Failed · exit code 8 · 2m 00s"));
 }
 
 void AgentWorkspaceViewTest::activityGroupCopyIncludesMembers() {
@@ -485,6 +547,108 @@ void AgentWorkspaceViewTest::activityGroupCopyIncludesMembers() {
         QVERIFY2(copyText().contains(QLatin1String(command)), qPrintable(copyText()));
 }
 
+// The answer being written does not scan its Markdown for fences on every chunk, also when
+// a steer has landed under it and it is no longer the last row.
+void AgentWorkspaceViewTest::streamingCodeWaitsForCopyChromeBehindASteer() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+
+    const QString code = QStringLiteral("Use this:\n\n```cpp\nint value = 1;\n```\n\n");
+    QVariantMap answer{{QStringLiteral("kind"), QStringLiteral("assistant")},
+                       {QStringLiteral("body"), code},
+                       {QStringLiteral("meta"), QStringLiteral("Codex · streaming")},
+                       {QStringLiteral("filePath"), QString()}};
+    view.resetMessages({textRow("u", "user", "Show code")}, "workspace:streaming-code");
+    view.setSessionState(QStringLiteral("Streaming"), QStringLiteral("Working…"), true);
+    view.appendMessage(answer);
+    QTRY_VERIFY(delegateAt(transcript, 1));
+    QTest::qWait(100);
+    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+
+    view.appendMessage(textRow("s", "user", "Also explain it"));
+    QTRY_VERIFY(delegateAt(transcript, 2));
+    for (int chunk = 0; chunk < 3; ++chunk) {
+        answer.insert(QStringLiteral("body"), answer.value(QStringLiteral("body")).toString() +
+                                                  QStringLiteral("More text arrives.\n\n"));
+        view.updateMessage(1, answer);
+        QTest::qWait(50);
+        QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+    }
+
+    // Written: the frame gets its Copy button without hover.
+    answer.insert(QStringLiteral("meta"), QStringLiteral("Codex"));
+    view.updateMessage(1, answer);
+    view.setSessionState(QStringLiteral("Ready"), QString(), false);
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+}
+
+// A steer joins the running turn, so the text above it is not the turn's answer; and an
+// answer whose turn was stopped says so above its Copy button.
+void AgentWorkspaceViewTest::steerDoesNotEndTheAnswerAndAStoppedAnswerSaysSo() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+
+    QVariantMap steer = textRow("s", "user", "Also check dark mode");
+    steer.insert("eventType", "turn.steered");
+    QVariantMap end{{"kind", "system"},        {"category", "system"},     {"subtype", "turnEnd"},
+                    {"status", "interrupted"}, {"body", "stopped by you"}, {"messageKey", "end"},
+                    {"meta", "Turn"},          {"filePath", QString()}};
+    view.resetMessages({textRow("u", "user", "Fix the spinner"),
+                        textRow("a1", "assistant", "I will read the sidebar first."), steer,
+                        textRow("a2", "assistant", "The spinner now steps on one clock."), end},
+                       "workspace:steered-answer");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QTRY_VERIFY(delegateAt(transcript, 3));
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyMessageButton"));
+    // Copy answer takes what the agent wrote on both sides of the steer, not the steer.
+    QVERIFY(clickButton(childNamed(delegateAt(transcript, 3), "copyMessageButton")));
+    QCOMPARE(
+        QGuiApplication::clipboard()->text(),
+        QStringLiteral("I will read the sidebar first.\n\nThe spinner now steps on one clock."));
+    auto* stopped = childNamed(delegateAt(transcript, 3), "answerStoppedNote");
+    QVERIFY(stopped);
+    QTRY_VERIFY(stopped->isVisible());
+    auto* earlier = childNamed(delegateAt(transcript, 1), "answerStoppedNote");
+    QVERIFY(earlier);
+    QVERIFY(!earlier->isVisible());
+
+    // A failure draws closer to its turn end; that holds when the row under it becomes the
+    // turn end in place, with no row added or removed.
+    QVariantMap error{{"kind", "error"},          {"category", "system"}, {"status", "failed"},
+                      {"body", "The CLI exited"}, {"messageKey", "err"},  {"meta", "Agent · error"},
+                      {"filePath", QString()}};
+    QVariantMap event{{"kind", "system"},        {"category", "system"}, {"subtype", "event"},
+                      {"body", "Model changed"}, {"messageKey", "next"}, {"meta", "Event"},
+                      {"filePath", QString()}};
+    view.resetMessages({textRow("u", "user", "Fix the spinner"), error, event},
+                       "workspace:failed-turn");
+    QTRY_VERIFY(delegateAt(transcript, 2));
+    QTest::qWait(100);
+    const qreal apart = delegateAt(transcript, 1)->height();
+    QVERIFY(!delegateAt(transcript, 1)->property("errorBeforeTurnEnd").toBool());
+    QVariantMap failedEnd = end;
+    failedEnd.insert("status", "failed");
+    failedEnd.insert("messageKey", "next");
+    view.updateMessage(2, failedEnd);
+    QTRY_VERIFY(delegateAt(transcript, 1)->property("errorBeforeTurnEnd").toBool());
+    QTRY_VERIFY(delegateAt(transcript, 1)->height() < apart);
+}
+
 void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -503,9 +667,13 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     QVERIFY(QMetaObject::invokeMethod(transcript, "positionViewAtBeginning"));
     QTRY_VERIFY(delegateAt(transcript, 3));
 
-    // Copy chrome is created lazily: nothing until a row is hovered or keyboard-focused.
+    // Message copy chrome is created lazily: nothing until a row is hovered or
+    // keyboard-focused, except the turn's answer, which always offers Copy answer under it,
+    // as in the mock.
     QVERIFY(!childNamed(delegateAt(transcript, 0), "copyMessageButton"));
-    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    // A code frame always carries its Copy button, as the kit's code block does.
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
     QVERIFY(!childNamed(delegateAt(transcript, 2), "copyActivityButton"));
     view.quickView()->requestActivate();
     QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
@@ -546,8 +714,9 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
     auto* answerButton = childNamed(delegateAt(transcript, 3), "copyMessageButton");
     QCOMPARE(answerButton->findChild<QObject*>("ketToolTip")->property("text").toString(),
-             QStringLiteral("Copy response"));
-    if (const auto capture = qEnvironmentVariable("KETPLUS_ANSWER_COPY_CAPTURE"); !capture.isEmpty()) {
+             QStringLiteral("Copy answer"));
+    if (const auto capture = qEnvironmentVariable("KETPLUS_ANSWER_COPY_CAPTURE");
+        !capture.isEmpty()) {
         QTest::qWait(150);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
@@ -555,9 +724,22 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     // The Markdown source, not the rendered text.
     QCOMPARE(QGuiApplication::clipboard()->text(), answer + QStringLiteral("\n\nBuilt it."));
 
-    // Like the rest of the row chrome, it leaves with the hover or focus.
+    // Unlike the rest of the row chrome, it stays when the hover or focus leaves.
     transcript->setProperty("keyboardIndex", 0);
+    QTest::qWait(50);
+    QVERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+
+    // A running session hides it on the last answer, which may still grow, but not once the
+    // answer's turn has its end line (#160): that answer is final.
+    view.setSessionState(QStringLiteral("Copy"), QStringLiteral("Working…"), true);
     QTRY_VERIFY(!childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    view.appendMessage({{"kind", "tool"},
+                        {"category", "notice"},
+                        {"subtype", "turnEnd"},
+                        {"status", "completed"},
+                        {"title", "Completed"},
+                        {"messageKey", "copy-turn-end"}});
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
 }
 
 void AgentWorkspaceViewTest::listCodeBlocksStayInTheirItem() {
@@ -954,7 +1136,7 @@ void AgentWorkspaceViewTest::messagesExposeAccessibleSemantics() {
     QCOMPARE(accessible(0, "role").toInt(), int(QAccessible::ListItem));
     QCOMPARE(accessible(0, "name").toString(), QStringLiteral("You: Please fix the build"));
     QCOMPARE(accessible(1, "name").toString(), QStringLiteral("Codex: Fixed it."));
-    QCOMPARE(accessible(2, "name").toString(), QStringLiteral("Read 2 files (1 failed)"));
+    QCOMPARE(accessible(2, "name").toString(), QStringLiteral("Explored 2 files (1 failed)"));
     QCOMPARE(accessible(2, "description").toString(),
              QStringLiteral("collapsed, completed, 1 failed"));
     QCOMPARE(accessible(-1, "role").toInt(), int(QAccessible::List));
@@ -1252,6 +1434,7 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
         {"turnId", "turn-1"},
         {"body", "Allow the agent to run the build?"},
         {"command", "cmake --build build/dev"},
+        {"target", "Command"},
         {"running", true},
         {"questionAnswers", QVariantMap{}},
         {"questions",
@@ -1275,13 +1458,99 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
     QTRY_VERIFY(card->isVisible() && card->height() > 0);
     auto* accept = findVisualItem(card, QStringLiteral("approvalAcceptButton"));
     QVERIFY(accept && accept->isVisible());
-    // The status sits inside the card, right-aligned with its padding.
-    auto* status = findVisualItem(card, QStringLiteral("approvalStatus"));
-    QVERIFY(status);
-    const QRectF bounds = status->mapRectToItem(card, status->boundingRect());
-    QVERIFY2(bounds.right() <= card->width(),
-             qPrintable(
-                 QStringLiteral("status ends at %1 of %2").arg(bounds.right()).arg(card->width())));
+    QCOMPARE(accept->property("text").toString(), QStringLiteral("Allow once"));
+    QCOMPARE(findVisualItem(card, QStringLiteral("approvalDeclineButton"))->property("text"),
+             QVariant(QStringLiteral("Deny")));
+    // As the mock's: what it asks to use, then the whole command in a code block inside the card.
+    auto* pending = findVisualItem(card, QStringLiteral("approvalPendingCard"));
+    QVERIFY(pending && pending->isVisible());
+    QCOMPARE(pending->property("label").toString(), QStringLiteral("Approval needed · Command"));
+    auto* command = findVisualItem(card, QStringLiteral("approvalCommand"));
+    QVERIFY(command && command->isVisible());
+    QCOMPARE(command->property("code").toString(), QStringLiteral("cmake --build build/dev"));
+    const QRectF bounds = command->mapRectToItem(card, command->boundingRect());
+    QVERIFY(bounds.left() >= 0 && bounds.right() <= card->width());
+    QVERIFY(!findVisualItem(card, QStringLiteral("approvalOutcome"))->isVisible());
+
+    // Allow once answers with the Accept option.
+    QSignalSpy answered(card, SIGNAL(decisionSubmitted(QVariant)));
+    QVERIFY(QMetaObject::invokeMethod(accept, "clicked"));
+    QCOMPARE(answered.count(), 1);
+    QCOMPARE(answered.first()
+                 .first()
+                 .toMap()
+                 .value("decision")
+                 .toMap()
+                 .value("option_ids")
+                 .toStringList(),
+             QStringList{"a"});
+
+    // From the keyboard: Tab from the item before Allow once reaches it, then Deny, and Space on
+    // Deny answers with the Decline option.
+    auto* decline = findVisualItem(card, QStringLiteral("approvalDeclineButton"));
+    view.quickView()->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+    auto* before = accept->nextItemInFocusChain(false);
+    QVERIFY(before && before != accept);
+    before->forceActiveFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(before->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Tab);
+    QTRY_VERIFY(accept->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Tab);
+    QTRY_VERIFY(decline->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
+    QTRY_COMPARE(answered.count(), 2);
+    QCOMPARE(answered.last()
+                 .first()
+                 .toMap()
+                 .value("decision")
+                 .toMap()
+                 .value("option_ids")
+                 .toStringList(),
+             QStringList{"d"});
+}
+
+// A settled approval is one quiet line of how it ended, as the mock's.
+void AgentWorkspaceViewTest::settledApprovalsReadAsTheirOutcome() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    const auto settled = [](const QString& key, const QString& status, const QVariantMap& answers) {
+        return QVariantMap{{"messageKey", key},
+                           {"kind", "tool"},
+                           {"category", "activity"},
+                           {"subtype", "approval"},
+                           {"turnId", "turn-1"},
+                           {"body", "Allow it?"},
+                           {"command", "rg -n \"<tenant>\" services"},
+                           {"target", "Cursor tool"},
+                           {"status", status},
+                           {"running", false},
+                           {"questionAnswers", answers},
+                           {"questions", QVariantList{}},
+                           {"filePath", ""}};
+    };
+    const QList<QPair<QVariantMap, QString>> cases{
+        {settled("approved", "approved", {}), "Approved"},
+        {settled("denied", "denied", {}), "Denied"},
+        {settled("expired", "expired", {}), "Approval expired"},
+        {settled("closed", "resolved", {}), "Approval closed"},
+        // Decided here: the receipt's label says how.
+        {settled("declined-here", "resolved", {{"decision", "Decline"}}), "Denied"}};
+    for (const auto& [row, label] : cases) {
+        view.resetMessages({row}, "approval:" + row.value("messageKey").toString());
+        QQuickItem* note = nullptr;
+        QTRY_VERIFY((note = findVisualItem(root, QStringLiteral("approvalOutcome"))) &&
+                    note->isVisible());
+        QVERIFY(!findVisualItem(root, QStringLiteral("approvalPendingCard"))->isVisible());
+        auto* text = findVisualItem(note, QStringLiteral("approvalOutcomeText"));
+        QTRY_COMPARE(text->property("text").toString(),
+                     QStringLiteral("<b>%1</b>&nbsp;&nbsp;Cursor tool · rg -n \"&lt;tenant&gt;\" "
+                                    "services")
+                         .arg(label));
+    }
 }
 
 void AgentWorkspaceViewTest::copiesMouseSelectionWithShortcut() {

@@ -1,5 +1,6 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Effects
@@ -10,11 +11,20 @@ Item {
     id: root
     objectName: "agentWorkspaceRoot"
 
-    readonly property var t: agentHost.tokens
-    // The reading column the transcript and composer share. The host sets its
-    // width; 0 lets the conversation fill the pane.
+    property alias prompt: composerArea.prompt
+    property alias permissionMenu: composerArea.permissionMenu
+    property alias skillsPopup: composerArea.skillsPopup
+    property alias modelButton: composerArea.modelButton
+    property alias usageRingButton: composerArea.usageRingButton
+    property alias modelPicker: modelPopup
+    property alias imageViewer: imagePreview
+    property alias limitsPopover: usageLimitsPopover
+    function scheduleDraftSave() { composerDraftSaveTimer.restart() }
+
+    // The reading column the transcript text and composer share, as in the mock: the host
+    // sets its width (760 by default); 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
-        ? Metrics.px(agentHost.conversationWidth, t) : Number.POSITIVE_INFINITY
+        ? KetTheme.px(agentHost.conversationWidth, KetTheme.zoom) : Number.POSITIVE_INFINITY
     readonly property int messageCount: messages.count
     property string selectedModel: ""
     property string modelLabel: "Codex default"
@@ -31,6 +41,53 @@ Item {
         return count
     }
     property string selectedProvider: "codex"
+    // ADR 0110: the selected provider's setup guide, when it cannot start a turn. A blocking
+    // guide holds the message, which sends once the provider is set up.
+    readonly property var providerSetup: ((agentHost.providerRuntime || {}).setups || {})[selectedProvider] || null
+    readonly property bool providerBlocked: !!providerSetup && providerSetup.blocking === true
+    // A provider that cannot start a turn shows its guide above the composer; one that ended a
+    // turn shows it at the end of that turn, and the model button carries the warning.
+    readonly property bool providerSetupShown: !!providerSetup && providerSetup.composer === true && !hiddenSetups[selectedProvider]
+    property var hiddenSetups: ({})
+    // A held message: the provider it waits for, the conversation's draft scope and the text
+    // sent. Switching conversation or editing the draft lets it go; switching provider keeps
+    // the draft unsent.
+    property var heldMessage: null
+    function showProviderSetup() {
+        const hidden = Object.assign({}, hiddenSetups)
+        delete hidden[selectedProvider]
+        hiddenSetups = hidden
+    }
+    // The daemon answered and listed the provider without a guide: not a stopped daemon and
+    // not a guide that merely stopped blocking.
+    function providerReady(provider) {
+        const runtime = agentHost.providerRuntime || {}
+        return runtime.gated === true && Object.prototype.hasOwnProperty.call(runtime.providers || {}, provider)
+            && !(runtime.setups || {})[provider]
+    }
+    function sendHeldMessage() {
+        const held = heldMessage
+        if (!held || !providerReady(held.provider))
+            return
+        heldMessage = null
+        if (held.provider === selectedProvider && held.scope === draftScope && prompt.text === held.text
+                && prompt.text.trim().length > 0)
+            submitCurrentPrompt()
+    }
+    Connections {
+        target: agentHost
+        enabled: root.heldMessage !== null
+        function onProviderRuntimeChanged() { root.sendHeldMessage() }
+        function onComposerScopeChanged() { root.heldMessage = null }
+    }
+    Connections {
+        target: prompt
+        enabled: root.heldMessage !== null
+        function onTextChanged() {
+            if (root.heldMessage && prompt.text !== root.heldMessage.text)
+                root.heldMessage = null
+        }
+    }
     readonly property string usageProvider: (agentHost.statusProvider || selectedProvider || "codex").toLowerCase()
     readonly property var usageSnapshot: agentHost.usageSnapshot || ({})
     readonly property bool usageMatchesProvider: (usageSnapshot.provider || "") === usageProvider
@@ -75,8 +132,8 @@ Item {
     }
     readonly property bool permissionElevated: currentPermission.elevated === true
     readonly property color permissionAccent: permissionElevated
-                                              ? (root.t.warning || "#d9a441")
-                                              : root.t.textSecondary
+                                              ? (KetTheme.t.warning)
+                                              : KetTheme.t.textSecondary
     function permissionIconSource(profileId) {
         if (profileId === "read-only")
             return "qrc:/agent/icons/lock.svg"
@@ -86,8 +143,8 @@ Item {
     }
     function permissionLabelColor(profile) {
         if (profile && profile.elevated === true)
-            return root.t.warning || "#d9a441"
-        return root.t.textMain
+            return KetTheme.t.warning
+        return KetTheme.t.textMain
     }
     property bool modelsLoading: false
     function refreshModels() {
@@ -102,10 +159,7 @@ Item {
         modelPopup.open()
         if (agentHost.models.length === 0) refreshModels()
     }
-    property string worktreeQuery: ""
-    property bool showAllWorktrees: false
     property bool applyingConversationConfiguration: false
-    readonly property var filteredWorktrees: filterWorktrees(worktreeQuery)
     readonly property var slashCommands: agentHost.compactMode ? [
         {id: "model", label: "/model", description: "Choose model and reasoning effort"},
         {id: "permissions", label: "/permissions", description: "Choose access for the next agent turn"},
@@ -213,7 +267,6 @@ Item {
                 Qt.callLater(root.restoreTranscriptPosition)
         }
         function onComposerScopeChanged() { root.saveAndRestoreDraft() }
-        function onWorktreesChanged() { Qt.callLater(root.revealSelectedWorktree) }
         function onRestoringChanged() {
             if (!agentHost.restoring) return
             modelPopup.close()
@@ -334,31 +387,6 @@ Item {
         prompt.text = text
         prompt.cursorPosition = prompt.length
         prompt.forceActiveFocus()
-    }
-
-    function filterWorktrees(query) {
-        const items = agentHost.worktrees || []
-        const needle = (query || "").trim().toLocaleLowerCase()
-        return items.filter(function(item) {
-            if (needle.length === 0)
-                return showAllWorktrees || item.relevant
-            const searchText = item.searchText || (item.branch + " " + item.displayPath + " " + item.path)
-            return searchText.toLocaleLowerCase().indexOf(needle) !== -1
-        })
-    }
-
-    function selectedWorktreeIndex() {
-        const items = filteredWorktrees || []
-        for (let index = 0; index < items.length; ++index)
-            if (items[index].selected)
-                return index
-        return -1
-    }
-
-    function revealSelectedWorktree() {
-        const index = selectedWorktreeIndex()
-        if (index >= 0)
-            sidebar.worktreeList.positionViewAtIndex(index, ListView.Contain)
     }
 
     // Capability names come from the daemon's provider.runtime_status (ADR 0015).
@@ -492,7 +520,6 @@ Item {
 
     ModelPicker {
         id: modelPopup
-        tokens: root.t
         viewport: root
         anchorItem: modelButton
         models: agentHost.models
@@ -519,6 +546,38 @@ Item {
             agentHost.applyModelConfiguration(model, effort, provider, changes)
         }
         onRefreshRequested: root.refreshModels()
+        onSetupGuideRequested: function(provider) {
+            modelPopup.close()
+            setupGuideDialog.provider = provider
+            setupGuideDialog.open()
+        }
+    }
+
+    // A provider's setup guide from Model & context (Show setup steps). It closes once the
+    // provider is fixed.
+    Kit.KetDialog {
+        id: setupGuideDialog
+        objectName: "providerSetupDialog"
+        property string provider: ""
+        readonly property var setup: ((agentHost.providerRuntime || {}).setups || {})[provider] || null
+        onSetupChanged: if (!setup && visible) close()
+        title: setup ? setup.title : ""
+        Loader {
+            Layout.fillWidth: true
+            active: !!setupGuideDialog.setup
+            sourceComponent: AgentProviderSetupCard {
+                shell: root
+                setup: setupGuideDialog.setup
+                inDialog: true
+            }
+        }
+        actions: [
+            Kit.KetButton {
+                text: "Close"
+                variant: KetTheme.ButtonVariant.Ghost
+                onClicked: setupGuideDialog.reject()
+            }
+        ]
     }
 
     UsageLimitsPopover {
@@ -555,43 +614,62 @@ Item {
         }
     }
 
-    Basic.Popup {
+    // The image viewer over the whole window, as the mock opens a capture or an image file.
+    Kit.KetLightbox {
         id: imagePreview
         objectName: "imagePreview"
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(Metrics.px(1100, root.t), root.width - Metrics.px(32, root.t))
-        height: Math.min(Metrics.px(850, root.t), root.height - Metrics.px(32, root.t))
-        modal: true
-        focus: true
-        padding: Metrics.px(16, root.t)
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: root.t.surfaceRaised; radius: Metrics.px(8, root.t) }
-        property url imageSource
-        Image {
-            objectName: "imagePreviewContent"
-            anchors.fill: parent
-            anchors.topMargin: Metrics.px(32, root.t)
-            source: imagePreview.imageSource
-            fillMode: Image.PreserveAspectFit
-            autoTransform: true
+        tools: Kit.KetTheme.LightboxTool.ZoomOut | Kit.KetTheme.LightboxTool.ZoomLevel
+               | Kit.KetTheme.LightboxTool.ZoomIn | Kit.KetTheme.LightboxTool.Rotate
+               | Kit.KetTheme.LightboxTool.Copy | Kit.KetTheme.LightboxTool.Download
+               | Kit.KetTheme.LightboxTool.Print | Kit.KetTheme.LightboxTool.Fullscreen
+        readonly property url imageSource: item ? item.source : ""
+        // Opens image URLs at `index`; each is captioned with its file name.
+        function showImages(sources, index) {
+            items = (sources || []).map(source => ({
+                source: source.toString(),
+                caption: agentHost.imageCaption(source)
+            }));
+            openAt(index || 0);
         }
-        Basic.ToolButton {
-            id: closeImageButton
-            anchors.top: parent.top
-            anchors.right: parent.right
-            width: Metrics.px(32, root.t)
-            height: Metrics.px(32, root.t)
-            padding: Metrics.px(8, root.t)
-            contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
-            onClicked: imagePreview.close()
-            Accessible.name: "Close image"
-            KetToolTip {
-                tokens: root.t
-                visible: closeImageButton.hovered
-                text: "Close image"
-            }
+        // Opens items that carry their own caption: [{ source, caption }].
+        function showItems(list, index) {
+            items = list || [];
+            openAt(index || 0);
         }
+        // A Mermaid diagram opened before its dark rendering was ready takes it once drawn,
+        // while the viewer still shows that diagram.
+        function refreshMermaid() {
+            const shown = item;
+            if (!opened || !shown || !shown.diagram)
+                return;
+            const next = agentHost.mermaidViewerImage(shown.diagram);
+            if (!next.source || String(next.source) === String(shown.source))
+                return;
+            const list = items.slice();
+            list[currentIndex] = next;
+            items = list;
+        }
+        onToolTriggered: tool => {
+            if (!item)
+                return;
+            if (tool === Kit.KetTheme.LightboxTool.Copy)
+                imageToast.show(agentHost.copyImage(item.source, rotationAngle) ? "Copied the image" : "The image could not be copied");
+            else if (tool === Kit.KetTheme.LightboxTool.Download) {
+                const saved = agentHost.saveImageToDownloads(item.source);
+                imageToast.show(saved ? "Saved " + saved.split("/").pop() + " to Downloads" : "The image could not be saved");
+            } else if (tool === Kit.KetTheme.LightboxTool.Print)
+                agentHost.printImage(item.source, rotationAngle, item.caption);
+            else if (tool === Kit.KetTheme.LightboxTool.Fullscreen)
+                agentHost.toggleWindowFullScreen();
+        }
+    }
+    Connections {
+        target: agentHost
+        function onMermaidChanged() { imagePreview.refreshMermaid() }
+    }
+    Kit.KetToast {
+        id: imageToast
+        objectName: "imageToast"
     }
 
     function openTranscriptFind() {
@@ -1161,6 +1239,49 @@ Item {
         captureTranscriptWheelPosition()
     }
 
+    // The failed turn Retry sends again: the latest turn, when it failed and the conversation
+    // is idle, with the prompt that opened it. Steers belong to that turn and are not its
+    // prompt. A prompt with images or from another agent is not resent, since Retry could not
+    // send it as it was, and neither while the composer holds attachments, which a send would
+    // carry along, nor while older history is shown instead of the latest turn.
+    function findRetryableFailure() {
+        const model = agentHost.messageModel
+        if (!model || agentHost.sessionRunning || !agentHost.agentAvailable || agentHost.attachments.length > 0 || agentHost.historyState.hasNewer)
+            return null
+        let errorKey = ""
+        for (let i = model.sourceCount() - 1; i >= 0; --i) {
+            const row = model.source(i)
+            // A turn that ended other than failed needs no retry, whatever errors it showed.
+            if (row.subtype === "turnEnd" && row.status !== "failed")
+                return null
+            if (row.kind === "error") {
+                if (errorKey.length === 0)
+                    errorKey = String(row.messageKey || "")
+                continue
+            }
+            if (row.kind !== "user" || row.eventType === "turn.steered")
+                continue
+            const text = String(row.body || "").trim()
+            const resendable = text.length > 0 && (row.images || []).length === 0 && row.subtype !== "agentMessage"
+            return errorKey.length > 0 && resendable ? {key: errorKey, prompt: text} : null
+        }
+        return null
+    }
+    // The source's revision also follows row updates that keep the count.
+    readonly property var retryableFailure: {
+        if (agentHost.messageModel)
+            agentHost.messageModel.sourceRevision
+        return findRetryableFailure()
+    }
+    // Checked again when clicked: the shown banner may be a moment out of date.
+    function retryFailedTurn(key) {
+        const failure = findRetryableFailure()
+        if (!failure || failure.key !== key)
+            return
+        agentHost.submitConfiguredPrompt(failure.prompt, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
+        revealLatestAfterSubmit()
+    }
+
     function submitCurrentPrompt() {
         if (!agentHost.agentAvailable || agentHost.steeringPending)
             return
@@ -1188,6 +1309,13 @@ Item {
             root.applySlashCommand(root.visibleSlashCommands[0])
             return
         }
+        if (root.providerBlocked) {
+            // The draft stays in the composer and sends once the provider is set up.
+            root.heldMessage = {provider: root.selectedProvider, scope: root.draftScope, text: prompt.text}
+            root.showProviderSetup()
+            imageToast.show("Set up " + root.providerTitle(root.selectedProvider) + " first. Your message is kept.")
+            return
+        }
         agentHost.submitConfiguredPrompt(value, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
         if (agentHost.sessionRunning) {
             prompt.clear()
@@ -1208,18 +1336,33 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: root.t.pageBackground || "#1b1f24"
+        color: KetTheme.t.pageBg
     }
 
     Basic.SplitView {
+        id: workspaceSplit
         objectName: "agentWorkspaceSplit"
         anchors.fill: parent
         orientation: Qt.Horizontal
+        // A drag sets the sidebar's preferred width; keep it in unscaled pixels so a
+        // zoom change rescales the user's choice instead of restoring the default.
+        onResizingChanged: {
+            if (!resizing && sidebar.visible)
+                sidebar.unscaledWidth = Math.max(188, Math.min(320, sidebar.width / KetTheme.zoom));
+        }
         handle: Item {
+            id: sidebarHandle
             objectName: "sidebarResizeHandle"
-            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? Metrics.px(6, root.t) : 0
-            readonly property color dividerColor: SplitHandle.pressed ? root.t.accent
-                                                 : SplitHandle.hovered ? root.t.borderStrong : root.t.border
+            // One pixel of layout, as the mock's divider; the grab area is wider.
+            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? 1 : 0
+            containmentMask: Item {
+                objectName: "sidebarResizeGrabArea"
+                width: sidebarHandle.implicitWidth > 0 ? KetTheme.px(6, KetTheme.zoom) : 0
+                height: sidebarHandle.height
+                x: (sidebarHandle.width - width) / 2
+            }
+            readonly property color dividerColor: SplitHandle.pressed ? KetTheme.t.accent
+                                                 : SplitHandle.hovered ? KetTheme.t.borderStrong : KetTheme.t.panelBorder
             Rectangle {
                 objectName: "sidebarDivider"
                 visible: parent.implicitWidth > 0
@@ -1238,17 +1381,27 @@ Item {
             id: sidebar
             workspace: root
             visible: agentHost.productSidebarVisible && !agentHost.compactMode
-            SplitView.minimumWidth: visible ? 188 : 0
-            SplitView.preferredWidth: visible ? 216 : 0
-            SplitView.maximumWidth: visible ? 320 : 0
+            // Recipe widths follow interface zoom, as the mock's 240 px sidebar does.
+            property real unscaledWidth: 240
+            function applyWidth() {
+                SplitView.preferredWidth = KetTheme.px(unscaledWidth, KetTheme.zoom);
+            }
+            SplitView.minimumWidth: visible ? KetTheme.px(188, KetTheme.zoom) : 0
+            SplitView.maximumWidth: visible ? KetTheme.px(320, KetTheme.zoom) : 0
+            Component.onCompleted: applyWidth()
+            onUnscaledWidthChanged: applyWidth()
+            Connections {
+                target: KetTheme
+                function onZoomChanged() { sidebar.applyWidth(); }
+            }
         }
 
         Rectangle {
             id: chatPane
             objectName: "chatPane"
             SplitView.fillWidth: true
-            SplitView.minimumWidth: 260
-            color: root.t.pageBackground || "#1b1f24"
+            SplitView.minimumWidth: KetTheme.px(260, KetTheme.zoom)
+            color: KetTheme.t.pageBg
 
             ColumnLayout {
                 anchors.top: parent.top
@@ -1273,7 +1426,7 @@ Item {
                     Layout.fillHeight: true
                     // Keep the final row clear of the composer even while
                     // the viewport is pinned during streaming or a new send.
-                    Layout.bottomMargin: Metrics.px(20, root.t)
+                    Layout.bottomMargin: KetTheme.px(20, KetTheme.zoom)
                     initialModel: agentHost.messageModel
                     transcriptFactory: cachedTranscriptFactory
                     onTranscriptActivated: function(view) {
@@ -1290,13 +1443,13 @@ Item {
                         z: 10
                         anchors.top: parent.top
                         anchors.right: parent.right
-                        anchors.topMargin: Metrics.px(8, root.t)
-                        anchors.rightMargin: Metrics.px(16, root.t)
-                        width: Math.min(parent.width - Metrics.px(32, root.t), Metrics.px(380, root.t))
-                        height: findRow.height + (findStatusText.visible ? findStatusText.height + Metrics.px(4, root.t) : 0) + Metrics.px(8, root.t)
-                        radius: Metrics.px(7, root.t)
-                        color: root.t.surfaceRaised
-                        border.color: root.t.borderStrong
+                        anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
+                        anchors.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                        width: Math.min(parent.width - KetTheme.px(32, KetTheme.zoom), KetTheme.px(380, KetTheme.zoom))
+                        height: findRow.height + (findStatusText.visible ? findStatusText.height + KetTheme.px(4, KetTheme.zoom) : 0) + KetTheme.px(8, KetTheme.zoom)
+                        radius: KetTheme.px(7, KetTheme.zoom)
+                        color: KetTheme.t.surfaceRaised
+                        border.color: KetTheme.t.borderStrong
                         Accessible.role: Accessible.ToolBar
                         Accessible.name: "Find in conversation"
                         Connections {
@@ -1309,21 +1462,21 @@ Item {
                         }
                         Row {
                             id: findRow
-                            x: Metrics.px(6, root.t)
-                            y: Metrics.px(4, root.t)
-                            width: parent.width - Metrics.px(12, root.t)
-                            height: Metrics.px(30, root.t)
-                            spacing: Metrics.px(4, root.t)
+                            x: KetTheme.px(6, KetTheme.zoom)
+                            y: KetTheme.px(4, KetTheme.zoom)
+                            width: parent.width - KetTheme.px(12, KetTheme.zoom)
+                            height: KetTheme.px(30, KetTheme.zoom)
+                            spacing: KetTheme.px(4, KetTheme.zoom)
                             Basic.TextField {
                                 id: findField
                                 objectName: "transcriptFindField"
-                                width: parent.width - findCount.width - 3 * Metrics.px(28, root.t) - 3 * parent.spacing
-                                height: Metrics.px(30, root.t)
+                                width: parent.width - findCount.width - 3 * KetTheme.px(28, KetTheme.zoom) - 3 * parent.spacing
+                                height: KetTheme.px(30, KetTheme.zoom)
                                 placeholderText: "Find in conversation"
-                                color: root.t.textMain
-                                placeholderTextColor: root.t.textMuted
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.body
+                                color: KetTheme.t.textMain
+                                placeholderTextColor: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 background: Rectangle {
                                     color: "transparent"
                                 }
@@ -1338,38 +1491,62 @@ Item {
                                 objectName: "transcriptFindCount"
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: transcriptFindBar.view ? transcriptFindBar.view.findCountText : ""
-                                color: root.t.textMuted
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.caption
+                                color: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                                 Accessible.name: text
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindPrevious"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("arrow-up"); color: KetTheme.t.textMain
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findPrevious()
                                 Accessible.name: "Previous match"
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindNext"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain; rotation: 180 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("arrow-up"); color: KetTheme.t.textMain; rotation: 180
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findNext()
                                 Accessible.name: "Next match"
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindClose"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("plus"); color: KetTheme.t.textMain; rotation: 45
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.closeFind()
                                 Accessible.name: "Close find"
                             }
@@ -1377,14 +1554,14 @@ Item {
                         Text {
                             id: findStatusText
                             objectName: "transcriptFindStatus"
-                            x: Metrics.px(12, root.t)
-                            y: findRow.y + findRow.height + Metrics.px(2, root.t)
-                            width: parent.width - Metrics.px(24, root.t)
+                            x: KetTheme.px(12, KetTheme.zoom)
+                            y: findRow.y + findRow.height + KetTheme.px(2, KetTheme.zoom)
+                            width: parent.width - KetTheme.px(24, KetTheme.zoom)
                             visible: text.length > 0
                             text: transcriptFindBar.view ? transcriptFindBar.view.findStatus : ""
-                            color: root.t.textMuted
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.caption
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                             elide: Text.ElideRight
                         }
                     }
@@ -1404,881 +1581,38 @@ Item {
                 BackgroundTaskBar {
                     workspace: root
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
+                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
                     Layout.preferredHeight: implicitHeight
-                    Layout.bottomMargin: visible ? Metrics.px(6, root.t) : 0
+                    Layout.bottomMargin: visible ? KetTheme.px(6, KetTheme.zoom) : 0
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: composer.height + composerFooter.height + Metrics.px(18, root.t)
-
-                    Rectangle {
-                        id: composer
-                        objectName: "agentComposer"
-                        readonly property bool compactControls: width < 520
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        width: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
-                        height: composerColumn.implicitHeight + Metrics.px(8, root.t)
-                        radius: Metrics.px(16, root.t)
-                        color: root.t.surfaceRaised
-                        border.width: 1
-                        border.color: prompt.activeFocus ? root.t.borderStrong : root.t.border
-
-                        DropArea {
-                            anchors.fill: parent
-                            onDropped: function(drop) {
-                                if (drop.hasUrls) {
-                                    let paths = []
-                                    for (let url of drop.urls) paths.push(url.toString())
-                                    agentHost.addAttachments(paths)
-                                    drop.acceptProposedAction()
-                                }
-                            }
-                        }
-                        ColumnLayout {
-                            id: composerColumn
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: Metrics.px(4, root.t)
-                            spacing: Metrics.px(4, root.t)
-
-                            Flow {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: childrenRect.height
-                                visible: agentHost.attachments.length > 0
-                                spacing: Metrics.px(6, root.t)
-                                Repeater {
-                                    model: agentHost.attachments
-                                        Rectangle {
-                                        id: attachmentChip
-                                        objectName: "composerAttachmentChip"
-                                        required property var modelData
-                                        required property int index
-                                        width: Metrics.px(200, root.t)
-                                        height: Metrics.px(40, root.t)
-                                        radius: Metrics.px(10, root.t)
-                                        color: root.t.surfaceRaised
-                                        border.width: modelData.image && attachmentChipHover.hovered ? 1 : 0
-                                        border.color: root.t.focus
-                                        Accessible.role: modelData.image ? Accessible.Button : Accessible.StaticText
-                                        Accessible.name: modelData.image
-                                                         ? "Preview " + (modelData.name || "image")
-                                                         : (modelData.name || "Attachment")
-                                        Accessible.onPressAction: attachmentChip.previewAttachment()
-                                        function previewAttachment() {
-                                            if (!modelData.image || !modelData.url)
-                                                return
-                                            imagePreview.imageSource = modelData.url
-                                            imagePreview.open()
-                                        }
-                                        HoverHandler {
-                                            id: attachmentChipHover
-                                            enabled: !!modelData.image
-                                        }
-                                        RowLayout {
-                                            id: chipRow
-                                            anchors.fill: parent
-                                            anchors.margins: Metrics.px(6, root.t)
-                                            spacing: Metrics.px(6, root.t)
-                                            Image {
-                                                objectName: "composerAttachmentImage"
-                                                visible: modelData.image
-                                                source: modelData.image ? modelData.url : ""
-                                                sourceSize.width: 56
-                                                sourceSize.height: 56
-                                                Layout.preferredWidth: Metrics.px(28, root.t)
-                                                Layout.preferredHeight: Metrics.px(28, root.t)
-                                                fillMode: Image.PreserveAspectCrop
-                                            }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.name
-                                                elide: Text.ElideMiddle
-                                                color: root.t.textMain
-                                                font.pixelSize: root.t.body
-                                            }
-                                            Basic.ToolButton {
-                                                id: removeAttachmentButton
-                                                objectName: "removeAttachmentButton"
-                                                z: 2
-                                                text: "×"
-                                                Layout.preferredWidth: Metrics.px(24, root.t)
-                                                Layout.preferredHeight: Metrics.px(24, root.t)
-                                                onClicked: agentHost.removeAttachment(index)
-                                                KetToolTip {
-                                                    tokens: root.t
-                                                    visible: removeAttachmentButton.hovered
-                                                    text: "Remove attachment"
-                                                }
-                                            }
-                                        }
-                                        MouseArea {
-                                            id: attachmentPreviewArea
-                                            objectName: "composerAttachmentPreviewArea"
-                                            z: 1
-                                            anchors.fill: parent
-                                            anchors.rightMargin: removeAttachmentButton.width
-                                                                + chipRow.spacing + chipRow.anchors.margins
-                                            enabled: !!modelData.image
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: attachmentChip.previewAttachment()
-                                        }
-                                        KetToolTip {
-                                            tokens: root.t
-                                            visible: modelData.image && attachmentChipHover.hovered
-                                                     && !removeAttachmentButton.hovered
-                                            text: "Click to preview"
-                                        }
-                                    }
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                            Basic.ScrollView {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: Math.min(Metrics.px(160, root.t), Math.max(Metrics.px(32, root.t), prompt.implicitHeight))
-                                clip: true
-                                Basic.TextArea {
-                                    id: prompt
-                                    objectName: "agentPrompt"
-                                    leftPadding: Metrics.px(10, root.t); rightPadding: Metrics.px(4, root.t); topPadding: Metrics.px(6, root.t); bottomPadding: Metrics.px(6, root.t)
-                                    placeholderText: agentHost.presentationState.folder === "missing"
-                                                     ? "Continue in the main worktree…"
-                                                     : "Type / for commands, @ for files, $ for skills"
-                                    // Drafting must remain available even while the
-                                    // transport reconnects; submission is gated separately.
-                                    enabled: true
-                                    color: root.t.textMain
-                                    placeholderTextColor: root.t.textMuted
-                                    selectionColor: root.t.accentMuted
-                                    selectedTextColor: root.t.textMain
-                                    wrapMode: TextArea.Wrap
-                                    background: null
-                                    font.family: root.t.uiFont
-                                    font.pixelSize: root.t.reading
-                                    property string lastObservedText: ""
-                                    onTextChanged: {
-                                        // QTextDocument formatting also emits textChanged.
-                                        // Save/reformat only after an actual text edit.
-                                        if (text === lastObservedText)
-                                            return
-                                        lastObservedText = text
-                                        composerDraftSaveTimer.restart()
-                                        composerLineHeightTimer.restart()
-                                    }
-                                    onFontChanged: composerLineHeightTimer.restart()
-                                    Component.onCompleted: composerLineHeightTimer.restart()
-                                    Timer {
-                                        id: composerLineHeightTimer
-                                        objectName: "composerLineHeightTimer"
-                                        interval: 0
-                                        onTriggered: agentHost.formatComposerDocument(prompt.textDocument, prompt.font.pixelSize)
-                                    }
-                                    Keys.onPressed: function(event) {
-                                        if (event.matches(StandardKey.Paste) && agentHost.pasteClipboardImage()) {
-                                            event.accepted = true
-                                            return
-                                        }
-                                        if (root.visibleSkillSuggestions.length > 0) {
-                                            if (event.key === Qt.Key_Down) {
-                                                root.selectedSkillSuggestion = Math.min(
-                                                    root.visibleSkillSuggestions.length - 1,
-                                                    root.selectedSkillSuggestion + 1)
-                                                event.accepted = true
-                                                return
-                                            }
-                                            if (event.key === Qt.Key_Up) {
-                                                root.selectedSkillSuggestion = Math.max(
-                                                    0, root.selectedSkillSuggestion - 1)
-                                                event.accepted = true
-                                                return
-                                            }
-                                            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Return
-                                                    || event.key === Qt.Key_Enter) {
-                                                const index = Math.min(root.selectedSkillSuggestion,
-                                                                       root.visibleSkillSuggestions.length - 1)
-                                                root.applySkillSuggestion(
-                                                    root.visibleSkillSuggestions[index])
-                                                event.accepted = true
-                                                return
-                                            }
-                                        }
-                                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                                            && !(event.modifiers & Qt.ShiftModifier) && !prompt.inputMethodComposing) {
-                                            root.submitCurrentPrompt()
-                                            event.accepted = true
-                                        }
-                                    }
-                                }
-                            }
-                                Basic.ToolButton {
-                                    id: stopButton
-                                    objectName: "stopButton"
-                                    Layout.alignment: Qt.AlignBottom
-                                    Layout.preferredWidth: Metrics.px(32, root.t)
-                                    Layout.preferredHeight: Metrics.px(32, root.t)
-                                    visible: agentHost.sessionRunning
-                                    padding: 0
-                                    contentItem: Item {
-                                            TintedIcon {
-                                                anchors.centerIn: parent
-                                                width: Metrics.px(14, root.t); height: Metrics.px(14, root.t)
-                                                source: "qrc:/agent/icons/square.svg"
-                                                color: root.t.textMain
-                                            }
-                                        }
-                                        background: Item {
-                                            Rectangle {
-                                                anchors.centerIn: parent
-                                                width: Metrics.px(26, root.t); height: Metrics.px(26, root.t); radius: Metrics.px(13, root.t)
-                                                color: stopButton.hovered ? root.t.surfaceHover : root.t.interactiveBackground
-                                                border.width: 1
-                                                border.color: root.t.border
-                                            }
-                                        }
-                                        onClicked: agentHost.stopAgent()
-                                        KetToolTip { tokens: root.t; visible: stopButton.hovered; text: "Stop agent" }
-                                        Accessible.name: "Stop agent"
-                                    }
-                                    Basic.ToolButton {
-                                        id: sendButton
-                                        objectName: "sendButton"
-                                        Layout.alignment: Qt.AlignBottom
-                                        Layout.preferredWidth: Metrics.px(32, root.t)
-                                        Layout.preferredHeight: Metrics.px(32, root.t)
-                                        enabled: agentHost.agentAvailable && !agentHost.steeringPending
-                                                 && (prompt.text.trim().length > 0 || agentHost.attachments.length > 0)
-                                        visible: true
-                                        padding: 0
-                                        contentItem: Item {
-                                            TintedIcon {
-                                                anchors.centerIn: parent
-                                                width: Metrics.px(14, root.t); height: Metrics.px(14, root.t)
-                                                source: "qrc:/agent/icons/arrow-up.svg"
-                                                color: sendButton.enabled ? root.t.pageBackground : root.t.textDisabled
-                                            }
-                                        }
-                                        background: Item {
-                                            Rectangle {
-                                                anchors.centerIn: parent
-                                                width: Metrics.px(26, root.t); height: Metrics.px(26, root.t); radius: Metrics.px(13, root.t)
-                                                color: sendButton.enabled
-                                                       ? (sendButton.hovered ? root.t.textSecondary : root.t.textMain)
-                                                       : root.t.interactiveActive
-                                            }
-                                        }
-                                        onClicked: root.submitCurrentPrompt()
-                                        KetToolTip {
-                                            tokens: root.t
-                                            visible: sendButton.hovered
-                                            text: agentHost.steeringPending ? "Sending..."
-                                                  : agentHost.sessionRunning
-                                                    ? "Steer current turn"
-                                                  : "Send · Enter (Shift+Enter for new line)"
-                                        }
-                                        Accessible.name: agentHost.sessionRunning ? "Steer current turn" : "Send message"
-                                    }
-                                }
-                            }
-                        }
-
-                        // Suggestion popovers float above the composer so the transcript never moves.
-                        Rectangle {
-                            id: slashPalette
-                            objectName: "slashPalette"
-                            anchors.left: composer.left
-                            anchors.right: composer.right
-                            anchors.bottom: composer.top
-                            anchors.bottomMargin: Metrics.px(6, root.t)
-                            z: 20
-                            height: slashCommandList.implicitHeight + Metrics.px(8, root.t)
-                            visible: root.visibleSlashCommands.length > 0 && !agentHost.sessionRunning
-                            radius: Metrics.px(12, root.t)
-                            color: root.t.surfaceRaised
-                            border.width: 1
-                            border.color: root.t.borderStrong
-                            Column {
-                                id: slashCommandList
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.margins: Metrics.px(4, root.t)
-                                spacing: Metrics.px(2, root.t)
-                                Repeater {
-                                    model: root.visibleSlashCommands
-                                    Basic.ItemDelegate {
-                                        required property var modelData
-                                        width: slashCommandList.width
-                                        height: Metrics.px(42, root.t)
-                                        padding: Metrics.px(8, root.t)
-                                        contentItem: RowLayout {
-                                            spacing: Metrics.px(10, root.t)
-                                            Text {
-                                                text: modelData.label
-                                                color: root.t.textMain
-                                                font.family: root.t.monoFont
-                                                font.pixelSize: root.t.reading
-                                                Layout.preferredWidth: Metrics.px(92, root.t)
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            Text {
-                                                text: modelData.description
-                                                color: root.t.textMuted
-                                                font.family: root.t.uiFont
-                                                font.pixelSize: root.t.body
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                    }
-                                    background: Rectangle {
-                                        radius: Metrics.px(8, root.t)
-                                        color: parent.hovered ? root.t.interactiveActive : "transparent"
-                                    }
-                                    onClicked: root.applySlashCommand(modelData)
-                                }
-                            }
+                Loader {
+                    objectName: "composerProviderSetup"
+                    active: root.providerSetupShown
+                    visible: active
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
+                    Layout.preferredHeight: active && item ? item.implicitHeight : 0
+                    Layout.bottomMargin: active ? KetTheme.px(8, KetTheme.zoom) : 0
+                    sourceComponent: AgentProviderSetupCard {
+                        shell: root
+                        setup: root.providerSetup
+                        canHide: true
+                        onHideRequested: {
+                            const hidden = Object.assign({}, root.hiddenSetups)
+                            hidden[root.selectedProvider] = true
+                            root.hiddenSetups = hidden
+                            imageToast.show("Setup steps hidden. Open them again from the model button below, or Settings › Providers.")
                         }
                     }
+                }
 
-                    Rectangle {
-                        id: skillMentionPalette
-                        objectName: "skillMentionPalette"
-                        anchors.left: composer.left
-                        anchors.right: composer.right
-                        anchors.bottom: composer.top
-                        anchors.bottomMargin: Metrics.px(6, root.t)
-                        z: 20
-                        height: Math.min(Metrics.px(360, root.t), skillSuggestionList.contentHeight + Metrics.px(8, root.t))
-                        visible: root.visibleSkillSuggestions.length > 0
-                        radius: Metrics.px(12, root.t)
-                        color: root.t.surfaceRaised
-                        border.width: 1
-                        border.color: root.t.borderStrong
-
-                        ListView {
-                            id: skillSuggestionList
-                            objectName: "skillSuggestionList"
-                            anchors.fill: parent
-                            anchors.margins: Metrics.px(4, root.t)
-                            clip: true
-                            spacing: Metrics.px(2, root.t)
-                            model: root.visibleSkillSuggestions
-                            currentIndex: Math.min(root.selectedSkillSuggestion,
-                                                   Math.max(0, count - 1))
-
-                            delegate: Basic.ItemDelegate {
-                                id: suggestionRow
-                                required property var modelData
-                                required property int index
-                                readonly property bool fileEntry: modelData.kind === "file"
-                                width: skillSuggestionList.width
-                                // A file shows its worktree path, then whether it is a file or folder.
-                                height: Metrics.px(46, root.t)
-                                padding: Metrics.px(8, root.t)
-                                highlighted: index === skillSuggestionList.currentIndex
-                                contentItem: Item {
-                                    ColumnLayout {
-                                        objectName: "fileMentionSuggestion"
-                                        anchors.fill: parent
-                                        visible: suggestionRow.fileEntry
-                                        spacing: 1
-                                        Text {
-                                            objectName: "fileMentionPath"
-                                            Layout.fillWidth: true
-                                            text: (suggestionRow.modelData.path || "").replace(/\/$/, "")
-                                            color: root.t.accentHover
-                                            font.family: root.t.monoFont
-                                            font.pixelSize: root.t.reading
-                                            // Long paths keep both the top folder and the file name.
-                                            elide: Text.ElideMiddle
-                                        }
-                                        Text {
-                                            text: suggestionRow.modelData.directory ? "Folder" : "File"
-                                            color: root.t.textMuted
-                                            font.family: root.t.uiFont
-                                            font.pixelSize: root.t.micro
-                                        }
-                                    }
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        visible: !suggestionRow.fileEntry
-                                        spacing: Metrics.px(10, root.t)
-                                        Text {
-                                            text: suggestionRow.modelData.mention || ""
-                                            color: root.t.accentHover
-                                            font.family: root.t.monoFont
-                                            font.pixelSize: root.t.reading
-                                            Layout.preferredWidth: Metrics.px(150, root.t)
-                                            elide: Text.ElideRight
-                                        }
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 1
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: suggestionRow.modelData.description || ""
-                                                color: root.t.textMain
-                                                font.family: root.t.uiFont
-                                                font.pixelSize: root.t.body
-                                                elide: Text.ElideRight
-                                            }
-                                            Text {
-                                                text: suggestionRow.modelData.kind === "conversation"
-                                                      ? (suggestionRow.modelData.detail || "")
-                                                      : (suggestionRow.modelData.source || "") + " skill"
-                                                color: root.t.textMuted
-                                                font.family: root.t.uiFont
-                                                font.pixelSize: root.t.micro
-                                            }
-                                        }
-                                    }
-                                }
-                                background: Rectangle {
-                                    radius: Metrics.px(8, root.t)
-                                    color: parent.highlighted || parent.hovered
-                                        ? root.t.interactiveActive : "transparent"
-                                }
-                                onClicked: root.applySkillSuggestion(modelData)
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        id: composerFooter
-                        objectName: "composerFooter"
-                        anchors.left: composer.left
-                        anchors.right: composer.right
-                        anchors.top: composer.bottom
-                        anchors.topMargin: Metrics.px(4, root.t)
-                        anchors.leftMargin: Metrics.px(2, root.t)
-                        anchors.rightMargin: Metrics.px(2, root.t)
-                        height: Metrics.px(28, root.t)
-                        spacing: Metrics.px(2, root.t)
-
-                                Basic.ToolButton {
-                                    id: attachButton
-                                    objectName: "attachButton"
-                                    Layout.preferredWidth: Metrics.px(28, root.t)
-                                    Layout.preferredHeight: Metrics.px(28, root.t)
-                                    contentItem: Item {
-                                        Item {
-                                            objectName: "attachGlyph"
-                                            anchors.centerIn: parent
-                                            width: Metrics.px(14, root.t)
-                                            height: Metrics.px(14, root.t)
-                                            Rectangle { anchors.centerIn: parent; width: Metrics.px(12, root.t); height: 1.5; radius: 1; color: root.t.textSecondary }
-                                            Rectangle { anchors.centerIn: parent; width: 1.5; height: Metrics.px(12, root.t); radius: 1; color: root.t.textSecondary }
-                                        }
-                                    }
-                                    padding: Metrics.px(7, root.t)
-                                    background: Item {
-                                        Rectangle {
-                                            anchors.centerIn: parent
-                                            width: Metrics.px(24, root.t)
-                                            height: Metrics.px(24, root.t)
-                                            radius: Metrics.px(5, root.t)
-                                            color: attachButton.hovered ? root.t.surfaceHover : "transparent"
-                                        }
-                                    }
-                                    onClicked: agentHost.chooseAttachments()
-                                    KetToolTip {
-                                        tokens: root.t
-                                        visible: attachButton.hovered
-                                        text: "Add images or text files"
-                                    }
-                                    Accessible.name: "Attach files"
-                                }
-                                Basic.ToolButton {
-                                    id: permissionButton
-                                    objectName: "permissionButton"
-                                    Layout.minimumHeight: Metrics.px(28, root.t)
-                                    text: root.currentPermission.label
-                                    contentItem: Row {
-                                        spacing: Metrics.px(6, root.t)
-                                        TintedIcon {
-                                            width: Metrics.px(14, root.t)
-                                            height: Metrics.px(14, root.t)
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: root.permissionIconSource(root.permission)
-                                            color: root.permissionAccent
-                                        }
-                                        Text {
-                                            text: permissionButton.text
-                                            visible: !composer.compactControls
-                                            color: root.permissionAccent
-                                            font.family: root.t.uiFont
-                                            font.pixelSize: root.t.body
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
-                                        TintedIcon {
-                                            width: Metrics.px(14, root.t)
-                                            height: Metrics.px(14, root.t)
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: "qrc:/agent/icons/chevron-down.svg"
-                                            color: root.permissionElevated
-                                                   ? root.permissionAccent : root.t.textMuted
-                                        }
-                                    }
-                                    background: Rectangle { radius: Metrics.px(6, root.t); color: permissionButton.hovered || permissionMenu.visible ? root.t.surfaceHover : "transparent" }
-                                    onClicked: { skillsPopup.close(); modelPopup.close(); permissionMenu.open() }
-                                    Basic.Popup {
-                                        id: permissionMenu
-                                        objectName: "permissionMenu"
-                                        focus: true
-                                        onOpened: permissionItems.forceActiveFocus()
-                                        y: -height - 4
-                                        x: Math.min(0, root.width - permissionButton.mapToItem(root, 0, 0).x - width - 12)
-                                        width: Math.min(Metrics.px(320, root.t), root.width - Metrics.px(24, root.t))
-                                        height: permissionItems.implicitHeight + Metrics.px(16, root.t)
-                                        padding: Metrics.px(8, root.t)
-                                        background: Rectangle {
-                                            color: root.t.surfaceRaised
-                                            radius: Metrics.px(12, root.t)
-                                            border.width: 1
-                                            border.color: root.t.borderStrong
-                                        }
-                                        Column {
-                                            id: permissionItems
-                                            width: parent.width
-                                            spacing: Metrics.px(2, root.t)
-                                            focus: true
-                                            Keys.onPressed: function(event) {
-                                            const choice = event.key - Qt.Key_1
-                                            if (choice >= 0 && choice < root.permissionProfiles.length) {
-                                                root.permission = root.permissionProfiles[choice].id
-                                                root.publishConversationConfiguration()
-                                                permissionMenu.close()
-                                                event.accepted = true
-                                            }
-                                        }
-                                            Text {
-                                                width: parent.width
-                                                leftPadding: Metrics.px(8, root.t)
-                                                topPadding: Metrics.px(2, root.t)
-                                                bottomPadding: Metrics.px(6, root.t)
-                                                text: "Mode"
-                                                color: root.t.textMuted
-                                                font.family: root.t.uiFont
-                                                font.pixelSize: root.t.micro
-                                            }
-                                            Repeater {
-                                                model: root.permissionProfiles
-                                                Basic.ItemDelegate {
-                                                    id: permissionOption
-                                                    required property var modelData
-                                                    required property int index
-                                                    width: permissionItems.width
-                                                    height: Metrics.px(52, root.t)
-                                                    leftPadding: Metrics.px(8, root.t)
-                                                    rightPadding: Metrics.px(8, root.t)
-                                                    contentItem: RowLayout {
-                                                        spacing: Metrics.px(8, root.t)
-                                                        TintedIcon {
-                                                            Layout.preferredWidth: Metrics.px(14, root.t)
-                                                            Layout.preferredHeight: Metrics.px(14, root.t)
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            source: root.permissionIconSource(modelData.id)
-                                                            color: root.permissionLabelColor(modelData)
-                                                        }
-                                                        Column {
-                                                            Layout.fillWidth: true
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            spacing: Metrics.px(3, root.t)
-                                                            Text {
-                                                                width: parent.width
-                                                                text: modelData.label
-                                                                color: root.permissionLabelColor(modelData)
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.body
-                                                            }
-                                                            Text {
-                                                                width: parent.width
-                                                                text: modelData.description || ""
-                                                                elide: Text.ElideRight
-                                                                color: modelData.elevated === true
-                                                                       ? (root.t.warning || "#d9a441")
-                                                                       : root.t.textMuted
-                                                                opacity: modelData.elevated === true ? 0.85 : 1
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.micro
-                                                            }
-                                                        }
-                                                        Rectangle {
-                                                            visible: modelData.elevated === true && root.permission !== modelData.id
-                                                            Layout.preferredWidth: enableText.implicitWidth + Metrics.px(12, root.t)
-                                                            Layout.preferredHeight: Metrics.px(18, root.t)
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            radius: Metrics.px(5, root.t)
-                                                            color: "transparent"
-                                                            border.width: 1
-                                                            border.color: root.t.warning || "#d9a441"
-                                                            Text {
-                                                                id: enableText
-                                                                anchors.centerIn: parent
-                                                                text: "Enable"
-                                                                color: root.t.warning || "#d9a441"
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.micro
-                                                            }
-                                                        }
-                                                        Text {
-                                                            text: root.permission === modelData.id ? "✓" : ""
-                                                            color: root.permissionLabelColor(modelData)
-                                                            font.pixelSize: root.t.caption
-                                                            Layout.preferredWidth: Metrics.px(12, root.t)
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                        }
-                                                        Text {
-                                                            text: String(index + 1)
-                                                            color: root.t.textMuted
-                                                            font.family: root.t.uiFont
-                                                            font.pixelSize: root.t.micro
-                                                            Layout.preferredWidth: Metrics.px(10, root.t)
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            horizontalAlignment: Text.AlignRight
-                                                        }
-                                                    }
-                                                    background: Rectangle { radius: Metrics.px(6, root.t); color: parent.hovered ? root.t.interactiveActive : "transparent" }
-                                                    onClicked: {
-                                                        root.permission = modelData.id
-                                                        root.publishConversationConfiguration()
-                                                        permissionMenu.close()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    KetToolTip {
-                                        tokens: root.t
-                                        visible: permissionButton.hovered
-                                        text: "Permissions for the next message. Restricted actions are blocked without approval prompts."
-                                    }
-                                }
-                                Basic.ToolButton {
-                                    id: skillsButton
-                                    objectName: "skillsButton"
-                                    Layout.minimumHeight: Metrics.px(28, root.t)
-                                    visible: false
-                                    enabled: !agentHost.sessionRunning
-                                    text: root.enabledSkillCount() > 0 ? "Skills " + root.enabledSkillCount() : "Skills"
-                                    contentItem: Row {
-                                        spacing: Metrics.px(6, root.t)
-                                        TintedIcon {
-                                            width: Metrics.px(14, root.t)
-                                            height: Metrics.px(14, root.t)
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: "qrc:/agent/icons/zap.svg"
-                                            color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
-                                        }
-                                        Text {
-                                            text: skillsButton.text
-                                            visible: !composer.compactControls
-                                            color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
-                                            font.family: root.t.uiFont
-                                            font.pixelSize: root.t.body
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
-                                    }
-                                    background: Rectangle { radius: Metrics.px(8, root.t); color: skillsButton.hovered ? root.t.surfaceHover : "transparent" }
-                                    onClicked: {
-                                        permissionMenu.close()
-                                        modelPopup.close()
-                                        agentHost.refreshSkills()
-                                        skillsPopup.open()
-                                    }
-                                    Basic.Popup {
-                                        id: skillsPopup
-                                        objectName: "skillsPopup"
-                                        focus: true
-                                        y: -height - 4
-                                        x: Math.min(0, root.width - skillsButton.mapToItem(root, 0, 0).x - width - 12)
-                                        width: Math.min(Metrics.px(420, root.t), root.width - Metrics.px(24, root.t))
-                                        height: Math.min(root.height - Metrics.px(32, root.t), skillsContent.implicitHeight + Metrics.px(16, root.t))
-                                        padding: Metrics.px(8, root.t)
-                                        background: Rectangle { color: root.t.surfaceRaised; radius: Metrics.px(12, root.t); border.color: root.t.borderStrong }
-                                        ColumnLayout {
-                                            id: skillsContent
-                                            width: parent.width
-                                            spacing: Metrics.px(6, root.t)
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: "Skills"
-                                                    color: root.t.textMain
-                                                    font.family: root.t.uiFont
-                                                    font.pixelSize: root.t.reading
-                                                    font.weight: Font.DemiBold
-                                                }
-                                                Text {
-                                                    text: root.enabledSkillCount() + " enabled"
-                                                    color: root.t.textMuted
-                                                    font.family: root.t.uiFont
-                                                    font.pixelSize: root.t.caption
-                                                }
-                                            }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                visible: agentHost.skills.length === 0
-                                                text: "No SKILL.md files found in this project or user skills."
-                                                color: root.t.textSecondary
-                                                font.family: root.t.uiFont
-                                                font.pixelSize: root.t.body
-                                                wrapMode: Text.Wrap
-                                            }
-                                            ListView {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: Math.min(root.height * 0.46, contentHeight)
-                                                clip: true
-                                                model: agentHost.skills
-                                                delegate: Basic.ItemDelegate {
-                                                    id: skillOption
-                                                    required property var modelData
-                                                    width: ListView.view.width
-                                                    height: Metrics.px(62, root.t)
-                                                    padding: Metrics.px(8, root.t)
-                                                    contentItem: RowLayout {
-                                                        spacing: Metrics.px(10, root.t)
-                                                        Rectangle {
-                                                            Layout.preferredWidth: Metrics.px(18, root.t)
-                                                            Layout.preferredHeight: Metrics.px(18, root.t)
-                                                            radius: Metrics.px(5, root.t)
-                                                            color: modelData.enabled ? root.t.accent : "transparent"
-                                                            border.width: 1
-                                                            border.color: modelData.enabled ? root.t.accentHover : root.t.borderStrong
-                                                            Text {
-                                                                anchors.centerIn: parent
-                                                                text: modelData.enabled ? "✓" : ""
-                                                                color: "#ffffff"
-                                                                font.pixelSize: root.t.body
-                                                            }
-                                                        }
-                                                        Column {
-                                                            Layout.fillWidth: true
-                                                            spacing: Metrics.px(3, root.t)
-                                                            Text {
-                                                                width: parent.width
-                                                                text: modelData.name + " · " + modelData.source
-                                                                color: root.t.textMain
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.reading
-                                                                font.weight: modelData.enabled ? Font.DemiBold : Font.Medium
-                                                                elide: Text.ElideRight
-                                                            }
-                                                            Text {
-                                                                width: parent.width
-                                                                text: modelData.description || modelData.displayPath
-                                                                color: root.t.textMuted
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.caption
-                                                                elide: Text.ElideRight
-                                                            }
-                                                            Text {
-                                                                width: parent.width
-                                                                text: modelData.displayPath
-                                                                color: root.t.textDisabled
-                                                                font.family: root.t.uiFont
-                                                                font.pixelSize: root.t.micro
-                                                                elide: Text.ElideMiddle
-                                                            }
-                                                        }
-                                                    }
-                                                    background: Rectangle {
-                                                        radius: Metrics.px(8, root.t)
-                                                        color: modelData.enabled ? root.t.interactiveActive
-                                                              : parent.hovered ? root.t.surfaceHover : "transparent"
-                                                    }
-                                                    onClicked: agentHost.toggleSkill(modelData.path, !modelData.enabled)
-                                                    KetToolTip {
-                                                        tokens: root.t
-                                                        visible: skillOption.hovered
-                                                        text: modelData.description || modelData.displayPath
-                                                    }
-                                                }
-                                                ScrollBar.vertical: Basic.ScrollBar { policy: ScrollBar.AsNeeded }
-                                            }
-                                        }
-                                    }
-                                    KetToolTip {
-                                        tokens: root.t
-                                        visible: skillsButton.hovered
-                                        text: "Manage skills included with the next agent turn"
-                                    }
-                                }
-                                Item { Layout.fillWidth: true }
-                                Basic.ToolButton {
-                                    id: modelButton
-                                    objectName: "modelButton"
-                                    Layout.minimumWidth: Metrics.px(40, root.t)
-                                    Layout.minimumHeight: Metrics.px(28, root.t)
-                                    Layout.maximumWidth: Math.max(Metrics.px(40, root.t), composer.width - (composer.compactControls ? Metrics.px(120, root.t) : Metrics.px(240, root.t)))
-                                    contentItem: RowLayout {
-                                        spacing: Metrics.px(6, root.t)
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: root.composerModelText()
-                                            color: root.t.textSecondary
-                                            font.family: root.t.uiFont
-                                            font.pixelSize: root.t.body
-                                            elide: Text.ElideRight
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        TintedIcon {
-                                            Layout.preferredWidth: Metrics.px(14, root.t)
-                                            Layout.preferredHeight: Metrics.px(14, root.t)
-                                            source: "qrc:/agent/icons/chevron-down.svg"
-                                            rotation: modelPopup.visible ? 180 : 0
-                                            color: root.t.textMuted
-                                        }
-                                    }
-                                    background: Rectangle { radius: Metrics.px(5, root.t); color: modelButton.hovered || modelPopup.visible ? root.t.surfaceHover : "transparent" }
-                                    onClicked: {
-                                        if (modelPopup.visible) modelPopup.close()
-                                        else root.openModelPicker()
-                                    }
-                                    Accessible.name: "Choose model and reasoning effort"
-                                    KetToolTip {
-                                        tokens: root.t
-                                        visible: modelButton.hovered && !modelPopup.visible
-                                        text: root.composerModelTooltip()
-                                    }
-                                }
-                                UsageRingButton {
-                                    tokens: root.t
-                                    id: usageRingButton
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: Metrics.px(20, root.t)
-                                    Layout.preferredHeight: Metrics.px(20, root.t)
-                                    progress: root.usageRingProgress
-                                    trackColor: root.t.borderStrong
-                                    fillColor: root.usageRingProgress >= 0.9 ? root.t.warning : root.t.textSecondary
-                                    hoverColor: root.t.surfaceHover
-                                    onClicked: {
-                                        skillsPopup.close()
-                                        permissionMenu.close()
-                                        modelPopup.close()
-                                        usageLimitsPopover.toggleFromAnchor()
-                                    }
-                                    KetToolTip {
-                                        tokens: root.t
-                                        visible: usageRingButton.hovered && !usageLimitsPopover.visible
-                                        text: {
-                                            const pct = Math.round(root.usageRingProgress * 100)
-                                            if (root.usageContext.available)
-                                                return "Context " + pct + "% · usage limits"
-                                            if (root.weeklyQuota.available)
-                                                return "Weekly " + pct + "% · usage limits"
-                                            return "Context and usage limits"
-                                        }
-                                    }
-                                }
-                    }
+                AgentComposer {
+                    id: composerArea
+                    workspace: root
+                    modelPopup: root.modelPicker
+                    imagePreview: root.imageViewer
+                    usageLimitsPopover: root.limitsPopover
                 }
             }
 

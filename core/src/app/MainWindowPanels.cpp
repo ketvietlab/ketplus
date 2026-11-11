@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "KetAppearance.h"
+
 #include "workspace/SearchPanel.h"
 
 #include "app/SettingsDialog.h"
@@ -28,6 +30,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -86,7 +89,7 @@ TerminalPanel* MainWindow::ensureTerminal() {
                              appearanceSettings_.terminal.lineHeightPixels,
                              appearanceSettings_.terminalFontFamily);
     mainSplit_->addWidget(terminal_);
-    mainSplit_->setStretchFactor(mainSplit_->indexOf(workspaceSplit_), 1);
+    mainSplit_->setStretchFactor(mainSplit_->indexOf(editorSplit_), 1);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(terminal_), 0);
     connect(terminal_, &TerminalPanel::closeRequested, this, [this] { setTerminalVisible(false); });
     connect(terminal_, &TerminalPanel::statusMessageRequested, this,
@@ -95,6 +98,8 @@ TerminalPanel* MainWindow::ensureTerminal() {
 }
 
 void MainWindow::setTerminalVisible(const bool visible) {
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* terminal = ensureTerminal();
         terminal->show();
@@ -128,13 +133,12 @@ ExplorerPanel* MainWindow::ensureExplorer() {
     explorer_ = new ExplorerPanel(workspaceSplit_);
     workspaceSplit_->insertWidget(0, explorer_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(explorer_), 0);
-    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
+    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorColumn_), 1);
 
     connect(explorer_, &ExplorerPanel::fileOpenRequested, this, &MainWindow::openFile);
     connect(explorer_, &ExplorerPanel::gitDiffRequested, this,
             [this](const QString& path) { requestFileDiff(path); });
     connect(explorer_, &ExplorerPanel::openFolderRequested, this, &MainWindow::chooseFolder);
-    connect(explorer_, &ExplorerPanel::hideRequested, this, [this] { setExplorerVisible(false); });
     connect(explorer_, &ExplorerPanel::pathRenamed, this,
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
@@ -164,7 +168,11 @@ ExplorerPanel* MainWindow::ensureExplorer() {
     return explorer_;
 }
 
-void MainWindow::setExplorerVisible(const bool visible) {
+void MainWindow::setExplorerVisible(bool visible) {
+    const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(explorerAction_, visible);
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* explorer = ensureExplorer();
         if (gitChanges_ != nullptr) {
@@ -177,8 +185,11 @@ void MainWindow::setExplorerVisible(const bool visible) {
         }
         explorer->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        sizes[workspaceSplit_->indexOf(explorer)] = 260;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] = qMax(420, workspaceSplit_->width() - 260);
+        // The mock's 248 px column, at the interface zoom.
+        const int width = qRound(ket::Appearance::instance().scaled(248));
+        sizes[workspaceSplit_->indexOf(explorer)] = width;
+        sizes[workspaceSplit_->indexOf(editorColumn_)] =
+            qMax(420, workspaceSplit_->width() - width);
         workspaceSplit_->setSizes(sizes);
         const QSignalBlocker explorerBlocker(explorerAction_);
         const QSignalBlocker sourceControlBlocker(sourceControlAction_);
@@ -205,18 +216,29 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
     gitChanges_ = new GitChangesPanel(workspaceSplit_);
     workspaceSplit_->insertWidget(0, gitChanges_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(gitChanges_), 0);
-    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
+    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorColumn_), 1);
     connect(gitChanges_, &GitChangesPanel::diffRequested, this,
             [this](const QString& path, const GitDiffMode mode) { requestFileDiff(path, mode); });
     connect(gitChanges_, &GitChangesPanel::fileOpenRequested, this, &MainWindow::openFile);
     connect(gitChanges_, &GitChangesPanel::refreshRequested, git_, &GitService::refresh);
+    connect(gitChanges_, &GitChangesPanel::stageRequested, git_, &GitService::stageFile);
+    connect(gitChanges_, &GitChangesPanel::unstageRequested, git_, &GitService::unstageFile);
+    connect(gitChanges_, &GitChangesPanel::commitRequested, git_, &GitService::commitStaged);
+    connect(git_, &GitService::mutationRunningChanged, gitChanges_,
+            &GitChangesPanel::setMutationRunning);
+    connect(git_, &GitService::mutationFinished, gitChanges_, &GitChangesPanel::mutationFinished);
+    gitChanges_->setMutationRunning(git_->mutationRunning());
     connect(gitChanges_, &GitChangesPanel::hideRequested, this,
             [this] { setSourceControlVisible(false); });
     gitChanges_->setSnapshot(gitSnapshot_);
     return gitChanges_;
 }
 
-void MainWindow::setSourceControlVisible(const bool visible) {
+void MainWindow::setSourceControlVisible(bool visible) {
+    const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(sourceControlAction_, visible);
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* changes = ensureGitChanges();
         if (explorer_ != nullptr) {
@@ -229,8 +251,11 @@ void MainWindow::setSourceControlVisible(const bool visible) {
         }
         changes->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        sizes[workspaceSplit_->indexOf(changes)] = 280;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] = qMax(420, workspaceSplit_->width() - 280);
+        // As wide as the Explorer, as in the mock.
+        const int width = qRound(ket::Appearance::instance().scaled(248));
+        sizes[workspaceSplit_->indexOf(changes)] = width;
+        sizes[workspaceSplit_->indexOf(editorColumn_)] =
+            qMax(420, workspaceSplit_->width() - width);
         workspaceSplit_->setSizes(sizes);
         const QSignalBlocker explorerBlocker(explorerAction_);
         const QSignalBlocker sourceControlBlocker(sourceControlAction_);

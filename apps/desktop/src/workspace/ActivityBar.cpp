@@ -1,14 +1,25 @@
 #include "workspace/ActivityBar.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/InterfaceZoom.h"
+#include "ui/SymbolIcon.h"
+#include <QApplication>
 
+#include "KetAvatar.h"
+#include "KetBanner.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetNavItem.h"
+#include "KetUpdateCard.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
-#include "workspace/LucideIcons.h"
+#include "workspace/SidebarControls.h"
+#include "workspace/SymbolIcons.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QButtonGroup>
 #include <QComboBox>
+#include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -29,8 +40,28 @@
 
 namespace ketplus {
 namespace {
+// The sidebar's journal banner opens Settings → Storage when clicked, as in the mock; the
+// banner draws itself and lets the clicks through to this button.
+class StorageNoticeButton final : public QAbstractButton {
+  public:
+    explicit StorageNoticeButton(QWidget* parent) : QAbstractButton(parent) {
+        // A button's Button role would make the banner's labels draw in ButtonText rather
+        // than in the banner's tone.
+        setBackgroundRole(QPalette::Window);
+    }
 
-constexpr int kRowHeight = 32;
+  protected:
+    void paintEvent(QPaintEvent*) override {}
+    [[nodiscard]] QSize sizeHint() const override {
+        return layout() != nullptr ? layout()->sizeHint() : QAbstractButton::sizeHint();
+    }
+};
+QString journalSize(qint64 bytes) {
+    return bytes >= 1'000'000'000LL
+               ? ActivityBar::tr("%1 GB").arg(double(bytes) / 1e9, 0, 'f', 1)
+               : ActivityBar::tr("%1 MB").arg((qMax<qint64>(0, bytes) + 500'000) / 1'000'000);
+}
+
 constexpr int kResizeHandleWidth = 5;
 const auto kWidthSetting = QStringLiteral("sidebar/width");
 
@@ -50,7 +81,9 @@ class SidebarResizeHandle final : public QWidget {
     }
     void mouseMoveEvent(QMouseEvent* event) override {
         if (event->buttons().testFlag(Qt::LeftButton))
-            bar_->setSidebarWidth(startWidth_ + qRound(event->globalPosition().x() - startX_));
+            bar_->setSidebarWidth(startWidth_ + qRound((event->globalPosition().x() - startX_) /
+                                                       InterfaceZoomMetrics::factor(
+                                                           chrome_geometry::zoomPercent(bar_))));
     }
     void mouseReleaseEvent(QMouseEvent*) override {
         QSettings().setValue(kWidthSetting, bar_->sidebarWidth());
@@ -67,9 +100,9 @@ class SidebarResizeHandle final : public QWidget {
 };
 
 // Icons render at the size they are shown so the stroke keeps its on-screen width.
-QIcon lucideIcon(const QByteArray& body, const QSize& size,
-                 const QColor& color = QColor(QStringLiteral("#6b7280"))) {
-    return QIcon(lucide_icon::pixmap(body, color, size));
+QIcon symbolIcon(const QByteArray& body, const QSize& size,
+                 const QColor& color = QApplication::palette().color(QPalette::PlaceholderText)) {
+    return QIcon(symbol_icon::pixmap(body, color, size));
 }
 
 } // namespace
@@ -79,7 +112,8 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     setProperty("kvRole", QStringLiteral("productSidebar"));
     setAttribute(Qt::WA_StyledBackground, true);
     sidebarWidth_ = qBound(kMinWidth, QSettings().value(kWidthSetting, kWidth).toInt(), kMaxWidth);
-    setFixedWidth(sidebarWidth_);
+    chrome_geometry::fixedWidth(this, sidebarWidth_);
+    shownWidth_ = width();
 
     group_->setExclusive(true);
     auto* layout = new QVBoxLayout(this);
@@ -89,7 +123,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* brand = new QWidget(this);
     brand->setObjectName(QStringLiteral("productBrand"));
     brand->setProperty("kvRole", QStringLiteral("productBrand"));
-    chrome_geometry::fixedHeight(brand, 50);
+    chrome_geometry::fixedHeight(brand, 54); // the mock: 16 above the 24 px mark, 14 below
     auto* brandLayout = new QHBoxLayout(brand);
     chrome_geometry::margins(brandLayout, 4, 0, 2, 0);
     chrome_geometry::spacing(brandLayout, 6);
@@ -102,55 +136,31 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     brandLayout->addStretch();
     layout->addWidget(brand);
 
-    quickSearchButton_ = new QToolButton(this);
+    // The mock's field-styled Quick search; it opens the command palette.
+    quickSearchButton_ = new SidebarSearchButton(tr("Quick search"), QStringLiteral("⌘ K"), this);
     quickSearchButton_->setObjectName(QStringLiteral("quickSearchButton"));
-    quickSearchButton_->setProperty("kvRole", QStringLiteral("productSearch"));
-    quickSearchButton_->setText(tr("Quick search"));
-    quickSearchButton_->setProperty("lucideBody", QByteArray(lucide::search));
-    chrome_geometry::iconSize(quickSearchButton_, QSize(14, 14));
-    quickSearchButton_->setIcon(lucideIcon(lucide::search, quickSearchButton_->iconSize()));
-    quickSearchButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    quickSearchButton_->setAccessibleName(tr("Quick search"));
-    chrome_geometry::fixedHeight(quickSearchButton_, kRowHeight);
-    quickSearchButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    quickSearchShortcut_ = new QLabel(QStringLiteral("⌘ K"), quickSearchButton_);
-    quickSearchShortcut_->setObjectName(QStringLiteral("quickSearchShortcut"));
-    quickSearchShortcut_->setAlignment(Qt::AlignCenter);
-    quickSearchShortcut_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    // Laid out, not positioned, so the shortcut follows the resizable sidebar edge.
-    auto* searchRow = new QHBoxLayout(quickSearchButton_);
-    searchRow->setSizeConstraint(QLayout::SetNoConstraint);
-    chrome_geometry::margins(searchRow, 0, 0, 8, 0);
-    searchRow->addStretch();
-    searchRow->addWidget(quickSearchShortcut_);
-    connect(quickSearchButton_, &QToolButton::clicked, this, &ActivityBar::quickSearchRequested);
+    connect(quickSearchButton_, &QAbstractButton::clicked, this,
+            &ActivityBar::quickSearchRequested);
     layout->addWidget(quickSearchButton_);
-    chrome_geometry::addSpacing(layout, 12);
+    chrome_geometry::addSpacing(layout, 8);
 
     agentButton_ =
-        addModeButton(lucide::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
-    explorerButton_ = addModeButton(lucide::folder, tr("Files & Editor"), Mode::Explorer);
+        addModeButton(symbols::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
+    explorerButton_ = addModeButton(symbols::folder, tr("Files & Editor"), Mode::Explorer);
     sourceControlButton_ =
-        addModeButton(lucide::gitBranch, tr("Source Control"), Mode::SourceControl);
-    remoteButton_ = addModeButton(lucide::unplug, tr("Connections"), Mode::Remote);
+        addModeButton(symbols::gitBranch, tr("Source Control"), Mode::SourceControl);
+    remoteButton_ = addModeButton(symbols::network, tr("Connections"), Mode::Remote);
     explorerButton_->setObjectName(QStringLiteral("explorerActivityButton"));
     sourceControlButton_->setObjectName(QStringLiteral("sourceControlActivityButton"));
-    sourceControlCount_ = new QLabel(sourceControlButton_);
-    sourceControlCount_->setObjectName(QStringLiteral("sourceControlCountBadge"));
-    sourceControlCount_->setAlignment(Qt::AlignCenter);
-    chrome_geometry::fixedSize(sourceControlCount_, 22, 16);
-    sourceControlCount_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    static_cast<QHBoxLayout*>(sourceControlButton_->layout())->addWidget(sourceControlCount_);
-    sourceControlCount_->hide();
     agentButton_->setObjectName(QStringLiteral("agentWorkspaceActivityButton"));
     remoteButton_->setObjectName(QStringLiteral("remoteActivityButton"));
-    const QList<QToolButton*> navigationButtons = {agentButton_, explorerButton_,
-                                                   sourceControlButton_, remoteButton_};
+    const QList<ket::NavItem*> navigationButtons = {agentButton_, explorerButton_,
+                                                    sourceControlButton_, remoteButton_};
     for (int index = 0; index < navigationButtons.size(); ++index) {
         auto* button = navigationButtons.at(index);
         layout->addWidget(button);
         if (index + 1 < navigationButtons.size())
-            chrome_geometry::addSpacing(layout, 4);
+            chrome_geometry::addSpacing(layout, 2); // the mock's destination spacing
     }
 
     auto* contextScroll = new QScrollArea(this);
@@ -208,9 +218,17 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             emit machineRequested(machineSelect_->itemData(index).toString());
     });
     machineLayout->addWidget(machineSelect_, 1);
+    // The mock's chevron beside the machine name opens the machine list.
+    auto* machineChooser =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"chevron-down")),
+                            tr("Choose machine"), machineRow);
+    machineChooser->setObjectName(QStringLiteral("productMachineChooser"));
+    machineChooser->setControlSize(ket::ControlSize::Small);
+    connect(machineChooser, &QAbstractButton::clicked, machineSelect_, &QComboBox::showPopup);
+    machineLayout->addWidget(machineChooser);
     repositoryAction_ = new QToolButton(machineRow);
     repositoryAction_->setProperty("kvRole", QStringLiteral("productSectionAction"));
-    repositoryAction_->setProperty("lucideBody", QByteArray(lucide::plus));
+    repositoryAction_->setProperty("symbolName", QByteArray(symbols::plus));
     repositoryAction_->setAccessibleName(tr("Add repository"));
     repositoryAction_->setToolTip(tr("Add repository"));
     chrome_geometry::fixedSize(repositoryAction_, 22, 22);
@@ -239,42 +257,94 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             &ActivityBar::conversationContextMenuRequested);
     connect(repositoryList_, &SidebarRepositoryList::conversationRenameRequested, this,
             &ActivityBar::conversationRenameRequested);
+    // The mock's active tag filter: set from a tag in the conversation header, cleared here.
+    tagFilter_ = new SidebarTagFilterChip(context);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, this,
+            [this] { repositoryList_->setTagFilter({}); });
+    auto* tagFilterRow = new QWidget(context);
+    auto* tagFilterLayout = new QVBoxLayout(tagFilterRow);
+    chrome_geometry::margins(tagFilterLayout, 6, 0, 6, 6);
+    tagFilterLayout->addWidget(tagFilter_);
+    tagFilterRow->setVisible(false);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, tagFilterRow, &QWidget::hide);
+    tagFilterRow_ = tagFilterRow;
+    contextLayout->addWidget(tagFilterRow);
     contextLayout->addWidget(repositoryList_);
     contextLayout->addStretch();
     contextScroll->setWidget(context);
     layout->addWidget(contextScroll, 1);
 
-    updateReadyButton_ = new QToolButton(this);
+    storageNotice_ = new QWidget(this);
+    storageNotice_->setObjectName(QStringLiteral("sidebarStorageWarning"));
+    auto* storageLayout = new QVBoxLayout(storageNotice_);
+    chrome_geometry::margins(storageLayout, 0, 0, 0, 6); // the mock's gap above Update ready
+    auto* storageSettings = new StorageNoticeButton(storageNotice_);
+    storageSettings->setObjectName(QStringLiteral("sidebarStorageSettings"));
+    storageSettings->setCursor(Qt::PointingHandCursor);
+    storageSettings->setFocusPolicy(Qt::StrongFocus);
+    auto* bannerLayout = new QVBoxLayout(storageSettings);
+    bannerLayout->setContentsMargins(0, 0, 0, 0);
+    storageBanner_ = new ket::Banner(ket::BannerTone::Warning, {}, {}, storageSettings);
+    storageBanner_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    bannerLayout->addWidget(storageBanner_);
+    connect(storageSettings, &QAbstractButton::clicked, this,
+            [this] { emit settingsSectionRequested(QStringLiteral("storage")); });
+    storageLayout->addWidget(storageSettings);
+    storageNotice_->hide();
+    layout->addWidget(storageNotice_);
+
+    updateReadyButton_ = new ket::UpdatePill(tr("Update ready"), {}, this);
     updateReadyButton_->setObjectName(QStringLiteral("productUpdateReadyButton"));
     updateReadyButton_->setProperty("kvRole", QStringLiteral("productUpdateReady"));
-    updateReadyButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     updateReadyButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     updateReadyButton_->hide();
-    connect(updateReadyButton_, &QToolButton::clicked, this, &ActivityBar::updatesRequested);
+    connect(updateReadyButton_, &QAbstractButton::clicked, this, &ActivityBar::updatesRequested);
     layout->addWidget(updateReadyButton_);
 
     identityButton_ = new QToolButton(this);
     identityButton_->setObjectName(QStringLiteral("productIdentityButton"));
     identityButton_->setProperty("kvRole", QStringLiteral("productIdentity"));
-    identityButton_->setText(tr("KetPlus\nPersonal workspace"));
+    // The button draws no text: a QToolButton centres it, and the mock starts both lines after
+    // the avatar. The labels below carry it, and the button keeps it as its accessible name.
     identityButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     chrome_geometry::fixedHeight(identityButton_, 52);
-    identityButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* identityAvatar = new QLabel(QStringLiteral("KP"), identityButton_);
-    identityAvatar->setObjectName(QStringLiteral("productIdentityAvatar"));
-    identityAvatar->setAlignment(Qt::AlignCenter);
-    identityAvatar->setGeometry(7, 11, 29, 29);
-    identityAvatar->setAttribute(Qt::WA_TransparentForMouseEvents);
+    // The sidebar sets the width; a long account name is elided, never widens it.
+    identityButton_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    identityButton_->installEventFilter(this);
+    identityAvatar_ = new QLabel(QStringLiteral("KP"), identityButton_);
+    identityAvatar_->setObjectName(QStringLiteral("productIdentityAvatar"));
+    identityAvatar_->setAlignment(Qt::AlignCenter);
+    identityAvatar_->setGeometry(7, 11, 29, 29);
+    identityAvatar_->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* identityChevron = new QLabel(identityButton_);
     identityChevron->setObjectName(QStringLiteral("productIdentityChevron"));
-    identityChevron->setProperty("lucideBody", QByteArray(lucide::chevronDown));
+    identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
     chrome_geometry::fixedSize(identityChevron, 14, 14);
     identityChevron->setAttribute(Qt::WA_TransparentForMouseEvents);
+    identityName_ = new QLabel(identityButton_);
+    identityName_->setObjectName(QStringLiteral("productIdentityName"));
+    identitySubtitle_ = new QLabel(tr("Personal workspace"), identityButton_);
+    identitySubtitle_->setObjectName(QStringLiteral("productIdentitySubtitle"));
+    auto* identityLines = new QVBoxLayout;
+    chrome_geometry::spacing(identityLines, 1);
+    for (auto* line : {identityName_, identitySubtitle_}) {
+        line->setTextFormat(Qt::PlainText); // the name comes from the relay
+        line->setAttribute(Qt::WA_TransparentForMouseEvents);
+        identityLines->addWidget(line);
+    }
+    // The two lines sit together in the middle of the 52 px row.
+    identityLines->insertStretch(0);
+    identityLines->addStretch();
     auto* identityRow = new QHBoxLayout(identityButton_);
     identityRow->setSizeConstraint(QLayout::SetNoConstraint);
-    chrome_geometry::margins(identityRow, 0, 0, 10, 0);
-    identityRow->addStretch();
+    chrome_geometry::margins(identityRow, 43, 0, 10, 0);
+    chrome_geometry::spacing(identityRow, 8);
+    identityRow->addLayout(identityLines, 1);
     identityRow->addWidget(identityChevron);
+    // The name never widens the button; it is elided whenever its label resizes.
+    identityName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    identityName_->installEventFilter(this);
+    refreshIdentityText();
     // Settings and account entry points live in the user menu instead of the sidebar footer.
     userMenu_ = new QMenu(this);
     userMenu_->setObjectName(QStringLiteral("productUserMenu"));
@@ -282,15 +352,15 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
         tr("Settings") + QLatin1Char('\t') +
         QKeySequence(QKeySequence::Preferences).toString(QKeySequence::NativeText));
     settingsAction->setObjectName(QStringLiteral("productSettingsAction"));
-    settingsAction->setIcon(lucideIcon(lucide::settings, QSize(16, 16)));
+    settingsAction->setIcon(symbolIcon(symbols::settings, QSize(16, 16)));
     connect(settingsAction, &QAction::triggered, this, &ActivityBar::settingsRequested);
     auto* accountAction = userMenu_->addAction(tr("Account & devices"));
     accountAction->setObjectName(QStringLiteral("productAccountAction"));
-    accountAction->setIcon(lucideIcon(lucide::unplug, QSize(16, 16)));
+    accountAction->setIcon(symbolIcon(symbols::unplug, QSize(16, 16)));
     connect(accountAction, &QAction::triggered, this, &ActivityBar::identityRequested);
     auto* updatesAction = userMenu_->addAction(tr("Check for Updates…"));
     updatesAction->setObjectName(QStringLiteral("productCheckForUpdatesAction"));
-    updatesAction->setIcon(lucideIcon(lucide::refreshCw, QSize(16, 16)));
+    updatesAction->setIcon(symbolIcon(symbols::refreshCw, QSize(16, 16)));
     connect(updatesAction, &QAction::triggered, this, &ActivityBar::updatesRequested);
     connect(identityButton_, &QToolButton::clicked, this, [this] {
         const QSize size = userMenu_->sizeHint();
@@ -304,25 +374,94 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     setMode(Mode::Explorer);
 }
 
-void ActivityBar::setPendingUpdate(const QString& version) {
-    updateReadyButton_->setText(
-        version.isEmpty()
-            ? QString()
-            : tr("Update available\nKétPlus Pro %1 · Review and install").arg(version));
+void ActivityBar::setStorageStatus(const QVariantMap& result) {
+    const auto status = result.value("status").toMap();
+    const bool ok = result.value("ok").toBool();
+    const bool warning = ok && status.value("warning").toBool();
+    const bool lowDisk = ok && status.value("low_disk").toBool();
+    storageNotice_->setVisible(warning || lowDisk);
+    if (!warning && !lowDisk)
+        return;
+    // The mock's "Journal is 9.0 GB · Over its 5 GB limit" (ADR 0108).
+    const auto bytes = status.value("database_page_bytes").toLongLong();
+    const auto limit = status.value("limit_bytes").toLongLong() / 1'000'000'000LL;
+    const QString free = journalSize(status.value("filesystem_available_bytes").toLongLong());
+    QString title, message;
+    if (warning) {
+        title = bytes > 0 ? tr("Journal is %1").arg(journalSize(bytes)) : tr("Journal almost full");
+        message = limit <= 0                            ? tr("Review its size in Settings")
+                  : status.value("over_limit").toBool() ? tr("Over its %1 GB limit").arg(limit)
+                                                        : tr("Near its %1 GB limit").arg(limit);
+        if (lowDisk)
+            message += tr(" · %1 free on disk").arg(free);
+    } else {
+        title = tr("Disk space is low");
+        message = tr("%1 free · journal writes may fail").arg(free);
+    }
+    storageBanner_->setTitle(title);
+    storageBanner_->setMessage(message);
+    auto* button = storageNotice_->findChild<QAbstractButton*>("sidebarStorageSettings");
+    button->setAccessibleName(title + QStringLiteral(". ") + message +
+                              tr(". Opens storage settings."));
+}
+
+void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded) {
+    updateReadyButton_->setDetail(downloaded
+                                      ? tr("KétPlus Pro %1 · Restart to install").arg(version)
+                                      : tr("KétPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
-void ActivityBar::setSidebarWidth(const int width) {
-    const int bounded = qBound(kMinWidth, width, kMaxWidth);
+void ActivityBar::setAccount(const QString& name) {
+    // The name comes from the relay and the button shows plain text; signed out keeps the
+    // product name, as before sign-in.
+    const QString shown = name.trimmed();
+    accountName_ = shown;
+    identityButton_->setToolTip(shown);
+    refreshIdentityText();
+    const QString initials = ket::Avatar::initialsOf(shown);
+    identityAvatar_->setText(initials.isEmpty() ? QStringLiteral("KP") : initials);
+}
+
+void ActivityBar::refreshIdentityText() {
+    // A long name ends in "…" before the chevron; the tooltip keeps all of it.
+    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    QString name = full;
+    // Before it is laid out the label has no width yet; the button's resize elides again.
+    if (identityButton_->isVisible() && identityName_->width() > 0)
+        name =
+            identityName_->fontMetrics().elidedText(full, Qt::ElideRight, identityName_->width());
+    identityName_->setText(name);
+    identityButton_->setAccessibleName(full + QLatin1Char(' ') + identitySubtitle_->text());
+}
+
+bool ActivityBar::eventFilter(QObject* watched, QEvent* event) {
+    if ((watched == identityButton_ || watched == identityName_) &&
+        (event->type() == QEvent::Resize || event->type() == QEvent::FontChange ||
+         event->type() == QEvent::StyleChange))
+        refreshIdentityText();
+    return QWidget::eventFilter(watched, event);
+}
+
+void ActivityBar::setSidebarWidth(const int unscaledWidth) {
+    const int bounded = qBound(kMinWidth, unscaledWidth, kMaxWidth);
     if (bounded == sidebarWidth_)
         return;
     sidebarWidth_ = bounded;
-    setFixedWidth(bounded);
-    emit sidebarWidthChanged(bounded);
+    chrome_geometry::fixedWidth(this, bounded);
+    syncShownWidth();
+}
+
+void ActivityBar::syncShownWidth() {
+    if (width() == shownWidth_)
+        return;
+    shownWidth_ = width();
+    emit sidebarWidthChanged(shownWidth_);
 }
 
 void ActivityBar::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
+    syncShownWidth();
     resizeHandle_->setGeometry(width() - kResizeHandleWidth, 0, kResizeHandleWidth, height());
     resizeHandle_->raise();
 }
@@ -384,172 +523,29 @@ void ActivityBar::setSourceControlAvailable(const bool available) {
 }
 
 void ActivityBar::setSourceControlCount(const int count) {
-    sourceControlCount_->setText(QString::number(count));
-    sourceControlCount_->setVisible(count > 0);
+    sourceControlButton_->setCount(count > 0 ? std::optional<int>(count) : std::nullopt);
+}
+
+void ActivityBar::setTagFilter(const QString& tag) {
+    tagFilter_->setTag(tag.trimmed());
+    tagFilterRow_->setVisible(!tagFilter_->tag().isEmpty());
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
-    refreshIcons();
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
-void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceFontSizePixels) {
-    if (auto* avatar = findChild<QLabel*>(QStringLiteral("productIdentityAvatar"))) {
-        const auto px = [interfaceFontSizePixels](int n) {
-            return InterfaceZoomMetrics::geometry(n, interfaceFontSizePixels);
-        };
-        avatar->setGeometry(px(7), px(11), px(29), px(29));
-    }
-    const QString wordmark = palette.dark ? QStringLiteral(":/brand/ketplus-logo-dark.png")
-                                          : QStringLiteral(":/brand/ketplus-logo-light.png");
-    const QPixmap source(wordmark);
-    if (!source.isNull()) {
-        const QSize size = brandWordmark_->size() * brandWordmark_->devicePixelRatioF();
-        QPixmap scaled = source.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        scaled.setDevicePixelRatio(brandWordmark_->devicePixelRatioF());
-        brandWordmark_->setPixmap(scaled);
-    }
-    const QString controlBorder = palette.dark ? palette.border : QStringLiteral("#DDDCDE");
-    const QString sidebarAccent = palette.accentText;
-    const QString navSelectedText =
-        palette.dark ? QStringLiteral("#DDE6FF") : QStringLiteral("#102EB3");
-    const QString sheet = TypeScale::apply(QStringLiteral(R"(
-        QWidget#activityBar { border-right: 1px solid %1; background: %2; }
-        QScrollArea#productSidebarContext, QScrollArea#productSidebarContext > QWidget > QWidget,
-        QWidget#productSidebarContextBody { border: 0; background: transparent; }
-        QScrollBar:vertical { width: 5px; border: 0; background: transparent; }
-        QScrollBar::handle:vertical { min-height: 24px; border-radius: 2px; background: %10; }
-        QScrollBar[scrolling="false"]::handle:vertical { background: transparent; }
-        QScrollBar[scrolling="false"]:hover::handle:vertical { background: %10; }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-        QFrame#productSidebarRule { border: 0; background: %1; }
-        QToolButton { text-align: left; }
-        QToolButton[kvRole="productSearch"] { min-height: 30px; max-height: 30px; padding: 0 8px; border: 1px solid %11; border-radius: 5px; background: %4; color: %5; font-size: {{caption}}px; }
-        QToolButton[kvRole="productSearch"]:hover { border-color: %13; }
-        QToolButton[kvRole="productNavButton"] { padding: 0; border: 0; border-radius: 5px; background: transparent; }
-        QToolButton[kvRole="productNavButton"]:hover { background: %7; }
-        QToolButton[kvRole="productNavButton"]:checked { background: %8; }
-        QLabel[kvRole="productNavLabel"] { color: %6; font-size: {{body}}px; font-weight: 400; }
-        QLabel[kvRole="productNavLabel"][activeNavigation="true"] { color: %9; }
-        QLabel[kvRole="productNavLabel"][disabledNavigation="true"] { color: %10; }
-        QLabel[kvRole="productSidebarSection"] { color: %5; font-size: {{caption}}px; font-weight: 500; }
-        QToolButton[kvRole="productSectionAction"] { padding: 0; border: 0; border-radius: 4px; background: transparent; }
-        QToolButton[kvRole="productSectionAction"]:hover { background: %7; }
-        QComboBox#productMachineSelect { min-height:28px; padding:0 18px 0 0; border:0; background:transparent; color:%6; font-size:{{caption}}px; font-weight:600; }
-        QComboBox#productMachineSelect:hover { color:%3; }
-        QComboBox#productMachineSelect:focus { outline:1px solid %12; }
-        QComboBox#productMachineSelect::drop-down { width:17px; border:0; background:transparent; }
-        QComboBox#productMachineSelect QAbstractItemView { background:%4; color:%3; border:1px solid %11; selection-background-color:%8; }
-        QToolButton[kvRole="productRepositoryGroup"] { padding: 0 0 0 8px; border: 0; background: transparent; color: %5; font-size: {{caption}}px; font-weight: 500; }
-        QToolButton[kvRole="productRepositoryGroup"]:hover, QToolButton[kvRole="productRepositoryGroup"][activeRepository="true"] { color: %6; }
-        QToolButton[kvRole="productShowMoreConversations"] { padding: 0 0 0 8px; border: 0; background: transparent; color: %5; font-size: {{caption}}px; }
-        QToolButton[kvRole="productShowMoreConversations"]:hover { color: %6; }
-        QToolButton[kvRole="productConversation"] { padding: 0; border: 0; border-radius: 6px; background: transparent; }
-        QToolButton[kvRole="productConversation"]:hover, QToolButton[kvRole="productConversation"]:checked { background: %7; }
-        QLabel[kvRole="productConversationTitle"] { color: %3; font-size: {{body}}px; font-weight: 400; }
-        QLabel[kvRole="productConversationNumber"] { color: %5; font-size: {{caption}}px; font-weight: 500; }
-        QLabel[kvRole="productConversationAgentSender"] { color: %5; font-size: {{caption}}px; font-weight: 400; }
-        QMenu#productUserMenu { padding: 4px; border: 1px solid %11; border-radius: 6px; background: %4; }
-        QMenu#productUserMenu::item { padding: 5px 18px 5px 8px; border-radius: 4px; color: %3; font-size: {{body}}px; }
-        QMenu#productUserMenu::item:selected { background: %7; }
-        QToolButton[kvRole="productIdentity"] { padding: 7px 7px 7px 43px; border: 0; border-top: 1px solid %1; border-radius: 0; background: transparent; color: %6; font-size: {{caption}}px; }
-        QToolButton[kvRole="productIdentity"]:hover { background: %7; }
-        QToolButton[kvRole="productUpdateReady"] { margin: 0 2px 4px 2px; padding: 7px 9px; border: 1px solid %12; border-radius: 6px; background: %8; color: %12; font-size: {{caption}}px; font-weight: 550; }
-        QToolButton[kvRole="productUpdateReady"]:hover { background: %7; }
-        QLabel#productIdentityAvatar { border: 1px solid %11; border-radius: 14px; background: %4; color: %12; font-size: {{micro}}px; font-weight: 600; }
-        QLabel#quickSearchShortcut { color: %5; font-size: {{micro}}px; }
-        QLabel#sourceControlCountBadge { border: 1px solid %11; border-radius: 4px; color: %6; font-size: {{micro}}px; }
-    )"),
-                                           interfaceFontSizePixels, /*biasPixels=*/2);
-    setStyleSheet(sheet.arg(
-        palette.border, palette.sidebarBackground, palette.textMain, palette.panelBackground,
-        palette.textMuted, palette.textSecondary, palette.surfaceHover, palette.accentSubtle,
-        navSelectedText, palette.textDisabled, controlBorder, sidebarAccent, palette.borderStrong));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
-    repositoryList_->applyZoom(interfaceFontSizePixels);
-    iconMainColor_ = palette.textMain;
-    iconMutedColor_ = palette.textMuted;
-    iconDisabledColor_ = palette.textDisabled;
-    iconAccentColor_ = sidebarAccent;
-    iconPositiveColor_ = palette.positive;
-    iconWarningColor_ = palette.warning;
-    iconDangerColor_ = palette.danger;
-    refreshIcons();
-}
-
-void ActivityBar::refreshIcons() {
-    for (auto* button : findChildren<QToolButton*>()) {
-        const auto body = button->property("lucideBody").toByteArray();
-        if (body.isEmpty())
-            continue;
-        QString color = iconMutedColor_;
-        if (button->property("lucideColorRole").toString() == QStringLiteral("main"))
-            color = iconMainColor_;
-        if (group_->buttons().contains(button) && button->isChecked())
-            color = iconAccentColor_;
-        button->setIcon(lucideIcon(body, button->iconSize(), QColor(color)));
-    }
-    for (auto* label : findChildren<QLabel*>()) {
-        const auto body = label->property("lucideBody").toByteArray();
-        if (label->property("kvRole").toString() == QStringLiteral("productNavLabel")) {
-            auto* button = qobject_cast<QToolButton*>(label->parentWidget());
-            label->setProperty("activeNavigation", button != nullptr && button->isChecked());
-            label->setProperty("disabledNavigation", button != nullptr && !button->isEnabled());
-            label->style()->unpolish(label);
-            label->style()->polish(label);
-        }
-        if (body.isEmpty())
-            continue;
-        const QString role = label->property("lucideColorRole").toString();
-        QString color = iconMutedColor_;
-        auto* navigationButton = qobject_cast<QToolButton*>(label->parentWidget());
-        if (label->objectName() == QStringLiteral("productNavIcon") && navigationButton != nullptr)
-            color = navigationButton->isEnabled()
-                        ? (navigationButton->isChecked() ? iconAccentColor_ : iconMutedColor_)
-                        : iconDisabledColor_;
-        else if (role == QStringLiteral("accent"))
-            color = iconAccentColor_;
-        else if (role == QStringLiteral("main"))
-            color = iconMainColor_;
-        else if (role == QStringLiteral("positive"))
-            color = iconPositiveColor_;
-        else if (role == QStringLiteral("warning"))
-            color = iconWarningColor_;
-        else if (role == QStringLiteral("danger"))
-            color = iconDangerColor_;
-        label->setPixmap(lucide_icon::pixmap(body, QColor(color), label->size()));
-    }
-}
-
-ActivityBar::Mode ActivityBar::mode() const noexcept { return mode_; }
-
-QToolButton* ActivityBar::addModeButton(const QByteArray& svgBody, const QString& label,
-                                        const Mode mode) {
-    auto* button = new QToolButton(this);
+ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,
+                                         const Mode mode) {
+    auto* button =
+        new ket::NavItem(label, ket::Icons::codeForLucide(QString::fromLatin1(symbol)), this);
     button->setToolTip(label);
     button->setAccessibleName(label);
-    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    button->setCheckable(true);
-    button->setProperty("kvRole", QStringLiteral("productNavButton"));
     button->setProperty("activityMode", static_cast<int>(mode));
-    chrome_geometry::fixedHeight(button, kRowHeight);
-    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* row = new QHBoxLayout(button);
-    chrome_geometry::margins(row, 8, 0, 8, 0);
-    chrome_geometry::spacing(row, 8);
-    auto* icon = new QLabel(button);
-    icon->setObjectName(QStringLiteral("productNavIcon"));
-    icon->setProperty("lucideBody", svgBody);
-    chrome_geometry::fixedSize(icon, 15, 15);
-    icon->setAttribute(Qt::WA_TransparentForMouseEvents);
-    auto* text = new QLabel(label, button);
-    text->setProperty("kvRole", QStringLiteral("productNavLabel"));
-    text->setAttribute(Qt::WA_TransparentForMouseEvents);
-    row->addWidget(icon);
-    row->addWidget(text);
-    row->addStretch();
     group_->addButton(button);
-    connect(button, &QToolButton::clicked, this, [this, mode] {
+    connect(button, &QAbstractButton::clicked, this, [this, mode] {
         mode_ = mode;
         emit modeRequested(mode);
     });

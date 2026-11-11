@@ -10,6 +10,7 @@
 #include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
+#include "DaemonClient.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -23,6 +24,7 @@
 #include "git/GitService.h"
 #include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
+#include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
 #include "ui/InterfaceZoom.h"
@@ -56,10 +58,12 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
+
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <memory>
 
 #include <algorithm>
 
@@ -878,7 +882,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     QVariantList archived =
         agentManager_ == nullptr ? QVariantList{} : agentManager_->archivedConversations();
     archived.append(archivedWorktrees());
-    settingsDialog_->addPage(new ArchivedSettingsPage(
+    auto* archivedPage = new ArchivedSettingsPage(
         archived,
         [this](const QString& path, const QString& id) {
             return id.isEmpty()
@@ -890,40 +894,47 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 return false;
             return id.isEmpty() ? agentManager_->cancelWorktree(path)
                                 : agentManager_->cancelConversation(path, id);
-        }));
-    // Another window may save while this form is open. Preserve its newer
-    // values for fields this form did not edit.
-    const auto settingsAtOpen = appearanceSettings_;
+        },
+        [this](const QString& path, const QString& id) { deleteAgentConversation(path, id); });
+    settingsDialog_->addPage(archivedPage);
+    // A delete confirmed in its dialog, or an archive from another client, updates the cards.
+    if (agentManager_ != nullptr)
+        connect(agentManager_, &AgentSessionManager::conversationsChanged, archivedPage,
+                [this, archivedPage] {
+                    QVariantList current = agentManager_->archivedConversations();
+                    current.append(archivedWorktrees());
+                    archivedPage->setConversations(std::move(current));
+                });
+    // Another window may save while this form is open. Each change applies at once, so only
+    // the fields this emission changed overwrite; the rest keep the other window's newer values.
+    auto lastRequested = std::make_shared<AppearanceSettings>(appearanceSettings_);
     connect(settingsDialog_, &SettingsDialog::appearanceSettingsSaved, this,
-            [this, settingsAtOpen](const AppearanceSettings& requested) {
+            [this, lastRequested](const AppearanceSettings& requested) {
+                const AppearanceSettings& previous = *lastRequested;
                 auto merged = appearanceSettings_;
-                if (requested.interfaceFontSizePixels != settingsAtOpen.interfaceFontSizePixels)
+                if (requested.interfaceZoomPercent != previous.interfaceZoomPercent)
+                    merged.interfaceZoomPercent = requested.interfaceZoomPercent;
+                if (requested.interfaceFontSizePixels != previous.interfaceFontSizePixels)
                     merged.interfaceFontSizePixels = requested.interfaceFontSizePixels;
-                if (requested.editor.fontFamily != settingsAtOpen.editor.fontFamily)
+                if (requested.editor.fontFamily != previous.editor.fontFamily)
                     merged.editor.fontFamily = requested.editor.fontFamily;
-                if (requested.editor.fontSizePixels != settingsAtOpen.editor.fontSizePixels)
+                if (requested.editor.fontSizePixels != previous.editor.fontSizePixels)
                     merged.editor.fontSizePixels = requested.editor.fontSizePixels;
-                if (requested.editor.lineHeightPixels != settingsAtOpen.editor.lineHeightPixels)
+                if (requested.editor.lineHeightPixels != previous.editor.lineHeightPixels)
                     merged.editor.lineHeightPixels = requested.editor.lineHeightPixels;
-                if (requested.terminal.fontSizePixels != settingsAtOpen.terminal.fontSizePixels)
-                    merged.terminal.fontSizePixels = requested.terminal.fontSizePixels;
-                if (requested.terminal.lineHeightPixels != settingsAtOpen.terminal.lineHeightPixels)
-                    merged.terminal.lineHeightPixels = requested.terminal.lineHeightPixels;
-                if (requested.preview.fontSizePixels != settingsAtOpen.preview.fontSizePixels)
-                    merged.preview.fontSizePixels = requested.preview.fontSizePixels;
-                if (requested.preview.lineHeightPixels != settingsAtOpen.preview.lineHeightPixels)
-                    merged.preview.lineHeightPixels = requested.preview.lineHeightPixels;
+                // Terminal and Markdown sizes follow from these when normalized.
+                *lastRequested = requested;
                 applyAppearanceSettings(merged);
             });
 
     const QPointer<AgentSessionManager> agents(agentManager_);
-    const auto providerRuntimes = [agents](SettingsProvidersPage::Reply reply) {
+    const auto providerRuntimes = [agents](const bool recheck, SettingsProvidersPage::Reply reply) {
         if (agents.isNull() || agents->appServer() == nullptr) {
             reply({}, SettingsProvidersPage::tr("Agents are not available."));
             return;
         }
         agents->appServer()->call(
-            QStringLiteral("provider/runtimeStatus"), {},
+            QStringLiteral("provider/runtimeStatus"), {{QStringLiteral("recheck"), recheck}},
             [reply = std::move(reply)](const QJsonObject& result, const QString& error) {
                 reply(result.value(QStringLiteral("providers")).toArray(), error);
             });
@@ -939,20 +950,33 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             agents->appServer()->call(QStringLiteral("provider/claudeCredentials/") + operation,
                                       payload, std::move(reply));
         },
-        [agents](const QString& operation, const QJsonObject& payload,
-                 SettingsStoragePage::Reply reply) {
+        [agents, sidebar = QPointer<ActivityBar>(activityBar_)](const QString& operation,
+                                                                const QJsonObject& payload,
+                                                                SettingsStoragePage::Reply reply) {
             if (!agents || !agents->appServer()) {
                 reply({}, SettingsStoragePage::tr("Agents are not available."));
                 return;
             }
-            agents->appServer()->call(operation.startsWith("size.")
-                                          ? QStringLiteral("daemon/storageSize/") + operation.mid(5)
-                                          : QStringLiteral("daemon/storageRetention/") + operation,
-                                      payload, std::move(reply));
+            // The sidebar banner follows what the Storage page reads, so it clears as soon as
+            // a compaction or a new limit brings the journal back under it.
+            if (operation.startsWith(QStringLiteral("size.")))
+                reply = [sidebar, reply = std::move(reply)](const QJsonObject& result,
+                                                            const QString& error) {
+                    if (sidebar && error.isEmpty() && result.value("ok").toBool())
+                        sidebar->setStorageStatus(result.toVariantMap());
+                    reply(result, error);
+                };
+            // "read" is the detail policy; "size.read", "compaction.start" and the like are
+            // the other storage areas (ADR 0108).
+            const QString area = operation.contains('.') ? operation.section('.', 0, 0)
+                                                         : QStringLiteral("retention");
+            agents->appServer()->call(
+                QStringLiteral("daemon/storage%1%2/%3")
+                    .arg(area.left(1).toUpper(), area.mid(1), operation.section('.', -1)),
+                payload, std::move(reply));
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);
-    settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
     connect(settingsWorkspace_, &SettingsWorkspacePage::saved, this, [this] {
         auto* previous = settingsWorkspace_;
         settingsWorkspace_ = nullptr;
@@ -972,6 +996,33 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
         setSettingsWorkspaceVisible(false);
         setRemoteWorkspaceVisible(true);
     });
+    // Account & devices reads the remote.status Connections reads, through its own client;
+    // signing out happens in Connections, which asks first.
+    auto* accountDaemon = this->accountDaemon(); // shared with the sidebar identity
+    settingsWorkspace_->setAccountStatusReader(
+        [accountDaemon](std::function<void(const QJsonObject&)> reply) {
+            if (!accountDaemon->isReady())
+                return; // readyChanged reads it
+            accountDaemon->call(
+                QStringLiteral("remote.status"), {}, {}, -1,
+                [reply = std::move(reply)](const QJsonObject& status, const QString& error) {
+                    if (error.isEmpty())
+                        reply(status);
+                });
+        });
+    connect(accountDaemon, &remote::DaemonClient::readyChanged, settingsWorkspace_,
+            [page = settingsWorkspace_](const bool ready) {
+                if (ready)
+                    page->refreshAccount();
+            });
+    connect(settingsWorkspace_, &SettingsWorkspacePage::accountSignOutRequested, this, [this] {
+        setSettingsWorkspaceVisible(false);
+        setRemoteWorkspaceVisible(true);
+        if (remoteControl_ != nullptr)
+            remoteControl_->requestSignOut();
+    });
+    connect(settingsWorkspace_, &SettingsWorkspacePage::typeInTerminalRequested, this,
+            &MainWindow::typeInTerminal);
     connect(settingsWorkspace_, &SettingsWorkspacePage::agentModelsRequested, this, [this] {
         setSettingsWorkspaceVisible(false);
         setAgentWorkspaceVisible(true);
@@ -1049,7 +1100,7 @@ void MainWindow::applyThemeToEditors() {
         }
     }
     if (agentWorkspace_ != nullptr) {
-        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceFontSizePixels);
+        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     }
     if (conversationAtlasPanel_ != nullptr)
         conversationAtlasPanel_->applyPalette(QApplication::palette());
@@ -1057,12 +1108,12 @@ void MainWindow::applyThemeToEditors() {
         for (int index = 0; index < atlasTabs_->count(); ++index) {
             if (auto* tab = qobject_cast<AtlasTab*>(atlasTabs_->widget(index))) {
                 tab->applyPalette(QApplication::palette(),
-                                  appearanceSettings_.interfaceFontSizePixels);
+                                  appearanceSettings_.interfaceZoomPercent);
             } else if (auto* builder = qobject_cast<AtlasBuilderTab*>(atlasTabs_->widget(index))) {
                 builder->applyPalette(QApplication::palette(),
-                                      appearanceSettings_.interfaceFontSizePixels);
+                                      appearanceSettings_.interfaceZoomPercent);
                 builder->chatView()->applyTheme(theme_.palette(),
-                                                appearanceSettings_.interfaceFontSizePixels);
+                                                appearanceSettings_.interfaceZoomPercent);
             }
         }
     }

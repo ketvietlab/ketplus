@@ -5,10 +5,9 @@
 #include <QStringList>
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
 class QLineEdit;
-class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -49,7 +48,6 @@ class SearchPanel final : public QWidget {
     void cancelRequested();
     void replaceAllRequested();
     void matchActivated(const QString& path, int line, int column, int length);
-    void hideRequested();
 
   private:
     void activateItem(QTreeWidgetItem* item);
@@ -58,19 +56,19 @@ class SearchPanel final : public QWidget {
     QLineEdit* queryEdit_{nullptr};
     QLineEdit* replaceEdit_{nullptr};
     QLineEdit* includeEdit_{nullptr};
-    QCheckBox* matchCaseCheck_{nullptr};
-    QCheckBox* wholeWordCheck_{nullptr};
-    QCheckBox* regexCheck_{nullptr};
-    QPushButton* searchButton_{nullptr};
-    QPushButton* replaceAllButton_{nullptr};
+    QAbstractButton* matchCaseCheck_{nullptr};
+    QAbstractButton* wholeWordCheck_{nullptr};
+    QAbstractButton* regexCheck_{nullptr};
+    QAbstractButton* searchButton_{nullptr};
+    QAbstractButton* replaceAllButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QTreeWidget* results_{nullptr};
     struct ResultColors final {
-        QString folder{QStringLiteral("#8B93A1")};
-        QString fileName{QStringLiteral("#E6EDF3")};
-        QString lineNumber{QStringLiteral("#6E7681")};
-        QString text{QStringLiteral("#ADBAC7")};
-        QString match{QStringLiteral("#E5A93C")};
+        QString folder;
+        QString fileName;
+        QString lineNumber;
+        QString text;
+        QString match;
     } colors_;
     int matchCount_{0};
     bool searching_{false};

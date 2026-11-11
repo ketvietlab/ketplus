@@ -44,7 +44,7 @@ obsolete run. See `docs/release-process.md`.
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
-| Desktop zoom | `ketplus_desktop_zoom_tests` | repeated Small/Medium/Large transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and settings draft merging |
+| Desktop zoom | `ketplus_desktop_zoom_tests` | repeated 90/100/110/125% zoom transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and merging with another window's newer settings |
 | Interface font stack | `ketplus_interface_font_tests` | embedded KÉT Sans weights, Vietnamese glyphs, tabular digits, shared QWidget/QML resolver and editor mono |
 | Streaming presentation | `ketplus_agent_streaming_tests` | delta coalescing, final/stop flush, scope and prepend fencing, scroll/Latest, skill refresh isolation |
 | Transcript viewport | `ketplus_agent_viewport_tests` | offscreen formatting deferral, partial source, source pin while reading, prefix anchors |
@@ -58,6 +58,7 @@ obsolete run. See `docs/release-process.md`.
 | Transcript row window | `ketplus_transcript_window_model_tests` | delegate retention and reentrant range changes during history reset |
 | Provider limits | `ketplus_rate_limits_tests` | Codex rate-limit parsing and state |
 | Chat Markdown | `ketplus_chat_markdown_tests` | raw HTML escaping, bare HTTP(S) autolinks without changing code/existing links, whole answer visible, URL hover/open and source copy in light/dark transcript delegates |
+| Transcript safety | `ketplus_transcript_safety_tests` | model rich text (inline/reference images, raw `<img>`, `<style>`, `<link>`) makes no network connection, every word stays visible, links re-colour on theme change, a 4000×3000 inline image is kept at thumbnail size, the layout trace records no message text |
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
 | Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
@@ -83,14 +84,21 @@ obsolete run. See `docs/release-process.md`.
 | Browser provider wiring | `ketplus_browser_provider_integration_tests` | host routing instructions for direct/daemon Codex and new/resumed Claude/Cursor, prompt/image preservation, scoped approvals, disabled/damaged/missing runtime |
 | Daemon Claude adapter | `ketplus_daemon_claude_adapter_tests` | sidecar turns, approvals, handoff |
 | Provider handoff history | `ketplus_provider_handoff_tests` | history after delivery acknowledgment, compacted cursor gaps, event/byte-limited paging, session/generation isolation |
+| Held-message Desktop release (#130) | `ketplus_agent_messaging_tests`, `ketplus_provider_transcript_tests`; Agent Workspace `heldMessageRequiresExplicitClickAndFencesDuplicates` | scoped authorization, all three guards, whole-batch validation, busy receiver, agent/remote refusal, expiry/deletion/generation fences, command replay, recovery before/after the durable input, explicit click/retry and typed notice projection; fake providers only |
 | Agent messaging (ADR 0027) | `ketplus_agent_messaging_tests` | number allocation, uniqueness, restart stability and legacy-journal backfill; idle delivery and automatic reply from the final answer; busy receivers batched at turn end; `urgent` steering of a running turn; hop, chain and hourly holds released with the next user turn, the per-sender backlog and the per-turn delivery budget measured on the serialized message (escapes and sender title), with oversize messages refused at send, and the 24-hour request expiry; `#NNNN` references; token, number, size and reply validation; deletion quarantine and token revocation; per-provider `ketplus_agents` injection (Claude `mcpServers`, Codex dotted per-thread config, Cursor ACP); agent-token IPC scope without broadcasts; MCP tool mapping; `sent` and `replied` notices and the running automatic turn's sender in `session.list`; the number and that sender sealed into the phone's session metadata (`ketplus_daemon_cloud_privacy_tests`); Desktop notice text (`ketplus_provider_transcript_tests`) and the sidebar "from #N" label (`ketplus_workspace_tests`). Fake providers only; the one authorized live run is recorded in ADR 0027 |
 | Conversation fork | `ketplus_daemon_session_fork_tests` | `threadFork` gating, Codex/Claude native fork, transcript copy at the same cursors, idempotent retry, active source isolation and unknown refusal, next turn resumes the forked thread; a fork of an archived conversation is unarchived and outlives its source's expiry (ADR 0100) |
 | Daemon Cursor adapter | `ketplus_daemon_cursor_adapter_tests` | ACP turns, login/install errors, approvals, an approval from a restarted process that reuses an unanswered question's request id is answered as an approval, missing/false/mistyped `loadSession` skips `session/load`, `agent models` fixtures |
 | Provider CLI compatibility | `ketplus_provider_compatibility_tests` | version parsing and statuses, manifest, Homebrew update command, version probe cache, outdated CLI blocked, untested CLI journaled once, `provider.runtime_status`, dialects and capabilities, `-32601` narrowing and steer gate, unknown Codex input (ignored notifications counted, protocol errors, declined requests, unknown item types) |
+| Provider readiness | `ketplus_provider_readiness_tests` | version check before probes, Claude `runtime_missing`, probe `since` kept per state, reported failures outrank an account until a working turn, limits until reset, owner-only persistence across restarts, Codex `account/read` and Cursor `cli-config.json` probes, per-platform commands, `runtime.error` codes (structured first, the #170 messages), Check again keeps an unexpired limit; in `ketplus_provider_compatibility_tests`, a limited Codex turn is coded and keeps its reset, and a working turn clears a persisted failure |
+| Provider setup guide | `ketplus_provider_setup_guide_tests`, `ketplus_settings_integration_tests`, `ketplus_agent_tests` (`providerSetup*`, `claudeSignOutGuidesWithoutHoldingTheMessage`, `aHeldMessageGoesWithItsDraft`, `modelPickerOpensTheProviderSetupGuide`) | in the Agent Workspace, the guide above the composer holds the message until a fresh read lists the same provider without a guide (not a stopped daemon, not a guide that stops blocking), and lets it go when the draft is edited or another conversation opens; Hide and the model button, Type in Terminal, Check again with `still`; a coded failed turn shows the guide with the provider's words and Retry, and turns back into a notice once the user writes again; Claude's sign-out never holds a send; Model & context keeps a guided provider's tab without models, shows its banner, keeps Apply off there, and Show setup steps opens the guide dialog, which closes once the provider works; `KETPLUS_SETUP_CAPTURE_DIR` saves the composer, transcript, model picker and dialog captures; `everySetupStateRendersInBothThemesAndZooms` renders all ten #169 states in light and dark at zoom 1 and 1.25, and `KETPLUS_SETUP_MATRIX_DIR` saves them as `<state>-<theme>-<zoom>.png` to set beside the mock's `--screen=workspace --state=setup-<state> --zoom=… --screenshot=…`; `anAccountChangeClearsAReportedFailure` (provider compatibility tests) checks that Codex `account/updated` drops a reported failure; guide ids follow the mock for every state and error code, the daemon's commands and the provider's own words, empty rows left out, the limit reset text, a turn error over readiness; in Settings → Providers, the guided badge and card, Copy and Type in Terminal (never run), Check again sends `recheck` and shows `still`, a fixed provider loses its guide; `KETPLUS_SETTINGS_CAPTURE_DIR` saves `providers-setup-{light,dark}.png` |
+| App-wide toasts and update notice | `ketplus_settings_integration_tests` | status messages outside the editor show as the kit toast near the bottom, never the idle `Ready`; the sidebar reminder reads Review and install, then Restart to install; `KETPLUS_OVERLAYS_CAPTURE=<dir>` saves `toast.png` and `update-pill.png` to set beside `KetPlusMock --open=toast` and `--screen=workspace`. The app toast keeps the neutral icon on purpose: a status message may be a failure, while every mock toast is a confirmation |
+| Waiting for you (#125) | `ketplus_awaiting_reply_tests`, `ketplus_conversation_attention_tests` | the fake Claude `ask-approval` and `needs-approval` prompts set `awaiting_reply`; a plain summary does not; it survives a daemon restart and clears on a new message and `session.mark_done`; the desktop row reads AwaitingReply after `turn/completed` and clears on the next turn; the Dock badge counts a worktree once across windows |
+| Tag catalog (#429) | `ketplus_tag_catalog_tests`, `ketplus_desktop_session_discovery_tests`, `ketplus_agent_tests`, `ketplus_daemon_cloud_privacy_tests` | defaults until saved, restart persistence, invalid catalogs refused, renames kept and removals dropped on every conversation, `tags.changed` reaches a second window live, a label chosen before the first turn is stored with it, Manage tags… saves a draft with renames; sealed phone metadata carries tags and awaitingReply; `KETPLUS_MANAGE_TAGS_CAPTURE=<png>` saves the dialog beside `KetPlusMock --screen=workspace --open=manage-tags` |
+| Header openers and composer suggestions | `ketplus_agent_tests` (`changesPaneListsTheWorktreeChanges`, `composerPlaceholderTracksCaret`, reviewer picker), `ketplus_agent_shell_tests` (`headerChangesOpensTheDetailsPaneChangesTab`) | the header's Changes opens the details pane's Changes tab (the worktree's uncommitted files, each opening its diff, and Open Source Control); with the pane open, Changes, Terminal and Report leave the header for the pane's Open content menu, Open tabs lists the tabs and Hide content pane keeps them; the Reviewer menu names each provider's default model and lists Codex as unable to review (ADR 0067); `KETPLUS_CHANGES_PANE_CAPTURE` and `KETPLUS_MENTION_CAPTURE` save the Changes tab and the file mention popover, to set beside `KetPlusMock --screen=workspace --open=mention|agent-mention|skill|slash` |
 | Cursor catalog output | `ketplus_cursor_catalog_bounds_tests` | stdout/stderr draining before exit, shared 1-MiB boundary/excess, unsuccessful exit, coalesced callers/cache, timeout after output and failed launch; self-hosted CLI fixture only |
 | Codex protocol contract | `ketplus_codex_contract_tests` (Node) | declared Codex usage exists in every tested schema snapshot; daemon code names only declared methods |
 | Relay browser sign-in | `ketplus_daemon_browser_sign_in_tests` | relay paths appended to a base path, loopback redirect, PKCE S256 challenge, wrong state/path refused, one-time callback |
-| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
+| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
@@ -251,6 +259,11 @@ the corresponding Atlas mock first.
   with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
   marked session, each activity backfill pass and the second open must each stay
   under 250 ms.
+- Activity files backfill (ADR 0102): `ketplus_daemon_activity_groups_tests`
+  checks that a journal indexed before `activity_files` keeps its groups hidden
+  until their files are listed, that a failed pass keeps its marker, that edits
+  completed during the listing are kept, and that forks and deletions carry or
+  remove the marker.
 - Journal migration recovery: `ketplus_daemon_journal_migration_recovery_tests`
   migrates a pre-format journal (60k rows in 2,000 sessions, without five later
   columns, the turn indexes and the activity tables) on a nearly full 256-MiB disk
@@ -269,9 +282,10 @@ the corresponding Atlas mock first.
   `ketplus_daemon_protocol_tests` gives a viewed-image path that is a FIFO and
   fails if reading it blocks for 2 s.
 - Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
-  statement of 25 journal operations (append, transcript reads, activity pages,
+  statement of 26 journal operations (append, transcript reads, activity pages,
   large-event fragments, fork including its snapshot reader, delete and purge,
-  backfill, retention and garbage passes) on a conversation with 100k events of its
+  backfill, a late changed-files pass over 100k items in five groups, retention and
+  garbage passes) on a conversation with 100k events of its
   own, next to 2,000 other sessions with 200k events and a conversation whose large
   tool results include three orphans. It fails a statement with more than 5,000
   full-scan steps, an automatic index or 200k VM steps. It reads SQLite's counters
@@ -315,8 +329,125 @@ the corresponding Atlas mock first.
   silently skipping the boundary assertion.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.
+  `agentQmlUsesBoundedAnimationsAndKitPrimitives` rejects infinite animation loops,
+  unexpected frame animations, and the removed local metrics/icon/tooltip resources.
+  `measurementTimerStopsAndRestartsForNewRows` exercises measurement exhaustion,
+  layout changes and window visibility. The row-measurement suite checks that
+  resource-backed bodies do not starve text and that a new layout re-enables work.
+  `ketplus_interface_font_tests::agentThemeUsesKitAndEditorMono` changes the
+  shared theme and zoom without a host update and checks the rendered header,
+  page colour, profile typography and configured mono font. It runs first in its
+  process so earlier font tests cannot preload KÉT Sans and hide a startup bug.
+  It also checks code-frame/caret alignment, table header baselines and the brand
+  image bounds after zoom changes. `markdownTableAfterCodeKeepsHeaderCells` covers
+  Qt Markdown's leading empty cell paragraph and preserves intentionally empty
+  headers across repeated formatting. Set
+  `KETPLUS_THEME_AUTHORITY_CAPTURE=<prefix>` in its native Cocoa run to capture
+  light/dark at 1/1.25 zoom. These captures cover the theme-authority regression;
+  the complete app/mock state matrix remains a separate acceptance item.
+  These checks do not replace the Apple Silicon foreground/background CPU
+  measurements required by #126 or the app/mock comparison required by #136.
 - Performance-sensitive behavior: Release build and the matching script under
   `benchmarks/`; record hardware and raw results.
+
+### Native idle CPU (#126)
+
+Run this manual check for native UI acceptance and before release. The dedicated
+fixture mounts the production Agent Workspace with three synthetic conversations
+and a short transcript. It uses temporary preferences and no provider or daemon.
+It measures the UI surface, not the complete desktop/daemon process topology.
+
+```sh
+cmake --preset release -DKETPLUS_BUILD_BENCHMARKS=ON
+cmake --build build/release --target ketplus_agent_idle_benchmark
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-active --capture
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-background --visibility inactive
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-no-work --work idle
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-hidden --visibility hidden
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibility minimized
+```
+
+`--visibility minimized` minimizes the window a second after `ready` and expects no
+held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
+`limits` to open that composer panel first, like the mock's `--open`, `--open=reviewer` or
+`tags` for the header's Reviewer or Add tag menu, `--open=composer` to focus the input, or
+`--open=welcome` for an empty conversation like the mock's `workspace/welcome`. `--open=viewer` opens the
+image viewer on the mock's sidebar capture, and `--open=tasks` shows the mock's three
+background tasks (running, completed and failed) like its `workspace/running` strip. With `--open`, the
+active conversation is the mock's Claude Opus 5.5 conversation with its fixed catalog and
+usage (context, session cost and tokens, and three plan limits); runs without `--open`
+keep the default CPU workload. `--transcript=claude`, `codex` or `cursor` replaces the
+messages with the message rows of the mock's `workspace/<provider>` transcript, projected
+from synthetic journal events through `daemonWindowMessages` (`--transcript=error` is the
+mock's `workspace/error`: a prompt, a `runtime.error` and the failed turn end), and
+`--scroll=0` to `1`
+positions the transcript like the mock's `--scroll`; `--expand-groups` opens every
+activity group first. `--display=secondary` (or a screen index) places the window like
+the mock's `--display`, so review windows stay off the main screen, and `--hold` keeps
+the window open for review without measuring. Under `QT_QPA_PLATFORM=offscreen` a
+`--capture` run only saves the window and exits. It is not a CPU measurement, but it
+lets a locked or headless Mac compare against the mock's offscreen `--screenshot`, both
+at 1×.
+
+Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
+identify the fixture separately from the installed app. After `ready`, focus the
+fixture for `active`, or another native app for `inactive`. Keep that state until
+the result; do not type, hover or scroll during measurement. The fixture waits for
+three stable seconds, stops its readiness polling, then samples for 12 seconds.
+Optional captures finish before a second warm-up period. Changing application
+state during a visible-window sample invalidates it. A readiness timeout is not a
+low-CPU result.
+
+The runner saves JSON events, environment metadata, stderr and the requested
+`top -l 5 -s 2 -pid <pid>` samples. Use a new, empty output directory for every
+attempt, including invalid ones; the runner refuses a directory that already has
+files. It stops the fixture and reports a collection failure when the run exceeds
+`--timeout` (150 seconds by default) or `top` did not record all five samples for
+the fixture process. The fixture also invalidates a sample when the window is
+resized, minimized, moved to another screen or changes device pixel ratio while
+it is measured, and checks the fixture conditions again at the end. Compare the four interval samples after top's
+initial sample, alongside the fixture's process-CPU and rendered-frame counts.
+Check `fixtureValid` and `valid`: Cocoa/Metal, 1440×900 at 2×, three realized rows,
+stopped transcript measurement, expected activity-clock ownership and stable
+window state are required. Working QML sidebar rows hold the animation clock
+beside the running transcript, so a running sample reports three
+`sidebarClockHolders`. The desktop shell draws its sidebar with Widgets
+`ket::ConversationRow`, which this fixture does not measure.
+
+The #126 targets are ≤7% running in front or behind another app, and
+approximately zero with no running work or when hidden or minimized. They were
+relaxed from 5%/1% on 2026-11-08 after the native measurement, because each tick
+of the kit's shared clock redraws the whole 2× window. On 2026-11-09 the
+background target moved from ≤2% to ≤7%: the kit (ad86196) now keeps 20 Hz behind
+other apps instead of 4 Hz, which stuttered visibly on a watched secondary display.
+On that DELL display at 1× (so `fixtureValid` false), with three working sidebar
+rows and the transcript, running behind another app measured 3.4–6.6% over three
+runs, up from about 1.6%. A qualified 2× sample at the new rate is still to be
+recorded. Earlier, at 4 Hz behind, `feat/new-ui` 3a9117b8 with kit d476382 measured:
+- running in front 2.1–5.3% over three runs;
+- running behind another app 0.5–1.0%;
+- no work 0.2%;
+- hidden or minimized 0.04%.
+
+All samples were valid, on an M1 Pro built-in display at 2×. Foreground samples
+vary between runs, so record at least three. Also run `--work idle --visibility inactive` and
+`KETPLUS_REDUCED_MOTION=1` when checking stop conditions. The sample must show no
+new frames when its activity and measurement timers have stopped. Record invalid
+attempts and unmeasured states; this fixture alone does not qualify Atlas Widgets
+or every application state.
+
+Automated stop checks cover the rest of #126:
+- the QML scan in `agentQmlUsesBoundedAnimationsAndKitPrimitives` rejects
+  `Animation.Infinite` and any `FrameAnimation` outside the self-stopping
+  allowlist;
+- the transcript measurement timer, row-window growth and wheel glide stop on
+  their own;
+- hidden, minimized (alone or inside a main window) and reduced-motion views hold
+  no clock;
+- in the daemon, the approval expiry timer runs only while a request can expire,
+  and the remote-peer tick only while a peer is connected
+  (`expiryTimerRunsOnlyWhileARequestCanExpire`,
+  `helloEpochSupersedeAndRevocation`).
 
 Browser and SDK wiring changes also run:
 
@@ -520,6 +651,13 @@ in-tree test targets, including `ketplus_atlas_tunnel_fixture`.
 `r03_characterization` needs `R03_FIXTURES` to name a materialized v3 workload
 directory. Without it, `initTestCase` fails.
 
+`ketplus_agent_shell_tests` checks the Delete conversation card against the mock
+(`deleteCardOffersArchiveInstead`): its title, the mock's copy, no worktree choices
+when there is nothing to remove, and Archive instead, which archives and never
+deletes. `KETPLUS_DIALOG_CAPTURE_DIR=<dir>` saves `<dialog>-{light,dark}.png` for
+the Delete, Rename and worktree cards (#422), to compare with
+`KetPlusMock --open=rename` and `--open=delete`.
+
 `ketplus_context_harness_tests` checks active/attaching turns retain submitted
 settings. Model-picker and iOS model-apply tests check that future defaults remain
 writable. No provider-account or quota-consuming test is required for these fixes.
@@ -655,6 +793,31 @@ sweeps before recent detail, and existing free-page priority. Agent-token denial
 and disconnected-request tests include both storage API families. Shared headers
 require full Pro build/CTest. No installed journal or live provider is used.
 
+### Storage options, Compact now, breakdown and export (#128, ADR 0108)
+
+`ketplus_daemon_storage_jobs_tests` covers the revisioned storage options (kept apart
+from the detail and size policies, local-owner only), the warning and its option,
+Compact now clearing an over-limit journal, Compact now waiting for a running turn,
+the breakdown measured off the event loop, and export writing one owner-only file per
+conversation. Run it with `ketplus_daemon_usage_retention_tests` (generated-image
+option), `ketplus_daemon_size_policy_tests`, `ketplus_daemon_lifecycle_tests`
+(archive period), `ketplus_settings_storage_page_tests`, `ketplus_workspace_tests`
+(sidebar banner) and `ketplus_desktop_daemon_client_tests`. No provider is started.
+
+The real-size check is opt-in. Copy the installed journal with SQLite's backup API (never
+copy the live WAL files, and never start the full daemon on the copy, because its cloud
+client would connect as the same device), then run:
+
+```sh
+python3 -c 'import sqlite3,sys; s=sqlite3.connect(f"file:{sys.argv[1]}?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d)' \
+  "<journal.sqlite3>" "$HOME/KetPlus-journal-size-check/journal.sqlite3"
+KETPLUS_JOURNAL_SIZE_CHECK="$HOME/KetPlus-journal-size-check/journal.sqlite3" \
+  QTEST_FUNCTION_TIMEOUT=3600000 QT_QPA_PLATFORM=offscreen ./ketplus_daemon_storage_jobs_tests journalCopyShrinksOnFirstCompaction
+```
+
+It migrates the copy to incremental vacuum, runs Compact now twice and requires the file
+under 4 GB and under its limit. Delete the copy afterwards; it holds real transcripts.
+
 The usage-retention suite also exercises bounded large-tool manifests: real
 fragment storage, the shared byte budget, latest-twenty and ACK/session guards,
 corrupt/oversize chunks, identity/digest mismatches, unknown manifests, shared
@@ -691,6 +854,16 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
+
+## Atlas result receipts
+
+The Agent Workspace target covers explicit Markdown link extraction (including
+code/raw-HTML exclusions), completed-only receipts, long-message chunk placement,
+actual QML actions and conversation/worktree/deletion fences. `AtlasTest` checks
+manifest limits, metadata and canonical-root/symlink isolation. `AtlasWorkspaceTest`
+checks real manifest metadata and the existing builder action without invoking a
+provider. Browser launch remains the managed viewer's existing integration path;
+these tests do not start a browser or validate the Atlas screens themselves.
 
 ### Failed journal reuse (ADR 0086)
 

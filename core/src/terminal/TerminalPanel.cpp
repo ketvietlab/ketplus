@@ -1,137 +1,145 @@
 #include "terminal/TerminalPanel.h"
-
-#include "terminal/TerminalSession.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-
 #include <QDir>
-#include <QFileInfo>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QPointer>
-#include <QStyle>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
-
 namespace ketplus {
-
 TerminalPanel::TerminalPanel(QWidget* parent)
-    : QWidget(parent), session_(new TerminalSession(this)),
-      terminal_(new TerminalView(*session_, this)),
-      titleLabel_(new QLabel(QStringLiteral("TERMINAL"), this)), pathLabel_(new QLabel(this)),
-      findButton_(new QToolButton(this)), clearButton_(new QToolButton(this)),
-      restartButton_(new QToolButton(this)), closeButton_(new QToolButton(this)) {
+    : QWidget(parent), tabs_(new QTabWidget(this)), palette_(currentThemePalette()) {
     setProperty("kvRole", QStringLiteral("terminalPanel"));
     setMinimumHeight(120);
-    setFocusPolicy(Qt::StrongFocus);
-    setFocusProxy(terminal_);
-
-    auto* header = new QWidget(this);
-    header->setProperty("kvRole", QStringLiteral("terminalHeader"));
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(11, 0, 6, 0);
-    headerLayout->setSpacing(9);
-    titleLabel_->setProperty("kvRole", QStringLiteral("terminalHeading"));
-    pathLabel_->setProperty("kvRole", QStringLiteral("terminalPath"));
-    pathLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    headerLayout->addWidget(titleLabel_);
-    headerLayout->addWidget(pathLabel_, 1);
-
-    findButton_->setText(QString::fromUtf8("⌕"));
-    findButton_->setAutoRaise(true);
-    findButton_->setToolTip(QStringLiteral("Find in terminal"));
-    findButton_->setAccessibleName(QStringLiteral("Find in terminal"));
-    findButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
-    headerLayout->addWidget(findButton_);
-
-    clearButton_->setText(QString::fromUtf8("⌫"));
-    clearButton_->setAutoRaise(true);
-    clearButton_->setToolTip(QStringLiteral("Clear terminal scrollback"));
-    clearButton_->setAccessibleName(QStringLiteral("Clear terminal scrollback"));
-    clearButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
-    headerLayout->addWidget(clearButton_);
-
-    restartButton_->setText(QString::fromUtf8("↻"));
-    restartButton_->setAutoRaise(true);
-    restartButton_->setToolTip(QStringLiteral("Restart terminal session"));
-    restartButton_->setAccessibleName(QStringLiteral("Restart terminal session"));
-    restartButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
-    headerLayout->addWidget(restartButton_);
-
-    closeButton_->setText(QString::fromUtf8("×"));
-    closeButton_->setAutoRaise(true);
-    closeButton_->setToolTip(QStringLiteral("Hide terminal"));
-    closeButton_->setAccessibleName(QStringLiteral("Hide terminal"));
-    closeButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
-    headerLayout->addWidget(closeButton_);
-
+    tabs_->setObjectName(QStringLiteral("terminalPanelTabs"));
+    tabs_->setDocumentMode(true);
+    tabs_->setTabsClosable(true);
+    tabs_->setMovable(true);
+    tabs_->setElideMode(Qt::ElideMiddle);
+    tabs_->tabBar()->setExpanding(false);
+    auto* actions = new QWidget(tabs_);
+    auto* row = new QHBoxLayout(actions);
+    row->setContentsMargins(0, 0, 4, 0);
+    row->setSpacing(0);
+    const auto add = [actions, row](QStringView icon, const QString& label) {
+        auto* button =
+            new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(icon)), label, actions);
+        row->addWidget(button);
+        return button;
+    };
+    auto* create = add(u"plus", tr("New terminal"));
+    create->setObjectName(QStringLiteral("newTerminalTab"));
+    auto* find = add(u"search", tr("Find in terminal"));
+    auto* clear = add(u"trash-2", tr("Clear terminal scrollback"));
+    auto* restart = add(u"refresh-cw", tr("Restart terminal session"));
+    auto* hide = add(u"x", tr("Hide terminal"));
+    tabs_->setCornerWidget(actions, Qt::TopRightCorner);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
-    layout->addWidget(header);
-    layout->addWidget(terminal_, 1);
-
-    connect(closeButton_, &QToolButton::clicked, this, &TerminalPanel::closeRequested);
-    connect(findButton_, &QToolButton::clicked, terminal_, &TerminalView::openSearch);
-    connect(clearButton_, &QToolButton::clicked, terminal_, &TerminalView::clearScrollback);
-    connect(restartButton_, &QToolButton::clicked, this, [this] {
-        if (!terminal_->restart()) {
-            emit statusMessageRequested(QStringLiteral("Unable to restart terminal session."));
+    layout->addWidget(tabs_);
+    connect(create, &QAbstractButton::clicked, this, [this] { addTab(true); });
+    connect(find, &QAbstractButton::clicked, this, [this] {
+        if (auto* tab = currentTab())
+            tab->view()->openSearch();
+    });
+    connect(clear, &QAbstractButton::clicked, this, [this] {
+        if (auto* tab = currentTab())
+            tab->view()->clearScrollback();
+    });
+    connect(restart, &QAbstractButton::clicked, this, [this] {
+        if (auto* tab = currentTab(); tab && !tab->restart())
+            emit statusMessageRequested(tr("Unable to restart terminal session."));
+    });
+    connect(hide, &QAbstractButton::clicked, this, &TerminalPanel::closeRequested);
+    connect(tabs_, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        auto* tab = tabs_->widget(index);
+        tabs_->removeTab(index);
+        delete tab;
+        if (!tabs_->count()) {
+            addTab(false);
+            emit closeRequested();
         }
     });
-    connect(terminal_, &TerminalView::statusMessageRequested, this,
+    connect(tabs_, &QTabWidget::currentChanged, this, [this] {
+        if (auto* tab = currentTab())
+            setFocusProxy(tab->view());
+    });
+    addTab(false);
+}
+TerminalTab* TerminalPanel::currentTab() const {
+    return qobject_cast<TerminalTab*>(tabs_->currentWidget());
+}
+void TerminalPanel::addTab(bool startSession) {
+    auto* tab = new TerminalTab(workingDirectory_, {}, tabs_);
+    tab->applyTheme(palette_);
+    tab->setTypography(fontSizePixels_, lineHeightPixels_, fontFamily_);
+    const int index = tabs_->addTab(tab, tab->title());
+    tabs_->setTabToolTip(index, tab->workingDirectory());
+    tabs_->setCurrentIndex(index);
+    connect(tab, &TerminalTab::statusMessageRequested, this,
             &TerminalPanel::statusMessageRequested);
-    connect(terminal_, &TerminalView::titleChanged, this,
-            [this](const QString& title) { titleLabel_->setToolTip(title); });
-    connect(session_, &TerminalSession::started, this, [this] {
-        titleLabel_->setText(QStringLiteral("TERMINAL"));
-        titleLabel_->setProperty("terminalState", QStringLiteral("running"));
-        titleLabel_->style()->unpolish(titleLabel_);
-        titleLabel_->style()->polish(titleLabel_);
+    connect(tab, &TerminalTab::titleChanged, this, [this, tab](const QString& title) {
+        const int index = tabs_->indexOf(tab);
+        if (index >= 0)
+            tabs_->setTabText(index, title);
     });
-    connect(session_, &TerminalSession::exited, this, [this](int) {
-        titleLabel_->setText(QStringLiteral("TERMINAL · EXITED"));
-        titleLabel_->setProperty("terminalState", QStringLiteral("exited"));
-        titleLabel_->style()->unpolish(titleLabel_);
-        titleLabel_->style()->polish(titleLabel_);
-    });
+    if (startSession)
+        tab->start();
+}
+void TerminalPanel::start(const QString& path) {
+    workingDirectory_ = QDir::cleanPath(path.isEmpty() ? QDir::homePath() : path);
+    if (auto* tab = currentTab()) {
+        tab->setDirectoryBeforeStart(workingDirectory_);
+        tabs_->setTabToolTip(tabs_->currentIndex(), tab->workingDirectory());
+        tab->start();
+    }
+}
+void TerminalPanel::typeText(const QString& text) {
+    if (auto* tab = currentTab())
+        tab->typeText(text);
 }
 
-void TerminalPanel::start(const QString& workingDirectory) {
-    workingDirectory_ =
-        QDir::cleanPath(workingDirectory.isEmpty() ? QDir::homePath() : workingDirectory);
-    const QString homeRelative = QDir::home().relativeFilePath(workingDirectory_);
-    pathLabel_->setText(homeRelative == QStringLiteral(".") ? QStringLiteral("~")
-                        : homeRelative.startsWith(QStringLiteral("../"))
-                            ? workingDirectory_
-                            : QStringLiteral("~/%1").arg(homeRelative));
-    pathLabel_->setToolTip(workingDirectory_);
-    if (!session_->isRunning()) {
-        terminal_->start(workingDirectory_);
-    }
+void TerminalPanel::typeTextInNewTab(const QString& text) {
+    if (currentTab() != nullptr)
+        addTab(true);
+    typeText(text);
 }
 
 void TerminalPanel::focusTerminal() {
-    terminal_->setFocus(Qt::ShortcutFocusReason);
-
-    // QAction menus restore the previously focused widget after emitting triggered().
-    // Re-apply terminal focus once that menu event has fully unwound.
-    const QPointer<TerminalView> terminal = terminal_;
-    QTimer::singleShot(0, terminal_, [terminal] {
-        if (terminal != nullptr && terminal->isVisible()) {
+    auto* tab = currentTab();
+    if (!tab)
+        return;
+    const QPointer<TerminalView> terminal = tab->view();
+    terminal->setFocus(Qt::ShortcutFocusReason);
+    QTimer::singleShot(0, terminal, [terminal] {
+        if (terminal && terminal->isVisible()) {
             terminal->window()->activateWindow();
             terminal->setFocus(Qt::ShortcutFocusReason);
         }
     });
 }
-
-void TerminalPanel::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
-
-void TerminalPanel::setTypography(const int fontSizePixels, const int lineHeightPixels,
-                                  const QString& fontFamily) {
-    terminal_->setTypography(fontSizePixels, lineHeightPixels, fontFamily);
+void TerminalPanel::applyTheme(const ThemePalette& palette) {
+    palette_ = palette;
+    for (int i = 0; i < tabs_->count(); ++i)
+        if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(i)))
+            tab->applyTheme(palette);
 }
-
-bool TerminalPanel::isSessionRunning() const { return session_->isRunning(); }
-
+void TerminalPanel::setTypography(int fontSize, int lineHeight, const QString& family) {
+    fontSizePixels_ = fontSize;
+    lineHeightPixels_ = lineHeight;
+    fontFamily_ = family;
+    for (int i = 0; i < tabs_->count(); ++i)
+        if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(i)))
+            tab->setTypography(fontSize, lineHeight, family);
+}
+bool TerminalPanel::isSessionRunning() const {
+    for (int i = 0; i < tabs_->count(); ++i)
+        if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(i)); tab && tab->isRunning())
+            return true;
+    return false;
+}
 } // namespace ketplus

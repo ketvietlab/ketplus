@@ -158,8 +158,13 @@ current-window value.
   error object must not add a second transcript row of `{}`. Cursor ACP
   `cursor/ask_question` requests are blocking: KetPlus presents a structured
   Question card and returns the selected option ids, never acknowledging the
-  request as skipped. Tool/file approvals use a separate compact Approval card;
-  command text remains hidden until the user requests details. Question and
+  request as skipped. Tool/file approvals use the mock's Approval card:
+  "Approval needed · <tool>" (Command, File change, `server.tool`, Claude or
+  Cursor tool), the reason, and the whole command in a code block, with Allow
+  once and Deny. A settled approval is one note: Approved, Denied or Approval
+  expired, then the tool and command. `approval.resolved` records
+  `answers.decision`, so a restored transcript and other clients show how it
+  ended; older journals read "Approval closed". Question and
   Approval rows are never folded into an activity group: one that arrives
   between commands splits the group so the card stays on screen. Both cards
   show the full question text, and an answered card is read-only. Expired unanswered
@@ -195,7 +200,15 @@ current-window value.
 - Changing worktrees swaps the visible session. Turns in other worktrees keep
   running and remain marked in the worktree list.
 - Final answers and public progress commentary stream into existing transcript rows;
-  private reasoning remains hidden. Command activity updates
+  private reasoning remains hidden. The one exception is the running line: while a
+  turn works it reads "Working · <heading>", where the heading is the bold title at
+  the start of the provider's latest reasoning summary, first letter lowercased
+  (#385, as Codex CLI shows it). The summary's body and the reasoning content stay
+  out of the line, the transcript and its copy; the heading clears when the turn
+  ends. Each conversation keeps its own heading and the line shows the selected
+  one, so another conversation in the same worktree never changes it. The heading
+  appears when a reasoning item completes; streaming it from summary deltas is
+  #397. Command activity updates
   its compact receipt without rendering output. The transcript viewport leaves a
   fixed 20 px gap above the composer in idle and streaming states.
   Streaming preserves reading intent: a viewport following the bottom continues
@@ -203,12 +216,10 @@ current-window value.
   resumes following regardless of scroll direction; farther away preserves the
   historical reading position.
   The run-status footer shares the rows' visual anchor compensation.
-  Animation trial 1 enables only the Working icon's opacity pulse, using an
-  Animator-only sequence on the scene graph render thread. Text and scale stay
-  fixed; the existing TintedIcon/MultiEffect is unchanged to isolate this trial.
-  Restore motion and conversation shimmer remain disabled. The pulse stops when
-  idle, restoring, hidden, minimized, or the Quick window is inactive. Set
-  `KETPLUS_REDUCED_MOTION=1` before launch for the static control. CPU savings
+  The Working indicator uses the kit's shared stepped animation clock. Restore
+  motion and conversation shimmer remain disabled. Indicators stop while idle,
+  restoring, hidden or minimized; the shared clock slows when the app is inactive.
+  Set `KETPLUS_REDUCED_MOTION=1` before launch for the static control. CPU savings
   remain unverified until measured on the same visible transcript and hardware.
 - Assistant bodies above 16 Ki characters become independently virtualized
   Markdown block rows. Pathological snapshots are segmented away from the UI
@@ -311,12 +322,18 @@ current-window value.
   its sidebar row and before the header title. Typing `#` in the composer offers
   numbered conversations by number or title; the daemon lists the ones a
   message names for the agent, which contacts them through `ketplus_agents`
-  only when asked. A turn another agent started shows its message as an
-  outlined bubble labelled "Message from #1093 · title · provider" (or "Reply
-  from …"). The sender's transcript adds an "Agent message" note naming the
-  receiver and its delivery ("Sent to #1093 · title · started a turn"), the
-  receiver's adds "Sent as the reply to #4821" when its final answer becomes the
-  reply, and held, failed or expired messages appear as the same notes. While a
+  only when asked. A turn another agent started shows its message as a
+  user bubble under a muted "From @agent/1093 · title · provider" label
+  (reviews keep "Review request from …"); a prompt's images lead its bubble and a steer adds "Sent
+  while <provider> was working" below it, naming the provider its `turn.steered`
+  event records (older steers read "the agent"). The sender's transcript adds the mock's note for
+  each message it sent: "Message to @agent/1093" (or "Reply to", "Notice to"),
+  then "title · provider · Sent · reply requested" and the first 500 characters
+  of the text, which the daemon journals on the `sent` event. Later states of
+  that message (held, expired, not delivered) and its reply ("Replied") update
+  the same note, live and within a restored page; a reply in another page
+  leaves the note at its last state. Incoming held messages and reviews keep
+  their notices. While a
   turn another conversation started is running, its sidebar row ends with a
   muted "from #4821" and the tooltip names that conversation.
 - Typing `@` offers files and folders of the conversation's worktree (tracked and
@@ -362,19 +379,39 @@ current-window value.
   shown as text: `chat_markdown::escapeRawHtml` escapes any `<` that could open a
   tag outside code before Qt imports the Markdown, because an unclosed tag such
   as a `<title>` placeholder hid the rest of the answer except its code spans.
-  The row measurer applies the same escaping. Code keeps the body colour. Inline code
-  sits on a rounded chip, the `inlineCodeBackground` token (the text colour at 11%
-  alpha), drawn behind the text by `messageInlineCode()` with one chip per wrapped
-  line; the character before the run and the run's last character are tracked by
-  4 px so the chip does not cover the neighbouring text. Code blocks keep their
-  frames and get no chips. The frames use the `codeBlockBackground` and
-  `codeBlockBorder` tokens, a step darker than the page in both themes (`#121519`
-  on dark, `#EDEBEC` on light). The transcript and
-  composer share one reading column, 760 px by default. Settings > Typography >
+  The row measurer applies the same escaping. The bare-URL autolinker stops at a
+  backslash, so a URL just before an escaped tag still closes its autolink. Code keeps
+  the body colour. Inline code is plain monospace text, as in the kit and the mock,
+  with no chip or extra tracking. Code blocks keep their frames.
+  Nothing a model writes reaches the network. `installLocalOnlyNetwork` gives the
+  transcript's QML engine a network manager that serves only `file:`, `qrc:` and
+  `data:` URLs and fails every other request before any lookup. An inline
+  `![alt](https://…)` is shown as a link to the image (`chat_markdown::prepareForDisplay`).
+  A file path that names another machine (`file://host/share/a.png`, `//host/share/a.png`,
+  `\\host\share\a.png`) counts as remote: opening it would connect to that host, on Windows
+  over SMB with the account's credentials. `transcriptMayOpen` allows such a path only inside
+  the conversation's worktree, when that worktree is on the share itself.
+  A reference-style remote image stays a broken image that is never fetched. An inline
+  local photo is drawn as an 88 px thumbnail, and the document keeps it at that size
+  for the screen's density instead of the full decode. Links take the kit's link
+  colour on every format pass, so they follow a theme change. Qt's Markdown importer
+  had kept the colour from the theme in use when the answer was parsed.
+  The layout trace (`KETPLUS_CHAT_LAYOUT_TRACE`) is off unless that variable names a
+  file. It records geometry and keys, never message text.
+  Their fill and border come directly from `KetTheme.codeBlockRecipe`, using the
+  kit's panel-subtle surface in each theme. Appearance-driven rich-text formatting
+  waits until QML font and width bindings settle before measuring overlay frames.
+  `TranscriptTableStyle` removes Qt 6.11's extra empty paragraph in a populated
+  table cell after a code fence, preserving intentionally empty cells and header
+  emphasis. Table padding owns cell spacing; code frames retain separation from
+  the following table. The transcript and
+  composer share one reading column, 760 px by default: as in the mock, answer
+  text, code frames and the composer span the whole column, and rows keep a
+  20 px inset from the pane's edges only when the pane is narrower. Settings > Typography >
   Conversation width offers Wide (864 px, close to Claude's wide reading column),
   Extra wide (1200 px) and Full width; a Wide saved as 960 px before it was narrowed
-  still reads as Wide. Like the other Typography fields, the choice is staged until
-  Save changes (and Reset defaults covers it). It is stored in the desktop app's
+  still reads as Wide. Like the other Typography fields, the choice applies as it is
+  made (ADR 0103), and Restore defaults covers it. It is stored in the desktop app's
   `agent/conversationWidth` setting and applies to the AI workspace only; Atlas's
   embedded chat keeps the default column.
 - Changed-file cards show paths from the worktree directory instead of the full
@@ -469,9 +506,8 @@ current-window value.
   Base worktree list in place, so a worktree made outside KetPlus (another agent
   or a terminal) appears without reopening the folder. The worktree already
   picked stays selected.
-  Git > Switch Worktree > Manage worktrees… opens the Worktrees page, which
-  offers Archive and confirmed deletion for inactive linked worktrees with no
-  running agent. Deletion keeps the branch. Conversation deletion confirms
+  There is no Worktrees page (ADR 0111): a worktree is created for a
+  conversation and switched from inside it. Conversation deletion confirms
   whether to remove linked worktrees and whether to force that removal; Git
   still refuses the primary worktree, and a failed non-forced remove leaves an
   error after the conversation is gone. KetPlus stores the worktrees each
@@ -981,17 +1017,20 @@ keeps the current buffer and opens a visible error dialog. Refresh happens on an
 explicit reopen; this is not a background filesystem watcher.
 
 
-### Proposed conversation repository picker (mock only)
+### Conversation repository picker
 
-The new Desktop/iPhone Atlas flows propose a repository selector beside the
-worktree selector. Current repository is pinned first; selecting another repo
-changes the existing conversation's scope after acknowledgment, updates the
-header, moves its sidebar row and promotes the new group. Worktree search stays
-scoped to that repository. Transcript, conversation identity, draft and an active
-provider turn survive; the newly selected scope is the next-turn target.
-Failed switches retain the old scope and expose Retry. iPhone uses a Repository
-→ Worktree bottom sheet. See the Atlas README and repository-picker evidence.
-This proposal does not change the currently implemented native picker contract.
+The desktop picker follows the mock (ADR 0105). The current repository is listed
+first. Selecting a repository lists its worktrees, with the current or last-used
+one chosen and the main worktree marked "Main". Worktree search stays scoped to
+that repository. Selecting a worktree only chooses it.
+
+**Use this repository** switches the conversation's execution context after the
+daemon acknowledges. The picker then closes and announces "Next turn:
+<repository> · <branch>". Transcript, conversation identity, draft and an active
+provider turn survive, and the new scope applies from the next turn. A failed switch
+keeps the old scope and shows the error, and Use retries. **Create worktree…** opens
+the Create worktree card in place (ADR 0111). iPhone uses a Repository → Worktree bottom sheet over the
+granted catalog.
 
 
 ### Claude API key
@@ -1012,3 +1051,29 @@ another provider. Non-macOS hosts retain inherited runtime authentication.
 The optional query budget and latest-query cost are estimates, not a hard account
 spend cap or bill. Consult Anthropic Console for actual usage. See
 [ADR 0026](decisions/0026-claude-api-key.md) for credential boundaries and release checks.
+
+## Teams
+
+[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+one repository on one goal: exactly one **leader**, one to five **developers** and exactly
+one **reviewer** (a Claude conversation). A conversation is on at most one team.
+
+- **Roles.** The leader plans, writes acceptance criteria, assigns tasks, changes lanes
+  and orders merges; it does not write code or review, and it is the only member that
+  speaks to the user. A developer works on its assigned task inside its lane (path
+  prefixes). The reviewer reviews each task read-only against its criteria.
+- **A task's life.** Created by the leader with criteria, lane and dependencies →
+  assigned (its branch and worktree are cut from the integration branch, and the
+  owner's conversation is pointed at that worktree) → `in_progress` → handed to review
+  with its work committed → `ready` when the reviewer reports no findings, or back to
+  the owner with the findings → merged by the leader or by the user, as the team is set
+  → `done` once its head is in the integration branch.
+- **What wakes whom.** An assignment or handover starts a turn of the new owner; a task
+  entering review, the reviewer; findings, the owner; an answered decision, the leader
+  and the blocked owner; actionable updates, one leader digest. Notes, met marks and
+  other state changes start nothing.
+- **Decisions.** Only the leader raises one; the user answers on the team page. The
+  folder in the sidebar shows the count.
+- **Limits.** 40 automatic turns per team since the user last acted on it, then the team
+  pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
+  message until Resume.

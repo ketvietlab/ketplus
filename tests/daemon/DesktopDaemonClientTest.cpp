@@ -2,6 +2,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
+#include "agent/DaemonTranscriptProjection.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "ipc/LocalIpcServer.h"
 #include "protocol/DaemonProtocol.h"
@@ -22,15 +23,18 @@
 #include <QLocalSocket>
 #include <QPointer>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QScopeGuard>
 
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 #include <functional>
@@ -40,6 +44,38 @@ using namespace ketplus;
 using namespace ketplus::daemon;
 
 namespace {
+
+QByteArray readFile(const QString& path) {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+}
+
+// One request on an agent connection, as the ketplus_agents MCP server makes it.
+QJsonObject agentRoundTrip(QLocalSocket& socket, const QString& type, const QJsonObject& payload) {
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    socket.write(protocol::encodeFrame({{"protocol_version", protocol::currentVersion},
+                                        {"message_id", id},
+                                        {"message_type", type},
+                                        {"sent_at", protocol::timestamp()},
+                                        {"payload", payload}}));
+    QByteArray buffer;
+    const auto frameSize = [&buffer] {
+        return (static_cast<uchar>(buffer[0]) << 24) | (static_cast<uchar>(buffer[1]) << 16) |
+               (static_cast<uchar>(buffer[2]) << 8) | static_cast<uchar>(buffer[3]);
+    };
+    while (true) {
+        while (buffer.size() < 4 || buffer.size() < 4 + frameSize()) {
+            if (!QTest::qWaitFor([&socket] { return socket.bytesAvailable() > 0; }, 5000))
+                return {};
+            buffer.append(socket.readAll());
+        }
+        const int size = frameSize();
+        const QJsonObject frame = QJsonDocument::fromJson(buffer.mid(4, size)).object();
+        buffer.remove(0, 4 + size);
+        if (frame.value("correlation_id").toString() == id)
+            return frame.value("payload").toObject();
+    }
+}
 
 int errorRows(const QVariantList& messages) {
     int rows = 0;
@@ -263,6 +299,38 @@ class DesktopDaemonClientTest final : public QObject {
                                 {{"scope", "Another answer"}});
         QCOMPARE(replayErrors.size(), 1);
 
+        // The live notice channel preserves the same typed action as history.
+        // This synthetic event must not authorize or deliver any real message.
+        const QJsonObject held{{"message_id", "live-held"},
+                               {"state", "held"},
+                               {"reason", "hop_limit"},
+                               {"direction", "incoming"},
+                               {"peer_number", "1093"}};
+        const auto presentation = agent_message::agentMessageNotice(held, "live-held-notice");
+        LocalJournal journal(state);
+        QVERIFY(journal.isOpen());
+        QVERIFY(!journal.sessions().isEmpty());
+        reopened.appServer()->notificationReceived(
+            "daemon/providerNotice", {{"threadId", journal.sessions().first().id},
+                                      {"itemId", "live-held-notice"},
+                                      {"presentation", QJsonObject::fromVariantMap(presentation)}});
+        const auto hasHeldAction = [&] {
+            for (const auto& value : reopened.messages(worktree)) {
+                const auto row = value.toMap();
+                if (row.value("subtype") == "heldAgentMessage" &&
+                    row.value("sanitizedPayload").toMap().value("messageId") == "live-held")
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY(hasHeldAction());
+        QSignalSpy heldStatus(&reopened, &AgentSessionManager::heldMessageResult);
+        reopened.heldMessageAction(worktree, "live-held", false);
+        QTRY_COMPARE(heldStatus.size(), 1);
+        QCOMPARE(heldStatus.first().at(2).toString(), QString("live-held"));
+        QVERIFY(heldStatus.first().at(3).toMap().value("error").toString().contains(
+            "does not belong")); // synthetic IDs never become an authorization
+
         const auto deletedId = desktop.activeConversationId(worktree);
         QSignalSpy deletion(&desktop, &AgentSessionManager::conversationDeletionFinished);
         QVERIFY(desktop.deleteConversation(worktree, deletedId));
@@ -426,10 +494,18 @@ class DesktopDaemonClientTest final : public QObject {
                  QStringLiteral("user"));
         QCOMPARE(transcript.first().toMap().value(QStringLiteral("body")).toString(),
                  QStringLiteral("continue"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("kind")).toString(),
-                 QStringLiteral("assistant"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("finished"));
+        const auto answer =
+            std::find_if(transcript.cbegin(), transcript.cend(), [](const QVariant& row) {
+                return row.toMap().value("kind") == "assistant";
+            });
+        QVERIFY(answer != transcript.cend());
+        QCOMPARE(answer->toMap().value("body").toString(), QStringLiteral("finished"));
+        QCOMPARE(std::count_if(transcript.cbegin(), transcript.cend(),
+                               [](const QVariant& row) {
+                                   return row.toMap().value("subtype") == "turnEnd" &&
+                                          row.toMap().value("status") == "completed";
+                               }),
+                 1);
         QCOMPARE(reopened.title(worktree), QStringLiteral("Renamed across daemon"));
 
         qunsetenv("KETPLUS_DAEMON_SOCKET");
@@ -537,6 +613,8 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(client.hasFeature(QStringLiteral("provider.runtime_status")));
         QVERIFY(client.hasFeature(QStringLiteral("session.fork")));
         QVERIFY(!client.hasFeature(QStringLiteral("not.a.feature")));
+        QVERIFY(client.hasCapability(QStringLiteral("session.agent_messages.read")));
+        QVERIFY(client.hasCapability(QStringLiteral("session.agent_messages.release")));
         QVERIFY(client.hasCapability(QStringLiteral("storage.retention.read")));
         QVERIFY(client.hasCapability(QStringLiteral("storage.retention.apply")));
 
@@ -558,6 +636,7 @@ class DesktopDaemonClientTest final : public QObject {
                                sizeState = result;
                            });
         QTRY_VERIFY(sizeState.value("ok").toBool());
+        QVERIFY(sizeState.value("status").toObject().value("warning").isBool());
         QCOMPARE(sizeState.value("revision").toInteger(), 0);
         sizeState = {};
         storageBridge.call(
@@ -1057,7 +1136,8 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(writeFakeCodex(executable, log));
         CodexAppServer server(executable);
         for (const auto& method : {"daemon/storageRetention/read", "daemon/storageSize/read",
-                                   "daemon/storageSize/apply", "daemon/storageUnknown/read"}) {
+                                   "daemon/storageSize/apply", "daemon/storageCompaction/start",
+                                   "daemon/storageExport/start", "daemon/storageUnknown/read"}) {
             bool rejected = false;
             server.call(method, {}, [&](const QJsonObject&, const QString& error) {
                 rejected = error.contains("local KetPlus daemon");
@@ -1071,11 +1151,12 @@ class DesktopDaemonClientTest final : public QObject {
         QTest::addColumn<QString>("family");
         QTest::newRow("retention") << QString("retention");
         QTest::newRow("size") << QString("size");
+        QTest::newRow("options") << QString("options"); // ADR 0108
     }
     void storageBridgeRefusesOldDaemonAndForwardsLocalOperations() {
         QFETCH(QString, family);
         const QString wire = "storage." + family + ".";
-        const QString ui = family == "size" ? "daemon/storageSize/" : "daemon/storageRetention/";
+        const QString ui = "daemon/storage" + family.left(1).toUpper() + family.mid(1) + "/";
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
         const auto restore = qScopeGuard(stopUsingFakeDaemon);
@@ -1264,6 +1345,113 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!answered.contains(QStringLiteral("seen-1=session.mark_seen")));
     }
 
+    // ADR 0106: a report the agent sends during a live turn arrives with that turn's end, as
+    // the journal's projection shows it after a reload.
+    void liveTurnEndCarriesTheWorkReport() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString worktree = directory.filePath(QStringLiteral("worktree"));
+        QVERIFY(QDir().mkpath(worktree));
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
+        QVERIFY(writeFakeCodex(executable, providerLog));
+        const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
+        const QString state = directory.filePath(QStringLiteral("journal.sqlite3"));
+        const QString token = directory.filePath(QStringLiteral("local.token"));
+        qputenv("KETPLUS_DAEMON_SOCKET", socket.toUtf8());
+        qputenv("KETPLUS_DAEMON_STATE", state.toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", token.toUtf8());
+        const auto cleanup = qScopeGuard([&worktree] {
+            qunsetenv("KETPLUS_DAEMON_SOCKET");
+            qunsetenv("KETPLUS_DAEMON_STATE");
+            qunsetenv("KETPLUS_DAEMON_TOKEN_FILE");
+            QSettings().remove(ketplus::agent_message::persistedKey(worktree));
+            QSettings().remove(
+                ketplus::agent_message::persistedKey(QFileInfo(worktree).canonicalFilePath()));
+        });
+        DaemonService service({state, token, socket, executable});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+
+        AgentSessionManager desktop;
+        desktop.activate(worktree);
+        // The fake provider waits for the question's answer, so the turn is open meanwhile.
+        desktop.submitPrompt(worktree, QStringLiteral("ask"));
+        QVariantMap question;
+        const auto findQuestion = [&] {
+            for (const QVariant& value : desktop.messages(worktree))
+                if (value.toMap().value(QStringLiteral("subtype")) == QStringLiteral("question"))
+                    question = value.toMap();
+            return !question.isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(findQuestion(), 5000);
+
+        QByteArray log;
+        QTRY_VERIFY_WITH_TIMEOUT((log = readFile(providerLog)).contains("KETPLUS_AGENT_TOKEN"),
+                                 5000);
+        const QRegularExpression tokenPattern("\"KETPLUS_AGENT_TOKEN\": \"([0-9a-f]{64})\"");
+        const QString agentToken = tokenPattern.match(QString::fromUtf8(log)).captured(1);
+        QVERIFY(!agentToken.isEmpty());
+        QLocalSocket agent;
+        agent.connectToServer(socket);
+        QVERIFY(agent.waitForConnected(3000));
+        QVERIFY(agentRoundTrip(agent, "daemon.hello", {{"agent_token", agentToken}})
+                    .value("agent")
+                    .toBool());
+        // The Report tab follows the conversation live.
+        QSignalSpy reports(&desktop, &AgentSessionManager::workReportChanged);
+        const QString conversation = desktop.activeConversationId(worktree);
+        const QJsonObject reported =
+            agentRoundTrip(agent, "agents.work_report",
+                           {{"title", "Live"},
+                            {"items", QJsonArray{QJsonObject{{"key", "live"},
+                                                             {"group", "Work"},
+                                                             {"title", "Answer the question"},
+                                                             {"status", "active"}}}}});
+        QVERIFY2(reported.value("ok").toBool(),
+                 QJsonDocument(reported).toJson(QJsonDocument::Compact).constData());
+
+        const QString optionId = question.value(QStringLiteral("questions"))
+                                     .toList()
+                                     .first()
+                                     .toMap()
+                                     .value(QStringLiteral("options"))
+                                     .toList()
+                                     .first()
+                                     .toMap()
+                                     .value(QStringLiteral("id"))
+                                     .toString();
+        desktop.answerQuestion(worktree, question.value(QStringLiteral("messageKey")).toString(),
+                               {{QStringLiteral("scope"),
+                                 QVariantMap{{QStringLiteral("option_ids"), QStringList{optionId}},
+                                             {QStringLiteral("custom_answer"), QString{}}}}});
+        QTRY_VERIFY_WITH_TIMEOUT(!desktop.isRunning(worktree), 5000);
+        const auto reportedEnd = [&] {
+            for (const QVariant& value : desktop.messages(worktree)) {
+                const QVariantMap row = value.toMap();
+                if (row.value(QStringLiteral("subtype")) == QStringLiteral("turnEnd"))
+                    return row.value(QStringLiteral("workReport")).toMap();
+            }
+            return QVariantMap{};
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!reportedEnd().isEmpty(), 5000);
+        const QVariantMap report = reportedEnd();
+        QCOMPARE(report.value(QStringLiteral("title")).toString(), QStringLiteral("Live"));
+        QCOMPARE(report.value(QStringLiteral("items")).toList().size(), 1);
+        QVERIFY(!reports.isEmpty());
+        QCOMPARE(reports.first().at(1).toString(), conversation);
+        QCOMPARE(reports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Live"));
+
+        // Opening the tab reads the stored ledger.
+        reports.clear();
+        desktop.readWorkReport(worktree);
+        QTRY_VERIFY_WITH_TIMEOUT(!reports.isEmpty(), 5000);
+        QCOMPARE(reports.last().at(1).toString(), conversation);
+        QVERIFY2(reports.last().at(3).toString().isEmpty(),
+                 qPrintable(reports.last().at(3).toString()));
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toInt(), 1);
+    }
+
     void forksConversationThroughDaemon() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -1385,10 +1573,18 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(transcript.size() >= 2);
         QCOMPARE(transcript.first().toMap().value(QStringLiteral("kind")).toString(),
                  QStringLiteral("user"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("kind")).toString(),
-                 QStringLiteral("assistant"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("finished"));
+        const auto answer =
+            std::find_if(transcript.cbegin(), transcript.cend(), [](const QVariant& row) {
+                return row.toMap().value("kind") == "assistant";
+            });
+        QVERIFY(answer != transcript.cend());
+        QCOMPARE(answer->toMap().value("body").toString(), QStringLiteral("finished"));
+        QCOMPARE(std::count_if(transcript.cbegin(), transcript.cend(),
+                               [](const QVariant& row) {
+                                   return row.toMap().value("subtype") == "turnEnd" &&
+                                          row.toMap().value("status") == "completed";
+                               }),
+                 1);
         QFile log(cursorLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY(log.readAll().contains("prompt:"));

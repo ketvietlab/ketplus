@@ -29,11 +29,10 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QCryptographicHash>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QDesktopServices>
-#include <QUrl>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
@@ -47,8 +46,9 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
-#include <QToolButton>
 #include <QTimer>
+#include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -66,8 +66,10 @@ void MainWindow::createActions() {
     auto* newAction = fileMenu->addAction(QStringLiteral("&New Tab"));
     newAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+T")));
     connect(newAction, &QAction::triggered, this, [this] {
-        if (atlasWorkspaceMode_) openAtlasPicker();
-        else createNewDocument();
+        if (atlasWorkspaceMode_)
+            openAtlasPicker();
+        else
+            createNewDocument();
     });
     auto* atlasAction = fileMenu->addAction(tr("New Atlas Tab"));
     atlasAction->setObjectName("newAtlasTabAction");
@@ -80,7 +82,8 @@ void MainWindow::createActions() {
     connect(newWindowAction, &QAction::triggered, this, &MainWindow::newWindowRequested);
     auto* spotlightAction = fileMenu->addAction(QStringLiteral("Spotlight..."));
     spotlightAction->setObjectName(QStringLiteral("spotlightAction"));
-    spotlightAction->setShortcut(QKeySequence(Qt::ControlModifier | Qt::ShiftModifier | Qt::Key_Space));
+    spotlightAction->setShortcut(
+        QKeySequence(Qt::ControlModifier | Qt::ShiftModifier | Qt::Key_Space));
     connect(spotlightAction, &QAction::triggered, this, &MainWindow::showSpotlight);
 
     auto* openAction = fileMenu->addAction(QStringLiteral("&Open…"));
@@ -92,8 +95,7 @@ void MainWindow::createActions() {
     connect(openFolderAction, &QAction::triggered, this, &MainWindow::chooseFolder);
 
     recentFoldersMenu_ = fileMenu->addMenu(QStringLiteral("Open Recent Folder"));
-    connect(recentFoldersMenu_, &QMenu::aboutToShow, this,
-            &MainWindow::rebuildRecentFoldersMenu);
+    connect(recentFoldersMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentFoldersMenu);
 
     recentFilesMenu_ = fileMenu->addMenu(QStringLiteral("Open Recent File"));
     connect(recentFilesMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentFilesMenu);
@@ -231,7 +233,7 @@ void MainWindow::createActions() {
     };
     const auto addViewOption = [this](QMenu* menu, const QString& label,
                                       const QKeySequence& shortcut,
-                                      bool EditorViewOptions::*field) {
+                                      bool EditorViewOptions::* field) {
         auto* action = menu->addAction(label);
         action->setCheckable(true);
         action->setChecked(viewOptions_.*field);
@@ -258,8 +260,7 @@ void MainWindow::createActions() {
     addEditorAction(lineMenu, QStringLiteral("De&lete Line"),
                     QKeySequence(QStringLiteral("Ctrl+Shift+K")),
                     [](EditorWidget& editor) { editor.deleteLines(); });
-    addEditorAction(lineMenu, QStringLiteral("&Join Lines"),
-                    QKeySequence(QStringLiteral("Ctrl+J")),
+    addEditorAction(lineMenu, QStringLiteral("&Join Lines"), QKeySequence(QStringLiteral("Ctrl+J")),
                     [](EditorWidget& editor) { editor.joinLines(); });
     lineMenu->addSeparator();
     addEditorAction(lineMenu, QStringLiteral("&Sort Lines"), {},
@@ -411,8 +412,7 @@ void MainWindow::createActions() {
     sourceControlAction_ = gitMenu_->addAction(QStringLiteral("Source Control"));
     sourceControlAction_->setCheckable(true);
     sourceControlAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+G")));
-    connect(sourceControlAction_, &QAction::toggled, this,
-            &MainWindow::setSourceControlVisible);
+    connect(sourceControlAction_, &QAction::toggled, this, &MainWindow::setSourceControlVisible);
 
     gitMenu_->addSeparator();
     viewDiffAction_ = gitMenu_->addAction(QStringLiteral("View Current File Diff"));
@@ -423,12 +423,6 @@ void MainWindow::createActions() {
 
     gitMenu_->addSeparator();
     worktreeMenu_ = gitMenu_->addMenu(QStringLiteral("Switch Worktree"));
-    // The sidebar lists conversations, not worktrees; the Worktrees page is reached from here.
-    manageWorktreesAction_ = new QAction(tr("Manage worktrees…"), this);
-    manageWorktreesAction_->setObjectName(QStringLiteral("manageWorktreesAction"));
-    connect(manageWorktreesAction_, &QAction::triggered, this,
-            [this] { setWorktreesWorkspaceVisible(true); });
-    worktreeMenu_->addAction(manageWorktreesAction_);
     connect(worktreeMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildWorktreeMenu);
     connect(gitMenu_, &QMenu::aboutToShow, this, [this] {
         updateGitActions();
@@ -581,6 +575,13 @@ void MainWindow::createActions() {
     distractionFreeAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Z")));
     connect(distractionFreeAction_, &QAction::toggled, this, &MainWindow::setDistractionFree);
 
+    compactConversationAction_ = viewMenu->addAction(tr("Compact conversation window"));
+    compactConversationAction_->setObjectName(QStringLiteral("compactConversationWindowAction"));
+    compactConversationAction_->setCheckable(true);
+    compactConversationAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+M")));
+    connect(compactConversationAction_, &QAction::toggled, this,
+            &MainWindow::setCompactConversationWindow);
+
     // Escape leaves full screen only while an editor has focus, so the agent chat,
     // terminal and Spotlight keep their own Escape handling.
     exitFullScreenShortcut_ = new QShortcut(QKeySequence(Qt::Key_Escape), editorSplit_);
@@ -651,10 +652,13 @@ void MainWindow::createActions() {
     });
 }
 
-void MainWindow::showUpdateSettings() {
-    showSettings();
-    if (settingsWorkspace_ != nullptr)
-        settingsWorkspace_->showSection(QStringLiteral("updates"));
+void MainWindow::showUpdateSettings() { showSettingsSection(QStringLiteral("updates")); }
+
+void MainWindow::showSettingsSection(const QString& id) {
+    if (!settingsWorkspaceMode_ || settingsWorkspace_ == nullptr)
+        showSettings();
+    if (settingsWorkspace_ != nullptr && !id.isEmpty())
+        settingsWorkspace_->showSection(id);
 }
 
 void MainWindow::checkForUpdates() {

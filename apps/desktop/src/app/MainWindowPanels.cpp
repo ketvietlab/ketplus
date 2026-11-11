@@ -128,8 +128,8 @@ TerminalPanel* MainWindow::ensureTerminal() {
 }
 
 void MainWindow::placeFindBar() {
-    QWidget* host = agentWorkspaceMode_ && agentDetailPane_ != nullptr ? agentDetailPane_
-                                                                        : editorPane_;
+    QWidget* host =
+        agentWorkspaceMode_ && agentDetailPane_ != nullptr ? agentDetailPane_ : editorPane_;
     if (findBar_->parentWidget() == host)
         return;
     const bool visible = findBar_->isVisibleTo(findBar_->parentWidget());
@@ -138,6 +138,8 @@ void MainWindow::placeFindBar() {
 }
 
 QTabWidget* MainWindow::ensureAgentDetailTabs() {
+    // Every opener comes here, so opening content shows a hidden pane again.
+    agentDetailPaneHidden_ = false;
     if (agentDetailTabs_ != nullptr) {
         return agentDetailTabs_;
     }
@@ -165,6 +167,7 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
             &MainWindow::showAgentDetailTabContextMenu);
     connect(agentDetailTabs_, &QTabWidget::currentChanged, this,
             [this] { updateAgentDetailTabs(); });
+    installAgentDetailActions();
     return agentDetailTabs_;
 }
 
@@ -286,8 +289,11 @@ void MainWindow::updateAgentDetailTabs() {
     if (agentDetailTabs_ == nullptr) {
         return;
     }
-    const bool hasTabs = agentDetailTabs_->count() > 0;
+    const bool hasTabs =
+        agentDetailTabs_->count() > 0 && !compactConversationWindow_ && !agentDetailPaneHidden_;
     agentDetailPane_->setVisible(agentWorkspaceMode_ && hasTabs);
+    if (agentWorkspace_ != nullptr)
+        agentWorkspace_->setDetailsOpen(agentWorkspaceMode_ && hasTabs);
     if (agentWorkspaceMode_ && agentWorkspace_ != nullptr) {
         QList<int> sizes(workspaceSplit_->count(), 0);
         const int width = qMax(800, workspaceSplit_->width());
@@ -316,6 +322,8 @@ bool MainWindow::showAgentFile(const QString& filePath) {
         return false;
     }
 
+    if (compactConversationWindow_)
+        setCompactConversationWindow(false);
     auto* detailTabs = ensureAgentDetailTabs();
     const QString absolutePath = normalizedPath(filePath);
     for (int index = 0; index < detailTabs->count(); ++index) {
@@ -384,6 +392,29 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
     updateAgentDetailTabs();
     statusBar()->showMessage(QStringLiteral("Opened Git diff"), 2000);
     return true;
+}
+
+void MainWindow::typeInTerminal(const QString& command) {
+    // Beside the conversation in Agent Workspace, below the page elsewhere. The command is typed,
+    // never run: the user presses Return.
+    // Settings covers the workspace, so the terminal opens beside the conversation instead.
+    if (settingsWorkspaceMode_)
+        setAgentWorkspaceVisible(true);
+    TerminalPanel* panel = nullptr;
+    if (agentWorkspaceMode_) {
+        panel = openAgentTerminalTab();
+    } else {
+        setTerminalVisible(true);
+        if (terminal_ == nullptr)
+            return;
+        terminal_->typeTextInNewTab(command);
+        terminal_->focusTerminal();
+        return;
+    }
+    if (panel == nullptr)
+        return;
+    panel->typeText(command);
+    panel->focusTerminal();
 }
 
 void MainWindow::setTerminalVisible(const bool visible) {

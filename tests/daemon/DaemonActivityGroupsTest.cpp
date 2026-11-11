@@ -20,12 +20,77 @@ QJsonObject browser(const QString& id, const QString& tool) {
                                  {"server", "ketplus_browser"},
                                  {"tool", tool}}}};
 }
+QJsonObject fileChange(const QString& id, const QJsonArray& changes,
+                       const QString& status = "completed") {
+    return {{"item",
+             QJsonObject{
+                 {"id", id}, {"type", "fileChange"}, {"status", status}, {"changes", changes}}}};
+}
+QJsonObject change(const QString& path, const QString& kind, const QString& diff) {
+    return {{"path", path}, {"kind", QJsonObject{{"type", kind}}}, {"diff", diff}};
+}
 bool seed(LocalJournal& journal, const QString& directory) {
     return journal.upsertSession({"session", directory, "codex", {}, {}, "ready"}) &&
            journal.appendEvent("session", 1, "user.message", {{"text", "Synthetic"}}) > 0;
 }
 QJsonObject last(LocalJournal& journal, qint64 cursor) {
     return journal.eventsAfter("session", 1, cursor - 1, 1).first().toObject();
+}
+
+bool sqlite(const QString& path, const QStringList& statements) {
+    const auto connection = QStringLiteral("activity-files-fixture");
+    bool ok = false;
+    {
+        auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+        db.setDatabaseName(path);
+        ok = db.open();
+        for (const auto& sql : statements) {
+            QSqlQuery query(db);
+            ok = ok && query.exec(sql);
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(connection);
+    return ok;
+}
+QJsonArray summaryFiles(LocalJournal& journal, qint64 cursor) {
+    return journal.activitySummaryEvent(last(journal, cursor))
+        .value("payload")
+        .toObject()
+        .value("files")
+        .toArray();
+}
+bool drain(LocalJournal& journal) {
+    for (int pass = 0; pass < 64; ++pass) {
+        switch (journal.backfillActivityGroups()) {
+        case LocalJournal::ActivityBackfill::Idle:
+            return true;
+        case LocalJournal::ActivityBackfill::Failed:
+            return false;
+        default:
+            break;
+        }
+    }
+    return false;
+}
+// A journal grouped before activity_files existed: its edit, then a command, then the table
+// dropped as an older daemon left it.
+qint64 groupedWithoutFiles(const QString& path, const QString& root) {
+    qint64 cursor = 0;
+    {
+        LocalJournal journal(path);
+        if (!seed(journal, root))
+            return 0;
+        cursor = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+b")}));
+        if (cursor <= 0 ||
+            journal.appendEvent("session", 1, "item.completed", command("two", "completed")) <= 0)
+            return 0;
+    }
+    return sqlite(path, {"DROP TABLE activity_files", "DROP TABLE activity_files_backfill"})
+               ? cursor
+               : 0;
 }
 } // namespace
 class DaemonActivityGroupsTest : public QObject {
@@ -167,6 +232,209 @@ class DaemonActivityGroupsTest : public QObject {
                      .toInt(),
                  5);
     }
+    void toolServersWaitsAndSubagentsJoinTheGroupInFirstUseOrder() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto item = [](const QString& id, const QString& type, const QString& tool,
+                             const QString& server = {}) {
+            QJsonObject body{{"id", id}, {"type", type}, {"tool", tool}, {"status", "completed"}};
+            if (!server.isEmpty())
+                body.insert("server", server);
+            return QJsonObject{{"item", body}};
+        };
+        const QList<QJsonObject> steps{
+            command("build", "completed"),
+            item("agents-1", "mcpToolCall", "agents_list", "ketplus_agents"),
+            browser("observe", "browser_observe"),
+            item("agents-2", "mcpToolCall", "agents_send", "ketplus_agents"),
+            item("spawn", "collabAgentToolCall", "spawnAgent"),
+            item("wait-agent", "collabAgentToolCall", "wait"),
+            item("sleep", "dynamicToolCall", "wait"),
+        };
+        qint64 first = 0;
+        for (const auto& step : steps) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", step);
+            QVERIFY(cursor > 0);
+            if (!first)
+                first = cursor;
+        }
+        const auto summary =
+            journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
+        QCOMPARE(summary.value("count").toInt(), 7);
+        QStringList families;
+        for (const auto& value : summary.value("families").toArray())
+            families.append(QStringLiteral("%1=%2")
+                                .arg(value.toObject().value("family").toString())
+                                .arg(value.toObject().value("count").toInt()));
+        QCOMPARE(families, (QStringList{"command=1", "tool:ketplus_agents=2", "browser=1",
+                                        "subagent=1", "subagent.step=1", "wait=1"}));
+        // Any server's text step joins the open group: "Used screen_tools", as Claude names it.
+        const auto joined =
+            journal.appendEvent("session", 1, "item.completed",
+                                item("screen", "dynamicToolCall", "mcp__screen_tools__describe"));
+        const auto widened =
+            journal.activitySummaryEvent(last(journal, joined)).value("payload").toObject();
+        QCOMPARE(widened.value("count").toInt(), 8);
+        QCOMPARE(widened.value("families").toArray().last().toObject().value("family").toString(),
+                 "tool:screen_tools");
+        // A tool without a server keeps its own row, as it may carry edits the summary would
+        // drop (Claude's Write), and ends the run; a server's step never opens a group.
+        for (const auto& standalone : {item("write", "dynamicToolCall", "Write"),
+                                       item("repl", "mcpToolCall", "js", "node_repl")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", standalone);
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+        }
+        // After those, Codex's read and listing commands, skills and fetches form one group.
+        const auto actions = [](const QString& id, const QString& kind) {
+            return QJsonObject{
+                {"item", QJsonObject{{"id", id},
+                                     {"type", "commandExecution"},
+                                     {"status", "completed"},
+                                     {"commandActions", QJsonArray{QJsonObject{{"type", kind}}}}}}};
+        };
+        qint64 next = 0;
+        auto twoFolders = actions("ls-two", "listFiles");
+        auto body = twoFolders.value("item").toObject();
+        body.insert("commandActions",
+                    QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}},
+                               QJsonObject{{"type", "listFiles"}, {"path", "tests"}}});
+        twoFolders.insert("item", body);
+        for (const auto& step :
+             {actions("cat", "read"), actions("ls", "listFiles"), twoFolders, twoFolders,
+              actions("rg", "search"), item("skill", "dynamicToolCall", "Skill"),
+              item("fetch", "dynamicToolCall", "WebFetch")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", step);
+            QVERIFY(cursor > 0);
+            if (!next)
+                next = cursor;
+        }
+        const auto grown =
+            journal.activitySummaryEvent(last(journal, next)).value("payload").toObject();
+        QStringList added;
+        for (const auto& value : grown.value("families").toArray())
+            added.append(value.toObject().value("family").toString());
+        // The repeated completion of the two-folder listing counts once, and only once a step.
+        QCOMPARE(added, (QStringList{"read", "list", "list:2", "codeSearch", "skill", "webFetch"}));
+        QCOMPARE(grown.value("count").toInt(), 6);
+
+        // A plan stays visible on its own, as in a local transcript.
+        const auto skill = journal.appendEvent("session", 1, "item.completed",
+                                               item("plan", "dynamicToolCall", "EnterPlanMode"));
+        QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
+                 "item.completed");
+    }
+    void serverStepsLeaveTheirGroupWhenTheyReturnImages() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto repl = [](const QString& id, const QString& status, bool image = false) {
+            QJsonObject body{{"id", id},
+                             {"type", "mcpToolCall"},
+                             {"server", "node_repl"},
+                             {"tool", "js"},
+                             {"status", status}};
+            if (image)
+                body.insert(
+                    "result",
+                    QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                   {"data", "iVBORw0KGgo="},
+                                                                   {"mimeType", "image/png"}}}}});
+            return QJsonObject{{"item", body}};
+        };
+        const auto families = [](const QJsonObject& summary) {
+            QStringList parts;
+            for (const auto& value : summary.value("families").toArray())
+                parts.append(QStringLiteral("%1=%2")
+                                 .arg(value.toObject().value("family").toString())
+                                 .arg(value.toObject().value("count").toInt()));
+            return parts;
+        };
+        const auto build =
+            journal.appendEvent("session", 1, "item.completed", command("build", "completed"));
+        const auto group = journal.activitySummaryEvent(last(journal, build))
+                               .value("payload")
+                               .toObject()
+                               .value("group_id")
+                               .toString();
+        QVERIFY(!group.isEmpty());
+        const auto started =
+            journal.appendEvent("session", 1, "item.started", repl("shot", "inProgress"));
+        const auto running =
+            journal.activitySummaryEvent(last(journal, started)).value("payload").toObject();
+        QCOMPARE(running.value("group_id").toString(), group);
+        QCOMPARE(running.value("running_count").toInt(), 1);
+        QVERIFY(journal.appendEvent("session", 1, "item.completed", repl("text", "completed")) > 0);
+
+        // Its images make it evidence: it comes as itself, with the group's line without it.
+        const auto shot =
+            journal.appendEvent("session", 1, "item.completed", repl("shot", "completed", true));
+        const auto left = journal.activitySummaryEvent(last(journal, shot));
+        QCOMPARE(left.value("event_type").toString(), "item.completed");
+        const auto refreshed =
+            left.value("payload").toObject().value("left_activity_group").toObject();
+        QCOMPARE(refreshed.value("group_id").toString(), group);
+        QCOMPARE(refreshed.value("count").toInt(), 2);
+        QCOMPARE(refreshed.value("running_count").toInt(), 0);
+        QCOMPARE(families(refreshed), (QStringList{"command=1", "tool:node_repl=1"}));
+        QCOMPARE(refreshed.value("revision").toInteger(), shot);
+        QCOMPARE(refreshed.value("membership_cursor").toInteger(), shot);
+        // A repeated start or completion of the departed step leaves the group as it is.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("shot", "inProgress")) > 0);
+        const auto repeated =
+            journal.appendEvent("session", 1, "item.completed", repl("shot", "completed", true));
+        const auto settled = journal.activitySummaryEvent(last(journal, repeated))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(settled.value("count").toInt(), 2);
+        QCOMPARE(settled.value("running_count").toInt(), 0);
+        QCOMPARE(families(settled), (QStringList{"command=1", "tool:node_repl=1"}));
+        QCOMPARE(settled.value("membership_cursor").toInteger(), shot);
+        // History reads it on its own too, and the group's page no longer lists it.
+        QCOMPARE(journal.activitySummaryEvent(last(journal, started)).value("event_type"),
+                 "item.started");
+        const auto page = journal.activityGroupPage("session", 1, {{"group_id", group}});
+        QVERIFY(page.value("ok").toBool());
+        QStringList members;
+        for (const auto& value : page.value("events").toArray())
+            members.append(value.toObject()
+                               .value("payload")
+                               .toObject()
+                               .value("item")
+                               .toObject()
+                               .value("id")
+                               .toString());
+        QVERIFY(members.contains("text"));
+        QVERIFY(!members.contains("shot"));
+
+        // The evidence ended the run: the next step starts another group.
+        const auto after = journal.appendEvent("session", 1, "item.started", command("after"));
+        const auto next =
+            journal.activitySummaryEvent(last(journal, after)).value("payload").toObject();
+        QVERIFY(next.value("group_id").toString() != group);
+        // Its only server step leaving keeps the watermark at the eviction, not before it.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("lone", "inProgress")) > 0);
+        const auto lone =
+            journal.appendEvent("session", 1, "item.completed", repl("lone", "completed", true));
+        const auto emptied = journal.activitySummaryEvent(last(journal, lone))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(families(emptied), (QStringList{"command=1"}));
+        QCOMPARE(emptied.value("count").toInt(), 1);
+        QCOMPARE(emptied.value("revision").toInteger(), lone);
+        // A step that completes with images without having started never joins.
+        const auto direct =
+            journal.appendEvent("session", 1, "item.completed", repl("direct", "completed", true));
+        const auto alone = journal.activitySummaryEvent(last(journal, direct));
+        QCOMPARE(alone.value("event_type").toString(), "item.completed");
+        QVERIFY(!alone.value("payload").toObject().contains("left_activity_group"));
+    }
     void evidenceAndMessagesBreakGroupsAndLateCompletionKeepsIdentity() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite3"));
@@ -228,6 +496,209 @@ class DaemonActivityGroupsTest : public QObject {
         QVERIFY(page.value("ok").toBool());
         QVERIFY(!page.value("group_running").toBool());
         QCOMPARE(page.value("events").toArray().size(), 1);
+    }
+    // ADR 0022: a group's summary lists the files its edits changed, merged by path in the
+    // order first changed and bounded, without any diff text.
+    void editSummaryListsChangedFiles() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        QVERIFY(journal.appendEvent(
+                    "session", 1, "item.completed",
+                    fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n-a\n+b"),
+                                       change("src/b.cpp", "add", "x\ny")})) > 0);
+        QVERIFY(journal.appendEvent("session", 1, "item.completed",
+                                    fileChange("two",
+                                               {change("src/c.cpp", "update", "@@ -1 +1 @@\n+c")},
+                                               "failed")) > 0);
+        const auto cursor = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("three", {change("src/a.cpp", "update", "@@ -4 +4 @@\n+again")}));
+        QVERIFY(cursor > 0);
+        const auto summary =
+            journal.activitySummaryEvent(last(journal, cursor)).value("payload").toObject();
+        QCOMPARE(summary.value("files_total").toInt(), 2);
+        const auto files = summary.value("files").toArray();
+        QCOMPARE(files.size(), 2);
+        QCOMPARE(files.at(0).toObject(), (QJsonObject{{"path", "src/a.cpp"},
+                                                      {"destination", ""},
+                                                      {"operation", "Edited"},
+                                                      {"added", 2},
+                                                      {"removed", 1},
+                                                      {"known", true}}));
+        QCOMPARE(files.at(1).toObject().value("operation").toString(), "Created");
+        QCOMPARE(files.at(1).toObject().value("added").toInt(), 2);
+        QVERIFY(!QJsonDocument(summary).toJson().contains("+again"));
+
+        QJsonArray many;
+        for (int i = 0; i < 60; ++i)
+            many.append(change(QString("gen/%1.cpp").arg(i), "add", "x"));
+        const auto bulk =
+            journal.appendEvent("session", 1, "item.completed", fileChange("bulk", many));
+        const auto bounded =
+            journal.activitySummaryEvent(last(journal, bulk)).value("payload").toObject();
+        QCOMPARE(bounded.value("files").toArray().size(), 50);
+        QCOMPARE(bounded.value("files_total").toInt(), 62);
+    }
+    // A path's later changes decide its operation; a file created and deleted again drops out.
+    void editSummaryMergesEachPathsOperations() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        auto moved = change("src/mv.cpp", "update", "@@ -1 +1 @@\n+m");
+        moved.insert("kind", QJsonObject{{"type", "update"}, {"move_path", "src/moved.cpp"}});
+        QVERIFY(journal.appendEvent(
+                    "session", 1, "item.completed",
+                    fileChange("one", {change("src/new.cpp", "add", "a"),
+                                       change("src/old.cpp", "update", "@@ -1 +1 @@\n+o"),
+                                       change("src/tmp.cpp", "add", "t"),
+                                       change("src/mv.cpp", "update", "@@ -1 +1 @@\n+e")})) > 0);
+        const auto cursor = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("two", {change("src/new.cpp", "update", "@@ -1 +1 @@\n+b"),
+                               change("src/old.cpp", "delete", "o"),
+                               change("src/tmp.cpp", "delete", "t"), moved}));
+        QVERIFY(cursor > 0);
+        const auto summary =
+            journal.activitySummaryEvent(last(journal, cursor)).value("payload").toObject();
+        QCOMPARE(summary.value("files_total").toInt(), 3);
+        QHash<QString, QJsonObject> byPath;
+        for (const auto& value : summary.value("files").toArray())
+            byPath.insert(value.toObject().value("path").toString(), value.toObject());
+        QCOMPARE(byPath.size(), 3);
+        QCOMPARE(byPath.value("src/new.cpp").value("operation").toString(), "Created");
+        QCOMPARE(byPath.value("src/old.cpp").value("operation").toString(), "Deleted");
+        QCOMPARE(byPath.value("src/mv.cpp").value("operation").toString(), "Moved");
+        QCOMPARE(byPath.value("src/mv.cpp").value("destination").toString(), "src/moved.cpp");
+        QVERIFY(!byPath.contains("src/tmp.cpp"));
+    }
+    // The files keep their order when a completion arrives again or the session is forked.
+    void editSummaryOrderSurvivesRedeliveryAndFork() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto one = fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+a")});
+        QVERIFY(journal.appendEvent("session", 1, "item.started", one) > 0);
+        QVERIFY(journal.appendEvent("session", 1, "item.completed", one) > 0);
+        const auto two = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("two", {change("src/b.cpp", "update", "@@ -1 +1 @@\n+b")}));
+        QVERIFY(two > 0);
+        const auto paths = [&](const QString& session, qint64 cursor) {
+            QStringList listed;
+            const auto event = journal.eventsAfter(session, 1, cursor - 1, 1).first().toObject();
+            for (const auto& value : journal.activitySummaryEvent(event)
+                                         .value("payload")
+                                         .toObject()
+                                         .value("files")
+                                         .toArray())
+                listed.append(value.toObject().value("path").toString());
+            return listed;
+        };
+        const QStringList expected{"src/a.cpp", "src/b.cpp"};
+        QCOMPARE(paths("session", two), expected);
+        const auto again = journal.appendEvent("session", 1, "item.completed", one);
+        QVERIFY(again > 0);
+        QCOMPARE(paths("session", again), expected);
+        StoredSession fork{"fork", dir.path(), "codex", {}, {}, "ready"};
+        QVERIFY(journal.forkSession("session", 1, fork));
+        QCOMPARE(paths("fork", again), expected);
+    }
+    // Open does not read edit payloads: the listing runs after it, and the group stays
+    // unpublished until it is done (ADR 0097).
+    void existingJournalBackfillsChangedFiles() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(journal.hasPendingActivityBackfill());
+            // Unpublished until listed: the edit comes as itself, not as its group.
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+            QVERIFY(drain(journal));
+            QVERIFY(!journal.hasPendingActivityBackfill());
+            const auto files = summaryFiles(journal, cursor);
+            QCOMPARE(files.size(), 1);
+            QCOMPARE(files.first().toObject().value("path").toString(), "src/a.cpp");
+            QCOMPARE(files.first().toObject().value("added").toInt(), 1);
+        }
+        // Once: a reopen has nothing left to list.
+        LocalJournal journal(path);
+        QVERIFY(!journal.hasPendingActivityBackfill());
+        QCOMPARE(summaryFiles(journal, cursor).size(), 1);
+    }
+    // A listing pass that fails keeps its marker, and the next start finishes it.
+    void interruptedFilesBackfillRunsAgain() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(sqlite(path, {"CREATE TRIGGER interrupt BEFORE INSERT ON activity_files BEGIN "
+                                  "SELECT RAISE(ABORT,'interrupted'); END"}));
+            QCOMPARE(journal.backfillActivityGroups(), LocalJournal::ActivityBackfill::Failed);
+            QVERIFY(journal.hasPendingActivityBackfill());
+        }
+        QVERIFY(sqlite(path, {"DROP TRIGGER interrupt"}));
+        LocalJournal journal(path);
+        QVERIFY(journal.hasPendingActivityBackfill());
+        QVERIFY(drain(journal));
+        QCOMPARE(summaryFiles(journal, cursor).size(), 1);
+    }
+    // An edit completed while the listing is pending is recorded live and kept by the pass.
+    void editsDuringTheListingAreKept() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        LocalJournal journal(path);
+        const auto later = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("three", {change("src/c.cpp", "update", "@@ -1 +1 @@\n+c")}));
+        QVERIFY(later > 0);
+        QVERIFY(summaryFiles(journal, later).isEmpty());
+        QVERIFY(drain(journal));
+        QStringList paths;
+        for (const auto& file : summaryFiles(journal, later))
+            paths.append(file.toObject().value("path").toString());
+        QCOMPARE(paths, (QStringList{"src/a.cpp", "src/c.cpp"}));
+    }
+    // A fork of a session whose files are pending lists its own copy, and a deleted session's
+    // listing ends with it.
+    void forksAndDeletionsFollowTheListing() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        LocalJournal journal(path);
+        StoredSession fork{"fork", dir.path(), "codex", {}, {}, "ready"};
+        QVERIFY(journal.forkSession("session", 1, fork));
+        QVERIFY(journal.deleteSession("session", 1));
+        QVERIFY(drain(journal));
+        QVERIFY(!journal.hasPendingActivityBackfill());
+        const auto forked = journal.eventsAfter("fork", fork.generation, cursor - 1, 1);
+        QCOMPARE(forked.size(), 1);
+        QCOMPARE(journal.activitySummaryEvent(forked.first().toObject())
+                     .value("payload")
+                     .toObject()
+                     .value("files")
+                     .toArray()
+                     .size(),
+                 1);
+        // Deleting a session removes its marker at once, without waiting for a pass.
+        QTemporaryDir other;
+        const auto otherPath = other.filePath("journal.sqlite3");
+        QVERIFY(groupedWithoutFiles(otherPath, other.path()) > 0);
+        LocalJournal deleted(otherPath);
+        QVERIFY(deleted.hasPendingActivityBackfill());
+        QVERIFY(deleted.deleteSession("session", 1));
+        QVERIFY(!deleted.hasPendingActivityBackfill());
     }
     void existingJournalBackfillsOnceWithoutChangingCanonicalEvents() {
         QTemporaryDir dir;

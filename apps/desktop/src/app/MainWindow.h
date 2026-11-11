@@ -37,6 +37,10 @@ class QTimer;
 class QToolButton;
 class QVariant;
 
+namespace ketplus::remote {
+class DaemonClient;
+}
+
 namespace ketplus {
 
 class DocumentFormatControls;
@@ -65,7 +69,6 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
-class WorktreesWorkspacePage;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -133,10 +136,8 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
-    void setWorktreesWorkspaceVisible(bool visible);
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
-    void refreshWorktreesWorkspace();
     void setShellMode(ActivityBar::Mode mode);
     void closeAtlasTab(int index);
     void openAtlas(const AtlasDescriptor& atlas, AtlasTab* picker = nullptr);
@@ -144,6 +145,7 @@ class MainWindow final : public QMainWindow {
     AtlasTab* createAtlasTab();
     void openAtlasBuilder(AtlasTab* picker);
     void connectAtlasBuilder(AtlasBuilderTab* builder);
+    void connectAtlasResults(AgentWorkspaceView* chat);
     void createNewDocument();
     void openDocument();
     void chooseFolder();
@@ -200,6 +202,7 @@ class MainWindow final : public QMainWindow {
     void focusOtherView();
     void setFullScreen(bool fullScreen);
     void setDistractionFree(bool enabled);
+    void setCompactConversationWindow(bool enabled);
     SearchPanel* ensureSearchPanel();
     void setSearchPanelVisible(bool visible);
     void hideSearchPanel();
@@ -226,7 +229,13 @@ class MainWindow final : public QMainWindow {
     void openSearchMatch(const QString& path, int line, int column, int length);
     [[nodiscard]] EditorWidget* openEditorForPath(const QString& path) const;
     void showSettings();
+    void setupSidebarStorage();
+    // Names the signed-in account on the sidebar identity button (ADR 0109).
+    void setupSidebarAccount();
+    [[nodiscard]] remote::DaemonClient* accountDaemon();
     void showUpdateSettings();
+    // Opens Settings on a section; an empty id keeps the section it shows.
+    void showSettingsSection(const QString& id);
     // Opens Sparkle's check (and any pending update); without a configured feed, Settings →
     // Updates.
     void checkForUpdates();
@@ -240,6 +249,14 @@ class MainWindow final : public QMainWindow {
     void applyTerminalTypography(TerminalPanel* terminal);
     QTabWidget* ensureAgentDetailTabs();
     TerminalPanel* openAgentTerminalTab();
+    // ADR 0106: one Report tab that follows the active conversation (MainWindowWorkReport.cpp).
+    void connectAgentWorkReport();
+    void openAgentWorkReportTab();
+    void openAgentChangesTab();
+    void installAgentDetailActions();
+    void hideAgentDetailPane();
+    void refreshAgentChanges();
+    void refreshAgentWorkReport(bool force);
     void closeAgentDetailTab(int index);
     void closeOtherAgentDetailTabs(int keepIndex);
     void closeAllAgentDetailTabs();
@@ -248,15 +265,24 @@ class MainWindow final : public QMainWindow {
     bool showAgentFile(const QString& filePath);
     bool showAgentDiff(const QString& filePath, GitDiffMode mode, const QString& diff);
     void setTerminalVisible(bool visible);
+    // Type in Terminal (#170): opens a terminal with `command` typed for the user to run.
+    void typeInTerminal(const QString& command);
     void focusTerminal();
     void ensureAgentWorkspace();
     void syncAgentWorkspaceContext(bool loadTranscript);
     void createAgentWorktree();
+    // Create worktree… in a conversation's picker: creates in `repository` and moves that
+    // conversation to it, checked against the picker's context `revision`.
+    void createConversationWorktree(const QString& repository, qint64 revision);
+    void moveConversationToCreatedWorktree(const QString& worktreePath, const QString& branch);
     void startNewAgentConversation();
     [[nodiscard]] QString primaryWorktreePath() const;
     void showAgentWorktreeContextMenu(const QString& path);
+    void showWorktreeMenu(const QString& path, const QPoint& globalPosition);
     void showAgentConversationContextMenu(const QString& worktreePath,
                                           const QString& conversationId);
+    void changeAgentConversationWorktree(const QString& worktreePath,
+                                         const QString& conversationId);
     void renameAgentConversation(const QString& worktreePath, const QString& conversationId);
     void archiveAgentConversation(const QString& worktreePath, const QString& conversationId);
     void forkAgentConversation(const QString& worktreePath, const QString& conversationId);
@@ -336,7 +362,6 @@ class MainWindow final : public QMainWindow {
     QAction* viewDiffAction_{nullptr};
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
-    QAction* manageWorktreesAction_{nullptr};
     QMenu* recentFoldersMenu_{nullptr};
     QMenu* recentFilesMenu_{nullptr};
     QAction* reopenClosedTabAction_{nullptr};
@@ -397,12 +422,16 @@ class MainWindow final : public QMainWindow {
     // Holds agentDetailTabs_ and, while one of its editors is searched, the find bar.
     QWidget* agentDetailPane_{nullptr};
     QTabWidget* agentDetailTabs_{nullptr};
+    // Hide content pane keeps its tabs; the next opener shows it again.
+    bool agentDetailPaneHidden_{false};
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
+    remote::DaemonClient* accountDaemon_{nullptr};
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
-    WorktreesWorkspacePage* worktreesWorkspace_{nullptr};
+    // The Create worktree card asked to open Agent Workspace on what it creates.
+    bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};
     SettingsDialog* settingsDialog_{nullptr};
     AgentWorktreeCreator* agentWorktreeCreator_{nullptr};
@@ -420,6 +449,10 @@ class MainWindow final : public QMainWindow {
     QString repositoryDisplayRoot_;
     QString promotedWorktreePath_;
     bool pendingConversationWorktree_{false};
+    // The conversation whose picker asked for the worktree being created.
+    QString pickerWorktreeAgentPath_;
+    QString pickerWorktreeConversation_;
+    qint64 pickerWorktreeRevision_{0};
     QString pendingDeleteConversationPath_;
     QStringList pendingDeleteWorktreePaths_;
     QString pendingDeleteWorktreeRepository_;
@@ -433,12 +466,19 @@ class MainWindow final : public QMainWindow {
     std::uint64_t tabAccessSequence_{0};
     int agentTerminalSerial_{0};
     bool agentWorkspaceMode_{false};
+    bool compactConversationWindow_{false};
+    QByteArray normalConversationGeometry_;
+    QSize normalConversationMinimum_;
+    QSize normalConversationSize_;
+    bool compactSidebarVisible_{true};
+    bool compactStatusVisible_{false};
+    bool compactDetailsVisible_{false};
+    QAction* compactConversationAction_{nullptr};
     // Diffs requested while the agent workspace is shown. Its status bar is hidden, so a
     // file with no uncommitted changes opens instead of reporting that nowhere visible.
     QSet<QString> agentDiffRequests_;
     bool atlasWorkspaceMode_{false};
     bool remoteWorkspaceMode_{false};
-    bool worktreesWorkspaceMode_{false};
     bool settingsWorkspaceMode_{false};
     bool restoringWorkspaceState_{false};
     bool suppressWorkspaceRestore_{false};

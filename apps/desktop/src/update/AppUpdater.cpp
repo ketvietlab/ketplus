@@ -46,10 +46,12 @@ AppUpdater& AppUpdater::instance() {
 
 void AppUpdater::setInstanceForTesting(AppUpdater* updater) { currentInstance() = updater; }
 
-void AppUpdater::setPendingVersion(const QString& version) {
-    if (pendingVersion_ == version)
+void AppUpdater::setPendingVersion(const QString& version, const bool downloaded) {
+    const bool ready = !version.isEmpty() && downloaded;
+    if (pendingVersion_ == version && pendingDownloaded_ == ready)
         return;
     pendingVersion_ = version;
+    pendingDownloaded_ = ready;
     emit pendingVersionChanged(version);
 }
 

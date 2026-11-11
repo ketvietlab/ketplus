@@ -1,5 +1,13 @@
 #include "git/GitChangesPanel.h"
 
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetControlRecipes.h"
+#include "KetIcon.h"
+#include "KetIcons.h"
+#include "KetSurfaceRecipes.h"
+#include "ui/Theme.h"
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
@@ -16,9 +24,9 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStyledItemDelegate>
-#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace ketplus {
 namespace {
@@ -28,163 +36,70 @@ constexpr int diffModeRole = Qt::UserRole + 1;
 constexpr int subtitleRole = Qt::UserRole + 2;
 constexpr int countRole = Qt::UserRole + 3;
 
-// Két Design System accent-text: Két Blue that stays readable on the dark theme.
-QColor selectedAccentText(const QPalette& palette) {
-    return QColor(palette.color(QPalette::Window).lightness() < 128 ? QStringLiteral("#9EB5FF")
-                                                                    : QStringLiteral("#1238DB"));
-}
-
-class RepositoryIcon final : public QWidget {
-  public:
-    explicit RepositoryIcon(QWidget* parent) : QWidget(parent) { setFixedSize(18, 18); }
-
-  protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        QPen pen(palette().color(QPalette::Text), 1.5);
-        pen.setJoinStyle(Qt::RoundJoin);
-        painter.setPen(pen);
-        painter.setBrush(Qt::NoBrush);
-        QPainterPath folder;
-        folder.moveTo(2.5, 5.5);
-        folder.lineTo(7, 5.5);
-        folder.lineTo(8.5, 7);
-        folder.lineTo(15, 7);
-        folder.quadTo(16.5, 7, 16, 8.5);
-        folder.lineTo(14.8, 14.5);
-        folder.quadTo(14.6, 15.5, 13.4, 15.5);
-        folder.lineTo(3.3, 15.5);
-        folder.quadTo(2, 15.5, 2.2, 14.2);
-        folder.lineTo(2.5, 5.5);
-        painter.drawPath(folder);
-    }
-};
-
+// The kit row recipes rendered over the Git item model keep keyboard selection and
+// refresh identity without allocating a FileRow widget for every changed file.
 class SourceControlDelegate final : public QStyledItemDelegate {
   public:
     using QStyledItemDelegate::QStyledItemDelegate;
-
     QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex& index) const override {
-        return QSize(0, index.parent().isValid() ? 52 : 40);
+        auto& a = ket::Appearance::instance();
+        const qreal height = index.parent().isValid()
+                                 ? ket::fileRowRecipe(false, {}, a.theme()).height
+                                 : ket::groupHeaderRecipe(false, {}, a.theme()).height;
+        return {0, qRound(a.scaled(height))};
     }
-
-    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+    void paint(QPainter* p, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
+        auto& a = ket::Appearance::instance();
+        const auto px = [&a](qreal n) { return qRound(a.scaled(n)); };
         const bool group = !index.parent().isValid();
-        const bool selected = option.state.testFlag(QStyle::State_Selected);
-        const bool dark = option.palette.color(QPalette::Window).lightness() < 128;
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing);
-
-        if (selected && !group)
-            painter->fillRect(option.rect, option.palette.color(QPalette::Highlight));
-
-        if (group) {
-            if (index.column() != 0) {
-                painter->restore();
-                return;
-            }
-            QPen chevronPen(option.palette.color(QPalette::ButtonText), 1.4);
-            chevronPen.setCapStyle(Qt::RoundCap);
-            chevronPen.setJoinStyle(Qt::RoundJoin);
-            painter->setPen(chevronPen);
-            const int centerY = option.rect.center().y();
-            QPainterPath chevron;
-            if (option.state.testFlag(QStyle::State_Open)) {
-                chevron.moveTo(option.rect.left() + 13, centerY - 2);
-                chevron.lineTo(option.rect.left() + 17, centerY + 2);
-                chevron.lineTo(option.rect.left() + 21, centerY - 2);
-            } else {
-                chevron.moveTo(option.rect.left() + 15, centerY - 4);
-                chevron.lineTo(option.rect.left() + 19, centerY);
-                chevron.lineTo(option.rect.left() + 15, centerY + 4);
-            }
-            painter->drawPath(chevron);
-
-            QFont font = option.font;
-            font.setPixelSize(12);
-            font.setWeight(QFont::DemiBold);
-            painter->setFont(font);
-            painter->setPen(option.palette.color(QPalette::ButtonText));
-            painter->drawText(option.rect.adjusted(29, 0, -42, 0),
-                              Qt::AlignLeft | Qt::AlignVCenter, index.data().toString());
-
-            const QString count = index.data(countRole).toString();
-            const int badgeWidth = QFontMetrics(font).horizontalAdvance(count) + 10;
-            const QRect badge(option.rect.right() - badgeWidth - 12, centerY - 10, badgeWidth, 20);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(dark ? QStringLiteral("#292F37")
-                                          : QStringLiteral("#F1EFF0")));
-            painter->drawRoundedRect(badge, 4, 4);
-            painter->setPen(option.palette.color(QPalette::ButtonText));
-            painter->drawText(badge, Qt::AlignCenter, count);
-            painter->restore();
+        if (group && index.column() != 0)
             return;
-        }
-
-        if (index.column() == 0) {
-            const QColor iconColor = selected ? selectedAccentText(option.palette)
-                                              : option.palette.color(QPalette::ButtonText);
-            QPen iconPen(iconColor, 1.35);
-            iconPen.setCapStyle(Qt::RoundCap);
-            iconPen.setJoinStyle(Qt::RoundJoin);
-            painter->setPen(iconPen);
-            painter->setBrush(Qt::NoBrush);
-            const qreal x = option.rect.left() + 14;
-            const qreal y = option.rect.center().y() - 8;
-            QPainterPath file;
-            file.moveTo(x + 2, y + 1);
-            file.lineTo(x + 9, y + 1);
-            file.lineTo(x + 13, y + 5);
-            file.lineTo(x + 13, y + 16);
-            file.lineTo(x + 2, y + 16);
-            file.closeSubpath();
-            file.moveTo(x + 9, y + 1);
-            file.lineTo(x + 9, y + 5);
-            file.lineTo(x + 13, y + 5);
-            painter->drawPath(file);
-            painter->drawLine(QPointF(x + 4.5, y + 9.5), QPointF(x + 6.5, y + 11.5));
-            painter->drawLine(QPointF(x + 6.5, y + 11.5), QPointF(x + 4.5, y + 13.5));
-            painter->drawLine(QPointF(x + 10.5, y + 9.5), QPointF(x + 8.5, y + 11.5));
-            painter->drawLine(QPointF(x + 8.5, y + 11.5), QPointF(x + 10.5, y + 13.5));
-
-            const QRect textRect = option.rect.adjusted(36, 5, -8, -4);
-            QFont title = option.font;
-            title.setPixelSize(12);
-            title.setWeight(QFont::Normal);
-            painter->setFont(title);
-            painter->setPen(selected ? selectedAccentText(option.palette)
-                                     : option.palette.color(QPalette::Text));
-            painter->drawText(textRect.adjusted(0, 0, 0, -18),
-                              Qt::AlignLeft | Qt::AlignVCenter,
-                              QFontMetrics(title).elidedText(index.data().toString(),
-                                                             Qt::ElideMiddle, textRect.width()));
-            QFont subtitle = option.font;
-            subtitle.setPixelSize(11);
-            painter->setFont(subtitle);
-            painter->setPen(option.palette.color(QPalette::PlaceholderText));
-            painter->drawText(textRect.adjusted(0, 18, 0, 0),
-                              Qt::AlignLeft | Qt::AlignVCenter,
-                              QFontMetrics(subtitle).elidedText(
-                                  index.data(subtitleRole).toString(), Qt::ElideMiddle,
-                                  textRect.width()));
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
+        const auto r = ket::fileRowRecipe(selected,
+                                          {option.state.testFlag(QStyle::State_MouseOver), false,
+                                           true, option.state.testFlag(QStyle::State_HasFocus)},
+                                          a.theme());
+        const auto g = ket::groupHeaderRecipe(false, {}, a.theme());
+        p->save();
+        p->setClipRect(option.rect);
+        p->fillRect(option.rect, r.background);
+        QFont font = option.font;
+        font.setPixelSize(px(group ? g.fontPixels : r.fontPixels));
+        font.setWeight(group ? QFont::Weight(g.fontWeight) : QFont::Normal);
+        p->setFont(font);
+        if (index.column() == 1) {
+            p->setPen(themeTokenColor(index.siblingAtColumn(0).data(diffModeRole).toInt() ==
+                                              int(GitDiffMode::Staged)
+                                          ? QStringLiteral("positive")
+                                          : QStringLiteral("warning"),
+                                      a.theme() == ket::Theme::Dark));
+            p->drawText(option.rect, Qt::AlignCenter, index.data().toString());
         } else {
-            QFont status = option.font;
-            status.setPixelSize(12);
-            status.setWeight(QFont::Medium);
-            painter->setFont(status);
-            const auto mode = static_cast<GitDiffMode>(index.siblingAtColumn(0)
-                                                           .data(diffModeRole)
-                                                           .toInt());
-            painter->setPen(mode == GitDiffMode::Staged
-                                ? QColor(dark ? QStringLiteral("#40C97B")
-                                              : QStringLiteral("#1D5D3B"))
-                                : QColor(dark ? QStringLiteral("#EF665C")
-                                              : QStringLiteral("#B42318")));
-            painter->drawText(option.rect, Qt::AlignCenter, index.data().toString());
+            const int icon = px(group ? g.iconSize : r.iconSize);
+            const int left = px(r.paddingInline);
+            const QString code = ket::Icons::codeForLucide(
+                group ? (option.state.testFlag(QStyle::State_Open) ? u"chevron-down"
+                                                                   : u"chevron-right")
+                      : u"file");
+            p->drawPixmap(option.rect.left() + left, option.rect.center().y() - icon / 2,
+                          ket::Icons::pixmap(code, icon, p->device()->devicePixelRatioF(),
+                                             group ? g.text : r.text));
+            const QString title =
+                index.data().toString() +
+                (group ? QStringLiteral("  %1").arg(index.data(countRole).toInt()) : QString{});
+            const QRect text =
+                option.rect.adjusted(left + icon + px(r.spacing), 0, -px(r.spacing), 0);
+            p->setPen(group ? g.text : r.text);
+            p->drawText(text, Qt::AlignLeft | Qt::AlignVCenter,
+                        QFontMetrics(font).elidedText(title, Qt::ElideMiddle, text.width()));
         }
-        painter->restore();
+        if (r.focusRing.alpha()) {
+            p->setPen(r.focusRing);
+            p->setBrush(Qt::NoBrush);
+            p->drawRect(option.rect.adjusted(0, 0, -1, -1));
+        }
+        p->restore();
     }
 };
 
@@ -217,35 +132,25 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     setAttribute(Qt::WA_StyledBackground, true);
     setMinimumWidth(210);
 
-    auto* heading = new QLabel(QStringLiteral("SOURCE CONTROL"), this);
-    heading->setObjectName(QStringLiteral("sourceControlHeading"));
-    heading->setProperty("kvRole", QStringLiteral("sourceControlHeading"));
     repositoryLabel_->setObjectName(QStringLiteral("sourceControlRepositoryName"));
     repositoryLabel_->setProperty("kvRole", QStringLiteral("gitRepositoryName"));
     branchLabel_->setObjectName(QStringLiteral("sourceControlBranch"));
     branchLabel_->setProperty("kvRole", QStringLiteral("gitRepositoryBranch"));
     branchLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
-    refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    refreshButton->setToolTip(QStringLiteral("Refresh Git status"));
-    refreshButton->setAccessibleName(QStringLiteral("Refresh Git status"));
-
-    auto* header = new QWidget(this);
+    auto* header = new ket::PaneHeader(tr("SOURCE CONTROL"), {}, this);
     header->setObjectName(QStringLiteral("sourceControlHeader"));
-    header->setFixedHeight(44);
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(12, 0, 8, 0);
-    headerLayout->setSpacing(4);
-    headerLayout->addWidget(heading);
-    headerLayout->addStretch();
-    headerLayout->addWidget(refreshButton);
+    auto* refreshButton =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")),
+                            tr("Refresh Git status"), header);
+    header->actions()->addWidget(refreshButton);
 
     auto* repositoryLayout = new QHBoxLayout(repositorySummary_);
     repositoryLayout->setContentsMargins(14, 10, 14, 19);
     repositoryLayout->setSpacing(8);
-    repositoryLayout->addWidget(new RepositoryIcon(repositorySummary_), 0, Qt::AlignTop);
+    repositoryLayout->addWidget(
+        new ket::Icon(ket::Icons::codeForLucide(u"folder"), 18, repositorySummary_), 0,
+        Qt::AlignTop);
     auto* repositoryText = new QVBoxLayout;
     repositoryText->setContentsMargins(0, 0, 0, 0);
     repositoryText->setSpacing(4);
@@ -270,7 +175,11 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     tree_->header()->setStretchLastSection(false);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree_->header()->setSectionResizeMode(1, QHeaderView::Fixed);
-    tree_->header()->resizeSection(1, 32);
+    tree_->header()->resizeSection(1, qRound(ket::Appearance::instance().scaled(32)));
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, tree_, [this] {
+        tree_->header()->resizeSection(1, qRound(ket::Appearance::instance().scaled(32)));
+        tree_->doItemsLayout();
+    });
 
     pages_->addWidget(emptyLabel_);
     pages_->addWidget(tree_);
@@ -281,9 +190,10 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     layout->setSpacing(0);
     layout->addWidget(header);
     layout->addWidget(repositorySummary_);
+    createCommitControls(layout);
     layout->addWidget(pages_, 1);
 
-    connect(refreshButton, &QToolButton::clicked, this, &GitChangesPanel::refreshRequested);
+    connect(refreshButton, &QAbstractButton::clicked, this, &GitChangesPanel::refreshRequested);
     connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item) {
         if (item != nullptr && item->parent() == nullptr) {
             item->setExpanded(!item->isExpanded());
@@ -300,6 +210,9 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
 }
 
 void GitChangesPanel::setSnapshot(const GitSnapshot& snapshot) {
+    hasStagedChanges_ = std::any_of(snapshot.files.cbegin(), snapshot.files.cend(),
+                                    [](const auto& file) { return file.hasStagedChange(); });
+    updateCommitEnabled();
     // Refreshes run on every save and Git change; keep the user's place in the list.
     const QTreeWidgetItem* previous = tree_->currentItem();
     const bool hadFile = previous != nullptr && previous->parent() != nullptr;
@@ -341,8 +254,7 @@ void GitChangesPanel::setSnapshot(const GitSnapshot& snapshot) {
         return;
     }
 
-    addGroup(QStringLiteral("Changes"), unstaged, GitDiffMode::Unstaged,
-             snapshot.repositoryRoot);
+    addGroup(QStringLiteral("Changes"), unstaged, GitDiffMode::Unstaged, snapshot.repositoryRoot);
     addGroup(QStringLiteral("Staged Changes"), staged, GitDiffMode::Staged,
              snapshot.repositoryRoot);
     tree_->expandAll();
@@ -373,8 +285,7 @@ void GitChangesPanel::focusChanges() {
     }
 }
 
-void GitChangesPanel::addGroup(const QString& title,
-                               const QVector<const GitFileStatus*>& files,
+void GitChangesPanel::addGroup(const QString& title, const QVector<const GitFileStatus*>& files,
                                const GitDiffMode mode, const QString& repositoryRoot) {
     if (files.isEmpty()) {
         return;
@@ -399,9 +310,8 @@ void GitChangesPanel::addGroup(const QString& title,
         item->setData(0, pathRole, absolutePath);
         item->setData(0, diffModeRole, static_cast<int>(mode));
         item->setToolTip(0, absolutePath);
-        item->setToolTip(1, mode == GitDiffMode::Staged
-                                ? QStringLiteral("Staged change")
-                                : QStringLiteral("Working tree change"));
+        item->setToolTip(1, mode == GitDiffMode::Staged ? QStringLiteral("Staged change")
+                                                        : QStringLiteral("Working tree change"));
         item->setSizeHint(0, QSize(0, 52));
     }
 }
@@ -420,6 +330,17 @@ void GitChangesPanel::showContextMenu(const QPoint& position) {
     auto* openAction = menu.addAction(QStringLiteral("Open File"));
     openAction->setEnabled(QFileInfo::exists(path));
     connect(openAction, &QAction::triggered, this, [this, item] { openItem(item); });
+    auto* stageAction = menu.addAction(
+        item->data(0, diffModeRole).toInt() == int(GitDiffMode::Staged) ? tr("Unstage File")
+                                                                        : tr("Stage File"));
+    stageAction->setEnabled(!mutationRunning_);
+    const bool staged = item->data(0, diffModeRole).toInt() == int(GitDiffMode::Staged);
+    connect(stageAction, &QAction::triggered, this, [this, path, staged] {
+        if (staged)
+            emit unstageRequested(path);
+        else
+            emit stageRequested(path);
+    });
     menu.addSeparator();
     auto* copyPathAction = menu.addAction(QStringLiteral("Copy Path"));
     connect(copyPathAction, &QAction::triggered, this,

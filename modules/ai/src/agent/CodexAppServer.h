@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -48,6 +49,7 @@ class CodexAppServer final : public QObject {
     [[nodiscard]] bool usesDaemon() const noexcept { return daemon_ != nullptr; }
     [[nodiscard]] bool hasCompactWindowSupport() const noexcept;
     [[nodiscard]] bool hasArchiveSupport() const noexcept;
+    [[nodiscard]] bool hasTagSupport() const noexcept;
     [[nodiscard]] bool isRestoring() const noexcept { return restoring_; }
     [[nodiscard]] bool hasDaemonTranscriptWindow() const noexcept {
         return daemonHasTranscriptWindow_;
@@ -87,6 +89,16 @@ class CodexAppServer final : public QObject {
     void markDaemonSessionSeen(const QString& sessionId, qint64 cursor, ResponseCallback callback);
     void setDaemonSessionArchived(const QString& sessionId, bool archived,
                                   ResponseCallback callback);
+    // Replaces the conversation's labels in the daemon journal (`session.tags.set`).
+    // #125: clears "Waiting for you" (`session.mark_done`).
+    void markDaemonSessionDone(const QString& sessionId, ResponseCallback callback);
+    void setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
+                              ResponseCallback callback);
+    // #429: the labels this Mac offers (`tags.catalog`, `tags.catalog.set`).
+    [[nodiscard]] bool hasTagCatalogSupport() const noexcept;
+    void readTagCatalog(ResponseCallback callback);
+    void setTagCatalog(const QJsonArray& tags, const QJsonObject& renames,
+                       ResponseCallback callback);
     [[nodiscard]] bool isDaemonSessionRestoring(const QString& sessionId) const;
     // Whether the session's installed transcript window still receives its live events:
     // nothing invalidated it and no window read or catch-up is replacing it.
@@ -109,6 +121,8 @@ class CodexAppServer final : public QObject {
     static QJsonObject permissionParams(const QString& profile, bool turn);
 
   signals:
+    // #429: another client changed the catalog or a conversation's tags (`tags.changed`).
+    void tagsChanged(const QJsonObject& change);
     void readyChanged(bool ready);
     void notificationReceived(const QString& method, const QJsonObject& params);
     void userInputRequested(const QJsonValue& requestId, const QJsonObject& params);
@@ -214,6 +228,12 @@ class CodexAppServer final : public QObject {
         bool approvalSyncInFlight{false};
         QSet<QString> settledApprovals;
         QString turnId;
+        // The running turn's journal start and context, for its end line.
+        qint64 turnSequence{-1};
+        QDateTime turnStartedAt;
+        qint64 turnContextTokens{-1};
+        // ADR 0106: the running turn's latest work report, shown with its end.
+        QJsonObject turnReport;
         bool turnStartInFlight{false};
         bool interruptRequested{false};
     };

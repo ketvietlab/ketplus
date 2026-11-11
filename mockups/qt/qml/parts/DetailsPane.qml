@@ -18,7 +18,7 @@ Rectangle {
     signal planRequested()
     function px(n) { return KetTheme.px(n, KetTheme.zoom) }
     function icon(kind) {
-        return ({ terminal: "terminal", plan: "check-all", diff: "compare", changes: "compare", atlas: "layers", file: "file-code" })[kind] || "file-text"
+        return ({ terminal: "terminal", plan: "check-all", report: "view-list", diff: "compare", changes: "compare", atlas: "layers", file: "file-code" })[kind] || "file-text"
     }
     function openFile(name) {
         const code = name === "NavigationRail.qml" ? Fixtures.navigationRail
@@ -30,6 +30,7 @@ Rectangle {
         if (kind === "terminal") session.newTerminal()
         else if (kind === "plan") session.open("plan", "conversation-plan", "Plan", "")
         else if (kind === "atlas") session.open("atlas", "onboarding.ketatlas", "onboarding.ketatlas", "")
+        else if (kind === "report") session.open("report", "conversation-report", "Report", "")
         else session.open("changes", "conversation-changes", "Changes", "")
     }
     function openTabMenu() { tabMenu.popup(allTabsButton, 0, allTabsButton.height) }
@@ -104,7 +105,7 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             contentWidth: availableWidth
-            visible: ["changes", "diff", "atlas"].includes(pane.tab)
+            visible: ["changes", "diff", "atlas", "report"].includes(pane.tab)
 
             Column {
                 x: pane.px(16)
@@ -112,6 +113,13 @@ Rectangle {
                 width: scroll.availableWidth - 2 * x
                 spacing: pane.px(14)
 
+                // The conversation's work report: every item reported, by group.
+                TurnReportCard {
+                    visible: pane.tab === "report"
+                    width: parent.width
+                    report: Fixtures.turnReport
+                    ledger: true
+                }
                 KetChangedFiles {
                     visible: pane.tab === "changes"
                     width: parent.width
@@ -201,6 +209,7 @@ Rectangle {
         KetMenuItem { text: "WorktreeItem.qml"; iconName: "file-code"; onTriggered: pane.openFile("WorktreeItem.qml") }
         KetMenuItem { text: "Conversation plan"; iconName: "check-all"; enabled: !!pane.planRun; onTriggered: pane.planRequested() }
         KetMenuItem { text: "Changes"; iconName: "compare"; onTriggered: pane.openContent("changes") }
+        KetMenuItem { text: "Work report"; iconName: "view-list"; onTriggered: pane.openContent("report") }
         KetMenuItem { text: "onboarding.ketatlas"; iconName: "layers"; onTriggered: pane.openContent("atlas") }
     }
     KetMenu {

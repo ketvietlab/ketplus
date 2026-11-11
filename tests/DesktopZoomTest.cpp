@@ -8,6 +8,13 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
+#include "KetConversationRow.h"
+#include "KetNavItem.h"
+#include "KetProfile.h"
+#include "KetSegmentedControl.h"
+
+#include "app/PixelSelect.h"
+#include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -15,11 +22,9 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSettings>
-#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QToolTip>
@@ -28,30 +33,18 @@
 using namespace ketplus;
 namespace {
 void installFontOverlay(ThemeManager& theme) {
-    InterfaceUiFont::apply(*qApp, theme.interfaceFontSizePixels());
+    InterfaceUiFont::apply(*qApp, theme.interfaceTextPixels());
     QObject::connect(&theme, &ThemeManager::themeChanged, &theme,
-                     [&theme] { InterfaceUiFont::apply(*qApp, theme.interfaceFontSizePixels()); });
+                     [&theme] { InterfaceUiFont::apply(*qApp, theme.interfaceTextPixels()); });
 }
 void openSettings(MainWindow& window) {
     auto* action = window.findChild<QAction*>(QStringLiteral("productSettingsAction"));
     QVERIFY(action);
     action->trigger();
 }
-void saveSettings(MainWindow& window) {
-    for (auto* button : window.findChildren<QPushButton*>()) {
-        if (button->property("kvRole") == QStringLiteral("primaryAction")) {
-            button->click();
-            return;
-        }
-    }
-    QFAIL("No settings save action");
-}
-QLabel* conversationLabel(ActivityBar& sidebar) {
-    for (auto* label : sidebar.findChildren<QLabel*>())
-        if (label->property("kvRole") == QStringLiteral("productConversationTitle") &&
-            label->text() != QStringLiteral("New row"))
-            return label;
-    return nullptr;
+// Settings changes apply as they are made (ADR 0103); there is no Save to press.
+void expectApplied(MainWindow& window) {
+    QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton")) == nullptr);
 }
 } // namespace
 
@@ -112,50 +105,58 @@ class DesktopZoomTest final : public QObject {
         repo.conversations = {QVariantMap{{"id", "first"}, {"path", repo.path}, {"title", title}}};
         bar->setRepositories({repo});
         bar->setMode(ActivityBar::Mode::AgentWorkspace);
-        const auto* nav = bar->findChild<QToolButton*>("agentWorkspaceActivityButton");
+        const auto* nav = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
         QVERIFY(nav);
         const auto* root = agent->quickView()->rootObject();
         QVERIFY(root);
         auto* header = root->findChild<QQuickItem*>("agentWorkspaceHeader");
         auto* footer = root->findChild<QQuickItem*>("composerFooter");
         QVERIFY(header && footer);
-        for (int pixels : {12, 14, 16, 12, 16, 14}) {
-            theme.setInterfaceFontSizePixels(pixels);
-            bar->applyPalette(theme.palette(), pixels);
-            agent->applyTheme(theme.palette(), pixels);
+        for (int zoom : {90, 100, 110, 125, 90, 110, 100}) {
+            theme.setInterfaceScale(14, zoom);
+            bar->applyPalette(theme.palette(), zoom);
+            agent->applyTheme(theme.palette(), zoom);
             QTest::qWait(80);
-            const auto px = [pixels](int n) { return InterfaceZoomMetrics::geometry(n, pixels); };
-            QCOMPARE(inherited.font().pixelSize(), pixels);
-            QCOMPARE(nav->height(), px(32));
+            QCOMPARE(ket::Appearance::instance().zoom(), InterfaceZoomMetrics::factor(zoom));
+            const auto px = [zoom](int n) { return InterfaceZoomMetrics::geometry(n, zoom); };
+            QCOMPARE(inherited.font().pixelSize(), InterfaceZoomMetrics::scale(14, zoom));
+            QCOMPARE(nav->height(), nav->sizeHint().height());
             QTRY_COMPARE(header->height(), px(44));
             QTRY_COMPARE(footer->height(), px(28));
-            auto* row = bar->findChild<QToolButton*>("productConversationButton");
-            QVERIFY(row && row->layout());
-            QCOMPARE(row->height(), px(36));
-            QCOMPARE(row->layout()->contentsMargins().left(), px(8));
-            QCOMPARE(row->layout()->spacing(), px(8));
-            auto* label = conversationLabel(*bar);
-            QVERIFY(label);
-            QCOMPARE(label->text(),
-                     label->fontMetrics().elidedText(title, Qt::ElideRight, label->width()));
-            QVERIFY(label->fontMetrics().horizontalAdvance(label->text()) <= label->width());
+            auto* row = bar->findChild<ket::ConversationRow*>("productConversationButton");
+            QVERIFY(row);
+            QCOMPARE(row->height(), row->sizeHint().height());
+            QCOMPARE(row->text(), title);
+            QVERIFY(row->recipe().titleLineHeight > 0);
             // Rows created after a zoom change inherit the same geometry.
             repo.conversations.append(QVariantMap{
-                {"id", QString::number(pixels) + QString::number(repo.conversations.size())},
+                {"id", QString::number(zoom) + QString::number(repo.conversations.size())},
                 {"path", repo.path},
                 {"title", "New row"}});
             bar->setRepositories({repo});
-            for (auto* newRow : bar->findChildren<QToolButton*>("productConversationButton"))
-                QCOMPARE(newRow->height(), px(36));
+            for (auto* newRow : bar->findChildren<QAbstractButton*>("productConversationButton"))
+                QCOMPARE(newRow->height(), newRow->sizeHint().height());
             QTest::qWait(80); // settle rows created above before native captures
             const auto captureRoot = qEnvironmentVariable("KETPLUS_ZOOM_CAPTURE");
             const auto capture =
                 captureRoot.isEmpty() ? QString{} : captureRoot + (dark ? "/dark" : "/light");
             if (!capture.isEmpty()) {
                 QDir().mkpath(capture);
-                QVERIFY(bar->grab().save(capture + QString("/sidebar-%1.png").arg(pixels)));
-                QVERIFY(agent->quickView()->grabWindow().save(
-                    capture + QString("/agent-%1.png").arg(pixels)));
+                QVERIFY(bar->grab().save(capture + QString("/sidebar-%1.png").arg(zoom)));
+                // The mock's workspace/storage-warning: the journal banner above Update ready.
+                bar->setStorageStatus(
+                    {{"ok", true},
+                     {"status", QVariantMap{{"warning", true},
+                                            {"over_limit", true},
+                                            {"database_page_bytes", 9'000'000'000LL},
+                                            {"limit_bytes", 5'000'000'000LL}}}});
+                bar->setPendingUpdate("1.8.0", true);
+                QTest::qWait(40);
+                QVERIFY(bar->grab().save(capture + QString("/sidebar-storage-%1.png").arg(zoom)));
+                bar->setStorageStatus({{"ok", true}, {"status", QVariantMap{{"warning", false}}}});
+                bar->setPendingUpdate({});
+                QVERIFY(agent->quickView()->grabWindow().save(capture +
+                                                              QString("/agent-%1.png").arg(zoom)));
             }
         }
     }
@@ -166,20 +167,21 @@ class DesktopZoomTest final : public QObject {
         chrome_geometry::margins(layout, 0, 1, 2, 8);
         chrome_geometry::spacing(layout, 2);
         chrome_geometry::addSpacing(layout, 12);
-        for (int pixels : {12, 16, 14, 12}) {
-            chrome_geometry::apply(&surface, pixels);
+        for (int zoom : {90, 110, 125, 100, 90}) {
+            chrome_geometry::apply(&surface, zoom);
             QCOMPARE(layout->contentsMargins().left(), 0);
             QCOMPARE(layout->contentsMargins().top(), 1);
-            QCOMPARE(layout->contentsMargins().right(), 2);
-            QCOMPARE(layout->spacing(), 2);
+            // Two pixels stay two up to 110%; 125% rounds them up like the mock's px().
+            QCOMPARE(layout->contentsMargins().right(), zoom < 125 ? 2 : 3);
+            QCOMPARE(layout->spacing(), zoom < 125 ? 2 : 3);
             QCOMPARE(layout->itemAt(0)->spacerItem()->sizeHint().width(),
-                     InterfaceZoomMetrics::geometry(12, pixels));
+                     InterfaceZoomMetrics::geometry(12, zoom));
         }
     }
 
     void tooltipsKeepTheKitSizeAtEveryInterfaceSize() {
-        // InterfaceUiFont rewrites and scales the stylesheet; the tooltip rule keeps the
-        // kit's recipe size at Medium and Large and after a theme change.
+        // ThemeManager scales compatibility QSS once; the font overlay preserves the
+        // kit's tooltip recipe at each numeric size and after a theme change.
         ThemeManager theme(*qApp);
         installFontOverlay(theme);
         QWidget anchor;
@@ -198,11 +200,12 @@ class DesktopZoomTest final : public QObject {
             return pixels;
         };
         QCOMPARE(shownPixels(), tooltipFontPixels());
-        theme.setInterfaceFontSizePixels(18);
+        theme.setInterfaceScale(16, 125);
         QCOMPARE(shownPixels(), tooltipFontPixels());
         theme.setMode(ThemeManager::Mode::Dark);
         QCOMPARE(shownPixels(), tooltipFontPixels());
-        QVERIFY(tooltipFontPixels() < 18);
+        QVERIFY(tooltipFontPixels() < theme.interfaceTextPixels());
+        theme.setInterfaceScale(14, 100);
     }
 
     void appearanceUpdatesAllWindowsAndMonoWithoutZoom() {
@@ -214,35 +217,46 @@ class DesktopZoomTest final : public QObject {
         second.openFolder(repo2.path());
         first.show();
         second.show();
-        first.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
-        second.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        first.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
+        second.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* one = first.findChild<AgentWorkspaceView*>();
         auto* two = second.findChild<AgentWorkspaceView*>();
         QVERIFY(one && two);
         openSettings(first);
-        first.findChild<QToolButton*>("interfaceZoomLarge")->click();
-        saveSettings(first);
-        QTRY_COMPARE(one->tokens().value("reading").toInt(), 18);
-        QTRY_COMPARE(two->tokens().value("reading").toInt(), 18);
+        auto* zoom = first.findChild<ket::SegmentedControl*>("interfaceZoom");
+        QVERIFY(zoom);
+        zoom->setCurrentIndex(int(InterfaceZoomMetrics::steps().indexOf(125)));
+        expectApplied(first);
+        const auto readingPixels = [](AgentWorkspaceView* view) {
+            return view->quickView()
+                ->rootObject()
+                ->findChild<QQuickItem*>("conversationTitle")
+                ->property("font")
+                .value<QFont>()
+                .pixelSize();
+        };
+        QTRY_COMPARE(readingPixels(one), InterfaceZoomMetrics::scale(
+                                             qRound(ket::Profile::current().readingPixels), 125));
+        QTRY_COMPARE(readingPixels(two), readingPixels(one));
         openSettings(second);
-        QVERIFY(second.findChild<QToolButton*>("interfaceZoomLarge")->isChecked());
+        auto* secondZoom = second.findChild<ket::SegmentedControl*>("interfaceZoom");
+        QVERIFY(secondZoom);
+        QCOMPARE(secondZoom->currentIndex(), int(InterfaceZoomMetrics::steps().indexOf(125)));
         auto* family = second.findChild<QComboBox*>("editorFontFamily");
         QVERIFY(family);
         family->addItem(QStringLiteral("Courier New"));
         family->setCurrentText(QStringLiteral("Courier New"));
-        saveSettings(second);
-        QTRY_COMPARE(one->tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
-        QTRY_COMPARE(two->tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
+        expectApplied(second);
+        QTRY_COMPARE(one->monoFontFamily(), QStringLiteral("Courier New"));
+        QTRY_COMPARE(two->monoFontFamily(), QStringLiteral("Courier New"));
         AgentWorkspaceView later;
-        QCOMPARE(later.tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
-        // First window still has a form opened before the font change. Saving a
+        QCOMPARE(later.monoFontFamily(), QStringLiteral("Courier New"));
+        // First window still has a form opened before the font change. Changing a
         // different field must not overwrite the newer font from the other window.
         QTest::qWait(50);
-        first.findChild<QSpinBox*>("editorFontSize")->setValue(17);
-        first.findChild<QSpinBox*>("previewFontSize")->setValue(19);
-        saveSettings(first);
+        first.findChild<ketplus::PixelSelect*>("editorFontSize")->setValue(17);
+        expectApplied(first);
         QCOMPARE(AppearanceSettings::load().editor.fontFamily, QStringLiteral("Courier New"));
-        QCOMPARE(AppearanceSettings::load().preview.fontSizePixels, 19);
         QCOMPARE(AppearanceSettings::load().editor.fontSizePixels, 17);
     }
 };

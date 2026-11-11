@@ -1,9 +1,9 @@
 #include "app/MainWindow.h"
+#include "app/SettingsWorkspacePage.h"
 
 #include "app/RepositoryRouter.h"
 #include "app/SettingsWorkspacePage.h"
 #include "app/SpotlightDialog.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "atlas/AtlasTab.h"
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
@@ -28,6 +28,8 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/ExplorerPanel.h"
 #include "workspace/SearchPanel.h"
+
+#include "KetToast.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -86,8 +88,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
       gitButton_(new QToolButton(this)) {
     repositoryLookupPool_.setMaxThreadCount(2);
-    theme_.setInterfaceFontSizePixels(
-        InterfaceZoomMetrics::snap(appearanceSettings_.interfaceFontSizePixels));
+    theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
+                             appearanceSettings_.interfaceZoomPercent);
     setWindowTitle(QStringLiteral("KétPlus Pro"));
     atlasIndex_ = new AtlasIndex(this);
     connect(atlasIndex_, &AtlasIndex::changed, this, &MainWindow::populateSpotlight);
@@ -145,7 +147,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
 
     git_ = new GitService(this);
     createActions();
-    activityBar_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+    activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(activityBar_, &ActivityBar::quickSearchRequested, this, &MainWindow::showSpotlight);
     connect(activityBar_, &ActivityBar::repositoryRequested, this, &MainWindow::chooseFolder);
     connect(activityBar_, &ActivityBar::machineRequested, this, [this](const QString& id) {
@@ -195,10 +197,26 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                     Qt::QueuedConnection);
             });
     connect(activityBar_, &ActivityBar::settingsRequested, this, &MainWindow::showSettings);
+    // The status bar shows only with the editor; elsewhere its messages show as the mock's
+    // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
+    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
+        // "Ready" is the status bar's idle text, not something that happened: opening the
+        // app in the Agent Workspace showed it as a toast.
+        if (!message.isEmpty() && !statusBar()->isVisible() && message != QStringLiteral("Ready"))
+            // Neutral: a status message may be a failure, never shown as a success.
+            ket::Toast::showMessage(this, message, ket::ToastTone::Neutral);
+    });
+    connect(activityBar_, &ActivityBar::settingsSectionRequested, this,
+            &MainWindow::showSettingsSection);
     connect(activityBar_, &ActivityBar::updatesRequested, this, &MainWindow::checkForUpdates);
+    const auto showPendingUpdate = [this] {
+        auto& updater = AppUpdater::instance();
+        activityBar_->setPendingUpdate(updater.pendingVersion(),
+                                       updater.pendingVersionDownloaded());
+    };
     connect(&AppUpdater::instance(), &AppUpdater::pendingVersionChanged, activityBar_,
-            &ActivityBar::setPendingUpdate);
-    activityBar_->setPendingUpdate(AppUpdater::instance().pendingVersion());
+            showPendingUpdate);
+    showPendingUpdate();
     connect(activityBar_, &ActivityBar::identityRequested, this,
             [this] { setRemoteWorkspaceVisible(true); });
     connect(activityBar_, &ActivityBar::modeRequested, this, [this](const ActivityBar::Mode mode) {
@@ -227,7 +245,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         }
     });
     statusBar()->setSizeGripEnabled(false);
-    statusBar()->setContentsMargins(activityBar_->sidebarWidth(), 0, 0, 0);
+    statusBar()->setContentsMargins(activityBar_->width(), 0, 0, 0);
     connect(activityBar_, &ActivityBar::sidebarWidthChanged, this,
             [this](const int width) { statusBar()->setContentsMargins(width, 0, 0, 0); });
     statusBar()->showMessage(QStringLiteral("Ready"));
@@ -339,19 +357,13 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     });
 
     connect(&theme_, &ThemeManager::themeChanged, this, [this, productSurface] {
-        activityBar_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+        activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
         productSurface->setStyleSheet(QStringLiteral("QWidget#productSurface { background: %1; }")
                                           .arg(theme_.palette().pageBackground));
         applyThemeToEditors();
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
-        if (settingsWorkspace_ != nullptr)
-            settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
     });
     connect(git_, &GitService::snapshotChanged, this, &MainWindow::updateGitSnapshot);
     connect(git_, &GitService::worktreesChanged, this, &MainWindow::updateWorktrees);
-    connect(git_, &GitService::snapshotChanged, this, [this] { refreshWorktreesWorkspace(); });
-    connect(git_, &GitService::worktreesChanged, this, [this] { refreshWorktreesWorkspace(); });
     connect(git_, &GitService::diffReady, this,
             [this](const QString& path, const GitDiffMode mode, const QString& diff,
                    const QString& error) {
@@ -423,7 +435,7 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::openFile(const QString& filePath) {
-    if (atlasWorkspaceMode_ || worktreesWorkspaceMode_ || settingsWorkspaceMode_)
+    if (atlasWorkspaceMode_ || settingsWorkspaceMode_)
         setExplorerVisible(true);
     if (showAgentFile(filePath))
         return;
@@ -511,15 +523,12 @@ void MainWindow::openFolder(const QString& folderPath) {
 }
 
 void MainWindow::setShellMode(const ActivityBar::Mode mode) {
+    if (compactConversationWindow_ && mode != ActivityBar::Mode::AgentWorkspace)
+        setCompactConversationWindow(false);
     if (mode != ActivityBar::Mode::Search)
         hideSearchPanel();
-    if (mode == ActivityBar::Mode::Settings) {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->hide();
-        worktreesWorkspaceMode_ = false;
-    } else if (!(mode == ActivityBar::Mode::AgentWorkspace && worktreesWorkspaceMode_)) {
+    if (mode != ActivityBar::Mode::Settings)
         hideUtilityWorkspaces();
-    }
     activityBar_->setMode(mode);
     activityBar_->show();
     // Search keeps the editor on screen, so its encoding/EOL/language controls stay reachable.
@@ -527,7 +536,7 @@ void MainWindow::setShellMode(const ActivityBar::Mode mode) {
         mode == ActivityBar::Mode::Explorer || mode == ActivityBar::Mode::Search;
     statusBar()->setVisible(explorerStatus);
     if (explorerStatus)
-        statusBar()->setContentsMargins(activityBar_->sidebarWidth(), 0, 0, 0);
+        statusBar()->setContentsMargins(activityBar_->width(), 0, 0, 0);
 }
 
 bool MainWindow::restoreLastWorkspace() {

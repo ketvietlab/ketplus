@@ -7,6 +7,8 @@
 #include <QAccessible>
 #include <QBuffer>
 #include <QClipboard>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QJsonDocument>
@@ -112,8 +114,8 @@ void AgentWorkspaceViewTest::browserEvidenceStaysVisible() {
     }
     auto* frame = findVisualItem(gallery, "messageAttachmentFrame");
     QVERIFY(frame);
-    QCOMPARE(frame->width(), 88.0);
-    QCOMPARE(frame->height(), 88.0);
+    QCOMPARE(frame->width(), 120.0);
+    QCOMPARE(frame->height(), 78.0);
     view.quickView()->requestActivate();
     QTest::qWait(50);
     frame->forceActiveFocus();
@@ -202,6 +204,297 @@ void AgentWorkspaceViewTest::fileChangesStayCompactInsideExpandedGroup() {
     QVERIFY(QMetaObject::invokeMethod(rows.at(0), "toggleDetails"));
     QTRY_VERIFY(findVisualItem(rows.at(0), "transcriptActivityDetails")->isVisible());
     QVERIFY(!findVisualItem(rows.at(1), "transcriptActivityDetails")->isVisible());
+
+    // One edit of several files lists each file as its own step, as the mock does.
+    QTemporaryDir files;
+    QVERIFY(files.isValid());
+    const QString deep = QStringLiteral("src/a-rather-long-module-directory/with-nested-feature-"
+                                        "folders/and-one-more-level-of-depth");
+    QVERIFY(QDir(files.path()).mkpath(deep));
+    const QString edited = files.filePath(deep + "/Edited.cpp");
+    const QString created = files.filePath("src/New.h");
+    for (const auto& path : {edited, created}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    auto several = ketplus::agent_message::fileChangeMessage(
+        {{"id", "several"},
+         {"type", "fileChange"},
+         {"status", "completed"},
+         {"changes",
+          QJsonArray{QJsonObject{{"path", edited},
+                                 {"kind", QJsonObject{{"type", "update"}}},
+                                 {"diff", "@@ -1 +1,2 @@\n-a\n+b\n+c\n"}},
+                     QJsonObject{{"path", created}, {"kind", QJsonObject{{"type", "add"}}}},
+                     QJsonObject{{"path", files.filePath("src/Old.cpp")},
+                                 {"kind", QJsonObject{{"type", "delete"}}}}}}},
+        true);
+    several.insert("messageKey", "several");
+    several.insert("turnId", "edit-turn");
+    ketplus::AgentWorkspaceView listing;
+    listing.applyTheme(testPalette());
+    listing.resize(800, 700);
+    listing.show();
+    listing.resetMessages({edit("single", files.filePath("README.md")), several}, "several-edits");
+    auto* listed = listing.messageModel();
+    QTRY_COMPARE(listed->count(), 1);
+    listed->setGroupExpanded(listed->get(0).value("groupKey").toString(), true);
+    QTRY_COMPARE(listed->count(), 2);
+    root = listing.quickView()->rootObject();
+    QList<QQuickItem*> steps;
+    const auto collectSteps = [&](const auto& self, QQuickItem* item) -> void {
+        if (!item->isVisible())
+            return;
+        if (item->objectName() == "transcriptFileStep")
+            steps.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    QTRY_VERIFY(([&] {
+        steps.clear();
+        collectSteps(collectSteps, root);
+        return steps.size() == 3;
+    })());
+    // The single-file edit keeps its one header line.
+    QVERIFY(findVisualItem(root, "transcriptActivityHeader"));
+    QCOMPARE(steps.at(0)->property("text").toString(), QStringLiteral("Edited"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("Edited.cpp"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("+2 −1"));
+    QCOMPARE(steps.at(1)->property("text").toString(), QStringLiteral("Created"));
+    QCOMPARE(steps.at(2)->property("text").toString(), QStringLiteral("Deleted"));
+    QCOMPARE(steps.at(2)->property("iconName").toString(), QStringLiteral("trash"));
+    QTRY_VERIFY(steps.at(2)->property("missing").toBool());
+    QVERIFY(!steps.at(0)->property("missing").toBool());
+
+    // A long path elides inside its step instead of running past it.
+    auto* detail = findVisualItem(steps.at(0), "transcriptFileStepDetail");
+    QVERIFY(detail);
+    QCOMPARE(detail->property("text").toString(), steps.at(0)->property("detail").toString());
+    QVERIFY(detail->property("truncated").toBool());
+    QVERIFY(detail->mapToItem(steps.at(0), QPointF(detail->width(), 0)).x() <=
+            steps.at(0)->width());
+
+    // A step without a diff opens the file's diff in the viewer.
+    QSignalSpy diffs(&listing, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(steps.at(1), "clicked"));
+    QCOMPARE(diffs.size(), 1);
+    QCOMPARE(diffs.constFirst().constFirst().toString(), created);
+
+    // Each step keeps the card's file actions; a missing file can still be copied.
+    const auto menuOf = [&](QQuickItem* fileStep) {
+        QTest::mouseClick(listing.quickView(), Qt::RightButton, Qt::NoModifier,
+                          fileStep->mapToScene(QPointF(30, fileStep->height() / 2)).toPoint());
+        auto* menu = fileStep->findChild<QObject*>("changedFileContextMenu");
+        return menu;
+    };
+    auto* deletedMenu = menuOf(steps.at(2));
+    QVERIFY(deletedMenu);
+    QTRY_VERIFY(deletedMenu->property("visible").toBool());
+    auto* copyAction = deletedMenu->findChild<QObject*>("copyChangedFilePathAction");
+    QVERIFY(copyAction && copyAction->property("enabled").toBool());
+    QVERIFY(
+        !deletedMenu->findChild<QObject*>("revealChangedFileAction")->property("enabled").toBool());
+    QVERIFY(
+        !deletedMenu->findChild<QObject*>("openChangedFileAction")->property("enabled").toBool());
+    QGuiApplication::clipboard()->clear();
+    QVERIFY(QMetaObject::invokeMethod(copyAction, "triggered"));
+    QVERIFY(QGuiApplication::clipboard()->text().endsWith(QStringLiteral("/src/Old.cpp")));
+    QMetaObject::invokeMethod(deletedMenu, "close");
+    QTRY_VERIFY(!deletedMenu->property("visible").toBool());
+    QCOMPARE(diffs.size(), 1);
+
+    auto* editedMenu = menuOf(steps.at(0));
+    QVERIFY(editedMenu);
+    QTRY_VERIFY(editedMenu->property("visible").toBool());
+    QVERIFY(
+        editedMenu->findChild<QObject*>("revealChangedFileAction")->property("enabled").toBool());
+    auto* openAction = editedMenu->findChild<QObject*>("openChangedFileAction");
+    QVERIFY(openAction->property("enabled").toBool());
+    QSignalSpy openedFile(&listing, &ketplus::AgentWorkspaceView::fileOpenRequested);
+    QVERIFY(QMetaObject::invokeMethod(openAction, "triggered"));
+    QCOMPARE(openedFile.count(), 1);
+    QMetaObject::invokeMethod(editedMenu, "close");
+    // The right button opens the menu, not the diff.
+    QCOMPARE(diffs.size(), 1);
+}
+
+void AgentWorkspaceViewTest::activityIconsFollowTheMock_data() {
+    QTest::addColumn<QString>("subtype");
+    QTest::addColumn<QString>("change");
+    QTest::addColumn<QString>("icon");
+    // mockups/qt TranscriptActivityItem.qml: command terminal, read file-text, web and browser
+    // globe, mcp package, generate and thinking sparkles, tool sliders, skill layers, agent send.
+    QTest::newRow("command") << "command" << "" << "terminal";
+    QTest::newRow("read") << "fileRead" << "" << "file-text";
+    QTest::newRow("code search") << "codeSearch" << "" << "search";
+    QTest::newRow("listing") << "fileSearch" << "listing" << "view-list";
+    QTest::newRow("file search") << "fileSearch" << "" << "search";
+    QTest::newRow("web search") << "webSearch" << "" << "globe";
+    QTest::newRow("web fetch") << "webFetch" << "" << "globe";
+    QTest::newRow("browser") << "ketplusBrowser" << "" << "globe";
+    QTest::newRow("generated image") << "imageGeneration" << "" << "sparkles";
+    QTest::newRow("reasoning") << "reasoning" << "" << "sparkles";
+    QTest::newRow("plan") << "plan" << "" << "map";
+    QTest::newRow("monitor") << "monitor" << "" << "clock";
+    QTest::newRow("skill") << "skill" << "" << "layers";
+    QTest::newRow("tools loaded") << "toolsLoaded" << "" << "sliders";
+    QTest::newRow("task stopped") << "taskStopped" << "" << "terminal";
+    QTest::newRow("message to an agent") << "collaboration" << "" << "send";
+    QTest::newRow("subagent") << "subAgent" << "" << "bot";
+    QTest::newRow("mcp") << "integration" << "" << "package";
+    QTest::newRow("unknown") << "somethingNew" << "" << "sliders";
+    QTest::newRow("edited") << "fileChange" << "update" << "edit";
+    QTest::newRow("created") << "fileChange" << "add" << "file-code";
+    QTest::newRow("deleted") << "fileChange" << "delete" << "trash";
+}
+
+void AgentWorkspaceViewTest::activityIconsFollowTheMock() {
+    QFETCH(QString, subtype);
+    QFETCH(QString, change);
+    QFETCH(QString, icon);
+    QVariantMap row{{"messageKey", "step"}, {"kind", "tool"},         {"category", "activity"},
+                    {"subtype", subtype},   {"title", "Did a thing"}, {"turnId", "icons"},
+                    {"status", "completed"}};
+    if (change == QStringLiteral("listing")) {
+        row.insert("title", "Listed files: src");
+    } else if (!change.isEmpty()) {
+        row = ketplus::agent_message::fileChangeMessage(
+            {{"id", "step"},
+             {"type", "fileChange"},
+             {"status", "completed"},
+             {"changes", QJsonArray{QJsonObject{{"path", "/worktree/src/File.cpp"},
+                                                {"kind", QJsonObject{{"type", change}}}}}}},
+            true);
+        row.insert("messageKey", "step");
+        row.insert("turnId", "icons");
+    }
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    view.resetMessages({row}, "icons:" + subtype + change);
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* drawn = nullptr;
+    QTRY_VERIFY((drawn = findVisibleItem(root, "transcriptActivityIcon")) != nullptr);
+    QCOMPARE(drawn->property("name").toString(), icon);
+}
+
+void AgentWorkspaceViewTest::browserStepsReadAsTheMock_data() {
+    QTest::addColumn<QString>("tool");
+    QTest::addColumn<QJsonObject>("arguments");
+    QTest::addColumn<QJsonObject>("result");
+    QTest::addColumn<QString>("completed");
+    QTest::addColumn<QString>("running");
+    const auto target = [](const QString& name) {
+        return QJsonObject{
+            {"structuredContent",
+             QJsonObject{{"outcome", "applied"},
+                         {"target", QJsonObject{{"role", "button"}, {"name", name}}}}}};
+    };
+    const auto act = [](const QJsonObject& action) {
+        return QJsonObject{{"sessionId", "s1"}, {"action", action}};
+    };
+    QTest::newRow("open") << "browser_open"
+                          << QJsonObject{{"url", "http://localhost:5173/sidebar?token=hidden"}}
+                          << QJsonObject{} << "Opened: localhost:5173/sidebar"
+                          << "Opening: localhost:5173/sidebar";
+    QTest::newRow("open nowhere") << "browser_open" << QJsonObject{} << QJsonObject{}
+                                  << "Opened a page" << "Opening a page";
+    QTest::newRow("click") << "browser_act"
+                           << act({{"type", "click"}, {"target", QJsonObject{{"nodeRef", "n4"}}}})
+                           << target("Review the startup flow")
+                           << "Clicked: “Review the startup flow”" << "Clicking";
+    // A filled value is never shown, only the field it went into.
+    QTest::newRow("fill") << "browser_act"
+                          << act({{"type", "fill"},
+                                  {"target", QJsonObject{{"nodeRef", "n2"}}},
+                                  {"value", "typed-value"}})
+                          << target("Email") << "Filled in: “Email”" << "Filling in";
+    QTest::newRow("press") << "browser_act"
+                           << act({{"type", "press"},
+                                   {"target", QJsonObject{{"nodeRef", "n2"}}},
+                                   {"key", "Enter"}})
+                           << target("Search") << "Pressed a key: “Search”"
+                           << "Pressing a key";
+    QTest::newRow("navigate") << "browser_act"
+                              << act({{"type", "navigate"},
+                                      {"url", "http://localhost:5173/settings/storage"}})
+                              << QJsonObject{} << "Opened: localhost:5173/settings/storage"
+                              << "Opening: localhost:5173/settings/storage";
+    QTest::newRow("history") << "browser_act" << act({{"type", "history"}, {"direction", "back"}})
+                             << QJsonObject{} << "Went back" << "Going back";
+    QTest::newRow("unchecked") << "browser_act"
+                               << act({{"type", "check"},
+                                       {"target", QJsonObject{{"nodeRef", "n7"}}},
+                                       {"checked", false}})
+                               << target("Dark mode") << "Unchecked: “Dark mode”"
+                               << "Unchecking";
+    QTest::newRow("wait text") << "browser_wait"
+                               << QJsonObject{{"condition",
+                                               QJsonObject{{"type", "text"}, {"text", "Working"}}}}
+                               << QJsonObject{} << "Waited for: text “Working”"
+                               << "Waiting for: text “Working”";
+    QTest::newRow("wait load") << "browser_wait"
+                               << QJsonObject{{"condition", QJsonObject{{"type", "load"}}}}
+                               << QJsonObject{} << "Waited for: the page to load"
+                               << "Waiting for: the page to load";
+    // A provider that keeps only the text block still reads the observation.
+    QTest::newRow("observe")
+        << "browser_observe" << QJsonObject{{"sessionId", "s1"}}
+        << QJsonObject{{"content",
+                        QJsonArray{QJsonObject{
+                            {"type", "text"},
+                            {"text",
+                             QString::fromUtf8(
+                                 QJsonDocument(
+                                     QJsonObject{{"page", QJsonObject{{"title", "Storage"}}},
+                                                 {"visibleNodeCount", 142}})
+                                     .toJson(QJsonDocument::Compact))}}}}}
+        << "Observed the page: Storage · 142 nodes" << "Observing the page";
+    // A secret spelled with JSON escapes inside the text block is withheld as in the object.
+    QTest::newRow("escaped secret")
+        << "browser_act" << act({{"type", "click"}, {"target", QJsonObject{{"nodeRef", "n4"}}}})
+        << QJsonObject{{"content",
+                        QJsonArray{QJsonObject{{"type", "text"},
+                                               {"text", "{\"target\":{\"role\":\"button\",\"name\":"
+                                                        "\"token\\u003dSYNTHETIC_SECRET\"}}"}}}}}
+        << "Clicked: “token=[redacted]”" << "Clicking";
+    QTest::newRow("plain secret") << "browser_act"
+                                  << act({{"type", "click"},
+                                          {"target", QJsonObject{{"nodeRef", "n4"}}}})
+                                  << target("token=SYNTHETIC_SECRET")
+                                  << "Clicked: “token=[redacted]”" << "Clicking";
+    QTest::newRow("compare") << "visual_compare" << QJsonObject{}
+                             << QJsonObject{{"structuredContent",
+                                             QJsonObject{{"raster",
+                                                          QJsonObject{{"mismatchRatio", 0.004}}}}}}
+                             << "Compared with the reference: 0.4% of pixels differ"
+                             << "Comparing with the reference";
+    QTest::newRow("identical") << "visual_compare" << QJsonObject{}
+                               << QJsonObject{{"structuredContent",
+                                               QJsonObject{
+                                                   {"raster", QJsonObject{{"mismatchRatio", 0}}}}}}
+                               << "Compared with the reference: no pixels differ"
+                               << "Comparing with the reference";
+    QTest::newRow("other") << "browser_pages" << QJsonObject{} << QJsonObject{}
+                           << "Used ketplus_browser · pages" << "Using ketplus_browser · pages";
+}
+
+void AgentWorkspaceViewTest::browserStepsReadAsTheMock() {
+    QFETCH(QString, tool);
+    QFETCH(QJsonObject, arguments);
+    QFETCH(QJsonObject, result);
+    QFETCH(QString, completed);
+    QFETCH(QString, running);
+    const QJsonObject item{{"id", "step"}, {"type", "mcpToolCall"},  {"server", "ketplus_browser"},
+                           {"tool", tool}, {"arguments", arguments}, {"result", result}};
+    const auto done = ketplus::agent_message::activityMessage(item, true);
+    QCOMPARE(done.value("title").toString(), completed);
+    QVERIFY(!done.value("title").toString().contains("hidden"));
+    QVERIFY(!done.value("title").toString().contains("typed-value"));
+    QVERIFY(!done.value("title").toString().contains("SYNTHETIC_SECRET"));
+    QCOMPARE(ketplus::agent_message::activityMessage(item, false).value("title").toString(),
+             running);
 }
 
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
@@ -224,8 +517,8 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto open = step("open", "browser_open");
     open.insert("target", "https://example.test/page");
     rows.append(open);
-    for (const char* tool : {"browser_observe", "browser_inspect", "browser_network",
-                             "browser_logs", "browser_close_page"})
+    for (const char* tool :
+         {"browser_observe", "browser_inspect", "browser_network", "browser_logs"})
         rows.append(step(QString::fromLatin1(tool), tool));
     auto capture = step("capture", "browser_capture");
     capture.insert("images", QVariantList{QUrl::fromLocalFile(imagePath).toString()});
@@ -233,6 +526,8 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto compare = step("compare", "visual_compare");
     compare.insert("images", capture.value("images"));
     rows.append(compare);
+    // Session housekeeping ends the browser work and is not shown.
+    rows.append(step("browser_close_page", "browser_close_page"));
 
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -240,14 +535,15 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     view.show();
     view.resetMessages(rows, "browser-groups");
     auto* model = view.messageModel();
-    QTRY_COMPARE(model->rowCount(), 3);
+    // As in the mock, the capture and the comparison are steps of the browser group: the
+    // closed group is one line, and opening it shows each step with its image.
+    QTRY_COMPARE(model->rowCount(), 1);
     QCOMPARE(model->get(0).value("messageKey").toString(), "open");
-    QCOMPARE(model->get(1).value("messageKey").toString(), "capture");
-    QCOMPARE(model->get(2).value("messageKey").toString(), "compare");
     QCOMPARE(model->sourceCount(), rows.size());
-    QVERIFY(view.transcriptCopyText().contains("observe"));
-    QVERIFY(view.transcriptCopyText().contains("inspect"));
-    QCOMPARE(model->findMatches("observe", 10).size(), 0);
+    QCOMPARE(model->get(0).value("groupSummary").toString(),
+             QStringLiteral("Used ketplus_browser · 7 steps"));
+    QVERIFY(view.transcriptCopyText().contains("Observed the page"));
+    QVERIFY(view.transcriptCopyText().contains("Inspected the page"));
     auto* root = view.quickView()->rootObject();
     const auto galleries = [&]() {
         const auto count = [](auto&& self, QQuickItem* parent) -> int {
@@ -261,16 +557,15 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
         };
         return count(count, root);
     };
-    QTRY_COMPARE(galleries(), 2);
-    auto* browserOpen = findVisualItem(root, "transcriptBrowserOpen");
-    QVERIFY(browserOpen && browserOpen->isVisible());
-    QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
-    auto* openRow = findVisualItem(root, "transcriptActivityRow");
-    QVERIFY(openRow);
-    QVERIFY(!findVisualItem(openRow, "transcriptActivityTarget")->isVisible());
-    // Hidden housekeeping cannot return when groups are toggled; evidence stays visible.
+    QTRY_COMPARE(galleries(), 0);
+    // Session housekeeping stays hidden when the group opens; the images show under their steps.
     model->setGroupExpanded("open", true);
-    QTRY_COMPARE(model->rowCount(), 3);
+    QTRY_COMPARE(model->rowCount(), 7);
+    for (int row = 0; row < model->rowCount(); ++row)
+        QVERIFY(model->get(row).value("messageKey").toString() != "browser_close_page");
+    QTRY_VERIFY(findVisibleItem(root, "transcriptBrowserOpen"));
+    auto* browserOpen = findVisibleItem(root, "transcriptBrowserOpen");
+    QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
     QTRY_COMPARE(galleries(), 2);
     const QString capturePrefix = qEnvironmentVariable("KETPLUS_BROWSER_GROUP_CAPTURE");
     if (!capturePrefix.isEmpty()) {
@@ -278,10 +573,13 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
         QVERIFY(
             view.quickView()->grabWindow().save(capturePrefix + QString::number(width) + ".png"));
     }
+    model->setGroupExpanded("open", false);
+    QTRY_COMPARE(model->rowCount(), 1);
+    QTRY_COMPARE(galleries(), 0);
     // Restored history uses the same projection while retaining all source rows.
     view.resetMessages(rows, "browser-groups-replay");
-    QTRY_COMPARE(model->rowCount(), 3);
-    QTRY_COMPARE(galleries(), 2);
+    QTRY_COMPARE(model->rowCount(), 1);
+    QCOMPARE(model->sourceCount(), rows.size());
 }
 
 void AgentWorkspaceViewTest::transcriptArtifactSafetyAndExport() {
@@ -391,7 +689,7 @@ void AgentWorkspaceViewTest::transcriptAtlasLayout() {
     QTRY_COMPARE(transcript->opacity(), 1.0);
     QTRY_COMPARE(view.messageModel()->count(), 3);
     QCOMPARE(view.messageModel()->get(1).value("groupSummary").toString(),
-             QString("Read 3 files, ran a command, searched code, used the browser"));
+             QString("Explored 3 files, ran a command, searched code, used the browser"));
     QVERIFY(view.messageModel()->get(2).value("groupRole").toString().isEmpty());
     const auto capture = qEnvironmentVariable("KETPLUS_ATLAS_TRANSCRIPT_CAPTURE");
     if (!capture.isEmpty()) {
@@ -464,7 +762,14 @@ void AgentWorkspaceViewTest::transcriptRendererInteractionMatrix() {
     QTRY_VERIFY(row->property("expanded").toBool());
     auto* title = findVisualItem(row, "transcriptActivityTitle");
     QVERIFY(title);
-    QCOMPARE(title->property("text").toString(), QStringLiteral("Ran command · Failed"));
+    // The mock's step line: "Ran" and the command beside it, the failure on its own line.
+    QCOMPARE(title->property("text").toString(), QStringLiteral("Ran"));
+    auto* detail = findVisualItem(row, "transcriptActivityDetail");
+    QVERIFY(detail);
+    QCOMPARE(detail->property("text").toString(), exactCommand);
+    auto* status = findVisualItem(row, "transcriptActivityStatus");
+    QVERIFY(status && status->isVisible());
+    QCOMPARE(status->property("text").toString(), QStringLiteral("Failed · exit code 1 · 42 ms"));
     auto* accessible = QAccessible::queryAccessibleInterface(row);
     QVERIFY(accessible);
     QCOMPARE(accessible->role(), QAccessible::Button);
@@ -554,6 +859,35 @@ void AgentWorkspaceViewTest::transcriptRendererInteractionMatrix() {
 }
 
 void AgentWorkspaceViewTest::activityOperationSemantics() {
+    const QMap<QString, QString> controlTypes{
+        {"functions.wait", "wait"},        {"monitor", "monitor"},      {"resume_agent", "wake"},
+        {"ScheduleWakeup", "wake"},        {"EnterPlanMode", "plan"},   {"Skill", "skill"},
+        {"ToolSearch", "toolsLoaded"},     {"TaskStop", "taskStopped"}, {"Agent", "subAgent"},
+        {"functions.update_plan", "plan"}, {"WebFetch", "webFetch"},    {"WebSearch", "webSearch"},
+        {"open_page", "webOpen"},          {"find_in_page", "webFind"}};
+    for (auto it = controlTypes.cbegin(); it != controlTypes.cend(); ++it) {
+        for (const auto& type : {"mcpToolCall", "dynamicToolCall"}) {
+            const QJsonObject item{{"type", type},
+                                   {"tool", it.key()},
+                                   {"id", "step"},
+                                   {"arguments", QJsonObject{{"query", "test"}}}};
+            const auto started = ketplus::agent_message::activityMessage(item, false);
+            const auto completed = ketplus::agent_message::activityMessage(item, true);
+            QCOMPARE(started.value("subtype").toString(), it.value());
+            QCOMPARE(started.value("status").toString(), QString("running"));
+            QCOMPARE(completed.value("status").toString(), QString("completed"));
+            QVERIFY(started.value("title") != completed.value("title"));
+            if (it.key() == "ScheduleWakeup") {
+                QCOMPARE(started.value("title").toString(), QString("Scheduling wake-up"));
+                QCOMPARE(completed.value("title").toString(), QString("Scheduled wake-up"));
+            } else if (it.key() == "EnterPlanMode") {
+                QCOMPARE(started.value("title").toString(), QString("Entering plan mode"));
+                QCOMPARE(completed.value("title").toString(), QString("Entered plan mode"));
+            }
+            QVERIFY(!completed.value("sanitizedPayload").toMap().isEmpty());
+        }
+    }
+
     const QMap<QString, QString> searchTypes{
         {"read_file", "fileRead"}, {"search_files", "fileSearch"}, {"search_code", "codeSearch"}};
     for (auto it = searchTypes.cbegin(); it != searchTypes.cend(); ++it) {
@@ -621,12 +955,17 @@ void AgentWorkspaceViewTest::activityOperationSemantics() {
                                                 QJsonObject{{"type", "image"},
                                                             {"data", "not base64!"},
                                                             {"mimeType", "image/png"}}}}}}};
+        const QJsonObject subagent{{"id", "sub"}, {"type", "subAgentActivity"}};
+        QCOMPARE(ketplus::agent_message::activityMessage(subagent, true).value("title").toString(),
+                 QStringLiteral("Ran a subagent"));
+        QCOMPARE(ketplus::agent_message::activityMessage(subagent, false).value("title").toString(),
+                 QStringLiteral("Running a subagent"));
         const auto running = ketplus::agent_message::activityMessage(capture, false);
         QCOMPARE(running.value("eventType").toString(), QStringLiteral("browser.screenshot"));
-        QCOMPARE(running.value("title").toString(), QStringLiteral("Using browser · capture"));
+        QCOMPARE(running.value("title").toString(), QStringLiteral("Capturing"));
         QVERIFY(running.value("images").toList().isEmpty());
         const auto done = ketplus::agent_message::activityMessage(capture, true);
-        QCOMPARE(done.value("title").toString(), QStringLiteral("Used browser · capture"));
+        QCOMPARE(done.value("title").toString(), QStringLiteral("Captured: 2 × 2"));
         QCOMPARE(done.value("status").toString(), QStringLiteral("completed"));
         QCOMPARE(done.value("summary").toString(), QStringLiteral("fullPage=false"));
         const auto images = done.value("images").toList();
@@ -727,7 +1066,7 @@ void AgentWorkspaceViewTest::activityGalleryLoadsInBatches() {
     auto* image = findVisualItem(gallery, "messageAttachmentImage");
     QVERIFY(image);
     QTRY_COMPARE(image->property("status").toInt(), 1);
-    QVERIFY(image->property("sourceSize").toSize().width() <= 224);
+    QVERIFY(image->property("sourceSize").toSize().width() <= 240);
     auto* more = findVisualItem(gallery, "expandMessageImages");
     QVERIFY(more);
     QCOMPARE(more->property("text").toString(), QString("+47"));
@@ -933,6 +1272,44 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible_data() {
         << QString("dynamicToolCall") << QString("synthetic") << true;
 }
 
+// #128: a compacted command or picture says what went, how large it was and how old.
+void AgentWorkspaceViewTest::compactedItemsSayWhatWasTrimmed() {
+    const auto marker = [](const QString& policy, qint64 bytes, int days) {
+        const auto at = QDateTime::fromString("2026-11-10T08:00:00.000Z", Qt::ISODateWithMs);
+        return QJsonObject{{"policy", policy},
+                           {"original_bytes", bytes},
+                           {"at", at.toString(Qt::ISODateWithMs)},
+                           {"cutoff", at.addDays(-days).toString(Qt::ISODateWithMs)}};
+    };
+    const auto command = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "old-command"},
+                    {"type", "commandExecution"},
+                    {"command", "make test"},
+                    {"status", "completed"},
+                    {"aggregatedOutput", "head…tail"},
+                    {"compacted", marker("command-output-v1", 1258291, 30)}},
+        true);
+    QCOMPARE(command.value("title").toString(),
+             QString("Ran: make test · Output trimmed · 1.2 MB · older than 30 days"));
+    // Size pressure trims with the current time as the cutoff: no age to state.
+    const auto image = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "old-image"},
+                    {"type", "imageGeneration"},
+                    {"status", "completed"},
+                    {"savedPath", "/missing/kite.png"},
+                    {"compacted", marker("image-preview-v1", 40 * 1024, 0)}},
+        true);
+    QCOMPARE(image.value("title").toString(),
+             QString("Generated an image · Full image trimmed · 40 KB"));
+    const auto untouched =
+        ketplus::agent_message::activityMessage(QJsonObject{{"id", "new-command"},
+                                                            {"type", "commandExecution"},
+                                                            {"command", "make test"},
+                                                            {"status", "completed"}},
+                                                true);
+    QCOMPARE(untouched.value("title").toString(), QString("Ran: make test"));
+}
+
 void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QFETCH(QString, type);
     QFETCH(QString, server);
@@ -1020,11 +1397,14 @@ void AgentWorkspaceViewTest::retainedFileDiffNoticeRemainsVisible() {
     QTRY_VERIFY((title = findVisualItem(root, "transcriptActivityTitle")) && title->isVisible());
     auto* row = findVisualItem(root, "transcriptActivityRow");
     QVERIFY(row);
+    auto* detail = findVisualItem(root, "transcriptActivityDetail");
+    QVERIFY(detail);
     for (bool compact : {false, true}) {
         row->setProperty("compact", compact);
-        QTRY_VERIFY(title->property("text").toString().contains("Diff trimmed"));
-        if (compact)
-            QVERIFY(title->property("text").toString().contains("Moved New.cpp"));
+        // The mock's step: "Moved", then both ends with the counts and the trimmed notice.
+        QTRY_COMPARE(title->property("text").toString(), QStringLiteral("Moved"));
+        QCOMPARE(detail->property("text").toString(),
+                 QString::fromUtf8("src/Old.cpp → src/New.cpp  +5000 −4500 · Diff trimmed"));
         QVERIFY(title->width() > 0 && title->height() > 0);
         auto* accessible = QAccessible::queryAccessibleInterface(row);
         QVERIFY(accessible);

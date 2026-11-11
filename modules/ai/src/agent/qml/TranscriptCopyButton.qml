@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -7,25 +7,30 @@ import QtQuick.Controls.Basic as Basic
 Basic.ToolButton {
     id: control
 
-    required property var tokens
     // What the button copies, as its tool tip and accessible name.
     property string label: "Copy"
     property bool showToolTip: true
     property color idleColor: "transparent"
-    property color hoverColor: tokens.surfaceHover
-    property real cornerRadius: Metrics.px(4, tokens)
+    property color hoverColor: KetTheme.t.surfaceHover
+    property real cornerRadius: KetTheme.px(4, KetTheme.zoom)
     property bool focusBorder: false
     property int copiedInterval: 1500
     readonly property bool copied: copiedTimer.running
 
     focusPolicy: Qt.TabFocus
-    contentItem: TintedIcon {
-        source: control.copied ? "qrc:/agent/icons/check.svg" : "qrc:/agent/icons/copy.svg"
-        color: control.copied ? control.tokens.textMain : control.tokens.textMuted
+    contentItem: Item {
+        implicitWidth: KetTheme.px(16, KetTheme.zoom)
+        implicitHeight: implicitWidth
+        KetIcon {
+            anchors.centerIn: parent
+            box: Math.min(parent.width, parent.height)
+            name: KetTheme.iconForLucide(control.copied ? "check" : "copy")
+            color: control.copied ? KetTheme.t.textMain : KetTheme.t.textMuted
+        }
     }
     background: Rectangle {
         color: control.hovered ? control.hoverColor : control.idleColor
-        border.color: control.focusBorder && control.visualFocus ? control.tokens.focus : "transparent"
+        border.color: control.focusBorder && control.visualFocus ? KetTheme.t.colorFocus : "transparent"
         radius: control.cornerRadius
     }
     // Runs alongside the instance's own onClicked, which does the copying.
@@ -37,7 +42,7 @@ Basic.ToolButton {
         interval: control.copiedInterval
     }
     KetToolTip {
-        tokens: control.tokens
+        objectName: "ketToolTip"
         visible: control.showToolTip && (control.hovered || control.copied)
         text: control.copied ? "Copied" : control.label
     }

@@ -11,6 +11,9 @@ KetDialog {
     id: dialog
 
     property string provider: "codex"
+    // When set, the only provider on offer (a team's reviewer runs on Claude), and why.
+    property string onlyProvider: ""
+    property string onlyReason: ""
     // The app window, for each provider's setup state (Fixtures.providerSetup).
     property var window: null
     readonly property var draftSetup: {
@@ -54,7 +57,7 @@ KetDialog {
     title: "Model & context"
     onAboutToShow: {
         search.text = ""
-        draftProvider = provider
+        draftProvider = onlyProvider !== "" ? onlyProvider : provider
         const listed = (Fixtures.providerModels[provider] || []).find(
             entry => entry.name === model || entry.short === model)
         draftModel = listed ? listed.name : model
@@ -62,6 +65,7 @@ KetDialog {
     }
 
     KetRouteTabs {
+        visible: dialog.onlyProvider === ""
         Layout.fillWidth: true
         tabs: Fixtures.providers.map(entry => entry.label)
         currentIndex: dialog.providerIndex(dialog.draftProvider)
@@ -90,7 +94,8 @@ KetDialog {
         Layout.fillWidth: true
         topPadding: dialog.px(10)
         bottomPadding: dialog.px(12)
-        text: Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
+        text: dialog.onlyProvider !== "" ? dialog.onlyReason
+                                         : Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
         font.pixelSize: dialog.px(13)

@@ -2,9 +2,12 @@
 
 #include "agents/AgentBroker.h"
 #include "agents/AgentToolLaunch.h"
+#include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
+#include "runtime/ProviderReadiness.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
+#include "teams/TeamCoordinator.h"
 
 #include <QDeadlineTimer>
 #include <QHash>
@@ -30,7 +33,7 @@ class CodexAdapter;
 class CursorAdapter;
 class ProviderAdapter;
 
-class SessionHost final : public QObject, private AgentHostPort {
+class SessionHost final : public QObject, private AgentHostPort, private teams::TeamHostPort {
     Q_OBJECT
 
   public:
@@ -42,6 +45,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
+    // ADR 0110: the provider's credential changed, so its reported failures no longer apply.
+    void forgetProviderFailure(const QString& provider) { readiness_.forget(provider); }
 
     using CommandCallback = std::function<void(const QJsonObject&)>;
 
@@ -63,10 +68,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     // validating their advertised snapshot head in one journal read transaction.
     [[nodiscard]] QJsonObject restoreTranscriptWindow(const QJsonObject& request) const;
     [[nodiscard]] bool hasActiveSessions() const;
-    // Archived conversations keep their history this long, then are deleted (#128).
-    static constexpr int archivedHistoryDays = 30;
-    // Deletes at most one conversation archived before now minus archivedHistoryDays, through
-    // the same guards as session.delete. Returns whether one was deleted.
+    // Deletes at most one conversation archived longer than the Storage option
+    // `archived_history_days` (ADR 0108; Never keeps them), through the same guards as
+    // session.delete. Returns whether one was deleted.
     bool expireArchivedSessions(const QDateTime& now);
     [[nodiscard]] QJsonObject configuration(const QJsonObject& request,
                                             const QJsonArray& providerModels) const;
@@ -101,6 +105,11 @@ class SessionHost final : public QObject, private AgentHostPort {
 
   signals:
     void eventReady(const QJsonObject& event);
+    // ADR 0112: team.changed or team.removed, for every local client.
+    void teamEvent(const QString& type, const QJsonObject& payload);
+    // A change every desktop window shows at once that is not a session event (#429):
+    // `tags.changed` with the catalog and/or the sessions whose labels changed.
+    void noticeReady(const QString& type, const QJsonObject& payload);
 
   private:
     ClaudeAccountUsage* claudeAccountUsage_{nullptr};
@@ -117,6 +126,11 @@ class SessionHost final : public QObject, private AgentHostPort {
         // A Stop can arrive while an adapter is still creating its provider-native session.
         // Keep it until that adapter has actually started the prompt.
         bool interruptPending{false};
+        // A client's Stop is ending this turn, so its interrupted end says so.
+        bool stopRequested{false};
+        // #125: this turn's last answer, and whether the agent asked the user to decide.
+        QString lastAnswerText;
+        bool decisionRequested{false};
         // The provider turn that last completed in the current provider process. A repeated
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
@@ -169,6 +183,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject storageSize(const QString& type, const QJsonObject& payload);
+    [[nodiscard]] QJsonObject storageOptions(const QString& type, const QJsonObject& payload);
+    // Warning, over-limit and low-disk state for the sidebar and remote clients (ADR 0108).
+    [[nodiscard]] QJsonObject storageStatus() const;
+    static constexpr qint64 lowDiskBytes = 5'000'000'000LL;
+    JournalStorageJobs& storageJobs();
+    std::unique_ptr<JournalStorageJobs> storageJobs_;
     QJsonObject workspaceCatalog(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject eventsAfter(const QJsonObject& request) const;
     [[nodiscard]] QJsonObject transcriptPage(const QJsonObject& request) const;
@@ -224,6 +244,16 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
+    [[nodiscard]] QJsonObject setSessionTags(const QJsonObject& request);
+    // #429, in SessionHostTags.cpp: the labels this Mac offers.
+    [[nodiscard]] QJsonObject tagCatalog();
+    [[nodiscard]] QJsonObject setTagCatalog(const QJsonObject& request);
+    // #125 "Waiting for you", in SessionHostAwaiting.cpp: Mark as done, and the turn's
+    // events that set or clear it.
+    [[nodiscard]] QJsonObject markSessionDone(const QJsonObject& request);
+    void noteAwaitingReply(Session& session, const QString& type, const QJsonObject& payload);
+    void setAwaitingReply(Session& session, bool awaiting);
+    [[nodiscard]] static bool endsWaitingForUser(const Session& session);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.
@@ -231,6 +261,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
+    // A turn.completed payload; it takes the session's pending Stop and carries the work report
+    // the turn ended with (ADR 0106).
+    [[nodiscard]] QJsonObject turnCompletion(Session& session, const QString& status);
     [[nodiscard]] QJsonObject resolveApproval(const QJsonObject& request);
     [[nodiscard]] QJsonObject applyConfiguration(const QJsonObject& request, bool localClient);
     [[nodiscard]] QJsonObject applyExecutionPolicy(const QJsonObject& request);
@@ -240,6 +273,42 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject commitAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject cancelAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject acknowledge(const QJsonObject& request, const QString& clientId);
+    [[nodiscard]] QJsonObject heldAgentMessages(const QJsonObject& request, bool release);
+    // ADR 0067: the conversation's reviewer, read or replaced by a local client.
+    [[nodiscard]] QJsonObject conversationReviewer(const QJsonObject& request, bool apply);
+    [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
+    QString startReviewerConversation(const Session& working, const QString& provider,
+                                      QString* error);
+    // ADR 0112, in SessionHostTeams.cpp.
+    [[nodiscard]] std::optional<teams::TeamConversation>
+    teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] bool onTeam(const QString& sessionId) const override;
+    std::optional<teams::TaskWorktree>
+    createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
+    QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
+    [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
+    [[nodiscard]] QString headCommit(const QString& worktree) const override;
+    QString postTeamMessage(const teams::TeamMessage& message) override;
+    [[nodiscard]] QJsonObject teamMembership(const QString& sessionId) const override;
+    [[nodiscard]] QString teamRoleNumber(const QString& sessionId,
+                                         const QString& role) const override;
+    QJsonObject teamOperation(const QString& sessionId, const QString& operation,
+                              const QJsonObject& payload) override;
+    QJsonObject teamDecisionOperation(const QString& sessionId, const QString& operation,
+                                      const QJsonObject& payload);
+    [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
+    void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
+    [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
+    void startTeams();
+    [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
+    [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
+    [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // A member conversation that has not had a turn yet. Returns its id, or empty with
+    // `problem` set.
+    QString createMemberConversation(const QString& worktree, const QString& provider,
+                                     const QString& model, const QString& effort,
+                                     const QString& title, QString* problem);
+    void discardMemberConversation(const QString& sessionId);
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
     void storeFork(const QString& sourceId, qint64 sourceGeneration, const QString& forkId,
@@ -255,6 +324,16 @@ class SessionHost final : public QObject, private AgentHostPort {
                      const QJsonObject& options);
     // ADR 0015: installed provider CLI versions and their support status.
     void providerRuntimeStatus(std::function<void(const QJsonObject&, const QString&)> callback);
+    // Codex readiness from account/read (#170); answers within codexAccountReadTimeoutMs.
+    void codexReadiness(const compat::Runtime& runtime,
+                        std::function<void(const QJsonObject&)> callback);
+    static constexpr int codexAccountReadTimeoutMs = 5000;
+    // runtime.error gains `code` (and Codex limits their reset) and updates readiness; a
+    // completed turn clears an earlier failure. Other events pass through unchanged.
+    [[nodiscard]] QJsonObject noteProviderOutcome(const Session& session, const QString& type,
+                                                  const QJsonObject& payload);
+    // Codex limits carry no reset in their error; account/rateLimits/read has it.
+    void readCodexLimitReset(const QString& message);
     // Journals `provider.runtime` once when a session's CLI is untested or unreadable.
     void noteProviderRuntime(const QString& sessionId, qint64 generation);
     void beginTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
@@ -348,6 +427,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] qint64 agentTurnSequence(const QString& sessionId) const override;
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
+    // ADR 0106, in SessionHostWorkReports.cpp.
+    QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
+                                   const QJsonObject& payload) override;
+    QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
+                                 const QJsonObject& payload) override;
+    [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
     [[nodiscard]] AgentConversation agentConversationOf(const Session& session) const;
     // The ketplus_agents launch for a conversation generation, when an endpoint is set.
     [[nodiscard]] std::optional<agent_tools::Launch> agentLaunch(const QString& sessionId,
@@ -378,7 +463,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QString handoffDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;
     McpMediaStore mediaStore_;
+    // Whether each provider can start a turn (#170); observed failures persist next to the journal.
+    ProviderReadiness readiness_;
     AgentBroker* agents_{nullptr};
+    teams::TeamCoordinator* teams_{nullptr};
+    // Worktree path → the repository's main worktree, for team membership.
+    mutable QHash<QString, QString> repositoryByWorktree_;
     QString agentSocket_;
     QString agentExecutable_;
     // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel

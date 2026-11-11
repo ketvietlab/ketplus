@@ -134,7 +134,7 @@ QStringList TranscriptRowGeometry::unmeasuredKeys(const int limit) const {
     QStringList keys;
     for (int index = rows_.size() - 1; index >= 0 && keys.size() < limit; --index) {
         const Row& row = rows_.at(index);
-        if (!row.realized && !row.derived)
+        if (!row.realized && !row.derived && !bodyMeasurements_.contains(row.key))
             keys.append(row.key);
     }
     return keys;

@@ -1,13 +1,15 @@
 #include "app/SettingsStoragePage.h"
+#include "KetBanner.h"
+#include "KetMeter.h"
 #include "app/SettingsDialog.h"
 #include "app/SettingsWorkspacePage.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
 #include <QAccessible>
-#include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
+#include <QDir>
+#include <QJsonArray>
 #include <QLabel>
-#include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTimer>
@@ -33,10 +35,20 @@ QJsonObject sizeState(qint64 revision = 0, qint64 limit = 5'000'000'000LL, int w
                                         {"pressure_enabled", revision > 0}});
     return result;
 }
-QJsonObject supportedState() {
+QJsonObject supportedState(bool options = true) {
     auto result = state();
     result.insert("size_policy_supported", true);
+    if (options)
+        result.insert("storage_options_supported", true);
     return result;
+}
+QJsonObject optionsState(qint64 revision = 0, int archived = 90, const QString& images = "preview",
+                         bool warn = true) {
+    return {{"ok", true},
+            {"revision", revision},
+            {"options", QJsonObject{{"archived_history_days", archived},
+                                    {"generated_images", images},
+                                    {"warn_near_limit", warn}}}};
 }
 QJsonObject lowDiskState() {
     auto result = state();
@@ -50,15 +62,78 @@ QJsonObject lowDiskState() {
                                             {"filesystem_available_bytes", 4'000'000'000LL}});
     return result;
 }
+// The mock's journal: 9.0 GB against a 5 GB limit, 4 GB free on disk.
+QJsonObject measuredSize() {
+    auto size = sizeState();
+    size.insert("usage", QJsonObject{{"database_page_bytes", 9'000'000'000LL},
+                                     {"free_page_bytes", 5'200'000'000LL},
+                                     {"kept_page_bytes", 3'800'000'000LL}});
+    size.insert("disk_usage", QJsonObject{{"database_file_bytes", 9'000'000'000LL},
+                                          {"wal_file_bytes", 100'000'000LL},
+                                          {"shared_memory_file_bytes", 32768},
+                                          {"total_file_bytes", 9'100'032'768LL},
+                                          {"filesystem_available_bytes", 4'000'000'000LL}});
+    size.insert("status", QJsonObject{{"target_scope", "sqlite_pages"},
+                                      {"database_page_bytes", 9'000'000'000LL},
+                                      {"limit_bytes", 5'000'000'000LL},
+                                      {"over_limit", true},
+                                      {"warning", true},
+                                      {"low_disk", true},
+                                      {"filesystem_available_bytes", 4'000'000'000LL},
+                                      {"pressure_enabled", true}});
+    return size;
+}
+QJsonObject measuredBreakdown() {
+    return {{"ok", true},
+            {"state", "ready"},
+            {"breakdown",
+             QJsonObject{{"database_page_bytes", 9'000'000'000LL},
+                         {"parts", QJsonObject{{"history_bytes", 2'300'000'000LL},
+                                               {"image_bytes", 1'200'000'000LL},
+                                               {"image_count", 422},
+                                               {"activity_bytes", 300'000'000LL},
+                                               {"free_bytes", 5'200'000'000LL}}},
+                         {"largest", QJsonArray{QJsonObject{{"session_id", "s"},
+                                                            {"number", "5498"},
+                                                            {"title", "Port the image pipeline"},
+                                                            {"provider", "codex"},
+                                                            {"bytes", 349'000'000LL},
+                                                            {"note", "318 generated images"}}}},
+                         {"directory", QDir::homePath() + "/Library/KetPlus/daemon"},
+                         {"oldest_event_at", "2026-09-24T09:00:00.000Z"}}}};
+}
+// A current daemon: every storage area answers; `overrides` replaces single operations.
+SettingsStoragePage::Requester daemon(QStringList* calls = nullptr,
+                                      QHash<QString, QJsonObject> overrides = {},
+                                      QJsonObject* payload = nullptr) {
+    return [calls, overrides, payload](const QString& op, const QJsonObject& data, auto reply) {
+        if (calls)
+            calls->append(op);
+        if (payload && op.endsWith("apply"))
+            *payload = data;
+        if (overrides.contains(op))
+            reply(overrides.value(op), {});
+        else if (op == "read" || op == "apply")
+            reply(supportedState(), {});
+        else if (op == "size.read" || op == "size.apply")
+            reply(sizeState(), {});
+        else if (op.startsWith("options."))
+            reply(optionsState(), {});
+        else if (op == "breakdown.read")
+            reply({{"ok", true}, {"state", "ready"}}, {});
+        else
+            reply({{"ok", true}}, {});
+    };
+}
 QComboBox* days(SettingsStoragePage& page) {
     return page.findChild<QComboBox*>("storageDetailDays");
 }
-QCheckBox* automatic(SettingsStoragePage& page) {
-    return page.findChild<QCheckBox*>("storageAutomaticDetail");
+QAbstractButton* automatic(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageAutomaticDetail");
 }
 QLabel* status(SettingsStoragePage& page) { return page.findChild<QLabel*>("storageStatus"); }
-QPushButton* reload(SettingsStoragePage& page) {
-    return page.findChild<QPushButton*>("storageReload");
+QAbstractButton* reload(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageReload");
 }
 void choose(SettingsStoragePage& page, int value) {
     days(page)->setCurrentIndex(days(page)->findData(value));
@@ -68,233 +143,194 @@ void choose(SettingsStoragePage& page, int value) {
 class SettingsStoragePageTest final : public QObject {
     Q_OBJECT
   private slots:
-    void sizeDraftSurvivesDetailSave_data() {
-        QTest::addColumn<bool>("conflict");
-        QTest::newRow("preserved") << false;
-        QTest::newRow("changed-revision") << true;
-    }
-    void sizeDraftSurvivesDetailSave() {
-        QFETCH(bool, conflict);
-        bool detailSaved = false;
-        QJsonObject submitted;
-        SettingsStoragePage page([&](const QString& op, const QJsonObject& payload, auto reply) {
-            if (op == "read")
-                reply(supportedState(), {});
-            else if (op == "size.read")
-                reply(sizeState(detailSaved && conflict ? 1 : 0), {});
-            else if (op == "apply") {
-                detailSaved = true;
-                auto response = state(1, 90);
-                response.insert("size_policy_supported", true);
-                reply(response, {});
-            } else {
-                submitted = payload;
-                reply(sizeState(1, 0, 95), {});
-            }
-        });
-        auto* save = page.findChild<QPushButton*>("storageSizeSave");
-        auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
-        auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
-        QTRY_VERIFY(save->isEnabled());
-        limit->setCurrentIndex(limit->findData(qint64(0)));
-        warning->setValue(95);
-        auto* draft = page.findChild<QLabel*>("storageSizeDraftStatus");
-        QVERIFY(draft->text().contains("Unsaved"));
-        choose(page, 90);
-        QCOMPARE(limit->currentData().toLongLong(), qint64(0));
-        QCOMPARE(warning->value(), 95);
-        if (conflict) {
-            QVERIFY(!save->isEnabled());
-            QVERIFY(status(page)->text().contains("another window"));
-            QVERIFY(submitted.isEmpty());
-        } else {
-            QVERIFY(save->isEnabled());
-            save->click();
-            QCOMPARE(submitted.value("expected_revision").toInteger(), 0);
-            QCOMPARE(submitted.value("policy").toObject().value("limit_bytes").toInteger(),
-                     qint64(0));
-            QCOMPARE(submitted.value("policy").toObject().value("warning_percent").toInt(), 95);
-            QVERIFY(draft->text().isEmpty());
-        }
-    }
-    void sizeRequiresExplicitSaveAndKeepsIndependentRevision() {
+    void sizeAppliesImmediatelyWithItsRevision() {
         QStringList calls;
         QJsonObject submitted;
-        SettingsStoragePage::Reply saveReply;
-        SettingsStoragePage page([&](const QString& op, const QJsonObject& payload, auto reply) {
-            calls << op;
-            if (op == "read")
-                reply(supportedState(), {});
-            else if (op == "size.read")
-                reply(sizeState(), {});
-            else {
-                submitted = payload;
-                saveReply = reply;
-            }
-        });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        auto saved = sizeState(1, 2'000'000'000LL, 90);
+        SettingsStoragePage page(daemon(&calls, {{"size.apply", saved}}, &submitted));
         auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
-        auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
-        QTRY_VERIFY(button->isEnabled());
-        QCOMPARE(calls, QStringList({"read", "size.read"}));
-        auto* info = page.findChild<QLabel*>("storageSizeStatus");
-        QVERIFY(info->text().contains("not been enabled"));
-        limit->setCurrentIndex(limit->findData(qint64(2'000'000'000LL)));
-        warning->setValue(90);
-        QCOMPARE(calls.size(), 2); // Editing and opening never opt in.
-        button->click();
-        QCOMPARE(calls.last(), "size.apply");
+        QTRY_VERIFY(limit->isEnabled());
+        QCOMPARE(calls, QStringList({"read", "size.read", "options.read", "breakdown.read"}));
+        QVERIFY(page.findChild<QAbstractButton*>("storageSizeSave") == nullptr);
+        QCOMPARE(limit->currentData().toLongLong(), 5'000'000'000LL);
+        limit->setCurrentIndex(limit->findData(2'000'000'000LL));
+        emit limit->activated(limit->currentIndex());
+        QCOMPARE(calls.at(4), QString("size.apply"));
         QCOMPARE(submitted.value("expected_revision").toInteger(), 0);
+        // The warning threshold has no control; it keeps the saved value.
         QCOMPARE(submitted.value("policy").toObject(),
-                 sizeState(1, 2'000'000'000LL, 90).value("policy").toObject());
-        QVERIFY(!days(page)->isEnabled());
-        QVERIFY(!button->isEnabled());
-        saveReply(sizeState(1, 2'000'000'000LL, 90), {});
-        QVERIFY(button->isEnabled());
-        QVERIFY(status(page)->text().contains("saved"));
-        QCOMPARE(QAccessible::queryAccessibleInterface(info)->text(QAccessible::Name),
-                 info->text());
-        choose(page, 90);
-        QCOMPARE(submitted.value("expected_revision").toInteger(), 0); // Different policy revision.
+                 (QJsonObject{{"limit_bytes", 2'000'000'000LL}, {"warning_percent", 80}}));
+        QTRY_VERIFY(status(page)->text().startsWith("Saved"));
+        QCOMPARE(page.findChild<QAbstractButton*>("storageWarnNearLimit")->text(),
+                 QString("Warn me when the journal passes 90% of its limit"));
+        QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("90%"));
+        // A reply that does not confirm the choice requires a reload.
+        SettingsStoragePage stale(daemon(nullptr, {{"size.apply", sizeState(1)}}));
+        auto* other = stale.findChild<QComboBox*>("storageSizeLimit");
+        QTRY_VERIFY(other->isEnabled());
+        other->setCurrentIndex(other->findData(qint64(0)));
+        emit other->activated(other->currentIndex());
+        QVERIFY(!other->isEnabled());
+        QVERIFY(!reload(stale)->isHidden());
     }
-    void sizeFailuresRequireReload_data() {
-        QTest::addColumn<QString>("failure");
-        for (auto value : {"conflict", "revision", "policy", "timeout", "disconnect"})
-            QTest::newRow(value) << QString(value);
-    }
-    void sizeFailuresRequireReload() {
-        QFETCH(QString, failure);
-        SettingsStoragePage::Reply pending;
-        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
-            if (op == "read")
-                reply(supportedState(), {});
-            else if (op == "size.read")
-                reply(sizeState(), {});
-            else
-                pending = reply;
-        });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
-        QTRY_VERIFY(button->isEnabled());
-        button->click();
-        QVERIFY(bool(pending));
-        if (failure == "timeout")
-            QVERIFY(QMetaObject::invokeMethod(page.findChild<QTimer*>("storageRequestTimeout"),
-                                              "timeout", Qt::DirectConnection));
-        else if (failure == "disconnect")
-            pending({}, "Disconnected");
-        else if (failure == "conflict")
-            pending({{"ok", false}, {"error_code", "policy_conflict"}}, {});
-        else if (failure == "revision")
-            pending(sizeState(0), {});
-        else
-            pending(sizeState(1, 2'000'000'000LL), {});
-        QVERIFY(!button->isEnabled());
-        QVERIFY(!days(page)->isEnabled());
-        QVERIFY(reload(page)->isEnabled());
-        reload(page)->click();
-        QVERIFY(button->isEnabled());
-        pending(sizeState(1), {}); // stale callback after reload cannot overwrite it
-        QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("not been enabled"));
-    }
-    void invalidSizePolicy_data() {
-        QTest::addColumn<QString>("field");
-        QTest::addColumn<QJsonValue>("value");
-        QTest::newRow("fraction") << QString("warning_percent") << QJsonValue(20.5);
-        QTest::newRow("zero") << QString("warning_percent") << QJsonValue(0);
-        QTest::newRow("above-100") << QString("warning_percent") << QJsonValue(101);
-        QTest::newRow("string") << QString("limit_bytes") << QJsonValue("5000000000");
-        QTest::newRow("unsupported") << QString("limit_bytes") << QJsonValue(3'000'000'000LL);
-        QTest::newRow("unknown") << QString("extra") << QJsonValue(true);
-    }
-    void invalidSizePolicy() {
-        QFETCH(QString, field);
-        QFETCH(QJsonValue, value);
-        auto malformed = sizeState();
-        auto policy = malformed.value("policy").toObject();
-        policy.insert(field, value);
-        malformed.insert("policy", policy);
-        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
-            reply(op == "read" ? supportedState() : malformed, {});
-        });
-        QTRY_VERIFY(reload(page)->isEnabled());
-        QVERIFY(!page.findChild<QPushButton*>("storageSizeSave")->isEnabled());
-        QVERIFY(!days(page)->isEnabled());
-    }
-    void sizeReplyAfterDestruction() {
-        SettingsStoragePage::Reply pending;
-        auto* page =
-            new SettingsStoragePage([&](const QString& op, const QJsonObject&, auto reply) {
-                if (op == "read")
-                    reply(supportedState(), {});
-                else
-                    pending = reply;
-            });
-        QTRY_VERIFY(bool(pending));
-        delete page;
-        pending(sizeState(), {});
-    }
-    void sizeUnavailableStatusAndOldDaemon() {
-        bool modern = true;
-        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
-            if (op == "read")
-                reply(modern ? supportedState() : state(), {});
-            else {
-                auto value = sizeState(1);
-                value.remove("status");
-                value.remove("usage");
-                reply(value, {});
-            }
-        });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
-        QTRY_VERIFY(button->isEnabled());
-        QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("unknown"));
-        modern = false;
-        reload(page)->click();
-        QVERIFY(page.findChild<QWidget*>("storageSizeGroup")->isHidden());
-        QVERIFY(!button->isEnabled());
-        QVERIFY(days(page)->isEnabled());
-    }
-    void diskMeasurementsAndLowSpaceWarnings_data() {
-        QTest::addColumn<QJsonValue>("available");
-        QTest::addColumn<bool>("known");
-        QTest::addColumn<bool>("low");
-        QTest::newRow("below") << QJsonValue(4'999'999'999LL) << true << true;
-        QTest::newRow("zero") << QJsonValue(0) << true << true;
-        QTest::newRow("boundary") << QJsonValue(5'000'000'000LL) << true << false;
-        QTest::newRow("above") << QJsonValue(6'000'000'000LL) << true << false;
-        QTest::newRow("missing") << QJsonValue() << false << false;
-        QTest::newRow("negative") << QJsonValue(-1) << false << false;
-        QTest::newRow("fraction") << QJsonValue(2.5) << false << false;
-        QTest::newRow("string") << QJsonValue("6000000000") << false << false;
-    }
-    void diskMeasurementsAndLowSpaceWarnings() {
-        QFETCH(QJsonValue, available);
-        QFETCH(bool, known);
-        QFETCH(bool, low);
-        auto replyValue = state();
-        replyValue.insert("disk_usage", QJsonObject{{"database_file_bytes", 3000},
-                                                    {"wal_file_bytes", 1000},
-                                                    {"shared_memory_file_bytes", 1000},
-                                                    {"total_file_bytes", 5000},
-                                                    {"filesystem_available_bytes", available}});
+    void optionsApplyImmediatelyAndOlderDaemonsHideThem() {
+        QStringList calls;
+        QJsonObject submitted;
         SettingsStoragePage page(
-            [&](const QString&, const QJsonObject&, auto reply) { reply(replyValue, {}); });
+            daemon(&calls, {{"options.apply", optionsState(1, 365, "caption", true)}}, &submitted));
+        auto* images = page.findChild<QComboBox*>("storageGeneratedImages");
+        auto* archived = page.findChild<QComboBox*>("storageArchivedHistory");
+        auto* warn = page.findChild<QAbstractButton*>("storageWarnNearLimit");
+        QTRY_VERIFY(images->isEnabled());
+        QCOMPARE(images->currentData().toString(), QString("preview"));
+        QCOMPARE(archived->currentData().toInt(), 90);
+        QVERIFY(warn->isChecked());
+        archived->setCurrentIndex(archived->findData(365));
+        images->setCurrentIndex(images->findData("caption"));
+        emit images->activated(images->currentIndex());
+        QCOMPARE(calls.last(), QString("options.apply"));
+        QCOMPARE(submitted.value("options").toObject(),
+                 (QJsonObject{{"archived_history_days", 365},
+                              {"generated_images", "caption"},
+                              {"warn_near_limit", true}}));
+        QVERIFY(status(page)->text().startsWith("Saved"));
+        QVERIFY(images->isEnabled());
+        // A conflict requires a reload; nothing is applied on top of the other window's save.
+        SettingsStoragePage conflict(daemon(
+            nullptr, {{"options.apply", {{"ok", false}, {"error_code", "policy_conflict"}}}}));
+        auto* toggle = conflict.findChild<QAbstractButton*>("storageWarnNearLimit");
+        QTRY_VERIFY(toggle->isEnabled());
+        toggle->click();
+        QVERIFY(!toggle->isEnabled());
+        QVERIFY(status(conflict)->text().contains("another window"));
+        // A daemon without the options keeps the rest of the page.
+        SettingsStoragePage older(daemon(nullptr, {{"read", supportedState(false)}}));
+        QTRY_VERIFY(older.findChild<QComboBox*>("storageSizeLimit")->isEnabled());
+        QVERIFY(older.findChild<QComboBox*>("storageGeneratedImages")->isHidden() ||
+                !older.findChild<QComboBox*>("storageGeneratedImages")->isVisibleTo(&older));
+        QVERIFY(!older.findChild<QAbstractButton*>("storageExport")->isEnabled());
+    }
+    void overviewShowsTheMeasuredJournal() {
+        const auto size = measuredSize();
+        const auto breakdown = measuredBreakdown();
+        auto read = supportedState();
+        read.insert("policy",
+                    QJsonObject{{"full_detail_days", 0}, {"automatic_detail_retention", true}});
+        SettingsStoragePage page(
+            daemon(nullptr, {{"read", read}, {"size.read", size}, {"breakdown.read", breakdown}}));
         QTRY_VERIFY(days(page)->isEnabled());
-        auto* usage = page.findChild<QLabel*>("storageUsage");
-        QVERIFY(usage->text().contains("SQLite files:"));
-        QCOMPARE(usage->text().contains("Low disk space"), low);
-        QCOMPARE(usage->text().contains("available is unknown"), !known);
-        auto* accessible = QAccessible::queryAccessibleInterface(usage);
-        QVERIFY(accessible);
-        QCOMPARE(accessible->text(QAccessible::Name), usage->text());
-        auto disk = replyValue.value("disk_usage").toObject();
-        disk.insert("filesystem_available_bytes", 7'000'000'000LL);
-        disk.insert("total_file_bytes", 1); // inconsistent file metrics do not invalidate settings
-        replyValue.insert("disk_usage", disk);
-        reload(page)->click();
-        QVERIFY(days(page)->isEnabled());
-        QVERIFY(!usage->text().contains("Low disk space"));
-        QVERIFY(usage->text().contains("file sizes unavailable"));
+        QCOMPARE(page.findChild<QLabel*>("storageFileSize")->text(), QString("9.1 GB"));
+        QCOMPARE(page.findChild<QLabel*>("storageDiskAvailable")->text(), QString("4.0 GB"));
+        auto* banner = page.findChild<ket::Banner*>("storageLimitBanner");
+        QVERIFY(banner->isVisibleTo(&page));
+        QCOMPARE(banner->title(), QString("The journal is over its size limit"));
+        QCOMPARE(banner->message(), QString("9.0 GB on disk, limit 5 GB. 5.2 GB of it is free "
+                                            "space that compacting returns to macOS."));
+        QVERIFY(page.findChild<ket::Banner*>("storageDiskBanner")->isVisibleTo(&page));
+        auto* journal = page.findChild<ket::Meter*>("storageJournalMeter");
+        QCOMPARE(journal->valueText(), QString("9.0 GB of 5 GB"));
+        QCOMPARE(journal->fraction(), 1.0);
+        QVERIFY(journal->caption().startsWith("~/Library/KetPlus/daemon · full detail since "));
+        QVERIFY(journal->caption().contains("2026"));
+        const auto parts = page.findChildren<ket::Meter*>("storagePartMeter");
+        QCOMPARE(parts.size(), 4);
+        QCOMPARE(parts[0]->valueText(), QString("2.3 GB"));
+        QCOMPARE(parts[1]->caption(), QString("422 images"));
+        QCOMPARE(parts[3]->valueText(), QString("5.2 GB"));
+        const auto rows = page.findChildren<QLabel*>("storageLargestConversation");
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first()->text(),
+                 QString("Port the image pipeline · Codex · 349 MB · 318 generated images"));
+    }
+    void compactNowShowsProgressAndReloads() {
+        QStringList calls;
+        QJsonObject compaction{{"state", "running"},
+                               {"before_bytes", 9'000'000'000LL},
+                               {"database_bytes", 6'100'000'000LL},
+                               {"sweeps", 1},
+                               {"sweep_progress", 0.5}};
+        auto overrides = QHash<QString, QJsonObject>{
+            {"compaction.start", {{"ok", true}, {"compaction", compaction}}}};
+        auto requester = daemon(&calls, overrides);
+        QJsonObject finished = compaction;
+        bool done = false;
+        SettingsStoragePage page([&](const QString& op, const QJsonObject& data, auto reply) {
+            if (op == "compaction.read" && done) {
+                calls.append(op);
+                reply({{"ok", true}, {"compaction", finished}}, {});
+                return;
+            }
+            if (op == "compaction.read") {
+                calls.append(op);
+                reply({{"ok", true}, {"compaction", compaction}}, {});
+                return;
+            }
+            requester(op, data, reply);
+        });
+        auto* compact = page.findChild<QAbstractButton*>("storageCompactNow");
+        QTRY_VERIFY(compact->isEnabled());
+        compact->click();
+        QCOMPARE(calls.last(), QString("compaction.start"));
+        auto* progress = page.findChild<ket::Meter*>("storageCompactionProgress");
+        QVERIFY(progress->isVisibleTo(&page));
+        QCOMPARE(progress->valueText(), QString("9.0 GB → 6.1 GB"));
+        QCOMPARE(progress->fraction(), 0.5);
+        QCOMPARE(progress->caption(), QString("Pass 2"));
+        QVERIFY(!compact->isEnabled());
+        auto* poll = page.findChild<QTimer*>("storageJobsPoll");
+        QVERIFY(poll->isActive());
+        done = true;
+        finished.insert("state", "idle");
+        finished.insert("outcome", "done");
+        finished.insert("database_bytes", 3'800'000'000LL);
+        finished.insert("last", QJsonObject{{"completed_at", "2026-11-10T08:00:00.000Z"},
+                                            {"before_bytes", 9'000'000'000LL},
+                                            {"after_bytes", 3'800'000'000LL}});
+        calls.clear();
+        QVERIFY(QMetaObject::invokeMethod(poll, "timeout", Qt::DirectConnection));
+        QCOMPARE(page.findChild<QLabel*>("storageJobStatus")->text(),
+                 QString("Journal compacted · 9.0 GB → 3.8 GB"));
+        QVERIFY(!progress->isVisibleTo(&page));
+        QVERIFY(
+            page.findChild<QLabel*>("storageLastCompaction")->text().endsWith("9.0 GB → 3.8 GB"));
+        QVERIFY(calls.contains("read")); // the sizes, the warning and the parts are read again
+        QTRY_VERIFY(compact->isEnabled());
+    }
+    void exportUsesTheChosenFolder() {
+        QStringList calls;
+        QJsonObject submitted;
+        QJsonObject exportStatus{{"state", "running"}, {"exported", 12}, {"total", 88}};
+        auto requester = daemon(&calls);
+        SettingsStoragePage page([&](const QString& op, const QJsonObject& data, auto reply) {
+            if (op.startsWith("export.")) {
+                calls.append(op);
+                if (op == "export.start")
+                    submitted = data;
+                reply({{"ok", true}, {"export", exportStatus}}, {});
+                return;
+            }
+            requester(op, data, reply);
+        });
+        QString folder;
+        page.setFolderChooser([&](QWidget*) { return folder; });
+        auto* button = page.findChild<QAbstractButton*>("storageExport");
+        QTRY_VERIFY(button->isEnabled());
+        button->click(); // cancelled
+        QVERIFY(!calls.contains("export.start"));
+        folder = "/tmp/exports";
+        button->click();
+        QCOMPARE(submitted, (QJsonObject{{"directory", "/tmp/exports"}}));
+        auto* text = page.findChild<QLabel*>("storageJobStatus");
+        QCOMPARE(text->text(), QString("Exporting 12 of 88 conversations…"));
+        QVERIFY(!button->isEnabled());
+        exportStatus = {{"state", "done"},
+                        {"exported", 88},
+                        {"directory", "/tmp/exports/KetPlus conversations"}};
+        QVERIFY(QMetaObject::invokeMethod(page.findChild<QTimer*>("storageJobsPoll"), "timeout",
+                                          Qt::DirectConnection));
+        QCOMPARE(text->text(), QString("Exported 88 conversations to /tmp/exports/KetPlus "
+                                       "conversations"));
+        QVERIFY(button->isEnabled());
     }
     void accessibleStatusTracksSaveAndRecoveryMessages() {
         QList<SettingsStoragePage::Reply> replies;
@@ -453,7 +489,7 @@ class SettingsStoragePageTest final : public QObject {
         QTRY_VERIFY(days(page)->isEnabled());
         choose(page, 7);
         QVERIFY(status(page)->text().startsWith("Saved"));
-        QVERIFY(page.findChild<QLabel*>("storageUsage")->text().contains("unavailable"));
+        QCOMPARE(page.findChild<QLabel*>("storageFileSize")->text(), QString("Loading…"));
         QVERIFY(days(page)->isEnabled());
     }
     void timeoutRequiresReloadAndIgnoresLateSave() {
@@ -499,32 +535,28 @@ class SettingsStoragePageTest final : public QObject {
         ThemeManager theme(*qApp);
         theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
         QScrollArea scroll;
-        auto* page = new SettingsStoragePage([](const QString& op, const QJsonObject&, auto reply) {
-            reply(op == "read" ? supportedState() : sizeState(), {});
-        });
+        auto* page = new SettingsStoragePage(daemon());
         scroll.setWidget(page);
         scroll.setWidgetResizable(true);
         scroll.resize(width, 700);
         scroll.show();
-        auto* save = page->findChild<QPushButton*>("storageSizeSave");
         auto* limit = page->findChild<QComboBox*>("storageSizeLimit");
-        auto* warning = page->findChild<QSpinBox*>("storageWarningPercent");
-        QTRY_VERIFY(save->isEnabled());
-        warning->setValue(95);
-        QTRY_VERIFY(save->isVisible());
-        scroll.ensureWidgetVisible(save);
+        auto* images = page->findChild<QComboBox*>("storageGeneratedImages");
+        auto* compact = page->findChild<QAbstractButton*>("storageCompactNow");
+        QTRY_VERIFY(limit->isEnabled());
+        scroll.ensureWidgetVisible(compact);
         QTRY_VERIFY(scroll.viewport()->rect().contains(
-            save->mapTo(scroll.viewport(), save->rect().bottomRight())));
+            compact->mapTo(scroll.viewport(), compact->rect().bottomRight())));
         QVERIFY(page->width() <= width);
         for (auto* text : page->findChildren<QLabel*>()) {
             if (text->isVisible() && text->wordWrap())
                 QTRY_VERIFY(text->height() >= text->heightForWidth(text->width()));
         }
+        // Each control sits at the row's end at the mock's 200 px.
+        QCOMPARE(limit->width(), 200);
         limit->setFocus();
         QTest::keyClick(limit, Qt::Key_Tab);
-        QVERIFY(warning->hasFocus());
-        QTest::keyClick(warning, Qt::Key_Tab);
-        QVERIFY(save->hasFocus());
+        QVERIFY(images->hasFocus());
         const auto capture = qEnvironmentVariable("KETPLUS_SIZE_UI_CAPTURE");
         if (!capture.isEmpty())
             QVERIFY(scroll.grab().save(capture + (dark ? "dark" : "light") + ".png"));
@@ -543,18 +575,16 @@ class SettingsStoragePageTest final : public QObject {
         ThemeManager theme(*qApp);
         theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
         auto* dialog = new SettingsDialog(AppearanceSettings{}, theme);
-        SettingsWorkspacePage shell(dialog, {}, nullptr, {},
-                                    [modern](const QString& op, const QJsonObject&, auto reply) {
-                                        if (modern && op == "size.read") {
-                                            reply(sizeState(), {});
-                                            return;
-                                        }
-                                        auto value = lowDiskState();
-                                        if (modern)
-                                            value.insert("size_policy_supported", true);
-                                        reply(value, {});
-                                    });
-        shell.applyPalette(theme.palette());
+        SettingsWorkspacePage shell(
+            dialog, {}, nullptr, {},
+            [modern](const QString& op, const QJsonObject& data, auto reply) {
+                if (modern) {
+                    daemon(nullptr, {{"size.read", measuredSize()},
+                                     {"breakdown.read", measuredBreakdown()}})(op, data, reply);
+                    return;
+                }
+                reply(lowDiskState(), {});
+            });
         shell.resize(1100, 760);
         shell.show();
         shell.showSection("storage");
@@ -562,19 +592,20 @@ class SettingsStoragePageTest final : public QObject {
         QVERIFY(page);
         QTRY_VERIFY(page->isVisible());
         QTRY_VERIFY(days(*page)->isEnabled());
-        QTRY_VERIFY(reload(*page)->isVisible());
-        QVERIFY(shell.findChild<QDialogButtonBox*>("settingsWorkspaceFooter")->isHidden());
-        if (modern) {
-            auto* scroll = qobject_cast<QScrollArea*>(page->parentWidget()->parentWidget());
-            QVERIFY(scroll);
-            scroll->ensureWidgetVisible(reload(*page));
-        }
-        QTRY_VERIFY(shell.rect().contains(
-            reload(*page)->mapTo(&shell, reload(*page)->rect().bottomRight())));
+        auto* compact = page->findChild<QAbstractButton*>("storageCompactNow");
+        QTRY_VERIFY(compact->isVisible());
+        QVERIFY(!reload(*page)->isVisible()); // only after a failure
+        QVERIFY(shell.findChild<QWidget*>("settingsWorkspaceFooter")->isHidden());
+        auto* scroll = qobject_cast<QScrollArea*>(page->parentWidget()->parentWidget());
+        QVERIFY(scroll);
         const QString capture = qEnvironmentVariable("KETPLUS_STORAGE_CAPTURE");
+        const QString name = QString(modern ? "size-" : "") + (dark ? "dark" : "light");
         if (!capture.isEmpty())
-            QVERIFY(shell.grab().save(capture + (modern ? "size-" : "") +
-                                      (dark ? "dark" : "light") + ".png"));
+            QVERIFY(shell.grab().save(capture + name + "-top.png"));
+        scroll->ensureWidgetVisible(compact);
+        QTRY_VERIFY(shell.rect().contains(compact->mapTo(&shell, compact->rect().bottomRight())));
+        if (!capture.isEmpty())
+            QVERIFY(shell.grab().save(capture + name + ".png"));
     }
     void layoutAndKeyboard_data() {
         QTest::addColumn<int>("width");
@@ -585,21 +616,20 @@ class SettingsStoragePageTest final : public QObject {
         QFETCH(int, width);
         SettingsStoragePage page(
             [](const QString&, const QJsonObject&, auto reply) { reply(lowDiskState(), {}); });
-        page.resize(width, 650);
+        page.resize(width, 1400);
         page.show();
         QTRY_VERIFY(days(page)->isEnabled());
-        auto* usage = page.findChild<QLabel*>("storageUsage");
-        QVERIFY(usage->text().contains("Low disk space"));
-        QVERIFY(page.rect().contains(usage->geometry()));
-        QTRY_VERIFY2(usage->height() >= usage->heightForWidth(usage->width()),
-                     qPrintable(QString("actual=%1 required=%2 width=%3")
-                                    .arg(usage->height())
-                                    .arg(usage->heightForWidth(usage->width()))
-                                    .arg(usage->width())));
+        auto* files = page.findChild<QLabel*>("storageFileSize");
+        QCOMPARE(files->text(), QString("3.5 GB"));
+        QCOMPARE(page.findChild<QLabel*>("storageDiskAvailable")->text(), QString("4.0 GB"));
         QVERIFY(page.width() <= width);
-        QVERIFY(page.rect().contains(days(page)->geometry()));
-        QVERIFY(page.rect().contains(automatic(page)->geometry()));
-        QVERIFY(page.rect().contains(reload(page)->geometry()));
+        const auto inside = [&](QWidget* widget) {
+            return page.rect().contains(QRect(widget->mapTo(&page, QPoint()), widget->size()));
+        };
+        QVERIFY(inside(files));
+        QVERIFY(inside(days(page)));
+        QVERIFY(inside(automatic(page)));
+        QVERIFY(inside(page.findChild<QAbstractButton*>("storageExport")));
         auto* accessible = QAccessible::queryAccessibleInterface(days(page));
         QVERIFY(accessible);
         QCOMPARE(accessible->text(QAccessible::Name), days(page)->currentText());

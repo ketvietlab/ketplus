@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -7,16 +7,15 @@ import QtQuick.Controls.Basic as Basic
 Rectangle {
     id: control
 
-    required property var tokens
     // True while the block shows its diagram.
     property bool rendered: false
     signal modeRequested(bool rendered)
 
-    implicitWidth: row.implicitWidth + 2 * Metrics.px(2, tokens)
-    implicitHeight: Metrics.px(24, tokens)
-    radius: Metrics.px(5, tokens)
-    color: tokens.panelSubtle
-    border.color: tokens.border
+    implicitWidth: row.implicitWidth + 2 * KetTheme.px(2, KetTheme.zoom)
+    implicitHeight: KetTheme.px(24, KetTheme.zoom)
+    radius: KetTheme.px(5, KetTheme.zoom)
+    color: KetTheme.t.panelBgSubtle
+    border.color: KetTheme.t.panelBorder
     border.width: 1
 
     Row {
@@ -36,23 +35,23 @@ Rectangle {
                 readonly property bool current: control.rendered === modelData.rendered
                 objectName: modelData.rendered ? "mermaidSwitchDiagram" : "mermaidSwitchSource"
                 focusPolicy: Qt.TabFocus
-                implicitWidth: label.implicitWidth + 2 * Metrics.px(8, control.tokens)
-                implicitHeight: control.height - 2 * Metrics.px(2, control.tokens)
+                implicitWidth: label.implicitWidth + 2 * KetTheme.px(8, KetTheme.zoom)
+                implicitHeight: control.height - 2 * KetTheme.px(2, KetTheme.zoom)
                 checkable: false
                 contentItem: Text {
                     id: label
                     text: modelData.label
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    color: parent.current ? control.tokens.textMain : control.tokens.textSecondary
-                    font.family: control.tokens.uiFont
-                    font.pixelSize: control.tokens.caption
+                    color: parent.current ? KetTheme.t.textMain : KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     font.weight: parent.current ? Font.DemiBold : Font.Normal
                 }
                 background: Rectangle {
-                    radius: Metrics.px(4, control.tokens)
-                    color: parent.current ? control.tokens.codeBlockBackground : parent.hovered ? control.tokens.surfaceHover : "transparent"
-                    border.color: parent.visualFocus ? control.tokens.focus : "transparent"
+                    radius: KetTheme.px(4, KetTheme.zoom)
+                    color: parent.current ? KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background : parent.hovered ? KetTheme.t.surfaceHover : "transparent"
+                    border.color: parent.visualFocus ? KetTheme.t.colorFocus : "transparent"
                 }
                 onClicked: if (!current)
                     control.modeRequested(modelData.rendered)

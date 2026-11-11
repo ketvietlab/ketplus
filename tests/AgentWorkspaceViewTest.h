@@ -9,12 +9,14 @@ class AgentWorkspaceViewTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void init();
+    void markdownTableAfterCodeKeepsHeaderCells();
     void manualCompactWindow();
     void builtInBrowserSkillFollowsBrowserTools();
     void pathChangeScansSkillsOffTheGuiThread();
     void loadsQmlAndMapsWorktrees();
     void mentionsOnlyFilesInConversationWorktree();
-    void hidesWorktreesWithoutConversationsByDefault();
+    void sidebarGroupsConversationsWithoutWorktreeRail();
     void restoringDoesNotCoverChatPane();
     void weeklyLimitFooter();
     void compactFollowsProviderCapabilities();
@@ -22,13 +24,35 @@ class AgentWorkspaceViewTest final : public QObject {
     void claudeUsageBudget();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
+    void heldMessageRequiresExplicitClickAndFencesDuplicates();
+    void heldMessageNoticeRendersInTranscript();
+    void atlasResultsUseExplicitCompletedLinks();
+    void atlasResultCardFencesChangedWorktrees();
     void webSearchLabelsAndAnimation();
     void activityGalleryLoadsInBatches();
     void browserEvidenceStaysVisible_data();
     void browserEvidenceStaysVisible();
+    void activityIconsFollowTheMock_data();
+    void activityIconsFollowTheMock();
+    void browserStepsReadAsTheMock_data();
+    void browserStepsReadAsTheMock();
     void browserStepsCollapseAroundEvidence_data();
     void browserStepsCollapseAroundEvidence();
     void fileChangesStayCompactInsideExpandedGroup();
+    void fileStepsOpenTheirDiffInline();
+    void claudeEditOpensItsDiffInline();
+    void sentAgentMessageReadsAsTheMockNote();
+    void settledApprovalsReadAsTheirOutcome();
+    void capacityErrorOffersAnotherModel();
+    void silentProviderReadsAsTheMocksError();
+    void providerSetupHoldsTheMessageUntilTheProviderWorks();
+    void aHeldMessageGoesWithItsDraft();
+    void providerSetupClosesTheTurnTheProviderEnded();
+    void claudeSignOutGuidesWithoutHoldingTheMessage();
+    void modelPickerOpensTheProviderSetupGuide();
+    void everySetupStateRendersInBothThemesAndZooms();
+    void trimmedTurnOpensStorageSettings();
+    void compactionReadsAsAnEventLine();
     void activityOperationSemantics();
     void semanticCommandLabelsStayExpandable();
     void longCommandTitleStaysInsideColumn();
@@ -37,6 +61,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void readRowTitleOpensTheFileAtItsLine();
     void retainedCommandNoticeRemainsVisible();
     void retainedFileDiffNoticeRemainsVisible();
+    void compactedItemsSayWhatWasTrimmed();
     void retainedToolTextNoticeRemainsVisible_data();
     void retainedToolTextNoticeRemainsVisible();
     void transcriptRendererInteractionMatrix();
@@ -82,13 +107,15 @@ class AgentWorkspaceViewTest final : public QObject {
     void streamingTableKeepsReadingParagraph_data();
     void compactionLifecycleAndCommand();
     void answersAgentQuestionsSequentially();
+    void questionCardSingleClickAndFreeText();
     void directModeAutoApprovesOnlyInjectedBrowserTools();
     void preservesQuestionDraftsAcrossScope();
     void presentsStateAxesIndependently();
     void linksFileReferencesInInlineCode();
     void mermaidFillsGetReadableLabels();
     void sidebarDividerRemainsResizable();
-    void filtersLargeWorktreeSets();
+    void sidebarMatchesMockAtEveryZoom();
+    void largeWorktreeCatalogDoesNotCreateSidebarRail();
     void exposesUiInteractions();
     void streamsAndKeepsSessionsByWorktree();
     void missingWorktreeKeepsHistoryAndCanStop();
@@ -115,8 +142,19 @@ class AgentWorkspaceViewTest final : public QObject {
     void streamingPreservesReadingPosition_data();
     void promotesConversationWhenAgentStarts();
     void animatesRunningConversationStatus();
-    void workingOpacityAnimatorLifecycle();
+    void workingIndicatorClockLifecycle();
     void formatsStreamingText();
+    void transcriptDayDividersUseJournalDates();
+    void userTurnLeadsWithOriginAndImages();
+    void imageViewerOpensTheRowsImages();
+    void transcriptNoticesUseRuntimeState();
+    void turnEndListsTheTurnsChangedFiles();
+    void turnEndShowsTheTurnsWorkReport();
+    void turnEndReportSurvivesAHistoryPageSplit();
+    void workReportGroupsAcceptAnyName();
+    void workReportPaneFollowsItsConversation();
+    void changesPaneListsTheWorktreeChanges();
+    void retryResendsTheLatestFailedPrompt();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();
     void userMessageBubbleIgnoresUnavailableImage();
@@ -127,12 +165,25 @@ class AgentWorkspaceViewTest final : public QObject {
     void reopenedRowFormatsItsDocumentOnce();
     void conversationColumnFollowsConfiguredWidth();
     void pastesImagesAndOpensIndividualFiles();
+    void welcomeSitsInTheViewport();
+    void welcomeScrollsToEveryStarter_data();
+    void welcomeScrollsToEveryStarter();
     void composerPreview();
     void composerFormattingSettles();
+    void composerPlaceholderTracksCaret();
     void worktreeHeaderKeepsLabelVisible();
+    void permissionMenuFitsSmallZoomedWorkspace();
     void tooltipsFollowDesignSystem();
+    void measurementTimerStopsAndRestartsForNewRows();
+    void transcriptFrameAnimationsStopOnTheirOwn();
+    void minimizedWindowReleasesTheWorkingClock();
+    void agentQmlUsesBoundedAnimationsAndKitPrimitives();
     void contextMenuFollowsDesignSystem();
     void conversationMenusOfferFork();
+    void hiddenConversationReferenceTakesNoKeyFocus();
+    void reviewerPickerFollowsTheActiveConversation();
+    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
+    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
     void selectsModelsInUnifiedPicker();
     void restoresStoredConversationModelInsteadOfCatalogDefault();
     void prefetchesModelsWhenAgentBecomesAvailable();
@@ -143,6 +194,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void streamedActivityJoinsGroupWithoutReset();
     void activityGroupCopyIncludesMembers();
     void copiesMessageSourcesAndCodeBlocks();
+    void streamingCodeWaitsForCopyChromeBehindASteer();
+    void steerDoesNotEndTheAnswerAndAStoppedAnswerSaysSo();
     void copiesMouseSelectionWithShortcut();
     void listCodeBlocksStayInTheirItem();
     void fencedCodeBlockSources();
@@ -160,6 +213,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void approvalCardStaysOutsideCommandGroup();
     void groupExpansionSurvivesPagingAndIsPruned();
     void expandedGroupHangsUnderRail();
+    void activityStepsReadAsTheMock();
     void findIgnoresUnrelatedHistoryStateUpdates();
     void findGoesToLastResultWhenAnchorTrimmed();
     void findResultsRefreshOnModelChanges();
@@ -168,41 +222,7 @@ class AgentWorkspaceViewTest final : public QObject {
 
 namespace agent_workspace_test {
 
-inline ketplus::ThemePalette testPalette() {
-    ketplus::ThemePalette palette;
-    palette.dark = true;
-    palette.appBackground = QStringLiteral("#12161b");
-    palette.pageBackground = QStringLiteral("#1b1f24");
-    palette.sidebarBackground = QStringLiteral("#171b20");
-    palette.panelBackground = QStringLiteral("#20252b");
-    palette.panelSubtle = QStringLiteral("#1e2329");
-    palette.surfaceRaised = QStringLiteral("#242930");
-    palette.surfaceHover = QStringLiteral("#292f37");
-    palette.textMain = QStringLiteral("#f2f4f7");
-    palette.textSecondary = QStringLiteral("#c5cad3");
-    palette.textMuted = QStringLiteral("#858d99");
-    palette.textDisabled = QStringLiteral("#5f6670");
-    palette.border = QStringLiteral("#292d33");
-    palette.borderStrong = QStringLiteral("#3b424c");
-    palette.interactiveBackground = QStringLiteral("#22272e");
-    palette.interactiveHover = QStringLiteral("#292f37");
-    palette.interactiveActive = QStringLiteral("#343b45");
-    palette.accent = QStringLiteral("#4f6fff");
-    palette.accentHover = QStringLiteral("#6380ff");
-    palette.accentActive = QStringLiteral("#8094ff");
-    palette.accentSubtle = QStringLiteral("#252d4a");
-    palette.accentMuted = QStringLiteral("#354476");
-    palette.focus = QStringLiteral("#6b82ff");
-    palette.tabActiveText = QStringLiteral("#8094ff");
-    palette.accentText = QStringLiteral("#9eb5ff");
-    palette.actionPrimary = QStringLiteral("#365fd6");
-    palette.actionPrimaryHover = QStringLiteral("#3151c6");
-    palette.actionPrimaryActive = QStringLiteral("#2b46b7");
-    palette.positive = QStringLiteral("#42b883");
-    palette.warning = QStringLiteral("#d9a441");
-    palette.danger = QStringLiteral("#ef6461");
-    return palette;
-}
+inline ketplus::ThemePalette testPalette() { return ketplus::currentThemePalette(); }
 
 inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
     if (item->objectName() == name) {
@@ -212,6 +232,19 @@ inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
         if (auto* match = findVisualItem(child, name)) {
             return match;
         }
+    }
+    return nullptr;
+}
+
+// Pooled delegates keep hidden copies; only a visible item is on screen.
+inline QQuickItem* findVisibleItem(QQuickItem* item, const QString& name) {
+    if (!item->isVisible())
+        return nullptr;
+    if (item->objectName() == name)
+        return item;
+    for (auto* child : item->childItems()) {
+        if (auto* match = findVisibleItem(child, name))
+            return match;
     }
     return nullptr;
 }

@@ -2,7 +2,10 @@
 #include "agent/FileChangeStatistics.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptFileLocation.h"
+#include "agent/TranscriptNetworkPolicy.h"
 #include "agent/TranscriptNormalizer.h"
+#include "agent/TranscriptStepItems.h"
+#include "agent/WorkReportText.h"
 #include <cmath>
 
 #include "CodexBrowserTools.h"
@@ -10,6 +13,9 @@
 #include "agent/TranscriptPresentationGrouper.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
+#include <QImage>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QUrl>
@@ -66,18 +72,44 @@ QVariantMap canonical(QVariantMap entry, const QString& eventType, const QString
 }
 
 QString toolTitle(const QJsonObject& item, const bool completed) {
-    const QString tool = item.value(QStringLiteral("tool")).toString();
-    const QString server = item.value(QStringLiteral("server")).toString();
-    const QString operation = tool.isEmpty() ? item.value(QStringLiteral("type")).toString() : tool;
-    const QString subject =
-        server.isEmpty() ? operation : server + QStringLiteral(" · ") + operation;
     return QStringLiteral("%1 %2").arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-                                       subject);
+                                       mcpToolSubject(item));
+}
+
+QString normalizedToolName(const QJsonObject& item) {
+    return item.value(QStringLiteral("tool"))
+        .toString()
+        .toLower()
+        .section(QStringLiteral("__"), -1)
+        .section(QLatin1Char('.'), -1);
 }
 
 QString semanticToolSubtype(const QJsonObject& item) {
-    const QString operation =
-        item.value(QStringLiteral("tool")).toString().toLower().section(QStringLiteral("__"), -1);
+    const QString operation = normalizedToolName(item);
+    static const QHash<QString, QString> stepTypes{{"wait", "wait"},
+                                                   {"sleep", "wait"},
+                                                   {"monitor", "monitor"},
+                                                   {"wake", "wake"},
+                                                   {"resume_agent", "wake"},
+                                                   {"schedulewakeup", "wake"},
+                                                   {"skill", "skill"},
+                                                   {"load_skill", "skill"},
+                                                   {"toolsearch", "toolsLoaded"},
+                                                   {"search_tools", "toolsLoaded"},
+                                                   {"taskstop", "taskStopped"},
+                                                   {"stop_task", "taskStopped"},
+                                                   {"agent", "subAgent"},
+                                                   {"task", "subAgent"},
+                                                   {"spawn_agent", "subAgent"},
+                                                   {"update_plan", "plan"},
+                                                   {"enterplanmode", "plan"},
+                                                   {"webfetch", "webFetch"},
+                                                   {"fetch_url", "webFetch"},
+                                                   {"websearch", "webSearch"},
+                                                   {"find_in_page", "webFind"},
+                                                   {"open_page", "webOpen"}};
+    if (const auto found = stepTypes.constFind(operation); found != stepTypes.cend())
+        return *found;
     if ((operation == QStringLiteral("read_file") || operation == "read"))
         return QStringLiteral("fileRead");
     if ((operation == QStringLiteral("search_files") || operation == "glob"))
@@ -199,6 +231,7 @@ QVariantMap fileChangeMessage(const QJsonObject& item, bool completed) {
                         {"known", known},
                         {"operation", operation},
                         {"destination", destination},
+                        {"hasDiff", !change.value(QStringLiteral("diff")).toString().isEmpty()},
                         {"diffTrimmed",
                          change.value("compacted").toObject().value("policy") == "file-diff-v1"}});
     }
@@ -287,6 +320,31 @@ QString itemSummary(const QJsonObject& item) {
     return type;
 }
 
+// "· Output trimmed · 1.2 MB · older than 30 days" for an item history retention compacted
+// (#128). Size pressure trims with the current time as its cutoff, so it has no age.
+QString compactedSuffix(const QJsonObject& item, const QStringList& policies, const QString& what) {
+    const auto info = item.value(QStringLiteral("compacted")).toObject();
+    if (!policies.contains(info.value(QStringLiteral("policy")).toString()))
+        return {};
+    QStringList parts{what + QStringLiteral(" trimmed")};
+    const auto bytes = info.value(QStringLiteral("original_bytes")).toInteger();
+    if (bytes >= 1024 * 1024)
+        parts.append(QStringLiteral("%1 MB").arg(double(bytes) / (1024 * 1024), 0, 'f', 1));
+    else if (bytes >= 1024)
+        parts.append(QStringLiteral("%1 KB").arg((bytes + 512) / 1024));
+    const auto at =
+        QDateTime::fromString(info.value(QStringLiteral("at")).toString(), Qt::ISODateWithMs);
+    const auto cutoff =
+        QDateTime::fromString(info.value(QStringLiteral("cutoff")).toString(), Qt::ISODateWithMs);
+    if (at.isValid() && cutoff.isValid()) {
+        const auto days = cutoff.daysTo(at);
+        if (days > 0)
+            parts.append(days == 1 ? QStringLiteral("older than 1 day")
+                                   : QStringLiteral("older than %1 days").arg(days));
+    }
+    return QStringLiteral(" · ") + parts.join(QStringLiteral(" · "));
+}
+
 QString retainedTextSuffix(const QJsonObject& item) {
     const auto info = item.value(QStringLiteral("compacted")).toObject();
     const bool text = info.value(QStringLiteral("policy")) == QStringLiteral("tool-result-text-v1");
@@ -328,23 +386,33 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
     const QJsonObject arguments = item.value(QStringLiteral("arguments")).toObject();
     const QString url = TranscriptSanitizer::url(arguments.value(QStringLiteral("url")).toString());
     const QString summary = mcp_media::argumentSummary(arguments);
-    const QString title = QStringLiteral("%1 browser · %2")
-                              .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-                                   sanitizedText(label)) +
-                          retainedTextSuffix(item);
     const QJsonValue safePayload = sanitizedJson(item);
+    QString title = browserStepTitle(operation, safePayload.toObject(), completed);
+    if (title.isEmpty())
+        title = QStringLiteral("%1 ketplus_browser · %2")
+                    .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
+                         sanitizedText(label));
+    QVariantList images;
+    if (completed)
+        images = mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
+    // The mock's "Captured 2 screenshots: 1440 × 900", read from the first image's header.
+    if (operation == QStringLiteral("screenshot") && !images.isEmpty()) {
+        if (images.size() > 1)
+            title += QStringLiteral(" %1 screenshots").arg(images.size());
+        if (QImageReader reader(QUrl(images.first().toString()).toLocalFile());
+            reader.size().isValid())
+            title +=
+                QStringLiteral(": %1 × %2").arg(reader.size().width()).arg(reader.size().height());
+    }
+    title += retainedTextSuffix(item);
     auto entry = message(QStringLiteral("tool"), summary, QStringLiteral("Browser"), {},
                          item.value(QStringLiteral("id")).toString());
     entry.insert(QStringLiteral("subtype"), QStringLiteral("ketplusBrowser"));
     entry.insert(QStringLiteral("running"), !completed);
     entry.insert(QStringLiteral("details"), safePayload.toObject().toVariantMap());
     entry.insert(QStringLiteral("sanitizedPayload"), safePayload.toObject().toVariantMap());
-    if (completed) {
-        const QVariantList images =
-            mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (!images.isEmpty())
-            entry.insert(QStringLiteral("images"), images);
-    }
+    if (!images.isEmpty())
+        entry.insert(QStringLiteral("images"), images);
     const bool failed =
         item.value(QStringLiteral("status")).toString() == QStringLiteral("failed") ||
         item.value(QStringLiteral("result")).toObject().value(QStringLiteral("isError")).toBool();
@@ -356,8 +424,7 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
 
 QVariantMap webSearchMessage(const QJsonObject& item, bool completed) {
     const QString query = sanitizedText(itemSummary(item));
-    const QString title =
-        completed ? QStringLiteral("Searched the web") : QStringLiteral("Searching the web");
+    const QString title = webStepTitle(sanitizedJson(item).toObject(), completed);
     auto entry = message(QStringLiteral("tool"), query,
                          completed ? QStringLiteral("Search web · completed")
                                    : QStringLiteral("Search web · running"),
@@ -443,7 +510,7 @@ CommandPresentation commandPresentation(const QString& command) {
                 match.captured(2).isEmpty()
                     ? QStringLiteral("L%1").arg(match.captured(1))
                     : QStringLiteral("L%1–%2").arg(match.captured(1), match.captured(2));
-            const QString title = QStringLiteral("Read %1 %2").arg(path, range);
+            const QString title = QStringLiteral("Read: %1 %2").arg(path, range);
             return {QStringLiteral("fileRead"), title, QStringLiteral("Reading %1").arg(path),
                     pathOperand(match.captured(3)), match.captured(1).toInt()};
         }
@@ -454,7 +521,7 @@ CommandPresentation commandPresentation(const QString& command) {
     if (const auto match = reader.match(command); match.hasMatch()) {
         const QString path = concisePath(match.captured(1));
         if (!path.isEmpty()) {
-            const QString title = QStringLiteral("Read %1").arg(path);
+            const QString title = QStringLiteral("Read: %1").arg(path);
             return {QStringLiteral("fileRead"), title, QStringLiteral("Reading %1").arg(path),
                     pathOperand(match.captured(1))};
         }
@@ -466,7 +533,7 @@ CommandPresentation commandPresentation(const QString& command) {
         const QString query = match.captured(1).simplified().left(48);
         const QString path = concisePath(match.captured(2));
         if (!query.isEmpty() && !path.isEmpty()) {
-            const QString title = QStringLiteral("Searched “%1” in %2").arg(query, path);
+            const QString title = QStringLiteral("Searched code: “%1” in %2").arg(query, path);
             return {QStringLiteral("codeSearch"), title, QStringLiteral("Searching %1").arg(path)};
         }
     }
@@ -499,6 +566,11 @@ QVariantMap commandMessage(const QJsonObject& item, const bool completed) {
         completed ? item.value(QStringLiteral("status")).toString() : QStringLiteral("running");
     QVariantMap entry = commandMessage(item.value(QStringLiteral("command")).toString(), state,
                                        item.value(QStringLiteral("id")).toString());
+    if (const auto trimmed =
+            compactedSuffix(item, {QStringLiteral("command-output-v1")}, QStringLiteral("Output"));
+        !trimmed.isEmpty())
+        entry.insert(QStringLiteral("title"),
+                     entry.value(QStringLiteral("title")).toString() + trimmed);
     const QString cwd = sanitizedText(item.value(QStringLiteral("cwd")).toString());
     const QString output = boundedCommandOutput(
         sanitizedText(item.value(QStringLiteral("aggregatedOutput")).toString()));
@@ -521,15 +593,34 @@ QVariantMap commandMessage(const QJsonObject& item, const bool completed) {
     // What the agent said the command is for, read before the command itself.
     entry.insert(QStringLiteral("commandDescription"),
                  sanitizedText(item.value(QStringLiteral("description")).toString().simplified()));
-    if (item.value(QStringLiteral("commandActions")).isArray())
-        details.insert(
-            QStringLiteral("actions"),
-            sanitizedJson(item.value(QStringLiteral("commandActions"))).toArray().toVariantList());
+    if (item.value(QStringLiteral("commandActions")).isArray()) {
+        const QJsonArray actions = item.value(QStringLiteral("commandActions")).toArray();
+        details.insert(QStringLiteral("actions"), sanitizedJson(actions).toArray().toVariantList());
+        // A listing's folders, for the group line's "listed 1 folder".
+        const bool listing =
+            !actions.isEmpty() &&
+            std::all_of(actions.begin(), actions.end(), [](const QJsonValue& action) {
+                return action.toObject().value(QStringLiteral("type")).toString() ==
+                       QStringLiteral("listFiles");
+            });
+        if (listing)
+            entry.insert(QStringLiteral("activityFacts"),
+                         QVariantMap{{QStringLiteral("listedFolders"), int(actions.size())}});
+    }
     entry.insert(QStringLiteral("exitCode"), item.value(QStringLiteral("exitCode")).toVariant());
     entry.insert(QStringLiteral("durationMs"),
                  item.value(QStringLiteral("durationMs")).toVariant());
     entry.insert(QStringLiteral("details"), details);
     entry.insert(QStringLiteral("sanitizedPayload"), sanitizedJson(item).toObject().toVariantMap());
+    // Codex says what a command did; its reading wins over parsing the command line.
+    // A command line the parser already read (a sed range, say) keeps its finer title.
+    if (const auto step = commandActionStep(sanitizedJson(item).toObject());
+        !step.subtype.isEmpty() &&
+        entry.value(QStringLiteral("subtype")) == QStringLiteral("command")) {
+        const bool running = entry.value(QStringLiteral("running")).toBool();
+        entry.insert(QStringLiteral("subtype"), step.subtype);
+        entry.insert(QStringLiteral("title"), running ? step.runningTitle : step.completedTitle);
+    }
     return entry;
 }
 
@@ -551,13 +642,16 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         return commandMessage(item, completed);
     if (type == QStringLiteral("fileChange"))
         return fileChangeMessage(item, completed);
+    if (const auto edit = claudeFileChangeItem(item); !edit.isEmpty())
+        return fileChangeMessage(edit, completed);
     if (type == QStringLiteral("webSearch"))
         return webSearchMessage(item, completed);
     if (type == QStringLiteral("imageView")) {
         const QString path = item.value(QStringLiteral("path")).toString();
         QVariantList images =
             mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (images.isEmpty() && !path.isEmpty())
+        // A path on another machine is named, never opened for its thumbnail.
+        if (images.isEmpty() && !path.isEmpty() && !namesAnotherMachine(path))
             images.append(QUrl::fromLocalFile(path).toString());
         const QString title =
             completed ? QStringLiteral("Viewed an image") : QStringLiteral("Viewing an image");
@@ -578,22 +672,39 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         const QString path = item.value(QStringLiteral("savedPath")).toString();
         QVariantList images =
             mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (images.isEmpty() && !path.isEmpty())
+        // A path on another machine is named, never opened for its thumbnail.
+        if (images.isEmpty() && !path.isEmpty() && !namesAnotherMachine(path))
             images.append(QUrl::fromLocalFile(path).toString());
-        const QString title = completed ? QStringLiteral("Generated an image")
-                                        : QStringLiteral("Generating an image");
+        const QString title =
+            (completed ? QStringLiteral("Generated an image")
+                       : QStringLiteral("Generating an image")) +
+            compactedSuffix(item,
+                            {QStringLiteral("image-pixels-v1"), QStringLiteral("image-preview-v1")},
+                            QStringLiteral("Full image"));
         const QString resource = images.isEmpty() ? QString{} : images.first().toString();
+        // The mock's "1024 × 1024 · transparent", read from the image's header only.
+        QString size;
+        if (QImageReader reader(QUrl(resource).toLocalFile()); reader.size().isValid()) {
+            size = QStringLiteral("%1 × %2").arg(reader.size().width()).arg(reader.size().height());
+            if (QImage::toPixelFormat(reader.imageFormat()).alphaUsage() == QPixelFormat::UsesAlpha)
+                size += QStringLiteral(" · transparent");
+        }
         auto entry = message(QStringLiteral("tool"), path, QStringLiteral("Image generation"),
                              QUrl(resource).toLocalFile(), id);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("imageGeneration"));
         entry.insert(QStringLiteral("images"), images);
+        // What the image was generated from, for the mock's "Prompt" line under it.
+        QString prompt = item.value(QStringLiteral("revisedPrompt")).toString();
+        if (prompt.isEmpty())
+            prompt = item.value(QStringLiteral("prompt")).toString();
+        entry.insert(QStringLiteral("commandDescription"), sanitizedText(prompt).simplified());
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("details"), QVariantMap{{QStringLiteral("path"), path}});
         entry.insert(QStringLiteral("sanitizedPayload"),
                      sanitizedJson(item).toObject().toVariantMap());
         return canonical(std::move(entry), QStringLiteral("image.generate"),
                          completed ? QStringLiteral("completed") : QStringLiteral("running"), title,
-                         path, resource);
+                         size.isEmpty() ? path : size, resource);
     }
     if (type == QStringLiteral("mcpToolCall") &&
         item.value(QStringLiteral("server")).toString() == QLatin1String(browser_tools::serverName))
@@ -608,6 +719,33 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                                 ? QStringLiteral("integration.mcp")
                                 : QStringLiteral("tool.dynamic");
         QString readLocation;
+        static const QHash<QString, QStringList> stepLabels{
+            {"wait", {"Waited", "Waiting"}},
+            {"monitor", {"Waited", "Waiting"}},
+            {"wake", {"Resumed agent", "Resuming agent"}},
+            {"skill", {"Used skill", "Using skill"}},
+            {"toolsLoaded", {"Loaded tools", "Finding tools"}},
+            {"taskStopped", {"Stopped a background task", "Stopping a background task"}},
+            {"subAgent", {"Ran a subagent", "Running a subagent"}},
+            {"plan", {"Updated plan", "Updating plan"}},
+            {"webFetch", {"Fetched", "Fetching"}},
+            {"webSearch", {"Searched the web", "Searching the web"}},
+            {"webFind", {"Found in page", "Finding in page"}},
+            {"webOpen", {"Opened a page", "Opening a page"}}};
+        if (const auto labels = stepLabels.constFind(subtype); labels != stepLabels.cend()) {
+            title = labels->at(completed ? 0 : 1);
+            const auto operation = normalizedToolName(item);
+            if (operation == QStringLiteral("schedulewakeup"))
+                title = completed ? QStringLiteral("Scheduled wake-up")
+                                  : QStringLiteral("Scheduling wake-up");
+            else if (operation == QStringLiteral("enterplanmode"))
+                title = completed ? QStringLiteral("Entered plan mode")
+                                  : QStringLiteral("Entering plan mode");
+            else if (const auto subject = stepSubject(subtype, safePayload.toObject());
+                     !subject.isEmpty())
+                title += QStringLiteral(": ") + subject;
+            eventType = QStringLiteral("activity.") + subtype;
+        }
         if (subtype.startsWith(QStringLiteral("browser"))) {
             const QHash<QString, QStringList> operations{
                 {QStringLiteral("browserOpen"), {"open", "Opened website", "Opening website"}},
@@ -648,12 +786,30 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                 title += QStringLiteral(": ") + url;
             if (read) {
                 int offset = 0;
-                for (const auto* key : {"arguments", "input"})
-                    offset = std::max(offset, item.value(QLatin1String(key))
-                                                  .toObject()
-                                                  .value(QStringLiteral("offset"))
-                                                  .toInt());
+                int limit = 0;
+                for (const auto* key : {"arguments", "input"}) {
+                    const auto arguments = item.value(QLatin1String(key)).toObject();
+                    offset = std::max(offset, arguments.value(QStringLiteral("offset")).toInt());
+                    limit = std::max(limit, arguments.value(QStringLiteral("limit")).toInt());
+                }
                 readLocation = fileLocation(url, offset, {}, {});
+                // The lines that were read, written as a command's read is: "… L540–600".
+                if (!url.isEmpty() && offset > 0 && limit > 0)
+                    title += QStringLiteral(" L%1–%2").arg(offset).arg(offset + limit - 1);
+            } else if (!files && !url.isEmpty()) {
+                // Where the pattern was looked for, written as a command's search is:
+                // "Searched code: “pattern” in modules/ai".
+                QString where;
+                for (const auto* key : {"arguments", "input"})
+                    if (where.isEmpty())
+                        where = sanitizedText(item.value(QLatin1String(key))
+                                                  .toObject()
+                                                  .value(QStringLiteral("path"))
+                                                  .toString());
+                if (!where.isEmpty())
+                    title = (completed ? QStringLiteral("Searched code: “%1” in %2")
+                                       : QStringLiteral("Searching code: “%1” in %2"))
+                                .arg(url, where);
             }
         } else if (subtype == QStringLiteral("imageView")) {
             eventType = QStringLiteral("image.view");
@@ -663,6 +819,12 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         title += retainedTextSuffix(item);
         auto entry = message(QStringLiteral("tool"), url, QStringLiteral("Activity"), {}, id);
         entry.insert(QStringLiteral("subtype"), subtype);
+        // The MCP server, for the group line's "Used node_repl, ketplus_agents".
+        if (type == QStringLiteral("mcpToolCall"))
+            entry.insert(
+                QStringLiteral("activityFacts"),
+                QVariantMap{{QStringLiteral("server"),
+                             sanitizedText(item.value(QStringLiteral("server")).toString())}});
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("fileLocation"), readLocation);
         entry.insert(QStringLiteral("details"), safePayload.toObject().toVariantMap());
@@ -672,7 +834,8 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                 safePayload, {QStringLiteral("path"), QStringLiteral("image_path")});
             if (!imagePath.isEmpty()) {
                 const QUrl imageUrl(imagePath);
-                if (imageUrl.scheme().isEmpty() || imageUrl.isLocalFile())
+                if (!namesAnotherMachine(imagePath) && !namesAnotherMachine(imageUrl) &&
+                    (imageUrl.scheme().isEmpty() || imageUrl.isLocalFile()))
                     entry.insert(QStringLiteral("images"),
                                  QVariantList{imageUrl.isLocalFile()
                                                   ? imageUrl.toString()
@@ -698,14 +861,23 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
     if (type == QStringLiteral("collabAgentToolCall") ||
         type == QStringLiteral("subAgentActivity")) {
         const bool collaborationCall = type == QStringLiteral("collabAgentToolCall");
-        const QString title = QStringLiteral("%1 %2").arg(
-            completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-            collaborationCall ? QStringLiteral("a collaborator") : QStringLiteral("a sub-agent"));
+        // Named as the mock's "Ran a subagent", like Cursor's Task tool.
+        const QString title = collaborationCall
+                                  ? (completed ? QStringLiteral("Used a collaborator")
+                                               : QStringLiteral("Using a collaborator"))
+                                  : (completed ? QStringLiteral("Ran a subagent")
+                                               : QStringLiteral("Running a subagent"));
         auto entry = message(QStringLiteral("tool"), itemSummary(item),
                              QStringLiteral("Collaboration"), {}, id);
         entry.insert(QStringLiteral("subtype"), collaborationCall ? QStringLiteral("collaboration")
                                                                   : QStringLiteral("subAgent"));
         entry.insert(QStringLiteral("running"), !completed);
+        // The agents it addressed, so the group line counts each subagent once.
+        QVariantList receivers;
+        for (const QJsonValue& receiver : item.value(QStringLiteral("receiverThreadIds")).toArray())
+            receivers.append(sanitizedText(receiver.toString()));
+        entry.insert(QStringLiteral("activityFacts"),
+                     QVariantMap{{QStringLiteral("receivers"), receivers}});
         entry.insert(QStringLiteral("details"), sanitizedJson(item).toObject().toVariantMap());
         entry.insert(QStringLiteral("sanitizedPayload"),
                      sanitizedJson(item).toObject().toVariantMap());
@@ -728,12 +900,14 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                          title);
     }
     if (type == QStringLiteral("contextCompaction")) {
+        // As the mock's event line: the divider's text, then what it means under it.
         const QString title =
-            completed ? QStringLiteral("Compacted context") : QStringLiteral("Compacting context");
-        auto entry = message(QStringLiteral("tool"),
-                             completed ? QStringLiteral("Context compacted")
-                                       : QStringLiteral("Compacting context…"),
-                             QStringLiteral("Codex"), {}, id);
+            completed ? QStringLiteral("Context compacted") : QStringLiteral("Compacting context");
+        auto entry = message(
+            QStringLiteral("tool"),
+            completed ? QStringLiteral("Older steps are summarised; the conversation continues.")
+                      : QStringLiteral("Compacting context…"),
+            QStringLiteral("Codex"), {}, id);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("compaction"));
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("sanitizedPayload"),
@@ -1030,6 +1204,10 @@ QString transcriptText(const QVariantList& entries) {
             }
             continue;
         }
+        // ADR 0106: the turn's work report travels as the matrix it replaced.
+        if (const auto report = workReportText(entry.value(QStringLiteral("workReport")).toMap());
+            !report.isEmpty())
+            parts.append(report);
         if (body.isEmpty())
             continue;
         parts.append(entry.value("meta", entry.value("kind")).toString() + ":\n" + body);

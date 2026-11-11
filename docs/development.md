@@ -87,6 +87,11 @@ browser then signs in without opening a browser, and Add generates a local
 synthetic QR code. The bypass never stores credentials, enrolls a machine, or calls the
 remote service. CMake does not compile it into Release builds.
 
+In that tree, `KETPLUS_CONNECTIONS_CAPTURE=<dir>` with
+`QT_QPA_PLATFORM=offscreen` makes `ketplus_remote_workspace_tests` save the signed-in
+Connections page (`connections-light.png`, `connections-dark.png`) for the side by
+side with `KetPlusMock --screen=connections`.
+
 ## Developer packages
 
 KétPlus, KétPlus Terminal and KétPlus Pro embed KÉT Sans 1.1 from the official
@@ -95,8 +100,8 @@ KÉT Sans Mono 0.10.4 Medium from `core/assets/fonts` (no public release yet). B
 SIL OFL 1.1. Configure downloads the archive once; offline builds can set
 `-DKETPLUS_KET_SANS_ARCHIVE=/path/to/KETSans-1.100.zip` (the same hash is required).
 The fonts are compiled into Qt resources and registered at startup; their licences
-ship with the application notices. The Lite editor keeps Inter as its interface
-default until #141 and #142 switch the defaults.
+ship with the application notices. KÉT Sans is the interface default and KÉT Sans
+Mono Medium the code default in every edition.
 
 The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external
@@ -281,3 +286,9 @@ and its three pinned submodules. Dependency build trees stay local to each build
 The daemon advertises `transport.webrtc/1`; it admits offers only after a heartbeat
 negotiates that capability. Relay feature flags remain the rollout control.
 No provider account or quota is needed for `ketplus_daemon_peer_transport_tests`.
+
+`KETPLUS_CAPTURE` and `KETPLUS_BENCHMARK_STARTUP` runs of Lite use a temporary
+INI preference store. They neither restore nor overwrite the installed app's
+session/window settings. Captures therefore start from a clean profile; use
+`KETPLUS_CAPTURE_THEME=light|dark` to choose the preview theme, and see
+`docs/design-system.md` for zoom and capture steps.

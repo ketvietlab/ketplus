@@ -119,6 +119,9 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
             value.insert(QStringLiteral("number"), number);
         if (!stored.archivedAt.isEmpty())
             value.insert(QStringLiteral("archived_at"), stored.archivedAt);
+        value.insert(QStringLiteral("tags"), QJsonArray::fromStringList(stored.tags));
+        if (stored.awaitingReply)
+            value.insert(QStringLiteral("awaiting_reply"), true);
         if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
             value.insert(QStringLiteral("agent_turn"), *sender);
         if (!session.backgroundTasks.isEmpty())
@@ -141,6 +144,9 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
          static_cast<qint64>(protocol::maximumReplayPayloadBytes)}};
     for (auto it = live.begin(); it != live.end(); ++it)
         catalog.insert(it.key(), it.value());
+    // Remote clients cannot read storage.*; they get the sidebar's warning state (ADR 0108).
+    if (const auto storage = storageStatus(); !storage.isEmpty())
+        catalog.insert(QStringLiteral("journal_storage"), storage);
     return finish(catalog);
 }
 

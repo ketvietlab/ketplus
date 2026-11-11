@@ -1,5 +1,7 @@
 #include "runtime/ApprovalBroker.h"
 
+#include <algorithm>
+
 #include "protocol/DaemonProtocol.h"
 
 #include "CodexServerRequests.h"
@@ -9,6 +11,7 @@
 #include <QJsonDocument>
 #include <QTimeZone>
 #include <QUuid>
+#include <algorithm>
 
 #include <optional>
 #include <utility>
@@ -101,9 +104,19 @@ std::optional<QJsonArray> normalizedQuestions(const QJsonArray& source) {
 } // namespace
 
 ApprovalBroker::ApprovalBroker(QObject* parent) : QObject(parent) {
+    // Ticks only while a request can expire, so an idle daemon has no wakeups (#126).
     expiryTimer_.setInterval(250);
     connect(&expiryTimer_, &QTimer::timeout, this, &ApprovalBroker::expireRequests);
-    expiryTimer_.start();
+}
+
+void ApprovalBroker::updateExpiryTimer() {
+    const bool expiring =
+        std::any_of(pending_.cbegin(), pending_.cend(),
+                    [](const Pending& pending) { return pending.expiresAtMs > 0; });
+    if (!expiring)
+        expiryTimer_.stop();
+    else if (!expiryTimer_.isActive())
+        expiryTimer_.start();
 }
 
 QString ApprovalBroker::request(const QString& sessionId, const qint64 generation,
@@ -132,6 +145,7 @@ QString ApprovalBroker::request(const QString& sessionId, const qint64 generatio
     }
     pending_.insert(id,
                     {sessionId, generation, providerRequestId, kind, expiry, normalizedDetails, 1});
+    updateExpiryTimer();
     emit requested(
         id, sessionId, generation, kind, normalizedDetails,
         expiry > 0
@@ -326,13 +340,20 @@ ApprovalResolution ApprovalBroker::resolve(const QString& approvalId, const QStr
     if (pending.kind == QStringLiteral("input")) {
         providerResult.insert(QStringLiteral("answers"),
                               resolution.value(QStringLiteral("answers")).toObject());
-    } else {
-        providerResult = approvalProviderResult(
-            pending.details,
-            resolution.value(QStringLiteral("decision")).toString() == QStringLiteral("accept"));
+        emit providerResolutionReady(pending.providerRequestId, providerResult);
+        return {true, {}, {}, QStringLiteral("accepted")};
     }
+    const bool accepted =
+        resolution.value(QStringLiteral("decision")).toString() == QStringLiteral("accept");
+    providerResult = approvalProviderResult(pending.details, accepted);
     emit providerResolutionReady(pending.providerRequestId, providerResult);
-    return {true, {}, {}, QStringLiteral("accepted")};
+    // The journal keeps the decision, so every client shows the approval as approved or denied.
+    return {true,
+            {},
+            {},
+            QStringLiteral("accepted"),
+            {{QStringLiteral("decision"),
+              accepted ? QStringLiteral("accept") : QStringLiteral("decline")}}};
 }
 
 void ApprovalBroker::expireRequests() {
@@ -354,6 +375,8 @@ void ApprovalBroker::expireRequests() {
         emit expired(approvalId, pending.sessionId, pending.generation, pending.kind,
                      pending.revision);
     }
+    // Requests answered or cancelled since the last tick are gone too.
+    updateExpiryTimer();
 }
 
 void ApprovalBroker::cancelPending(const QString& sessionId, const qint64 generation) {

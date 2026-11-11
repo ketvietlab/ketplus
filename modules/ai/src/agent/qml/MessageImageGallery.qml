@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -6,7 +6,7 @@ Grid {
     id: root
 
     required property var sources
-    required property var tokens
+
     property var host: null
     property int maximumVisible: 3
     property bool showUnavailable: true
@@ -16,10 +16,11 @@ Grid {
     readonly property int remainingCount: imageCount - visibleCount
     readonly property int tileCount: visibleCount + (remainingCount > 0 ? 1 : 0)
     signal expanded()
-    readonly property real thumbnailSide: 88
-    readonly property real gap: 6
+    property bool largePreview: false
+    readonly property real thumbnailSide: KetTheme.px(largePreview ? 360 : 120, KetTheme.zoom)
+    readonly property real thumbnailHeight: KetTheme.px(largePreview ? 225 : 78, KetTheme.zoom)
+    readonly property real gap: KetTheme.px(8, KetTheme.zoom)
     readonly property real preferredWidth: tileCount * thumbnailSide + Math.max(0, tileCount - 1) * gap
-    readonly property real bubblePreferredWidth: preferredWidth
 
     signal imageClicked(url source)
 
@@ -31,7 +32,8 @@ Grid {
     // Fixed cells reserve space before decoding and while delegates are recreated.
     // Source aspect ratio never changes transcript geometry; the viewer uses the original.
     readonly property real cellSide: Math.min(thumbnailSide, Math.max(0, width))
-    height: tileCount > 0 ? Math.ceil(tileCount / columns) * (cellSide + gap) - gap : 0
+    readonly property real cellHeight: cellSide * thumbnailHeight / thumbnailSide
+    height: tileCount > 0 ? Math.ceil(tileCount / columns) * (cellHeight + gap) - gap : 0
 
     Repeater {
         model: root.sources ? root.sources.slice(0, root.maximumVisible) : []
@@ -52,11 +54,11 @@ Grid {
                      || attachmentImage.status === Image.Ready
                      || root.showUnavailable
             width: root.cellSide
-            height: width
-            radius: 9
-            color: root.tokens.interactiveBackground
+            height: root.cellHeight
+            radius: KetTheme.px(8, KetTheme.zoom)
+            color: KetTheme.t.interactiveBg
             border.width: 1
-            border.color: imageHover.hovered || activeFocus ? root.tokens.focus : root.tokens.border
+            border.color: imageHover.hovered || activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
             clip: true
 
             Image {
@@ -70,19 +72,19 @@ Grid {
                 autoTransform: true
                 asynchronous: true
                 cache: false
-                sourceSize.width: 176
-                sourceSize.height: 176
+                sourceSize.width: Math.ceil(root.cellSide * 2)
+                sourceSize.height: Math.ceil(root.cellHeight * 2)
             }
 
             Text {
                 anchors.centerIn: parent
-                width: parent.width - Metrics.px(8, tokens)
+                width: parent.width - KetTheme.px(8, KetTheme.zoom)
                 visible: root.showUnavailable && attachmentImage.status === Image.Error
                 objectName: "messageAttachmentUnavailable"
                 text: root.unavailableText
-                color: root.tokens.textMuted
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.body
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -104,7 +106,7 @@ Grid {
         objectName: "expandMessageImages"
         visible: root.remainingCount > 0
         width: root.cellSide
-        height: width
+        height: root.cellHeight
         text: "+" + root.remainingCount
         Accessible.name: "Show " + root.remainingCount + " more images"
         onClicked: {
@@ -113,17 +115,17 @@ Grid {
         }
         contentItem: Text {
             text: moreButton.text
-            color: root.tokens.textSecondary
-            font.family: root.tokens.uiFont
-            font.pixelSize: root.tokens.body
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
-            radius: 9
-            color: moreButton.hovered ? root.tokens.interactiveHover : root.tokens.interactiveBackground
+            radius: KetTheme.px(8, KetTheme.zoom)
+            color: moreButton.hovered ? KetTheme.t.interactiveHover : KetTheme.t.interactiveBg
             border.width: 1
-            border.color: moreButton.activeFocus ? root.tokens.focus : root.tokens.border
+            border.color: moreButton.activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
         }
     }
 

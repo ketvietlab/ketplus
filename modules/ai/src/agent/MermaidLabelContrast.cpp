@@ -1,17 +1,56 @@
 #include "agent/MermaidLabelContrast.h"
 
+#include "KetTokens.h"
+
 #include <QColor>
 #include <QRegularExpression>
 #include <QStringList>
 
 #include <cmath>
+#include <initializer_list>
+#include <utility>
 
 namespace ketplus::agent_message {
 
 namespace {
 
-constexpr auto darkLabel = "#1f2328";
-constexpr auto lightLabel = "#f0f3f6";
+qreal luminance(const QColor& colour) {
+    const auto channel = [](const qreal value) {
+        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(colour.redF()) + 0.7152 * channel(colour.greenF()) +
+           0.0722 * channel(colour.blueF());
+}
+
+qreal contrast(const QColor& first, const QColor& second) {
+    const qreal a = luminance(first);
+    const qreal b = luminance(second);
+    return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
+}
+
+// The label with the most contrast on the fill, from Két DS tokens: the main text of the
+// light and dark themes, and black or white when neither reaches 4.5:1 (mid-grey fills).
+// Black or white always reach it.
+QColor labelOn(const QColor& fill) {
+    const auto best = [&fill](std::initializer_list<QColor> inks) {
+        QColor chosen;
+        qreal highest = 0;
+        for (const QColor& ink : inks) {
+            if (const qreal ratio = contrast(fill, ink); ratio > highest) {
+                chosen = ink;
+                highest = ratio;
+            }
+        }
+        return std::pair{chosen, highest};
+    };
+    const auto [text, ratio] = best({ket::Tokens::color(u"text-main", ket::Theme::Light),
+                                     ket::Tokens::color(u"text-main", ket::Theme::Dark)});
+    if (ratio >= minimumLabelContrast)
+        return text;
+    return best({ket::Tokens::color(u"ref-black", ket::Theme::Light),
+                 ket::Tokens::color(u"ref-white", ket::Theme::Light)})
+        .first;
+}
 
 QString readableLine(const QString& line) {
     static const QRegularExpression styling(
@@ -28,18 +67,10 @@ QString readableLine(const QString& line) {
     const QColor background(fillMatch.captured(1));
     if (!background.isValid() || background.alpha() == 0)
         return line;
-    // Relative luminance picks whichever text keeps the label legible on that fill.
-    const auto channel = [](const qreal value) {
-        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
-    };
-    const qreal luminance = 0.2126 * channel(background.redF()) +
-                            0.7152 * channel(background.greenF()) +
-                            0.0722 * channel(background.blueF());
     QString trimmed = line;
     while (trimmed.endsWith(QLatin1Char(';')) || trimmed.endsWith(QLatin1Char(' ')))
         trimmed.chop(1);
-    return trimmed + QStringLiteral(",color:") +
-           QLatin1StringView(luminance > 0.18 ? darkLabel : lightLabel);
+    return trimmed + QStringLiteral(",color:") + labelOn(background).name();
 }
 
 } // namespace

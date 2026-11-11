@@ -33,7 +33,7 @@ endif()
 
 project(
     KetPlus
-    VERSION 0.1.50
+    VERSION 0.1.52
     DESCRIPTION "The full KetPlus desktop product"
     LANGUAGES C CXX
 )
@@ -107,6 +107,7 @@ add_subdirectory(modules/remote)
 add_subdirectory(apps/daemon)
 
 if(KETPLUS_BUILD_DESKTOP)
+    set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
     set(KETPLUS_CM_BUILD_APP OFF CACHE BOOL "" FORCE)
     set(KETPLUS_CM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(KETPLUS_CM_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
@@ -115,16 +116,14 @@ if(KETPLUS_BUILD_DESKTOP)
     # Private chrome typography (KET Sans, then platform fallbacks). Defined before modules/ai
     # so Agent Workspace and the desktop shell resolve one family.
     add_library(ketplus_typography STATIC
-        apps/desktop/src/ui/ChromeGeometry.cpp
-        apps/desktop/src/ui/ChromeGeometry.h
         apps/desktop/src/ui/InterfaceFont.cpp
         apps/desktop/src/ui/InterfaceFont.h
-        apps/desktop/src/ui/LucideIcon.cpp
-        apps/desktop/src/ui/LucideIcon.h
+        apps/desktop/src/ui/SymbolIcon.cpp
+        apps/desktop/src/ui/SymbolIcon.h
     )
     target_link_libraries(ketplus_typography PUBLIC Qt6::Gui Qt6::Svg Qt6::Widgets)
-    # ThemeManager's tooltipFontPixels(): the stylesheet keeps tooltips at the kit's size.
-    target_link_libraries(ketplus_typography PRIVATE KetPlusCM::ui)
+    # Public typography headers consume CM's shared zoom mapping and Két scaling API.
+    target_link_libraries(ketplus_typography PUBLIC KetPlusCM::ui)
     target_include_directories(ketplus_typography PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/apps/desktop/src>"
     )

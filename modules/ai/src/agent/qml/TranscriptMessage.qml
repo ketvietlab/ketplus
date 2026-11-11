@@ -1,10 +1,14 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
+import Ket as Kit
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
 Item {
     id: messageDelegate
+    readonly property var userRecipe: Kit.KetTheme.userMessageRecipe(KetTheme.dark, KetTheme.zoom)
+    readonly property var groupRecipe: Kit.KetTheme.activityGroupRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
+    readonly property var codeRecipe: Kit.KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom)
     required property var shell
     required property var host
     required property var preview
@@ -21,6 +25,7 @@ Item {
     required property var fileStats
     required property var questionData
     required property var questionAnswerData
+    required property string timestamp
     required property string meta
     required property string filePath
     required property string subtype
@@ -40,8 +45,19 @@ Item {
     // An activity row inside an expanded group is drawn compact, with tighter vertical padding,
     // and hangs under a rail indented by groupRailInset.
     readonly property bool groupNested: activityRow && groupRole.length > 0 && groupExpanded
-    readonly property real groupRailInset: Metrics.px(22, shell.t)
-    readonly property int surfaceInset: activityRow ? 0 : Metrics.px(4, shell.t)
+    // The last step of an open group: the mock's steps end with room under them, inside the rail.
+    readonly property bool groupEnd: {
+        if (!groupNested || !view.messageModel)
+            return false;
+        // The next row may change in place, without the row count changing.
+        view.messageModel.sourceRevision;
+        const rows = view.messageModel.count;
+        return index + 1 >= rows || view.messageModel.get(index + 1).groupKey !== groupKey;
+    }
+    readonly property real groupRailInset: groupRecipe.childrenIndent + groupRecipe.childrenPadding + 1
+    // A day divider is a block of its own in the mock: the request under it keeps its distance.
+    readonly property real dayLead: dayDivider.visible ? dayDivider.height + KetTheme.px(12, KetTheme.zoom) : 0
+    readonly property int surfaceInset: activityRow ? 0 : KetTheme.px(4, KetTheme.zoom)
     onYChanged: {
         if (!view.followTail && shell.transcriptWheel.direction !== 0)
             host.scheduleTranscriptRestore();
@@ -52,6 +68,34 @@ Item {
     required property bool running
     required property string category
     required property string eventType
+    // The provider a steer joined, from its journal event; older steers have none.
+    required property string provider
+    // ADR 0110: the daemon's code for a turn the provider ended; the row shows its setup guide.
+    required property string errorCode
+    // The provider's own words and the model of the turn that failed.
+    required property string errorDetail
+    required property string errorModel
+    // Only the failure that ended the latest turn shows the full guide; once the user writes
+    // again, the row reads as the notice it was.
+    readonly property var providerSetup: {
+        if (kind !== "error" || !errorCode || !view.messageModel)
+            return null;
+        view.messageModel.sourceRevision;
+        host.providerRuntime; // the commands the daemon reports for the provider
+        const rows = view.messageModel.count;
+        for (let next = index + 1; next < rows && next <= index + 50; ++next) {
+            const later = view.messageModel.get(next);
+            // A later turn, the user's or an agent's, or a newer failure.
+            if (later.kind === "user" || (later.kind === "error" && later.errorCode))
+                return null;
+        }
+        const turnModel = errorModel ? shell.modelForId(errorModel) : null;
+        const modelName = turnModel && turnModel.displayName ? turnModel.displayName
+                        : errorModel || shell.modelLabel || shell.selectedModel || "";
+        const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider,
+                                             errorCode, errorDetail || body, modelName);
+        return guide && guide.id ? guide : null;
+    }
     required property string phase
     required property string title
     required property string summary
@@ -60,16 +104,42 @@ Item {
     required property string cwd
     required property string commandDescription
     required property string fileLocation
+    // What history retention reduced in the turn this row ends.
+    required property string trimmedDetail
     required property var exitCode
     required property var durationMs
     required property string detailsData
+    required property var atlasLinks
     required property string payloadData
     required property string detailsRef
     required property string payloadRef
     readonly property var messageImages: imageSources || []
     readonly property var messageQuestions: questionData || []
     readonly property var messageQuestionAnswers: questionAnswerData || ({})
-    readonly property bool activityRow: category === "activity"
+    // Error banners and event lines sit a block apart in the mock, closer than other notices.
+    readonly property bool tightNotice: noticeRow && (kind === "error" || subtype === "event" || subtype === "compaction")
+    // A failure and the end of its turn read as one block in the mock: the banner, then the line.
+    readonly property bool errorBeforeTurnEnd: {
+        if (kind !== "error" || !view.messageModel)
+            return false;
+        // The next row may change in place, without the row count changing.
+        view.messageModel.sourceRevision;
+        const rows = view.messageModel.count;
+        return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
+    }
+    // A failed turn whose error banner sits just above it: the banner already says so, and the
+    // mock's workspace/error shows no "Failed" line under it.
+    readonly property bool failureShownAbove: {
+        if (subtype !== "turnEnd" || status !== "failed" || index < 1 || !view.messageModel)
+            return false;
+        view.messageModel.sourceRevision;
+        return view.messageModel.get(index - 1).kind === "error";
+    }
+    // An event line that opens the transcript ("Switched from…", "Forked from…") starts where a
+    // day divider would, right under the top padding.
+    readonly property real firstRowLift: index === 0 && tightNotice && kind !== "error" ? KetTheme.px(8, KetTheme.zoom) : 0
+    readonly property bool activityRow: category === "activity" && !noticeRow
+    readonly property bool noticeRow: subtype !== "question" && subtype !== "approval" && (category === "system" || subtype === "notice" || subtype === "compaction" || kind === "error")
     readonly property bool commandRow: activityRow && subtype === "command"
     readonly property string displayBody: shell.displayMessageBody(kind, body)
     readonly property string userExpansionKey: JSON.stringify(["user-message", view.cacheScope, messageKey])
@@ -78,7 +148,8 @@ Item {
         userExpanded = view.activityState(userExpansionKey)?.expanded === true;
     }
     onUserExpansionKeyChanged: restoreUserExpansion()
-    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth)
+    // The reading column plus the 20 px inset each side that rows keep from the pane's edges.
+    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + KetTheme.px(40, KetTheme.zoom))
     readonly property real contentColumnX: (width - contentColumnWidth) / 2
     // Like Claude: an agent turn has one copy action, under its last answer, for the text the
     // agent wrote (not its commands or files); a request keeps its own copy.
@@ -91,21 +162,40 @@ Item {
     // Per-row chrome (copy buttons and their tool tips) exists only while the row is hovered,
     // keyboard-focused or one of its buttons holds focus; collapsed members never create it.
     property bool chromeFocusHold: false
+    // The answer still being written is known by its own row state, not by being last: a
+    // steer or queued message may land under it while its text keeps growing.
+    readonly property bool codeCopyShown: chromeActive || !(host.sessionRunning && kind === "assistant" && meta.endsWith(" · streaming"))
     readonly property bool chromeActive: (rowHover.hovered || chromeFocusHold || (view.activeFocus && view.keyboardIndex === index))
+    // The mock's line under an answer whose turn was stopped.
+    readonly property bool answerStopped: answerEnd > 0 && view.answerStopped(index, view.messageModel ? view.messageModel.count : 0)
+    Text {
+        id: stoppedNote
+        objectName: "answerStoppedNote"
+        visible: messageDelegate.answerStopped
+        x: messageSurface.x
+        y: messageSurface.y + messageSurface.height + KetTheme.px(4, KetTheme.zoom)
+        height: visible ? implicitHeight + KetTheme.px(4, KetTheme.zoom) : 0
+        text: "Stopped before the answer finished"
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.px(12, KetTheme.zoom)
+    }
+    // As in the mock, the turn's answer always offers Copy answer under it; a prompt's copy
+    // comes with the hover or focus.
     Loader {
-        active: (kind === "user" ? messageDelegate.copyableMessage : messageDelegate.turnAnswered) && messageDelegate.chromeActive
+        active: kind === "user" ? messageDelegate.copyableMessage && messageDelegate.chromeActive : messageDelegate.turnAnswered
         z: 2
-        width: Metrics.px(28, shell.t)
-        height: Metrics.px(28, shell.t)
+        width: KetTheme.px(28, KetTheme.zoom)
+        height: KetTheme.px(28, KetTheme.zoom)
         x: kind === "user" ? messageSurface.x - width - 4 : messageSurface.x
-        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + Metrics.px(8, shell.t)
+        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + stoppedNote.height + KetTheme.px(8, KetTheme.zoom)
         sourceComponent: TranscriptCopyButton {
             objectName: "copyMessageButton"
-            tokens: shell.t
-            label: kind === "user" ? "Copy message" : "Copy response"
-            padding: Metrics.px(7, shell.t)
-            idleColor: shell.t.pageBackground
-            cornerRadius: Metrics.px(5, shell.t)
+
+            label: kind === "user" ? "Copy message" : "Copy answer"
+            padding: KetTheme.px(7, KetTheme.zoom)
+            idleColor: KetTheme.t.pageBg
+            cornerRadius: KetTheme.px(5, KetTheme.zoom)
             focusBorder: true
             onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
             onClicked: host.copyText(kind === "user" ? view.messageCopyText(messageDelegate.index) : view.answerCopyText(messageDelegate.index))
@@ -129,13 +219,13 @@ Item {
         z: 3
         sourceComponent: Rectangle {
             objectName: "keyboardFocusRing"
-            x: messageSurface.x - Metrics.px(6, shell.t)
+            x: messageSurface.x - KetTheme.px(6, KetTheme.zoom)
             y: messageSurface.y - 3
-            width: messageSurface.width + Metrics.px(12, shell.t)
-            height: messageSurface.height + Metrics.px(6, shell.t)
-            radius: Metrics.px(6, shell.t)
+            width: messageSurface.width + KetTheme.px(12, KetTheme.zoom)
+            height: messageSurface.height + KetTheme.px(6, KetTheme.zoom)
+            radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
-            border.color: shell.t.focus
+            border.color: KetTheme.t.colorFocus
             border.width: 2
         }
     }
@@ -144,18 +234,18 @@ Item {
         active: messageDelegate.findCurrentRow && messageDelegate.activityRow
         sourceComponent: Rectangle {
             objectName: "findActivityHighlight"
-            x: messageSurface.x - Metrics.px(6, shell.t)
+            x: messageSurface.x - KetTheme.px(6, KetTheme.zoom)
             y: messageSurface.y - 2
-            width: messageSurface.width + Metrics.px(12, shell.t)
-            height: messageSurface.height + Metrics.px(4, shell.t)
-            radius: Metrics.px(6, shell.t)
+            width: messageSurface.width + KetTheme.px(12, KetTheme.zoom)
+            height: messageSurface.height + KetTheme.px(4, KetTheme.zoom)
+            radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
-            border.color: shell.t.accent
+            border.color: KetTheme.t.accent
             border.width: 1
         }
     }
     width: view.width
-    height: messageSurface.y + messageSurface.height + surfaceInset + (activityRow ? Metrics.px(3, shell.t) : kind === "user" ? Metrics.px(25, shell.t) : copyableMessage ? Metrics.px(44, shell.t) : view.rowSpacing)
+    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset - (errorBeforeTurnEnd ? KetTheme.px(14, KetTheme.zoom) : 0) + (activityRow ? KetTheme.px(groupEnd ? 20 : 3, KetTheme.zoom) : kind === "user" ? KetTheme.px(29, KetTheme.zoom) : copyableMessage ? stoppedNote.height + KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
     // Publish what this row actually is. The geometry model only ever learns a
     // height from the row that laid itself out, so a row it has not seen keeps
     // one fixed constant instead of borrowing another row's size.
@@ -175,31 +265,91 @@ Item {
     Rectangle {
         objectName: "transcriptGroupRail"
         visible: messageDelegate.groupNested
-        x: messageSurface.x + Metrics.px(7, shell.t)
+        x: messageSurface.x + KetTheme.px(7, KetTheme.zoom)
         y: messageDelegate.groupLeader ? messageSurface.y + messageColumn.y + transcriptActivityLoader.y : 0
-        width: Math.max(1, Metrics.px(2, shell.t))
+        width: Math.max(1, KetTheme.px(2, KetTheme.zoom))
         height: Math.max(0, parent.height - y)
-        color: shell.t.border
+        color: KetTheme.t.panelBorder
+    }
+    Kit.KetDayDivider {
+        id: dayDivider
+        objectName: "transcriptDayDivider"
+        width: messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        text: kind === "user" && !chunkContinuation ? view.dayLabel(index, timestamp, view.messageModel ? view.messageModel.count : 0) : ""
+        visible: text.length > 0
+        height: visible ? implicitHeight : 0
+    }
+    // The mock's user turn: who sent it and its images sit above the bubble, right-aligned.
+    Column {
+        id: userLead
+        objectName: "userMessageLead"
+        readonly property real gap: visible ? KetTheme.px(6, KetTheme.zoom) : 0
+        visible: kind === "user" && !messageDelegate.activityRow && (messageSurface.agentMessage || imageGallery.imageCount > 0)
+        width: messageSurface.userMaximumWidth
+        height: visible ? implicitHeight : 0
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead
+        spacing: KetTheme.px(6, KetTheme.zoom)
+        Text {
+            id: agentOrigin
+            objectName: "agentMessageOrigin"
+            visible: messageSurface.agentMessage
+            width: parent.width
+            text: visible ? meta : ""
+            horizontalAlignment: Text.AlignRight
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            elide: Text.ElideRight
+            Accessible.name: text
+        }
+        // Reparenting one gallery between the lead and the bubble stops its taps reaching the
+        // thumbnails, so user rows and the rest each declare their own.
+        TranscriptMessageImages {
+            id: imageGallery
+            row: messageDelegate
+            sources: kind === "user" ? messageDelegate.messageImages : []
+            x: parent.width - width
+        }
+    }
+    Text {
+        id: steerNotice
+        objectName: "transcriptSteerNotice"
+        visible: kind === "user" && eventType === "turn.steered"
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        y: messageSurface.y + messageSurface.height + KetTheme.px(6, KetTheme.zoom)
+        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom))
+        height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
+        text: "Sent while " + (provider ? shell.providerTitle(provider) : "the agent") + " was working · joined the running turn"
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        wrapMode: Text.Wrap
+        horizontalAlignment: Text.AlignRight
     }
     Rectangle {
         id: messageSurface
         objectName: "messageSurface"
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : Metrics.px(kind === "user" ? 12 : 18, shell.t)
+        // Banners and turn ends span the reading column, as the mock's KetBanner does.
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
-        readonly property real userMaximumWidth: Math.max(Metrics.px(160, shell.t), Math.min(messageDelegate.contentColumnWidth * 0.8, messageDelegate.contentColumnWidth - Metrics.px(63, shell.t)))
-        x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - Metrics.px(20, shell.t) : messageDelegate.contentColumnX + Metrics.px(20, shell.t)
-        y: messageDelegate.surfaceInset
-        width: kind === "user"
-                   ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + Metrics.px(10, shell.t),
-                              agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + Metrics.px(4, shell.t) : 0,
-                              imageGallery.bubblePreferredWidth) + horizontalPadding * 2)
-                   : messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
-        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : Metrics.px(16, shell.t))
-        radius: kind === "user" ? Metrics.px(12, shell.t) : kind === "file" ? Metrics.px(7, shell.t) : 0
-        color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? Qt.darker(shell.t.accent, 1.35) : kind === "file" ? shell.t.surfaceRaised : "transparent"
-        border.color: agentMessage ? shell.t.accent : kind === "file" ? shell.t.border : "transparent"
+        readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
+        x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) - messageDelegate.firstRowLift
+        width: kind === "user" ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        // An images-only prompt keeps no empty bubble under its thumbnails.
+        readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
+        visible: !imagesOnly
+        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
+        // A file edit read as an activity step is a line like any other step, as in the mock;
+        // only a standalone file message keeps its raised card.
+        readonly property bool fileCard: kind === "file" && !messageDelegate.activityRow
+        radius: kind === "user" ? userRecipe.radius : fileCard ? KetTheme.px(7, KetTheme.zoom) : 0
+        color: kind === "user" ? userRecipe.background : fileCard ? KetTheme.t.surfaceRaised : "transparent"
+        border.color: fileCard ? KetTheme.t.panelBorder : "transparent"
 
         Column {
             id: messageColumn
@@ -208,64 +358,144 @@ Item {
             anchors.leftMargin: messageSurface.horizontalPadding
             anchors.rightMargin: messageSurface.horizontalPadding
             anchors.verticalCenter: parent.verticalCenter
-            spacing: kind === "file" ? Metrics.px(4, shell.t) : Metrics.px(7, shell.t)
+            spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
 
-            Text {
-                id: agentOrigin
-                objectName: "agentMessageOrigin"
-                visible: messageSurface.agentMessage
+            TranscriptTrimmedDetail {
                 width: parent.width
-                text: visible ? meta : ""
-                color: shell.t.accentText
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.caption
-                font.weight: Font.Medium
-                elide: Text.ElideRight
-                Accessible.name: text
+                visible: messageDelegate.subtype === "turnEnd" && messageDelegate.trimmedDetail.length > 0
+                height: visible ? implicitHeight : 0
+                message: messageDelegate.trimmedDetail
+                host: messageDelegate.host
             }
-            TextMetrics {
-                id: agentOriginMetrics
-                text: agentOrigin.text
-                font: agentOrigin.font
+            // The mock's changed-files card closes a turn that edited files, above its end.
+            Kit.KetChangedFiles {
+                id: turnChanges
+                objectName: "transcriptTurnChanges"
+                // The source's revision re-reads the turn when a row changes in place.
+                readonly property var turn: messageDelegate.subtype === "turnEnd" && view.messageModel ? (view.messageModel.sourceRevision, view.messageModel.turnFiles(messageDelegate.index)) : null
+                readonly property var changes: turn && turn.files ? turn.files : []
+                width: parent.width
+                visible: changes.length > 0
+                height: visible ? implicitHeight : 0
+                files: changes.map(file => {
+                    const shown = String(file.destination || file.path)
+                    const split = Math.max(shown.lastIndexOf("/"), shown.lastIndexOf("\\"))
+                    return {name: shown.slice(split + 1), path: split > 0 ? shown.slice(0, split) : "", added: file.added || 0, removed: file.removed || 0, known: file.known !== false}
+                })
+                // A daemon group lists at most 50 files; Review changes shows them all.
+                complete: !turn || turn.complete !== false
+                title: complete ? "" : changes.length + "+ files changed"
+                // As in the mock, while Source Control shows any of the files uncommitted.
+                note: host.workingChangesRevision >= 0 && changes.length > 0 && host.hasUncommittedChange(changes.map(file => String(file.destination || file.path))) ? "Not committed" : ""
+                onFileActivated: index => host.requestFileDiff(String(changes[index].destination || changes[index].path))
+                footer: Kit.KetButton {
+                    objectName: "transcriptReviewChanges"
+                    text: "Review changes"
+                    controlSize: Kit.KetTheme.ControlSize.Small
+                    onClicked: host.requestProductNavigation("source-control")
+                }
             }
+            // ADR 0106: the work report the turn ended with, below its changed files.
+            TranscriptWorkReport {
+                readonly property var turnReport: messageDelegate.subtype === "turnEnd" && view.messageModel ? (view.messageModel.sourceRevision, view.messageModel.turnReport(messageDelegate.index)) : null
+                width: parent.width
+                visible: !!turnReport && !!turnReport.items && turnReport.items.length > 0
+                height: visible ? implicitHeight : 0
+                report: visible ? turnReport : ({})
+                onOpenRequested: agentHost.requestWorkReport()
+            }
+            TranscriptAgentNote {
+                width: parent.width
+                visible: messageDelegate.subtype === "agentNote"
+                height: visible ? implicitHeight : 0
+                label: messageDelegate.title
+                details: messageDelegate.meta
+                message: messageDelegate.displayBody
+                state: messageDelegate.status
+            }
+            TranscriptNotice {
+                objectName: "transcriptNotice"
+                width: parent.width
+                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup && !messageDelegate.failureShownAbove
+                height: visible ? implicitHeight : 0
 
+                title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")
+                message: messageDelegate.displayBody
+                status: kind === "error" ? "failed" : messageDelegate.status
+                subtype: messageDelegate.subtype
+                // As in the mock, a model at capacity offers another model instead of the same one.
+                readonly property bool capacity: messageDelegate.subtype === "modelCapacity"
+                actionText: kind === "error" && shell.retryableFailure && shell.retryableFailure.key === messageDelegate.messageKey ? (capacity ? "Switch model" : "Retry") : ""
+                onActionTriggered: capacity ? shell.openModelPicker() : shell.retryFailedTurn(messageDelegate.messageKey)
+            }
+            Loader {
+                objectName: "transcriptProviderSetup"
+                active: !!messageDelegate.providerSetup
+                visible: active
+                width: parent.width
+                height: active && item ? item.implicitHeight : 0
+                sourceComponent: AgentProviderSetupCard {
+                    shell: messageDelegate.shell
+                    setup: messageDelegate.providerSetup
+                    messageKey: messageDelegate.messageKey
+                }
+            }
+            Loader {
+                active: messageDelegate.subtype === "heldAgentMessage"
+                visible: active
+                width: parent.width
+                height: active && item ? item.implicitHeight : 0
+                sourceComponent: HeldMessageAction {
+
+                    messageId: {
+                        try { return JSON.parse(messageDelegate.payloadData).messageId || ""; }
+                        catch (e) { return ""; }
+                    }
+                }
+            }
             Loader {
                 active: messageDelegate.groupLeader
                 visible: active
                 width: parent.width
-                height: active ? Metrics.px(32, shell.t) : 0
+                height: active ? groupRecipe.height : 0
                 // One muted summary line followed by its chevron, as the mobile transcript
                 // reads; the rows open under a rail below it.
-                sourceComponent: Item {
+                sourceComponent: Basic.AbstractButton {
                     id: groupHeader
+                    activeFocusOnTab: false
+                    hoverEnabled: true
+                    contentItem: Item {}
+                    onClicked: view.toggleGroup(messageDelegate.groupKey)
+                    background: Rectangle {
+                        radius: messageDelegate.groupRecipe.radius
+                        color: Kit.KetTheme.activityGroupRecipe(KetTheme.dark, KetTheme.zoom, parent.hovered, parent.down, true, parent.visualFocus).background
+                    }
                     objectName: "transcriptGroupHeader"
                     Text {
                         id: groupSummaryText
                         objectName: "transcriptGroupSummary"
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, parent.width - groupChevron.width - Metrics.px(36, shell.t))
+                        width: Math.min(implicitWidth, parent.width - groupChevron.width - KetTheme.px(36, KetTheme.zoom))
                         text: messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
-                        color: messageDelegate.groupFailed > 0 ? shell.t.danger : shell.t.textMuted
-                        font.family: shell.t.uiFont
-                        font.pixelSize: shell.t.body
-                        font.weight: Font.Medium
+                        // A failure shows on its own step, as in the mock; the summary stays quiet.
+                        color: messageDelegate.groupRecipe.text
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: messageDelegate.groupRecipe.fontPixels
+                        font.weight: Font.Normal
                         elide: Text.ElideRight
                     }
-                    TintedIcon {
+                    KetIcon {
                         id: groupChevron
                         objectName: "transcriptGroupChevron"
                         anchors.left: groupSummaryText.right
-                        anchors.leftMargin: Metrics.px(4, shell.t)
+                        anchors.leftMargin: KetTheme.px(4, KetTheme.zoom)
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Metrics.px(14, shell.t)
+                        width: KetTheme.px(14, KetTheme.zoom)
                         height: width
-                        source: "qrc:/agent/icons/chevron-right.svg"
-                        color: shell.t.textMuted
-                        rotation: messageDelegate.groupExpanded ? 90 : 0
-                    }
-                    TapHandler {
-                        onTapped: view.toggleGroup(messageDelegate.groupKey)
+                        name: KetTheme.iconForLucide(messageDelegate.groupExpanded ? "chevron-up" : "chevron-down")
+                        color: KetTheme.t.textMuted
+                        box: KetTheme.px(14, KetTheme.zoom)
                     }
                     HoverHandler {
                         cursorShape: Qt.PointingHandCursor
@@ -285,7 +515,7 @@ Item {
                     id: remoteGroupComponent
                     TranscriptRemoteGroup {
                         width: transcriptActivityLoader.width
-                        tokens: shell.t
+
                         host: messageDelegate.host
                         view: messageDelegate.view
                         groupKey: messageDelegate.groupKey
@@ -298,7 +528,7 @@ Item {
                     TranscriptActivityRow {
                         objectName: "transcriptActivityRow"
                         width: transcriptActivityLoader.width
-                        tokens: shell.t
+
                         host: messageDelegate.host
                         stateStore: messageDelegate.view
                         stateKey: JSON.stringify([messageDelegate.view.cacheScope, messageDelegate.messageKey])
@@ -325,8 +555,9 @@ Item {
                         running: messageDelegate.running
                         compact: messageDelegate.groupNested
                         onImageClicked: function (source) {
-                            preview.imageSource = source;
-                            preview.open();
+                            const all = images.map(image => String(image));
+                            const index = all.indexOf(source.toString());
+                            preview.showImages(index < 0 ? [source] : all, Math.max(0, index));
                         }
                     }
                 }
@@ -340,22 +571,23 @@ Item {
             }
 
             Row {
-                height: Metrics.px(16, shell.t)
-                spacing: Metrics.px(7, shell.t)
-                visible: !messageDelegate.activityRow && !messageDelegate.chunkContinuation && kind !== "user" && kind !== "assistant" && subtype !== "question" && subtype !== "approval"
-                TintedIcon {
+                height: KetTheme.px(16, KetTheme.zoom)
+                spacing: KetTheme.px(7, KetTheme.zoom)
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.chunkContinuation && kind !== "user" && kind !== "assistant" && subtype !== "question" && subtype !== "approval"
+                KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Metrics.px(15, shell.t)
-                    height: Metrics.px(15, shell.t)
-                    source: subtype === "compaction" ? "qrc:/agent/icons/bot.svg" : subtype === "webSearch" ? "qrc:/agent/icons/search.svg" : kind === "tool" ? "qrc:/agent/icons/square-terminal.svg" : kind === "file" ? "qrc:/agent/icons/file-code.svg" : "qrc:/agent/icons/sparkles.svg"
-                    color: subtype === "compaction" ? shell.t.textMuted : subtype === "webSearch" ? shell.t.textMuted : kind === "tool" ? shell.t.warning : kind === "file" ? shell.t.tabActiveText : shell.t.accentText
+                    width: KetTheme.px(15, KetTheme.zoom)
+                    height: KetTheme.px(15, KetTheme.zoom)
+                    name: KetTheme.iconForLucide(subtype === "compaction" ? "bot" : subtype === "webSearch" ? "search" : kind === "tool" ? "square-terminal" : kind === "file" ? "file-code" : "sparkles")
+                    color: subtype === "compaction" ? KetTheme.t.textMuted : subtype === "webSearch" ? KetTheme.t.textMuted : kind === "tool" ? KetTheme.t.warning : kind === "file" ? KetTheme.t.tabActiveText : KetTheme.t.accentText
+                    box: KetTheme.px(15, KetTheme.zoom)
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: meta
-                    color: shell.t.textMuted
-                    font.family: shell.t.uiFont
-                    font.pixelSize: shell.t.caption
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     font.weight: Font.DemiBold
                 }
             }
@@ -365,29 +597,59 @@ Item {
                 visible: active
                 width: parent.width
                 height: item ? item.implicitHeight : 0
-                sourceComponent: subtype === "approval" ? approvalCardComponent : questionCardComponent
+                sourceComponent: subtype === "approval" ? approvalCardComponent : messageDelegate.running ? questionCardComponent : closedQuestionComponent
+            }
+
+            // A question that is no longer open folds into the mock's note: what was asked
+            // and, when it was answered, the answer.
+            Component {
+                id: closedQuestionComponent
+                // The note keeps the mock's block spacing from the activity around it.
+                Item {
+                    implicitHeight: closedNote.implicitHeight + KetTheme.px(26, KetTheme.zoom)
+                    TranscriptAgentNote {
+                        id: closedNote
+                        y: KetTheme.px(12, KetTheme.zoom)
+                        width: parent.width
+                        height: implicitHeight
+                        objectName: "closedQuestionNote"
+                        readonly property bool answered: Object.keys(messageDelegate.messageQuestionAnswers).length > 0
+                        iconName: answered ? "check" : "clock"
+                        iconColor: answered ? KetTheme.t.success : KetTheme.t.textMuted
+                        label: answered ? "Answered" : messageDelegate.status === "deferred" ? "Deferred" : messageDelegate.status === "expired" ? "Question expired" : "Question closed"
+                        details: messageDelegate.messageQuestions.map(question => {
+                            const asked = question.question || question.header || "";
+                            const answer = messageDelegate.messageQuestionAnswers[question.id];
+                            const said = answer === undefined || answer === null ? "" : Array.isArray(answer) ? answer.join(", ") : typeof answer === "object" ? (answer.custom_answer || (answer.option_ids || []).join(", ")) : String(answer);
+                            return said.length > 0 ? asked + "  ·  " + said : asked;
+                        }).filter(line => line.length > 0).join("\n")
+                        message: ""
+                        state: messageDelegate.status
+                    }
+                }
             }
 
             Component {
                 id: questionCardComponent
                 AgentQuestionCard {
-                objectName: "messageQuestionCard"
-                questions: messageDelegate.messageQuestions
-                answerData: messageDelegate.messageQuestionAnswers
-                pending: messageDelegate.running
-                messageKey: messageDelegate.messageKey
-                tokens: shell.t
-                initialDraftAnswers: shell.questionDraftFor(messageKey).answers || ({})
-                initialOtherQuestions: shell.questionDraftFor(messageKey).otherAnswers || ({})
-                initialQuestionIndex: shell.questionDraftFor(messageKey).questionIndex || 0
-                onDraftChanged: function (answers, questionIndex, otherAnswers) {
-                    shell.saveQuestionDraft(messageKey, answers, questionIndex, otherAnswers);
-                }
-                onAnswersSubmitted: function (answers) {
-                    shell.clearQuestionDraft(messageKey);
-                    host.answerQuestion(messageKey, answers);
-                }
-                onDraftDiscarded: shell.clearQuestionDraft(messageKey)
+                    lifecycleStatus: messageDelegate.status
+                    objectName: "messageQuestionCard"
+                    questions: messageDelegate.messageQuestions
+                    answerData: messageDelegate.messageQuestionAnswers
+                    pending: messageDelegate.running
+                    messageKey: messageDelegate.messageKey
+
+                    initialDraftAnswers: shell.questionDraftFor(messageKey).answers || ({})
+                    initialOtherQuestions: shell.questionDraftFor(messageKey).otherAnswers || ({})
+                    initialQuestionIndex: shell.questionDraftFor(messageKey).questionIndex || 0
+                    onDraftChanged: function (answers, questionIndex, otherAnswers) {
+                        shell.saveQuestionDraft(messageKey, answers, questionIndex, otherAnswers);
+                    }
+                    onAnswersSubmitted: function (answers) {
+                        shell.clearQuestionDraft(messageKey);
+                        host.answerQuestion(messageKey, answers);
+                    }
+                    onDraftDiscarded: shell.clearQuestionDraft(messageKey)
                 }
             }
 
@@ -397,12 +659,14 @@ Item {
                     objectName: "messageApprovalCard"
                     prompt: messageDelegate.body
                     command: messageDelegate.command
+                    tool: messageDelegate.target
+                    status: messageDelegate.status
                     pending: messageDelegate.running
                     answerData: messageDelegate.messageQuestionAnswers
                     questions: messageDelegate.messageQuestions
-                    tokens: shell.t
+
                     onDecisionSubmitted: function (answers) {
-                        host.answerQuestion(messageKey, answers)
+                        host.answerQuestion(messageKey, answers);
                     }
                 }
             }
@@ -449,12 +713,10 @@ Item {
                 // the viewport; existing anchor repair absorbs that correction.
                 readonly property real userCollapsedHeight: font.pixelSize * 1.75 * 20
                 readonly property bool userOverlong: kind === "user" && implicitHeight > userCollapsedHeight + 1
-                height: userOverlong && !messageDelegate.userExpanded
-                    ? Math.min(implicitHeight, userCollapsedHeight)
-                    : sourceInitialized ? Math.max(implicitHeight, font.pixelSize * 1.4) : estimatedUnrenderedHeight
+                height: userOverlong && !messageDelegate.userExpanded ? Math.min(implicitHeight, userCollapsedHeight) : sourceInitialized ? Math.max(implicitHeight, font.pixelSize * 1.4) : estimatedUnrenderedHeight
                 clip: userOverlong && !messageDelegate.userExpanded
-                topPadding: codeBlocks.length > 0 && codeBlocks[0].startsDocument ? 8 : 0
-                bottomPadding: codeBlocks.length > 0 && codeBlocks[codeBlocks.length - 1].endsDocument ? 8 : 0
+                topPadding: codeBlocks.length > 0 && codeBlocks[0].startsDocument ? codeRecipe.padding : 0
+                bottomPadding: codeBlocks.length > 0 && codeBlocks[codeBlocks.length - 1].endsDocument ? codeRecipe.padding : 0
                 // Keep measured geometry for cached rows, but do not parse a
                 // growing Markdown document outside the reading viewport.
                 // Source stays authoritative in the message model; returning
@@ -476,10 +738,12 @@ Item {
                     // materializes the newest authoritative model source.
                     // Never pin an empty document — that freezes a blank body
                     // for the rest of the turn.
-                    if (readingAnchorOwnsBody && host.sessionRunning
-                            && sourceInitialized && renderedSource.length > 0 && !readerSourcePinned) {
+                    if (readingAnchorOwnsBody && host.sessionRunning && sourceInitialized && renderedSource.length > 0 && !readerSourcePinned) {
                         readerSourcePinned = true;
-                        shell.traceTranscript("reader-pin", {key: messageKey, pinned: true});
+                        shell.traceTranscript("reader-pin", {
+                            key: messageKey,
+                            pinned: true
+                        });
                     }
                 }
                 onReadingAnchorOwnsBodyChanged: {
@@ -487,7 +751,10 @@ Item {
                         pinReaderIfStreaming();
                     } else {
                         if (readerSourcePinned)
-                            shell.traceTranscript("reader-pin", {key: messageKey, pinned: false});
+                            shell.traceTranscript("reader-pin", {
+                                key: messageKey,
+                                pinned: false
+                            });
                         readerSourcePinned = false;
                         refreshRenderedSource();
                     }
@@ -565,9 +832,7 @@ Item {
                         return;
                     // A diagram finishing under a pinned reader redraws the text they are
                     // reading; the newest source waits for them as before.
-                    if (sourceInitialized && sameMessage && readerSourcePinned && selectionStart === selectionEnd
-                            && !prefixChanged && !force && renderedMermaidRevision !== host.mermaidRevision
-                            && renderedSource.toLowerCase().indexOf("mermaid") >= 0) {
+                    if (sourceInitialized && sameMessage && readerSourcePinned && selectionStart === selectionEnd && !prefixChanged && !force && renderedMermaidRevision !== host.mermaidRevision && renderedSource.toLowerCase().indexOf("mermaid") >= 0) {
                         rerenderHeldSource();
                         return;
                     }
@@ -577,15 +842,13 @@ Item {
                     // the pin. Explicit older-prefix loads are exempt.
                     // An empty pinned document must still accept the first real
                     // body; otherwise "Codex · streaming" shows with no text.
-                    if (sourceInitialized && sameMessage && readerSourcePinned
-                            && renderedSource.length > 0 && !prefixChanged && !force)
+                    if (sourceInitialized && sameMessage && readerSourcePinned && renderedSource.length > 0 && !prefixChanged && !force)
                         return;
                     // Replacing the document drops the reader's selection, so a
                     // streaming answer could not be selected and copied. Hold what
                     // is rendered while text is selected; clearing the selection
                     // applies the newest source.
-                    if (sourceInitialized && sameMessage && selectionStart !== selectionEnd
-                            && !prefixChanged && !force) {
+                    if (sourceInitialized && sameMessage && selectionStart !== selectionEnd && !prefixChanged && !force) {
                         selectionHeld = true;
                         return;
                     }
@@ -658,13 +921,13 @@ Item {
                             bodyText.refreshRenderedSource();
                     }
                 }
-                visible: !messageDelegate.activityRow && subtype !== "question" && subtype !== "approval" && kind !== "file"
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && subtype !== "question" && subtype !== "approval" && kind !== "file"
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true
-                selectionColor: shell.t.accent
-                selectedTextColor: "#ffffff"
-                color: messageSurface.agentMessage ? shell.t.textMain : kind === "user" ? "#ffffff" : kind === "file" ? shell.t.tabActiveText : shell.t.textMain
+                selectionColor: KetTheme.t.accent
+                selectedTextColor: KetTheme.t.actionPrimaryInk
+                color: messageSurface.agentMessage ? KetTheme.t.textMain : kind === "user" ? userRecipe.text : kind === "file" ? KetTheme.t.tabActiveText : KetTheme.t.textMain
                 wrapMode: TextEdit.Wrap
                 textFormat: kind === "assistant" && !renderedPartialBody ? TextEdit.MarkdownText : TextEdit.PlainText
                 baseUrl: host.messageBaseUrl
@@ -675,7 +938,6 @@ Item {
                 property var codeFences: []
                 property bool codeFencesIdentity: true
                 property var codeBlocks: []
-                property var inlineCode: []
                 property string lastActivatedLink: ""
                 property double lastLinkActivationTime: 0
                 function activateLink(link) {
@@ -711,7 +973,6 @@ Item {
                     try {
                         host.formatMessageDocument(textDocument, font.pixelSize, width);
                         codeBlocks = host.messageCodeBlocks(textDocument);
-                        inlineCode = host.messageInlineCode(textDocument);
                         mermaidPlaceholders = host.mermaidPlaceholderPositions(textDocument);
                         const layout = host.mermaidLayout(textDocument, messageKey);
                         mermaidBlocks = layout.blocks;
@@ -729,8 +990,10 @@ Item {
                 }
                 Connections {
                     target: host
-                    function onTokensChanged() {
-                        bodyText.updateParagraphFormat();
+                    function onDocumentStyleChanged() {
+                        // Appearance also updates the QML font/width bindings. Format
+                        // after they settle so text and overlay geometry use one layout.
+                        Qt.callLater(bodyText.updateParagraphFormat);
                     }
                     function onFileLinksChanged() {
                         bodyText.updateParagraphFormat();
@@ -764,9 +1027,9 @@ Item {
                         width: modelData.width
                         height: modelData.height
                         z: -1
-                        radius: Metrics.px(6, shell.t)
-                        color: shell.t.codeBlockBackground
-                        border.color: shell.t.codeBlockBorder
+                        radius: codeRecipe.radius
+                        color: codeRecipe.background
+                        border.color: codeRecipe.border
                         border.width: 1
                     }
                 }
@@ -782,9 +1045,9 @@ Item {
                         width: modelData.width
                         height: modelData.height
                         z: -1
-                        radius: Metrics.px(6, shell.t)
-                        color: shell.t.codeBlockBackground
-                        border.color: shell.t.codeBlockBorder
+                        radius: codeRecipe.radius
+                        color: codeRecipe.background
+                        border.color: codeRecipe.border
                         border.width: 1
                     }
                 }
@@ -794,11 +1057,11 @@ Item {
                         id: mermaidSwitch
                         objectName: "mermaidSwitch"
                         required property var modelData
-                        tokens: shell.t
+
                         rendered: modelData.rendered
                         // Beside the copy button of a source block, in the corner of a diagram.
-                        x: modelData.x + modelData.width - width - Metrics.px(4, shell.t) - (rendered ? 0 : Metrics.px(30, shell.t))
-                        y: modelData.y + bodyText.topPadding + Metrics.px(5, shell.t)
+                        x: modelData.x + modelData.width - width - KetTheme.px(4, KetTheme.zoom) - (rendered ? 0 : KetTheme.px(30, KetTheme.zoom))
+                        y: modelData.y + bodyText.topPadding + KetTheme.px(5, KetTheme.zoom)
                         z: 2
                         onModeRequested: rendered => {
                             // The row changes height under the reader's line, so the change runs
@@ -808,20 +1071,6 @@ Item {
                                 bodyText.applyMermaidMode();
                             });
                         }
-                    }
-                }
-                Repeater {
-                    model: bodyText.inlineCode
-                    delegate: Rectangle {
-                        objectName: "messageInlineCodeChip"
-                        required property var modelData
-                        x: modelData.x
-                        y: modelData.y + bodyText.topPadding
-                        width: modelData.width
-                        height: modelData.height
-                        z: -1
-                        radius: Metrics.px(4, shell.t)
-                        color: shell.t.inlineCodeBackground
                     }
                 }
                 Loader {
@@ -841,28 +1090,29 @@ Item {
                         y: range ? range.y : 0
                         width: range ? range.width : 0
                         height: range ? range.height : 0
-                        radius: Metrics.px(2, shell.t)
-                        color: shell.t.accentMuted
+                        radius: KetTheme.px(2, KetTheme.zoom)
+                        color: KetTheme.t.accentMuted
                     }
                 }
                 Repeater {
-                    // Fenced code of this block's Markdown source is extracted only once the row
-                    // shows its chrome; buttons appear when it lines up with the rendered code
-                    // frames (indented code blocks do not get one).
-                    model: messageDelegate.chromeActive && kind === "assistant" && bodyText.codeBlocks.length > 0 && (bodyText.codeFencesIdentity ? host.codeBlockSources(body).length === bodyText.codeBlocks.length : bodyText.codeFences.length === bodyText.codeBlocks.length) ? bodyText.codeBlocks : []
+                    // Every code frame carries its Copy button, as the kit's code block does.
+                    // Only the row still being written waits for its chrome, so streaming text
+                    // is not re-scanned for fences on every chunk. Buttons appear when the
+                    // fences line up with the rendered frames (indented code gets none).
+                    model: messageDelegate.codeCopyShown && kind === "assistant" && bodyText.codeBlocks.length > 0 && (bodyText.codeFencesIdentity ? host.codeBlockSources(body).length === bodyText.codeBlocks.length : bodyText.codeFences.length === bodyText.codeBlocks.length) ? bodyText.codeBlocks : []
                     delegate: TranscriptCopyButton {
                         objectName: "copyCodeBlockButton"
                         required property var modelData
                         required property int index
-                        x: modelData.x + modelData.width - width - Metrics.px(4, shell.t)
-                        y: modelData.y + bodyText.topPadding + Metrics.px(4, shell.t)
+                        x: modelData.x + modelData.width - width - KetTheme.px(4, KetTheme.zoom)
+                        y: modelData.y + bodyText.topPadding + KetTheme.px(4, KetTheme.zoom)
                         z: 2
-                        width: Metrics.px(26, shell.t)
-                        height: Metrics.px(26, shell.t)
-                        tokens: shell.t
+                        width: KetTheme.px(26, KetTheme.zoom)
+                        height: KetTheme.px(26, KetTheme.zoom)
+
                         label: "Copy code"
-                        padding: Metrics.px(6, shell.t)
-                        idleColor: shell.t.codeBlockBackground
+                        padding: KetTheme.px(6, KetTheme.zoom)
+                        idleColor: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background
                         onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
                         onClicked: host.copyText(host.codeBlockSources(messageDelegate.body)[bodyText.codeFencesIdentity ? index : bodyText.codeFences[index]] || "")
                     }
@@ -885,10 +1135,13 @@ Item {
                         if (source.toString().length > 0) {
                             if (source.toString() === "qrc:/agent/mermaid-placeholder.svg")
                                 return;
-                            if (host.openMermaidImage(source))
+                            // A diagram opens in the image viewer, as in the mock.
+                            const diagram = host.mermaidViewerImage(source);
+                            if (diagram.source) {
+                                preview.showItems([diagram], 0);
                                 return;
-                            preview.imageSource = source;
-                            preview.open();
+                            }
+                            preview.showImages([source], 0);
                             return;
                         }
                         const link = host.messageLinkAt(bodyText.textDocument, position);
@@ -912,32 +1165,32 @@ Item {
                         // The box the document reserved for the image, from the same place.
                         width: modelData.width
                         height: modelData.height
-                        color: shell.t.panelSubtle
-                        border.color: shell.t.border
-                        radius: Metrics.px(6, shell.t)
+                        color: KetTheme.t.panelBgSubtle
+                        border.color: KetTheme.t.panelBorder
+                        radius: KetTheme.px(6, KetTheme.zoom)
                         Text {
                             objectName: "mermaidPendingLabel"
                             anchors.centerIn: parent
                             visible: parent.pending
                             text: "Loading..."
-                            color: shell.t.textSecondary
-                            font.family: shell.t.uiFont
-                            font.pixelSize: shell.t.body
+                            color: KetTheme.t.textSecondary
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                         Column {
                             anchors.centerIn: parent
-                            width: parent.width - Metrics.px(24, shell.t)
-                            spacing: Metrics.px(8, shell.t)
+                            width: parent.width - KetTheme.px(24, KetTheme.zoom)
+                            spacing: KetTheme.px(8, KetTheme.zoom)
                             visible: !parent.pending
                             Text {
                                 text: host.mermaidInstalling ? "Installing Mermaid..." : "Mermaid"
-                                color: shell.t.textSecondary
-                                font.family: shell.t.uiFont
-                                font.pixelSize: shell.t.body
+                                color: KetTheme.t.textSecondary
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                             }
                             Row {
                                 width: parent.width
-                                spacing: Metrics.px(8, shell.t)
+                                spacing: KetTheme.px(8, KetTheme.zoom)
                                 TextEdit {
                                     objectName: "mermaidInstallCommand"
                                     // Claim Copy and Select All before the Edit menu can: a read-only TextEdit does not,
@@ -950,36 +1203,42 @@ Item {
                                             event.accepted = true;
                                         }
                                     }
-                                    width: parent.width - Metrics.px(40, shell.t)
-                                    height: Math.max(Metrics.px(32, shell.t), contentHeight)
+                                    width: parent.width - KetTheme.px(40, KetTheme.zoom)
+                                    height: Math.max(KetTheme.px(32, KetTheme.zoom), contentHeight)
                                     verticalAlignment: TextEdit.AlignVCenter
                                     text: "npm install -g @mermaid-js/mermaid-cli"
                                     readOnly: true
                                     selectByMouse: true
                                     wrapMode: TextEdit.Wrap
-                                    color: shell.t.textMain
-                                    font.family: shell.t.monoFont
-                                    font.pixelSize: shell.t.body
+                                    color: KetTheme.t.textMain
+                                    font.family: agentHost.monoFontFamily
+                                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 }
                                 Basic.ToolButton {
                                     id: mermaidInstallButton
                                     objectName: "mermaidInstallButton"
-                                    width: Metrics.px(32, shell.t)
-                                    height: Metrics.px(32, shell.t)
-                                    padding: Metrics.px(7, shell.t)
+                                    width: KetTheme.px(32, KetTheme.zoom)
+                                    height: KetTheme.px(32, KetTheme.zoom)
+                                    padding: KetTheme.px(7, KetTheme.zoom)
                                     enabled: !host.mermaidInstalling
-                                    contentItem: TintedIcon {
-                                        source: "qrc:/agent/icons/play.svg"
-                                        color: parent.enabled ? shell.t.textMain : shell.t.textDisabled
+                                    contentItem: Item {
+                                        implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                        implicitHeight: implicitWidth
+                                        KetIcon {
+                                            anchors.centerIn: parent
+                                            box: Math.min(parent.width, parent.height)
+                                            name: KetTheme.iconForLucide("play")
+                                            color: parent.enabled ? KetTheme.t.textMain : KetTheme.t.textDisabled
+                                        }
                                     }
                                     background: Rectangle {
-                                        color: parent.hovered ? shell.t.surfaceHover : "transparent"
-                                        radius: Metrics.px(4, shell.t)
+                                        color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
+                                        radius: KetTheme.px(4, KetTheme.zoom)
                                     }
                                     onClicked: host.installMermaid()
                                     Accessible.name: "Install Mermaid"
                                     KetToolTip {
-                                        tokens: shell.t
+                                        objectName: "ketToolTip"
                                         visible: mermaidInstallButton.hovered
                                         text: "Install Mermaid"
                                     }
@@ -989,13 +1248,13 @@ Item {
                                 width: parent.width
                                 visible: host.mermaidInstallError.length > 0 && !host.mermaidInstalling
                                 text: host.mermaidInstallError
-                                color: shell.t.warning
-                                font.family: shell.t.uiFont
-                                font.pixelSize: shell.t.caption
+                                color: KetTheme.t.warning
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                                 elide: Text.ElideRight
                                 maximumLineCount: 1
                                 KetToolTip {
-                                    tokens: shell.t
+                                    objectName: "ketToolTip"
                                     visible: errorHover.hovered
                                     text: host.mermaidInstallError
                                 }
@@ -1015,14 +1274,11 @@ Item {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
                     hoverEnabled: true
-                    readonly property string link: containsMouse && bodyText.sourceInitialized
-                        ? host.messageLinkAt(bodyText.textDocument,
-                                             bodyText.positionAt(mouseX, mouseY))
-                        : ""
+                    readonly property string link: containsMouse && bodyText.sourceInitialized ? host.messageLinkAt(bodyText.textDocument, bodyText.positionAt(mouseX, mouseY)) : ""
                     cursorShape: link.length > 0 ? Qt.PointingHandCursor : Qt.IBeamCursor
                 }
-                font.family: kind === "tool" && subtype !== "compaction" ? shell.t.monoFont : shell.t.uiFont
-                font.pixelSize: kind === "tool" ? shell.t.body : shell.t.reading
+                font.family: kind === "tool" && subtype !== "compaction" ? agentHost.monoFontFamily : KetTheme.fontFamily
+                font.pixelSize: kind === "tool" ? KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels : KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
             }
 
             Basic.Button {
@@ -1031,7 +1287,7 @@ Item {
                 visible: bodyText.userOverlong
                 text: messageDelegate.userExpanded ? "Show less" : "Show more"
                 Accessible.name: text + " user message"
-                implicitHeight: visible ? Metrics.px(26, shell.t) : 0
+                implicitHeight: visible ? KetTheme.px(26, KetTheme.zoom) : 0
                 leftPadding: 0
                 rightPadding: 0
                 topPadding: 0
@@ -1039,46 +1295,36 @@ Item {
                 background: Item {}
                 contentItem: Text {
                     text: userMessageMore.text
-                    color: "#ffffff"
-                    font.family: shell.t.uiFont
-                    font.pixelSize: shell.t.body
+                    color: userRecipe.text
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     font.underline: userMessageMore.hovered || userMessageMore.activeFocus
                     verticalAlignment: Text.AlignVCenter
                 }
                 onClicked: {
                     messageDelegate.userExpanded = !messageDelegate.userExpanded;
-                    view.rememberActivityState(messageDelegate.userExpansionKey, {expanded: messageDelegate.userExpanded});
+                    view.rememberActivityState(messageDelegate.userExpansionKey, {
+                        expanded: messageDelegate.userExpanded
+                    });
                 }
             }
 
-            MessageImageGallery {
-                id: imageGallery
-                objectName: "messageImageGallery"
-                readonly property string expansionKey: JSON.stringify(["images", view.cacheScope, messageDelegate.messageKey])
-                function restoreImages() {
-                    const saved = view.activityState(expansionKey);
-                    maximumVisible = saved === undefined ? 3 : saved.imageLimit;
-                }
-                onExpansionKeyChanged: restoreImages()
-                Component.onCompleted: restoreImages()
-                onExpanded: view.rememberActivityState(expansionKey, {imageLimit: maximumVisible})
-                width: Math.min(parent.width, preferredWidth)
-                sources: messageDelegate.messageImages
-                tokens: shell.t
-                host: messageDelegate.host
-                visible: !messageDelegate.activityRow && imageCount > 0
-                // Thumbnail rows have fixed geometry; adding/removing attachments
-                // still preserves the reading anchor.
-                onHeightChanged: {
-                    if (view.followTail || shell.transcript !== view)
-                        return;
-                    host.scheduleTranscriptRestore();
-                }
-                onImageClicked: function (source) {
-                    preview.imageSource = source;
-                    preview.open();
+            Repeater {
+                model: messageDelegate.atlasLinks || []
+                delegate: AtlasResultCard {
+                    required property string modelData
+                    width: messageColumn.width
+                    link: modelData
+                    host: messageDelegate.host
+
                 }
             }
+
+            TranscriptMessageImages {
+                row: messageDelegate
+                sources: kind === "user" ? [] : messageDelegate.messageImages
+            }
+
         }
     }
 }

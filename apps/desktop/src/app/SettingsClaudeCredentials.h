@@ -6,7 +6,7 @@ class QLabel;
 class QLineEdit;
 class QComboBox;
 class QDoubleSpinBox;
-class QPushButton;
+class QAbstractButton;
 
 namespace ketplus {
 class SettingsClaudeCredentials final : public QWidget {
@@ -26,13 +26,13 @@ class SettingsClaudeCredentials final : public QWidget {
     Requester requester_;
     QComboBox* mode_;
     QLineEdit* key_;
-    QDoubleSpinBox* budget_;
+    QDoubleSpinBox* budget_; // USD; 0 is no limit
     QLabel* status_;
     QLabel* observation_;
-    QPushButton* save_;
-    QPushButton* check_;
-    QPushButton* remove_;
-    QPushButton* refresh_;
+    QAbstractButton* save_;
+    QAbstractButton* check_;
+    QAbstractButton* remove_;
+    QAbstractButton* refresh_;
     bool busy_{false};
     bool supported_{false};
     bool configured_{false};

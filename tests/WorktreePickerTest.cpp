@@ -1,3 +1,4 @@
+#include "KetDialog.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -8,6 +9,7 @@
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
 #include "workspace/SidebarRepositoryList.h"
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -42,7 +44,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(first);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(agent);
         const auto before = agent->activePath();
@@ -76,7 +78,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(a);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         auto* manager = window.findChild<ketplus::AgentSessionManager*>();
         auto* server = manager->findChild<ketplus::CodexAppServer*>();
@@ -100,8 +102,8 @@ class WorktreePickerTest : public QObject {
                  QFileInfo(b).canonicalFilePath());
         QCOMPARE(manager->conversations(anchor).first().toMap().value("executionPath").toString(),
                  b);
-        QTRY_VERIFY(window.findChild<QToolButton*>("productRepositoryGroupButton"));
-        const auto groups = window.findChildren<QToolButton*>("productRepositoryGroupButton");
+        QTRY_VERIFY(window.findChild<QAbstractButton*>("productRepositoryGroupButton"));
+        const auto groups = window.findChildren<QAbstractButton*>("productRepositoryGroupButton");
         QCOMPARE(groups.first()->toolTip(), QFileInfo(b).canonicalFilePath());
         emit server->executionContextChanged("same-conversation", "old", a, 1);
         QCOMPARE(agent->executionPath(), b);
@@ -122,7 +124,7 @@ class WorktreePickerTest : public QObject {
         manager->activate(anchor, false);
         QTest::qWait(50);
         bool targetActive = false;
-        for (auto* group : window.findChildren<QToolButton*>("productRepositoryGroupButton")) {
+        for (auto* group : window.findChildren<QAbstractButton*>("productRepositoryGroupButton")) {
             if (group->toolTip() == QFileInfo(b).canonicalFilePath())
                 targetActive = group->property("activeRepository").toBool();
         }
@@ -157,7 +159,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(first);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         auto* service = window.findChild<ketplus::GitService*>();
         QVERIFY(agent && service);
@@ -187,7 +189,9 @@ class WorktreePickerTest : public QObject {
     }
 
     void unsupportedAgentKeepsExecutionAndScrollLoadsMore() {
-        QWidget parent;
+        QWidget parent; // the picker is a card inside this window
+        parent.resize(900, 600);
+        parent.show();
         QString selected;
         QStringList methods;
         ketplus::showExecutionWorktreeDialog(
@@ -207,9 +211,10 @@ class WorktreePickerTest : public QObject {
                      {});
             },
             [&](const QString& path) { selected = path; }, "/repo/tree-0");
-        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         QVERIFY(dialog);
-        QCOMPARE(dialog->layout()->contentsMargins(), QMargins(24, 24, 24, 24));
+        // The card pads its body, as the mock's KetDialog does.
+        QCOMPARE(dialog->body()->layout()->contentsMargins(), QMargins());
         auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
         QVERIFY(!list->isEnabled());
         QCOMPARE(list->count(), 100);

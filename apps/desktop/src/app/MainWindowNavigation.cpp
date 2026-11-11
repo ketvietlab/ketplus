@@ -101,7 +101,6 @@ QuickOpenPopup* MainWindow::ensureQuickOpen() {
             }
         });
     }
-    quickOpen_->setStyleSheet(quickOpenStyleSheet());
     return quickOpen_;
 }
 

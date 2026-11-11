@@ -112,12 +112,12 @@ class TerminalView final : public QAbstractScrollArea {
     int leftPadding_{10};
     int topPadding_{8};
     bool cursorBlinkOn_{true};
-    QColor foreground_{QStringLiteral("#CDD2D8")};
-    QColor background_{QStringLiteral("#171B20")};
-    QColor cursorColor_{QStringLiteral("#1746FF")};
-    QColor selectionColor_{QStringLiteral("#394B8A")};
-    QColor searchColor_{QStringLiteral("#8A6D1E")};
-    QColor currentSearchColor_{QStringLiteral("#B98900")};
+    QColor foreground_;
+    QColor background_;
+    QColor cursorColor_;
+    QColor selectionColor_;
+    QColor searchColor_;
+    QColor currentSearchColor_;
     QString preeditText_;
     int preeditCursor_{0};
     QTimer* cursorTimer_{nullptr};

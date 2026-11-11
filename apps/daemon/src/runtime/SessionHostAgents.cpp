@@ -111,6 +111,36 @@ QString SessionHost::startAgentTurn(const QString& sessionId, const qint64 gener
                : result.value(QStringLiteral("error_message")).toString();
 }
 
+// A new review agent: a read-only conversation in the same worktree whose first turn
+// only introduces the role. Returns its session id, or empty with `error` set.
+QString SessionHost::startReviewerConversation(const Session& working, const QString& provider,
+                                               QString* error) {
+    const QString number =
+        journal_->conversationNumber(working.stored.id, working.stored.generation);
+    const QString prompt =
+        QStringLiteral(
+            "KetPlus made this conversation the reviewer of #%1 \"%2\" in %3. After each "
+            "turn it finishes, you will receive that turn's changes to review. Reviews "
+            "are read-only: you cannot edit files, run commands that change anything, "
+            "push, merge or approve. Reply \"Ready.\" now.")
+            .arg(number, working.stored.title, working.stored.worktreePath);
+    const QJsonObject result =
+        startTurn(internalRequest(
+                      QStringLiteral("session.start_turn"), {}, -1,
+                      {{QStringLiteral("prompt"), prompt},
+                       {QStringLiteral("display_text"), QStringLiteral("Reviewer for #") + number},
+                       {QStringLiteral("worktree_path"), working.stored.worktreePath},
+                       {QStringLiteral("options"),
+                        QJsonObject{{QStringLiteral("provider"), provider},
+                                    {QStringLiteral("permission"), QStringLiteral("read-only")}}}}),
+                  true);
+    if (!result.value(QStringLiteral("ok")).toBool()) {
+        *error = result.value(QStringLiteral("error_message")).toString();
+        return {};
+    }
+    return result.value(QStringLiteral("session_id")).toString();
+}
+
 QString SessionHost::steerAgentTurn(const QString& sessionId, const qint64 generation,
                                     const QString& providerText, const QJsonObject& origin) {
     const auto it = sessions_.constFind(sessionId);
@@ -154,7 +184,12 @@ QString SessionHost::agentInstructions(const Session& session) const {
         return {};
     const QString number =
         journal_->conversationNumber(session.stored.id, session.stored.generation);
-    return number.isEmpty() ? QString{} : agent_messaging::toolInstructions(number);
+    if (number.isEmpty())
+        return {};
+    // ADR 0112: a member also gets its role's instructions, current at every turn.
+    const QString team = teamInstructionsFor(session.stored.id);
+    return team.isEmpty() ? agent_messaging::toolInstructions(number)
+                          : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;
 }
 
 void SessionHost::addAgentContext(Session& session, const QString& userText, QJsonArray& input,
@@ -170,6 +205,26 @@ void SessionHost::addAgentContext(Session& session, const QString& userText, QJs
         !references.isEmpty())
         input.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                  {QStringLiteral("text"), references}});
+}
+
+QJsonObject SessionHost::heldAgentMessages(const QJsonObject& request, bool release) {
+    Session* session = nullptr;
+    const auto failure = checkedSession(request, &session);
+    if (!failure.isEmpty())
+        return failure;
+    const auto payload = request.value("payload").toObject();
+    const auto values = payload.value("message_ids").toArray();
+    QStringList ids;
+    for (const auto& value : values) {
+        if (!value.isString() || value.toString().isEmpty() || value.toString().size() > 128)
+            return {{"ok", false},
+                    {"error_code", "invalid_held_batch"},
+                    {"error_message", "Invalid message ID."}};
+        ids.append(value.toString());
+    }
+    return release ? agents_->releaseHeldMessages(session->stored.id, session->stored.generation,
+                                                  ids, request.value("message_id").toString())
+                   : agents_->heldMessages(session->stored.id, session->stored.generation, ids);
 }
 
 } // namespace ketplus::daemon

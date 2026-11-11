@@ -72,7 +72,9 @@ class SparkleAppUpdater final : public AppUpdater {
     }
 
     void notifyStateChanged() { emit stateChanged(); }
-    void remindLater(const QString& version) { setPendingVersion(version); }
+    void remindLater(const QString& version, const bool downloaded = false) {
+        setPendingVersion(version, downloaded);
+    }
 
   private:
     KetPlusSparkleDelegate* delegate_{nil};
@@ -144,7 +146,9 @@ AppUpdater* createPlatformAppUpdater(QObject* parent) { return new SparkleAppUpd
                                             state:(SPUUserUpdateState*)state {
     if (!_owner || handleShowingUpdate || state.userInitiated)
         return;
-    _owner->remindLater(QString::fromNSString(update.displayVersionString));
+    // A downloaded update installs on restart, as the mock's "Restart to install" says.
+    _owner->remindLater(QString::fromNSString(update.displayVersionString),
+                        state.stage != SPUUserUpdateStageNotDownloaded);
 }
 
 - (void)standardUserDriverDidReceiveUserAttentionForUpdate:(SUAppcastItem*)update {

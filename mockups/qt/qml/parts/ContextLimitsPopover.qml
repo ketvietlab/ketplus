@@ -172,8 +172,8 @@ Basic.Popup {
             Repeater {
                 model: [
                     { name: "SDK session estimate", value: "$139.6424" },
-                    { name: "Input / output tokens", value: "22.383 / 1.561.880" },
-                    { name: "Cache read / write", value: "400.672.151 / 3.522.600" },
+                    { name: "Input / output tokens", value: "22,383 / 1,561,880" },
+                    { name: "Cache read / write", value: "400,672,151 / 3,522,600" },
                     { name: "Query budget", value: "Managed by runtime" }
                 ]
                 RowLayout {

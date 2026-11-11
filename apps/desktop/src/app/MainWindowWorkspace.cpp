@@ -99,7 +99,6 @@ ExplorerPanel* MainWindow::ensureExplorer() {
     connect(explorer_, &ExplorerPanel::gitDiffRequested, this,
             [this](const QString& path) { requestFileDiff(path); });
     connect(explorer_, &ExplorerPanel::openFolderRequested, this, &MainWindow::chooseFolder);
-    connect(explorer_, &ExplorerPanel::hideRequested, this, [this] { setExplorerVisible(false); });
     connect(explorer_, &ExplorerPanel::pathRenamed, this,
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
@@ -187,6 +186,13 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
             [this](const QString& path, const GitDiffMode mode) { requestFileDiff(path, mode); });
     connect(gitChanges_, &GitChangesPanel::fileOpenRequested, this, &MainWindow::openFile);
     connect(gitChanges_, &GitChangesPanel::refreshRequested, git_, &GitService::refresh);
+    connect(gitChanges_, &GitChangesPanel::stageRequested, git_, &GitService::stageFile);
+    connect(gitChanges_, &GitChangesPanel::unstageRequested, git_, &GitService::unstageFile);
+    connect(gitChanges_, &GitChangesPanel::commitRequested, git_, &GitService::commitStaged);
+    connect(git_, &GitService::mutationRunningChanged, gitChanges_,
+            &GitChangesPanel::setMutationRunning);
+    connect(git_, &GitService::mutationFinished, gitChanges_, &GitChangesPanel::mutationFinished);
+    gitChanges_->setMutationRunning(git_->mutationRunning());
     connect(gitChanges_, &GitChangesPanel::hideRequested, this,
             [this] { setSourceControlVisible(false); });
     gitChanges_->setSnapshot(gitSnapshot_);
@@ -324,6 +330,23 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
 
 void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
     gitSnapshot_ = snapshot;
+    if (agentWorkspace_) {
+        QStringList uncommitted;
+        for (const auto& file : snapshot.files)
+            if (!file.ignored)
+                uncommitted.append(file.path);
+        agentWorkspace_->setWorkingChanges(snapshot.repositoryRoot, uncommitted);
+    }
+    refreshAgentChanges();
+    if (explorer_) {
+        QHash<QString, QString> statuses;
+        for (const auto& file : snapshot.files)
+            statuses.insert(QDir(snapshot.repositoryRoot).filePath(file.path),
+                            file.untracked ? QStringLiteral("U")
+                                           : QString(file.hasUnstagedChange() ? file.worktreeCode
+                                                                              : file.indexCode));
+        explorer_->setFileStatuses(statuses);
+    }
     if (!pendingTranscriptDiff_.isEmpty() && snapshot.isRepository() &&
         normalizedPath(snapshot.repositoryRoot) == pendingTranscriptDiffRoot_ &&
         normalizedPath(snapshot.repositoryRoot) ==
@@ -410,8 +433,6 @@ void MainWindow::prioritizeWorktree(QVector<GitWorktree>& worktrees) const {
 
 void MainWindow::rebuildWorktreeMenu() {
     worktreeMenu_->clear();
-    worktreeMenu_->addAction(manageWorktreesAction_);
-    worktreeMenu_->addSeparator();
     if (worktrees_.isEmpty()) {
         auto* emptyAction = worktreeMenu_->addAction(QStringLiteral("No linked worktrees"));
         emptyAction->setEnabled(false);

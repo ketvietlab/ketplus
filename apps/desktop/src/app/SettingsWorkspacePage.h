@@ -1,18 +1,18 @@
 #pragma once
 
+#include "app/SettingsAccountPage.h"
 #include "app/SettingsProvidersPage.h"
 #include "app/SettingsStoragePage.h"
-#include "ui/Theme.h"
-
-#include <QWidget>
-
-class QListWidget;
+#include "app/SettingsWorkspace.h"
 
 namespace ketplus {
 
 class SettingsDialog;
 
-class SettingsWorkspacePage final : public QWidget {
+// Pro's Settings: the shared page (core SettingsWorkspace) with Conversation width on
+// Typography and Pro's sections: Account & devices, Agent models, Browser, Computer use,
+// Providers, Archived, Storage and Updates.
+class SettingsWorkspacePage final : public SettingsWorkspace {
     Q_OBJECT
 
   public:
@@ -22,22 +22,23 @@ class SettingsWorkspacePage final : public QWidget {
                                    SettingsClaudeCredentials::Requester credentials = {},
                                    SettingsStoragePage::Requester storage = {});
 
-    [[nodiscard]] SettingsDialog* dialog() const noexcept;
-    void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
-    // Selects a settings section by its navigation id, such as "updates".
-    void showSection(const QString& id);
+    // Reads remote.status for Account & devices.
+    void setAccountStatusReader(SettingsAccountPage::StatusReader reader) {
+        account_->setStatusReader(std::move(reader));
+    }
+    void refreshAccount() { account_->refresh(); }
 
   signals:
-    void saved();
-    void dismissed();
     void accountDevicesRequested();
+    void accountSignOutRequested();
     void agentModelsRequested();
+    // A provider setup guide's command, to type into a terminal without running it (#170).
+    void typeInTerminalRequested(const QString& command);
 
   private:
-    SettingsDialog* dialog_{nullptr};
-    QListWidget* navigation_{nullptr};
-    ThemePalette palette_{};
-    int interfaceFontSizePixels_{14};
+    void addConversationWidth();
+
+    SettingsAccountPage* account_{nullptr};
 };
 
 } // namespace ketplus

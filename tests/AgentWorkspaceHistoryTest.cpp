@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetProfile.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentTranscriptWindowBudget.h"
@@ -728,7 +729,29 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
             {"status", "completed"}},
         true);
     QCOMPARE(read.value("subtype").toString(), QStringLiteral("fileRead"));
-    QCOMPARE(read.value("title").toString(), QStringLiteral("Read CursorAdapter.cpp L1–240"));
+    QCOMPARE(read.value("title").toString(), QStringLiteral("Read: CursorAdapter.cpp L1–240"));
+    // A tool's own read and search name their lines and their place the same way.
+    const auto toolRead = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "tool-read"},
+                    {"type", "dynamicToolCall"},
+                    {"tool", "Read"},
+                    {"arguments", QJsonObject{{"file_path", "modules/ai/src/Sidebar.qml"},
+                                              {"offset", 540},
+                                              {"limit", 61}}},
+                    {"status", "completed"}},
+        true);
+    QCOMPARE(toolRead.value("title").toString(),
+             QStringLiteral("Read: modules/ai/src/Sidebar.qml L540–600"));
+    const auto toolSearch = ketplus::agent_message::activityMessage(
+        QJsonObject{
+            {"id", "tool-search"},
+            {"type", "dynamicToolCall"},
+            {"tool", "Grep"},
+            {"arguments", QJsonObject{{"pattern", "Animation.Infinite"}, {"path", "modules/ai"}}},
+            {"status", "completed"}},
+        true);
+    QCOMPARE(toolSearch.value("title").toString(),
+             QStringLiteral("Searched code: “Animation.Infinite” in modules/ai"));
     QVERIFY(read.value("target").toString().isEmpty());
     QCOMPARE(read.value("command").toString(),
              QStringLiteral("/bin/zsh -lc \"sed -n '1,240p' modules/ai/src/CursorAdapter.cpp\""));
@@ -763,7 +786,7 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
     QCOMPARE(search.value("subtype").toString(), QStringLiteral("codeSearch"));
     QVERIFY(search.value("fileLocation").toString().isEmpty());
     QCOMPARE(search.value("title").toString(),
-             QStringLiteral("Searched “stopRequested” in AgentWorkspaceTest.cpp"));
+             QStringLiteral("Searched code: “stopRequested” in AgentWorkspaceTest.cpp"));
 
     ketplus::AgentMessageModel model;
     QVariantMap readRow = read;
@@ -773,7 +796,7 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
     model.reset({readRow, searchRow});
     // The two steps read as one line; each keeps its exact command when expanded.
     QCOMPARE(model.get(0).value("groupSummary").toString(),
-             QStringLiteral("Read a file, searched code"));
+             QStringLiteral("Explored a file, searched code"));
     model.setGroupExpanded(model.get(0).value("groupKey").toString(), true);
     QCOMPARE(model.get(0).value("command").toString(), read.value("command").toString());
     QCOMPARE(model.get(1).value("command").toString(), search.value("command").toString());
@@ -844,6 +867,7 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
             {{"id", "image"},
              {"type", type},
              {key, path},
+             {"revisedPrompt", "A flat  storage gauge,\n2 px <strokes>"},
              {"result", QJsonObject{{"content", QJsonArray{block}}}}},
             true);
         QCOMPARE(entry.value("images").toList(),
@@ -867,7 +891,37 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
         QTRY_VERIFY(resource && resource->isVisible());
         QCOMPARE(resource->property("resource").toString(),
                  QUrl::fromLocalFile(retained).toString());
+        // As in the mock: the path, or a generated image's size, on the title line; the open
+        // step shows the image, with no raw text to read or copy.
+        QCOMPARE(row->property("headDetail").toString(),
+                 type == "imageView" ? path : QStringLiteral("6 × 4"));
+        QVERIFY(!findVisualItem(row, "transcriptActivityTarget")->isVisible());
+        QVERIFY(!findVisualItem(row, "transcriptActivityDetailText")->isVisible());
+        QVERIFY(!findVisualItem(row, "copyActivityDetails")->isVisible());
+        // Only a generated image says what it was made from, on one escaped line under it.
+        auto* prompt = findVisualItem(view.quickView()->rootObject(), "imagePromptLine");
+        QVERIFY(prompt);
+        QCOMPARE(prompt->isVisible(), type == "imageGeneration");
+        if (type == "imageGeneration") {
+            QCOMPARE(entry.value("commandDescription").toString(),
+                     QStringLiteral("A flat storage gauge, 2 px <strokes>"));
+            QVERIFY(prompt->property("text").toString().endsWith(
+                QStringLiteral("A flat storage gauge, 2 px &lt;strokes&gt;")));
+        }
     }
+    // A generation that returned no image has nothing to open.
+    ketplus::AgentWorkspaceView empty;
+    empty.applyTheme(testPalette());
+    empty.resize(900, 640);
+    empty.show();
+    empty.resetMessages({ketplus::agent_message::activityMessage(
+        {{"id", "nothing"}, {"type", "imageGeneration"}, {"revisedPrompt", "a gauge"}}, true)});
+    QQuickItem* generated = nullptr;
+    QTRY_VERIFY((generated = findVisualItem(empty.quickView()->rootObject(),
+                                            "transcriptActivityRow")) != nullptr);
+    QVERIFY(!generated->property("hasDetails").toBool());
+    QVERIFY(!generated->property("expanded").toBool());
+    QVERIFY(!findVisualItem(empty.quickView()->rootObject(), "imagePromptLine")->isVisible());
 }
 
 void AgentWorkspaceViewTest::normalizesTypedTranscriptCorpus() {
@@ -953,7 +1007,12 @@ void AgentWorkspaceViewTest::normalizesTypedTranscriptCorpus() {
         QJsonObject{{"id", "reasoning"}, {"type", "reasoning"}, {"text", "Hidden"}},
         TranscriptPhase::Completed, context);
     QCOMPARE(reasoning.eventType, QStringLiteral("assistant.reasoning"));
-    QVERIFY(!reasoning.visible);
+    // The mock's "Thought" step: it shows that the agent thought, never what it thought.
+    QVERIFY(reasoning.visible);
+    const QVariantMap thought = reasoning.toVariantMap();
+    QCOMPARE(thought.value("title").toString(), QStringLiteral("Thought"));
+    QCOMPARE(thought.value("subtype").toString(), QStringLiteral("thought"));
+    QVERIFY(!QString::fromUtf8(QJsonDocument::fromVariant(thought).toJson()).contains("Hidden"));
 
     const auto registered = ActivityNormalizer::registeredRawTypes();
     for (const auto& [item, expectedType] : corpus) {
@@ -1709,11 +1768,13 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
         auto* button = root->findChild<QQuickItem*>(QString::fromLatin1(name));
         QVERIFY(button);
         QVERIFY(button->isEnabled());
-        QVERIFY(button->height() >= 28);
+        // Attach is the mock's Small icon button in the 28 px footer row.
+        QVERIFY(button->height() >= (button->objectName() == "attachButton" ? 24 : 28));
     }
     auto* attachGlyph = root->findChild<QQuickItem*>("attachGlyph");
     QVERIFY(attachGlyph);
-    QCOMPARE(attachGlyph->size(), QSizeF(14, 14));
+    QCOMPARE(attachGlyph->size(), QSizeF(ket::Profile::current().composerAttachIconSize,
+                                         ket::Profile::current().composerAttachIconSize));
     QSignalSpy configuration(&view,
                              &ketplus::AgentWorkspaceView::conversationConfigurationRequested);
     view.updateConversationConfiguration("next-model", "high", "read-only");
@@ -1731,6 +1792,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
     QCOMPARE(stopRequested.count(), 1);
     QSignalSpy submitted(&view, &ketplus::AgentWorkspaceView::steeringPromptSubmitted);
     prompt->setProperty("text", "Focus on tests");
+    QVERIFY(send->isVisible());
+    QVERIFY(!stop->isVisible());
     QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
     QVERIFY(view.steeringPending());
     QVERIFY(!send->isEnabled());
@@ -1756,7 +1819,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
     QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
     view.finishSteering(path, "first", "Final input", true);
     QCOMPARE(prompt->property("text").toString(), QString());
-    QVERIFY(send->isVisible());
+    QVERIFY(!send->isVisible());
+    QVERIFY(stop->isVisible());
     QVERIFY(!send->isEnabled());
     view.addAttachments({attachmentPath});
     QVERIFY(send->isEnabled());

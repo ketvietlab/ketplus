@@ -1,10 +1,12 @@
 #include "agent/AgentMessageModel.h"
+#include "agent/TranscriptAtlasLinks.h"
 
 #include <utility>
 
 #include "agent/AgentMessageFormatter.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptTrace.h"
+#include "agent/TranscriptTurnFiles.h"
 
 #include <QCryptographicHash>
 #include <QJsonDocument>
@@ -51,6 +53,7 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
     for (const auto* name : {"kind",
                              "body",
                              "meta",
+                             "timestamp",
                              "filePath",
                              "subtype",
                              "command",
@@ -62,6 +65,7 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "messageKey",
                              "category",
                              "eventType",
+                             "provider",
                              "phase",
                              "title",
                              "summary",
@@ -70,16 +74,21 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "cwd",
                              "commandDescription",
                              "fileLocation",
+                             "trimmedDetail",
                              "exitCode",
                              "durationMs",
                              "detailsData",
                              "payloadData",
+                             "atlasLinks",
                              "detailsRef",
                              "payloadRef",
                              "partialBody",
                              "bodyPrefixCharacters",
                              "chunkContinuation",
-                             "estimatedBodyLines"})
+                             "estimatedBodyLines",
+                             "errorCode",
+                             "errorDetail",
+                             "errorModel"})
         roles_.insert(++role, name);
     for (const QString& name : agent_message::activityGroupRoleNames()) {
         roles_.insert(++role, name.toUtf8());
@@ -186,6 +195,18 @@ int AgentMessageModel::groupLeaderIndex(const int row) const {
     if (item.value(QStringLiteral("groupRole")).toString().isEmpty())
         return -1;
     return indexes_.value(item.value(agent_message::activityGroupLeaderKeyName()).toString(), -1);
+}
+QVariantMap AgentMessageModel::turnFiles(const int row) const {
+    if (row < 0 || row >= count())
+        return {};
+    bool complete = true;
+    const QVariantList files = agent_message::turnChangedFiles(items_, visible_.at(row), &complete);
+    return {{QStringLiteral("files"), files}, {QStringLiteral("complete"), complete}};
+}
+QVariantMap AgentMessageModel::turnReport(const int row) const {
+    if (row < 0 || row >= count())
+        return {};
+    return items_.at(visible_.at(row)).value(QStringLiteral("workReport")).toMap();
 }
 QStringList AgentMessageModel::activityGroupKeys() const {
     QStringList keys;
@@ -295,9 +316,28 @@ QString AgentMessageModel::resolvePayload(const QString& reference) {
 }
 
 QVariantMap AgentMessageModel::normalized(QVariantMap item) {
-    for (const auto* key : {"kind", "body", "meta", "filePath", "subtype", "command", "category",
-                            "eventType", "phase", "title", "summary", "target", "status", "cwd",
-                            "commandDescription", "fileLocation"})
+    for (const auto* key : {"kind",
+                            "body",
+                            "meta",
+                            "timestamp",
+                            "filePath",
+                            "subtype",
+                            "command",
+                            "category",
+                            "eventType",
+                            "provider",
+                            "phase",
+                            "title",
+                            "summary",
+                            "target",
+                            "status",
+                            "cwd",
+                            "commandDescription",
+                            "fileLocation",
+                            "trimmedDetail",
+                            "errorCode",
+                            "errorDetail",
+                            "errorModel"})
         if (!item.contains(key))
             item.insert(key, QString{});
     if (item.value("category").toString().isEmpty()) {
@@ -313,14 +353,11 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
                                      ? QStringLiteral("assistant.final")
                                      : QStringLiteral("activity.generic"));
     }
-    // Keep every tool event in sourceItems_ for copy/export, while the transcript
-    // presents only browser visits and visual evidence.
-    if (item.value("subtype").toString() == QStringLiteral("ketplusBrowser")) {
-        const QString event = item.value("eventType").toString();
-        item.insert("presentationHidden", event != QStringLiteral("browser.open") &&
-                                              event != QStringLiteral("browser.screenshot") &&
-                                              event != QStringLiteral("browser.compare"));
-    }
+    // Keep every tool event in sourceItems_ for copy/export. As in the mock, the transcript
+    // shows the browser's page steps, not its session housekeeping.
+    if (item.value("subtype").toString() == QStringLiteral("ketplusBrowser"))
+        item.insert("presentationHidden",
+                    item.value("eventType").toString() == QStringLiteral("browser.session"));
     if (item.value("subtype").toString().isEmpty() &&
         item.value("kind").toString() == QStringLiteral("file")) {
         item.insert("subtype", QStringLiteral("fileChange"));
@@ -330,6 +367,7 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
         item.insert("title", item.value("meta").toString());
     if (item.value("summary").toString().isEmpty())
         item.insert("summary", item.value("body").toString());
+    item.insert("atlasLinks", QStringList{});
     if (!item.contains("running"))
         item.insert("running", false);
     if (!item.contains("partialBody"))
@@ -433,11 +471,14 @@ QList<QVariantMap> AgentMessageModel::renderedItems(const QVariantMap& source, i
     if (base.value("messageKey").toString().isEmpty())
         base.insert("messageKey", QStringLiteral("snapshot:%1").arg(sourceIndex));
     const QString body = base.value("body").toString();
-    if (base.value("kind") != QStringLiteral("assistant") || body.size() <= kMaximumChunkCharacters)
-        return {normalized(base)};
-
     QList<QVariantMap> result;
-    appendChunks(&result, base, body, base.value("messageKey").toString(), 0, false, false);
+    if (base.value("kind") != QStringLiteral("assistant") || body.size() <= kMaximumChunkCharacters)
+        result.append(normalized(base));
+    else
+        appendChunks(&result, base, body, base.value("messageKey").toString(), 0, false, false);
+    if (!result.isEmpty() && base.value("kind") == QStringLiteral("assistant") &&
+        !base.value("running").toBool() && !base.value("partialBody").toBool())
+        result.last().insert("atlasLinks", transcriptAtlasLinks(body));
     return result;
 }
 
@@ -690,24 +731,27 @@ QString AgentMessageModel::rowShape(const QVariantMap& item) {
                                                                       : QString{});
 }
 
-void AgentMessageModel::measureUnmeasuredRows(const int limit, const qreal width,
+bool AgentMessageModel::measureUnmeasuredRows(const int limit, const qreal width,
                                               const QFont& font) {
-    const QStringList keys = geometry_->unmeasuredKeys(limit);
-    if (keys.isEmpty())
-        return;
+    if (limit <= 0 || width <= 0)
+        return false;
+    const QStringList keys = geometry_->unmeasuredKeys(std::numeric_limits<int>::max());
     QList<TranscriptRowMeasurer::Request> requests;
-    requests.reserve(keys.size());
+    requests.reserve(std::min(qsizetype(limit), keys.size()));
     for (const QString& key : keys) {
         const QVariantMap item = rowForKey(key);
-        if (item.isEmpty())
+        if (item.isEmpty() || !TranscriptRowMeasurer::measurable(item.value("body").toString()))
             continue;
         // The delegate renders a complete assistant body as Markdown and
         // everything else literally; measuring the other one would answer a
         // different question than the reader will see.
         const bool markdown = TranscriptRowMeasurer::markdownBody(item);
         requests.append({key, item.value(QStringLiteral("body")).toString(), markdown});
+        if (requests.size() == limit)
+            break;
     }
     measurer_->measure(requests, width, font);
+    return !requests.isEmpty();
 }
 
 void AgentMessageModel::rebuildKeys() {
@@ -782,6 +826,7 @@ void AgentMessageModel::regroup(const int first, const int last) {
     }
 }
 void AgentMessageModel::reset(const QVariantList& items) {
+    const auto touched = sourceTouch();
     clearPayloads();
     const quint64 generation = ++materializationGeneration_;
     const bool deferred = needsDeferredMaterialization(items);
@@ -857,6 +902,7 @@ void AgentMessageModel::resetFor(const char* reason, const QVariantList& items) 
     reset(items);
 }
 void AgentMessageModel::append(const QVariantMap& item) {
+    const auto touched = sourceTouch();
     const auto key = item.value("messageKey").toString();
     if (!key.isEmpty()) {
         if (const int index = sourceIndexes_.value(key, -1); index >= 0) {
@@ -881,6 +927,7 @@ void AgentMessageModel::append(const QVariantMap& item) {
     emit countChanged();
 }
 void AgentMessageModel::prepend(const QVariantList& incoming) {
+    const auto touched = sourceTouch();
     QVariantList items;
     QSet<QString> keys;
     for (const auto& value : incoming) {
@@ -985,6 +1032,7 @@ void AgentMessageModel::replaceWindow(const QVariantList& items) {
 }
 
 void AgentMessageModel::replaceWindowRows(const QVariantList& items) {
+    const auto touched = sourceTouch();
     if (sourceItems_.isEmpty() || items.isEmpty()) {
         resetFor("window-empty", items);
         return;
@@ -1099,6 +1147,7 @@ void AgentMessageModel::replaceWindowRows(const QVariantList& items) {
         prepend(items.mid(0, prefixCount));
 }
 void AgentMessageModel::set(int row, const QVariantMap& item) {
+    const auto touched = sourceTouch();
     if (row < 0 || row >= sourceItems_.size())
         return;
     auto updated = item;
@@ -1149,8 +1198,8 @@ bool AgentMessageModel::renderIncrementally(const int row, const QVariantMap& ol
     // non-final block's boundary depends only on text before it. Resume the
     // chunker at the last block instead of re-chunking the whole body.
     Q_UNUSED(row)
-    if (materializing_ || renderedRow < 0 || old.size() != updated.size() ||
-        updated.value("kind") != QStringLiteral("assistant"))
+    if (!updated.value("running").toBool() || materializing_ || renderedRow < 0 ||
+        old.size() != updated.size() || updated.value("kind") != QStringLiteral("assistant"))
         return false;
     const QString oldBody = old.value("body").toString();
     const QString body = updated.value("body").toString();
@@ -1290,6 +1339,7 @@ void AgentMessageModel::startDeferredWork() {
 
 void AgentMessageModel::finishDeferredReset(const QVariantList& source, QList<QVariantMap> rendered,
                                             const quint64 generation) {
+    const auto touched = sourceTouch();
     deferredWorkerActive_ = false;
     deferredActiveUpdates_.clear();
     publishDeferredMaterialization(source, std::move(rendered), generation);
@@ -1299,6 +1349,7 @@ void AgentMessageModel::finishDeferredReset(const QVariantList& source, QList<QV
 void AgentMessageModel::finishDeferredUpdates(const QMap<int, QVariantMap>& updates,
                                               QMap<int, QList<QVariantMap>> rendered,
                                               const quint64 generation) {
+    const auto touched = sourceTouch();
     deferredActiveUpdates_.clear();
     if (generation == materializationGeneration_) {
         for (auto it = updates.cbegin(); it != updates.cend(); ++it)

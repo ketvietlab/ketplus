@@ -29,7 +29,18 @@ struct AgentSessionManager::Session final {
     QString agentTurnTitle;
     bool agentTurnReply{false};
     bool customTitle{false};
+    // The user's labels, as the daemon stores them (`session.tags/1`).
+    QStringList tags;
+    // The list the user's changes add up to while the daemon is still storing an earlier one.
+    QStringList tagsWanted;
+    bool tagSyncPending{false};
+    // #429: labels chosen before the first turn, sent once the daemon knows the conversation.
+    bool tagsAwaitStart{false};
+    // #125: the last turn ended asking the user to approve or decide ("Waiting for you").
+    bool awaitingReply{false};
     bool archived{false};
+    // When the daemon recorded the archive (`archived_at`); invalid until the catalog says.
+    QDateTime archivedAt;
     // An archive or restore made here that the daemon has not confirmed (ADR 0100).
     bool archiveUnsent{false};
     bool archiveSyncPending{false};
@@ -42,6 +53,8 @@ struct AgentSessionManager::Session final {
     quint64 turnWorktreeGeneration{0};
     bool steeringPending{false};
     QString status{QStringLiteral("Ready")};
+    // The latest reasoning heading of the running turn, for "Working · …" (#385).
+    QString workingDetail;
     QString model;
     QString effort;
     qint64 configurationRevision{0};

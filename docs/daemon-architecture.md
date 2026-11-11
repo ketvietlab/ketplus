@@ -54,6 +54,11 @@ Drafts are applied explicitly, with a captured configuration revision; conflicts
 retain the draft and refresh the fence for Retry. Desktop negotiates the minor-1
 capability; mobile recognizes the compact field in the configuration result.
 Older daemons keep ordinary model selection and omit the compact field.
+`session.configuration_changed` events also list `changed`: the settings that
+differ (`model`, `effort`, `execution_policy`, `mode`, `compact_window`). The
+transcript uses it to name a permission or mode change instead of calling it a
+model change. Events from older daemons omit it and read as a neutral
+"Settings changed".
 Automatic cache/payer selection remains planned, and native auto-compaction
 timing remains provider-owned; see [ADR 0021](decisions/0021-economic-compact-window.md).
 
@@ -84,10 +89,23 @@ core target. The local slice includes:
 - durable sidebar read markers through `session.mark_seen` (`last_seen_cursor` in
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
+- the "Waiting for you" flag (`awaiting_reply` in the journal, `session.list`
+  and `turn.completed`, cleared by a new message, a new turn or
+  `session.mark_done`; set by the `request_user_decision` MCP tool or a final
+  answer ending with a question; feature `session.awaiting_reply/1`, ADR 0112);
 - archiving through `session.set_archived` (`archived_at` in the journal and in
   `session.list`, feature `session.archive/1`). The idle pass deletes one
-  conversation archived for more than 30 days per pass, through `session.delete`
-  and its guards ([ADR 0100](decisions/0100-archived-conversation-retention.md));
+  conversation archived for longer than the Storage option (30 days, 90 by default,
+  1 year or Never) per pass, through `session.delete` and its guards
+  ([ADR 0100](decisions/0100-archived-conversation-retention.md),
+  [ADR 0108](decisions/0108-storage-page-controls.md));
+- conversation tags through `session.tags.set` (`tags` in the journal and in
+  `session.list`, feature `session.tags/1`): at most 8 labels of up to 64 bytes,
+  one per case-insensitive name
+  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md)); the tag catalog
+  through `tags.catalog` and `tags.catalog.set` (journal table `tag_catalog`, feature
+  `tags.catalog/1`), with the `tags.changed` push to every desktop window
+  ([ADR 0113](decisions/0113-tag-catalog.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
   its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
   journal copies the source generation's transcript from one read snapshot in
@@ -206,8 +224,22 @@ structured tool results also support sanitized display-only excerpts sharing the
 text allowance; error/resource-bearing results stay intact
 ([ADR 0044](decisions/0044-structured-result-retention.md)). The full-detail period is configurable locally (7/30/90 days or Forever),
 with a separate automatic-detail-retention switch and revisioned saves; see
-[ADR 0042](decisions/0042-detail-retention-policy.md). Size pressure, archive/media
-policies, complete Storage UI and remaining compaction are still tracked in #128.
+[ADR 0042](decisions/0042-detail-retention-policy.md).
+
+The 5 GB size target applies by default: over it, the idle pass finishes the expired sweep,
+then trims eligible recent detail, with the same guards (ADR 0046 as changed by
+[ADR 0108](decisions/0108-storage-page-controls.md)). The Storage options choose how long
+archived conversations are kept and what older generated images keep (the full image, a
+512 px preview or the caption), and whether the near-limit warning shows. `storage.size.read`,
+`storage.options.read` and `session.list` (`journal_storage`) report the warning, over-limit
+and low-disk (under 5 GB free) state. **Compact now** (`storage.compaction.start`/`read`)
+runs the idle pass back to back while no session is active, until a whole sweep after the
+last change finds nothing to trim or return, and records the run. `storage.breakdown.read`
+measures the parts (conversation history, generated images, activity index, free pages) and
+the five largest conversations on a worker thread through a read-only connection, and
+`storage.export.start`/`read` writes one owner-only JSON file per conversation into a
+folder the user chose. Desktop's transcript labels compacted commands and images with what
+went ("Output trimmed · 1.2 MB · older than 30 days").
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the
 next pass, and wraps at the end (restart begins a fresh scan). Deletion and the
@@ -420,8 +452,8 @@ After that, once a minute while no session is active, up to 4,096 free pages
 then copies the smaller size into the file. It never waits for a reader: if a
 reader holds frames back, the next run finishes it. Emptying the log runs
 without the busy timeout. It is skipped while someone still reads the log: the
-file has already shrunk, and the next write reuses the log. Compacting old detail,
-the size limit and the storage warning are still to come (the rest of #128).
+file has already shrunk, and the next write reuses the log. Compact now uses the same
+reclaim with batches of 32,768 pages (128 MB) (ADR 0108).
 
 Before an event enters the cloud encryption and retry path, the daemon projects
 command lifecycle payloads to the full command text plus identity, status and
@@ -682,10 +714,15 @@ KetPlus never asks for a password. Signing a Mac in is a browser handoff
    ends the sign-in at once with a fixed message, "Sign-in was declined." for
    `access_denied`; `error_description` is never shown (#84).
 4. The daemon redeems the code at `/v2/auth/token` with the verifier and uses
-   that user session once, to enroll the Mac. The session is not stored.
+   that user session once, to enroll the Mac. The session is not stored. Its
+   subject's `displayName` and `username` are stored with the enrollment and
+   removed on sign-out (ADR 0109).
 
 `remote.status` reports `sign_in_pending` while it waits (ten minutes at most)
 and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it.
+Once enrolled, it reports `account {display_name, username}`. Settings → Account
+& devices and the Connections account strip show it. An enrollment made before
+ADR 0109 has no `account` until the next sign-in.
 
 ## Lifecycle
 
@@ -784,7 +821,7 @@ thread. The pending note is kept in memory only, so a daemon restart in between
 loses it.
 ### Conversation execution worktree (isolated implementation)
 
-`session.worktrees` returns a searched, touched-first page (20 default, 100 max). `session.worktree.switch` validates an idle Codex session, same Git repository and expected context revision. Remote commands/results are encrypted; the switch target opaque IDs are included in AAD. New catalog targets are published before the page response; switching requests an immediate heartbeat. Stable desktop navigation uses `conversation_navigation`, separate from execution cwd. `conversation_worktree_activity` stores new provider evidence, not inferred ownership or reconstructed history; see ADR 0015 and the execution-worktree test lane.
+`session.worktrees` returns a searched, touched-first page (20 default, 100 max). Local IPC may pass `repository_path` to list another repository's worktrees without switching or enrolling it; every result names the listed `repository_path` and marks the `main` worktree (ADR 0105). `session.worktree.switch` validates an idle Codex session, same Git repository and expected context revision. Remote commands/results are encrypted; the switch target opaque IDs are included in AAD. New catalog targets are published before the page response; switching requests an immediate heartbeat. Stable desktop navigation uses `conversation_navigation`, separate from execution cwd. `conversation_worktree_activity` stores new provider evidence, not inferred ownership or reconstructed history; see ADR 0015 and the execution-worktree test lane.
 
 ## Atlas live runtime
 
@@ -814,7 +851,9 @@ transcript reads then send summary-only group payloads. `session.activity_group_
 reads details only for an opened group, with the existing session/generation
 checks, a consistent SQLite snapshot, exclusive delta cursor and projection
 revision. `raw_activity_details` is an explicit local read option used for
-conversation export. Relay/mobile remain on the legacy projection. See
+conversation export. Sometimes an MCP step that joined a group completes with images. It
+then leaves the group, and its completion carries the group's new summary as
+`left_activity_group`. Relay/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
 Opening a journal only marks sessions whose activity index is behind in
@@ -910,6 +949,32 @@ an automatic turn runs, the broker keeps its sender in memory: `session.list`
 adds it as `agent_turn` (`number`, `title`, `kind`) and the heartbeat seals it
 into the phone's session metadata as `agentTurn`, beside `number`.
 
+The work report (ADR 0106) travels the same authenticated path:
+- the ketplus_agents server's `work_report` tool calls `agents.work_report`;
+- `WorkReport.cpp` validates, redacts and caps the items and merges them by key into
+  the conversation's ledger;
+- `SessionHostWorkReports.cpp` stores the ledger in `work_reports` (one row per
+  generation, forked and deleted with it) and journals the merged ledger as
+  `work_report.updated`, answering with an error when that event cannot be journaled;
+- `turnCompletion` repeats the ledger on `turn.completed` as `work_report` when the
+  turn changed it, so a history page that splits the two still shows the report;
+- the cloud projection redacts that text again on both events.
+
+With the ketplus_agents server, `responseGuidance(true)` asks for the report in place
+of the markdown matrix.
+
+`AgentBrokerReviews.cpp` adds automatic turn review (ADR 0067). A conversation's
+`conversation_reviewers` row names its reviewer. After each completed turn, the
+broker diffs two snapshot trees of the worktree (written through a copy of its
+index) and sends the reviewer a `review` request with `expect_reply`. The
+reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
+in plan mode and denies every permission request. Review requests never join a
+user turn. The verdict line of the reply, whether it is the final answer or an
+`agents_send` reply, decides whether the working agent starts a fix turn or the
+reply is only recorded. `session.reviewer.get/set` are local Desktop operations;
+Desktop calls them as `reviewer/get` and `reviewer/set` through `CodexAppServer`
+and resolves the picker's conversation numbers to session ids itself.
+
 Providers launch `ketplus_daemon --mcp-agents` with the endpoint's absolute path
 and the token. `daemon.hello` with `agent_token` authenticates an agents-only
 connection that never receives session events; the MCP server opens one per
@@ -965,3 +1030,18 @@ to version-1 fragmented payloads within the shared 1 MiB pass budget. It require
 a fully acknowledged session generation, verifies identity and SHA-256, and
 atomically replaces the replay manifest, cleans unreferenced chunks and advances
 projection revision. Images, legacy blobs and larger payloads remain retained.
+
+## Agent teams (ADR 0112)
+
+`apps/daemon/src/teams/` owns teams. `LocalJournalTeams.cpp` stores three tables:
+`teams` (one JSON document per team under a revision; `AUTOINCREMENT` ids are never
+reused), `team_members` (session id → team, the primary key enforces one team per
+conversation) and `team_updates` (the append-only log with its digest mark).
+`TeamRules` checks membership and task moves without side effects and returns the
+error code of ADR 0112; `TeamCoordinator` applies them, journals every change, emits
+`team.changed` / `team.removed` to local clients, and decides which change starts a turn
+through its narrow `TeamHostPort` (conversation lookup, member scaffold, worktree
+switch, git queries, message posting through `AgentBroker`). `SessionHostTeams.cpp`
+dispatches the `team.*` requests of the `teams/1` and `teams.tasks/1` features and
+implements the port. Member agents reach the same coordinator through the `team_*`
+tools of the ketplus_agents server, with the caller's role checked by the daemon.

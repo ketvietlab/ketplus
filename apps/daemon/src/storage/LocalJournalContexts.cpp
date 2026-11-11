@@ -1,6 +1,7 @@
 #include "storage/LocalJournal.h"
 
 #include <QDateTime>
+#include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -142,9 +143,16 @@ qint64 LocalJournal::switchSessionWorktree(const StoredSession& previous, const 
                                            const QString& messageId, const QJsonObject& result,
                                            QString* error) {
     const qint64 revision = previous.contextRevision + 1;
+    // The branch and the folder's name say where the agent went; the path itself stays on this
+    // Mac, in session_contexts.
+    QJsonObject changed{{"from_context_revision", previous.contextRevision},
+                        {"context_revision", revision}};
+    if (const auto branch = result.value("current_branch").toString(); !branch.isEmpty())
+        changed.insert("branch", branch);
+    if (const auto name = QFileInfo(target).fileName(); !name.isEmpty())
+        changed.insert("worktree_name", name);
     return appendEventWithMutation(
-        previous.id, previous.generation, QStringLiteral("conversation.context_changed"),
-        {{"from_context_revision", previous.contextRevision}, {"context_revision", revision}},
+        previous.id, previous.generation, QStringLiteral("conversation.context_changed"), changed,
         error, [&] {
             QSqlQuery current(database_);
             current.prepare(

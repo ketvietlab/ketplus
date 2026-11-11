@@ -122,6 +122,8 @@ struct SessionHost::PendingFork {
     qint64 sourceGeneration{0};
     QString threadId;
     bool copiedActiveTurn{false};
+    // The source's turn when the copy began, for "Forked from @agent/N at turn 14".
+    qint64 sourceTurn{0};
     std::function<void(const QJsonObject&)> finish;
 };
 
@@ -152,6 +154,9 @@ void SessionHost::storeFork(const QString& sourceId, const qint64 sourceGenerati
     // A fork is a new conversation: it is not archived and does not inherit the source's
     // archive time, which would delete it with the source (ADR 0100).
     fork.stored.archivedAt.clear();
+    // Its row starts without labels; the user tags the fork for what it becomes.
+    fork.stored.tags.clear();
+    fork.stored.awaitingReply = false;
     fork.stored.title = source->stored.title.isEmpty()
                             ? QStringLiteral("Fork")
                             : source->stored.title + QStringLiteral(" (fork)");
@@ -161,6 +166,7 @@ void SessionHost::storeFork(const QString& sourceId, const qint64 sourceGenerati
                                 source->stored.state == QStringLiteral("running") ||
                                 source->stored.state == QStringLiteral("waiting_for_input") ||
                                 source->stored.state == QStringLiteral("stopping");
+    pending->sourceTurn = source->stored.currentTurnSequence;
     QString journalError;
     pending->copy = journal_->beginFork(sourceId, sourceGeneration, fork.stored, &journalError);
     if (!pending->copy) {
@@ -230,10 +236,18 @@ void SessionHost::completeFork(const std::shared_ptr<PendingFork>& pending) {
     if (journal_->assignConversationNumber(forkId, it->stored.generation, &numberError).isEmpty())
         qWarning("Unable to number conversation %s: %s", qUtf8Printable(forkId),
                  qUtf8Printable(numberError));
-    (void)appendEvent(*it, QStringLiteral("session.forked"),
-                      {{QStringLiteral("from_session_id"), sourceId},
+    // Worded as the mock's "Forked from @agent/5208 at turn 14 · Cursor · Composer 2".
+    QJsonObject forked{{QStringLiteral("from_session_id"), sourceId},
                        {QStringLiteral("from_session_generation"), pending->sourceGeneration},
-                       {QStringLiteral("through_cursor"), throughCursor}});
+                       {QStringLiteral("through_cursor"), throughCursor},
+                       {QStringLiteral("provider"), it->stored.adapter},
+                       {QStringLiteral("model"), it->stored.model}};
+    if (const auto number = journal_->conversationNumber(sourceId, pending->sourceGeneration);
+        !number.isEmpty())
+        forked.insert(QStringLiteral("from_conversation_number"), number);
+    if (pending->sourceTurn > 0)
+        forked.insert(QStringLiteral("through_turn"), pending->sourceTurn);
+    (void)appendEvent(*it, QStringLiteral("session.forked"), forked);
     // Only the copy is settled: inherited running rows and pending questions must not
     // make clients wait on a provider turn that belongs to the source conversation.
     if (pending->copiedActiveTurn)

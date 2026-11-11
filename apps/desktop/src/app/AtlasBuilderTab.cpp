@@ -1,6 +1,11 @@
 #include "app/AtlasBuilderTab.h"
+#include "KetBadge.h"
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetIcons.h"
+#include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
@@ -27,29 +32,28 @@ namespace ketplus {
 namespace {
 constexpr int placeholderMaximumWidth = 440;
 
-QString builderStyle(const QPalette& palette, const int basePixels) {
+QString builderStyle(const QPalette& palette, const int zoomPercent) {
     const bool dark = palette.color(QPalette::Window).lightness() < 128;
-    const QString page = dark ? QStringLiteral("#1B1F24") : QStringLiteral("#F7F5F5");
-    const QString panel = dark ? QStringLiteral("#1D2228") : QStringLiteral("#FFFFFF");
-    const QString raised = dark ? QStringLiteral("#23282F") : QStringLiteral("#FBFAFA");
-    const QString text = dark ? QStringLiteral("#F2F4F7") : QStringLiteral("#24262A");
-    const QString muted = dark ? QStringLiteral("#858D99") : QStringLiteral("#717373");
-    const QString border = dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8");
-    const QString strong = dark ? QStringLiteral("#3B424C") : QStringLiteral("#CCCCCD");
+    const auto theme = dark ? ket::Theme::Dark : ket::Theme::Light;
+    const auto color = [theme](QStringView name) {
+        return ket::Tokens::color(name, theme).name(QColor::HexArgb);
+    };
+    const QString page = color(u"page-bg");
+    const QString panel = color(u"panel-bg");
+    const QString raised = color(u"surface-raised");
+    const QString text = color(u"text-main");
+    const QString muted = color(u"text-muted");
+    const QString border = color(u"panel-border");
+    const QString strong = color(u"border-strong");
     // Két Design System accent-text and accent-subtle (Két Blue).
-    const QString accent = dark ? QStringLiteral("#9EB5FF") : QStringLiteral("#1238DB");
-    const QString accentSubtle = dark ? QStringLiteral("#202C4B") : QStringLiteral("#EDF2FF");
-    return TypeScale::apply(QStringLiteral(R"QSS(
+    const QString accent = color(u"accent-text");
+    const QString accentSubtle = color(u"accent-subtle");
+    auto sheet = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasBuilderTab, QWidget#atlasBuilderPlaceholder { background:%1; color:%4; }
-QWidget#atlasBuilderToolbar { min-height:58px; max-height:58px; background:%2; border-bottom:1px solid %6; }
-QLabel#atlasBuilderToolbarTitle { color:%4; font-size:{{reading}}px; font-weight:600; }
-QLabel#atlasBuilderToolbarSubtitle { color:%5; font-size:{{caption}}px; }
-QToolButton#atlasBuilderAiButton { min-height:32px; padding:0 12px; border:1px solid %7; border-radius:6px; background:%2; color:%4; }
-QToolButton#atlasBuilderAiButton:checked { border-color:%8; background:%9; color:%8; }
-QFrame#atlasBuilderChatFrame { background:%2; border:1px solid %7; border-radius:10px; }
-QWidget#atlasBuilderChatHeader { min-height:43px; background:%2; border-bottom:1px solid %6; }
-QLabel#atlasBuilderChatTitle { color:%4; font-size:{{body}}px; font-weight:600; }
-QLabel#atlasBuilderFlowContext { color:%5; font-size:{{micro}}px; }
+QWidget#atlasBuilderToolbar { min-height:44px; max-height:44px; background:%2; border-bottom:1px solid %6; }
+QLabel#atlasBuilderToolbarTitle { color:%4; font-size:{{px:13}}px; font-weight:600; }
+QLabel#atlasBuilderToolbarSubtitle { color:%5; font-size:{{px:11}}px; }
+QFrame#atlasBuilderChatFrame { background:%2; border:0; border-left:1px solid %6; }
 QLabel#atlasBuilderPlaceholderIcon { color:%8; font-size:{{glyphLarge}}px; }
 QLabel#atlasBuilderPlaceholderEyebrow { color:%8; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
 QLabel#atlasBuilderPlaceholderTitle { color:%4; font-size:{{title}}px; font-weight:600; }
@@ -57,18 +61,16 @@ QLabel#atlasBuilderExplanation { color:%5; font-size:{{body}}px; }
 QLabel#atlasBuilderGuidance { color:%5; font-size:{{body}}px; }
 QLabel#atlasBuilderSamplePrompt { color:%5; font-size:{{caption}}px; padding:13px; border:1px solid %6; border-radius:7px; background:%3; }
 )QSS"),
-                            basePixels)
-        .arg(page, panel, raised, text, muted, border, strong, accent, accentSubtle);
+                                  zoomPercent);
+    const QStringList colors{page,   panel,  raised, text,        muted,
+                             border, strong, accent, accentSubtle};
+    for (int i = 0; i < colors.size(); ++i)
+        sheet.replace(QStringLiteral("%") + QString::number(i + 1), colors[i]);
+    return sheet;
 }
 
 QPixmap networkPixmap(const QColor& color) {
-    return lucide_icon::pixmap(
-        QByteArrayLiteral("<rect x=\"16\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<rect x=\"2\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<rect x=\"9\" y=\"2\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<path d=\"M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3\"/>"
-                          "<path d=\"M12 12V8\"/>"),
-        color, QSize(35, 35));
+    return symbol_icon::pixmap("network", color, QSize(35, 35));
 }
 
 quint64 bundleFingerprint(const QString& directory) {
@@ -91,15 +93,33 @@ quint64 bundleFingerprint(const QString& directory) {
 AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot, QWidget* parent)
     : QWidget(parent), index_(index), atlas_(new AtlasTab(index, this)),
       placeholder_(new QWidget(this)), chatFrame_(new QFrame(this)),
-      chat_(new AgentWorkspaceView(chatFrame_)), collapse_(new QToolButton(chatFrame_)),
+      chat_(new AgentWorkspaceView(chatFrame_)),
+      collapse_(
+          new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"panel-right-close")),
+                              tr("Hide AI Chat"), chatFrame_)),
       workspaceRoot_(workspaceRoot) {
     setObjectName(QStringLiteral("atlasBuilderTab"));
-    applyPalette(QApplication::palette());
+    // A tab opened after the zoom changed starts at that zoom.
+    applyPalette(QApplication::palette(), InterfaceZoomMetrics::current());
     setMinimumSize(680, 420);
     toolbar_ = new QWidget(this);
     toolbar_->setObjectName(QStringLiteral("atlasBuilderToolbar"));
     auto* toolbarLayout = new QHBoxLayout(toolbar_);
-    chrome_geometry::margins(toolbarLayout, 18, 0, 18, 0);
+    // The mock's header: back, the flow glyph and the Atlas, then the preview state and AI Chat.
+    chrome_geometry::margins(toolbarLayout, 10, 0, 12, 0);
+    chrome_geometry::spacing(toolbarLayout, 10);
+    auto* back = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"arrow-left")),
+                                     tr("Back to the conversation"), toolbar_);
+    back->setObjectName(QStringLiteral("atlasBackToConversation"));
+    // Back has nowhere to go until a conversation is bound to this builder.
+    back->setEnabled(false);
+    back_ = back;
+    toolbarLayout->addWidget(back);
+    flowGlyph_ = new QLabel(toolbar_);
+    flowGlyph_->setObjectName(QStringLiteral("atlasBuilderFlowGlyph"));
+    toolbarLayout->addWidget(flowGlyph_);
+    connect(back, &QAbstractButton::clicked, this,
+            [this] { emit conversationRequested(workspaceRoot_, conversationId_); });
     auto* toolbarCopy = new QVBoxLayout;
     chrome_geometry::spacing(toolbarCopy, 1);
     auto* toolbarTitle = new QLabel(tr("Atlas Builder"), toolbar_);
@@ -108,16 +128,27 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
     auto* toolbarSubtitle = new QLabel(tr("Interactive screens and connected flows"), toolbar_);
     toolbarSubtitle->setObjectName(QStringLiteral("atlasBuilderToolbarSubtitle"));
     toolbarCopy->addWidget(toolbarSubtitle);
+    connect(this, &AtlasBuilderTab::titleChanged, toolbarTitle, &QLabel::setText);
+    subtitle_ = toolbarSubtitle;
+    connect(this, &AtlasBuilderTab::titleChanged, this, &AtlasBuilderTab::updateFlowContext);
     toolbarLayout->addLayout(toolbarCopy);
     toolbarLayout->addStretch();
-    aiButton_ = new QToolButton(toolbar_);
+    validated_ = new ket::Badge(tr("Validated preview"), ket::BadgeTone::Success, toolbar_);
+    validated_->setObjectName(QStringLiteral("atlasBuilderValidated"));
+    validated_->hide();
+    auto* actions = new QHBoxLayout;
+    chrome_geometry::spacing(actions, 8);
+    actions->addWidget(validated_);
+    toolbarLayout->addLayout(actions);
+    aiButton_ = new ket::Button(tr("Hide AI Chat"), ket::ButtonVariant::Secondary, toolbar_);
+    static_cast<ket::Button*>(aiButton_)->setControlSize(ket::ControlSize::Small);
     aiButton_->setObjectName(QStringLiteral("atlasBuilderAiButton"));
     aiButton_->setText(tr("Hide AI Chat"));
-    aiButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     aiButton_->setCheckable(true);
     aiButton_->setChecked(true);
-    toolbarLayout->addWidget(aiButton_);
-    connect(aiButton_, &QToolButton::clicked, this, [this] { setChatCollapsed(!chatCollapsed_); });
+    actions->addWidget(aiButton_);
+    connect(aiButton_, &QAbstractButton::clicked, this,
+            [this] { setChatCollapsed(!chatCollapsed_); });
     activityPulse_.setInterval(650);
     connect(&activityPulse_, &QTimer::timeout, this, [this] {
         pulseBright_ = !pulseBright_;
@@ -203,28 +234,13 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
     auto* chatLayout = new QVBoxLayout(chatFrame_);
     chrome_geometry::margins(chatLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(chatLayout, 0);
-    auto* chatHeader = new QWidget(chatFrame_);
+    auto* chatHeader = new ket::PaneHeader(tr("AI Chat"), QStringLiteral("chat"), chatFrame_);
     chatHeader->setObjectName(QStringLiteral("atlasBuilderChatHeader"));
-    auto* headerLayout = new QHBoxLayout(chatHeader);
-    chrome_geometry::margins(headerLayout, 12, 6, 8, 6);
-    auto* chatTitle = new QLabel(tr("Atlas Builder"), chatHeader);
-    chatTitle->setObjectName(QStringLiteral("atlasBuilderChatTitle"));
-    auto chatTitleFont = chatTitle->font();
-    chatTitleFont.setBold(true);
-    chatTitle->setFont(chatTitleFont);
-    headerLayout->addWidget(chatTitle);
-    flowContext_ = new QLabel(tr("@Flow · Entire Atlas"), chatHeader);
-    flowContext_->setObjectName(QStringLiteral("atlasBuilderFlowContext"));
-    flowContext_->setToolTip(
-        tr("Preferred context only. Shared screens and styles may affect other flows."));
-    flowContext_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    headerLayout->addWidget(flowContext_, 1, Qt::AlignRight);
     collapse_->setObjectName(QStringLiteral("atlasBuilderChatCollapse"));
-    collapse_->setAutoRaise(true);
-    collapse_->setText(QStringLiteral("›"));
+    static_cast<ket::IconButton*>(collapse_)->setControlSize(ket::ControlSize::Small);
     collapse_->setToolTip(tr("Hide chat — AI keeps running"));
     collapse_->setAccessibleName(tr("Hide Atlas Builder chat"));
-    headerLayout->addWidget(collapse_);
+    chatHeader->actions()->addWidget(collapse_);
     chatLayout->addWidget(chatHeader);
     chat_->setCompactMode(true);
     // The main window's Edit > Find actions route to this chat while it has focus.
@@ -232,16 +248,16 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
     chrome_geometry::minimumWidth(chat_, 0);
     chatLayout->addWidget(chat_, 1);
 
-    connect(collapse_, &QToolButton::clicked, this, [this] { setChatCollapsed(!chatCollapsed_); });
+    connect(collapse_, &QAbstractButton::clicked, this,
+            [this] { setChatCollapsed(!chatCollapsed_); });
     connect(index_, &AtlasIndex::changed, this, &AtlasBuilderTab::detectCreatedAtlas);
     connect(atlas_, &AtlasTab::flowContextChanged, this,
             [this](const QString&, const QString& flowId, const QString& title) {
                 flowId_ = flowId;
                 flowTitle_ = title;
-                flowContext_->setText(flowId.isEmpty()
-                                          ? tr("@Flow · Entire Atlas")
-                                          : tr("@Flow · %1").arg(title.isEmpty() ? flowId : title));
+                updateFlowContext();
             });
+    updateFlowContext();
     connect(atlas_, &AtlasTab::atlasRequested, this, [this](const AtlasDescriptor& descriptor) {
         flowId_.clear();
         flowTitle_.clear();
@@ -250,6 +266,7 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
         atlas_->setActive(active_);
         updateGeometry();
         chatFrame_->raise();
+        setPreviewValidated(true);
         emit titleChanged(descriptor.title);
         emit atlasBuilt(descriptor);
     });
@@ -291,6 +308,7 @@ QVariantMap AtlasBuilderTab::promptContext() const {
 
 void AtlasBuilderTab::setConversationId(const QString& conversationId) {
     conversationId_ = conversationId;
+    back_->setEnabled(!conversationId_.isEmpty());
 }
 
 void AtlasBuilderTab::openExistingAtlas(const AtlasDescriptor& descriptor) {
@@ -306,19 +324,30 @@ void AtlasBuilderTab::openExistingAtlas(const AtlasDescriptor& descriptor) {
     atlas_->setActive(active_);
     updateGeometry();
     chatFrame_->raise();
+    setPreviewValidated(true);
     emit titleChanged(descriptor.title);
 }
 
-void AtlasBuilderTab::applyPalette(const QPalette& palette, const int interfaceFontSizePixels) {
+void AtlasBuilderTab::applyPalette(const QPalette& palette, const int zoomPercent) {
     if (applyingStyle_)
         return;
     applyingStyle_ = true;
-    setStyleSheet(builderStyle(palette, interfaceFontSizePixels));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
-    atlas_->applyPalette(palette, interfaceFontSizePixels);
+    zoomPercent_ = zoomPercent;
+    setStyleSheet(builderStyle(palette, zoomPercent));
+    chrome_geometry::apply(this, zoomPercent);
+    atlas_->applyPalette(palette, zoomPercent);
     if (placeholderIcon_)
         placeholderIcon_->setPixmap(networkPixmap(palette.color(QPalette::Highlight)));
+    if (flowGlyph_) {
+        const bool dark = palette.color(QPalette::Window).lightness() < 128;
+        const qreal box = InterfaceZoomMetrics::geometry(14, zoomPercent);
+        flowGlyph_->setPixmap(ket::Icons::pixmap(
+            u"branch", box, devicePixelRatioF(),
+            ket::Tokens::color(u"text-secondary", dark ? ket::Theme::Dark : ket::Theme::Light)));
+    }
     applyingStyle_ = false;
+    if (toolbar_)
+        updateGeometry();
 }
 
 void AtlasBuilderTab::setActive(const bool active) {
@@ -349,10 +378,8 @@ void AtlasBuilderTab::changeEvent(QEvent* event) {
     if (event->type() == QEvent::PaletteChange ||
         event->type() == QEvent::ApplicationPaletteChange ||
         event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::FontChange) {
-        const int basePixels = QApplication::font().pixelSize() > 0
-                                   ? QApplication::font().pixelSize()
-                                   : InterfaceZoomMetrics::mediumPixels;
-        applyPalette(QApplication::palette(), basePixels);
+        const int zoomPercent = InterfaceZoomMetrics::current();
+        applyPalette(QApplication::palette(), zoomPercent);
     }
     QWidget::changeEvent(event);
 }
@@ -375,6 +402,7 @@ void AtlasBuilderTab::detectCreatedAtlas() {
         atlas_->setActive(active_);
         updateGeometry();
         chatFrame_->raise();
+        setPreviewValidated(true);
         emit titleChanged(descriptor.title);
         emit atlasBuilt(descriptor);
         return;
@@ -386,8 +414,12 @@ void AtlasBuilderTab::updateGeometry() {
     const int toolbarHeight = qMax(40, toolbar_->sizeHint().height());
     toolbar_->setGeometry(0, 0, width, toolbarHeight);
     const int height = qMax(0, this->height() - toolbarHeight);
-    const int chatWidth = chatCollapsed_ ? 0 : qMin(400, qMax(320, width / 3));
-    const int inset = 18;
+    const auto px = [this](int value) {
+        return InterfaceZoomMetrics::geometry(value, zoomPercent_);
+    };
+    // The mock's chat is 410 px; a narrow builder keeps at least 300 px and most of the map.
+    const int chatWidth = chatCollapsed_ ? 0 : qMin(px(410), qMax(px(300), width * 2 / 5));
+    const int inset = 0;
     if (!chatCollapsed_)
         chatFrame_->setGeometry(qMax(0, width - chatWidth - inset), toolbarHeight + inset,
                                 chatWidth, qMax(0, height - inset * 2));
@@ -401,7 +433,7 @@ void AtlasBuilderTab::updateGeometry() {
             chatFrame_->raise();
         return;
     }
-    atlas_->setGeometry(0, toolbarHeight, width, height);
+    atlas_->setGeometry(0, toolbarHeight, qMax(0, width - chatWidth), height);
     if (!chatCollapsed_)
         chatFrame_->raise();
 }
@@ -436,8 +468,11 @@ void AtlasBuilderTab::refreshPreview() {
     const auto config = QJsonDocument::fromJson(manifest.readAll()).object();
     // Retain the last preview while the agent is midway through writing JSON.
     if (config.value("version").toInt() != 1 || !config.value("title").isString() ||
-        !config.value("screens").isArray() || !config.value("flows").isArray())
+        !config.value("screens").isArray() || !config.value("flows").isArray()) {
+        setPreviewValidated(false);
         return;
+    }
+    setPreviewValidated(true);
     emit titleChanged(config.value("title").toString());
     atlas_->refreshPreview();
 }
@@ -505,7 +540,7 @@ void AtlasBuilderTab::updateAiButton() {
         activityPulse_.stop();
     }
     aiButton_->setText(needsAnswer      ? tr("AI Chat · Needs answer")
-                       : chatCollapsed_ ? tr("AI Chat")
+                       : chatCollapsed_ ? tr("Show AI Chat")
                                         : tr("Hide AI Chat"));
     const QString action =
         chatCollapsed_ ? tr("Show Atlas Builder chat") : tr("Hide chat — AI keeps running");
@@ -514,11 +549,16 @@ void AtlasBuilderTab::updateAiButton() {
                                       : tr("AI is idle");
     aiButton_->setToolTip(action + "\n" + state);
     aiButton_->setAccessibleName(action + ". " + state);
+    if (!needsAnswer && !running) {
+        // Idle, the button carries the mock's chat glyph; activity replaces it with a dot.
+        aiButton_->setIcon(ket::Icons::icon(QStringLiteral("chat")));
+        return;
+    }
     QPixmap indicator(12, 12);
     indicator.fill(Qt::transparent);
     QPainter painter(&indicator);
     painter.setRenderHint(QPainter::Antialiasing);
-    QColor color = palette().color(needsAnswer || running ? QPalette::Highlight : QPalette::Mid);
+    QColor color = palette().color(QPalette::Highlight);
     if (running && !needsAnswer && !pulseBright_)
         color.setAlpha(90);
     painter.setBrush(color);
@@ -526,6 +566,40 @@ void AtlasBuilderTab::updateAiButton() {
     painter.drawEllipse(QRectF(2, 2, 8, 8));
     painter.end();
     aiButton_->setIcon(QIcon(indicator));
+}
+
+void AtlasBuilderTab::setPreviewValidated(const bool validated) {
+    validated_->setText(validated ? tr("Validated preview") : tr("Checking changes"));
+    validated_->setTone(validated ? ket::BadgeTone::Success : ket::BadgeTone::Neutral);
+    validated_->setVisible(built_);
+}
+
+void AtlasBuilderTab::updateFlowContext() {
+    // atlases() returns a copy; keep it alive while its entries are read.
+    const auto atlases = index_->atlases();
+    const AtlasDescriptor* atlas = nullptr;
+    for (const auto& entry : atlases)
+        if (built_ && entry.path == atlasPath())
+            atlas = &entry;
+    const AtlasFlowDescriptor* flow = nullptr;
+    if (atlas)
+        for (const auto& entry : atlas->flows)
+            if (entry.id == flowId_)
+                flow = &entry;
+    const QString flowTitle = flowTitle_.isEmpty() ? flowId_ : flowTitle_;
+    // As in the mock: the header names the flow being edited and the composer asks for a change
+    // to it. The flow is the preferred context; shared screens may still change other flows.
+    if (flow)
+        subtitle_->setText(flow->screenCount == 1
+                               ? tr("%1 · 1 screen").arg(flowTitle)
+                               : tr("%1 · %2 screens").arg(flowTitle).arg(flow->screenCount));
+    else if (atlas)
+        subtitle_->setText(
+            tr("%1 flows · %2 screens").arg(atlas->flowCount).arg(atlas->screens.size()));
+    else
+        subtitle_->setText(tr("Interactive screens and connected flows"));
+    chat_->setComposerHint(flowId_.isEmpty() ? tr("Ask for a change to this Atlas…")
+                                             : tr("Ask for a change to %1…").arg(flowTitle));
 }
 
 } // namespace ketplus

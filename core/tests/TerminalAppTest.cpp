@@ -1,10 +1,11 @@
 #include "terminal_app/TerminalWindow.h"
 
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-#include "terminal_app/TerminalTab.h"
 #include "ui/KetFonts.h"
 
 #include "KetAppearance.h"
+#include "KetDialog.h"
 #include "KetProfile.h"
 #include "KetStyle.h"
 #include "KetTokens.h"
@@ -15,8 +16,10 @@
 #include <QDir>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QLabel>
 #include <QSettings>
 #include <QTabWidget>
+#include <QTimer>
 #include <QtTest>
 
 namespace ketplus {
@@ -32,7 +35,9 @@ class TerminalAppTest final : public QObject {
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
     void usesTheSavedFontFamily();
+    void interfaceZoomPersistsWithoutChangingTerminalText();
     void showsTheKetPlusName();
+    void aboutUsesTheKitDialog();
     void drawsTheTerminalInKetSansMono();
 };
 
@@ -49,6 +54,7 @@ void TerminalAppTest::initTestCase() {
 
 void TerminalAppTest::cleanup() {
     QSettings().clear();
+    ket::Appearance::instance().setZoom(1);
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
 }
 
@@ -140,6 +146,20 @@ void TerminalAppTest::savesAndRestoresTheAppearance() {
     QCOMPARE(ket::Appearance::instance().mode(), ket::Appearance::Mode::Light);
 }
 
+void TerminalAppTest::interfaceZoomPersistsWithoutChangingTerminalText() {
+    TerminalWindow window(QDir::tempPath());
+    auto* zoom = window.findChild<QAction*>(QStringLiteral("terminalInterfaceZoom125"));
+    QVERIFY(zoom);
+    const int textSize = window.currentTab()->view()->font().pixelSize();
+    zoom->trigger();
+    QCOMPARE(ket::Appearance::instance().zoom(), 1.25);
+    QCOMPARE(window.currentTab()->view()->font().pixelSize(), textSize);
+    ket::Appearance::instance().setZoom(1);
+    restoreTerminalAppearance();
+    QCOMPARE(ket::Appearance::instance().zoom(), 1.25);
+    QVERIFY(zoom->isChecked());
+}
+
 void TerminalAppTest::usesTheSavedFontFamily() {
     QString family;
     const QString fixedFamily =
@@ -171,6 +191,31 @@ void TerminalAppTest::showsTheKetPlusName() {
     QVERIFY(texts.contains(QStringLiteral("Quit KétPlus Terminal")));
     QVERIFY(texts.contains(QStringLiteral("About KétPlus Terminal")));
     QVERIFY(!texts.join(QLatin1Char('\n')).contains(QStringLiteral("KetPlus Terminal")));
+}
+
+void TerminalAppTest::aboutUsesTheKitDialog() {
+    TerminalWindow window(QDir::tempPath());
+    window.show();
+    QAction* about = nullptr;
+    for (auto* action : window.findChildren<QAction*>()) {
+        if (action->text() == QStringLiteral("About KétPlus Terminal"))
+            about = action;
+    }
+    QVERIFY(about != nullptr);
+    QString title;
+    QString body;
+    QTimer::singleShot(0, &window, [&] {
+        auto* dialog = window.findChild<ket::Dialog*>();
+        if (dialog == nullptr)
+            return;
+        title = dialog->title();
+        if (auto* label = qobject_cast<QLabel*>(dialog->body()))
+            body = label->text();
+        QTest::keyClick(dialog, Qt::Key_Escape);
+    });
+    about->trigger();
+    QCOMPARE(title, QStringLiteral("About KétPlus Terminal"));
+    QVERIFY2(body.contains(QStringLiteral("Két Symbol")), qPrintable(body));
 }
 
 void TerminalAppTest::drawsTheTerminalInKetSansMono() {

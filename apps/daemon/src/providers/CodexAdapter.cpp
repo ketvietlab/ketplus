@@ -6,6 +6,7 @@
 
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
+#include "agents/AgentToolLaunch.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
 
@@ -382,11 +383,18 @@ void CodexAdapter::sendCall(const QString& method, const QJsonObject& params, Ca
     pendingMethods_.insert(id, method);
     QJsonObject providerParams = browser_tools::withCodexBrowserInstructions(
         method, params, !launchedBrowserArguments_.isEmpty());
-    if (method == QStringLiteral("thread/start") || method == QStringLiteral("thread/resume"))
+    if (method == QStringLiteral("thread/start") || method == QStringLiteral("thread/resume")) {
+        // ADR 0106: the work report needs the thread's ketplus_agents server.
+        const bool workReport = providerParams.value(QStringLiteral("config"))
+                                    .toObject()
+                                    .contains(QStringLiteral("mcp_servers.%1.command")
+                                                  .arg(QLatin1String(agent_tools::serverName)));
         providerParams.insert(
             QStringLiteral("developerInstructions"),
             withResponseGuidance(
-                providerParams.value(QStringLiteral("developerInstructions")).toString()));
+                providerParams.value(QStringLiteral("developerInstructions")).toString(),
+                workReport));
+    }
     sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},
                 {QStringLiteral("params"), providerParams}});

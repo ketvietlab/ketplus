@@ -1,5 +1,6 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -7,8 +8,8 @@ import QtQuick.Layouts
 Basic.Popup {
     id: picker
     objectName: "modelPopup"
+    readonly property var look: Kit.KetTheme.dialogRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom)
 
-    required property var tokens
     required property Item viewport
     required property Item anchorItem
     property var models: []
@@ -37,6 +38,9 @@ Basic.Popup {
         return draftModel === selectedModel && selectedProviderTab === selectedProvider ? modelCapacity : 0
     }
     property var effortLabel: function(value) { return value }
+    // Row titles and supporting text follow the mock's Model & context dialog.
+    readonly property real titlePixels: KetTheme.px(15, KetTheme.zoom)
+    readonly property real bodyPixels: KetTheme.px(13, KetTheme.zoom)
 
     property string selectedProviderTab: "codex"
     // While a turn runs the conversation keeps its provider; the other tabs say when to switch.
@@ -95,23 +99,29 @@ Basic.Popup {
     signal effortSelected(string effort)
     signal applyRequested(string model, string effort, string provider, var changes)
     signal refreshRequested()
+    // Show setup steps on the provider's banner (ADR 0110).
+    signal setupGuideRequested(string provider)
+    // The browsed provider's setup guide, whether or not the conversation still shows it.
+    readonly property var setups: (agentHost.providerRuntime || {}).setups || {}
+    readonly property var draftSetup: setups[selectedProviderTab] || null
+    function hasSetup(provider) { return !!setups[provider] }
 
     parent: Overlay.overlay
     function revealControl(item) {
         const flick = settingsScroll.contentItem
         if (!flick || flick.contentY === undefined) return
         const top = item.mapToItem(settingsBody, 0, 0).y
-        const inset = Metrics.px(8, tokens)
+        const inset = KetTheme.px(8, KetTheme.zoom)
         let offset = flick.contentY
         if (top < offset + inset) offset = top - inset
         else if (top + item.height > offset + flick.height - inset)
             offset = top + item.height - flick.height + inset
         flick.contentY = Math.max(0, Math.min(offset, Math.max(0, flick.contentHeight - flick.height)))
     }
-    width: Math.min(Metrics.px(500, tokens), viewport.width - Metrics.px(32, tokens))
-    height: Math.min(settingsBody.implicitHeight + Metrics.px(116, tokens) + 2, viewport.height - Metrics.px(32, tokens))
-    x: Math.round((viewport.width - width) / 2)
-    y: Math.round((viewport.height - height) / 2)
+    width: Math.min(KetTheme.px(500, KetTheme.zoom), viewport.width - KetTheme.px(32, KetTheme.zoom))
+    height: Math.min(settingsBody.implicitHeight + KetTheme.px(126, KetTheme.zoom) + 2, viewport.height - KetTheme.px(32, KetTheme.zoom))
+    x: (viewport.width - width) / 2
+    y: (viewport.height - height) / 2
     padding: 0
     focus: true
     modal: true
@@ -140,8 +150,9 @@ Basic.Popup {
                 }
             }
         }
-        if (tab === "claude" && !hasClaudeModels) tab = "codex"
-        if (tab === "cursor" && !hasCursorModels) tab = "codex"
+        // A provider with a setup guide keeps its tab, so its banner says what to do.
+        if (tab === "claude" && !hasClaudeModels && !hasSetup("claude")) tab = "codex"
+        if (tab === "cursor" && !hasCursorModels && !hasSetup("cursor")) tab = "codex"
         if (lockedProvider) tab = lockedProvider
         selectedProviderTab = tab
         syncCurrentModel()
@@ -151,12 +162,12 @@ Basic.Popup {
     onSelectedModelChanged: syncCurrentModel()
     onClosed: anchorItem.forceActiveFocus()
 
-    Overlay.modal: Rectangle { color: picker.tokens.overlay || "#66000000" }
+    Overlay.modal: Rectangle { color: picker.look.backdrop }
     background: Rectangle {
-        radius: Metrics.px(10, tokens)
-        color: picker.tokens.surfaceRaised
+        radius: picker.look.radius
+        color: picker.look.background
         border.width: 1
-        border.color: picker.tokens.borderStrong
+        border.color: picker.look.border
     }
 
     function chooseDraft(model) {
@@ -193,47 +204,53 @@ Basic.Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(58, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(14, tokens)
-            spacing: Metrics.px(8, tokens)
+            Layout.preferredHeight: KetTheme.px(65, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(14, KetTheme.zoom)
+            spacing: KetTheme.px(8, KetTheme.zoom)
 
             Text {
                 Layout.fillWidth: true
                 text: qsTr("Model & context")
-                color: picker.tokens.textMain
-                font.family: picker.tokens.uiFont
-                font.pixelSize: picker.tokens.title
-                font.weight: Font.DemiBold
+                color: KetTheme.t.textMain
+                font.family: KetTheme.fontFamily
+                font.pixelSize: picker.look.titlePixels
+                font.weight: picker.look.titleWeight
             }
             Basic.ToolButton {
                 id: closeButton
                 objectName: "closeModelPickerButton"
-                Layout.preferredWidth: Metrics.px(34, tokens)
-                Layout.preferredHeight: Metrics.px(34, tokens)
-                padding: Metrics.px(9, tokens)
-                contentItem: TintedIcon {
-                    source: "qrc:/agent/icons/plus.svg"
-                    rotation: 45
-                    color: picker.tokens.textMuted
+                Layout.preferredWidth: KetTheme.px(34, KetTheme.zoom)
+                Layout.preferredHeight: KetTheme.px(34, KetTheme.zoom)
+                padding: KetTheme.px(9, KetTheme.zoom)
+                contentItem: Item {
+                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                    implicitHeight: implicitWidth
+                    KetIcon {
+                        anchors.centerIn: parent
+                        box: Math.min(parent.width, parent.height)
+                        name: KetTheme.iconForLucide("plus")
+                        rotation: 45
+                        color: KetTheme.t.textMuted
+                    }
                 }
                 background: Rectangle {
-                    radius: Metrics.px(6, tokens)
+                    radius: KetTheme.px(6, KetTheme.zoom)
                     color: closeButton.hovered || closeButton.visualFocus
-                           ? picker.tokens.surfaceHover : "transparent"
+                           ? KetTheme.t.surfaceHover : "transparent"
                 }
                 enabled: !picker.applying
                 onClicked: picker.close()
                 Accessible.name: "Close model picker"
                 KetToolTip {
-                    tokens: picker.tokens
+                    objectName: "ketToolTip"
                     visible: closeButton.hovered
                     text: "Close"
                 }
             }
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: picker.tokens.border }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: KetTheme.t.panelBorder }
 
         Basic.ScrollView {
             id: settingsScroll
@@ -245,80 +262,51 @@ Basic.Popup {
                 id: settingsBody
                 width: settingsScroll.availableWidth
                 spacing: 0
-        Row {
-            id: providerGrid
-            objectName: "providerTabs"
+        ModelProviderTabs {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(28, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(12, tokens)
-            spacing: Metrics.px(22, tokens)
-
-            Repeater {
-                model: [
-                    {id: "codex", label: "Codex"},
-                    {id: "claude", label: "Claude"},
-                    {id: "cursor", label: "Cursor"},
-                    {id: "ketrouter", label: "K\u00e9tRouter"}
-                ]
-                Basic.ToolButton {
-                    id: providerButton
-                    required property var modelData
-                    objectName: "providerTab_" + modelData.id
-                    width: contentItem.implicitWidth
-                    height: Metrics.px(28, tokens)
-                    readonly property bool supported: modelData.id === "codex"
-                        || (modelData.id === "claude" && picker.hasClaudeModels)
-                        || (modelData.id === "cursor" && picker.hasCursorModels)
-                    readonly property bool lockedOut: supported && picker.lockedProvider !== "" && picker.lockedProvider !== modelData.id
-                    enabled: supported && !lockedOut
-                    padding: 0
-                    Accessible.name: modelData.label
-                    Accessible.description: enabled ? (picker.selectedProviderTab === modelData.id ? "Current provider" : "Select provider") : lockedOut ? "Switch to " + modelData.label + " after this turn" : modelData.id === "cursor" ? "Install Cursor CLI, then retry" : "Not supported yet"
-                    contentItem: Text {
-                        text: providerButton.modelData.label
-                        color: providerButton.enabled ? picker.tokens.tabActiveText : picker.tokens.textMuted
-                        opacity: providerButton.enabled ? 1 : 0.62
-                        font.family: picker.tokens.uiFont
-                        font.pixelSize: picker.tokens.body
-                        font.weight: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id ? Font.DemiBold : Font.Normal
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Item {
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: Metrics.px(2, tokens)
-                            visible: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id
-                            color: picker.tokens.accent
-                        }
-                    }
-                    KetToolTip {
-                        tokens: picker.tokens
-                        visible: providerButton.hovered
-                        text: providerButton.enabled ? providerButton.modelData.label
-                              : providerButton.lockedOut ? "Switch to " + providerButton.modelData.label + " after this turn"
-                              : providerButton.modelData.id === "cursor"
-                                ? "Install Cursor CLI: " + picker.cursorInstallCommand
-                              : providerButton.modelData.label + ": not supported yet"
-                    }
-                    onClicked: {
-                        if (!providerButton.enabled) return
-                        picker.selectedProviderTab = providerButton.modelData.id
-                        if (picker.providerModels.length > 0) picker.chooseDraft(picker.providerModels[0])
-                        picker.syncCurrentModel()
-                    }
-                }
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(22, KetTheme.zoom)
+            selectedProvider: picker.selectedProviderTab
+            lockedProvider: picker.lockedProvider
+            hasClaudeModels: picker.hasClaudeModels
+            hasCursorModels: picker.hasCursorModels
+            cursorInstallCommand: picker.cursorInstallCommand
+            setupProviders: Object.keys(picker.setups)
+            onProviderChosen: (provider) => {
+                picker.selectedProviderTab = provider
+                if (picker.providerModels.length > 0) picker.chooseDraft(picker.providerModels[0])
+                picker.syncCurrentModel()
             }
         }
 
-        Text {
+        // A provider with a setup guide: what is wrong and the way to the guide, as the mock's
+        // Model & context.
+        Kit.KetBanner {
+            objectName: "modelPickerSetupBanner"
+            visible: !!picker.draftSetup
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(7, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+            tone: picker.draftSetup && picker.draftSetup.tone === "danger" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
+            title: picker.draftSetup ? picker.draftSetup.title : ""
+            message: !picker.draftSetup ? ""
+                   : picker.providerModels.length === 0 ? picker.draftSetup.name + "'s models appear once it is set up."
+                   : picker.draftSetup.blocking ? "You can choose a model now. " + picker.draftSetup.name + " starts turns once it is set up."
+                   : picker.draftSetup.summary || picker.draftSetup.reason || ""
+            actionText: "Show setup steps"
+            onActionTriggered: picker.setupGuideRequested(picker.selectedProviderTab)
+        }
+
+        Text {
+            visible: !picker.draftSetup
+            Layout.fillWidth: true
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(2, KetTheme.zoom)
             text: picker.selectedProviderTab === "claude"
                   ? "Claude uses the local Agent SDK sidecar."
                   : picker.selectedProviderTab === "cursor"
@@ -332,88 +320,48 @@ Basic.Popup {
                   : picker.hasCursorModels
                     ? "Codex is ready. Cursor is available."
                     : "Codex is ready. Other providers are not supported yet."
-            color: picker.tokens.textMuted
-            font.family: picker.tokens.uiFont
-            font.pixelSize: picker.tokens.caption
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: picker.bodyPixels
             elide: Text.ElideRight
         }
 
-        Rectangle {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(36, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(14, tokens)
-            Layout.bottomMargin: Metrics.px(12, tokens)
-            radius: Metrics.px(5, tokens)
-            color: picker.tokens.interactiveBackground
-            border.width: 1
-            border.color: modelSearch.activeFocus ? picker.tokens.focus : picker.tokens.borderStrong
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Metrics.px(10, tokens)
-                anchors.rightMargin: Metrics.px(6, tokens)
-                spacing: Metrics.px(8, tokens)
-                TintedIcon {
-                    Layout.preferredWidth: Metrics.px(15, tokens)
-                    Layout.preferredHeight: Metrics.px(15, tokens)
-                    source: "qrc:/agent/icons/search.svg"
-                    color: picker.tokens.textMuted
+            Layout.leftMargin: picker.look.paddingInline
+            Layout.rightMargin: picker.look.paddingInline
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(6, KetTheme.zoom)
+            Kit.KetTextField {
+                id: modelSearch
+                objectName: "modelSearch"
+                Layout.fillWidth: true
+                leadingIcon: Kit.KetTheme.iconForLucide("search")
+                placeholderText: "Search models…"
+                Accessible.name: "Search models"
+                Keys.onDownPressed: {
+                    if (modelList.count > 0) {
+                        modelList.currentIndex = Math.max(0, modelList.currentIndex)
+                        modelList.forceActiveFocus()
+                    }
                 }
-                Basic.TextField {
-                    id: modelSearch
-                    objectName: "modelSearch"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    placeholderText: "Search models..."
-                    placeholderTextColor: picker.tokens.textMuted
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
-                    padding: 0
-                    selectByMouse: true
-                    background: Item {}
-                    Accessible.name: "Search Codex models"
-                    Keys.onDownPressed: {
-                        if (modelList.count > 0) {
-                            modelList.currentIndex = Math.max(0, modelList.currentIndex)
-                            modelList.forceActiveFocus()
-                        }
-                    }
-                    onAccepted: picker.chooseCurrentModel()
-                }
-                Basic.ToolButton {
-                    id: clearSearch
-                    objectName: "clearModelSearchButton"
-                    Layout.preferredWidth: Metrics.px(26, tokens)
-                    Layout.preferredHeight: Metrics.px(26, tokens)
-                    visible: modelSearch.text.length > 0
-                    padding: Metrics.px(7, tokens)
-                    contentItem: TintedIcon {
-                        source: "qrc:/agent/icons/plus.svg"
-                        rotation: 45
-                        color: picker.tokens.textMuted
-                    }
-                    background: Rectangle {
-                        radius: Metrics.px(5, tokens)
-                        color: clearSearch.hovered ? picker.tokens.surfaceHover : "transparent"
-                    }
-                    onClicked: {
-                        modelSearch.clear()
-                        modelSearch.forceActiveFocus()
-                    }
-                    Accessible.name: "Clear model search"
-                }
+                onAccepted: picker.chooseCurrentModel()
+            }
+            Kit.KetIconButton {
+                objectName: "clearModelSearchButton"
+                iconName: Kit.KetTheme.iconForLucide("x")
+                text: "Clear model search"
+                visible: modelSearch.text.length > 0
+                onClicked: { modelSearch.clear(); modelSearch.forceActiveFocus() }
             }
         }
 
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(Math.max(60, Math.min(180, picker.filteredModels.length * 60)), tokens)
-            Layout.minimumHeight: Metrics.px(48, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
+            Layout.preferredHeight: KetTheme.px(Math.max(60, Math.min(180, picker.filteredModels.length * 60)), KetTheme.zoom)
+            Layout.minimumHeight: KetTheme.px(48, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
 
             ListView {
                 id: modelList
@@ -437,64 +385,56 @@ Basic.Popup {
                     required property int index
                     objectName: "modelOption_" + modelData.model
                     width: ListView.view.width
-                    height: Metrics.px(60, tokens)
+                    height: KetTheme.px(60, KetTheme.zoom)
                     padding: 0
                     highlighted: picker.catalogMatches(modelData, picker.draftModel)
                     Accessible.name: modelData.displayName || modelData.model
 
                     contentItem: RowLayout {
-                        spacing: Metrics.px(11, tokens)
-                        Rectangle {
-                            Layout.preferredWidth: Metrics.px(14, tokens)
-                            Layout.preferredHeight: Metrics.px(14, tokens)
-                            radius: Metrics.px(7, tokens)
-                            color: "transparent"
-                            border.width: 1
-                            border.color: modelRow.highlighted
-                                          ? picker.tokens.tabActiveText : picker.tokens.borderStrong
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: Metrics.px(6, tokens)
-                                height: Metrics.px(6, tokens)
-                                radius: Metrics.px(3, tokens)
-                                visible: modelRow.highlighted
-                                color: picker.tokens.tabActiveText
-                            }
+                        spacing: KetTheme.px(10, KetTheme.zoom)
+                        KetRadio {
+                            Layout.leftMargin: KetTheme.px(2, KetTheme.zoom)
+                            // The row owns the choice; a click must not break this binding.
+                            checkable: false
+                            checked: modelRow.highlighted
+                            focusPolicy: Qt.NoFocus
+                            onClicked: modelRow.clicked()
+                            Accessible.ignored: true
                         }
                         Column {
                             Layout.fillWidth: true
-                            spacing: Metrics.px(3, tokens)
+                            spacing: KetTheme.px(3, KetTheme.zoom)
                             Text {
                                 width: parent.width
                                 text: modelRow.modelData.displayName || modelRow.modelData.model
                                 elide: Text.ElideRight
-                                color: picker.tokens.textMain
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.body
+                                color: KetTheme.t.textMain
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: picker.titlePixels
                                 font.weight: Font.DemiBold
                             }
                             Text {
                                 width: parent.width
                                 text: modelRow.modelData.description || modelRow.modelData.model
                                 elide: Text.ElideRight
-                                color: picker.tokens.textMuted
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.micro
+                                color: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: picker.bodyPixels
                             }
                         }
                         Rectangle {
                             visible: modelRow.index === 0
-                            Layout.preferredWidth: Metrics.px(50, tokens)
-                            Layout.preferredHeight: Metrics.px(22, tokens)
-                            radius: Metrics.px(4, tokens)
-                            color: picker.tokens.interactiveBackground
-                            border.color: picker.tokens.border
+                            Layout.preferredWidth: KetTheme.px(50, KetTheme.zoom)
+                            Layout.preferredHeight: KetTheme.px(22, KetTheme.zoom)
+                            radius: KetTheme.px(4, KetTheme.zoom)
+                            color: KetTheme.t.interactiveBg
+                            border.color: KetTheme.t.panelBorder
                             Text {
                                 anchors.centerIn: parent
                                 text: "Default"
-                                color: picker.tokens.textSecondary
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.micro
+                                color: KetTheme.t.textSecondary
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             }
                         }
                     }
@@ -504,14 +444,15 @@ Basic.Popup {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             height: 1
-                            color: picker.tokens.border
+                            visible: modelRow.index < modelList.count - 1
+                            color: KetTheme.t.panelBorder
                         }
                         Rectangle {
                             anchors.fill: parent
-                            radius: Metrics.px(5, tokens)
-                            color: modelRow.hovered ? picker.tokens.surfaceHover : "transparent"
+                            radius: KetTheme.px(5, KetTheme.zoom)
+                            color: modelRow.hovered ? KetTheme.t.surfaceHover : "transparent"
                             border.color: modelRow.visualFocus || (modelList.activeFocus && modelRow.ListView.isCurrentItem)
-                                          ? picker.tokens.focus : "transparent"
+                                          ? KetTheme.t.colorFocus : "transparent"
                         }
                     }
                     onClicked: {
@@ -519,7 +460,7 @@ Basic.Popup {
                         picker.chooseDraft(modelData)
                     }
                     KetToolTip {
-                        tokens: picker.tokens
+                        objectName: "ketToolTip"
                         visible: modelRow.hovered
                         text: modelData.description || modelData.model
                     }
@@ -530,18 +471,19 @@ Basic.Popup {
             ColumnLayout {
                 anchors.centerIn: parent
                 width: parent.width
-                spacing: Metrics.px(8, tokens)
+                spacing: KetTheme.px(8, KetTheme.zoom)
                 visible: picker.loading || !picker.available || picker.filteredModels.length === 0
                 Text {
                     objectName: "modelPickerEmptyState"
                     Layout.fillWidth: true
-                    text: !picker.available ? "Codex CLI unavailable" : picker.loading ? "Loading models..."
+                    text: picker.draftSetup && picker.providerModels.length === 0 ? "Models appear once " + picker.draftSetup.name + " is set up"
+                          : !picker.available ? "Codex CLI unavailable" : picker.loading ? "Loading models..."
                           : picker.providerModels.length === 0 ? "Models unavailable" : "No models found"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    color: picker.tokens.textMuted
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
                 Basic.Button {
                     id: retryModels
@@ -549,21 +491,21 @@ Basic.Popup {
                     Layout.alignment: Qt.AlignHCenter
                     visible: picker.available && !picker.loading
                     text: picker.providerModels.length === 0 ? "Retry" : "Clear search"
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
-                    implicitHeight: Metrics.px(32, tokens)
-                    horizontalPadding: Metrics.px(12, tokens)
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
+                    implicitHeight: KetTheme.px(32, KetTheme.zoom)
+                    horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                     contentItem: Text {
                         text: retryModels.text
                         font: retryModels.font
-                        color: picker.tokens.textMain
+                        color: KetTheme.t.textMain
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                     background: Rectangle {
-                        radius: Metrics.px(5, tokens)
-                        color: retryModels.hovered ? picker.tokens.surfaceHover : picker.tokens.interactiveBackground
-                        border.color: retryModels.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
+                        radius: KetTheme.px(5, KetTheme.zoom)
+                        color: retryModels.hovered ? KetTheme.t.surfaceHover : KetTheme.t.interactiveBg
+                        border.color: retryModels.visualFocus ? KetTheme.t.colorFocus : KetTheme.t.borderStrong
                     }
                     onClicked: {
                         modelSearch.clear()
@@ -577,35 +519,38 @@ Basic.Popup {
         Rectangle {
             visible: picker.displayedEfforts.length > 1
             Layout.fillWidth: true
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
             Layout.preferredHeight: 1
-            color: picker.tokens.border
+            color: KetTheme.t.panelBorder
         }
 
         ColumnLayout {
             visible: picker.displayedEfforts.length > 1
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(14, tokens)
-            Layout.bottomMargin: Metrics.px(14, tokens)
-            spacing: Metrics.px(7, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+            spacing: KetTheme.px(6, KetTheme.zoom)
 
             RowLayout {
                 Layout.fillWidth: true
                 Text {
                     Layout.fillWidth: true
                     text: "Reasoning effort"
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
-                    font.weight: Font.DemiBold
+                    color: effortSlider.recipe.label
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: effortSlider.recipe.labelPixels
+                    font.weight: effortSlider.recipe.labelWeight
                 }
                 Text {
                     objectName: "selectedEffortLabel"
                     text: picker.draftEffort ? picker.effortLabel(picker.draftEffort) : "Default"
-                    color: picker.tokens.tabActiveText
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.caption
+                    color: effortSlider.recipe.value
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: effortSlider.recipe.labelPixels
                 }
             }
 
@@ -613,7 +558,7 @@ Basic.Popup {
                 id: effortSlider
                 objectName: "effortSlider"
                 Layout.fillWidth: true
-                Layout.preferredHeight: Metrics.px(24, tokens)
+                Layout.preferredHeight: KetTheme.px(21, KetTheme.zoom)
                 from: 0
                 to: Math.max(1, picker.displayedEfforts.length - 1)
                 stepSize: 1
@@ -625,57 +570,79 @@ Basic.Popup {
                     if (index >= 0 && index < picker.displayedEfforts.length)
                         picker.draftEffort = picker.displayedEfforts[index].reasoningEffort
                 }
-                background: Rectangle {
-                    x: effortSlider.leftPadding
-                    y: (effortSlider.height - height) / 2
-                    width: effortSlider.availableWidth
-                    height: Metrics.px(4, tokens)
-                    radius: Metrics.px(2, tokens)
-                    color: picker.tokens.interactiveActive
-                    border.color: effortSlider.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
+                // Drawn from ket::sliderRecipe like KetSlider; the handle hides until an effort is chosen.
+                readonly property var recipe: KetTheme.sliderRecipe(KetTheme.dark, KetTheme.zoom, hovered, pressed, enabled, visualFocus)
+                hoverEnabled: true
+                padding: 0
+                opacity: recipe.opacity
+                background: Item {
+                    x: effortSlider.leftPadding + effortSlider.recipe.handleSize / 2
+                    width: effortSlider.availableWidth - effortSlider.recipe.handleSize
+                    height: effortSlider.height
                     Rectangle {
-                        height: parent.height
-                        width: effortSlider.position * parent.width
-                        radius: Metrics.px(2, tokens)
-                        color: picker.tokens.accent
-                        visible: effortSlider.enabled && picker.effortIndex >= 0
+                        y: (parent.height - height) / 2
+                        width: parent.width
+                        height: effortSlider.recipe.trackHeight
+                        radius: height / 2
+                        color: effortSlider.recipe.track
+                    }
+                    Rectangle {
+                        y: (parent.height - height) / 2
+                        width: effortSlider.visualPosition * parent.width
+                        height: effortSlider.recipe.trackHeight
+                        radius: height / 2
+                        color: effortSlider.recipe.fill
+                        visible: picker.effortIndex >= 0
                     }
                 }
-                handle: Rectangle {
+                handle: Item {
                     objectName: "effortHandle"
                     x: effortSlider.leftPadding + effortSlider.visualPosition * (effortSlider.availableWidth - width)
                     y: (effortSlider.height - height) / 2
-                    width: Metrics.px(16, tokens)
-                    height: Metrics.px(16, tokens)
-                    radius: Metrics.px(8, tokens)
+                    width: effortSlider.recipe.handleSize
+                    height: width
                     visible: picker.effortIndex >= 0
-                    color: effortSlider.enabled ? picker.tokens.accent : picker.tokens.textDisabled
-                    border.color: picker.tokens.surfaceRaised
-                    border.width: 2
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -2
+                        visible: effortSlider.recipe.focusRing.a > 0
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: effortSlider.recipe.focusRing
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: effortSlider.recipe.handle
+                        border.width: effortSlider.recipe.handleBorderWidth
+                        border.color: effortSlider.recipe.handleBorder
+                    }
                 }
                 Accessible.name: "Reasoning effort"
                 Accessible.description: picker.effortLabel(picker.draftEffort)
             }
 
+            // Only the range ends are named, as KetStepSlider does; the header shows the current step.
             Item {
+                readonly property var recipe: KetTheme.sliderRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
                 Layout.fillWidth: true
-                Layout.preferredHeight: Metrics.px(14, tokens)
-                Repeater {
-                    model: picker.displayedEfforts
-                    Text {
-                        required property var modelData
-                        required property int index
-                        objectName: "effortTickLabel_" + index
-                        readonly property real tickCenter: picker.displayedEfforts.length <= 1
-                            ? parent.width / 2
-                            : 8 + index * (parent.width - 16) / (picker.displayedEfforts.length - 1)
-                        x: Math.max(0, Math.min(parent.width - width, tickCenter - width / 2))
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: picker.effortLabel(modelData.reasoningEffort)
-                        color: picker.tokens.textMuted
-                        font.family: picker.tokens.uiFont
-                        font.pixelSize: picker.tokens.micro
-                    }
+                Layout.preferredHeight: effortMinLabel.implicitHeight
+                Text {
+                    id: effortMinLabel
+                    objectName: "effortMinLabel"
+                    text: picker.displayedEfforts.length > 1 ? picker.effortLabel(picker.displayedEfforts[0].reasoningEffort) : ""
+                    color: parent.recipe.rangeLabel
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: parent.recipe.rangePixels
+                }
+                Text {
+                    objectName: "effortMaxLabel"
+                    anchors.right: parent.right
+                    text: picker.displayedEfforts.length > 1 ? picker.effortLabel(picker.displayedEfforts[picker.displayedEfforts.length - 1].reasoningEffort) : ""
+                    color: parent.recipe.rangeLabel
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: parent.recipe.rangePixels
                 }
             }
         }
@@ -683,11 +650,11 @@ Basic.Popup {
         CompactWindowControl {
             id: compactControl
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(16, tokens)
-            Layout.bottomMargin: Metrics.px(16, tokens)
-            tokens: picker.tokens
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(21, KetTheme.zoom)
+
             onFocusRequested: (item) => picker.revealControl(item)
             supported: picker.canCustomizeCompact
             capacity: picker.selectedCapacity
@@ -697,28 +664,28 @@ Basic.Popup {
         Text {
             objectName: "modelConfigurationError"
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.bottomMargin: Metrics.px(12, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
             visible: picker.applyError.length > 0
             text: picker.applyError
             wrapMode: Text.Wrap
-            color: picker.tokens.danger
-            font.family: picker.tokens.uiFont
-            font.pixelSize: picker.tokens.caption
+            color: KetTheme.t.danger
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             Accessible.role: Accessible.AlertMessage
         }
             }
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: picker.tokens.border }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: KetTheme.t.panelBorder }
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(58, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            spacing: Metrics.px(8, tokens)
+            Layout.preferredHeight: KetTheme.px(61, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            spacing: KetTheme.px(8, KetTheme.zoom)
             Item { Layout.fillWidth: true }
             Basic.Button {
                 id: resetEffort
@@ -727,19 +694,19 @@ Basic.Popup {
                 enabled: picker.available && !picker.loading &&
                          (compactControl.requested !== null || (picker.defaultEffort.length > 0 && picker.defaultEffort !== picker.draftEffort) ||
                           (picker.providerModels.length > 0 && picker.providerModels[0].model !== picker.draftModel))
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(12, tokens)
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: resetEffort.text
-                    color: resetEffort.enabled ? picker.tokens.textMain : picker.tokens.textDisabled
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: resetEffort.enabled ? KetTheme.t.textMain : KetTheme.t.textDisabled
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: Metrics.px(5, tokens)
-                    color: resetEffort.hovered ? picker.tokens.surfaceHover : "transparent"
+                    radius: KetTheme.px(5, KetTheme.zoom)
+                    color: resetEffort.hovered ? KetTheme.t.surfaceHover : "transparent"
                 }
                 onClicked: picker.restoreDefaults()
             }
@@ -748,16 +715,16 @@ Basic.Popup {
                 objectName: "cancelModelButton"
                 text: qsTr("Cancel")
                 enabled: !picker.applying
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(12, tokens)
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: cancelButton.text
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.textMain
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     verticalAlignment: Text.AlignVCenter
                 }
-                background: Rectangle { radius: Metrics.px(5, tokens); color: cancelButton.hovered ? picker.tokens.surfaceHover : "transparent" }
+                background: Rectangle { radius: KetTheme.px(5, KetTheme.zoom); color: cancelButton.hovered ? KetTheme.t.surfaceHover : "transparent" }
                 onClicked: picker.close()
             }
             Basic.Button {
@@ -765,20 +732,22 @@ Basic.Popup {
                 objectName: "applyModelButton"
                 text: picker.applying ? qsTr("Applying…") : picker.applyError ? qsTr("Retry") : qsTr("Apply")
                 enabled: picker.available && !picker.loading && !picker.applying && !picker.blockedReason && compactControl.valid && picker.draftModel.length > 0
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(15, tokens)
+                         // A tab without models keeps the previous provider's model: nothing to apply.
+                         && picker.providerModels.length > 0
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(15, KetTheme.zoom)
                 contentItem: Text {
                     text: applyButton.text
-                    color: "#ffffff"
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.actionPrimaryInk
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: Metrics.px(5, tokens)
-                    color: applyButton.pressed ? picker.tokens.actionPrimaryActive
-                           : applyButton.hovered ? picker.tokens.actionPrimaryHover : picker.tokens.actionPrimary
+                    radius: KetTheme.px(5, KetTheme.zoom)
+                    color: applyButton.pressed ? KetTheme.t.actionPrimaryActive
+                           : applyButton.hovered ? KetTheme.t.actionPrimaryHover : KetTheme.t.actionPrimaryBg
                 }
                 onClicked: picker.applyRequested(picker.draftModel, picker.draftEffort, picker.selectedProviderTab,
                     picker.compactSupported ? {compactWindow: compactControl.requested, expected_revision: picker.draftRevision} : {expected_revision: picker.draftRevision})

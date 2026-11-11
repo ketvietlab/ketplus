@@ -26,6 +26,7 @@ turns = 0
 approvals = {}
 names = {}
 previews = {}
+limit_used = False
 
 def emit(value):
     with lock:
@@ -63,8 +64,16 @@ for line in sys.stdin:
             'defaultReasoningEffort': 'medium', 'supportedReasoningEfforts': []}]}})
     elif method == 'account/rateLimits/read':
         emit({'id': message_id, 'result': {'rateLimits': {
-            'limitId': 'codex', 'secondary': {'usedPercent': 42,
+            'limitId': 'codex', 'secondary': {'usedPercent': 100 if limit_used else 42,
             'windowDurationMins': 10080, 'resetsAt': int(time.time()) + 3600}}}})
+    elif method == 'account/read':
+        # #170 readiness: KETPLUS_FAKE_CODEX_SIGNED_OUT reports no account.
+        if os.environ.get('KETPLUS_FAKE_CODEX_SIGNED_OUT'):
+            emit({'id': message_id, 'result': {'account': None, 'requiresOpenaiAuth': True}})
+        else:
+            emit({'id': message_id, 'result': {'account': {
+                'type': 'chatgpt', 'email': 'dev@example.com', 'planType': 'plus'},
+                'requiresOpenaiAuth': True}})
     elif method == 'thread/delete':
         log('delete:' + message['params']['threadId'])
         emit({'id': message_id, 'result': {}})
@@ -99,6 +108,8 @@ for line in sys.stdin:
         emit({'method': 'thread/name/updated', 'params': {
             'threadId': thread_id, 'threadName': name}})
     elif method == 'turn/start':
+        log('turn-start:' + json.dumps({'approvalPolicy': message['params'].get('approvalPolicy'),
+                                        'sandboxPolicy': message['params'].get('sandboxPolicy')}))
         turns += 1
         thread_id = message['params']['threadId']
         turn_id = 'turn-' + str(turns)
@@ -120,6 +131,18 @@ for line in sys.stdin:
             def refuse(message_id=message_id):
                 emit({'id': message_id, 'error': {'code': -32000, 'message': 'start failed'}})
             threading.Timer(0.3, refuse).start()
+            continue
+        if text == 'limit-final':
+            # #170: the weekly limit, as Codex reports it; the rate limits read then shows it.
+            limit_used = True
+            emit({'id': message_id, 'result': {'turn': {'id': turn_id}}})
+            emit({'method': 'turn/started', 'params': {
+                'threadId': thread_id, 'turn': {'id': turn_id}}})
+            emit({'method': 'error', 'params': {
+                'threadId': thread_id, 'turnId': turn_id, 'willRetry': False,
+                'error': {'message': "You've hit your weekly limit", 'codexErrorInfo': 'usageLimitExceeded'}}})
+            emit({'method': 'turn/completed', 'params': {
+                'threadId': thread_id, 'turn': {'id': turn_id, 'status': 'failed'}}})
             continue
         if text == 'error-final':
             # A turn that ends with a final error and never sends turn/completed.

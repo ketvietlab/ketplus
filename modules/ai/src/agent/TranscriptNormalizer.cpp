@@ -3,6 +3,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/TranscriptStepItems.h"
 
 #include <QRegularExpression>
 #include <QUrl>
@@ -37,8 +38,12 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
         presentation = agent_message::message(QStringLiteral("user"), textValue,
                                               QStringLiteral("You"), {}, itemId);
         presentation.insert(QStringLiteral("category"), QStringLiteral("user"));
-        presentation.insert(QStringLiteral("eventType"), QStringLiteral("user.message"));
+        presentation.insert(QStringLiteral("eventType"), item.value("eventType") == "turn.steered"
+                                                             ? QStringLiteral("turn.steered")
+                                                             : QStringLiteral("user.message"));
         presentation.insert(QStringLiteral("title"), QStringLiteral("You"));
+        presentation.insert(QStringLiteral("timestamp"),
+                            item.value(QStringLiteral("timestamp")).toString());
         presentation.insert(QStringLiteral("images"), images);
         agent_message::markAgentOrigin(presentation,
                                        item.value(QStringLiteral("agentMessages")).toArray());
@@ -54,11 +59,17 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
             presentation.insert(QStringLiteral("title"), QStringLiteral("Update"));
         }
     } else if (rawType == QStringLiteral("reasoning")) {
-        visible = false;
+        // The mock's "Thought · 14 s" step: that the agent thought, never what it thought.
+        const bool completed = lifecycle == TranscriptPhase::Completed;
         presentation = agent_message::message(QStringLiteral("tool"), {}, {}, {}, itemId);
-        presentation.insert(QStringLiteral("category"), QStringLiteral("system"));
+        presentation.insert(QStringLiteral("category"), QStringLiteral("activity"));
         presentation.insert(QStringLiteral("eventType"), QStringLiteral("assistant.reasoning"));
-        presentation.insert(QStringLiteral("subtype"), QStringLiteral("reasoning"));
+        presentation.insert(QStringLiteral("subtype"), QStringLiteral("thought"));
+        presentation.insert(QStringLiteral("title"),
+                            completed ? QStringLiteral("Thought") : QStringLiteral("Thinking"));
+        presentation.insert(QStringLiteral("status"),
+                            completed ? QStringLiteral("completed") : QStringLiteral("running"));
+        presentation.insert(QStringLiteral("running"), !completed);
     } else {
         presentation =
             agent_message::activityMessage(item, lifecycle == TranscriptPhase::Completed);
@@ -79,7 +90,13 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
              sourceStatus == QStringLiteral("cancelled"))
         event.phase = TranscriptPhase::Interrupted;
     event.visible = visible;
-    event.sanitizedPayload = TranscriptSanitizer::json(item).toObject().toVariantMap();
+    // A thought's text is never part of the transcript, its copy or its details.
+    // A Claude edit keeps the fileChange it reads as, so its diff opens as a Codex edit's does.
+    if (rawType != QStringLiteral("reasoning")) {
+        const QJsonObject edit = agent_message::claudeFileChangeItem(item);
+        event.sanitizedPayload =
+            TranscriptSanitizer::json(edit.isEmpty() ? item : edit).toObject().toVariantMap();
+    }
     return event;
 }
 
@@ -146,6 +163,10 @@ QSet<QString> ActivityNormalizer::registeredProtocolEventTypes() {
             QStringLiteral("runtime.error"),
             QStringLiteral("session.created"),
             QStringLiteral("session.renamed"),
+            QStringLiteral("session.provider_changed"),
+            QStringLiteral("session.configuration_changed"),
+            QStringLiteral("conversation.context_changed"),
+            QStringLiteral("session.forked"),
             QStringLiteral("turn.completed"),
             QStringLiteral("turn.queued"),
             QStringLiteral("turn.started"),

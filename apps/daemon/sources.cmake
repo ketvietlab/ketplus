@@ -20,6 +20,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
     src/storage/LocalJournalArchive.cpp
+    src/storage/LocalJournalTags.cpp
     src/cloud/CloudControlCredentials.cpp
     src/cloud/MachineChallenge.cpp
     src/cloud/CloudControlClient.cpp
@@ -44,6 +45,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeRepositories.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
+    src/agents/WorkReport.cpp
+    src/agents/WorkReport.h
     src/cloud/RelayWakeups.cpp
     src/cloud/RelayWakeups.h
     src/ipc/LocalIpcServer.cpp
@@ -78,22 +81,48 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/CodexItems.cpp
     src/runtime/CodexItems.h
     src/runtime/ProviderCatalogCache.cpp
+    src/runtime/ProviderErrorCode.cpp
+    src/runtime/ProviderReadiness.cpp
     src/runtime/ProviderCatalogCache.h
     src/agents/AgentBroker.cpp
+    src/agents/AgentBrokerRelease.cpp
+    src/agents/AgentBrokerReviews.cpp
     src/agents/AgentBroker.h
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
     src/agents/AgentMcpServer.cpp
     src/agents/AgentMcpServer.h
+    src/agents/AgentTeamTools.cpp
+    src/agents/AgentTeamTools.h
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
     src/runtime/SessionHostCatalog.cpp
     src/runtime/SessionHostAgents.cpp
+    src/runtime/SessionHostWorkReports.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
+    src/storage/LocalJournalReviewers.cpp
+    src/storage/LocalJournalTeams.cpp
+    src/teams/Team.cpp
+    src/teams/Team.h
+    src/teams/TeamRules.cpp
+    src/teams/TeamRules.h
+    src/teams/TeamCoordinator.cpp
+    src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorTasks.cpp
+    src/agents/AgentBrokerTeams.cpp
+    src/storage/LocalJournalWorkReports.cpp
+    src/runtime/SessionHostReviewers.cpp
+    src/runtime/SessionHostTeams.cpp
+    src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/SessionHostTeamAgents.cpp
+    src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
     src/runtime/SessionHostDeltas.cpp
@@ -101,6 +130,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
     src/runtime/SessionHostArchive.cpp
+    src/runtime/SessionHostAwaiting.cpp
+    src/runtime/AwaitingReply.h
+    src/runtime/SessionHostTags.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp
     src/runtime/SessionHostQuestions.cpp
@@ -132,6 +164,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/ReplayDetailCompactor.cpp
     src/storage/JournalSizePolicy.cpp
     src/storage/LocalJournalSizePolicy.cpp
+    src/storage/JournalStorageOptions.cpp
+    src/storage/LocalJournalStorageOptions.cpp
+    src/storage/JournalStorageReader.cpp
     src/storage/JournalRetentionPolicy.cpp
     src/storage/JournalRetentionPolicy.h
     src/storage/LocalJournalRetentionPolicy.cpp

@@ -6,18 +6,20 @@
 #include <QString>
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QDialogButtonBox;
 class QComboBox;
-class QLineEdit;
 class QListWidget;
-class QPushButton;
-class QSpinBox;
+namespace ket {
+class SegmentedControl;
+class ThemeCard;
+} // namespace ket
 class QStackedWidget;
 
 namespace ketplus {
 
 class ThemeManager;
+class PixelSelect;
 class TypographyPreview;
 
 class SettingsPage : public QWidget {
@@ -81,6 +83,8 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
     [[nodiscard]] AppearanceSettings appearanceSettings() const;
     [[nodiscard]] EditorSettings settings() const;
+    // The theme the Appearance settings drive; null for the editor-only dialog.
+    [[nodiscard]] ThemeManager* theme() const noexcept { return theme_; }
     void addPage(SettingsPage* page);
     SettingsRegistrationResult registerPage(SettingsPageRegistration registration) override;
     bool selectPage(const QString& id) override;
@@ -92,18 +96,18 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
   protected:
     void reject() override;
+    void keyPressEvent(QKeyEvent* event) override;
 
   private:
     void initialize(const AppearanceSettings& settings);
-    QWidget* createGeneralPage();
     QWidget* createAppearancePage();
     QWidget* createThemeCard();
     QWidget* createTypographyCard();
     void addNavigationPage(const QString& id, const QString& title, QWidget* page);
     void setAppearanceSettings(const AppearanceSettings& settings);
     void updatePreview();
-    void updateDirtyState();
-    void updateThemePreview();
+    void applyChanges();
+    void updateThemeCards();
     void selectThemeMode(int mode);
     void rebuildExtensionNavigation();
 
@@ -117,26 +121,24 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     AppearanceSettings initialSettings_;
     int initialThemeMode_{0};
     int selectedThemeMode_{0};
+    // What was last applied, so each change emits once.
+    AppearanceSettings appliedSettings_;
+    bool ready_{false};
     QListWidget* navigation_{nullptr};
     QStackedWidget* pages_{nullptr};
-    QLineEdit* themeSearch_{nullptr};
-    QCheckBox* followSystem_{nullptr};
-    QListWidget* themeList_{nullptr};
+    QAbstractButton* followSystem_{nullptr};
+    QList<ket::ThemeCard*> themeCards_;
     QComboBox* editorFontBox_{nullptr};
     QString editorFontFamily_;
     // Kept as loaded: the dialog has no terminal font picker yet.
     QString terminalFontFamily_;
-    QSpinBox* interfaceFontSizeBox_{nullptr};
-    QSpinBox* editorFontSizeBox_{nullptr};
-    QSpinBox* editorLineHeightBox_{nullptr};
-    QSpinBox* terminalFontSizeBox_{nullptr};
-    QSpinBox* terminalLineHeightBox_{nullptr};
-    QSpinBox* previewFontSizeBox_{nullptr};
-    QSpinBox* previewLineHeightBox_{nullptr};
+    PixelSelect* interfaceFontSizeBox_{nullptr};
+    PixelSelect* editorFontSizeBox_{nullptr};
+    PixelSelect* editorLineHeightBox_{nullptr};
     TypographyPreview* preview_{nullptr};
-    QDialogButtonBox* buttons_{nullptr};
-    QPushButton* resetButton_{nullptr};
-    QPushButton* saveButton_{nullptr};
+    QWidget* buttons_{nullptr};
+    ket::SegmentedControl* zoomControl_{nullptr};
+    QAbstractButton* resetButton_{nullptr};
     QList<SettingsPage*> extensionPages_;
     QList<RegisteredPage> registeredPages_;
     qsizetype nextRegistrationSequence_{0};

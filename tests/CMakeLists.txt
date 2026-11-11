@@ -28,11 +28,7 @@ target_link_libraries(ketplus_spotlight_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
-qt_add_resources(ketplus_spotlight_tests "spotlight_test_icons"
-    PREFIX "/agent"
-    BASE "${PROJECT_SOURCE_DIR}/modules/ai/src/agent"
-    FILES "${PROJECT_SOURCE_DIR}/modules/ai/src/agent/icons/search.svg"
-)
+
 
 ketplus_add_gui_test(ketplus_atlas_tests AtlasTest.cpp)
 target_link_libraries(ketplus_atlas_tests PRIVATE Qt6::Test ketplus_atlas)
@@ -60,13 +56,22 @@ target_link_libraries(ketplus_interface_font_tests PRIVATE
 ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceHistoryTest.cpp
     TranscriptInteractionTest.cpp
+    TranscriptFileStepsTest.cpp
+    TranscriptAgentNoteTest.cpp
+    TranscriptWorkReportTest.cpp
+    TranscriptProviderErrorTest.cpp
+    AgentProviderSetupTest.cpp
+    TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
+    AgentWorkspaceMotionTest.cpp
     AgentCompactWindowTest.cpp
     AgentWorkspaceScrollTest.cpp
     AgentWorkspaceSessionTest.cpp
     AgentWorkspaceMissingWorktreeTest.cpp
     AgentConversationForkMenuTest.cpp
+    AgentReviewerPickerTest.cpp
     AgentWorkspaceViewTest.cpp
     AgentWorkspaceViewTest.h
     TranscriptPhase5Test.cpp
@@ -101,14 +106,23 @@ target_link_libraries(ketplus_transcript_window_model_tests PRIVATE Qt6::Test Qt
 ketplus_add_gui_test(ketplus_transcript_activity_groups_tests TranscriptActivityGroupsTest.cpp)
 target_link_libraries(ketplus_transcript_activity_groups_tests PRIVATE Qt6::Test ketplus_ai)
 
-ketplus_add_gui_test(ketplus_lucide_icon_tests LucideIconTest.cpp)
-target_link_libraries(ketplus_lucide_icon_tests PRIVATE Qt6::Test ketplus_ai)
+ketplus_add_gui_test(ketplus_transcript_safety_tests TranscriptSafetyTest.cpp)
+target_link_libraries(ketplus_transcript_safety_tests PRIVATE Qt6::Test Qt6::Network Qt6::Quick ketplus_ai)
+
+ketplus_add_gui_test(ketplus_symbol_icon_tests SymbolIconTest.cpp)
+target_link_libraries(ketplus_symbol_icon_tests PRIVATE Qt6::Test ketplus_ai)
 
 ketplus_add_gui_test(ketplus_agent_viewport_tests AgentTranscriptViewportTest.cpp)
 target_link_libraries(ketplus_agent_viewport_tests PRIVATE Qt6::Test ketplus_ai)
 
 ketplus_add_gui_test(ketplus_claude_credentials_settings_tests ClaudeCredentialsSettingsTest.cpp)
 target_link_libraries(ketplus_claude_credentials_settings_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_working_line_tests WorkingLineTest.cpp)
+target_link_libraries(ketplus_working_line_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_conversation_menu_tests ConversationMenuTest.cpp)
+target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_settings_integration_tests MainWindowSettingsTest.cpp)
 target_link_libraries(ketplus_settings_integration_tests PRIVATE

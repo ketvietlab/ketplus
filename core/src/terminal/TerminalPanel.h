@@ -1,13 +1,14 @@
 #pragma once
 
+#include "ui/Theme.h"
 #include <QWidget>
 
-class QLabel;
-class QToolButton;
+class QTabWidget;
+class QAbstractButton;
 
 namespace ketplus {
 
-class TerminalSession;
+class TerminalTab;
 class TerminalView;
 struct ThemePalette;
 
@@ -22,20 +23,24 @@ class TerminalPanel final : public QWidget {
     void applyTheme(const ThemePalette& palette);
     void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
     [[nodiscard]] bool isSessionRunning() const;
+    // Types `text` into the current tab without running it (TerminalTab::typeText).
+    void typeText(const QString& text);
+    // The same in a new tab, since the current one may be running vim or another program. A
+    // panel with no tab yet types into its first.
+    void typeTextInNewTab(const QString& text);
 
   signals:
     void closeRequested();
     void statusMessageRequested(const QString& message);
 
   private:
-    TerminalSession* session_{nullptr};
-    TerminalView* terminal_{nullptr};
-    QLabel* titleLabel_{nullptr};
-    QLabel* pathLabel_{nullptr};
-    QToolButton* findButton_{nullptr};
-    QToolButton* clearButton_{nullptr};
-    QToolButton* restartButton_{nullptr};
-    QToolButton* closeButton_{nullptr};
+    TerminalTab* currentTab() const;
+    void addTab(bool start);
+    QTabWidget* tabs_{nullptr};
+    ThemePalette palette_;
+    int fontSizePixels_{14};
+    int lineHeightPixels_{22};
+    QString fontFamily_;
     QString workingDirectory_;
 };
 

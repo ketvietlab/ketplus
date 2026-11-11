@@ -32,6 +32,10 @@ QJsonObject SessionHost::setSessionArchived(const QJsonObject& request) {
     if (!archived.isBool())
         return error(QStringLiteral("invalid_payload"),
                      QStringLiteral("`archived` must be true or false."));
+    // ADR 0112: a member leaves its team before it is archived.
+    if (archived.toBool())
+        if (const auto refused = teams_->archiveRefusal(session->stored.id))
+            return error(refused->code, refused->message);
     // Archiving again keeps the first time, so retention counts from when it was hidden.
     QString archivedAt = session->stored.archivedAt;
     if (!archived.toBool())
@@ -56,7 +60,11 @@ QJsonObject SessionHost::setSessionArchived(const QJsonObject& request) {
 bool SessionHost::expireArchivedSessions(const QDateTime& now) {
     if (!now.isValid())
         return false;
-    const QDateTime cutoff = now.toUTC().addDays(-archivedHistoryDays);
+    // Unreadable options keep everything: expiry deletes history and cannot be undone.
+    const auto options = journal_->storageOptions();
+    if (!options || options->archivedHistoryDays <= 0)
+        return false;
+    const QDateTime cutoff = now.toUTC().addDays(-options->archivedHistoryDays);
     QList<std::pair<QDateTime, std::pair<QString, qint64>>> expired;
     for (const Session& session : std::as_const(sessions_)) {
         if (session.stored.archivedAt.isEmpty())

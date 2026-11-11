@@ -13,6 +13,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
@@ -64,6 +65,11 @@ void CodexAppServer::setupDaemonTransport() {
     });
     connect(daemon_, &remote::DaemonClient::eventReceived, this,
             &CodexAppServer::consumeDaemonEvent);
+    connect(daemon_, &remote::DaemonClient::noticeReceived, this,
+            [this](const QString& type, const QJsonObject& payload) {
+                if (type == QStringLiteral("tags.changed"))
+                    emit tagsChanged(payload);
+            });
     connect(daemon_, &remote::DaemonClient::disconnected, this, [](const QString&) {});
 }
 
@@ -118,14 +124,18 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
         return;
     }
     if (method.startsWith(QStringLiteral("daemon/storage"))) {
-        const bool retention = method.startsWith(QStringLiteral("daemon/storageRetention/"));
-        const bool size = method.startsWith(QStringLiteral("daemon/storageSize/"));
+        // daemon/storage<Area>/<operation> → storage.<area>.<operation> (ADRs 0042, 0046, 0108).
+        static const QHash<QString, QStringList> operations{
+            {QStringLiteral("Retention"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Size"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Options"), {QStringLiteral("read"), QStringLiteral("apply")}},
+            {QStringLiteral("Compaction"), {QStringLiteral("start"), QStringLiteral("read")}},
+            {QStringLiteral("Breakdown"), {QStringLiteral("read")}},
+            {QStringLiteral("Export"), {QStringLiteral("start"), QStringLiteral("read")}}};
+        const QString area = method.section('/', 1, 1).mid(7); // after "storage"
         const QString operation = method.section('/', -1);
-        const QString capability =
-            (retention ? QStringLiteral("storage.retention.") : QStringLiteral("storage.size.")) +
-            operation;
-        if ((!retention && !size) || method.count('/') != 2 ||
-            (operation != QStringLiteral("read") && operation != QStringLiteral("apply")) ||
+        const QString capability = QStringLiteral("storage.%1.%2").arg(area.toLower(), operation);
+        if (method.count('/') != 2 || !operations.value(area).contains(operation) ||
             !daemon_->isReady() || !daemon_->hasCapability(capability)) {
             callback(
                 {},
@@ -166,7 +176,8 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
             callback({}, QStringLiteral("KetPlus Daemon does not support %1 yet.").arg(method));
             return;
         }
-        daemon_->call(QStringLiteral("provider.runtime_status"), {}, {}, -1, std::move(callback));
+        daemon_->call(QStringLiteral("provider.runtime_status"), params, {}, -1,
+                      std::move(callback));
         return;
     }
     if (method == QStringLiteral("thread/start")) {
@@ -402,6 +413,47 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
                       std::move(callback));
         return;
     }
+    if (method == "agentMessages/read" || method == "agentMessages/release") {
+        const QString sessionId = params.value("threadId").toString();
+        const auto found = daemonSessions_.constFind(sessionId);
+        const QString operation = method.endsWith("/release")
+                                      ? QStringLiteral("session.agent_messages.release")
+                                      : QStringLiteral("session.agent_messages.read");
+        if (found == daemonSessions_.cend() || !daemon_->hasCapability(operation)) {
+            callback({},
+                     QStringLiteral("Update the daemon to receive held messages from Desktop."));
+            return;
+        }
+        daemon_->call(operation, {{"message_ids", params.value("messageIds")}}, sessionId,
+                      found->generation, std::move(callback));
+        return;
+    }
+    if (method == "reviewer/get" || method == "reviewer/set") {
+        // ADR 0067: the conversation that reviews each finished turn of this one.
+        const QString sessionId = params.value("threadId").toString();
+        const auto found = daemonSessions_.constFind(sessionId);
+        const QString operation = method.endsWith("/set") ? QStringLiteral("session.reviewer.set")
+                                                          : QStringLiteral("session.reviewer.get");
+        if (found == daemonSessions_.cend() || !daemon_->hasCapability(operation)) {
+            callback({}, QStringLiteral("Update the daemon to choose a reviewer."));
+            return;
+        }
+        daemon_->call(operation, params.value("reviewer").toObject(), sessionId, found->generation,
+                      std::move(callback));
+        return;
+    }
+    if (method == "workReport/read") {
+        // ADR 0106: the conversation's current ledger for the Report tab.
+        const QString sessionId = params.value("threadId").toString();
+        const auto found = daemonSessions_.constFind(sessionId);
+        const QString operation = QStringLiteral("session.work_report.read");
+        if (found == daemonSessions_.cend() || !daemon_->hasCapability(operation)) {
+            callback({}, QStringLiteral("Update the daemon to see the work report."));
+            return;
+        }
+        daemon_->call(operation, {}, sessionId, found->generation, std::move(callback));
+        return;
+    }
     if (method == QStringLiteral("task/stop") || method == QStringLiteral("task/output")) {
         const QString sessionId = params.value(QStringLiteral("threadId")).toString();
         auto found = daemonSessions_.find(sessionId);
@@ -454,6 +506,56 @@ void CodexAppServer::setDaemonSessionArchived(const QString& sessionId, const bo
     }
     daemon_->call(QStringLiteral("session.set_archived"), {{QStringLiteral("archived"), archived}},
                   sessionId, found->generation, std::move(callback));
+}
+
+void CodexAppServer::setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
+                                          ResponseCallback callback) {
+    if (!hasTagSupport() || sessionId.isEmpty()) {
+        callback({}, QStringLiteral("This daemon does not store conversation tags."));
+        return;
+    }
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("Unknown daemon session."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.tags.set"),
+                  {{QStringLiteral("tags"), QJsonArray::fromStringList(tags)}}, sessionId,
+                  found->generation, std::move(callback));
+}
+
+bool CodexAppServer::hasTagCatalogSupport() const noexcept {
+    return daemon_ && daemon_->hasFeature(QStringLiteral("tags.catalog/1"));
+}
+
+void CodexAppServer::readTagCatalog(ResponseCallback callback) {
+    if (!hasTagCatalogSupport()) {
+        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
+        return;
+    }
+    daemon_->call(QStringLiteral("tags.catalog"), {}, {}, -1, std::move(callback));
+}
+
+void CodexAppServer::setTagCatalog(const QJsonArray& tags, const QJsonObject& renames,
+                                   ResponseCallback callback) {
+    if (!hasTagCatalogSupport()) {
+        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
+        return;
+    }
+    daemon_->call(QStringLiteral("tags.catalog.set"),
+                  {{QStringLiteral("tags"), tags}, {QStringLiteral("renames"), renames}}, {}, -1,
+                  std::move(callback));
+}
+
+void CodexAppServer::markDaemonSessionDone(const QString& sessionId, ResponseCallback callback) {
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (!daemon_ || !daemon_->hasFeature(QStringLiteral("session.awaiting_reply/1")) ||
+        found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("This daemon does not track conversations waiting for you."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.mark_done"), {}, sessionId, found->generation,
+                  std::move(callback));
 }
 
 void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {

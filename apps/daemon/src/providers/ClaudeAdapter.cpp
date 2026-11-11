@@ -403,7 +403,7 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
         }
         providerParams.insert(QStringLiteral("mcpServers"), servers);
         providerParams.insert(QStringLiteral("browserInstructions"),
-                              withResponseGuidance(instructions));
+                              withResponseGuidance(instructions, !agentServer.isEmpty()));
     }
     sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},
@@ -491,8 +491,11 @@ void ClaudeAdapter::consumeLine(const QByteArray& line) {
         const QJsonObject params = object.value(QStringLiteral("params")).toObject();
         if (params.value(QStringLiteral("type")).toString() ==
             QStringLiteral("provider.authentication")) {
+            const QJsonObject payload = params.value(QStringLiteral("payload")).toObject();
             if (credentials_)
-                credentials_->observe(params.value(QStringLiteral("payload")).toObject());
+                credentials_->observe(payload);
+            if (payload.contains(QStringLiteral("source")))
+                emit authenticationObserved(payload.value(QStringLiteral("source")).toString());
             return;
         }
         emit canonicalEvent(params.value(QStringLiteral("sessionId")).toString(),

@@ -8,12 +8,16 @@
 
 #include <ScintillaMessages.h>
 
+#include "KetDialog.h"
+#include "ui/MessageDialog.h"
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QLineEdit>
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
 
 #include <atomic>
@@ -23,6 +27,8 @@ class NavigationTest final : public QObject {
 
   private slots:
     void scoresFuzzyMatches();
+    void messageDialogKeepsSafeDismissalAndExplicitChoices();
+    void numberDialogAcceptsOnlyTheRange();
     void filtersAndActivatesQuickOpenItems();
     void collectsWorkspaceFiles();
     void listsRepositoryFilesByIgnoreRules();
@@ -40,13 +46,13 @@ void NavigationTest::buildsDefinitionPatterns() {
         return expression.isValid() && expression.match(line).hasMatch();
     };
 
-    const QString cpp = ketplus::definitionExpression(QStringLiteral("Widget"),
-                                                      QStringLiteral("c-cpp"));
+    const QString cpp =
+        ketplus::definitionExpression(QStringLiteral("Widget"), QStringLiteral("c-cpp"));
     QVERIFY(matches(cpp, QStringLiteral("class Widget final : public QWidget {")));
     QVERIFY(!matches(cpp, QStringLiteral("    auto* widget = new Widget(this);")));
 
-    const QString python = ketplus::definitionExpression(QStringLiteral("render"),
-                                                         QStringLiteral("python"));
+    const QString python =
+        ketplus::definitionExpression(QStringLiteral("render"), QStringLiteral("python"));
     QVERIFY(matches(python, QStringLiteral("def render(self):")));
     QVERIFY(!matches(python, QStringLiteral("    self.render()")));
 
@@ -55,16 +61,16 @@ void NavigationTest::buildsDefinitionPatterns() {
     QVERIFY(matches(js, QStringLiteral("const handler = (event) => {")));
     QVERIFY(matches(js, QStringLiteral("function handler(event) {")));
 
-    const QString css = ketplus::definitionExpression(QStringLiteral("panel"),
-                                                      QStringLiteral("css"));
+    const QString css =
+        ketplus::definitionExpression(QStringLiteral("panel"), QStringLiteral("css"));
     QVERIFY(matches(css, QStringLiteral(".panel { color: red; }")));
 
     // Not a name, so there is nothing to look for.
     QVERIFY(ketplus::definitionExpression(QStringLiteral("10"), QStringLiteral("c-cpp")).isEmpty());
 
     // An unrecognised syntax still finds the shapes other languages use.
-    const QString unknown = ketplus::definitionExpression(QStringLiteral("helpUrl"),
-                                                          QStringLiteral("generic"));
+    const QString unknown =
+        ketplus::definitionExpression(QStringLiteral("helpUrl"), QStringLiteral("generic"));
     QVERIFY(matches(unknown, QStringLiteral("export const helpUrl = 'https://example.com';")));
     QVERIFY(!matches(unknown, QStringLiteral("import { helpUrl } from '../data/help';")));
 
@@ -79,8 +85,7 @@ void NavigationTest::buildsDefinitionPatterns() {
                 .contains(QStringLiteral("./menus.ts")));
 
     // The module a name is imported from, so a click follows the import.
-    QCOMPARE(ketplus::importedModuleOnLine(
-                 QStringLiteral("import { menus } from './menus.js';")),
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("import { menus } from './menus.js';")),
              QStringLiteral("./menus.js"));
     QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("const a = require(\"../lib/a\")")),
              QStringLiteral("../lib/a"));
@@ -128,8 +133,8 @@ void NavigationTest::requestsDefinitionOnModifierClick() {
     QApplication::sendEvent(editor.viewport(), &plain);
     QCOMPARE(spy.count(), 0);
 
-    QMouseEvent modified(QEvent::MouseButtonPress, point, editor.mapToGlobal(point),
-                         Qt::LeftButton, Qt::LeftButton, Qt::ControlModifier);
+    QMouseEvent modified(QEvent::MouseButtonPress, point, editor.mapToGlobal(point), Qt::LeftButton,
+                         Qt::LeftButton, Qt::ControlModifier);
     QApplication::sendEvent(editor.viewport(), &modified);
     QCOMPARE(spy.count(), 1);
 }
@@ -183,7 +188,8 @@ void NavigationTest::collectsWorkspaceFiles() {
     }
 
     const auto files = ketplus::collectWorkspaceFiles(directory.path());
-    QCOMPARE(files.relativePaths, QStringList({QStringLiteral("a.txt"), QStringLiteral("src/b.cpp")}));
+    QCOMPARE(files.relativePaths,
+             QStringList({QStringLiteral("a.txt"), QStringLiteral("src/b.cpp")}));
     QVERIFY(!files.truncated);
 
     const auto limited = ketplus::collectWorkspaceFiles(directory.path(), 1);
@@ -284,8 +290,8 @@ void NavigationTest::extractsCppSymbols() {
 }
 
 void NavigationTest::extractsScriptAndMarkdownSymbols() {
-    const auto python = ketplus::extractDocumentSymbols("class Foo:\n    def bar(self):\n        pass\n",
-                                                        QStringLiteral("python"));
+    const auto python = ketplus::extractDocumentSymbols(
+        "class Foo:\n    def bar(self):\n        pass\n", QStringLiteral("python"));
     QCOMPARE(python.size(), 2);
     QCOMPARE(python.at(1).name, QStringLiteral("bar"));
     QCOMPARE(python.at(1).kind, QStringLiteral("function"));
@@ -320,3 +326,83 @@ void NavigationTest::movesCaretToPosition() {
 
 QTEST_MAIN(NavigationTest)
 #include "NavigationTest.moc"
+
+void NavigationTest::messageDialogKeepsSafeDismissalAndExplicitChoices() {
+    QWidget window;
+    window.resize(900, 600);
+    window.show();
+    QTimer::singleShot(0, &window, [&window] {
+        if (auto* dialog = window.findChild<ket::Dialog*>())
+            QTest::keyClick(dialog, Qt::Key_Escape);
+    });
+    QCOMPARE(ketplus::message_dialog::warning(&window, "Unsaved changes", "Keep or discard edits?",
+                                              QMessageBox::Discard | QMessageBox::Cancel,
+                                              QMessageBox::Cancel),
+             QMessageBox::Cancel);
+    QTimer::singleShot(0, &window, [&window] {
+        auto* dialog = window.findChild<ket::Dialog*>();
+        if (!dialog)
+            return;
+        for (auto* button : dialog->findChildren<QAbstractButton*>())
+            if (button->property("standardButton").toInt() == int(QMessageBox::Discard))
+                button->click();
+    });
+    QCOMPARE(ketplus::message_dialog::warning(&window, "Unsaved changes", "Discard edits?",
+                                              QMessageBox::Discard | QMessageBox::Cancel,
+                                              QMessageBox::Cancel),
+             QMessageBox::Discard);
+    QVERIFY(window.findChild<ket::Dialog*>() == nullptr);
+}
+
+void NavigationTest::numberDialogAcceptsOnlyTheRange() {
+    QWidget window;
+    window.resize(900, 600);
+    window.show();
+    const auto ask = [&window] {
+        return ketplus::message_dialog::number(&window, "Go to Line", "Line number (1–40)", 7, 1,
+                                               40, "Go");
+    };
+    // Escape cancels; the field starts at the current value.
+    QString initial;
+    QTimer::singleShot(0, &window, [&window, &initial] {
+        auto* field = window.findChild<QLineEdit*>("numberField");
+        initial = field ? field->text() : QString();
+        QTest::keyClick(window.findChild<ket::Dialog*>(), Qt::Key_Escape);
+    });
+    QVERIFY(!ask().has_value());
+    QCOMPARE(initial, QStringLiteral("7"));
+
+    // Out of range stays open; Return then submits a valid line.
+    bool stayedOpen = false;
+    QTimer::singleShot(0, &window, [&window, &stayedOpen] {
+        auto* field = window.findChild<QLineEdit*>("numberField");
+        field->setText("99");
+        QTest::keyClick(field, Qt::Key_Return);
+        auto* dialog = window.findChild<ket::Dialog*>();
+        stayedOpen = dialog != nullptr && dialog->isOpen();
+        field->setText("12");
+        QTest::keyClick(field, Qt::Key_Return);
+    });
+    QCOMPARE(ask().value_or(-1), 12);
+    QVERIFY(stayedOpen);
+    QVERIFY(window.findChild<ket::Dialog*>() == nullptr);
+
+    // Return on the focused button presses it: Go submits, Cancel cancels.
+    const auto pressOn = [&window, &ask](const QString& label) {
+        QTimer::singleShot(0, &window, [&window, label] {
+            window.findChild<QLineEdit*>("numberField")->setText("5");
+            auto* dialog = window.findChild<ket::Dialog*>();
+            for (auto* button : dialog->findChildren<QAbstractButton*>())
+                if (button->text() == label) {
+                    button->setFocus(Qt::TabFocusReason);
+                    QTest::keyClick(button, Qt::Key_Return);
+                }
+            // A dialog that ignored Return would wait forever; Escape ends the case.
+            if (dialog->isOpen())
+                QTest::keyClick(dialog, Qt::Key_Escape);
+        });
+        return ask();
+    };
+    QCOMPARE(pressOn("Go").value_or(-1), 5);
+    QVERIFY(!pressOn("Cancel").has_value());
+}

@@ -45,6 +45,7 @@ struct TranscriptEvent final {
     QString kind;
     QString body;
     QString meta;
+    QString timestamp;
     QString title;
     QString summary;
     QString target;
@@ -62,6 +63,9 @@ struct TranscriptEvent final {
     QVariantList fileChanges;
     QVariantList questions;
     QVariantMap questionAnswers;
+    // Small facts a group's summary line reads after details are moved out of the row: an MCP
+    // call's `server`, a collaboration's `receivers`, a listing's `listedFolders`.
+    QVariantMap activityFacts;
     bool visible{true};
 
     [[nodiscard]] bool running() const;

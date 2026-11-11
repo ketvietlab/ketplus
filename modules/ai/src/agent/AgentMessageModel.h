@@ -1,4 +1,5 @@
 #pragma once
+#include <QScopeGuard>
 
 #include "agent/TranscriptRowGeometry.h"
 #include "agent/TranscriptRowMeasurer.h"
@@ -20,6 +21,8 @@ class AgentMessageModel final : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool materializing READ materializing NOTIFY materializingChanged)
+    // Advances whenever the loaded rows change, also in fields no role shows (a group's files).
+    Q_PROPERTY(int sourceRevision READ sourceRevision NOTIFY sourceRevisionChanged)
     // Row geometry: every row's height and top, as a sum of measurements rather
     // than an extrapolation. The transcript view places rows from it.
     Q_PROPERTY(ketplus::TranscriptRowGeometry* geometry READ geometry CONSTANT)
@@ -43,6 +46,10 @@ class AgentMessageModel final : public QAbstractListModel {
     Q_INVOKABLE QVariantList findMatches(const QString& query, int limit = 1000) const;
     // Row of the leader of the activity group containing `row` (-1 when ungrouped). O(1).
     Q_INVOKABLE int groupLeaderIndex(int row) const;
+    // The files the turn ending at visible `row` changed, for its changed-files card.
+    Q_INVOKABLE QVariantMap turnFiles(int row) const;
+    // ADR 0106: the work report a turn-end row carries, empty when the turn reported none.
+    Q_INVOKABLE QVariantMap turnReport(int row) const;
     // Stable keys of the activity groups currently loaded.
     Q_INVOKABLE QStringList activityGroupKeys() const;
     Q_INVOKABLE int sourceCount() const { return int(sourceItems_.size()); }
@@ -55,7 +62,8 @@ class AgentMessageModel final : public QAbstractListModel {
     TranscriptWindowModel* window() const { return window_; }
     // Asks the measurer for bodies of rows no delegate has reported, so the
     // geometry knows a window the reader has not scrolled through yet.
-    Q_INVOKABLE void measureUnmeasuredRows(int limit, qreal width, const QFont& font);
+    // False when no off-thread work remains; resource-backed rows wait for their delegate.
+    Q_INVOKABLE bool measureUnmeasuredRows(int limit, qreal width, const QFont& font);
     Q_INVOKABLE int indexOfKey(const QString& key) const;
     // The key of the row the view shows for `key`: the key itself when it is a
     // row, the group row while it is withheld in a collapsed group, and the
@@ -108,17 +116,26 @@ class AgentMessageModel final : public QAbstractListModel {
     Q_INVOKABLE void set(int index, const QVariantMap& item);
     [[nodiscard]] qsizetype retainedPayloadBytes() const { return retainedPayloadBytes_; }
     [[nodiscard]] int retainedPayloadCount() const { return payloads_.size(); }
+    [[nodiscard]] int sourceRevision() const { return sourceRevision_; }
     // The rows one source entry renders as. Pure, so a worker can render a page
     // before it reaches the model.
     static QList<QVariantMap> renderedItems(const QVariantMap& item, int sourceIndex);
 
   signals:
     void countChanged();
+    void sourceRevisionChanged();
     void groupExpansionChanged();
     void remoteGroupRequested(const QString& key, bool expanded);
     void materializingChanged();
 
   private:
+    // Advances sourceRevision when the calling mutation returns.
+    [[nodiscard]] auto sourceTouch() {
+        return qScopeGuard([this] {
+            ++sourceRevision_;
+            emit sourceRevisionChanged();
+        });
+    }
     static QVariantMap normalized(QVariantMap item);
     static QList<QVariantMap> renderedItems(const QVariantList& items);
     static void appendChunks(QList<QVariantMap>* result, const QVariantMap& base,
@@ -206,6 +223,7 @@ class AgentMessageModel final : public QAbstractListModel {
     QHash<int, QByteArray> roles_;
     quint64 materializationGeneration_{0};
     bool materializing_{false};
+    int sourceRevision_{0};
     bool deferredWorkerActive_{false};
     bool deferredPending_{false};
     bool deferredPendingReset_{false};
