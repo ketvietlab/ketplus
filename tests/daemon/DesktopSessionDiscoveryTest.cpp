@@ -273,6 +273,16 @@ class DesktopSessionDiscoveryTest final : public QObject {
         remote::DaemonClient other;
         QTRY_VERIFY(watcher.isReady() && other.isReady());
         QSignalSpy pushed(&watcher, &remote::DaemonClient::noticeReceived);
+        // The desktop's own connection: its handlers run while the notice is emitted.
+        auto* desktopClient = server.findChild<remote::DaemonClient*>();
+        QVERIFY(desktopClient != nullptr);
+        QSignalSpy desktopNotices(desktopClient, &remote::DaemonClient::noticeReceived);
+        const auto desktopReceived = [&] {
+            for (const auto& notice : desktopNotices)
+                if (notice.first().toString() == QStringLiteral("tags.changed"))
+                    return true;
+            return false;
+        };
         bool saved = false;
         other.call(QStringLiteral("tags.catalog.set"),
                    {{"tags", QJsonArray{QJsonObject{{"label", "Reviewed"}, {"color", "#0e7c86"}}}},
@@ -285,8 +295,8 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(!pushed.isEmpty(), 5000);
         QCOMPARE(pushed.first().first().toString(), QStringLiteral("tags.changed"));
         QCOMPARE(storedTags(), QStringList{"Reviewed"});
-        // The same push reaches the desktop's own connection; let it arrive and pass.
-        QTest::qWait(200);
+        // The same push reaches the desktop's own connection and passes without an error.
+        QTRY_VERIFY_WITH_TIMEOUT(desktopReceived(), 5000);
         QVERIFY(errors.isEmpty());
         QVERIFY(!row().contains("tags"));
     }
