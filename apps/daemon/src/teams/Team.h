@@ -64,6 +64,19 @@ struct HistoryEntry final {
     QJsonObject data;
 };
 
+// A team's whole document goes to clients in one daemon frame (1 MiB), so what a task keeps
+// grows with its work, never with the size of a diff. A list longer than the bound keeps its
+// first entries and records the full count next to it as "<key>_total".
+inline constexpr qsizetype maximumOutsidePaths = 200;
+inline constexpr qsizetype maximumHistoryText = 2000;
+inline constexpr qsizetype maximumHistoryListItems = 50;
+
+// The entry within the bounds above. Entries read from older documents are bounded too, and
+// so are the team's Updates (their text and data), when written and when read.
+[[nodiscard]] HistoryEntry bounded(HistoryEntry entry);
+[[nodiscard]] QString boundedText(QString text);
+[[nodiscard]] QJsonObject boundedData(QJsonObject data);
+
 struct Task final {
     QString id;
     QString title;

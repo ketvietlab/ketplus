@@ -3,8 +3,11 @@
 // providers. No real provider is started.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
+#include "protocol/DaemonProtocol.h"
+#include "runtime/TeamGit.h"
 
 #include <QDir>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
@@ -20,6 +23,20 @@ void git(const QString& directory, const QStringList& arguments) {
     process.start("git", arguments);
     QVERIFY(process.waitForFinished(15000));
     QVERIFY2(process.exitCode() == 0, process.readAllStandardError().constData());
+}
+
+QString revision(const QString& directory) {
+    QProcess process;
+    process.setWorkingDirectory(directory);
+    process.start("git", {"rev-parse", "HEAD"});
+    process.waitForFinished(15000);
+    return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+}
+
+void commitAll(const QString& directory, const QString& message) {
+    git(directory, {"add", "-A"});
+    git(directory,
+        {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q", "-m", message});
 }
 
 void write(const QString& path) {
@@ -134,6 +151,120 @@ class TeamLaneTest final : public QObject {
         teams_->memberTurnEnded("lead");
         QCOMPARE(host_.of("digest").size(), 1);
         QVERIFY(host_.of("digest").first().body.contains("api/routes.cpp"));
+    }
+
+    // A branch compared with a stale base once flagged 3,000 paths on each of many tasks; the
+    // team's document grew past one frame and no client received the team any more.
+    void aFlagOfThousandsOfPathsStaysWithinOneFrame() {
+        QStringList many;
+        for (int index = 0; index < 3000; ++index)
+            many.append(QStringLiteral("api/module-%1/a-long-generated-file-name.ts").arg(index));
+        host_.changed.insert(task_, many);
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(task().outsideLane.size(), maximumOutsidePaths);
+        const HistoryEntry& flagged = task().history.last();
+        QCOMPARE(flagged.kind, QStringLiteral("outside_lane"));
+        QVERIFY(flagged.text.size() <= maximumHistoryText + 40);
+        QVERIFY(flagged.text.contains(QStringLiteral("and 180 more")));
+        QCOMPARE(flagged.data.value("paths").toArray().size(), maximumHistoryListItems);
+        QCOMPARE(flagged.data.value("paths_total").toInt(), maximumOutsidePaths);
+        QVERIFY(updates("outside_lane").first().text.contains(QStringLiteral("and 180 more")));
+        QCOMPARE(updates("outside_lane").first().data.value("paths").toArray().size(),
+                 maximumHistoryListItems);
+
+        // Updates written before the bounds are bounded when team.get reads them.
+        QJsonArray every;
+        for (const QString& path : many)
+            every.append(path);
+        for (int index = 0; index < 10; ++index)
+            QVERIFY(journal_->appendTeamUpdate({.teamId = team_,
+                                                .at = nowIso(),
+                                                .actor = "daemon",
+                                                .kind = "outside_lane",
+                                                .taskId = task_,
+                                                .text = many.join(", "),
+                                                .data = QJsonObject{{"paths", every}},
+                                                .actionable = true}));
+        const QByteArray listed =
+            QJsonDocument(teams_->updatesJson(team_)).toJson(QJsonDocument::Compact);
+        QVERIFY2(listed.size() < protocol::maximumFrameBytes / 4,
+                 QByteArray::number(listed.size()).constData());
+
+        // A document written before the bounds is bounded when it is read.
+        QJsonObject stored = toJson(team());
+        QJsonArray tasks = stored.value("tasks").toArray();
+        QJsonObject first = tasks.first().toObject();
+        QJsonArray history = first.value("history").toArray();
+        QJsonArray huge;
+        for (const QString& path : many)
+            huge.append(path);
+        for (int index = 0; index < 10; ++index)
+            history.append(QJsonObject{{"at", nowIso()},
+                                       {"actor", "daemon"},
+                                       {"kind", "outside_lane"},
+                                       {"text", many.join(", ")},
+                                       {"data", QJsonObject{{"paths", huge}, {"added", huge}}}});
+        first.insert("history", history);
+        first.insert("outside_lane", huge);
+        tasks.replace(0, first);
+        stored.insert("tasks", tasks);
+        QVERIFY(QJsonDocument(stored).toJson(QJsonDocument::Compact).size() >
+                protocol::maximumFrameBytes);
+        const Team read = teamFromJson(stored);
+        const Task& old = read.tasks.first();
+        QCOMPARE(old.outsideLane.size(), maximumOutsidePaths);
+        QCOMPARE(old.history.last().data.value("added_total").toInt(), 3000);
+        QVERIFY(old.history.last().text.size() <= maximumHistoryText + 40);
+        QVERIFY(QJsonDocument(toJson(read)).toJson(QJsonDocument::Compact).size() <
+                protocol::maximumFrameBytes / 4);
+    }
+
+    // Without an integration branch the base is the commit the task started from. A merge of
+    // the main line into the branch brings no one else's files into the lane check.
+    void withoutAnIntegrationBranchOnlyTheBranchsOwnCommitsCount() {
+        QTemporaryDir root;
+        const QString repository = QDir(root.path()).filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-q", "-b", "main"});
+        write(QDir(repository).filePath("README"));
+        commitAll(repository, "start");
+        const QString base = revision(repository);
+        const QString worktree = QDir(root.path()).filePath("task");
+        git(repository, {"worktree", "add", "-q", "-b", "team/t-1", worktree});
+        write(QDir(repository).filePath("api/routes.txt"));
+        commitAll(repository, "someone else");
+        write(QDir(worktree).filePath("web/cart.txt"));
+        commitAll(worktree, "mine");
+        git(worktree, {"-c", "user.email=t@example.com", "-c", "user.name=T", "merge", "-q",
+                       "--no-edit", "main"});
+        write(QDir(worktree).filePath("web/pending.txt"));
+
+        Team team;
+        team.repository = repository;
+        Task task;
+        task.worktree = worktree;
+        task.branch = "team/t-1";
+        task.baseCommit = base;
+        const auto changed = team_git::changedPaths(team, task);
+        QVERIFY(changed);
+        QStringList paths = *changed;
+        paths.sort();
+        QCOMPARE(paths, (QStringList{"web/cart.txt", "web/pending.txt"}));
+    }
+
+    // A text bounded when it was written is the same when the document is read again, and
+    // the note still counts the characters of the original. No surrogate pair is cut in half.
+    void aBoundedTextIsUnchangedWhenReadAgain() {
+        const QString once = boundedText(QString(5000, u'h'));
+        QVERIFY(once.size() <= maximumHistoryText);
+        QVERIFY2(once.endsWith(QStringLiteral("(3040 more characters)")),
+                 qPrintable(once.right(40)));
+        QCOMPARE(boundedText(once), once);
+        QCOMPARE(bounded({.text = once}).text, once);
+        const QString emoji = QString::fromUtf8("\xF0\x9F\x98\x80");
+        const QString cut = boundedText(QString(1959, u'h') + emoji + QString(100, u'h'));
+        QVERIFY(!cut.contains(emoji.at(0)));
+        QCOMPARE(cut.indexOf(QChar(0x2026)), 1959);
     }
 
     void revertingTheFilesClearsTheFlag() {

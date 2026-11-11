@@ -34,12 +34,18 @@ QString taskCommit(const teams::Team& team, const teams::Task& task) {
 std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Task& task) {
     if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir())
         return std::nullopt;
-    const QString base =
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch;
-    // Committed on the branch since it left its base, then what is not committed yet.
+    // Committed on the branch since it left its base, then what is not committed yet. With an
+    // integration branch, the diff from where the branch left it. Without one the base is the
+    // commit the task started from, and a developer who merges the repository's main line into
+    // the branch brings in everyone else's files, so only the branch's own commits count.
     const auto committed =
-        output(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
-                               QStringLiteral("%1...HEAD").arg(base)});
+        team.integrationBranch.isEmpty()
+            ? output(task.worktree, {QStringLiteral("log"), QStringLiteral("--first-parent"),
+                                     QStringLiteral("--no-merges"), QStringLiteral("--format="),
+                                     QStringLiteral("--name-only"), QStringLiteral("--no-renames"),
+                                     QStringLiteral("%1..HEAD").arg(task.baseCommit)})
+            : output(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
+                                     QStringLiteral("%1...HEAD").arg(team.integrationBranch)});
     const auto pending =
         output(task.worktree,
                {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
