@@ -64,9 +64,19 @@ describes them.
   associated data adds, in this order: `ownerSubjectId`, `repositoryId` (`""` when
   absent), `expectedCatalogRevision` (`-1` when absent), `recipientDeviceId`,
   `recipientKeyVersion` and `ephemeralPublicKey`.
-- **Result.** The daemon seals the result to the requesting device
-  (`recipientDeviceId`, `recipientKeyVersion`, `ephemeralPublicKey`), exactly as it
-  seals a `session.create` result. No other device and not the relay can read it.
+- **Result.** The command's `recipientDeviceId` and `recipientKeyVersion` name the Mac.
+  The daemon seals the result back to the device that sent the command: the content's
+  `senderDeviceId` and `senderKeyVersion`, with a fresh ephemeral key, as it seals a
+  `session.create` result. The result content has:
+  - `keyId` `team-result:<command id>` and `keyEpoch` 1;
+  - `senderDeviceId` and `senderKeyVersion`: the Mac's;
+  - `recipientDeviceId` and `recipientKeyVersion`: the requesting device's;
+  - its own `ephemeralPublicKey`.
+
+  Its associated data is the command-result associated data of ADR 0025 (`sessionId`
+  `""`, `sessionGeneration` `0`), followed in this order by `ownerSubjectId`,
+  `recipientDeviceId` and `recipientKeyVersion`. No other device and not the relay can
+  read it. The fixture holds a vector for each direction.
 - **Route.** The phone posts to `POST /v2/mobile/machines/{machineId}/team-commands` and
   reads the result at `GET /v2/mobile/commands/{commandId}`. The daemon claims team
   commands with `/v2/commands:poll`, like every other command.
@@ -132,7 +142,9 @@ describes them.
   - each decision.
 
   A command is refused with `stale_team` only when its target part changed after
-  `expected_revision`. A team whose agents are at work changes every few seconds, so a
+  `expected_revision`. `team.delete` depends on the settings and the member list: the
+  user must have seen who is in the team they delete, but a task or an Update that moves
+  while agents work does not refuse it. A team whose agents are at work changes every few seconds, so a
   check on the whole team would refuse almost every answer. A refusal carries the
   current summary, so the phone redraws it and the user can act again.
 - **Errors.** A refusal is the command's result `{ok: false, error_code, error_message}`.
@@ -168,7 +180,7 @@ describes them.
 | Answer a decision, including **Start** for the first plan, **Continue** for a used-up budget, **Wake the leader again** | `team.decision.answer` | `team_id`, `decision_id`, `choice` (one of its choices, exactly) or `text` (1 to 4,000 characters), `expected_revision` | that decision | `decision_closed` |
 | Pause / Resume | `team.update` | `team_id`, `paused`, `expected_revision` | settings | none; pausing a paused team succeeds and changes nothing |
 | Who merges | `team.update` | `team_id`, `merge_policy` (`leader` or `user`), `expected_revision` | settings | none |
-| Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | the whole team | `confirmation_required` |
+| Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
 | New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}` | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
@@ -309,18 +321,26 @@ refusal.
 - **Updates**: the newest 20. Each update has these fields:
   - `id`, `kind` (the daemon's update kind), `at`;
   - `actor`: `{role, number}`, `{role: "user"}` or `{role: "daemon"}`;
-  - `task_id`, `text` (up to 500 characters), `actionable`;
+  - `task_id`, `pull_request_number` (the task's pull request when the update is about
+    one, or null), `text` (up to 500 characters), `actionable`;
   - `warning`. The daemon sets it for `blocked`, `round_limit`, `outside_lane`,
     `merged_unreviewed`, `stalled`, `message_failed` and `merge_waiting`.
 
-  The phone chooses the icon from `kind`.
+  The phone chooses the icon from `kind`. It draws the detail line under the text from
+  `actor` (`@agent/<number>`) and `pull_request_number` (`#<n>`), for example
+  "@agent/2035 · #412". The daemon sends no detail text of its own.
 
 **Task detail**: what `team.task.get` returns.
 
 - The summary fields.
 - `description`, up to 16 KiB.
 - `criteria`: at most 20, each `{text, met}`.
-- `outside_lane`: at most 20 paths, relative to the repository.
+- `outside_lane`: at most 20 entries `{path, lane, owner_number}`. `path` is relative to
+  the repository. `lane` and `owner_number` name the lane the path belongs to and the
+  member whose lane it is, or `""` and null when it belongs to no lane. The phone draws
+  "<path> belongs to <lane>, the lane of @agent/<owner_number>".
+- `criteria_note`: up to 500 characters, the daemon's text of the newest change to the
+  criteria (when, what, and who was told), or `""` when they never changed.
 - `history`: one page of at most 50 entries `{at, actor, kind, text}`, each text up to
   2,000 characters.
 
@@ -382,7 +402,9 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
    - resolve `repositoryId` and `expectedCatalogRevision` through the worktree catalog
      (`repository_not_found`);
    - forward the payload to the local `team.*` request with actor `user`;
-   - seal the result to the requesting device.
+   - seal the result to the requesting device with `keyId` `team-result:<id>` and the
+     result associated data of §2. `encryptSealed` names its key `session-create:<id>`
+     today; it takes the key id as an argument instead.
 4. Restrict the payloads to the fields of §4:
    - only `paused` and `merge_policy` through `team.update`;
    - `confirmation: "DELETE"` for `team.delete`;
@@ -395,9 +417,12 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
 7. Build the phone projection of §6:
    - directory entries, the summary and the task detail;
    - member `state`, `now`, `agent` and `session_generation`;
-   - decisions with `delivers_to`, and updates with `warning`;
+   - decisions with `delivers_to`, and updates with `warning` and
+     `pull_request_number`;
+   - `outside_lane` entries with their lane and its owner, and `criteria_note` from the
+     newest criteria change in the task's history;
    - `turns_left`, and opaque `repository_id` and `worktree_id`;
-   - no paths outside lanes, no tags.
+   - no tags.
 8. Enforce the 384 KiB bound with the shedding order of §6. Add a test of the worst case,
    in the manner of `TeamPayloadTest`.
 9. Add the reads to `remoteCommandMayChange`'s list of reads. Add `team_id` to the remote
@@ -446,7 +471,8 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
    - a fresh `idempotencyKey` per user action, reused on retry;
    - `expected_revision` from the revision the phone drew;
    - sealing to the Mac with the associated data of §2;
-   - opening the result sealed to the device;
+   - opening the result sealed to the device (`team-result:<id>`, the result
+     associated data of §2, checked against the fixture vector);
    - mapping each error code to a state the UI can show, with `stale_team` applying the
      summary it carries.
 6. Set `risk_acknowledged` only from the full-access confirmation flow.
