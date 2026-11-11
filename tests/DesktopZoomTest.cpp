@@ -8,10 +8,10 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
-#include "KetConversationRow.h"
 #include "KetNavItem.h"
 #include "KetProfile.h"
 #include "KetSegmentedControl.h"
+#include "KetSidebarTree.h"
 
 #include "app/PixelSelect.h"
 #include <QAbstractButton>
@@ -123,11 +123,11 @@ class DesktopZoomTest final : public QObject {
             QCOMPARE(nav->height(), nav->sizeHint().height());
             QTRY_COMPARE(header->height(), px(44));
             QTRY_COMPARE(footer->height(), px(28));
-            auto* row = bar->findChild<ket::ConversationRow*>("productConversationButton");
+            auto* row = bar->findChild<ket::SidebarRow*>("productConversationButton");
             QVERIFY(row);
             QCOMPARE(row->height(), row->sizeHint().height());
             QCOMPARE(row->text(), title);
-            QVERIFY(row->recipe().titleLineHeight > 0);
+            QVERIFY(row->recipe().height > 0);
             // Rows created after a zoom change inherit the same geometry.
             repo.conversations.append(QVariantMap{
                 {"id", QString::number(zoom) + QString::number(repo.conversations.size())},

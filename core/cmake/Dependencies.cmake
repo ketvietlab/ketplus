@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 282125f473b7d4e21f6fac803a5af2a09ab75249 # ket-qt #52: stacked field rows, wrapping toggles
+    GIT_TAG 3fee15d4d51db3f0b310dc4c23d8f177071f96ac # ket-qt #53: sidebar tree parts
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"

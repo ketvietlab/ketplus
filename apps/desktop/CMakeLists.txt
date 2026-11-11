@@ -30,6 +30,9 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
+    src/workspace/SidebarRepositoryListDetail.h
+    src/workspace/SidebarRepositoryListLayout.cpp
+    src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h

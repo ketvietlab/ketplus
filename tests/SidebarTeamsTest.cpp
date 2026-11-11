@@ -1,13 +1,16 @@
 // ADR 0114 and #464: a team is a folder inside its repository in the sidebar. The order of the
 // rows, the folder and conversation menus with their reasons, joining by drag and the missing
 // feature, against a fake daemon. Run with QT_QPA_PLATFORM=offscreen.
-#include "KetBadge.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
-#include "KetConversationRow.h"
+#include "KetProfile.h"
+#include "KetSidebarTree.h"
 #include "KetStyle.h"
-#include "KetTreeItem.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
+#include "ui/InterfaceZoom.h"
+#include "ui/Theme.h"
+#include "workspace/ActivityBar.h"
 #include "workspace/SidebarRepositoryList.h"
 
 #include <QAction>
@@ -18,6 +21,8 @@
 #include <QLayout>
 #include <QMenu>
 #include <QMimeData>
+#include <QPushButton>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTimer>
@@ -68,6 +73,22 @@ SidebarRepository repository(const QString& path, int openDecisions = 0, bool fu
     return result;
 }
 
+QVector<ket::SidebarRow*> rowsIn(QWidget* parent) {
+    QVector<ket::SidebarRow*> rows;
+    for (auto* row : parent->findChildren<ket::SidebarRow*>("productConversationButton"))
+        rows.append(row);
+    return rows;
+}
+
+// A conversation of no team: the rows that are not members.
+QVector<ket::SidebarRow*> looseRows(QWidget* parent) {
+    QVector<ket::SidebarRow*> rows;
+    for (auto* row : rowsIn(parent))
+        if (!row->property("teamMember").toBool())
+            rows.append(row);
+    return rows;
+}
+
 QStringList texts(const QMenu& menu) {
     QStringList result;
     for (const auto* action : menu.actions())
@@ -112,44 +133,54 @@ class SidebarTeamsTest final : public QObject {
         ket::Style::install(*qApp);
     }
 
-    // Its teams first, then its other conversations; leader, developers, reviewer; the role
-    // is each member's only tag, locked.
-    void aTeamIsAFolderBeforeTheRepositorysConversations() {
+    void init() {
+        QSettings().remove(QStringLiteral("sidebar"));
+        ket::Appearance::instance().setZoom(1.0);
+    }
+
+    // The repository is the root; its teams are branches directly under it, then the
+    // conversations of no team. Leader, developers, reviewer; the role is in the hint and the
+    // accessible description, never a tag.
+    void aTeamIsABranchBeforeTheRepositorysConversations() {
         SidebarRepositoryList list;
         list.setRepositories({repository("/repo")});
         list.resize(280, 600);
         auto* group = list.findChild<QWidget*>("productRepositoryGroup");
         QVERIFY(group);
-        auto* folder = group->findChild<QWidget*>("productTeamFolder", Qt::FindDirectChildrenOnly);
+        QVERIFY(group->findChild<ket::SidebarRepositoryHeader*>("productRepositoryGroupButton"));
+        auto* held = group->findChild<ket::SidebarTreeGuide*>("productRepositoryHeld");
+        QVERIFY(held);
+        QCOMPARE(held->level(), 0);
+        auto* folder = held->findChild<QWidget*>("productTeamFolder", Qt::FindDirectChildrenOnly);
         QVERIFY(folder);
         QCOMPARE(folder->property("teamId").toString(), QStringLiteral("7"));
-        const auto layout = group->layout();
-        QCOMPARE(layout->indexOf(folder), 1); // right after the repository's header
+        QCOMPARE(held->partsLayout()->indexOf(folder), 0); // first under the repository
         QStringList members;
-        for (auto* row : folder->findChildren<ket::ConversationRow*>("productConversationButton",
-                                                                     Qt::FindDirectChildrenOnly)) {
+        for (auto* row : rowsIn(folder)) {
             members.append(row->property("teamRole").toString());
-            QCOMPARE(row->tags().size(), 1);
-            QVERIFY(row->tags().first().locked);
-            QCOMPARE(row->tags().first().label, team_roles::label(members.last()));
+            QCOMPARE(row->level(), 1);
+            QVERIFY(row->accessibleDescription().contains(team_roles::label(members.last())));
+            QVERIFY(row->toolTip().contains(team_roles::label(members.last())));
         }
         QCOMPARE(members, (QStringList{"leader", "developer", "reviewer"}));
-        const auto others = group->findChildren<ket::ConversationRow*>("productConversationButton",
-                                                                       Qt::FindDirectChildrenOnly);
+        const auto others = looseRows(group);
         QCOMPARE(others.size(), 1);
-        QVERIFY(layout->indexOf(others.first()) > layout->indexOf(folder));
+        QCOMPARE(others.first()->level(), 0);
+        QVERIFY(held->partsLayout()->indexOf(others.first()) >
+                held->partsLayout()->indexOf(folder));
     }
 
-    // The count is the open decisions; the name opens the team, the icon folds it.
-    void theFolderCountsDecisionsOpensAndFolds() {
+    // The branch shows the open decisions as its mark and a semibold name; the name opens the
+    // team, the chevron folds it.
+    void theBranchShowsDecisionsOpensAndFolds() {
         SidebarRepositoryList list;
         list.setRepositories({repository("/repo", 2)});
         list.show();
         auto* folder = list.findChild<QWidget*>("productTeamFolder");
-        auto* count = folder->findChild<ket::Badge*>("productTeamDecisionCount");
-        QVERIFY(count->isVisibleTo(&list));
-        QCOMPARE(count->text(), QStringLiteral("2"));
-        QCOMPARE(count->accessibleName(), QStringLiteral("2 decisions wait for you"));
+        auto* branch = folder->findChild<ket::SidebarTeamBranch*>("productTeamFolderHeader");
+        QVERIFY(branch);
+        QCOMPARE(branch->decisionCount(), 2);
+        QCOMPARE(branch->memberCount(), 3);
         QSignalSpy opened(&list, &SidebarRepositoryList::teamRequested);
         folder->findChild<QAbstractButton*>("productTeamFolderName")->click();
         QCOMPARE(opened.size(), 1);
@@ -157,17 +188,196 @@ class SidebarTeamsTest final : public QObject {
         // The update in place lowers the count without a rebuild.
         list.setRepositories({repository("/repo", 0)});
         QCOMPARE(list.findChild<QWidget*>("productTeamFolder"), folder);
-        QVERIFY(!count->isVisibleTo(&list));
-        auto* lead =
-            folder->findChildren<ket::ConversationRow*>("productConversationButton").first();
+        QCOMPARE(branch->decisionCount(), 0);
+        auto* lead = rowsIn(folder).first();
         QVERIFY(lead->isVisibleTo(&list));
         folder->findChild<QAbstractButton*>("productTeamFolderFold")->click();
         QVERIFY(!lead->isVisibleTo(&list));
+        QVERIFY(!branch->isExpanded());
         folder->findChild<QAbstractButton*>("productTeamFolderFold")->click();
         QVERIFY(lead->isVisibleTo(&list));
         QSignalSpy menu(&list, &SidebarRepositoryList::teamMenuRequested);
-        folder->findChild<ket::GroupHeader*>("productTeamFolderHeader")->action()->click();
+        branch->menuAction()->click();
         QCOMPARE(menu.size(), 1);
+    }
+
+    // "Conversations (n)" labels the conversations of no team, only where the repository has
+    // teams; its + starts a conversation. "Show N more" says how many it adds.
+    void theSectionLabelAndShowMoreSayWhatTheyHold() {
+        SidebarRepository plain{"/plain", "plain", false, {}};
+        for (int index = 0; index < 7; ++index)
+            plain.conversations.append(conversation(QStringLiteral("p%1").arg(index),
+                                                    QStringLiteral("sp%1").arg(index),
+                                                    QStringLiteral("Plain %1").arg(index)));
+        SidebarRepositoryList list;
+        list.setRepositories({repository("/repo"), plain});
+        list.show();
+        QWidget* teamGroup = nullptr;
+        QWidget* plainGroup = nullptr;
+        for (auto* group : list.findChildren<QWidget*>("productRepositoryGroup"))
+            (group->property("repositoryPath") == "/repo" ? teamGroup : plainGroup) = group;
+        auto* section =
+            teamGroup->findChild<ket::SidebarSectionLabel*>("productConversationsSection");
+        QVERIFY(section && section->isVisibleTo(&list));
+        QCOMPARE(section->displayText(), QStringLiteral("Conversations (1)"));
+        QVERIFY(!plainGroup->findChild<ket::SidebarSectionLabel*>());
+        QSignalSpy created(&list, &SidebarRepositoryList::newConversationRequested);
+        section->action()->click();
+        QCOMPARE(created.size(), 1);
+        QCOMPARE(created.first().first().toString(), QStringLiteral("/repo"));
+
+        auto* more = plainGroup->findChild<QPushButton*>("productShowMoreConversations");
+        QVERIFY(more && more->isVisibleTo(&list));
+        QCOMPARE(more->text(), QStringLiteral("Show 2 more"));
+        int shown = 0;
+        for (auto* row : looseRows(plainGroup))
+            shown += row->isVisibleTo(&list) ? 1 : 0;
+        QCOMPARE(shown, 5);
+        more->click();
+        QVERIFY(!more->isVisibleTo(&list));
+        for (auto* row : looseRows(plainGroup))
+            QVERIFY(row->isVisibleTo(&list));
+    }
+
+    // A repository and a team stay folded across a restart; a folded repository shows one dot
+    // while something inside waits.
+    void foldsSurviveARestartAndAFoldedRepositoryShowsWhatWaits() {
+        {
+            SidebarRepositoryList list;
+            list.setRepositories({repository("/repo")});
+            list.show();
+            list.findChild<QWidget*>("productTeamFolder")
+                ->findChild<QAbstractButton*>("productTeamFolderFold")
+                ->click();
+            list.findChild<ket::SidebarRepositoryHeader*>("productRepositoryGroupButton")->click();
+        }
+        SidebarRepositoryList list;
+        list.setRepositories({repository("/repo", 1)});
+        list.show();
+        auto* header =
+            list.findChild<ket::SidebarRepositoryHeader*>("productRepositoryGroupButton");
+        QVERIFY(!header->isExpanded());
+        QVERIFY(!list.findChild<QWidget*>("productRepositoryHeld")->isVisibleTo(&list));
+        QCOMPARE(header->conversationCount(), 4);
+        QCOMPARE(header->waitingCount(), 5); // four finished and unread, one decision
+        QVERIFY(header->isWaitingDotShown());
+        header->click();
+        QVERIFY(header->isExpanded());
+        auto* branch = list.findChild<ket::SidebarTeamBranch*>("productTeamFolderHeader");
+        QVERIFY(!branch->isExpanded());
+        QVERIFY(!rowsIn(list.findChild<QWidget*>("productTeamFolder")).first()->isVisibleTo(&list));
+        QVERIFY(!header->isWaitingDotShown());
+    }
+
+    // A row is the state's mark, the title and #number; finished and unread is a dot. The state
+    // in words and the worktree are in the hint and the description.
+    void aRowSaysItsStateWithoutTags() {
+        SidebarRepository plain{"/plain", "plain", true, {}};
+        QVariantMap done = conversation("c1", "s1", "Done");
+        done.insert("number", "42");
+        done.insert("path", "/work/plain-feature");
+        QVariantMap asking = conversation("c2", "s2", "Asking");
+        asking.insert("needsInput", true);
+        plain.conversations = {done, asking};
+        SidebarRepositoryList list;
+        list.setRepositories({plain});
+        list.show();
+        const auto rows = looseRows(&list);
+        QCOMPARE(rows.size(), 2);
+        ket::SidebarRow* unread = rows.at(0)->text() == "Done" ? rows.at(0) : rows.at(1);
+        ket::SidebarRow* waiting = unread == rows.at(0) ? rows.at(1) : rows.at(0);
+        QVERIFY(unread->isUnread());
+        QVERIFY(unread->isUnreadDotShown());
+        QCOMPARE(unread->number(), QStringLiteral("42"));
+        QVERIFY(unread->accessibleName().contains("#42"));
+        QVERIFY(unread->accessibleDescription().contains("plain-feature"));
+        QVERIFY(unread->toolTip().contains("plain-feature"));
+        QVERIFY(unread->toolTip().contains(unread->stateText()));
+        QCOMPARE(waiting->status(), ket::ConversationStatus::NeedsInput);
+        QVERIFY(!waiting->isUnread());
+        auto* header = list.findChild<ket::SidebarRepositoryHeader*>();
+        QCOMPARE(header->waitingCount(), 2);
+        unread->click();
+        QVERIFY(!unread->isUnread());
+        QCOMPARE(header->waitingCount(), 1);
+    }
+
+    // The text edges and one-line rows hold at every zoom step and at the narrowest sidebar.
+    void theLayoutHoldsAtEveryZoomAndWidth() {
+        SidebarRepository plain{"/plain", "plain", false, {}};
+        for (int index = 0; index < 7; ++index)
+            plain.conversations.append(conversation(
+                QStringLiteral("p%1").arg(index), QStringLiteral("sp%1").arg(index),
+                QStringLiteral("A conversation with a title far too long for any sidebar %1")
+                    .arg(index)));
+        const auto previous = ket::Profile::current();
+        ket::Profile::setCurrent(ket::Profile::ketPlus());
+        for (const int percent : {100, 125, 150}) {
+            ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(percent));
+            for (const int width : {ActivityBar::kMinWidth, ActivityBar::kWidth}) {
+                SidebarRepositoryList list;
+                list.applyZoom(percent);
+                list.setRepositories({repository("/repo", 1), plain});
+                list.resize(InterfaceZoomMetrics::geometry(width, percent), list.height());
+                list.show();
+                QCoreApplication::processEvents();
+                const QStringList problems = list.layoutProblems();
+                QVERIFY2(problems.isEmpty(), qPrintable(QStringLiteral("%1%, %2 px: %3")
+                                                            .arg(percent)
+                                                            .arg(width)
+                                                            .arg(problems.join("; "))));
+            }
+        }
+        ket::Profile::setCurrent(previous);
+    }
+
+    // The real sidebar, themed, light and dark: the tree holds its geometry there too.
+    // KETPLUS_SIDEBAR_TREE_CAPTURE names a folder for the PR's images beside the mock.
+    void theThemedSidebarHoldsInBothThemes() {
+        ThemeManager theme(*qApp);
+        SidebarRepository shop = repository("/repo", 1);
+        shop.name = "ketplus";
+        shop.teams.first().name = "Mobile Refactor";
+        int memberNumber = 9420;
+        for (QVariant& value : shop.teams.first().members) {
+            QVariantMap member = value.toMap();
+            member.insert("number", QString::number(memberNumber++));
+            value = member;
+        }
+        const auto loose = [](const QString& id, const QString& title, const QString& number,
+                              const QVariantMap& state) {
+            QVariantMap row = conversation(id, "s-" + id, title);
+            row.insert("number", number);
+            row.insert(state);
+            return row;
+        };
+        shop.conversations = {
+            loose("w", "Sidebar tree from the kit", "9410", {{"running", true}}),
+            loose("q", "Which zoom steps to test?", "9402", {{"needsInput", true}}),
+            loose("u", "Pin ket-qt to the tree parts", "9398", {}),
+            loose("d", "Lite edition build", "9387", {{"seen", true}}),
+            loose("e", "Relay capability check", "9371", {{"status", "Failed"}, {"seen", true}})};
+        SidebarRepository folded{"/ketviet",
+                                 "ketviet",
+                                 false,
+                                 {loose("k", "Gateway logs", "8120", {{"needsInput", true}})}};
+        QSettings().setValue("sidebar/collapsedRepositories", QStringList{"/ketviet"});
+        const QString capture = qEnvironmentVariable("KETPLUS_SIDEBAR_TREE_CAPTURE");
+        for (const bool dark : {false, true}) {
+            theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+            ActivityBar bar;
+            bar.applyPalette(theme.palette());
+            bar.resize(ActivityBar::kWidth, 700);
+            bar.setRepositories({shop, folded});
+            bar.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&bar));
+            auto* list = bar.findChild<SidebarRepositoryList*>();
+            QVERIFY(list);
+            QVERIFY2(list->layoutProblems().isEmpty(),
+                     qPrintable(list->layoutProblems().join("; ")));
+            if (!capture.isEmpty())
+                QVERIFY(bar.grab().save(capture + (dark ? "/app-dark.png" : "/app-light.png")));
+        }
     }
 
     void theFolderMenuSaysWhyAFullTeamTakesNoMember() {
