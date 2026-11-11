@@ -602,6 +602,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Planned
 
+- Agent teams ([ADR 0112](decisions/0112-agent-teams.md), epic #450): a leader, one
+  to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
+  review, decisions on the team page and a digest instead of status messages. Each
+  step of #450 moves its part to Implemented.
+
 - Cache/payer-aware automatic compact-window selection and UI policy/reason
   controls, based on actual runtime retention and occupancy rather than a shared
   timeout. Native boundary-only compaction needs provider capability verification.

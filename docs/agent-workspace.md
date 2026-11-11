@@ -1047,3 +1047,29 @@ another provider. Non-macOS hosts retain inherited runtime authentication.
 The optional query budget and latest-query cost are estimates, not a hard account
 spend cap or bill. Consult Anthropic Console for actual usage. See
 [ADR 0026](decisions/0026-claude-api-key.md) for credential boundaries and release checks.
+
+## Teams
+
+[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+one repository on one goal: exactly one **leader**, one to five **developers** and exactly
+one **reviewer** (a Claude conversation). A conversation is on at most one team.
+
+- **Roles.** The leader plans, writes acceptance criteria, assigns tasks, changes lanes
+  and orders merges; it does not write code or review, and it is the only member that
+  speaks to the user. A developer works on its assigned task inside its lane (path
+  prefixes). The reviewer reviews each task read-only against its criteria.
+- **A task's life.** Created by the leader with criteria, lane and dependencies →
+  assigned (its branch and worktree are cut from the integration branch, and the
+  owner's conversation is pointed at that worktree) → `in_progress` → handed to review
+  with its work committed → `ready` when the reviewer reports no findings, or back to
+  the owner with the findings → merged by the leader or by the user, as the team is set
+  → `done` once its head is in the integration branch.
+- **What wakes whom.** An assignment or handover starts a turn of the new owner; a task
+  entering review, the reviewer; findings, the owner; an answered decision, the leader
+  and the blocked owner; actionable updates, one leader digest. Notes, met marks and
+  other state changes start nothing.
+- **Decisions.** Only the leader raises one; the user answers on the team page. The
+  folder in the sidebar shows the count.
+- **Limits.** 40 automatic turns per team since the user last acted on it, then the team
+  pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
+  message until Resume.
