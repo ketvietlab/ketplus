@@ -16,6 +16,7 @@ class Dialog;
 class FieldRow;
 class Radio;
 class SegmentedControl;
+class Select;
 class TextField;
 } // namespace ket
 
@@ -60,6 +61,7 @@ class NewTeamForm final : public QWidget {
     void chooseAgent(const QString& role);
     void showErrors(const QJsonObject& refusal);
     void clearErrors();
+    void describePermissions();
 
     TeamDirectory* teams_;
     QString repository_;
@@ -69,6 +71,8 @@ class NewTeamForm final : public QWidget {
     ket::TextField* branch_;
     ket::Radio* leaderMerges_;
     ket::Radio* userMerges_;
+    ket::Select* permissions_;
+    ket::FieldRow* permissionsRow_{nullptr};
     ket::SegmentedControl* developers_;
     ket::Checkbox* requirements_;
     QLabel* hint_;

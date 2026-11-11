@@ -4,6 +4,7 @@
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetSegmentedControl.h"
+#include "KetSelect.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
 #include "teams/TeamDirectory.h"
@@ -125,7 +126,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     : QWidget(parent), teams_(teams), repository_(repository), models_(models),
       name_(new ket::TextField(this)), goal_(new ket::TextField(this)),
       branch_(new ket::TextField(this)), leaderMerges_(new ket::Radio(tr("The leader"), this)),
-      userMerges_(new ket::Radio(tr("Me"), this)),
+      userMerges_(new ket::Radio(tr("Me"), this)), permissions_(new ket::Select(this)),
       developers_(new ket::SegmentedControl({"1", "2", "3", "4", "5"}, this)),
       requirements_(new ket::Checkbox(tr("The leader also writes the requirements"), this)),
       hint_(note(this, "teamDialogHint")), error_(note(this, "teamDialogError")) {
@@ -156,6 +157,19 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow->addWidget(userMerges_);
     mergeRow->addStretch();
     layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
+
+    // What the leader and the developers may do without asking, as the composer's Mode
+    // lists it. The reviewer is not in it: a review is always read-only.
+    permissions_->setObjectName(QStringLiteral("teamPermissions"));
+    permissions_->addItem(tr("Read only"), QStringLiteral("read-only"));
+    permissions_->addItem(tr("Workspace"), QStringLiteral("ask"));
+    permissions_->addItem(tr("Full access"), QStringLiteral("full"));
+    permissions_->setCurrentIndex(1);
+    permissionsRow_ = new ket::FieldRow(tr("Permissions"), permissions_, {}, this);
+    permissionsRow_->setObjectName(QStringLiteral("teamPermissionsRow"));
+    connect(permissions_, &QComboBox::currentIndexChanged, this, &NewTeamForm::describePermissions);
+    describePermissions();
+    layout->addWidget(permissionsRow_);
 
     const team_agents::Defaults defaults = team_agents::defaults(models_);
     agents_.insert(leader, defaults.leader);
@@ -228,6 +242,19 @@ void NewTeamForm::chooseAgent(const QString& role) {
                               });
 }
 
+void NewTeamForm::describePermissions() {
+    const QString policy = permissions_->currentData().toString();
+    const QString what = policy == QStringLiteral("read-only")
+                             ? tr("Inspect files; stays in plan mode.")
+                         : policy == QStringLiteral("full") ? tr("Skip permission prompts.")
+                                                            : tr("Edit project files; asks before "
+                                                                 "commands.");
+    permissionsRow_->setHelp(
+        tr("%1 The leader and the developers start with this; change it for one member in its "
+           "conversation. The reviewer stays read-only.")
+            .arg(what));
+}
+
 QJsonObject NewTeamForm::payload() const {
     QJsonObject developers = agents_.value(developer).json();
     developers.insert(QStringLiteral("count"), developers_->currentIndex() + 1);
@@ -236,6 +263,10 @@ QJsonObject NewTeamForm::payload() const {
                        {QStringLiteral("merge_policy"), userMerges_->isChecked()
                                                             ? QStringLiteral("user")
                                                             : QStringLiteral("leader")},
+                       {QStringLiteral("execution_policy"), permissions_->currentData().toString()},
+                       // Choosing Full access here is the acknowledgement, as in the composer.
+                       {QStringLiteral("risk_acknowledged"),
+                        permissions_->currentData().toString() == QStringLiteral("full")},
                        {QStringLiteral("leader_writes_requirements"), requirements_->isChecked()},
                        {QStringLiteral("plan"),
                         QJsonObject{{QStringLiteral("leader"), agents_.value(leader).json()},
