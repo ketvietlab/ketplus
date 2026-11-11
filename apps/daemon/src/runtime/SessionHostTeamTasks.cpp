@@ -3,6 +3,7 @@
 #include "runtime/SessionHost.h"
 
 #include "protocol/DaemonProtocol.h"
+#include "runtime/TeamGit.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -11,20 +12,6 @@
 
 namespace ketplus::daemon {
 namespace {
-
-// A short synchronous git call for the team's bookkeeping; nothing when git failed.
-std::optional<QString> gitOutput(const QString& directory, const QStringList& arguments) {
-    if (directory.isEmpty())
-        return std::nullopt;
-    QProcess process;
-    process.setWorkingDirectory(directory);
-    process.start(QStringLiteral("git"),
-                  QStringList{QStringLiteral("--no-optional-locks")} + arguments);
-    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit ||
-        process.exitCode() != 0)
-        return std::nullopt;
-    return QString::fromUtf8(process.readAllStandardOutput());
-}
 
 QJsonObject refused(const QString& code, const QString& message) {
     return {{QStringLiteral("ok"), false},
@@ -48,8 +35,8 @@ SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task
     const QString base =
         team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
     const auto commit =
-        gitOutput(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                                    base + QStringLiteral("^{commit}")});
+        team_git::output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                                           base + QStringLiteral("^{commit}")});
     if (!commit) {
         *error = QStringLiteral("The integration branch %1 does not exist in %2.")
                      .arg(base, team.repository);
@@ -64,9 +51,9 @@ SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task
         *error = QStringLiteral("The worktree path %1 already exists.").arg(path);
         return std::nullopt;
     }
-    if (!gitOutput(team.repository,
-                   {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
-                    QStringLiteral("--"), path, commit->trimmed()})) {
+    if (!team_git::output(team.repository,
+                          {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"),
+                           branch, QStringLiteral("--"), path, commit->trimmed()})) {
         *error = QStringLiteral("git could not create the worktree %1 on %2.").arg(path, branch);
         return std::nullopt;
     }
@@ -98,23 +85,10 @@ QString SessionHost::pointConversationAt(const QString& sessionId, const QString
 
 std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) const {
     const auto status =
-        gitOutput(worktree, {QStringLiteral("status"), QStringLiteral("--porcelain")});
+        team_git::output(worktree, {QStringLiteral("status"), QStringLiteral("--porcelain")});
     if (!status)
         return std::nullopt;
     return !status->trimmed().isEmpty();
-}
-
-QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
-    if (task.branch.isEmpty())
-        return {};
-    // The branch itself, not a worktree's HEAD: a worktree can be detached or on another
-    // branch, and the branch can move without it.
-    return gitOutput(team.repository,
-                     {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                      QStringLiteral("--quiet"), QStringLiteral("--end-of-options"),
-                      QStringLiteral("refs/heads/%1^{commit}").arg(task.branch)})
-        .value_or(QString{})
-        .trimmed();
 }
 
 std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
@@ -123,54 +97,41 @@ std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
     // The branch against the integration branch it was cut from (ADR 0114 §2).
     const QString range = QStringLiteral("%1...%2").arg(
         team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
-    const auto diff = gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
-                                            QStringLiteral("--no-ext-diff"), range});
+    const auto diff =
+        team_git::output(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
+                                     QStringLiteral("--no-ext-diff"), range});
     const auto names =
-        gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
+        team_git::output(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
     if (!diff || !names)
         return std::nullopt;
     return teams::TaskDiff{.diff = *diff,
                            .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
 }
 
+QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
+    return team_git::taskCommit(team, task);
+}
+
 std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
                                                      const teams::Task& task) const {
-    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir())
-        return std::nullopt;
-    const QString base =
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch;
-    // Committed on the branch since it left its base, then what is not committed yet.
-    const auto committed =
-        gitOutput(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
-                                  QStringLiteral("%1...HEAD").arg(base)});
-    const auto pending =
-        gitOutput(task.worktree,
-                  {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
-                   QStringLiteral("-uall"), QStringLiteral("--no-renames")});
-    if (!committed || !pending)
-        return std::nullopt;
-    QStringList paths = committed->split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
-        if (entry.size() > 3)
-            paths.append(entry.mid(3));
-    paths.removeDuplicates();
-    return paths;
+    return team_git::changedPaths(team, task);
 }
 
 std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::Task& task) const {
-    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
-        return std::nullopt;
-    // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
-    QProcess process;
-    process.setWorkingDirectory(team.repository);
-    process.start(QStringLiteral("git"),
-                  {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
-                   QStringLiteral("--is-ancestor"), task.branch, team.integrationBranch});
-    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
-        return std::nullopt;
-    if (process.exitCode() == 0 || process.exitCode() == 1)
-        return process.exitCode() == 0;
-    return std::nullopt;
+    return team_git::isMerged(team, task);
+}
+
+// The daemon's own checks ask git on another thread: a slow repository holds no client and no
+// other conversation. The team and the tasks are copies; the answer comes back queued.
+void SessionHost::askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
+                           const teams::TaskQuestion question, teams::TaskFactsDone done) {
+    teamGit_.start([guard = QPointer<SessionHost>(this), team, tasks, question,
+                    done = std::move(done)]() mutable {
+        QHash<QString, teams::TaskFacts> facts = team_git::facts(team, tasks, question);
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+            Qt::QueuedConnection);
+    });
 }
 
 void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,

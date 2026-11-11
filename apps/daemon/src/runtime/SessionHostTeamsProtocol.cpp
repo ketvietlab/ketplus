@@ -140,7 +140,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
-        // ADR 0114, open point 3: reading the team notices a merge made outside the app.
+        // ADR 0114, open point 3: reading the team asks git whether a task was merged outside
+        // the app. The answer comes after this reply, as a `team.changed` event.
         teams_->checkMerged(teamId);
         const teams::Team* team = teams_->team(teamId);
         if (!team)

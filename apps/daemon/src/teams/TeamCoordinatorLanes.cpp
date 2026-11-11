@@ -70,14 +70,50 @@ bool TeamCoordinator::flagOutside(Team& team, Task& task, const QStringList& out
 }
 
 void TeamCoordinator::checkLanes(const qint64 teamId, const QString& developer) {
+    const Team* team = this->team(teamId);
+    if (!team)
+        return;
+    QList<Task> mine;
+    for (const Task& task : team->tasks)
+        if (task.owner == developer && open(task) && !task.worktree.isEmpty())
+            mine.append(task);
+    if (mine.isEmpty())
+        return;
+    const QString check = QStringLiteral("%1/%2").arg(teamId).arg(developer);
+    if (laneChecks_.contains(check)) {
+        laneChecksAgain_.insert(check);
+        return;
+    }
+    laneChecks_.insert(check);
+    host_->askTasks(*team, mine, TaskQuestion::Lane,
+                    [self = QPointer<TeamCoordinator>(this), teamId, developer, check,
+                     mine](const QHash<QString, TaskFacts>& facts) {
+                        if (!self)
+                            return;
+                        self->laneChecks_.remove(check);
+                        self->applyLaneFacts(teamId, developer, mine, facts);
+                        if (self->laneChecksAgain_.remove(check))
+                            self->checkLanes(teamId, developer);
+                    });
+}
+
+void TeamCoordinator::applyLaneFacts(const qint64 teamId, const QString& developer,
+                                     const QList<Task>& asked,
+                                     const QHash<QString, TaskFacts>& facts) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
     QHash<QString, QStringList> found;
-    for (const Task& task : team->tasks)
-        if (task.owner == developer && open(task) && !task.worktree.isEmpty())
-            if (const auto files = host_->changedPaths(*team, task))
-                found.insert(task.id, outsidePaths(*team, developer, *files));
+    for (const Task& was : asked) {
+        const Task* task = std::as_const(*team).task(was.id);
+        const auto fact = facts.constFind(was.id);
+        // The lanes are read as they are now; a task that changed hands or worktree
+        // meanwhile is checked after its owner's next turn.
+        if (!task || fact == facts.cend() || !fact->changed || task->owner != developer ||
+            !open(*task) || task->worktree != was.worktree)
+            continue;
+        found.insert(task->id, outsidePaths(*team, developer, *fact->changed));
+    }
     if (found.isEmpty())
         return;
     team = mutableTeam(teamId);

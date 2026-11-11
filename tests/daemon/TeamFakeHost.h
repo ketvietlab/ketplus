@@ -7,6 +7,9 @@
 #include <QHash>
 #include <QSet>
 
+#include <functional>
+#include <utility>
+
 namespace team_test {
 
 using namespace ketplus::daemon::teams;
@@ -59,6 +62,25 @@ class FakeHost final : public TeamHostPort {
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override {
         notes.append({sessionId, note});
     }
+    // With `holdAnswers`, git is read when it is asked and the answer waits for answer(), as
+    // the session runtime answers a check after the caller's turn.
+    void askTasks(const Team& team, const QList<Task>& tasks, const TaskQuestion question,
+                  TaskFactsDone done) override {
+        ++asked;
+        if (!holdAnswers) {
+            TeamHostPort::askTasks(team, tasks, question, std::move(done));
+            return;
+        }
+        TeamHostPort::askTasks(team, tasks, question,
+                               [this, done](const QHash<QString, TaskFacts>& facts) {
+                                   held.append([done, facts] { done(facts); });
+                               });
+    }
+    void answer() {
+        const QList<std::function<void()>> waiting = std::exchange(held, {});
+        for (const auto& one : waiting)
+            one();
+    }
 
     void add(const QString& id, const QString& provider = QStringLiteral("codex")) {
         conversations.insert(id, {.sessionId = id,
@@ -85,6 +107,9 @@ class FakeHost final : public TeamHostPort {
     QSet<QString> unreadable;
     QHash<QString, QStringList> changed;
     QSet<QString> merged;
+    bool holdAnswers = false;
+    int asked = 0;
+    QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
 };

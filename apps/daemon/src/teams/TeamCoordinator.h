@@ -5,10 +5,12 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 
 class QTimer;
 
+#include <functional>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -65,9 +67,37 @@ struct TaskDiff final {
     QStringList files;
 };
 
+// What git knows about one task, for a check the daemon makes by itself.
+struct TaskFacts final {
+    // Merge: the commit the task's branch points at, and whether the integration branch
+    // contains the branch. Nothing where git could not tell.
+    QString head;
+    std::optional<bool> merged;
+    // Lane: the paths the task's worktree changed.
+    std::optional<QStringList> changed;
+};
+enum class TaskQuestion { Merge, Lane };
+using TaskFactsDone = std::function<void(const QHash<QString, TaskFacts>&)>;
+
 class TeamHostPort {
   public:
     virtual ~TeamHostPort() = default;
+    // Asks git about the tasks for one check and answers `done` on the caller's thread, by task
+    // id. Here it answers before it returns. The session runtime asks git off its event loop
+    // and answers later, so the caller applies the answer to the team as it then is.
+    virtual void askTasks(const Team& team, const QList<Task>& tasks, TaskQuestion question,
+                          TaskFactsDone done) {
+        QHash<QString, TaskFacts> facts;
+        for (const Task& task : tasks)
+            facts.insert(task.id, question == TaskQuestion::Merge
+                                      ? TaskFacts{.head = taskCommit(team, task),
+                                                  .merged = isMerged(team, task),
+                                                  .changed = std::nullopt}
+                                      : TaskFacts{.head = {},
+                                                  .merged = std::nullopt,
+                                                  .changed = changedPaths(team, task)});
+        done(facts);
+    }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
     // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
@@ -237,8 +267,14 @@ class TeamCoordinator : public QObject {
                                 const QString& actor);
 
     // ADR 0114 §5 (TeamCoordinatorMerges.cpp): marks every Ready task the integration branch
-    // contains as done. Run when a member's turn ends and when a client reads the team.
+    // contains as done. Run when a member's turn ends and when a client reads the team. Git
+    // is asked through the host, which may answer later; one question is open for a team at a
+    // time, and a check asked for meanwhile runs when it is answered.
     void checkMerged(qint64 teamId);
+    // Whether a question of a merge or a lane check is still with git.
+    [[nodiscard]] bool checksOpen() const {
+        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty();
+    }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
@@ -299,6 +335,10 @@ class TeamCoordinator : public QObject {
     // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
     // open tasks changed with its lane and the shared paths.
     void checkLanes(qint64 teamId, const QString& developer);
+    void applyLaneFacts(qint64 teamId, const QString& developer, const QList<Task>& asked,
+                        const QHash<QString, TaskFacts>& facts);
+    void applyMergeFacts(qint64 teamId, const QList<Task>& asked,
+                         const QHash<QString, TaskFacts>& facts);
     // After a lane or the shared paths changed: clears the flagged paths they now cover.
     void recheckLanes(Team& team, QList<Update>& updates);
     // Sets a task's outside paths and records the change; false when nothing changed.
@@ -333,6 +373,12 @@ class TeamCoordinator : public QObject {
     LocalJournal* journal_{nullptr};
     TeamHostPort* host_{nullptr};
     QHash<qint64, Team> teams_;
+    // Checks whose question to git is open, and those asked for again meanwhile: a team id
+    // for the merge check, "<team>/<developer>" for the lane check.
+    QSet<qint64> mergeChecks_;
+    QSet<qint64> mergeChecksAgain_;
+    QSet<QString> laneChecks_;
+    QSet<QString> laneChecksAgain_;
     QHash<QString, qint64> teamBySession_;
     bool loaded_{false};
     QHash<qint64, QTimer*> digestTimers_;
