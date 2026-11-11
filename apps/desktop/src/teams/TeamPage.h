@@ -13,17 +13,24 @@ class QVBoxLayout;
 
 namespace ket {
 class Dialog;
-class SegmentedControl;
 } // namespace ket
 
 namespace ketplus {
 
 class TeamDirectory;
+namespace team_page {
+class TaskRows;
+class Text;
+} // namespace team_page
 
 // #466: where a team stands and what it needs from the user, in that order: what waits for
 // the user, the tasks, the members, what happened. It follows team.changed without a reload,
 // keeping its scroll position and any dialog it opened. Without the team (deleted, or a
 // repository that has none) it explains teams and offers New team.
+//
+// The page is one column, at most 1120 px wide, that never scrolls sideways: text wraps or
+// elides, a decision's choices continue on the next line, and the task columns and the member
+// status that do not fit are left out (TeamPageParts.h).
 class TeamPage final : public QWidget {
     Q_OBJECT
 
@@ -46,6 +53,9 @@ class TeamPage final : public QWidget {
     void deleteRequested(const QString& teamId);
     void removeMemberRequested(const QString& teamId, const QString& sessionId);
 
+  protected:
+    void resizeEvent(QResizeEvent* event) override;
+
   private:
     void rebuild();
     void readUpdates();
@@ -57,6 +67,15 @@ class TeamPage final : public QWidget {
     void buildUpdates();
     void buildEmpty();
     void fillTasks();
+    void addSection(const QString& title, const QString& count, const char* name,
+                    QWidget* trailing = nullptr);
+    [[nodiscard]] static QString memberName(const QJsonObject& team, const QString& sessionId);
+    // Wide enough for the lane column and the members' status.
+    [[nodiscard]] bool roomy() const;
+    // Too narrow for a member's lane beside its name.
+    [[nodiscard]] bool compact() const;
+    [[nodiscard]] int columnWidth() const;
+    [[nodiscard]] bool filterFits() const;
     void showMenu(QWidget* anchor, const QJsonObject& team);
     void send(const QString& type, QJsonObject payload, QLabel* error = nullptr);
 
@@ -67,8 +86,17 @@ class TeamPage final : public QWidget {
     QJsonArray updates_;
     QScrollArea* scroll_;
     QWidget* content_{nullptr};
+    // The column of sections, centred in content_.
+    QWidget* column_{nullptr};
     QVBoxLayout* layout_{nullptr};
     QTableWidget* tasks_{nullptr};
+    team_page::TaskRows* taskRows_{nullptr};
+    team_page::Text* taskHint_{nullptr};
+    // What the last rebuild laid out for; a resize across either rebuilds.
+    bool roomy_{false};
+    bool compact_{false};
+    bool segmented_{true};
+    int segmentedWidth_{0};
     bool readPending_{false};
 };
 

@@ -41,8 +41,13 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamDialogs.h
     src/teams/TeamPage.cpp
     src/teams/TeamPage.h
+    src/teams/TeamPageParts.cpp
+    src/teams/TeamPageParts.h
+    src/teams/TeamPageSections.cpp
+    src/teams/TeamPageTasks.cpp
     src/teams/TeamTaskDialog.cpp
     src/teams/TeamTaskDialog.h
+    src/teams/TeamTaskDialogActions.cpp
 )
 target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Network
