@@ -11,6 +11,9 @@ import KetPlusMock
 //   review      the reviewer's request: task, criteria, the diff in short
 //   verdict     the owner's review result: findings and the round
 //   decision    the leader's (and the blocked owner's) answer from the user
+//   nudge       a member whose turn ended with its own work open: go on, or say what you wait for
+//   stall       the leader, when nobody works and tasks are open: each open task and its owner,
+//               and which wake this is before the user is asked. Drawn as a warning.
 // The card is one accessible item named by its kind and title; Open T-n shows the task on the
 // team page. A client that does not know a kind shows the message body as text.
 Rectangle {
@@ -24,8 +27,12 @@ Rectangle {
         digest: { label: "Digest", icon: "info" },
         review: { label: "Review request", icon: "pull-request" },
         verdict: { label: "Review", icon: block.passed ? "check" : "warning" },
-        decision: { label: "Decision", icon: "check" }
+        decision: { label: "Decision", icon: "check" },
+        nudge: { label: "Nudge", icon: "clock" },
+        stall: { label: "Team stopped", icon: "warning" }
     })
+    // A failed review and a stopped team are the cards that ask for attention.
+    readonly property bool warns: (block.kind === "verdict" && !block.passed) || block.kind === "stall"
     readonly property var kind: kinds[block.kind] || kinds.assignment
     readonly property string heading: (block.task ? block.task + " " : "") + (block.title || "")
 
@@ -35,7 +42,7 @@ Rectangle {
     implicitHeight: column.implicitHeight + px(28)
     radius: px(8)
     color: KetTheme.t.panelBg
-    border.color: block.kind === "verdict" && !block.passed ? KetTheme.t.warningBorder : KetTheme.t.panelBorder
+    border.color: warns ? KetTheme.t.warningBorder : KetTheme.t.panelBorder
 
     Accessible.role: Accessible.Grouping
     Accessible.name: kind.label + ": " + heading
@@ -96,7 +103,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     name: card.kind.icon
                     box: card.px(14)
-                    color: card.block.kind === "verdict" && !card.block.passed ? KetTheme.t.warning : KetTheme.t.accentText
+                    color: card.warns ? KetTheme.t.warning : KetTheme.t.accentText
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter

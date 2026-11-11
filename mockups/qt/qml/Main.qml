@@ -24,6 +24,7 @@ Basic.ApplicationWindow {
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
+        "workspace/team-nudge", "workspace/team-stall",
         "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -100,7 +101,8 @@ Basic.ApplicationWindow {
     // Which member reads which team block: the developer, the leader, the reviewer, the owner.
     readonly property var teamTranscripts: ({ "team-assignment": "8213", "team-digest": "4821",
                                               "team-review": "4583", "team-verdict": "8215",
-                                              "team-decision": "4821" })
+                                              "team-decision": "4821", "team-nudge": "8213",
+                                              "team-stall": "4821" })
     function openTeamMember(id, number) {
         teams.showTeam(id)
         teams.openConversation(number)

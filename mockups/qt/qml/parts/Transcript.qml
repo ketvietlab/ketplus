@@ -23,7 +23,9 @@ Item {
                                      "team-digest": TranscriptFixtures.teamDigest,
                                      "team-review": TranscriptFixtures.teamReview,
                                      "team-verdict": TranscriptFixtures.teamVerdict,
-                                     "team-decision": TranscriptFixtures.teamDecision })[kind] || null
+                                     "team-decision": TranscriptFixtures.teamDecision,
+                                     "team-nudge": TranscriptFixtures.teamNudge,
+                                     "team-stall": TranscriptFixtures.teamStall })[kind] || null
 
     signal openDetails(string tab)
 

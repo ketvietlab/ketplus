@@ -112,6 +112,31 @@ QtObject {
         { type: "commentary", text: "Two findings. Fixing both, then back to review." },
         { type: "answer", status: "", markdown: "Both findings fixed in `UpdateReminder.qml`; T-6 is **In review** again (round 2)." }
     ]
+    // The stall watchdog (ADR 0114 §8): a developer whose turn ended with its task in progress.
+    readonly property var teamNudge: [
+        { type: "day", text: "Today" },
+        { type: "answer", status: "", markdown: "Recents are ordered. Pinned repositories and the filter are left." },
+        { type: "team", kind: "nudge", team: "Release 1.4", task: "T-3",
+          title: "is still in progress with you",
+          text: "Your turn ended three minutes ago. Go on with it, or block the task with what you wait for so the leader can act." },
+        { type: "commentary", text: "Nothing blocks T-3. Continuing with pinned repositories." }
+    ]
+    // The same watchdog, to the leader: nobody works and tasks are open.
+    readonly property var teamStall: [
+        { type: "day", text: "Today" },
+        { type: "answer", status: "", markdown: "Waiting for #418 to be fixed before I assign T-7." },
+        { type: "team", kind: "stall", team: "Release 1.4", title: "Nobody is working and 3 of 7 tasks are not done",
+          groups: [
+              { task: "T-3", title: "Repository picker: recent and pinned repositories", state: "In progress", lines: [
+                    { text: "@agent/8213 is idle" }] },
+              { task: "T-6", title: "Settings: the update reminder", state: "In review", lines: [
+                    { text: "@agent/8215 was stopped by the user" }] },
+              { task: "T-7", title: "Sidebar: keyboard order", state: "To do", lines: [
+                    { text: "Nobody owns it", needsYou: true }] }],
+          text: "Wake 1 of 2. If the team still stands after the second, the user is asked on the team page." },
+        { type: "commentary", text: "T-7 does not depend on #418. Assigning it now and asking @agent/8213 what T-3 waits for." },
+        { type: "answer", status: "", markdown: "T-7 goes to @agent/2035. @agent/8213 continues T-3." }
+    ]
     readonly property var teamDecision: [
         { type: "day", text: "Today" },
         { type: "team", kind: "decision", team: "Release 1.4", task: "T-5", title: "D-1 answered",
