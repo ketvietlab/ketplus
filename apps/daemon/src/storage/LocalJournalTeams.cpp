@@ -172,10 +172,13 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
     return false;
 }
 
-QList<QJsonObject> LocalJournal::teamDocuments() const {
+QList<QJsonObject> LocalJournal::teamDocuments(bool* read) const {
     QList<QJsonObject> documents;
     QSqlQuery query(database_);
-    if (!query.exec(QStringLiteral("SELECT document FROM teams ORDER BY id")))
+    const bool ran = query.exec(QStringLiteral("SELECT document FROM teams ORDER BY id"));
+    if (read)
+        *read = ran;
+    if (!ran)
         return documents;
     while (query.next())
         documents.append(parsed(query.value(0).toString()));

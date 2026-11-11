@@ -121,6 +121,12 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}}};
     };
     if (type == QStringLiteral("team.list")) {
+        // The teams could not be read when the daemon started: read them now, or say so.
+        if (!teams_->isLoaded())
+            teams_->load();
+        if (!teams_->isLoaded())
+            return failure(QStringLiteral("teams_unavailable"),
+                           QStringLiteral("The teams could not be read. Try again."));
         const QString repository = payload.value(QStringLiteral("repository")).toString();
         QJsonArray list;
         for (const teams::Team* team :

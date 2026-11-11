@@ -176,7 +176,8 @@ revision) and `team.removed` go to every local client.
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
-`team_member`, `team_not_found`, `task_not_found`, `invalid_transition`,
+`team_member`, `team_not_found`, `teams_unavailable` (the journal could not be read; ask
+again), `task_not_found`, `invalid_transition`,
 `not_owner`, `role_forbidden`, `dependencies_open`, `uncommitted_work`,
 `decision_closed`, `invalid_payload`.
 
