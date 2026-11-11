@@ -305,6 +305,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                              .arg(normalised->isEmpty() ? QStringLiteral("none")
                                                         : normalised->join(QStringLiteral(", ")))});
         team->sharedPaths = *normalised;
+        recheckLanes(*team, updates);
     }
     if (changes.contains(QStringLiteral("paused"))) {
         const bool paused = changes.value(QStringLiteral("paused")).toBool();
@@ -479,9 +480,9 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
         if (task.state != state::done &&
             (task.owner == sessionId || task.lane == oldLane || task.lane == member->lane))
             addHistory(task, actor, QStringLiteral("lane"), text, data);
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("lane_changed"), .text = text, .data = data}}))
+    QList<Update> updates{{.kind = QStringLiteral("lane_changed"), .text = text, .data = data}};
+    recheckLanes(*team, updates);
+    if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};
 }
