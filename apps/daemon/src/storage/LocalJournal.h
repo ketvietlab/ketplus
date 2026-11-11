@@ -40,8 +40,9 @@ struct StoredSession final {
     QString effort;
     QString executionPolicy{QStringLiteral("ask")};
     QString mode{QStringLiteral("default")};
-    // JSON object: provider id -> {"thread_id", "seen_cursor"} for providers this conversation
-    // has used besides the current one (whose thread is threadId).
+    // JSON object: provider id -> {"thread_id", "retired_thread_ids"} for providers this
+    // conversation has used besides the current one (whose thread is threadId). Earlier daemons
+    // also stored a "seen_cursor" number per provider; it is read and ignored.
     QString providerThreads{QStringLiteral("{}")};
     // Desktop sidebar read marker. Unread completed turns when lastSeenCursor < lastCursor.
     qint64 lastSeenCursor{0};

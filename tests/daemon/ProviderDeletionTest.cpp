@@ -27,6 +27,7 @@ QList<QPair<QString, QString>> unsupportedOwnershipMetadata() {
             {"retired-string", R"({"codex":{"retired_thread_ids":"shared-thread"}})"},
             {"retired-number", R"({"codex":{"retired_thread_ids":[42]}})"},
             {"unknown-fields", R"({"codex":{"future_refs":["shared-thread"]}})"},
+            {"seen-cursor-string", R"({"codex":{"thread_id":"t","seen_cursor":"7"}})"},
             {"empty-provider", R"({"":{"thread_id":"shared-thread"}})"}};
 }
 } // namespace
@@ -1055,6 +1056,43 @@ class ProviderDeletionTest final : public QObject {
         QCOMPARE(journal.sessions().at(corruptSource ? 0 : 1).providerThreads, malformed);
         QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
         QVERIFY(journal.deletionWork().isEmpty());
+    }
+    // Earlier daemons stored a read marker beside each provider thread. A conversation that
+    // still has one neither blocks deleting another conversation nor loses its own threads.
+    void legacySeenCursorDoesNotBlockDeletion() {
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        StoredSession first;
+        first.id = "first";
+        first.adapter = "codex";
+        first.threadId = "first-thread";
+        first.worktreePath = directory.path();
+        first.state = "ready";
+        first.providerThreads = R"({"claude":{"thread_id":"claude-old","seen_cursor":12}})";
+        auto second = first;
+        second.id = "second";
+        second.threadId = "second-thread";
+        second.providerThreads = R"({"claude":{"thread_id":"shared-old","seen_cursor":3}})";
+        QVERIFY(journal.upsertSession(first));
+        QVERIFY(journal.upsertSession(second));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", first.generation},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY2(result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 1);
+        const auto targets =
+            journal.deletionWork().first().toObject().value("provider_targets").toArray();
+        QVERIFY(
+            targets.contains(QJsonObject{{"provider", "codex"}, {"thread_id", "first-thread"}}));
+        QVERIFY(targets.contains(QJsonObject{{"provider", "claude"}, {"thread_id", "claude-old"}}));
+        QVERIFY(
+            !targets.contains(QJsonObject{{"provider", "claude"}, {"thread_id", "shared-old"}}));
     }
     void sharedThreadsRemainOwnedByTheOtherConversation() {
         QTemporaryDir directory;
