@@ -497,6 +497,46 @@ void AgentWorkspaceViewTest::browserStepsReadAsTheMock() {
              running);
 }
 
+// A screenshot in a daemon activity group, as restored history shows one, opens the lightbox.
+void AgentWorkspaceViewTest::daemonGroupScreenshotsOpenTheLightbox() {
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    QImage image(640, 320, QImage::Format_RGB32);
+    image.fill(QColor("#c9dcff"));
+    const QString imagePath = media.filePath("page.png");
+    QVERIFY(image.save(imagePath));
+    const QVariantMap step{{"messageKey", "shot"},
+                           {"subtype", "mcpTool"},
+                           {"title", "Opened website"},
+                           {"status", "completed"},
+                           {"images", QVariantList{QUrl::fromLocalFile(imagePath).toString()}}};
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1000, 800);
+    view.show();
+    view.resetMessages({QVariantMap{{"messageKey", "g"},
+                                    {"kind", "tool"},
+                                    {"subtype", "daemonGroup"},
+                                    {"turnId", "t"},
+                                    {"groupRole", "leader"},
+                                    {"groupKey", "g"},
+                                    {"groupSummary", "Opened 1 website"},
+                                    {"groupSize", 1},
+                                    {"details", QVariantMap{{"groupItems", QVariantList{step}}}}}},
+                       "daemon-group");
+    view.messageModel()->setGroupExpanded("g", true);
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* shot = nullptr;
+    QTRY_VERIFY((shot = findVisibleItem(root, "messageAttachmentImage")) &&
+                shot->property("status").toInt() == 1);
+    const QPointF centre = shot->mapToScene(QPointF(shot->width() / 2, shot->height() / 2));
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre.toPoint());
+    auto* lightbox = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(lightbox);
+    QTRY_VERIFY(lightbox->property("visible").toBool());
+    QCOMPARE(lightbox->property("imageSource").toUrl().toLocalFile(), imagePath);
+}
+
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QFETCH(int, width);
     QTemporaryDir media;
@@ -567,6 +607,18 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto* browserOpen = findVisibleItem(root, "transcriptBrowserOpen");
     QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
     QTRY_COMPARE(galleries(), 2);
+    // Clicking a step's screenshot opens it in the workspace lightbox.
+    QQuickItem* shot = nullptr;
+    QTRY_VERIFY((shot = findVisibleItem(root, "messageAttachmentImage")) &&
+                shot->property("status").toInt() == 1);
+    const QPointF centre = shot->mapToScene(QPointF(shot->width() / 2, shot->height() / 2));
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre.toPoint());
+    auto* lightbox = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(lightbox);
+    QTRY_VERIFY(lightbox->property("visible").toBool());
+    QCOMPARE(lightbox->property("imageSource").toUrl().toLocalFile(), imagePath);
+    QVERIFY(QMetaObject::invokeMethod(lightbox, "close"));
+    QTRY_VERIFY(!lightbox->property("visible").toBool());
     const QString capturePrefix = qEnvironmentVariable("KETPLUS_BROWSER_GROUP_CAPTURE");
     if (!capturePrefix.isEmpty()) {
         QTest::qWait(150);

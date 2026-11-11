@@ -158,7 +158,16 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
     agentDetailTabs_->setTabsClosable(true);
     agentDetailTabs_->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     agentDetailPane_->hide();
+    // An explicit minimum lets the splitter go below the tabs' content hint (a diff's toolbar).
+    agentDetailPane_->setMinimumWidth(240);
     workspaceSplit_->addWidget(agentDetailPane_);
+    connect(workspaceSplit_, &QSplitter::splitterMoved, this, [this] {
+        if (agentDetailPane_ == nullptr || !agentDetailPane_->isVisible())
+            return;
+        const int total = agentDetailPane_->width() + agentWorkspace_->width();
+        if (total > 0)
+            agentDetailPaneShare_ = double(agentDetailPane_->width()) / total;
+    });
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(agentWorkspace_), 1);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(agentDetailPane_), 1);
     connect(agentDetailTabs_, &QTabWidget::tabCloseRequested, this,
@@ -296,15 +305,20 @@ void MainWindow::updateAgentDetailTabs() {
     agentDetailPane_->setVisible(agentWorkspaceMode_ && hasTabs);
     if (agentWorkspace_ != nullptr)
         agentWorkspace_->setDetailsOpen(agentWorkspaceMode_ && hasTabs);
-    if (agentWorkspaceMode_ && agentWorkspace_ != nullptr) {
+    // Laid out only when the pane appears or leaves: switching or refreshing its tabs keeps the
+    // width the user dragged to. It opens at 45% of the workspace, the transcript at 55%.
+    const bool shown = agentWorkspaceMode_ && hasTabs;
+    if (agentWorkspaceMode_ && agentWorkspace_ != nullptr && shown != agentDetailPaneShown_) {
         QList<int> sizes(workspaceSplit_->count(), 0);
         const int width = qMax(800, workspaceSplit_->width());
-        sizes[workspaceSplit_->indexOf(agentWorkspace_)] = hasTabs ? width / 2 : width;
+        const int detail = hasTabs ? qRound(width * agentDetailPaneShare_) : 0;
+        sizes[workspaceSplit_->indexOf(agentWorkspace_)] = width - detail;
         if (hasTabs) {
-            sizes[workspaceSplit_->indexOf(agentDetailPane_)] = width - width / 2;
+            sizes[workspaceSplit_->indexOf(agentDetailPane_)] = detail;
         }
         workspaceSplit_->setSizes(sizes);
     }
+    agentDetailPaneShown_ = shown;
 
     bool terminalSelected = false;
     if (hasTabs) {

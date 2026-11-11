@@ -182,12 +182,12 @@ Item {
     readonly property var activeSkillMention: skillMentionAtCursor(
         prompt ? prompt.text : "", prompt ? prompt.cursorPosition : 0)
     // `$` completes skills, `@` completes files and folders of the conversation worktree, and
-    // `#` completes other conversations' numbers (ADR 0027).
+    // `#` or `@agent/` completes other conversations' numbers (ADR 0027).
     readonly property var visibleSkillSuggestions: !activeSkillMention.active ? []
         : activeSkillMention.kind === "file"
             ? (agentHost.fileMentionRevision, agentHost.fileMentionSuggestions(activeSkillMention.query))
             : activeSkillMention.kind === "conversation"
-                ? (agentHost.conversations, agentHost.conversationMentionSuggestions(activeSkillMention.query))
+                ? (agentHost.conversations, agentHost.conversationMentionSuggestions(activeSkillMention.query, activeSkillMention.prefix))
                 : agentHost.skillSuggestions(activeSkillMention.query)
     property var drafts: ({})
     property string draftScope: ""
@@ -430,8 +430,12 @@ Item {
                 && (fileStart === 0 || /[\s(\[{'"]/.test(value.charAt(fileStart - 1)))) {
             let fileEnd = cursor
             while (fileEnd < value.length && /[^\s@"$]/.test(value.charAt(fileEnd))) ++fileEnd
-            return {active: true, kind: "file", start: fileStart, end: fileEnd,
-                    query: value.substring(fileStart + 1, cursor)}
+            const query = value.substring(fileStart + 1, cursor)
+            // `@agent/4821` names a conversation the way its header shows it, like `#4821`.
+            if (query.startsWith("agent/"))
+                return {active: true, kind: "conversation", prefix: "@agent/", start: fileStart,
+                        end: fileEnd, query: query.substring(6)}
+            return {active: true, kind: "file", start: fileStart, end: fileEnd, query: query}
         }
         let numberStart = cursor - 1
         while (numberStart >= 0 && /[^\s#@$]/.test(value.charAt(numberStart))) --numberStart
@@ -439,7 +443,7 @@ Item {
                 && (numberStart === 0 || /[\s(\[{'"]/.test(value.charAt(numberStart - 1)))) {
             let numberEnd = cursor
             while (numberEnd < value.length && /[^\s#@$]/.test(value.charAt(numberEnd))) ++numberEnd
-            return {active: true, kind: "conversation", start: numberStart, end: numberEnd,
+            return {active: true, kind: "conversation", prefix: "#", start: numberStart, end: numberEnd,
                     query: value.substring(numberStart + 1, cursor)}
         }
         let start = cursor - 1

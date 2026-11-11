@@ -20,6 +20,7 @@
 #include <QMimeData>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QtTest>
 
 using namespace ketplus;
@@ -201,6 +202,31 @@ class SidebarTeamsTest final : public QObject {
         QSignalSpy created(&list, &SidebarRepositoryList::newConversationRequested);
         list.findChild<QAbstractButton*>("productNewConversationButton")->click();
         QCOMPARE(created.size(), 1);
+    }
+
+    // The menu has closed before New team… opens its dialog, whose backdrop is a snapshot of
+    // the screen: opened at once, the snapshot kept the menu on screen.
+    void newTeamOpensOnceTheMenuHasClosed() {
+        SidebarRepositoryList list;
+        list.setTeamsAvailable(true);
+        list.setRepositories({repository("/repo")});
+        list.show();
+        QSignalSpy requested(&list, &SidebarRepositoryList::newTeamRequested);
+        bool menuVisibleOnRequest = false;
+        connect(&list, &SidebarRepositoryList::newTeamRequested, &list, [&menuVisibleOnRequest] {
+            menuVisibleOnRequest = QApplication::activePopupWidget() != nullptr;
+        });
+        QTimer::singleShot(0, &list, [] {
+            auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+            QVERIFY(menu);
+            menu->setActiveAction(menu->findChild<QAction*>("newTeamAction"));
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+        list.findChild<QAbstractButton*>("productNewConversationButton")->click();
+        QCOMPARE(requested.size(), 0);
+        QTRY_COMPARE(requested.size(), 1);
+        QCOMPARE(requested.at(0).at(0).toString(), QStringLiteral("/repo"));
+        QVERIFY(!menuVisibleOnRequest);
     }
 
     void theConversationMenuJoinsAndLeavesWithItsReasons() {

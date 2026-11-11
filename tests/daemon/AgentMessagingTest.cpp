@@ -587,6 +587,10 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(providerLog.contains("[KetPlus agent message]"));
         QVERIFY(providerLog.contains("[KetPlus conversation references]"));
         QVERIFY(providerLog.contains(("- #" + number + ": \"").toUtf8()));
+        // `@agent/NNNN`, as the header shows a conversation, resolves the same way.
+        QCOMPARE(fixture.start("claude", "ask @agent/" + number + " again", receiver), receiver);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 3, 5000);
+        QCOMPARE(logText(fixture.claudeLog).count(("- #" + number + ": \"").toUtf8()), 2);
         const auto held = fixture.journal->agentMessage("deep-message");
         QCOMPARE(held->state, "delivered");
         QCOMPARE(held->delivery, "user_turn");

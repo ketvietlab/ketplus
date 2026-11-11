@@ -309,7 +309,10 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     remove->setProperty(ket::Style::kDangerProperty, true);
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
     if (chosen == create)
-        emit newTeamRequested(team.value(QStringLiteral("repository")).toString());
+        afterMenuCloses(this,
+                        [this, repository = team.value(QStringLiteral("repository")).toString()] {
+                            emit newTeamRequested(repository);
+                        });
     else if (chosen == merges)
         send(QStringLiteral("team.update"),
              {{QStringLiteral("merge_policy"),
@@ -317,7 +320,7 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     else if (chosen == pause)
         send(QStringLiteral("team.update"), {{QStringLiteral("paused"), !paused}});
     else if (chosen == remove)
-        emit deleteRequested(teamId_);
+        afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
 }
 
 void TeamPage::buildBanners(const QJsonObject& team) {

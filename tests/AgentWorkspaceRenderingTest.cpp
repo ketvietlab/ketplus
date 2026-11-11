@@ -1399,11 +1399,11 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
     QCOMPARE(changes.count(), 1);
     QCOMPARE(navigated.count(), 0);
-    // With the details pane open, its Open content menu replaces the three openers.
+    // The three openers stay while the details pane is open: they switch its tab.
     view.setDetailsOpen(true);
     for (const char* name :
          {"headerChangesButton", "headerTerminalButton", "headerWorkReportButton"})
-        QTRY_VERIFY2(!root->findChild<QQuickItem*>(name)->isVisible(), name);
+        QTRY_VERIFY2(root->findChild<QQuickItem*>(name)->isVisible(), name);
     QVERIFY(root->findChild<QQuickItem*>("headerAtlasButton") == nullptr ||
             root->findChild<QQuickItem*>("headerAtlasButton")->isVisible());
     view.setDetailsOpen(false);

@@ -35,12 +35,10 @@ QJsonObject failure(const QString& code, const QString& message) {
             {QStringLiteral("error_message"), message}};
 }
 
-// "4821", "#4821" or 4821; empty unless it is four or five digits.
+// "4821", "#4821", "@agent/4821" or 4821; empty unless it is four or five digits.
 QString normalizedNumber(const QJsonValue& value) {
-    QString text = value.isDouble() ? QString::number(value.toInteger()) : value.toString();
-    text = text.trimmed();
-    if (text.startsWith(QLatin1Char('#')))
-        text.remove(0, 1);
+    const QString text = agent_messaging::bareNumber(
+        value.isDouble() ? QString::number(value.toInteger()) : value.toString());
     static const QRegularExpression digits(QStringLiteral("^[1-9][0-9]{3,4}$"));
     return digits.match(text).hasMatch() ? text : QString{};
 }
@@ -603,8 +601,9 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
 }
 
 QString AgentBroker::referenceBlock(const QString& sessionId, const QString& text) const {
+    // `#4821` or `@agent/4821`, the form the conversation header and sidebar show.
     static const QRegularExpression reference(
-        QStringLiteral("(?<![\\w#])#([1-9][0-9]{3,4})(?!\\d)"));
+        QStringLiteral("(?<![\\w#@/])(?:#|@agent/)([1-9][0-9]{3,4})(?!\\d)"));
     QStringList seen;
     QList<AgentConversation> conversations;
     for (auto match = reference.globalMatch(text); match.hasNext();) {
