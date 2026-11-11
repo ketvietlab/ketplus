@@ -480,6 +480,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     teams::TeamCoordinator* teams_{nullptr};
     // Worktree path → the repository's main worktree, for team membership.
     mutable QHash<QString, QString> repositoryByWorktree_;
+    // Paths git did not answer for, until the event loop turns: one command asks once.
+    mutable QSet<QString> failedRepositoryLookups_;
     QString agentSocket_;
     QString agentExecutable_;
     // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel

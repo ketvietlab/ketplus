@@ -16,6 +16,15 @@ QString SessionHost::repositoryOf(const QString& worktreePath) const {
     if (const auto cached = repositoryByWorktree_.constFind(worktreePath);
         cached != repositoryByWorktree_.cend())
         return cached.value();
+    QString own = QFileInfo(worktreePath).canonicalFilePath();
+    if (own.isEmpty())
+        own = worktreePath;
+    // A team filed under the path itself keeps that key: it was created there, perhaps while
+    // git did not answer, and it and its members are found by it whatever git says later.
+    if (teams_ && !teams_->teams(own).isEmpty())
+        return own;
+    if (failedRepositoryLookups_.contains(worktreePath))
+        return own;
     QProcess process;
     process.setWorkingDirectory(worktreePath);
     process.start(QStringLiteral("git"),
@@ -30,12 +39,17 @@ QString SessionHost::repositoryOf(const QString& worktreePath) const {
                          ? QFileInfo(common.absolutePath()).canonicalFilePath()
                          : common.canonicalFilePath();
     }
-    if (repository.isEmpty())
-        repository = QFileInfo(worktreePath).canonicalFilePath();
-    if (repository.isEmpty())
-        repository = worktreePath;
-    repositoryByWorktree_.insert(worktreePath, repository);
-    return repository;
+    // Only git's own answer is kept. A path that is no repository yet, or a git that did not
+    // answer in time, is asked again, but not within the command that asked: a team's members
+    // share a path, and each failed call can take the whole timeout.
+    if (!repository.isEmpty()) {
+        repositoryByWorktree_.insert(worktreePath, repository);
+        return repository;
+    }
+    if (failedRepositoryLookups_.isEmpty())
+        QTimer::singleShot(0, this, [this] { failedRepositoryLookups_.clear(); });
+    failedRepositoryLookups_.insert(worktreePath);
+    return own;
 }
 
 std::optional<teams::TeamConversation>
