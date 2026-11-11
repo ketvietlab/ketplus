@@ -316,6 +316,14 @@ class TeamDialogsTest final : public QObject {
                 if (control->mapTo(form, control->rect().bottomRight()).x() >= form->width())
                     return QStringLiteral("%1: a control ends outside the form").arg(when);
             }
+            // A label that wraps gets every line of it, not only the first.
+            const auto* requirements =
+                form->findChild<ket::Checkbox*>("teamLeaderWritesRequirements");
+            if (requirements->height() < requirements->heightForWidth(requirements->width()))
+                return QStringLiteral("%1: the requirements label is cut off (%2 < %3)")
+                    .arg(when)
+                    .arg(requirements->height())
+                    .arg(requirements->heightForWidth(requirements->width()));
             const QRect card = dialog->card()->geometry();
             if (card.left() < 0 || card.right() >= dialog->parentWidget()->width())
                 return QStringLiteral("%1: the card leaves the window").arg(when);
