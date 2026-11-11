@@ -52,6 +52,8 @@ QString SessionHost::repositoryOf(const QString& worktreePath) const {
     return own;
 }
 
+bool SessionHost::teamChecksPending() const { return teams_ && teams_->checksOpen(); }
+
 std::optional<teams::TeamConversation>
 SessionHost::teamConversation(const QString& sessionId) const {
     const auto it = sessions_.constFind(sessionId);

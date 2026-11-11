@@ -48,6 +48,42 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
 }
 
 void TeamCoordinator::checkMerged(const qint64 teamId) {
+    const Team* team = this->team(teamId);
+    if (!team)
+        return;
+    QList<Task> ready;
+    for (const Task& task : team->tasks)
+        if (task.state == state::ready && !task.branch.isEmpty())
+            ready.append(task);
+    if (ready.isEmpty())
+        return;
+    if (mergeChecks_.contains(teamId)) {
+        mergeChecksAgain_.insert(teamId);
+        return;
+    }
+    mergeChecks_.insert(teamId);
+    host_->askTasks(
+        *team, ready, TaskQuestion::Merge,
+        [self = QPointer<TeamCoordinator>(this), teamId, ready, repository = team->repository,
+         integration = team->integrationBranch](const QHash<QString, TaskFacts>& facts) {
+            if (!self)
+                return;
+            self->mergeChecks_.remove(teamId);
+            bool again = self->mergeChecksAgain_.remove(teamId);
+            // Git answered for the integration branch the team had. An answer
+            // about another one says nothing: it is dropped and asked again.
+            const Team* now = self->team(teamId);
+            if (now && now->repository == repository && now->integrationBranch == integration)
+                self->applyMergeFacts(teamId, ready, facts);
+            else
+                again = now != nullptr;
+            if (again)
+                self->checkMerged(teamId);
+        });
+}
+
+void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& asked,
+                                      const QHash<QString, TaskFacts>& facts) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
@@ -55,14 +91,18 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
     // A ready task was reviewed at one commit (ADR 0114 §5). Commits added to its branch
     // after that were never reviewed.
     QHash<QString, QString> moved;
-    for (const Task& task : team->tasks) {
-        if (task.state != state::ready || task.branch.isEmpty())
+    for (const Task& was : asked) {
+        const Task* task = std::as_const(*team).task(was.id);
+        const auto fact = facts.constFind(was.id);
+        // Git was asked about the task as it was. One that moved on meanwhile is asked
+        // about again by the next check.
+        if (!task || fact == facts.cend() || task->state != state::ready ||
+            task->branch != was.branch || task->headCommit != was.headCommit)
             continue;
-        if (const QString head = host_->taskCommit(*team, task);
-            !head.isEmpty() && !task.headCommit.isEmpty() && head != task.headCommit)
-            moved.insert(task.id, head);
-        if (const auto contained = host_->isMerged(*team, task); contained && *contained)
-            merged.append(task.id);
+        if (!fact->head.isEmpty() && !task->headCommit.isEmpty() && fact->head != task->headCommit)
+            moved.insert(task->id, fact->head);
+        if (fact->merged && *fact->merged)
+            merged.append(task->id);
     }
     if (merged.isEmpty() && moved.isEmpty())
         return;

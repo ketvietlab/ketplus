@@ -41,6 +41,9 @@ void scheduleFlush(QTimer& timer, int delay) {
 
 SessionHost::~SessionHost() {
     deltaFlush_.stop();
+    // Questions to git nobody will read: the ones not started are dropped; the pool's own
+    // destructor waits for the one that runs.
+    teamGit_.clear();
     // The journal outlives this host and its media store.
     journal_->setImagePreviewWriter({});
     // Drain accepted in-memory data while storage is available. A failed write

@@ -56,6 +56,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // answers lost the text whenever the provider then refused it. A steer whose provider never
     // answers within steerOutcomeTimeoutMs, or whose daemon restarted before it answered, ends
     // as steer_outcome_unknown rather than being sent twice.
+    // Whether a team's check still waits for git's answer (ADR 0114, open point 3).
+    [[nodiscard]] bool teamChecksPending() const;
     void handleCommandDeferred(const QJsonObject& request, const QString& clientId,
                                CommandCallback done);
     static constexpr int steerOutcomeTimeoutMs = 20'000;
@@ -287,6 +289,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
+    void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
+                  teams::TaskQuestion question, teams::TaskFactsDone done) override;
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
@@ -492,6 +496,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     int mediaReadsInFlight_{0};
     // Last member: its destructor waits for running decodes before anything else goes away.
     QThreadPool mediaReads_;
+    // One thread for what a team's own checks ask git, in the order they were asked.
+    QThreadPool teamGit_;
 };
 
 } // namespace ketplus::daemon

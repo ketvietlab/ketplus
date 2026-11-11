@@ -124,6 +124,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/TeamGit.cpp
+    src/runtime/TeamGit.h
     src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
