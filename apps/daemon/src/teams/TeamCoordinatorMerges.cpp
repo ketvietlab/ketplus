@@ -58,7 +58,7 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
     for (const Task& task : team->tasks) {
         if (task.state != state::ready || task.branch.isEmpty())
             continue;
-        if (const QString head = host_->headCommit(task.worktree);
+        if (const QString head = host_->taskCommit(*team, task);
             !head.isEmpty() && !task.headCommit.isEmpty() && head != task.headCommit)
             moved.insert(task.id, head);
         if (const auto contained = host_->isMerged(*team, task); contained && *contained)

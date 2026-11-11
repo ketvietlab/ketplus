@@ -66,6 +66,89 @@ class TeamMergeTest final : public QObject {
         return count;
     }
 
+    struct Ready {
+        QString teamId;
+        QString repository;
+        QString worktree;
+        QString branch;
+    };
+    static QJsonObject readTeam(agent_test::Fixture& fixture, const QString& teamId) {
+        return fixture.host
+            ->handleCommand(agent_test::request("team.get", {{"team_id", teamId}}), "desktop-test")
+            .value("team")
+            .toObject();
+    }
+    static QString stateOf(agent_test::Fixture& fixture, const QString& teamId) {
+        return readTeam(fixture, teamId)
+            .value("tasks")
+            .toArray()
+            .first()
+            .toObject()
+            .value("state")
+            .toString();
+    }
+    // A real repository with one task committed, reviewed with no findings and ready.
+    void readyOnARealRepository(agent_test::Fixture& fixture, Ready& ready) {
+        QVERIFY(fixture.open(true));
+        const QString repository = fixture.directory.filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"commit", "-q", "--allow-empty", "-m", "start"});
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QJsonObject created = command(
+            "team.create",
+            {{"repository", repository},
+             {"name", "Shop"},
+             {"integration_branch", "integration"},
+             {"merge_policy", "user"},
+             {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "codex"}}},
+                                  {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
+                                  {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString teamId = created.value("team").toObject().value("id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        QVERIFY(command("team.task.create", {{"team_id", teamId}, {"title", "Cart no-findings"}})
+                    .value("ok")
+                    .toBool());
+        const QJsonObject assigned = command(
+            "team.task.assign", {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}});
+        QVERIFY2(assigned.value("ok").toBool(), qPrintable(agent_test::text(assigned)));
+        const QJsonObject task = assigned.value("task").toObject();
+        const QString worktree = task.value("worktree").toString();
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") >= 1, 8000);
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_progress"}})
+                    .value("ok")
+                    .toBool());
+        QFile file(QDir(worktree).filePath("cart.txt"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("cart\n");
+        file.close();
+        git(worktree, {"add", "cart.txt"});
+        git(worktree, {"commit", "-q", "-m", "Cart"});
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_review"}})
+                    .value("ok")
+                    .toBool());
+        ready.teamId = teamId;
+        ready.repository = repository;
+        ready.worktree = worktree;
+        ready.branch = task.value("branch").toString();
+        const auto read = [&] {
+            return command("team.get", {{"team_id", teamId}}).value("team").toObject();
+        };
+        const auto state = [&] {
+            return read().value("tasks").toArray().first().toObject().value("state").toString();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(state(), QStringLiteral("ready"), 10000);
+        QCOMPARE(read().value("open_decisions").toInt(), 1);
+    }
+
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
@@ -178,7 +261,7 @@ class TeamMergeTest final : public QObject {
         // Nothing moved: it stays ready.
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::ready);
-        host_.heads.insert(get(id).worktree, "later");
+        host_.heads.insert(get(id).branch, "later");
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::blocked);
         QCOMPARE(get(id).resumeState, state::inProgress);
@@ -199,7 +282,7 @@ class TeamMergeTest final : public QObject {
     void aMergeWithCommitsAfterTheReviewIsDoneAndReported() {
         const QString id = task("Cart");
         pass(id, "dev1");
-        host_.heads.insert(get(id).worktree, "later");
+        host_.heads.insert(get(id).branch, "later");
         host_.merged.insert(id);
         teams_->memberTurnEnded("lead");
         QCOMPARE(get(id).state, state::done);
@@ -208,66 +291,35 @@ class TeamMergeTest final : public QObject {
 
     void theAncestorCheckOnARealRepository() {
         agent_test::Fixture fixture;
-        QVERIFY(fixture.open(true));
-        const QString repository = fixture.directory.filePath("shop");
-        QVERIFY(QDir().mkpath(repository));
-        git(repository, {"init", "-q", "-b", "integration"});
-        git(repository, {"commit", "-q", "--allow-empty", "-m", "start"});
-        const auto command = [&](const QString& type, const QJsonObject& payload) {
-            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
-        };
-        const QJsonObject created = command(
-            "team.create",
-            {{"repository", repository},
-             {"name", "Shop"},
-             {"integration_branch", "integration"},
-             {"merge_policy", "user"},
-             {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "codex"}}},
-                                  {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
-                                  {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
-        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
-        const QJsonArray members = created.value("team").toObject().value("members").toArray();
-        const QString teamId = created.value("team").toObject().value("id").toString();
-        const QString developer = members.at(1).toObject().value("session_id").toString();
-        QVERIFY(command("team.task.create", {{"team_id", teamId}, {"title", "Cart no-findings"}})
-                    .value("ok")
-                    .toBool());
-        const QJsonObject assigned = command(
-            "team.task.assign", {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}});
-        QVERIFY2(assigned.value("ok").toBool(), qPrintable(agent_test::text(assigned)));
-        const QJsonObject task = assigned.value("task").toObject();
-        const QString worktree = task.value("worktree").toString();
-        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") >= 1, 8000);
-        QVERIFY(fixture
-                    .agents(developer, "agents.team_task_update",
-                            {{"task_id", "T-1"}, {"state", "in_progress"}})
-                    .value("ok")
-                    .toBool());
-        QFile file(QDir(worktree).filePath("cart.txt"));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        file.write("cart\n");
-        file.close();
-        git(worktree, {"add", "cart.txt"});
-        git(worktree, {"commit", "-q", "-m", "Cart"});
-        QVERIFY(fixture
-                    .agents(developer, "agents.team_task_update",
-                            {{"task_id", "T-1"}, {"state", "in_review"}})
-                    .value("ok")
-                    .toBool());
-        const auto read = [&] {
-            return command("team.get", {{"team_id", teamId}}).value("team").toObject();
-        };
-        const auto state = [&] {
-            return read().value("tasks").toArray().first().toObject().value("state").toString();
-        };
-        QTRY_COMPARE_WITH_TIMEOUT(state(), QStringLiteral("ready"), 10000);
-        QCOMPARE(read().value("open_decisions").toInt(), 1);
+        Ready ready;
+        readyOnARealRepository(fixture, ready);
+        if (QTest::currentTestFailed())
+            return;
         // Not contained yet; then the user merges by hand outside the app.
-        QCOMPARE(state(), QStringLiteral("ready"));
-        git(repository,
-            {"merge", "-q", "--no-ff", "-m", "Merge T-1", task.value("branch").toString()});
-        QCOMPARE(state(), QStringLiteral("done"));
-        QCOMPARE(read().value("open_decisions").toInt(), 0);
+        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("ready"));
+        // A worktree that leaves the branch does not change what was reviewed.
+        git(ready.worktree, {"checkout", "-q", "--detach"});
+        git(ready.worktree, {"commit", "-q", "--allow-empty", "-m", "Detached"});
+        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("ready"));
+        git(ready.repository, {"merge", "-q", "--no-ff", "-m", "Merge T-1", ready.branch});
+        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("done"));
+        QCOMPARE(readTeam(fixture, ready.teamId).value("open_decisions").toInt(), 0);
+    }
+
+    void aBranchMovedOutsideItsWorktreeIsSeenOnARealRepository() {
+        agent_test::Fixture fixture;
+        Ready ready;
+        readyOnARealRepository(fixture, ready);
+        if (QTest::currentTestFailed())
+            return;
+        // The worktree's HEAD stays where it was reviewed; the branch moves without it.
+        git(ready.worktree, {"checkout", "-q", "--detach"});
+        git(ready.repository, {"checkout", "-q", "-b", "elsewhere", ready.branch});
+        git(ready.repository, {"commit", "-q", "--allow-empty", "-m", "Later"});
+        git(ready.repository, {"branch", "-f", ready.branch, "elsewhere"});
+        git(ready.repository, {"checkout", "-q", "integration"});
+        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("blocked"));
+        QCOMPARE(readTeam(fixture, ready.teamId).value("open_decisions").toInt(), 0);
     }
 };
 

@@ -495,7 +495,7 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Commit your work in %1 before handing %2 to "
                                                     "review; uncommitted changes are not reviewed.")
                                          .arg(task->worktree, taskId))};
-        task->headCommit = host_->headCommit(task->worktree);
+        task->headCommit = host_->taskCommit(*team, *task);
     } else if (to == state::blocked) {
         if (!owner && !daemon && !leaderOrUser(role))
             return {.error =

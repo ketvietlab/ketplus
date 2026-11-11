@@ -31,8 +31,8 @@ class FakeHost final : public TeamHostPort {
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {
         return dirty.contains(worktree);
     }
-    QString headCommit(const QString& worktree) const override {
-        return heads.value(worktree, worktree + QStringLiteral("@head"));
+    QString taskCommit(const Team&, const Task& task) const override {
+        return heads.value(task.branch, task.branch + QStringLiteral("@head"));
     }
     std::optional<TaskDiff> taskDiff(const Team& team, const Task& task) const override {
         (void)team;

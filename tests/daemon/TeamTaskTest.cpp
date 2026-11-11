@@ -36,7 +36,9 @@ class FakeHost final : public TeamHostPort {
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {
         return dirty.contains(worktree);
     }
-    QString headCommit(const QString& worktree) const override { return worktree + "@head"; }
+    QString taskCommit(const Team&, const Task& task) const override {
+        return task.branch + "@head";
+    }
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
         return {};
@@ -209,7 +211,7 @@ class TeamTaskTest final : public QObject {
         QVERIFY(dirty.error->message.contains("Commit your work in /wt/T-1"));
         host_.dirty.clear();
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
-        QCOMPARE(get(id).headCommit, QStringLiteral("/wt/T-1@head"));
+        QCOMPARE(get(id).headCommit, get(id).branch + QStringLiteral("@head"));
         QCOMPARE(
             teams_->moveTask(team_, id, state::inProgress, "dev1").error.value_or(TeamError{}).code,
             QStringLiteral("invalid_transition"));

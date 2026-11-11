@@ -86,8 +86,11 @@ class TeamHostPort {
         (void)worktree;
         return false;
     }
-    [[nodiscard]] virtual QString headCommit(const QString& worktree) const {
-        (void)worktree;
+    // The commit the task's branch points at in the team's repository: what is reviewed
+    // and merged, whatever a worktree has checked out. Empty when git could not tell.
+    [[nodiscard]] virtual QString taskCommit(const Team& team, const Task& task) const {
+        (void)team;
+        (void)task;
         return {};
     }
     // Queues the message; it starts a turn when the receiver is idle. Returns an error.
