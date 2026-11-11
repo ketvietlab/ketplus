@@ -65,7 +65,7 @@ void updateConversation(ket::ConversationRow* row, const QVariantMap& conversati
         label += QObject::tr(" · from #%1").arg(sender);
     row->setStatusLabel(label);
     row->setAccessibleDescription(label);
-    // Only a team member's locked role is drawn; conversations show no user tags (ADR 0116).
+    // Only a team member's locked role is drawn; conversations show no user tags (ADR 0117).
     QList<ket::ConversationTag> tags;
     for (const auto& value : conversation.value(QStringLiteral("tags")).toList()) {
         const auto tag = value.toMap();

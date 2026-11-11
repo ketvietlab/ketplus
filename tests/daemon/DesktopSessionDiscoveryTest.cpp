@@ -225,7 +225,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QCOMPARE(archivedAt("archived-elsewhere"), QString("2026-01-01T00:00:00.000Z"));
     }
 
-    // ADR 0116: the daemon keeps conversation tags; the desktop lists none and offers no way to
+    // ADR 0117: the daemon keeps conversation tags; the desktop lists none and offers no way to
     // change them. Another client's change still reaches the desktop as `tags.changed`, which
     // it takes without an error or a warning.
     void tagsStayInTheDaemon() {

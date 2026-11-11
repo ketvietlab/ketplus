@@ -139,14 +139,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
-  compact title, status, worktree and Reviewer choice, and no user tags (ADR 0116).
+  compact title, status, worktree and Reviewer choice, and no user tags (ADR 0117).
   The input retains IME/draft/steering
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
   the mock's field-styled Quick search, a machine header with its chevron, and update
-  pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0116); the
+  pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
   daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
   Storage pressure warnings consume the local daemon's existing size-status contract,
   and "Waiting for you" comes from the daemon (ADR 0112). It matches

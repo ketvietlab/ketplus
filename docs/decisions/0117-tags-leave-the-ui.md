@@ -1,4 +1,4 @@
-# ADR 0116: Conversation tags leave the UI; the daemon keeps them
+# ADR 0117: Conversation tags leave the UI; the daemon keeps them
 
 Status: accepted (Jay, 2026-11-11). Amends ADR 0107 and ADR 0113.
 

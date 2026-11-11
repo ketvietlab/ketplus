@@ -98,7 +98,7 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
             row.insert(QStringLiteral("teamId"), folder.id);
             row.insert(QStringLiteral("teamRole"), role);
             // The role is the row's only tag, locked: the team sets it (#467). Conversations
-            // carry no user tags in the UI (ADR 0116).
+            // carry no user tags in the UI (ADR 0117).
             row.insert(
                 QStringLiteral("tags"),
                 QVariantList{QVariantMap{{QStringLiteral("label"), team_roles::label(role)},

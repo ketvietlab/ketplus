@@ -30,7 +30,7 @@ QtObject {
         source: "qrc:/qt/qml/KetPlusMock/assets/screenshot-" + name + ".png",
         caption: "Browser capture · " + name + ".png" }))
     // A member's role in its team (Fixtures.teams), drawn as a locked tag beside its
-    // conversation. The team sets it; conversations carry no user tags (ADR 0116).
+    // conversation. The team sets it; conversations carry no user tags (ADR 0117).
     // A team has one leader, one reviewer and this many developers at most (and one at least).
     readonly property int mostDevelopers: 5
     readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })

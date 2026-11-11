@@ -1253,7 +1253,7 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     auto* input = root->findChild<QQuickItem*>("agentPrompt");
     auto* placeholder = root->findChild<QQuickItem*>("composerPlaceholder");
     QVERIFY(input && placeholder);
-    // ADR 0116: the header draws no user tag, even when a row still carries one, and has no
+    // ADR 0117: the header draws no user tag, even when a row still carries one, and has no
     // Add tag, tag menu or Manage tags….
     QTRY_VERIFY(findVisibleItem(root, "conversationTitle"));
     QVERIFY(!findVisualItem(root, "conversationTag_UI"));

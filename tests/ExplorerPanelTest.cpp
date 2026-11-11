@@ -575,7 +575,7 @@ void ExplorerPanelTest::drawsNoTagsAndUsesAuthoritativeStorageWarning() {
                     {"title", "Two"},
                     {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
     bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    // ADR 0116: no tag filter above the repositories and no user tag on a row, even when the
+    // ADR 0117: no tag filter above the repositories and no user tag on a row, even when the
     // metadata still carries one.
     QVERIFY(!bar.findChild<QWidget*>("sidebarTagFilter"));
     const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");

@@ -175,7 +175,7 @@ semantics. A caret-aligned placeholder follows document formatting without
 saving a draft on formatting-only changes. Empty running drafts show Stop;
 nonempty drafts or attachments show Send guidance in the same action position.
 Model/permission selection still uses the existing revisioned configuration path.
-The header draws no user tags (ADR 0116); a team member's role is a locked label.
+The header draws no user tags (ADR 0117); a team member's role is a locked label.
 Unavailable metadata is not invented. Automatic reviewer orchestration remains a separate #120 dependency.
 
 ## Transcript composition

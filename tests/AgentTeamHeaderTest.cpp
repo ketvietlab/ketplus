@@ -27,7 +27,7 @@ QVariantMap leaderRole() {
 } // namespace
 
 // ADR 0114 (#467): a member's header shows its role, locked, and has no Reviewer choice;
-// leaving the team restores the choice with the setting it had. ADR 0116: the header draws
+// leaving the team restores the choice with the setting it had. ADR 0117: the header draws
 // no user tag, even when a row still carries one, and offers no way to add or manage tags.
 void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     ketplus::AgentWorkspaceView view;

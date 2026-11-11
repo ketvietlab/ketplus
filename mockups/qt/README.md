@@ -89,7 +89,7 @@ There is no Worktrees screen: a worktree is made when a conversation needs one
 (Repository & worktree → Create worktree…, or the New conversation card) and
 switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
 context menu (rename, fork, change worktree, archive, delete), compact window (⇧⌘M),
-update notice and toasts. Conversations carry no user tags (ADR 0116).
+update notice and toasts. Conversations carry no user tags (ADR 0117).
 
 ## Transcript content types
 
