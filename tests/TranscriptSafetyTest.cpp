@@ -1,5 +1,6 @@
 #include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/TranscriptNetworkPolicy.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -92,6 +93,56 @@ class TranscriptSafetyTest final : public QObject {
         }
         QVERIFY(!server.waitForNewConnection(300));
         QVERIFY(!server.hasPendingConnections());
+    }
+
+    // A file path can name another machine. Opening it would connect to that host (SMB on
+    // Windows), so the transcript opens such a path only inside a worktree on that share.
+    void pathsOnAnotherMachineAreNotOpened() {
+        using ketplus::namesAnotherMachine;
+        using ketplus::transcriptMayOpen;
+        QVERIFY(namesAnotherMachine(QStringLiteral("//host/share/a.png")));
+        QVERIFY(namesAnotherMachine(QStringLiteral("\\\\host\\share\\a.png")));
+        QVERIFY(namesAnotherMachine(QUrl(QStringLiteral("file://host/share/a.png"))));
+        QVERIFY(namesAnotherMachine(QUrl(QStringLiteral("file:////host/share/a.png"))));
+        QVERIFY(!namesAnotherMachine(QStringLiteral("/Users/me/a.png")));
+        QVERIFY(!namesAnotherMachine(QStringLiteral("C:/Users/me/a.png")));
+        QVERIFY(!namesAnotherMachine(QUrl(QStringLiteral("file:///Users/me/a.png"))));
+        QVERIFY(!namesAnotherMachine(QUrl(QStringLiteral("https://host/a.png"))));
+
+        QVERIFY(transcriptMayOpen(QStringLiteral("/Users/me/a.png")));
+        QVERIFY(!transcriptMayOpen(QStringLiteral("//host/share/a.png")));
+        QVERIFY(!transcriptMayOpen(QStringLiteral("//host/share/a.png"),
+                                   QStringLiteral("/Users/me/repo")));
+        // A conversation working on a share still shows that share's own images.
+        const QString share = QStringLiteral("//files/team/repo");
+        QVERIFY(transcriptMayOpen(QStringLiteral("//files/team/repo/docs/a.png"), share));
+        QVERIFY(transcriptMayOpen(QStringLiteral("\\\\files\\team\\repo\\a.png"), share));
+        QVERIFY(!transcriptMayOpen(QStringLiteral("//files/team/repository/a.png"), share));
+        QVERIFY(!transcriptMayOpen(QStringLiteral("//files/team/repo/../../other/a.png"), share));
+        QVERIFY(!transcriptMayOpen(QStringLiteral("//elsewhere/team/repo/a.png"), share));
+
+        // An answer naming such an image keeps its place in the text and reads no file.
+        ketplus::AgentWorkspaceView view;
+        view.applyTheme(ketplus::currentThemePalette());
+        view.resize(900, 640);
+        view.show();
+        view.resetMessages(
+            {QVariantMap{{"kind", "assistant"},
+                         {"meta", "Agent"},
+                         {"body", "Look:\n\n![a](file://files.invalid/share/a.png)\n\n"
+                                  "![b](//files.invalid/share/b.png)\n\nDone."}}});
+        QQuickItem* body = nullptr;
+        QTRY_VERIFY((body = find(view.quickView()->rootObject(), "messageBody")) != nullptr);
+        auto* quickDocument = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+        QVERIFY(quickDocument && quickDocument->textDocument());
+        QTRY_VERIFY(quickDocument->textDocument()->toPlainText().contains("Done."));
+        for (const auto* source :
+             {"file://files.invalid/share/a.png", "//files.invalid/share/b.png"})
+            QVERIFY(!quickDocument->textDocument()
+                         ->resource(QTextDocument::ImageResource, QUrl(QString::fromLatin1(source)))
+                         .isValid());
+        QVERIFY(!view.messageImageSize(QUrl(QStringLiteral("file://files.invalid/share/a.png")))
+                     .isValid());
     }
 
     // #79: rendered answers are re-styled, not served from a stale render, when the theme changes.

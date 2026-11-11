@@ -8,6 +8,7 @@
 #include "agent/ChatMarkdown.h"
 #include "agent/MermaidLabelContrast.h"
 #include "agent/TranscriptFileLinks.h"
+#include "agent/TranscriptNetworkPolicy.h"
 #include "agent/TranscriptSyntax.h"
 #include "agent/TranscriptTableStyle.h"
 #include "preview/MermaidRenderer.h"
@@ -636,7 +637,9 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
             if (imageFormat.name().startsWith(QStringLiteral("~/"))) {
                 resolved = QUrl::fromLocalFile(QDir::home().filePath(imageFormat.name().mid(2)));
             }
-            if (!resolved.isLocalFile())
+            // A path on another machine is never opened for a model's Markdown.
+            if (!resolved.isLocalFile() || !resolved.host().isEmpty() ||
+                !transcriptMayOpen(resolved.toLocalFile(), activePath_))
                 continue;
             const bool isMermaid = mermaidImages_.contains(resolved.toString());
             const bool vectorMermaid = isMermaid && QImageReader(resolved.toLocalFile()).format() ==
@@ -935,6 +938,8 @@ QSize AgentWorkspaceView::messageImageSize(const QUrl& source) const {
     };
     QString path;
     if (source.isLocalFile()) {
+        if (!source.host().isEmpty() || !transcriptMayOpen(source.toLocalFile(), activePath_))
+            return remember({});
         const QFileInfo info(source.toLocalFile());
         // isFile() follows symlinks; FIFOs, sockets and devices are rejected.
         if (!info.exists() || !info.isFile() || info.size() <= 0 || info.size() > maximumImageBytes)

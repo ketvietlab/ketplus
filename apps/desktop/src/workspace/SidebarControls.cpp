@@ -95,6 +95,7 @@ SidebarTagFilterChip::SidebarTagFilterChip(QWidget* parent) : QWidget(parent) {
     layout->setSpacing(0);
     label_ = new QLabel(this);
     label_->setObjectName(QStringLiteral("sidebarTagFilterLabel"));
+    label_->setTextFormat(Qt::PlainText); // a tag is the user's text, never markup
     layout->addWidget(label_, 1);
     clear_ = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
                                  tr("Clear filter"), this);
