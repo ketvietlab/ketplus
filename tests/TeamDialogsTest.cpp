@@ -15,6 +15,7 @@
 #include <QApplication>
 #include <QJsonArray>
 #include <QLabel>
+#include <QScrollArea>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -219,6 +220,33 @@ class TeamDialogsTest final : public QObject {
         QVERIFY(create->isVisible());
         QCOMPARE(create->text(), QStringLiteral("Create with 4 members"));
         QVERIFY(dialog->findChild<QWidget*>("teamDialogScroll"));
+        dialog->reject();
+    }
+
+    // A long model name elides inside its button instead of widening the form past the card.
+    void longModelNamesStayInsideTheCard() {
+        const QVariantList longNames{
+            model("codex", "gpt-6.1-super", "GPT-6.1-Super-Long-Context (recommended)", true),
+            model("claude", "default", "Default (recommended) with a very long name", true)};
+        QWidget window;
+        window.resize(1024, 640);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", longNames);
+        QApplication::processEvents();
+        auto* scroll = dialog->findChild<QScrollArea*>("teamDialogScroll");
+        QVERIFY(scroll);
+        auto* form = dialog->findChild<NewTeamForm*>();
+        QTRY_VERIFY2(form->width() <= scroll->viewport()->width(),
+                     qPrintable(QStringLiteral("form %1 > viewport %2")
+                                    .arg(form->width())
+                                    .arg(scroll->viewport()->width())));
+        for (const QString& role : {"leader", "developer", "reviewer"}) {
+            ket::Button* button = form->agentButton(role);
+            QVERIFY(button->geometry().right() < form->width());
+            QVERIFY(button->toolTip().contains(QStringLiteral("recommended")));
+            QVERIFY(button->sizeHint().width() <= button->width() + 1);
+        }
         dialog->reject();
     }
 
