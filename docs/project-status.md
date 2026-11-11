@@ -87,6 +87,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   task opens its description, criteria, dependencies and full history, and Hand over…
   sends `team.task.handover` with another developer and a required reason. Without the
   team it explains teams and offers New team.
+  Transcript blocks (#468): a member's transcript draws the team's own messages as cards
+  (assignment, digest, review request, verdict, decision) with Open T-n; a digest of many
+  changes is one card. Anything it cannot read stays the message's text.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

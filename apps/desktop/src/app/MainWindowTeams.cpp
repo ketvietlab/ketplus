@@ -166,6 +166,13 @@ void MainWindow::openTeam(const QString& teamId) {
     showTeamPage(teamId, team->value(QStringLiteral("repository")).toString());
 }
 
+// #468: a transcript block's Open T-n shows the task on its team's page.
+void MainWindow::openTeamTask(const QString& teamId, const QString& taskId) {
+    openTeam(teamId);
+    if (teamPage_ != nullptr && teamPage_->teamId() == teamId)
+        teamPage_->openTask(taskId);
+}
+
 void MainWindow::openTeamMember(const QString& sessionId) {
     if (agentManager_ == nullptr || sessionId.isEmpty())
         return;

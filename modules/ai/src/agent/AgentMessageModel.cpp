@@ -62,6 +62,7 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "fileStats",
                              "questionData",
                              "questionAnswerData",
+                             "teamBlockData",
                              "messageKey",
                              "category",
                              "eventType",
@@ -406,6 +407,7 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
     item.insert("fileStats", item.value("fileChanges", QVariantList{}).toList());
     item.insert("questionData", item.value("questions", QVariantList{}).toList());
     item.insert("questionAnswerData", item.value("questionAnswers", QVariantMap{}).toMap());
+    item.insert("teamBlockData", item.value("teamBlock", QVariantMap{}).toMap());
     QString detailsData;
     const QString detailsRef = retainPayload(item.value("details", QVariantMap{}),
                                              QStringLiteral("details"), &detailsData);
