@@ -3,6 +3,7 @@
 #include "AgentTestFixture.h"
 
 #include <QDir>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
@@ -52,6 +53,30 @@ class TeamProtocolTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void featureIsAdvertised() { QVERIFY(protocol::features(1).contains("teams/1")); }
+
+    // A path that was no repository when it was first asked about is asked again (#473): its
+    // teams are found once it is one.
+    void aPathThatBecomesARepositoryFindsItsTeams() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed");
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString inside = fixture.directory.filePath(QStringLiteral("apps"));
+        QVERIFY(QDir().mkpath(inside));
+        QVERIFY(command(fixture, "team.list", {{"repository", inside}})
+                    .value("teams")
+                    .toArray()
+                    .isEmpty());
+        QProcess git;
+        git.setWorkingDirectory(fixture.directory.path());
+        git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("--quiet")});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
+        QVERIFY2(create(fixture).value("ok").toBool(), "the team is created in the repository");
+        QCOMPARE(
+            command(fixture, "team.list", {{"repository", inside}}).value("teams").toArray().size(),
+            1);
+    }
 
     void createStartsFourNamedMembersAndSurvivesRestart() {
         Fixture fixture;

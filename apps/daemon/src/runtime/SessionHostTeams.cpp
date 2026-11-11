@@ -30,12 +30,14 @@ QString SessionHost::repositoryOf(const QString& worktreePath) const {
                          ? QFileInfo(common.absolutePath()).canonicalFilePath()
                          : common.canonicalFilePath();
     }
-    if (repository.isEmpty())
-        repository = QFileInfo(worktreePath).canonicalFilePath();
-    if (repository.isEmpty())
-        repository = worktreePath;
-    repositoryByWorktree_.insert(worktreePath, repository);
-    return repository;
+    // Only git's own answer is kept. A path that is no repository yet, or a git that did not
+    // answer in time, is asked again: the path may become one, and a team is found by this key.
+    if (!repository.isEmpty()) {
+        repositoryByWorktree_.insert(worktreePath, repository);
+        return repository;
+    }
+    repository = QFileInfo(worktreePath).canonicalFilePath();
+    return repository.isEmpty() ? worktreePath : repository;
 }
 
 std::optional<teams::TeamConversation>
