@@ -37,9 +37,9 @@ libraries) as a three-day artifact. A `test` job per runner version
 | Job | Built on | Tested on |
 | --- | --- | --- |
 | `lite-linux` | `ubuntu-22.04` | `ubuntu-22.04`, `ubuntu-24.04` |
-| `lite-macos` | `macos-14` | `macos-14`, `macos-15` |
+| `lite-macos` | `macos-15` | `macos-15`, `macos-26` |
 | `lite-windows` | `windows-2022` | `windows-2022`, `windows-2025` |
-| `pro-macos` | `macos-14` | `macos-14`, `macos-15` (serial CTest) |
+| `pro-macos` | `macos-15` | `macos-15`, `macos-26` (serial CTest) |
 
 The FetchContent cache (`.cache/fetchcontent`) is keyed on the suite, OS,
 architecture, compiler version, Qt version and the hash of `CMakeLists.txt`,

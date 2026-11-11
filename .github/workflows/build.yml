@@ -115,8 +115,8 @@ jobs:
     uses: ./.github/workflows/os-suite.yml
     with:
       suite: lite
-      build-runner: macos-14
-      test-runners: '["macos-14", "macos-15"]'
+      build-runner: macos-15
+      test-runners: '["macos-15", "macos-26"]'
       qt-version: "6.10.*"
       qt-modules: qt5compat
       configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
@@ -137,8 +137,8 @@ jobs:
     uses: ./.github/workflows/os-suite.yml
     with:
       suite: pro
-      build-runner: macos-14
-      test-runners: '["macos-14", "macos-15"]'
+      build-runner: macos-15
+      test-runners: '["macos-15", "macos-26"]'
       qt-version: "6.11.1"
       qt-modules: qt5compat qtwebsockets qtwebview
       configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
