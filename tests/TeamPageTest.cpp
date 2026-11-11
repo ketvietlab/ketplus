@@ -23,6 +23,7 @@
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QtTest>
+#include <functional>
 
 using namespace ketplus;
 
@@ -102,12 +103,22 @@ QJsonObject fixture(int revision = 1, int developers = 2, bool paused = false,
 struct FakeDaemon {
     QList<QPair<QString, QJsonObject>> sent;
     QHash<QString, QJsonObject> answers;
+    // While set, answers wait in `late` until the test delivers them.
+    bool hold{false};
+    QList<std::function<void()>> late;
     TeamDirectory::Transport transport() {
         return [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
             sent.append({type, payload});
             const QJsonObject answer = answers.value(type, {{"ok", true}});
-            reply(answer, answer.value("ok").toBool() ? QString{}
-                                                      : answer.value("error_message").toString());
+            const auto deliver = [answer, reply] {
+                reply(answer, answer.value("ok").toBool()
+                                  ? QString{}
+                                  : answer.value("error_message").toString());
+            };
+            if (hold)
+                late.append(deliver);
+            else
+                deliver();
         };
     }
     int count(const QString& type) const {
@@ -434,6 +445,37 @@ class TeamPageTest final : public QObject {
         dialog->findChild<ket::Button*>("teamTaskOpenOwner")->click();
         QCOMPARE(asked.size(), 1);
         QCOMPARE(asked.first().first().toString(), QStringLiteral("dev2"));
+    }
+
+    // An answer that arrives after its handover dialog was cancelled belongs to that dialog:
+    // it neither closes the one opened since nor clears what the user wrote there.
+    void aLateHandoverAnswerLeavesANewDialogAlone() {
+        start(fixture());
+        QWidget window;
+        window.resize(1024, 640);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        auto* body = dialog->findChild<TeamTaskDialog*>();
+        QPointer<ket::Dialog> first = body->openHandover();
+        QVERIFY(first);
+        body->handoverReason()->setText("First reason");
+        daemon_.hold = true;
+        body->handOver();
+        QCOMPARE(daemon_.late.size(), 1);
+        first->reject();
+        QTRY_VERIFY(!first);
+        QPointer<ket::Dialog> second = body->openHandover();
+        QVERIFY(second && second->isOpen());
+        body->handoverReason()->setText("A new draft");
+        daemon_.hold = false;
+        daemon_.late.takeFirst()();
+        QCoreApplication::processEvents();
+        QVERIFY(second && second->isOpen());
+        QCOMPARE(body->handoverReason()->text(), QStringLiteral("A new draft"));
+        QVERIFY(body->error().isEmpty());
+        second->reject();
+        dialog->reject();
     }
 
     // A leader writes a task as Markdown, often long: the dialog renders it, cuts it and keeps

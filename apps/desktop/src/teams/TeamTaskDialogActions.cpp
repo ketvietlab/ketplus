@@ -66,13 +66,17 @@ void TeamTaskDialog::handOver() {
     reason_->setInvalid(false);
     fail({});
     const QPointer<TeamTaskDialog> alive(this);
+    // The answer belongs to the dialog that asked. One that was cancelled meanwhile, or
+    // replaced by a new one with a new draft, is not touched by it; the task itself shows
+    // the new owner either way.
+    const QPointer<ket::Dialog> asked(handover_);
     teams_->request(QStringLiteral("team.task.handover"),
                     {{QStringLiteral("team_id"), teamId_},
                      {QStringLiteral("task_id"), taskId_},
                      {QStringLiteral("owner"), owner},
                      {QStringLiteral("reason"), reason}},
-                    [alive, fail](const QJsonObject&, const QString& error) {
-                        if (!alive)
+                    [alive, asked, fail](const QJsonObject&, const QString& error) {
+                        if (!alive || asked != alive->handover_)
                             return;
                         fail(error);
                         if (!error.isEmpty())
