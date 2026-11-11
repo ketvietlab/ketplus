@@ -517,8 +517,8 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto open = step("open", "browser_open");
     open.insert("target", "https://example.test/page");
     rows.append(open);
-    for (const char* tool : {"browser_observe", "browser_inspect", "browser_network",
-                             "browser_logs", "browser_close_page"})
+    for (const char* tool :
+         {"browser_observe", "browser_inspect", "browser_network", "browser_logs"})
         rows.append(step(QString::fromLatin1(tool), tool));
     auto capture = step("capture", "browser_capture");
     capture.insert("images", QVariantList{QUrl::fromLocalFile(imagePath).toString()});
@@ -526,6 +526,8 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto compare = step("compare", "visual_compare");
     compare.insert("images", capture.value("images"));
     rows.append(compare);
+    // Session housekeeping ends the browser work and is not shown.
+    rows.append(step("browser_close_page", "browser_close_page"));
 
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -533,14 +535,13 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     view.show();
     view.resetMessages(rows, "browser-groups");
     auto* model = view.messageModel();
-    QTRY_COMPARE(model->rowCount(), 3);
+    // As in the mock, the capture and the comparison are steps of the browser group: the
+    // closed group is one line, and opening it shows each step with its image.
+    QTRY_COMPARE(model->rowCount(), 1);
     QCOMPARE(model->get(0).value("messageKey").toString(), "open");
-    QCOMPARE(model->get(1).value("messageKey").toString(), "capture");
-    QCOMPARE(model->get(2).value("messageKey").toString(), "compare");
     QCOMPARE(model->sourceCount(), rows.size());
-    // Page steps collapse into the open step's group, titled as the mock's browser steps.
     QCOMPARE(model->get(0).value("groupSummary").toString(),
-             QStringLiteral("Used ketplus_browser · 5 steps"));
+             QStringLiteral("Used ketplus_browser · 7 steps"));
     QVERIFY(view.transcriptCopyText().contains("Observed the page"));
     QVERIFY(view.transcriptCopyText().contains("Inspected the page"));
     auto* root = view.quickView()->rootObject();
@@ -556,8 +557,8 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
         };
         return count(count, root);
     };
-    QTRY_COMPARE(galleries(), 2);
-    // Session housekeeping stays hidden when the group opens; evidence stays visible.
+    QTRY_COMPARE(galleries(), 0);
+    // Session housekeeping stays hidden when the group opens; the images show under their steps.
     model->setGroupExpanded("open", true);
     QTRY_COMPARE(model->rowCount(), 7);
     for (int row = 0; row < model->rowCount(); ++row)
@@ -566,19 +567,19 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto* browserOpen = findVisibleItem(root, "transcriptBrowserOpen");
     QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
     QTRY_COMPARE(galleries(), 2);
-    model->setGroupExpanded("open", false);
-    QTRY_COMPARE(model->rowCount(), 3);
-    QTRY_COMPARE(galleries(), 2);
     const QString capturePrefix = qEnvironmentVariable("KETPLUS_BROWSER_GROUP_CAPTURE");
     if (!capturePrefix.isEmpty()) {
         QTest::qWait(150);
         QVERIFY(
             view.quickView()->grabWindow().save(capturePrefix + QString::number(width) + ".png"));
     }
+    model->setGroupExpanded("open", false);
+    QTRY_COMPARE(model->rowCount(), 1);
+    QTRY_COMPARE(galleries(), 0);
     // Restored history uses the same projection while retaining all source rows.
     view.resetMessages(rows, "browser-groups-replay");
-    QTRY_COMPARE(model->rowCount(), 3);
-    QTRY_COMPARE(galleries(), 2);
+    QTRY_COMPARE(model->rowCount(), 1);
+    QCOMPARE(model->sourceCount(), rows.size());
 }
 
 void AgentWorkspaceViewTest::transcriptArtifactSafetyAndExport() {

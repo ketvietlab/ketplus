@@ -156,6 +156,7 @@ void SessionHost::storeFork(const QString& sourceId, const qint64 sourceGenerati
     fork.stored.archivedAt.clear();
     // Its row starts without labels; the user tags the fork for what it becomes.
     fork.stored.tags.clear();
+    fork.stored.awaitingReply = false;
     fork.stored.title = source->stored.title.isEmpty()
                             ? QStringLiteral("Fork")
                             : source->stored.title + QStringLiteral(" (fork)");
