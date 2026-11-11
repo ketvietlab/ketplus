@@ -28,6 +28,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVBoxLayout>
+#include <utility>
 
 #include <cmath>
 #include <cstdio>
@@ -646,17 +647,29 @@ int main(int argc, char** argv) {
 #endif
 #if defined(Q_OS_UNIX)
     // The shells start as login shells. A runner's own startup files can print, pause or read
-    // the keyboard (zsh's new-user menu does), so the shell gets a home of empty ones.
+    // the keyboard (zsh's new-user menu does), so the shell gets a home of its own ones. They
+    // only set a short prompt: the default one holds the host name, and a runner's is long
+    // enough that a typed command wraps at 80 columns and no longer reads as one line.
     QTemporaryDir home;
     if (!home.isValid())
         return 1;
-    for (const char* name :
-         {".zshenv", ".zprofile", ".zshrc", ".zlogin", ".bash_profile", ".bashrc", ".profile"}) {
+    const QByteArray bashPrompt = "PS1='$ '\n";
+    const QByteArray zshPrompt = "PROMPT='$ '\nRPROMPT=''\n";
+    const std::pair<const char*, QByteArray> startupFiles[] = {{".zshenv", {}},
+                                                               {".zprofile", {}},
+                                                               {".zshrc", zshPrompt},
+                                                               {".zlogin", {}},
+                                                               {".bash_profile", bashPrompt},
+                                                               {".bashrc", bashPrompt},
+                                                               {".profile", bashPrompt}};
+    for (const auto& [name, contents] : startupFiles) {
         QFile file(home.filePath(QString::fromLatin1(name)));
-        if (!file.open(QIODevice::WriteOnly))
+        if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size())
             return 1;
     }
     qputenv("HOME", home.path().toLocal8Bit());
+    // macOS bash prints a "default shell is now zsh" notice first.
+    qputenv("BASH_SILENCE_DEPRECATION_WARNING", "1");
     for (const char* variable : {"ZDOTDIR", "BASH_ENV", "ENV"})
         qunsetenv(variable);
 #endif
