@@ -151,8 +151,29 @@ leader the user stopped is not woken, so step 3 follows at once. A member's next
 that ends by itself lifts that, and "Wake the leader again" lifts it for the leader only.
 A worker that exits without a new turn changes nothing.
 
-Not covered here: a timed wait a member asks for ("check again in 10 minutes"), and a
-message to a conversation outside the team that failed to deliver.
+**Waiting for something outside the team.** A leader or developer that waits for a
+build, a deployment or another conversation calls `team_wait` with what it waits for and
+1 to 60 minutes, then ends its turn. The wait is an entry in Updates. Until it ends the
+watchdog treats that member as at work: it is not nudged and the leader is not woken on
+its account. When it ends an idle member is woken to check (message kind `wait`), an
+automatic turn counted against the budget and held while the team is paused; a member
+that already works again is left alone. A member has one wait, a new one replaces it; the
+user's Stop, leaving the team and deleting the team end it, and the Stop also drops a
+wake that is held because the wait ended while the team was paused. Resume asks again:
+a held `wait`, `message_failed`, `nudge` or `stall` is not delivered to a member that
+is stopped at that moment. Waits are kept in memory: a
+daemon restart loses them and the watchdog takes over. The reviewer does not wait.
+
+**A message outside the team that failed.** When a member's message to a conversation
+that is not on its team fails, expires or gets no answer, the broker's note in the
+transcript is not read by the agent, whose turn has ended. The member is woken with what
+happened (message kind `message_failed`) and decides: send again, go on, block the task,
+or, for the leader, raise a decision. A member the user stopped is not woken. A turn the
+provider refuses to start ends with `runtime.error` alone, so the host marks that event
+`turn_start_failed` with the turn's `turn_sequence`, and the broker ends the requests
+that turn carried as `turn_failed` instead of leaving them to expire. A `runtime.error`
+without the mark, or of another turn, ends nothing: an error inside a turn that goes on
+may be journaled after the turn has answered.
 
 ## Open points, fixed here
 
@@ -223,7 +244,8 @@ team request is served; ask again), `task_not_found`, `invalid_transition`,
 `decision_closed`, `invalid_payload`.
 
 Agent tools in the ketplus_agents server, served only to members: `team_get`,
-`team_tasks`, `team_task_update` (developer, own task), `team_task_create`,
+`team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
+developers), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_lane_set`,
 `team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
 the role that may.

@@ -400,8 +400,10 @@ std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {
     if (!journal_->deleteTeam(teamId, &error))
         return journalError(error);
     const QString repository = team->repository;
-    for (const QString& session : team->memberSessions())
+    for (const QString& session : team->memberSessions()) {
+        cancelWait(session);
         teamBySession_.remove(session);
+    }
     teams_.remove(teamId);
     delete digestTimers_.take(teamId);
     delete stallTimers_.take(teamId);
@@ -534,6 +536,7 @@ TeamResult TeamCoordinator::removeMember(const qint64 teamId, const QString& ses
         return {.error = refused};
     const QString name = team->member(sessionId)->name;
     QList<Update> updates;
+    cancelWait(sessionId);
     unassignTasksOf(*team, sessionId, actor, QStringLiteral("%1 left the team").arg(name), updates);
     team->members.removeIf([&](const Member& member) { return member.sessionId == sessionId; });
     updates.prepend({.kind = QStringLiteral("member_removed"),
@@ -552,6 +555,7 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
     const Member* member = team->member(sessionId);
     const QString role = member->role;
     const QString name = member->name;
+    cancelWait(sessionId);
     QList<Update> updates;
     unassignTasksOf(*team, sessionId, QStringLiteral("daemon"),
                     QStringLiteral("%1 was deleted").arg(name), updates);

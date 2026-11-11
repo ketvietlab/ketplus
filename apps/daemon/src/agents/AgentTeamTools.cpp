@@ -34,6 +34,7 @@ const QStringList& names() {
     static const QStringList value{QStringLiteral("team_get"),
                                    QStringLiteral("team_tasks"),
                                    QStringLiteral("team_task_update"),
+                                   QStringLiteral("team_wait"),
                                    QStringLiteral("team_task_create"),
                                    QStringLiteral("team_task_assign"),
                                    QStringLiteral("team_task_handover"),
@@ -86,6 +87,21 @@ QJsonArray teamTools() {
                            {QStringLiteral("description"),
                             QStringLiteral("Criteria marks by zero-based index.")}}}},
              {QStringLiteral("task_id")}),
+        tool(QStringLiteral("team_wait"),
+             QStringLiteral("Leader and developers: you wait for something outside the team (a "
+                            "build, a deployment, another conversation's answer). Records it "
+                            "for the team and starts your turn again after `minutes` so you "
+                            "check. Call it, then end your turn; do not poll and do not end "
+                            "the turn without it."),
+             {{QStringLiteral("reason"), text(QStringLiteral("What you wait for."))},
+              {QStringLiteral("minutes"),
+               QJsonObject{{QStringLiteral("type"), QStringLiteral("integer")},
+                           {QStringLiteral("minimum"), 1},
+                           {QStringLiteral("maximum"), 60},
+                           {QStringLiteral("description"),
+                            QStringLiteral("When to check again, 1 to 60.")}}},
+              {QStringLiteral("task_id"), text(QStringLiteral("The task it holds up, if any."))}},
+             {QStringLiteral("reason"), QStringLiteral("minutes")}),
         tool(QStringLiteral("team_task_create"),
              QStringLiteral("Leader: create a task with its acceptance criteria, lane and the "
                             "tasks it depends on."),

@@ -182,6 +182,50 @@ class TeamAgentToolsTest final : public QObject {
                  QStringLiteral("not_on_team"));
     }
 
+    // ADR 0114 §8: a member says what it waits for; a message it sent outside the team that
+    // failed comes back to it as a turn.
+    void aMemberWaitsAndHearsOfAFailedOutsideMessage() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(
+            fixture.agents(team.reviewer, "agents.team_wait", {{"reason", "CI"}, {"minutes", 5}})
+                .value("error_code")
+                .toString(),
+            QStringLiteral("role_forbidden"));
+        QCOMPARE(fixture.agents(team.developer, "agents.team_wait", {{"reason", "CI"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        const QJsonObject waiting =
+            fixture.agents(team.developer, "agents.team_wait", {{"reason", "CI"}, {"minutes", 5}});
+        QVERIFY2(waiting.value("ok").toBool(), qPrintable(text(waiting)));
+        QCOMPARE(waiting.value("wakes_in_minutes").toInt(), 5);
+
+        // The outside conversation's turn cannot start, so no answer will ever arrive.
+        const QString outside = fixture.start("claude", "outside");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(outside, "turn.completed"), 1, 5000);
+        const auto failed = [&] {
+            for (const AgentMessageRecord& message :
+                 fixture.journal->agentMessagesOf(team.leader, 1, 20))
+                if (message.kind == QStringLiteral("message_failed"))
+                    return message.body;
+            return QString{};
+        };
+        QVERIFY(failed().isEmpty());
+        const QJsonObject sent = fixture.agents(team.leader, "agents.send",
+                                                {{"to", "#" + fixture.number(outside)},
+                                                 {"text", "fail-start"},
+                                                 {"expect_reply", true}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        QTRY_VERIFY_WITH_TIMEOUT(!failed().isEmpty(), 5000);
+        QVERIFY(failed().contains("#" + fixture.number(outside)));
+        const auto request = fixture.journal->agentMessage(sent.value("message_id").toString());
+        QCOMPARE(request->state, QStringLiteral("failed"));
+        QCOMPARE(request->error, QStringLiteral("turn_failed"));
+    }
+
     void rolesAreAddressesInsideATeam() {
         Fixture fixture;
         QVERIFY(fixture.open());

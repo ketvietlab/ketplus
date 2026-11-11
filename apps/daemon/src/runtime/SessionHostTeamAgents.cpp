@@ -114,6 +114,16 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             tasks.append(teams::toJson(task, false));
         return {{QStringLiteral("ok"), true}, {QStringLiteral("tasks"), tasks}};
     }
+    if (operation == QStringLiteral("team_wait")) {
+        if (role == teams::role::reviewer)
+            return onlyFor(QStringLiteral("the leader and developers"), operation);
+        const int minutes = payload.value(QStringLiteral("minutes")).toInt();
+        const auto result = teams_->wait(
+            teamId, sessionId, minutes, payload.value(QStringLiteral("reason")).toString(), taskId);
+        if (!result.ok())
+            return refusal(result.error->code, result.error->message);
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("wakes_in_minutes"), minutes}};
+    }
     if (operation == QStringLiteral("team_task_update")) {
         if (role != teams::role::developer)
             return onlyFor(QStringLiteral("developers, on their own task"), operation);

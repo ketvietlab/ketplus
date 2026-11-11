@@ -87,6 +87,11 @@ class AgentHostPort {
         (void)text;
         (void)failure;
     }
+    // A message a conversation sent failed, expired or was never answered (`reason`).
+    virtual void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) {
+        (void)message;
+        (void)reason;
+    }
     [[nodiscard]] virtual bool onTeam(const QString& sessionId) const {
         (void)sessionId;
         return false;
@@ -176,6 +181,8 @@ class AgentBroker final : public QObject {
         QString lastText;
         // Started by a review request: read-only, and never itself reviewed (ADR 0067).
         bool review{false};
+        // The sequence of the turn the broker started; 0 for the user's own turn.
+        qint64 turn{0};
     };
 
     [[nodiscard]] QJsonObject whoami(const AgentConversation& caller) const;

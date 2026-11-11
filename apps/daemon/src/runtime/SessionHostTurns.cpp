@@ -373,7 +373,12 @@ void SessionHost::failTurnStart(Session& session, const QString& message) {
     releaseTurnAttachments(session);
     session.stored.state = QStringLiteral("failed");
     journal_->upsertSession(session.stored);
-    appendEvent(session, QStringLiteral("runtime.error"), {{QStringLiteral("message"), message}});
+    // The turn never ran and no turn.completed follows: said on the event, with the turn,
+    // so the broker ends the requests that turn carried (ADR 0114 §8).
+    appendEvent(session, QStringLiteral("runtime.error"),
+                {{QStringLiteral("message"), message},
+                 {QStringLiteral("turn_start_failed"), true},
+                 {QStringLiteral("turn_sequence"), session.stored.currentTurnSequence}});
 }
 
 void SessionHost::providerStopped(const QString& adapterName, const QString& reason) {

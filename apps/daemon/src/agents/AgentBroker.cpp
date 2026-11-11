@@ -540,6 +540,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         if (reviewRequest(message))
             origin.review = true;
     }
+    origin.turn = host_->agentTurnSequence(sessionId) + 1;
     turns_.insert(sessionId, origin);
     const QString error =
         host_->startAgentTurn(sessionId, receiver->generation,
@@ -659,7 +660,20 @@ void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, c
         scheduleDelivery(sessionId);
         return;
     }
-    if (type == QStringLiteral("tasks.changed") || type == QStringLiteral("runtime.error"))
+    if (type == QStringLiteral("runtime.error")) {
+        // A turn the provider refused to start ends with this alone, no turn.completed: its
+        // requests would wait for an answer until they expire. The host says so on the
+        // event and names the turn, because the event may be journaled late: an error
+        // inside a turn that goes on, or one of an earlier turn, ends nothing here.
+        const auto origin = turns_.constFind(sessionId);
+        if (origin != turns_.cend() && origin->turn > 0 &&
+            payload.value(QStringLiteral("turn_start_failed")).toBool() &&
+            payload.value(QStringLiteral("turn_sequence")).toInteger() == origin->turn)
+            finishTurn(sessionId, generation, QStringLiteral("failed"));
+        scheduleDelivery(sessionId);
+        return;
+    }
+    if (type == QStringLiteral("tasks.changed"))
         scheduleDelivery(sessionId);
 }
 
@@ -792,6 +806,10 @@ void AgentBroker::notice(const AgentMessageRecord& message, const QString& state
     outgoing.insert(QStringLiteral("direction"), QStringLiteral("outgoing"));
     outgoing.insert(QStringLiteral("peer_number"), message.toNumber);
     host_->appendAgentNotice(message.fromSession, message.fromGeneration, outgoing);
+    // The notice is for the reader of the transcript; the sending agent's turn has ended.
+    if ((state == QStringLiteral("failed") || state == QStringLiteral("expired")) &&
+        !message.fromSession.isEmpty())
+        host_->agentMessageFailed(message, reason);
     if (state != QStringLiteral("held") && !message.delivery.startsWith("user_authorized:"))
         return;
     QJsonObject incoming = common;

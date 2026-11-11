@@ -335,6 +335,46 @@ class TeamStoreTest final : public QObject {
         QVERIFY(teams.isLoaded());
         QCOMPARE(teams.teams().size(), 1);
     }
+
+    // The read can also stop on a later row: SQLite hands out the first team and then fails.
+    // Half a list is not the list.
+    void aReadThatStopsPartWayKeepsTheTeamsItHad() {
+        LocalJournal journal(journalPath());
+        TeamCoordinator teams(&journal, &host_);
+        teams.load();
+        QVERIFY(teams.create(standard(), "user").ok());
+        const auto sql = [this](const QString& statement) {
+            bool ran = false;
+            {
+                auto database = QSqlDatabase::addDatabase("QSQLITE", "later-row");
+                database.setDatabaseName(journalPath());
+                ran = database.open() && QSqlQuery(database).exec(statement);
+                database.close();
+            }
+            QSqlDatabase::removeDatabase("later-row");
+            return ran;
+        };
+        QVERIFY(sql("INSERT INTO teams (id, repository, document, revision, created_at, "
+                    "changed_at) SELECT id + 1, repository, document, revision, created_at, "
+                    "changed_at FROM teams"));
+        QVERIFY(sql("ALTER TABLE teams RENAME TO teams_saved"));
+        QVERIFY(sql("CREATE VIEW teams AS SELECT id, CASE WHEN id = (SELECT MAX(id) FROM "
+                    "teams_saved) THEN json_extract('invalid-json', '$') ELSE document END AS "
+                    "document FROM teams_saved"));
+        bool read = true;
+        QVERIFY(journal.teamDocuments(&read).isEmpty());
+        QVERIFY(!read);
+        QTest::ignoreMessage(QtWarningMsg, "Unable to read the teams from the journal.");
+        teams.load();
+        QVERIFY(!teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+        QVERIFY(sql("DROP VIEW teams"));
+        QVERIFY(sql("DELETE FROM teams_saved WHERE id = (SELECT MAX(id) FROM teams_saved)"));
+        QVERIFY(sql("ALTER TABLE teams_saved RENAME TO teams"));
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(TeamStoreTest)

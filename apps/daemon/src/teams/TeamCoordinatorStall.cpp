@@ -59,7 +59,9 @@ void TeamCoordinator::checkStall(const qint64 teamId) {
     QStringList idle;
     for (const Member& member : team->members) {
         const auto conversation = host_->teamConversation(member.sessionId);
-        if (conversation && !conversation->idle)
+        // A member that said what it waits for (team_wait) counts as at work until it is
+        // woken to check: it is not nudged and the leader is not woken on its account.
+        if (isWaiting(member.sessionId) || (conversation && !conversation->idle))
             anyoneWorking = true;
         else
             idle.append(member.sessionId);

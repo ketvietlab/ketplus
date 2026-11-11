@@ -111,6 +111,13 @@ void TeamCoordinator::releaseHeld(const qint64 teamId) {
         // A member that left meanwhile receives nothing of the team's.
         if (!current->member(message.toSession))
             continue;
+        // The user's Stop is respected here as well: what only wakes a member to go on by
+        // itself is dropped for a member that is stopped now, whenever it was held.
+        static const QStringList wakesOnly{QStringLiteral("wait"), QStringLiteral("message_failed"),
+                                           QStringLiteral("nudge"), QStringLiteral("stall")};
+        if (wakesOnly.contains(message.kind) &&
+            stalls_.value(teamId).stopped.contains(message.toSession))
+            continue;
         // Past the budget, wake() holds the rest again, still in order.
         wake(*current, message);
     }
@@ -161,16 +168,34 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     if (!team)
         return;
     const Member* member = team->member(sessionId);
+    const QString memberRole = member ? member->role : QString{};
     const qint64 teamId = team->id;
-    if (stoppedByUser == true)
+    if (stoppedByUser == true) {
         stalls_[teamId].stopped.insert(sessionId);
-    else if (stoppedByUser == false)
+        // The user's Stop also ends what the member asked to be woken for: the timer, and
+        // a wake that ended while the team was paused and is held for Resume.
+        cancelWait(sessionId);
+        QJsonArray kept;
+        for (const QJsonValue& value : team->held) {
+            const QJsonObject message = value.toObject();
+            if (message.value(QStringLiteral("kind")).toString() != QStringLiteral("wait") ||
+                message.value(QStringLiteral("to")).toString() != sessionId)
+                kept.append(value);
+        }
+        if (Team* changed = kept.size() == team->held.size() ? nullptr : mutableTeam(teamId)) {
+            const Team before = *changed;
+            changed->held = kept;
+            if (commit(*changed, before, QStringLiteral("daemon"), {}))
+                qWarning("Unable to drop the held wait of a stopped member.");
+        }
+    } else if (stoppedByUser == false) {
         stalls_[teamId].stopped.remove(sessionId);
+    }
     watchForStall(teamId);
     checkMerged(teamId);
-    if (member && member->role == role::developer)
+    if (memberRole == role::developer)
         checkLanes(teamId, sessionId);
-    else if (member && member->role == role::leader)
+    else if (memberRole == role::leader)
         sendDigest(teamId);
 }
 
