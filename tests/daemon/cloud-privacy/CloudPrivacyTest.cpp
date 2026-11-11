@@ -2041,6 +2041,34 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(reported(QStringLiteral("recovering")), QStringLiteral("unreachable"));
     }
 
+    // #125 and #429: the phone reads "Waiting for you" and the tags only from sealed metadata;
+    // the plaintext snapshot the relay sees carries neither.
+    void sealedMetadataCarriesWaitingAndTags() {
+        StoredSession session;
+        session.id = QStringLiteral("session-synthetic");
+        session.worktreePath = QStringLiteral("/synthetic/worktree");
+        session.adapter = QStringLiteral("claude");
+        session.state = QStringLiteral("ready");
+        session.generation = 1;
+        QJsonObject sealed = Access::metadata(session);
+        QVERIFY(!sealed.contains(QStringLiteral("awaitingReply")));
+        QVERIFY(!sealed.contains(QStringLiteral("tags")));
+        session.awaitingReply = true;
+        session.tags = {QStringLiteral("Release"), QStringLiteral("Custom")};
+        sealed =
+            Access::metadata(session, {}, {{QStringLiteral("release"), QStringLiteral("#d1453b")}});
+        QVERIFY(sealed.value(QStringLiteral("awaitingReply")).toBool());
+        const QJsonArray tags = sealed.value(QStringLiteral("tags")).toArray();
+        QCOMPARE(tags.size(), 2);
+        QCOMPARE(tags.at(0).toObject().value(QStringLiteral("color")).toString(),
+                 QStringLiteral("#d1453b"));
+        QCOMPARE(tags.at(1).toObject().value(QStringLiteral("color")).toString(),
+                 QStringLiteral("#5b6b7f"));
+        const QJsonObject plain = Access::snapshots({session}).first().toObject();
+        QVERIFY(!plain.contains(QStringLiteral("tags")));
+        QVERIFY(!plain.contains(QStringLiteral("awaitingReply")));
+    }
+
     // "ready" after a failure hides how the turn ended; the sealed metadata keeps it.
     void sealedMetadataCarriesTheLastTurnOutcome() {
         const auto outcome = [](const QString& state, const qint64 turns) {

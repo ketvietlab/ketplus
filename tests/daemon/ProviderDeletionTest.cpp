@@ -568,7 +568,9 @@ class ProviderDeletionTest final : public QObject {
         stored.id = "deleted";
         QVERIFY(!journal->upsertSession(stored));
         QVERIFY(q.exec("UPDATE session_tombstones SET deleted_at='2000-01-01T00:00:00.000Z'"));
-        q.finish();
+        // The journal owns the connection: release every handle on it before closing it.
+        q = QSqlQuery();
+        db = QSqlDatabase();
         journal.reset();
         journal = std::make_unique<LocalJournal>(path);
         QVERIFY(journal->isOpen());
@@ -584,9 +586,9 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(q.exec("DROP TRIGGER stall_purge"));
         // The daemon drains the rest one pass per event-loop turn.
         CodexAdapter adapter(dir.filePath("missing-fixture-provider"));
-        SessionHost host(journal.get(), &adapter);
+        auto host = std::make_unique<SessionHost>(journal.get(), &adapter);
         bool ticked = false;
-        QTimer::singleShot(0, &host, [&] { ticked = true; });
+        QTimer::singleShot(0, host.get(), [&] { ticked = true; });
         QTRY_VERIFY(!journal->hasPendingHistoryPurge());
         QVERIFY(ticked);
         QVERIFY(q.exec("SELECT count(*) FROM events WHERE session_id='deleted'"));
@@ -595,6 +597,10 @@ class ProviderDeletionTest final : public QObject {
         q.finish();
         QCOMPARE(journal->eventsAfter("unrelated", 1, 0), unrelatedBefore);
         QCOMPARE(journal->purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Idle);
+        // The host reads the journal until it is destroyed, so it goes first.
+        host.reset();
+        q = QSqlQuery();
+        db = QSqlDatabase();
         journal.reset();
         LocalJournal reopened(path);
         QVERIFY(reopened.isOpen());

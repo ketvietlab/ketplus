@@ -899,7 +899,7 @@ class AgentMessagingTest final : public QObject {
                 .toObject()
                 .value("tools")
                 .toArray();
-        QCOMPARE(tools.size(), 5);
+        QCOMPARE(tools.size(), 6); // with work_report and request_user_decision
         const QJsonObject whoami = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"},
              {"id", 3},

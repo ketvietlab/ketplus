@@ -342,8 +342,12 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 [this, name = provider->name()] { catalogCache_.invalidate(name); });
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
-                if (method == "account/updated")
+                if (method == "account/updated") {
                     catalogCache_.invalidate("codex");
+                    // The CLI signed in, out or changed account: a sign-in, key or limit
+                    // failure reported for the old account no longer applies.
+                    readiness_.forget(QStringLiteral("codex"));
+                }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
     if (claude != nullptr)
@@ -603,6 +607,12 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = setSessionArchived(request);
     } else if (type == QStringLiteral("session.tags.set")) {
         result = setSessionTags(request);
+    } else if (type == QStringLiteral("tags.catalog")) {
+        result = tagCatalog();
+    } else if (type == QStringLiteral("tags.catalog.set")) {
+        result = setTagCatalog(request);
+    } else if (type == QStringLiteral("session.mark_done")) {
+        result = markSessionDone(request);
     } else if (type == QStringLiteral("session.delete")) {
         result = deleteSession(request);
     } else if (type == QStringLiteral("session.output.read") ||
@@ -2572,6 +2582,8 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.mark_seen") ||
            messageType == QStringLiteral("session.set_archived") ||
            messageType == QStringLiteral("session.tags.set") ||
+           messageType == QStringLiteral("tags.catalog.set") ||
+           messageType == QStringLiteral("session.mark_done") ||
            messageType == QStringLiteral("session.delete") ||
            messageType == QStringLiteral("session.steer") ||
            messageType == QStringLiteral("session.interrupt") ||

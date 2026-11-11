@@ -189,6 +189,9 @@ int main(int argc, char** argv) {
         // The mock's header: one tag, and a reviewer picker with nobody assigned.
         active.insert("tags", QVariantList{QVariantMap{{"label", "Review"}, {"color", "#7c5cd6"}}});
         active.insert("tagsEditable", true);
+        // The mock's workspace/error: the turn failed, as the session reports it.
+        if (transcript == "error" && work != "running")
+            active.insert("status", "Error");
         conversations[0] = active;
         QObject::connect(&view, &ketplus::AgentWorkspaceView::reviewerRequested, &view,
                          [&view] { view.acceptReviewerState({{"available", true}}); });

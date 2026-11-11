@@ -270,7 +270,7 @@ class ProviderTranscriptTest : public QObject {
                 edits.append(entry.value("fileChanges").toList().first().toMap());
         }
         const QStringList expected{"fileRead | Read: a/b.qml",
-                                   "codeSearch | Searched code: Animation",
+                                   "codeSearch | Searched code: “Animation” in modules",
                                    "fileSearch | Searched files: **/*.qml",
                                    "fileChange | Edited 1 file",
                                    "fileChange | Edited 1 file",
@@ -545,9 +545,11 @@ class ProviderTranscriptTest : public QObject {
             const auto busy = failure(message);
             QCOMPARE(busy.value("title").toString(), "Selected model is at capacity");
             QCOMPARE(busy.value("subtype").toString(), "modelCapacity");
+            // As the mock words it: Codex's error names Codex, Anthropic's names Claude.
+            const QString provider = message.startsWith("Selected") ? "Codex" : "Claude";
             QCOMPARE(busy.value("body").toString(),
-                     "The model could not finish the turn. Try again, or pick another model "
-                     "for this conversation.");
+                     provider + " could not finish the turn. Try again, or pick another model "
+                                "for this conversation.");
         }
         // A failed turn's message can be the agent's own last words: they keep the generic row.
         const auto words = failure("The database is overloaded; inspect its connection pool next.");
