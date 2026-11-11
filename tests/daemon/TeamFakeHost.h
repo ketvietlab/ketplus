@@ -20,6 +20,9 @@ class FakeHost final : public TeamHostPort {
         const auto it = conversations.constFind(sessionId);
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
     }
+    QString conversationRepository(const QString& sessionId) const override {
+        return conversations.contains(sessionId) ? QStringLiteral("/repo") : QString{};
+    }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
         ++made;
@@ -120,7 +123,6 @@ class FakeHost final : public TeamHostPort {
                                   .number = id,
                                   .title = id,
                                   .provider = provider,
-                                  .repository = QStringLiteral("/repo"),
                                   .idle = true});
     }
     void setIdle(const QString& id, const bool idle) { conversations[id].idle = idle; }

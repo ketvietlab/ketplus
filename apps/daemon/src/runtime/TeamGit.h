@@ -10,6 +10,9 @@ namespace ketplus::daemon::team_git {
 
 // A short git call in `directory`; nothing when git failed or did not answer in time.
 [[nodiscard]] std::optional<QString> output(const QString& directory, const QStringList& arguments);
+// The main worktree of the repository `worktreePath` is in (a bare repository is its own);
+// empty when the path is no repository or git did not answer in time.
+[[nodiscard]] QString repositoryOf(const QString& worktreePath);
 // The commit the task's branch points at in the team's repository; empty when unknown.
 [[nodiscard]] QString taskCommit(const teams::Team& team, const teams::Task& task);
 // Paths changed in the task's worktree against its base, committed or not.

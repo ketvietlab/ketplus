@@ -27,16 +27,20 @@ void git(const QString& directory, const QStringList& arguments) {
 }
 
 // Puts a `git` first on PATH that waits before it runs the real one, until it is destroyed.
+// With a log, it writes the arguments of each call there.
 struct SlowGit final {
     QByteArray path = qgetenv("PATH");
     bool installed = false;
 
-    explicit SlowGit(const QString& directory) {
+    explicit SlowGit(const QString& directory, const QString& log = {}) {
         const QString real = QStandardPaths::findExecutable(QStringLiteral("git"));
         QFile script(directory + QStringLiteral("/git"));
         if (real.isEmpty() || !QDir().mkpath(directory) || !script.open(QIODevice::WriteOnly))
             return;
-        script.write("#!/bin/sh\nsleep 0.3\nexec '" + real.toUtf8() + "' \"$@\"\n");
+        script.write("#!/bin/sh\n");
+        if (!log.isEmpty())
+            script.write("printf '%s\\n' \"$*\" >> '" + log.toUtf8() + "'\n");
+        script.write("sleep 0.3\nexec '" + real.toUtf8() + "' \"$@\"\n");
         script.close();
         installed = script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("PATH", directory.toUtf8() + ':' + path);
@@ -389,6 +393,85 @@ class TeamTaskGitProtocolTest final : public QObject {
         QCOMPARE(reply.value("error_code").toString(), QStringLiteral("authentication_failed"));
         // Git is left to finish what the review asked before the runtime goes.
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.host->teamChecksPending(), 30000);
+    }
+
+    // A repository the daemon has not seen is asked about off the event loop before the
+    // command that names it runs; a known one is answered inside the call.
+    void aFirstSeenRepositoryIsLearnedBeforeTheCommandRuns() {
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString repository = fixture.directory.filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
+                         "--allow-empty", "-m", "start"});
+        int ticks = 0;
+        QTimer pulse;
+        connect(&pulse, &QTimer::timeout, &pulse, [&ticks] { ++ticks; });
+        pulse.start(10);
+        const QString log = fixture.directory.filePath("git-calls");
+        const SlowGit slow(fixture.directory.filePath("bin"), log);
+        QVERIFY(slow.installed);
+        const auto lookups = [&log] {
+            QFile file(log);
+            return file.open(QIODevice::ReadOnly) ? file.readAll().count("--git-common-dir") : 0;
+        };
+
+        QJsonObject reply;
+        int ticksAtReply = 0;
+        const auto list = [&] {
+            reply = {};
+            ticks = 0;
+            fixture.host->handleCommandDeferred(
+                agent_test::request("team.list", {{"repository", repository}}), "desktop-test",
+                [&](const QJsonObject& result) {
+                    reply = result;
+                    ticksAtReply = ticks;
+                });
+        };
+        list();
+        QVERIFY(reply.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!reply.isEmpty(), 30000);
+        QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
+        QVERIFY2(ticksAtReply >= 10, qPrintable(QString::number(ticksAtReply)));
+        QCOMPARE(lookups(), 1);
+        // Known now: the next command that names it does not wait.
+        list();
+        QVERIFY(reply.value("ok").toBool());
+
+        // A team is created there without another question about the path.
+        reply = {};
+        fixture.host->handleCommandDeferred(
+            agent_test::request(
+                "team.create",
+                {{"repository", repository},
+                 {"name", "Shop"},
+                 {"integration_branch", "integration"},
+                 {"plan",
+                  QJsonObject{{"leader", QJsonObject{{"provider", "codex"}}},
+                              {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
+                              {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
+            "desktop-test", [&](const QJsonObject& result) { reply = result; });
+        QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
+        QCOMPARE(QFileInfo(reply.value("team").toObject().value("repository").toString())
+                     .canonicalFilePath(),
+                 QFileInfo(repository).canonicalFilePath());
+        // Its members start in the repository and are read with the team: one question in all.
+        QVERIFY(fixture.host
+                    ->handleCommand(
+                        agent_test::request(
+                            "team.get", {{"team_id", reply.value("team").toObject().value("id")}}),
+                        "desktop-test")
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(lookups(), 1);
+
+        // A client that is not the local one is refused inside the call, with nothing asked.
+        reply = {};
+        fixture.host->handleCommandDeferred(
+            agent_test::request("team.list", {{"repository", fixture.directory.filePath("other")}}),
+            "cloud-control-v2", [&](const QJsonObject& result) { reply = result; });
+        QCOMPARE(reply.value("error_code").toString(), QStringLiteral("forbidden"));
     }
 };
 

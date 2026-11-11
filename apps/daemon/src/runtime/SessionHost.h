@@ -288,6 +288,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0114, in SessionHostTeams.cpp.
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] QString conversationRepository(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
@@ -323,6 +324,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
+    [[nodiscard]] bool repositoryKnown(const QString& worktreePath) const;
+    void noteRepository(const QString& worktreePath, const QString& repository) const;
+    void learnRepositories(const QStringList& paths, std::function<void()> then);
+    [[nodiscard]] QStringList teamCommandPaths(const QJsonObject& payload) const;
     void startTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);

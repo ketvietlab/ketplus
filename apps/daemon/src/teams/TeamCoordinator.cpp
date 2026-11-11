@@ -139,7 +139,7 @@ std::optional<Candidate> TeamCoordinator::candidate(const QString& sessionId) co
         return std::nullopt;
     const Team* current = teamOf(sessionId);
     return Candidate{.sessionId = sessionId,
-                     .repository = conversation->repository,
+                     .repository = host_->conversationRepository(sessionId),
                      .provider = conversation->provider,
                      .teamId = current ? current->id : 0};
 }
