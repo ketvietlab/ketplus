@@ -132,31 +132,42 @@ void ExplorerPanelTest::togglesFoldersFromTheTree() {
 void ExplorerPanelTest::identityNamesTheSignedInAccount() {
     ketplus::ActivityBar bar;
     auto* identity = bar.findChild<QToolButton*>(QStringLiteral("productIdentityButton"));
+    auto* name = bar.findChild<QLabel*>(QStringLiteral("productIdentityName"));
+    auto* subtitle = bar.findChild<QLabel*>(QStringLiteral("productIdentitySubtitle"));
     auto* avatar = bar.findChild<QLabel*>(QStringLiteral("productIdentityAvatar"));
-    QVERIFY(identity && avatar);
-    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QVERIFY(identity && name && subtitle && avatar);
+    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
+    QCOMPARE(subtitle->text(), QStringLiteral("Personal workspace"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
-    // remote.status names the account (ADR 0109); an ampersand is not a mnemonic.
+    // The button draws no text of its own: a QToolButton would centre it.
+    QVERIFY(identity->text().isEmpty());
+    // remote.status names the account (ADR 0109); the name is plain text.
     bar.setAccount(QStringLiteral("Minh & Lan"));
-    QCOMPARE(identity->text(), QStringLiteral("Minh && Lan\nPersonal workspace"));
+    QCOMPARE(name->text(), QStringLiteral("Minh & Lan"));
+    QCOMPARE(name->textFormat(), Qt::PlainText);
+    QCOMPARE(identity->accessibleName(), QStringLiteral("Minh & Lan Personal workspace"));
     QCOMPARE(avatar->text(), ket::Avatar::initialsOf(QStringLiteral("Minh & Lan")));
     bar.setAccount(QStringLiteral("Minh Tran"));
     QCOMPARE(avatar->text(), QStringLiteral("MT"));
     QCOMPARE(identity->toolTip(), QStringLiteral("Minh Tran"));
-    // A long name ends in "…" inside the button and never widens the sidebar.
+    // Both lines start after the avatar, as in the mock, not centred in the button.
     bar.resize(ketplus::ActivityBar::kWidth, 600);
     bar.show();
     QVERIFY(QTest::qWaitForWindowExposed(&bar));
+    QTRY_VERIFY(name->width() > 0);
+    QVERIFY(name->x() > avatar->geometry().right());
+    QCOMPARE(subtitle->x(), name->x());
+    QVERIFY(name->x() - avatar->geometry().right() < 16);
+    // A long name ends in "…" inside the button and never widens the sidebar.
     const QString longName(60, QLatin1Char('W'));
     bar.setAccount(longName);
-    const QString firstLine = identity->text().section(QLatin1Char('\n'), 0, 0);
-    QVERIFY2(firstLine.endsWith(QChar(0x2026)), qPrintable(firstLine));
-    QVERIFY(identity->fontMetrics().horizontalAdvance(firstLine) < identity->width());
+    QVERIFY2(name->text().endsWith(QChar(0x2026)), qPrintable(name->text()));
+    QVERIFY(name->fontMetrics().horizontalAdvance(name->text()) <= name->width());
     QCOMPARE(identity->toolTip(), longName);
     QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
     // Signing out returns to the product name.
     bar.setAccount({});
-    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
 }
 
@@ -336,7 +347,8 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     QVERIFY(!visibleIds().contains(QStringLiteral("thread-3")));
     QVERIFY(!visibleIds().contains(QStringLiteral("thread-4")));
 
-    auto* showMore = bar.findChild<QToolButton*>(QStringLiteral("productShowMoreConversations"));
+    auto* showMore =
+        bar.findChild<QAbstractButton*>(QStringLiteral("productShowMoreConversations"));
     QVERIFY(showMore);
     QVERIFY(!showMore->isHidden());
     showMore->click();
@@ -563,16 +575,24 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
                     {"title", "Two"},
                     {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
     bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    auto* filter = bar.findChild<QComboBox*>("conversationTagFilter");
-    QVERIFY(filter && filter->isVisible());
-    filter->setCurrentIndex(filter->findData("UI"));
+    // As in the mock, no filter shows until a tag in the conversation header is chosen.
+    auto* filter = bar.findChild<QWidget*>("sidebarTagFilter");
+    QVERIFY(filter && !filter->isVisible());
+    bar.setTagFilter("UI");
+    QVERIFY(filter->isVisible());
+    QCOMPARE(filter->accessibleName(), QString("Tagged UI"));
     const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");
     QCOMPARE(rows.size(), 2);
     for (auto* row : rows)
         QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    filter->setCurrentIndex(0);
-    for (auto* row : rows)
-        QVERIFY(row->isVisible());
+    // New rows keep the active filter.
+    bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
+    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
+    QTest::mouseClick(filter->findChild<QAbstractButton*>("sidebarTagFilterClear"), Qt::LeftButton);
+    QVERIFY(!filter->isVisible());
+    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+        QTRY_VERIFY(row->isVisible());
     auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
     QVERIFY(warning && !warning->isVisible());
     bar.setStorageStatus({{"ok", true},

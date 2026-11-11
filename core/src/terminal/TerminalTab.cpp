@@ -47,6 +47,21 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
         if (!pendingCommandPath_.isEmpty()) {
             session_.sendBytes(commandForPath(std::exchange(pendingCommandPath_, {})));
         }
+        shellReady_ = false;
+        sinceStart_.start();
+        typePendingTextWhenReady();
+    });
+    // The shell is ready once its prompt has been drawn and output has paused.
+    promptSettled_.setSingleShot(true);
+    promptSettled_.setInterval(150);
+    connect(&session_, &TerminalSession::outputReceived, this, [this] {
+        if (!shellReady_)
+            promptSettled_.start();
+    });
+    connect(&promptSettled_, &QTimer::timeout, this, [this] {
+        shellReady_ = true;
+        if (!pendingTypedText_.isEmpty())
+            session_.sendPaste(std::exchange(pendingTypedText_, {}));
     });
     connect(&session_, &TerminalSession::exited, this,
             [this](const int exitCode) { setTitle(QStringLiteral("Exited (%1)").arg(exitCode)); });
@@ -82,6 +97,36 @@ bool TerminalTab::restart() {
 }
 
 void TerminalTab::stop() { session_.stop(); }
+
+void TerminalTab::typeText(const QString& text) {
+    // Typed, never run: a line break or another control character would run or edit it, since
+    // a paste is only bracketed when the shell asks for it.
+    QString typed;
+    typed.reserve(text.size());
+    for (const QChar character : text)
+        if (character.unicode() >= 0x20 && character.unicode() != 0x7f &&
+            character.category() != QChar::Other_Control)
+            typed.append(character);
+    if (session_.isRunning() && shellReady_) {
+        session_.sendPaste(typed);
+        return;
+    }
+    pendingTypedText_ = typed;
+    if (session_.isRunning())
+        typePendingTextWhenReady();
+}
+
+void TerminalTab::typePendingTextWhenReady() {
+    if (shellReady_ || pendingTypedText_.isEmpty())
+        return;
+    // A shell that prints nothing still gets the text, after at most three seconds.
+    constexpr qint64 longestWaitMs = 3000;
+    const qint64 left = longestWaitMs - (sinceStart_.isValid() ? sinceStart_.elapsed() : 0);
+    QTimer::singleShot(qMax<qint64>(0, left), this, [this] {
+        if (!shellReady_ && !pendingTypedText_.isEmpty())
+            promptSettled_.start(0);
+    });
+}
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
 

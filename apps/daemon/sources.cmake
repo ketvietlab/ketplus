@@ -81,6 +81,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/CodexItems.cpp
     src/runtime/CodexItems.h
     src/runtime/ProviderCatalogCache.cpp
+    src/runtime/ProviderErrorCode.cpp
     src/runtime/ProviderReadiness.cpp
     src/runtime/ProviderCatalogCache.h
     src/agents/AgentBroker.cpp
@@ -113,6 +114,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
     src/runtime/SessionHostArchive.cpp
+    src/runtime/SessionHostAwaiting.cpp
+    src/runtime/AwaitingReply.h
     src/runtime/SessionHostTags.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp

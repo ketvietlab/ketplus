@@ -60,6 +60,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptAgentNoteTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
+    AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
@@ -104,6 +105,9 @@ target_link_libraries(ketplus_transcript_window_model_tests PRIVATE Qt6::Test Qt
 
 ketplus_add_gui_test(ketplus_transcript_activity_groups_tests TranscriptActivityGroupsTest.cpp)
 target_link_libraries(ketplus_transcript_activity_groups_tests PRIVATE Qt6::Test ketplus_ai)
+
+ketplus_add_gui_test(ketplus_transcript_safety_tests TranscriptSafetyTest.cpp)
+target_link_libraries(ketplus_transcript_safety_tests PRIVATE Qt6::Test Qt6::Network Qt6::Quick ketplus_ai)
 
 ketplus_add_gui_test(ketplus_symbol_icon_tests SymbolIconTest.cpp)
 target_link_libraries(ketplus_symbol_icon_tests PRIVATE Qt6::Test ketplus_ai)

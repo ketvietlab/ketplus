@@ -928,13 +928,13 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             });
 
     const QPointer<AgentSessionManager> agents(agentManager_);
-    const auto providerRuntimes = [agents](SettingsProvidersPage::Reply reply) {
+    const auto providerRuntimes = [agents](const bool recheck, SettingsProvidersPage::Reply reply) {
         if (agents.isNull() || agents->appServer() == nullptr) {
             reply({}, SettingsProvidersPage::tr("Agents are not available."));
             return;
         }
         agents->appServer()->call(
-            QStringLiteral("provider/runtimeStatus"), {},
+            QStringLiteral("provider/runtimeStatus"), {{QStringLiteral("recheck"), recheck}},
             [reply = std::move(reply)](const QJsonObject& result, const QString& error) {
                 reply(result.value(QStringLiteral("providers")).toArray(), error);
             });
@@ -1021,6 +1021,8 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
         if (remoteControl_ != nullptr)
             remoteControl_->requestSignOut();
     });
+    connect(settingsWorkspace_, &SettingsWorkspacePage::typeInTerminalRequested, this,
+            &MainWindow::typeInTerminal);
     connect(settingsWorkspace_, &SettingsWorkspacePage::agentModelsRequested, this, [this] {
         setSettingsWorkspaceVisible(false);
         setAgentWorkspaceVisible(true);

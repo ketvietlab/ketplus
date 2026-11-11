@@ -20,8 +20,12 @@ add_library(ketplus_desktop_support STATIC
     src/app/RepositoryRouter.h
     src/app/SpotlightDialog.cpp
     src/app/SpotlightDialog.h
+    src/app/WaitingBadge.cpp
+    src/app/WaitingBadge.h
     src/workspace/ActivityBar.cpp
     src/workspace/ActivityBarAppearance.cpp
+    src/workspace/SidebarControls.cpp
+    src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
@@ -112,6 +116,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowLayout.cpp
     src/app/MainWindowNavigation.cpp
     src/app/MainWindowPanels.cpp
+    src/app/MainWindowDetailActions.cpp
     src/app/MainWindowWorkReport.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
@@ -131,6 +136,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsStoragePage.cpp
     src/app/SettingsStorageOverview.cpp
     src/app/SettingsStoragePage.h
+    src/app/ProviderSetupCard.cpp
+    src/app/ProviderSetupCard.h
     src/app/SettingsProvidersPage.cpp
     src/app/SettingsProvidersPage.h
     src/app/SettingsUpdatesPage.cpp
@@ -141,10 +148,6 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsRows.h
     src/app/SettingsWorkspacePage.cpp
     src/app/SettingsWorkspacePage.h
-    src/app/WorktreeStateProbe.cpp
-    src/app/WorktreeStateProbe.h
-    src/app/WorktreesWorkspacePage.cpp
-    src/app/WorktreesWorkspacePage.h
 )
 target_link_libraries(ketplus_desktop_shell PUBLIC
     Qt6::Concurrent

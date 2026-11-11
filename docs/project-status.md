@@ -28,16 +28,16 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
   through authenticated outbound Relay; this layer does not add SSH setup.
-  The Worktrees page follows the mock: each linked worktree shows its own Git
-  state, read by one read-only `git status` per worktree off the event loop
-  (`WorktreeStateProbe`); Prune appears only while a worktree folder is missing;
-  Manage opens New conversation here, Open in Files & Editor, Reveal in Finder,
-  Archive and Delete; Create worktree offers "Start a conversation in it".
+  There is no Worktrees page (ADR 0111): worktrees are created for a
+  conversation, from New conversation or the repository picker's Create
+  worktree… card, which moves that conversation to the new worktree, and
+  switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
-  separators and the kit empty state and avatar. Linux machines still connect
-  only through the Relay, so the mock's SSH wording, machine details and
-  Disconnect are not in the app.
+  separators and the kit empty state and avatar. Linux machines connect only
+  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
+  details and Disconnect, and its phone pairing dialog now follows the app's
+  scan, compare and approve flow (no typed pairing code).
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
@@ -53,10 +53,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  tag filtering and update pills. Storage pressure warnings consume the local
-  daemon's existing size-status contract. Tags come from the daemon catalog (ADR 0107);
-  waiting-for-reply renders only when metadata supplies it; automatic intent classification/reviewer orchestration
-  are separate behaviour work. Native acceptance remains deferred.
+  the mock's field-styled Quick search, a machine header with its chevron, and update
+  pills. A tag chosen in the conversation header filters the sidebar and shows as the
+  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
+  local daemon's existing size-status contract. Tags come from the daemon catalog
+  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+  `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
   Search, Source Control and Settings. First use opens a folder welcome surface;
@@ -565,9 +567,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   name and transcript right-click menus copies an idle Codex or Claude
   conversation through the provider's native fork and a journal copy. Cursor
   has no fork operation; forking from an earlier message is not offered yet.
-- The product sidebar opens a dedicated Worktrees workspace with live
-  conversation/activity state, create/manage actions, and the archived-items
-  route. Settings is a full workspace page rather than a modal popup while
+- Worktrees have no workspace of their own (ADR 0111); conversations create
+  and switch them. Settings is a full workspace page rather than a modal popup while
   continuing to reuse the public KetPlus CM settings controls and persistence.
 - Streaming presentation is coalesced, offscreen Markdown work is deferred, and
   an anchored live response can retain its displayed source while the user reads

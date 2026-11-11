@@ -756,7 +756,8 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
 QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
-    QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata) {
+    QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata,
+    const QHash<QString, QString>& tagColors) {
     QJsonArray sessions;
     const QString machineName = QHostInfo::localHostName().left(128);
     QHash<QString, QString> revisions;
@@ -799,6 +800,19 @@ QJsonArray CloudControlClient::sessionSnapshots(
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.
+            // #125 and #429: the phone counts the conversations waiting for the user and
+            // shows each conversation's tags in their colours (lower-case label -> colour).
+            if (session.awaitingReply)
+                (*metadata)[session.id].insert(QStringLiteral("awaitingReply"), true);
+            if (!session.tags.isEmpty()) {
+                QJsonArray tags;
+                for (const QString& tag : session.tags)
+                    tags.append(
+                        QJsonObject{{QStringLiteral("label"), tag},
+                                    {QStringLiteral("color"),
+                                     tagColors.value(tag.toLower(), QStringLiteral("#5b6b7f"))}});
+                (*metadata)[session.id].insert(QStringLiteral("tags"), tags);
+            }
             const QJsonObject agent = agentMetadata.value(session.id);
             for (auto it = agent.constBegin(); it != agent.constEnd(); ++it)
                 (*metadata)[session.id].insert(it.key(), it.value());

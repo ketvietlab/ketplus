@@ -45,6 +45,9 @@ class AgentWorktreeDialog final : public QWidget {
     [[nodiscard]] bool createWorktree() const;
     // Create worktree only: whether Agent Workspace opens on the new worktree.
     [[nodiscard]] bool startConversation() const;
+    // Create worktree from a conversation's picker: the worktree is that conversation's, so
+    // the "Start a conversation in it" choice gives way to a note saying so.
+    void useForThisConversation();
     // Conversation layout only: replaces the listed worktrees, keeping the one the
     // reader picked when it is still there.
     void setWorktrees(const QVector<GitWorktree>& worktrees);
@@ -80,6 +83,7 @@ class AgentWorktreeDialog final : public QWidget {
     QRadioButton* existingWorktree_{nullptr};
     QRadioButton* newWorktree_{nullptr};
     QAbstractButton* startConversation_{nullptr};
+    QLabel* conversationNote_{nullptr};
     QLabel* error_{nullptr};
     QLabel* status_{nullptr};
     // The card's primary action, once presented.
@@ -97,12 +101,18 @@ class AgentConversationDeleteDialog final : public QWidget {
   public:
     // `linkedWorktreePaths` are exactly the checkouts deletion would remove; they are listed so
     // the user sees what goes before opting in.
+    // `reference` is the conversation's @agent/NNNN, when it has one.
     explicit AgentConversationDeleteDialog(const QStringList& linkedWorktreePaths,
+                                           const QString& reference = {},
                                            QWidget* parent = nullptr);
     [[nodiscard]] bool deleteLinkedWorktree() const;
     [[nodiscard]] bool forceDeleteWorktree() const;
     // As AgentWorktreeDialog::present.
     ket::Dialog* present(QWidget* anchor);
+
+  signals:
+    // Archive instead: the card closes and the conversation is archived, not deleted.
+    void archiveRequested();
 
   private:
     void updateConfirm();

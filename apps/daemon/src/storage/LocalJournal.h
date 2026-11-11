@@ -58,6 +58,9 @@ struct StoredSession final {
     // The user's labels for this conversation, in the order they were added. Written only by
     // setSessionTags; upsertSession leaves them as they are.
     QStringList tags;
+    // #125: the last turn ended asking the user to approve or decide. Written only by
+    // setSessionAwaitingReply; upsertSession leaves it as it is.
+    bool awaitingReply{false};
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -244,6 +247,11 @@ class LocalJournal final {
     bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
     // Replaces the labels of this generation.
     bool setSessionTags(const QString& sessionId, qint64 generation, const QStringList& tags);
+    // #429: the labels this Mac offers, [{label, color}] in order. Until a catalog is stored
+    // (or when it cannot be read) the defaults; an empty array is a catalog with no tags.
+    [[nodiscard]] QJsonArray tagCatalog();
+    bool setTagCatalog(const QJsonArray& catalog);
+    bool setSessionAwaitingReply(const QString& sessionId, qint64 generation, bool awaiting);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;

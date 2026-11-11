@@ -159,7 +159,19 @@ QJsonArray tools() {
                      {QStringLiteral("limit"),
                       property(QStringLiteral("integer"),
                                QStringLiteral("At most this many messages (1-50)."))}})}},
-        workReportTool()};
+        workReportTool(),
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("request_user_decision")},
+            {QStringLiteral("description"),
+             QStringLiteral("Call once, just before your final answer, when that answer asks the "
+                            "user to approve, choose or decide something before work can go on. "
+                            "KetPlus then shows the conversation as Waiting for you instead of "
+                            "Completed. Do not call it for a plain summary or an optional idea.")},
+            {QStringLiteral("inputSchema"),
+             schema({{QStringLiteral("summary"),
+                      property(QStringLiteral("string"),
+                               QStringLiteral("What the user must decide, in one short line."))}},
+                    {QStringLiteral("summary")})}}};
 }
 
 QString operationFor(const QString& tool) {
@@ -173,6 +185,8 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.inbox");
     if (tool == QStringLiteral("work_report"))
         return QStringLiteral("agents.work_report");
+    if (tool == QStringLiteral("request_user_decision"))
+        return QStringLiteral("agents.request_user_decision");
     return {};
 }
 

@@ -423,12 +423,6 @@ void MainWindow::createActions() {
 
     gitMenu_->addSeparator();
     worktreeMenu_ = gitMenu_->addMenu(QStringLiteral("Switch Worktree"));
-    // The sidebar lists conversations, not worktrees; the Worktrees page is reached from here.
-    manageWorktreesAction_ = new QAction(tr("Manage worktrees…"), this);
-    manageWorktreesAction_->setObjectName(QStringLiteral("manageWorktreesAction"));
-    connect(manageWorktreesAction_, &QAction::triggered, this,
-            [this] { setWorktreesWorkspaceVisible(true); });
-    worktreeMenu_->addAction(manageWorktreesAction_);
     connect(worktreeMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildWorktreeMenu);
     connect(gitMenu_, &QMenu::aboutToShow, this, [this] {
         updateGitActions();

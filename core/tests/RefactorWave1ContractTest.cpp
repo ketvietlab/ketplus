@@ -325,19 +325,27 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
             ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels));
     };
     // The label a tooltip shows: the stylesheet's base QWidget size must not reach it.
-    const auto shownTooltipPixels = [] {
+    const auto shownTooltipPixels = [&] {
         QWidget anchor;
         anchor.resize(80, 40);
         anchor.show();
         QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
+        // On Windows the label is parented to the screen's desktop widget, so it is not a
+        // top-level widget there.
         int pixels = -1;
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
+        for (QWidget* widget : QApplication::allWidgets()) {
             if (widget->inherits("QTipLabel") && widget->isVisible()) {
                 widget->ensurePolished();
                 pixels = QFontInfo(widget->font()).pixelSize();
             }
         }
         QToolTip::hideText();
+#if defined(Q_OS_WIN)
+        // The offscreen platform on Windows shows no tooltip at all; the size it would have is
+        // still checked through QToolTip::font() and tooltipFontPixels().
+        if (pixels < 0)
+            return tooltipPixels();
+#endif
         return pixels;
     };
     {

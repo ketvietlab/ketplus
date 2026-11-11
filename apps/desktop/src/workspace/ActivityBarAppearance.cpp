@@ -58,8 +58,8 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int zoomPercen
         QComboBox#productMachineSelect QAbstractItemView { background:%4; color:%3; border:1px solid %11; selection-background-color:%8; }
         QToolButton[kvRole="productRepositoryGroup"] { padding: 0 0 0 8px; border: 0; background: transparent; color: %5; font-size: {{caption}}px; font-weight: 500; }
         QToolButton[kvRole="productRepositoryGroup"]:hover, QToolButton[kvRole="productRepositoryGroup"][activeRepository="true"] { color: %6; }
-        QToolButton[kvRole="productShowMoreConversations"] { padding: 0 0 0 8px; border: 0; background: transparent; color: %5; font-size: {{caption}}px; }
-        QToolButton[kvRole="productShowMoreConversations"]:hover { color: %6; }
+        QPushButton[kvRole="productShowMoreConversations"] { text-align: left; padding: 0 0 0 22px; border: 0; background: transparent; color: %6; font-size: {{px:13}}px; font-weight: 500; }
+        QPushButton[kvRole="productShowMoreConversations"]:hover { color: %3; }
         QToolButton[kvRole="productConversation"] { padding: 0; border: 0; border-radius: 6px; background: transparent; }
         QToolButton[kvRole="productConversation"]:hover, QToolButton[kvRole="productConversation"]:checked { background: %7; }
         QLabel[kvRole="productConversationTitle"] { color: %3; font-size: {{body}}px; font-weight: 400; }
@@ -72,6 +72,8 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int zoomPercen
         QToolButton[kvRole="productIdentity"]:hover { background: %7; }
         QToolButton[kvRole="productUpdateReady"] { margin: 0 2px 4px 2px; padding: 7px 9px; border: 1px solid %12; border-radius: 6px; background: %8; color: %12; font-size: {{caption}}px; font-weight: 550; }
         QToolButton[kvRole="productUpdateReady"]:hover { background: %7; }
+        QLabel#productIdentityName { background: transparent; color: %3; font-size: {{caption}}px; font-weight: 500; }
+        QLabel#productIdentitySubtitle { background: transparent; color: %5; font-size: {{micro}}px; }
         QLabel#productIdentityAvatar { border: 1px solid %11; border-radius: 14px; background: %4; color: %12; font-size: {{micro}}px; font-weight: 600; }
         QLabel#quickSearchShortcut { color: %5; font-size: {{micro}}px; }
         QLabel#sourceControlCountBadge { border: 1px solid %11; border-radius: 4px; color: %6; font-size: {{micro}}px; }

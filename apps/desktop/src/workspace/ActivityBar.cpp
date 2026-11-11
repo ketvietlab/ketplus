@@ -9,10 +9,10 @@
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetNavItem.h"
-#include "KetSelect.h"
 #include "KetUpdateCard.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
+#include "workspace/SidebarControls.h"
 #include "workspace/SymbolIcons.h"
 
 #include <QAbstractButton>
@@ -123,7 +123,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* brand = new QWidget(this);
     brand->setObjectName(QStringLiteral("productBrand"));
     brand->setProperty("kvRole", QStringLiteral("productBrand"));
-    chrome_geometry::fixedHeight(brand, 50);
+    chrome_geometry::fixedHeight(brand, 54); // the mock: 16 above the 24 px mark, 14 below
     auto* brandLayout = new QHBoxLayout(brand);
     chrome_geometry::margins(brandLayout, 4, 0, 2, 0);
     chrome_geometry::spacing(brandLayout, 6);
@@ -136,22 +136,20 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     brandLayout->addStretch();
     layout->addWidget(brand);
 
-    quickSearchButton_ =
-        new ket::NavItem(tr("Quick search"), ket::Icons::codeForLucide(u"search"), this);
+    // The mock's field-styled Quick search; it opens the command palette.
+    quickSearchButton_ = new SidebarSearchButton(tr("Quick search"), QStringLiteral("⌘ K"), this);
     quickSearchButton_->setObjectName(QStringLiteral("quickSearchButton"));
-    quickSearchButton_->setCheckable(false);
-    quickSearchButton_->setShortcutText(QStringLiteral("⌘ K"));
     connect(quickSearchButton_, &QAbstractButton::clicked, this,
             &ActivityBar::quickSearchRequested);
     layout->addWidget(quickSearchButton_);
-    chrome_geometry::addSpacing(layout, 12);
+    chrome_geometry::addSpacing(layout, 8);
 
     agentButton_ =
         addModeButton(symbols::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
     explorerButton_ = addModeButton(symbols::folder, tr("Files & Editor"), Mode::Explorer);
     sourceControlButton_ =
         addModeButton(symbols::gitBranch, tr("Source Control"), Mode::SourceControl);
-    remoteButton_ = addModeButton(symbols::unplug, tr("Connections"), Mode::Remote);
+    remoteButton_ = addModeButton(symbols::network, tr("Connections"), Mode::Remote);
     explorerButton_->setObjectName(QStringLiteral("explorerActivityButton"));
     sourceControlButton_->setObjectName(QStringLiteral("sourceControlActivityButton"));
     agentButton_->setObjectName(QStringLiteral("agentWorkspaceActivityButton"));
@@ -162,7 +160,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
         auto* button = navigationButtons.at(index);
         layout->addWidget(button);
         if (index + 1 < navigationButtons.size())
-            chrome_geometry::addSpacing(layout, 4);
+            chrome_geometry::addSpacing(layout, 2); // the mock's destination spacing
     }
 
     auto* contextScroll = new QScrollArea(this);
@@ -220,6 +218,14 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             emit machineRequested(machineSelect_->itemData(index).toString());
     });
     machineLayout->addWidget(machineSelect_, 1);
+    // The mock's chevron beside the machine name opens the machine list.
+    auto* machineChooser =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"chevron-down")),
+                            tr("Choose machine"), machineRow);
+    machineChooser->setObjectName(QStringLiteral("productMachineChooser"));
+    machineChooser->setControlSize(ket::ControlSize::Small);
+    connect(machineChooser, &QAbstractButton::clicked, machineSelect_, &QComboBox::showPopup);
+    machineLayout->addWidget(machineChooser);
     repositoryAction_ = new QToolButton(machineRow);
     repositoryAction_->setProperty("kvRole", QStringLiteral("productSectionAction"));
     repositoryAction_->setProperty("symbolName", QByteArray(symbols::plus));
@@ -251,13 +257,18 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             &ActivityBar::conversationContextMenuRequested);
     connect(repositoryList_, &SidebarRepositoryList::conversationRenameRequested, this,
             &ActivityBar::conversationRenameRequested);
-    tagFilter_ = new ket::Select(context);
-    tagFilter_->setObjectName(QStringLiteral("conversationTagFilter"));
-    tagFilter_->setAccessibleName(tr("Filter conversations by tag"));
-    tagFilter_->hide();
-    connect(tagFilter_, &QComboBox::currentIndexChanged, this,
-            [this] { repositoryList_->setTagFilter(tagFilter_->currentData().toString()); });
-    contextLayout->addWidget(tagFilter_);
+    // The mock's active tag filter: set from a tag in the conversation header, cleared here.
+    tagFilter_ = new SidebarTagFilterChip(context);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, this,
+            [this] { repositoryList_->setTagFilter({}); });
+    auto* tagFilterRow = new QWidget(context);
+    auto* tagFilterLayout = new QVBoxLayout(tagFilterRow);
+    chrome_geometry::margins(tagFilterLayout, 6, 0, 6, 6);
+    tagFilterLayout->addWidget(tagFilter_);
+    tagFilterRow->setVisible(false);
+    connect(tagFilter_, &SidebarTagFilterChip::cleared, tagFilterRow, &QWidget::hide);
+    tagFilterRow_ = tagFilterRow;
+    contextLayout->addWidget(tagFilterRow);
     contextLayout->addWidget(repositoryList_);
     contextLayout->addStretch();
     contextScroll->setWidget(context);
@@ -266,7 +277,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     storageNotice_ = new QWidget(this);
     storageNotice_->setObjectName(QStringLiteral("sidebarStorageWarning"));
     auto* storageLayout = new QVBoxLayout(storageNotice_);
-    storageLayout->setContentsMargins(0, 0, 0, 0);
+    chrome_geometry::margins(storageLayout, 0, 0, 0, 6); // the mock's gap above Update ready
     auto* storageSettings = new StorageNoticeButton(storageNotice_);
     storageSettings->setObjectName(QStringLiteral("sidebarStorageSettings"));
     storageSettings->setCursor(Qt::PointingHandCursor);
@@ -293,7 +304,8 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityButton_ = new QToolButton(this);
     identityButton_->setObjectName(QStringLiteral("productIdentityButton"));
     identityButton_->setProperty("kvRole", QStringLiteral("productIdentity"));
-    identityButton_->setText(tr("KetPlus\nPersonal workspace")); // until setAccount names someone
+    // The button draws no text: a QToolButton centres it, and the mock starts both lines after
+    // the avatar. The labels below carry it, and the button keeps it as its accessible name.
     identityButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     chrome_geometry::fixedHeight(identityButton_, 52);
     // The sidebar sets the width; a long account name is elided, never widens it.
@@ -309,11 +321,30 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
     chrome_geometry::fixedSize(identityChevron, 14, 14);
     identityChevron->setAttribute(Qt::WA_TransparentForMouseEvents);
+    identityName_ = new QLabel(identityButton_);
+    identityName_->setObjectName(QStringLiteral("productIdentityName"));
+    identitySubtitle_ = new QLabel(tr("Personal workspace"), identityButton_);
+    identitySubtitle_->setObjectName(QStringLiteral("productIdentitySubtitle"));
+    auto* identityLines = new QVBoxLayout;
+    chrome_geometry::spacing(identityLines, 1);
+    for (auto* line : {identityName_, identitySubtitle_}) {
+        line->setTextFormat(Qt::PlainText); // the name comes from the relay
+        line->setAttribute(Qt::WA_TransparentForMouseEvents);
+        identityLines->addWidget(line);
+    }
+    // The two lines sit together in the middle of the 52 px row.
+    identityLines->insertStretch(0);
+    identityLines->addStretch();
     auto* identityRow = new QHBoxLayout(identityButton_);
     identityRow->setSizeConstraint(QLayout::SetNoConstraint);
-    chrome_geometry::margins(identityRow, 0, 0, 10, 0);
-    identityRow->addStretch();
+    chrome_geometry::margins(identityRow, 43, 0, 10, 0);
+    chrome_geometry::spacing(identityRow, 8);
+    identityRow->addLayout(identityLines, 1);
     identityRow->addWidget(identityChevron);
+    // The name never widens the button; it is elided whenever its label resizes.
+    identityName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    identityName_->installEventFilter(this);
+    refreshIdentityText();
     // Settings and account entry points live in the user menu instead of the sidebar footer.
     userMenu_ = new QMenu(this);
     userMenu_->setObjectName(QStringLiteral("productUserMenu"));
@@ -394,21 +425,18 @@ void ActivityBar::setAccount(const QString& name) {
 
 void ActivityBar::refreshIdentityText() {
     // A long name ends in "…" before the chevron; the tooltip keeps all of it.
-    QString name = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
-    const auto* chevron =
-        identityButton_->findChild<QLabel*>(QStringLiteral("productIdentityChevron"));
-    const int gap = 8;
-    const int available = identityButton_->width() - identityAvatar_->geometry().right() - gap -
-                          (chevron != nullptr ? chevron->width() + 10 + gap : 0);
-    // Before it is laid out the button has no width yet; its first resize elides.
-    if (identityButton_->isVisible() && available > 0)
-        name = identityButton_->fontMetrics().elidedText(name, Qt::ElideRight, available);
-    name.replace(QLatin1Char('&'), QStringLiteral("&&")); // not a mnemonic
-    identityButton_->setText(name + QLatin1Char('\n') + tr("Personal workspace"));
+    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    QString name = full;
+    // Before it is laid out the label has no width yet; the button's resize elides again.
+    if (identityButton_->isVisible() && identityName_->width() > 0)
+        name =
+            identityName_->fontMetrics().elidedText(full, Qt::ElideRight, identityName_->width());
+    identityName_->setText(name);
+    identityButton_->setAccessibleName(full + QLatin1Char(' ') + identitySubtitle_->text());
 }
 
 bool ActivityBar::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == identityButton_ &&
+    if ((watched == identityButton_ || watched == identityName_) &&
         (event->type() == QEvent::Resize || event->type() == QEvent::FontChange ||
          event->type() == QEvent::StyleChange))
         refreshIdentityText();
@@ -499,32 +527,14 @@ void ActivityBar::setSourceControlCount(const int count) {
 }
 
 void ActivityBar::setTagFilter(const QString& tag) {
-    const int index = tagFilter_->findData(tag);
-    if (index >= 0)
-        tagFilter_->setCurrentIndex(index);
+    tagFilter_->setTag(tag.trimmed());
+    tagFilterRow_->setVisible(!tagFilter_->tag().isEmpty());
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
-    QStringList labels;
-    for (const auto& repository : repositories)
-        for (const auto& conversation : repository.conversations)
-            for (const auto& value : conversation.toMap().value("tags").toList()) {
-                const QString label =
-                    value.toMap().value("label", value.toString()).toString().trimmed();
-                if (!label.isEmpty() && !labels.contains(label))
-                    labels.append(label);
-            }
-    labels.sort(Qt::CaseInsensitive);
-    const QString selected = tagFilter_->currentData().toString();
-    const QSignalBlocker block(tagFilter_);
-    tagFilter_->clear();
-    tagFilter_->addItem(tr("All tags"), QString());
-    for (const auto& label : labels)
-        tagFilter_->addItem(label, label);
-    tagFilter_->setCurrentIndex(qMax(0, tagFilter_->findData(selected)));
-    tagFilter_->setVisible(!labels.isEmpty());
-    repositoryList_->setTagFilter(tagFilter_->currentData().toString());
+    repositoryList_->setTagFilter(tagFilter_->tag());
 }
 
 ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,

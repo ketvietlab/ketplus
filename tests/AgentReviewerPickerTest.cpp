@@ -94,7 +94,22 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QVERIFY(existing);
     QVERIFY(!menuItem(menu, "existingReviewerItem_2044"));
     QVERIFY(!menuItem(menu, "existingReviewerItem_3055"));
-    QVERIFY(!menuItem(menu, "newCodexReviewerItem"));
+    // ADR 0067: Codex is listed, as the mock, but cannot review; Claude names its model.
+    auto* codex = menuItem(menu, "newCodexReviewerItem");
+    QVERIFY(codex && !codex->property("enabled").toBool());
+    QCOMPARE(menuItem(menu, "newClaudeReviewerItem")->property("text").toString(),
+             QStringLiteral("Claude"));
+    view.setModels({QVariantMap{{"provider", "claude"},
+                                {"model", "claude-opus-5-5"},
+                                {"displayName", "Opus 5.5"},
+                                {"isDefault", true}},
+                    QVariantMap{{"provider", "codex"},
+                                {"model", "gpt-5.6-sol"},
+                                {"displayName", "GPT-5.6 Sol"},
+                                {"isDefault", true}}});
+    QTRY_COMPARE(menuItem(menu, "newClaudeReviewerItem")->property("text").toString(),
+                 QStringLiteral("Claude · Opus 5.5"));
+    QCOMPARE(codex->property("text").toString(), QStringLiteral("Codex · GPT-5.6 Sol"));
     QVERIFY(QMetaObject::invokeMethod(existing, "triggered"));
     QCOMPARE(changes.size(), 1);
     QCOMPARE(changes.first().at(0).toString(), QStringLiteral("1093"));

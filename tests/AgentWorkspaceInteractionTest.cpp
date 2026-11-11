@@ -1068,6 +1068,18 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
                  QStringLiteral("Turn finished · 2 background tasks"));
     QTRY_VERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_build")));
     QVERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_review")));
+    // A finished task reads as the mock words it: what it reported, else how long it took.
+    const auto meta = [bar](const QVariantMap& task) {
+        QVariant text;
+        QMetaObject::invokeMethod(bar, "meta", Q_RETURN_ARG(QVariant, text),
+                                  Q_ARG(QVariant, QVariant(task)));
+        return text.toString();
+    };
+    QCOMPARE(meta({{"status", "completed"}, {"duration_ms", 48000}}), QString("Completed in 48s"));
+    QCOMPARE(meta({{"status", "failed"}, {"duration_ms", 10000}, {"result", "2 tests failed"}}),
+             QString("2 tests failed"));
+    QCOMPARE(meta({{"status", "stopped"}, {"duration_ms", 75000}}),
+             QString("Stopped after 1m 15s"));
 
     // Stop asks first, then sends the task id.
     QSignalSpy stops(&view, &ketplus::AgentWorkspaceView::backgroundTaskStopRequested);

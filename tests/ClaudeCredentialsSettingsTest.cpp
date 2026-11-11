@@ -73,7 +73,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         ketplus::ThemeManager theme(*qApp);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
         ketplus::SettingsWorkspacePage page(
-            dialog, [](auto reply) { reply({}, {}); }, nullptr,
+            dialog, [](bool, auto reply) { reply({}, {}); }, nullptr,
             [](const QString&, const QJsonObject&, auto reply) {
                 reply({{"configured", true},
                        {"enabled", true},
@@ -227,7 +227,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
     void settingsNameTheBundledFonts() {
         ketplus::ThemeManager theme(*qApp);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
-        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        ketplus::SettingsWorkspacePage page(dialog, [](bool, auto reply) { reply({}, {}); });
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
         auto* family = page.findChild<QComboBox*>("editorFontFamily");
@@ -260,7 +260,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         ketplus::ThemeManager theme(*qApp);
         theme.previewMode(ketplus::ThemeManager::Mode::Light);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
-        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        ketplus::SettingsWorkspacePage page(dialog, [](bool, auto reply) { reply({}, {}); });
         QJsonObject status;
         std::function<void(const QJsonObject&)> pending;
         page.setAccountStatusReader(
@@ -319,7 +319,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         ketplus::ThemeManager theme(*qApp);
         theme.previewMode(ketplus::ThemeManager::Mode::Light);
         auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
-        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        ketplus::SettingsWorkspacePage page(dialog, [](bool, auto reply) { reply({}, {}); });
         page.resize(1440, 900);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
@@ -338,6 +338,12 @@ class ClaudeCredentialsSettingsTest : public QObject {
                     page.grab().save(QDir(directory).filePath(QStringLiteral("%1.png").arg(id))));
         }
         QVERIFY(seen.size() >= 7);
+        // As in the mock, Restore defaults is not offered where it would reset nothing.
+        for (const auto* id : {"account-devices", "storage", "updates"}) {
+            page.showSection(QString::fromLatin1(id));
+            QCoreApplication::processEvents();
+            QVERIFY2(page.findChild<QWidget*>("settingsWorkspaceFooter")->isHidden(), id);
+        }
     }
 };
 QTEST_MAIN(ClaudeCredentialsSettingsTest)

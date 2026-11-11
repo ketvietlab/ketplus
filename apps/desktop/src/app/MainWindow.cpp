@@ -4,7 +4,6 @@
 #include "app/RepositoryRouter.h"
 #include "app/SettingsWorkspacePage.h"
 #include "app/SpotlightDialog.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "atlas/AtlasTab.h"
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
@@ -362,13 +361,9 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         productSurface->setStyleSheet(QStringLiteral("QWidget#productSurface { background: %1; }")
                                           .arg(theme_.palette().pageBackground));
         applyThemeToEditors();
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     });
     connect(git_, &GitService::snapshotChanged, this, &MainWindow::updateGitSnapshot);
     connect(git_, &GitService::worktreesChanged, this, &MainWindow::updateWorktrees);
-    connect(git_, &GitService::snapshotChanged, this, [this] { refreshWorktreesWorkspace(); });
-    connect(git_, &GitService::worktreesChanged, this, [this] { refreshWorktreesWorkspace(); });
     connect(git_, &GitService::diffReady, this,
             [this](const QString& path, const GitDiffMode mode, const QString& diff,
                    const QString& error) {
@@ -440,7 +435,7 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::openFile(const QString& filePath) {
-    if (atlasWorkspaceMode_ || worktreesWorkspaceMode_ || settingsWorkspaceMode_)
+    if (atlasWorkspaceMode_ || settingsWorkspaceMode_)
         setExplorerVisible(true);
     if (showAgentFile(filePath))
         return;
@@ -532,13 +527,8 @@ void MainWindow::setShellMode(const ActivityBar::Mode mode) {
         setCompactConversationWindow(false);
     if (mode != ActivityBar::Mode::Search)
         hideSearchPanel();
-    if (mode == ActivityBar::Mode::Settings) {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->hide();
-        worktreesWorkspaceMode_ = false;
-    } else if (!(mode == ActivityBar::Mode::AgentWorkspace && worktreesWorkspaceMode_)) {
+    if (mode != ActivityBar::Mode::Settings)
         hideUtilityWorkspaces();
-    }
     activityBar_->setMode(mode);
     activityBar_->show();
     // Search keeps the editor on screen, so its encoding/EOL/language controls stay reachable.

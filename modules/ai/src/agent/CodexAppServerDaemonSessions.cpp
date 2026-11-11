@@ -65,6 +65,11 @@ void CodexAppServer::setupDaemonTransport() {
     });
     connect(daemon_, &remote::DaemonClient::eventReceived, this,
             &CodexAppServer::consumeDaemonEvent);
+    connect(daemon_, &remote::DaemonClient::noticeReceived, this,
+            [this](const QString& type, const QJsonObject& payload) {
+                if (type == QStringLiteral("tags.changed"))
+                    emit tagsChanged(payload);
+            });
     connect(daemon_, &remote::DaemonClient::disconnected, this, [](const QString&) {});
 }
 
@@ -171,7 +176,8 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
             callback({}, QStringLiteral("KetPlus Daemon does not support %1 yet.").arg(method));
             return;
         }
-        daemon_->call(QStringLiteral("provider.runtime_status"), {}, {}, -1, std::move(callback));
+        daemon_->call(QStringLiteral("provider.runtime_status"), params, {}, -1,
+                      std::move(callback));
         return;
     }
     if (method == QStringLiteral("thread/start")) {
@@ -516,6 +522,40 @@ void CodexAppServer::setDaemonSessionTags(const QString& sessionId, const QStrin
     daemon_->call(QStringLiteral("session.tags.set"),
                   {{QStringLiteral("tags"), QJsonArray::fromStringList(tags)}}, sessionId,
                   found->generation, std::move(callback));
+}
+
+bool CodexAppServer::hasTagCatalogSupport() const noexcept {
+    return daemon_ && daemon_->hasFeature(QStringLiteral("tags.catalog/1"));
+}
+
+void CodexAppServer::readTagCatalog(ResponseCallback callback) {
+    if (!hasTagCatalogSupport()) {
+        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
+        return;
+    }
+    daemon_->call(QStringLiteral("tags.catalog"), {}, {}, -1, std::move(callback));
+}
+
+void CodexAppServer::setTagCatalog(const QJsonArray& tags, const QJsonObject& renames,
+                                   ResponseCallback callback) {
+    if (!hasTagCatalogSupport()) {
+        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
+        return;
+    }
+    daemon_->call(QStringLiteral("tags.catalog.set"),
+                  {{QStringLiteral("tags"), tags}, {QStringLiteral("renames"), renames}}, {}, -1,
+                  std::move(callback));
+}
+
+void CodexAppServer::markDaemonSessionDone(const QString& sessionId, ResponseCallback callback) {
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (!daemon_ || !daemon_->hasFeature(QStringLiteral("session.awaiting_reply/1")) ||
+        found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("This daemon does not track conversations waiting for you."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.mark_done"), {}, sessionId, found->generation,
+                  std::move(callback));
 }
 
 void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {

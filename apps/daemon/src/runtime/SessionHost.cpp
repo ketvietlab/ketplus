@@ -342,8 +342,12 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 [this, name = provider->name()] { catalogCache_.invalidate(name); });
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
-                if (method == "account/updated")
+                if (method == "account/updated") {
                     catalogCache_.invalidate("codex");
+                    // The CLI signed in, out or changed account: a sign-in, key or limit
+                    // failure reported for the old account no longer applies.
+                    readiness_.forget(QStringLiteral("codex"));
+                }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
     if (claude != nullptr)
@@ -602,6 +606,12 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = setSessionArchived(request);
     } else if (type == QStringLiteral("session.tags.set")) {
         result = setSessionTags(request);
+    } else if (type == QStringLiteral("tags.catalog")) {
+        result = tagCatalog();
+    } else if (type == QStringLiteral("tags.catalog.set")) {
+        result = setTagCatalog(request);
+    } else if (type == QStringLiteral("session.mark_done")) {
+        result = markSessionDone(request);
     } else if (type == QStringLiteral("session.delete")) {
         result = deleteSession(request);
     } else if (type == QStringLiteral("session.output.read") ||
@@ -767,6 +777,9 @@ void SessionHost::handleProviderQuery(
         return;
     }
     if (type == QStringLiteral("provider.runtime_status")) {
+        // Check again (#170): forget reported sign-in failures and read every probe afresh.
+        if (payload.value(QStringLiteral("recheck")).toBool())
+            readiness_.recheck(QDateTime::currentSecsSinceEpoch());
         providerRuntimeStatus(std::move(callback));
         return;
     }
@@ -2174,11 +2187,13 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             abandonTurnApprovals(session->stored.id);
         }
         const QJsonObject providerError = params.value(QStringLiteral("error")).toObject();
-        appendProviderEvent(
-            *session, QStringLiteral("runtime.error"),
-            {{QStringLiteral("code"), providerError.value(QStringLiteral("code")).toString()},
-             {QStringLiteral("message"),
-              providerError.value(QStringLiteral("message")).toString()}});
+        QJsonObject failure{
+            {QStringLiteral("message"), providerError.value(QStringLiteral("message")).toString()}};
+        // Codex's own reason, which runtime.error's `code` is classified from first (ADR 0110).
+        const QJsonValue info = providerError.value(QStringLiteral("codexErrorInfo"));
+        if (!info.isUndefined() && !info.isNull())
+            failure.insert(QStringLiteral("provider_info"), info);
+        appendProviderEvent(*session, QStringLiteral("runtime.error"), failure);
         for (const QString& path : std::exchange(session->materializedAttachments, {}))
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
@@ -2565,6 +2580,8 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.mark_seen") ||
            messageType == QStringLiteral("session.set_archived") ||
            messageType == QStringLiteral("session.tags.set") ||
+           messageType == QStringLiteral("tags.catalog.set") ||
+           messageType == QStringLiteral("session.mark_done") ||
            messageType == QStringLiteral("session.delete") ||
            messageType == QStringLiteral("session.steer") ||
            messageType == QStringLiteral("session.interrupt") ||

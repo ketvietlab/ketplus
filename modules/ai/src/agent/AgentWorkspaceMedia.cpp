@@ -61,8 +61,6 @@ namespace {
 constexpr int codeStyledProperty = QTextFormat::UserProperty + 1;
 constexpr int mermaidStyledProperty = QTextFormat::UserProperty + 2;
 constexpr int mermaidInsetProperty = QTextFormat::UserProperty + 3;
-constexpr qreal inlineCodePaddingX = 4;
-constexpr qreal inlineCodePaddingY = 2;
 
 // The document and its overlay frames use the same scaled recipe dimensions.
 qreal recipePixels(qreal value) {
@@ -83,47 +81,29 @@ bool sameCodeBlock(const QTextBlock& first, const QTextBlock& second) {
                second.blockFormat().property(QTextFormat::BlockQuoteLevel);
 }
 
-// The chip behind inline code reaches inlineCodePaddingX past the glyphs on both
-// sides. Tracking the character before a code run and the run's last character
-// by that much keeps the chip off the neighbouring text, as a browser's padding
-// would. Only the layout moves; the text and what copies stay the same.
-void spaceAroundInlineCode(const QTextBlock& block) {
-    QList<int> spaced;
-    bool previousCode = false;
-    int previousEnd = -1;
+// Qt's Markdown importer colours links from the palette when it parses, so a theme change
+// left them in the old theme's colour. They take the kit's link colour on every format pass.
+void recolourLinks(const QTextBlock& block, const QColor& linkColor) {
+    QList<std::pair<int, int>> stale;
     for (auto it = block.begin(); !it.atEnd(); ++it) {
         const auto fragment = it.fragment();
-        if (!fragment.isValid())
-            continue;
         const auto format = fragment.charFormat();
-        const bool code = !format.isImageFormat() && format.fontFixedPitch();
-        if (code && !previousCode && previousEnd > block.position())
-            spaced.append(previousEnd - 1);
-        if (!code && previousCode)
-            spaced.append(previousEnd - 1);
-        previousCode = code;
-        previousEnd = fragment.position() + fragment.length();
+        if (fragment.isValid() && format.isAnchor() && !format.isImageFormat() &&
+            format.foreground().color() != linkColor)
+            stale.append({fragment.position(), fragment.position() + fragment.length()});
     }
-    if (previousCode)
-        spaced.append(previousEnd - 1);
-    for (const int position : std::as_const(spaced)) {
+    QTextCharFormat colour;
+    colour.setForeground(linkColor);
+    for (const auto& [start, end] : std::as_const(stale)) {
         QTextCursor cursor(block);
-        cursor.setPosition(position + 1);
-        const auto current = cursor.charFormat();
-        if (current.isImageFormat() ||
-            (current.fontLetterSpacingType() == QFont::AbsoluteSpacing &&
-             qFuzzyCompare(current.fontLetterSpacing(), inlineCodePaddingX)))
-            continue;
-        QTextCharFormat spacing;
-        spacing.setFontLetterSpacingType(QFont::AbsoluteSpacing);
-        spacing.setFontLetterSpacing(inlineCodePaddingX);
-        cursor.setPosition(position, QTextCursor::KeepAnchor);
-        cursor.mergeCharFormat(spacing);
+        cursor.setPosition(start);
+        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        cursor.mergeCharFormat(colour);
     }
 }
 
-// Inline code naming a file in the worktree becomes a link the transcript opens. The chip
-// splits a span into fragments, so whole runs of code are read before linking.
+// Inline code naming a file in the worktree becomes a link the transcript opens. A span may
+// be split into fragments, so whole runs of code are read before linking.
 void linkFileReferences(const QTextBlock& block, TranscriptFileLinks& links,
                         const QColor& linkColor) {
     struct Run final {
@@ -173,7 +153,7 @@ void styleMessageCharacters(const QTextBlock& block, const qreal textPixelSize, 
     // Qt sets inline code in the platform fixed font at full size, which made
     // it the loudest thing in a sentence and a different face from the code
     // blocks. It now uses the code-block family a step smaller in the body
-    // colour; messageInlineCode() gives the view the rounded chips drawn behind it.
+    // colour, without a chip, as the kit's Markdown and the mock draw it.
     struct Change final {
         int start;
         int end;
@@ -210,7 +190,6 @@ void styleMessageCharacters(const QTextBlock& block, const qreal textPixelSize, 
         cursor.setPosition(change.end, QTextCursor::KeepAnchor);
         cursor.mergeCharFormat(change.format);
     }
-    spaceAroundInlineCode(block);
 }
 
 } // namespace
@@ -687,10 +666,27 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                     continue;
                 textDocument->addResource(QTextDocument::ImageResource, source, image);
             }
+            // An inline photo draws as an 88 px thumbnail. The document keeps it at that size
+            // for this screen, however large the file, rather than the full decode.
+            const qreal thumbnailBound = 88.0 * density;
+            if (!isMermaid && qMax(image.width(), image.height()) > thumbnailBound) {
+                const QSize natural = image.size();
+                image = image.scaled(QSizeF(thumbnailBound, thumbnailBound).toSize(),
+                                     Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                image.setDevicePixelRatio(density);
+                // Whole pixels would round the aspect ratio; the row keeps the file's own.
+                image.setText(QStringLiteral("ketplus-natural-size"),
+                              QStringLiteral("%1x%2").arg(natural.width()).arg(natural.height()));
+                textDocument->addResource(QTextDocument::ImageResource, source, image);
+            }
             const qreal naturalWidth =
                 rasterMermaid ? image.width() / 2.0 : image.deviceIndependentSize().width();
             qreal width = qMin(naturalWidth, qMax(1.0, availableWidth - 2));
-            qreal height = width * image.height() / image.width();
+            const auto natural = image.text(QStringLiteral("ketplus-natural-size")).split(u'x');
+            const qreal aspect = natural.size() == 2 && natural.at(0).toInt() > 0
+                                     ? natural.at(1).toDouble() / natural.at(0).toDouble()
+                                     : qreal(image.height()) / image.width();
+            qreal height = width * aspect;
             if (!isMermaid) {
                 // Inline Markdown photos follow attachment thumbnail bounds too.
                 const qreal scale = qMin(1.0, 88.0 / qMax(width, height));
@@ -754,6 +750,7 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                                                                      : recipe.heading3Pixels)
                                             : fontPixelSize;
         styleMessageCharacters(block, textPixelSize, heading, monoFamily, recipe, zoom);
+        recolourLinks(block, linkColor);
         linkFileReferences(block, fileLinks_, linkColor);
         const auto heightType =
             containsImage ? QTextBlockFormat::MinimumHeight : QTextBlockFormat::FixedHeight;
@@ -917,61 +914,6 @@ QVariantMap AgentWorkspaceView::mermaidLayout(QObject* document, const QString& 
     layout.insert(QStringLiteral("blocks"), blocks);
     layout.insert(QStringLiteral("codeFences"), codeFences);
     return layout;
-}
-
-QVariantList AgentWorkspaceView::messageInlineCode(QObject* document) const {
-    auto* quickDocument = qobject_cast<QQuickTextDocument*>(document);
-    if (!quickDocument || !quickDocument->textDocument())
-        return {};
-    auto* textDocument = quickDocument->textDocument();
-    auto* layout = textDocument->documentLayout();
-    QVariantList chips;
-    for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
-        if (isCodeBlock(block) || !block.layout())
-            continue;
-        const QTextLayout* textLayout = block.layout();
-        // Line positions are relative to the block, whose rect already carries
-        // the offsets of any list or table frame around it.
-        const QPointF origin = layout->blockBoundingRect(block).topLeft();
-        const auto isCode = [](const QTextFragment& fragment) {
-            return fragment.isValid() && fragment.charFormat().fontFixedPitch() &&
-                   !fragment.charFormat().isImageFormat();
-        };
-        for (auto it = block.begin(); !it.atEnd();) {
-            const auto fragment = it.fragment();
-            ++it;
-            if (!isCode(fragment))
-                continue;
-            // The padding splits a run's last character into its own fragment;
-            // the run still gets one chip.
-            const int start = fragment.position() - block.position();
-            int end = start + fragment.length();
-            for (; !it.atEnd() && isCode(it.fragment()); ++it)
-                end = it.fragment().position() + it.fragment().length() - block.position();
-            const QFontMetricsF metrics(fragment.charFormat().font());
-            // A span that wraps gets one chip per line, as in a browser.
-            for (int index = 0; index < textLayout->lineCount(); ++index) {
-                const QTextLine line = textLayout->lineAt(index);
-                const int from = qMax(start, line.textStart());
-                const int to = qMin(end, line.textStart() + line.textLength());
-                if (from >= to)
-                    continue;
-                const qreal left = line.cursorToX(from);
-                // The run's last character is tracked by the padding already
-                // (spaceAroundInlineCode); a line that wraps mid-run is not.
-                const qreal right = line.cursorToX(to) + (to == end ? 0 : inlineCodePaddingX);
-                // The glyphs sit on the line's baseline; the chip hugs the code
-                // font rather than the roomy prose line height.
-                const qreal top = line.y() + line.ascent() - metrics.ascent();
-                chips.append(QVariantMap{
-                    {"x", origin.x() + left - inlineCodePaddingX},
-                    {"y", origin.y() + top - inlineCodePaddingY},
-                    {"width", right - left + inlineCodePaddingX},
-                    {"height", metrics.ascent() + metrics.descent() + 2 * inlineCodePaddingY}});
-            }
-        }
-    }
-    return chips;
 }
 
 QSize AgentWorkspaceView::messageImageSize(const QUrl& source) const {
