@@ -159,7 +159,9 @@ its account. When it ends an idle member is woken to check (message kind `wait`)
 automatic turn counted against the budget and held while the team is paused; a member
 that already works again is left alone. A member has one wait, a new one replaces it; the
 user's Stop, leaving the team and deleting the team end it, and the Stop also drops a
-wake that is held because the wait ended while the team was paused. Waits are kept in memory: a
+wake that is held because the wait ended while the team was paused. Resume asks again:
+a held `wait`, `message_failed`, `nudge` or `stall` is not delivered to a member that
+is stopped at that moment. Waits are kept in memory: a
 daemon restart loses them and the watchdog takes over. The reviewer does not wait.
 
 **A message outside the team that failed.** When a member's message to a conversation

@@ -111,6 +111,13 @@ void TeamCoordinator::releaseHeld(const qint64 teamId) {
         // A member that left meanwhile receives nothing of the team's.
         if (!current->member(message.toSession))
             continue;
+        // The user's Stop is respected here as well: what only wakes a member to go on by
+        // itself is dropped for a member that is stopped now, whenever it was held.
+        static const QStringList wakesOnly{QStringLiteral("wait"), QStringLiteral("message_failed"),
+                                           QStringLiteral("nudge"), QStringLiteral("stall")};
+        if (wakesOnly.contains(message.kind) &&
+            stalls_.value(teamId).stopped.contains(message.toSession))
+            continue;
         // Past the budget, wake() holds the rest again, still in order.
         wake(*current, message);
     }

@@ -5,6 +5,8 @@
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
 
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -153,6 +155,45 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(team().held.size(), 2);
         teams_->memberTurnEnded("dev1", true);
         QCOMPARE(team().held.size(), 1);
+        host_.messages.clear();
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        QCOMPARE(kinds(), QStringList{"wait>dev2"});
+    }
+
+    // Resume asks again whether the member is stopped: a held report of a failed message is
+    // dropped too, and so is a held wait whose removal at the Stop could not be stored.
+    void resumeDoesNotWakeAStoppedMember() {
+        (void)inProgress();
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        teams_->outsideMessageFailed("dev1", "#4629", "turn_failed");
+        QCOMPARE(team().held.size(), 1);
+        teams_->memberTurnEnded("dev1", true);
+        host_.messages.clear();
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        QVERIFY2(host_.messages.isEmpty(), qPrintable(kinds().join(',')));
+    }
+
+    void aStopWhoseSaveFailedStillHoldsAtResume() {
+        (void)inProgress();
+        QVERIFY(teams_->wait(team_, "dev1", 1, "CI").ok());
+        QVERIFY(teams_->wait(team_, "dev2", 1, "a deployment").ok());
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(!teams_->isWaiting("dev1") && !teams_->isWaiting("dev2"), 2000);
+        QCOMPARE(team().held.size(), 2);
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", "stop-save");
+            database.setDatabaseName(directory_.filePath("journal.sqlite3"));
+            QVERIFY(database.open());
+            QSqlQuery query(database);
+            QVERIFY(query.exec("CREATE TRIGGER no_save BEFORE UPDATE ON teams BEGIN SELECT "
+                               "RAISE(ABORT, 'not now'); END"));
+            QTest::ignoreMessage(QtWarningMsg, "Unable to drop the held wait of a stopped member.");
+            teams_->memberTurnEnded("dev1", true);
+            QCOMPARE(team().held.size(), 2);
+            QVERIFY(query.exec("DROP TRIGGER no_save"));
+            database.close();
+        }
+        QSqlDatabase::removeDatabase("stop-save");
         host_.messages.clear();
         QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
         QCOMPARE(kinds(), QStringList{"wait>dev2"});
