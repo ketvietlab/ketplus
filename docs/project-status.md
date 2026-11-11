@@ -79,6 +79,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   tag that opens the team, has no Reviewer choice (the team's reviewer reviews its
   tasks), and its tag menu starts with a disabled "Role · Set by team" row. Leaving the
   team brings the Reviewer choice back with its setting.
+  Team page (#466): Open team shows the team in the workspace area: what waits for the
+  user (decisions with the recommended choice first, answered in place through
+  `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
+  members, and the updates from `team.get`, newest first. Paused and queue banners explain
+  why turns wait. `team.changed` rebuilds it in place and keeps the scroll position. A
+  task opens its description, criteria, dependencies and full history, and Hand over…
+  sends `team.task.handover` with another developer and a required reason. Without the
+  team it explains teams and offers New team.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

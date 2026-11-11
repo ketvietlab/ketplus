@@ -25,6 +25,13 @@ inline constexpr int maximumDevelopers = 5;
 [[nodiscard]] int order(const QString& role);
 } // namespace team_roles
 
+namespace team_states {
+// The task states in the order of the page's filter.
+[[nodiscard]] QStringList all();
+// "To do", …, "Ready to merge" (#468), "Done".
+[[nodiscard]] QString label(const QString& state);
+} // namespace team_states
+
 struct TeamFolderMenuActions {
     QAction* open = nullptr;
     QAction* addMember = nullptr;

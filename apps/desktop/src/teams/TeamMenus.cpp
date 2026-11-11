@@ -80,6 +80,27 @@ int team_roles::order(const QString& role) {
     return 1;
 }
 
+QStringList team_states::all() {
+    return {QStringLiteral("todo"),    QStringLiteral("in_progress"), QStringLiteral("in_review"),
+            QStringLiteral("blocked"), QStringLiteral("ready"),       QStringLiteral("done")};
+}
+
+QString team_states::label(const QString& state) {
+    if (state == QStringLiteral("todo"))
+        return tr("To do");
+    if (state == QStringLiteral("in_progress"))
+        return tr("In progress");
+    if (state == QStringLiteral("in_review"))
+        return tr("In review");
+    if (state == QStringLiteral("blocked"))
+        return tr("Blocked");
+    if (state == QStringLiteral("ready"))
+        return tr("Ready to merge");
+    if (state == QStringLiteral("done"))
+        return tr("Done");
+    return state;
+}
+
 TeamFolderMenuActions addTeamFolderMenuActions(QMenu& menu, const QJsonObject& team) {
     TeamFolderMenuActions actions;
     actions.open = entry(menu, tr("Open team"), u"users", "openTeamAction");

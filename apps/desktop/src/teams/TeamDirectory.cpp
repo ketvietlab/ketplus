@@ -47,9 +47,11 @@ void TeamDirectory::store(const QJsonObject& team) {
     if (id.isEmpty())
         return;
     // Events and answers can arrive in either order; the higher revision wins.
+    // An answer that repeats what is known changes nothing (a page re-reads on every change).
     if (const auto it = teams_.constFind(id);
-        it != teams_.cend() && it->value(QStringLiteral("revision")).toInteger() >
-                                   team.value(QStringLiteral("revision")).toInteger())
+        it != teams_.cend() &&
+        (*it == team || it->value(QStringLiteral("revision")).toInteger() >
+                            team.value(QStringLiteral("revision")).toInteger()))
         return;
     teams_.insert(id, team);
     emit changed();

@@ -6,16 +6,21 @@
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
+#include "git/GitChangesPanel.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
+#include "teams/TeamPage.h"
+#include "terminal/TerminalPanel.h"
 #include "workspace/ActivityBar.h"
+#include "workspace/ExplorerPanel.h"
 
 #include <QAction>
 #include <QCursor>
 #include <QJsonArray>
 #include <QMenu>
 #include <QPointer>
+#include <QSplitter>
 #include <QStatusBar>
 
 #include <algorithm>
@@ -156,21 +161,53 @@ void MainWindow::showTeamMenu(const QString& teamId) {
 
 void MainWindow::openTeam(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
-    if (!team || agentManager_ == nullptr)
+    if (!team)
         return;
-    // Until the team page (#466): the leader's conversation.
-    QString leader;
-    for (const auto& value : team->value(QStringLiteral("members")).toArray())
-        if (value.toObject().value(QStringLiteral("role")).toString() == QStringLiteral("leader"))
-            leader = value.toObject().value(QStringLiteral("session_id")).toString();
+    showTeamPage(teamId, team->value(QStringLiteral("repository")).toString());
+}
+
+void MainWindow::openTeamMember(const QString& sessionId) {
+    if (agentManager_ == nullptr || sessionId.isEmpty())
+        return;
     for (const QString& path : agentManager_->conversationPaths().values())
         for (const QVariant& value : agentManager_->conversations(path)) {
             const QVariantMap conversation = value.toMap();
-            if (conversation.value(QStringLiteral("sessionId")).toString() == leader) {
+            if (conversation.value(QStringLiteral("sessionId")).toString() == sessionId) {
                 openSidebarConversation(path, conversation.value(QStringLiteral("id")).toString());
                 return;
             }
         }
+    statusBar()->showMessage(tr("That conversation is not listed in this window yet."), 5000);
+}
+
+void MainWindow::showTeamPage(const QString& teamId, const QString& repository) {
+    if (teams_ == nullptr)
+        return;
+    hideUtilityWorkspaces();
+    setRemoteWorkspaceVisible(false);
+    setAtlasWorkspaceVisible(false);
+    setAgentWorkspaceVisible(false);
+    teamPage_ = new TeamPage(teams_, teamId, repository, workspaceSplit_);
+    workspaceSplit_->addWidget(teamPage_);
+    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(teamPage_), 1);
+    connect(teamPage_, &TeamPage::conversationRequested, this, &MainWindow::openTeamMember);
+    connect(teamPage_, &TeamPage::addMemberRequested, this, &MainWindow::showAddTeamMemberDialog);
+    connect(teamPage_, &TeamPage::newTeamRequested, this, &MainWindow::showNewTeamDialog);
+    connect(teamPage_, &TeamPage::deleteRequested, this, &MainWindow::deleteTeam);
+    connect(teamPage_, &TeamPage::removeMemberRequested, this, &MainWindow::leaveTeam);
+    for (QWidget* other :
+         {static_cast<QWidget*>(explorer_), static_cast<QWidget*>(gitChanges_),
+          static_cast<QWidget*>(terminal_), static_cast<QWidget*>(agentDetailPane_)})
+        if (other != nullptr)
+            other->hide();
+    editorSplit_->hide();
+    teamPage_->show();
+    workspaceSplit_->show();
+    mainSplit_->show();
+    QList<int> sizes(workspaceSplit_->count(), 0);
+    sizes[workspaceSplit_->indexOf(teamPage_)] = qMax(800, workspaceSplit_->width());
+    workspaceSplit_->setSizes(sizes);
+    teamPage_->setFocus();
 }
 
 void MainWindow::joinTeam(const QString& teamId, const QString& sessionId) {

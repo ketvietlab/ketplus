@@ -70,6 +70,7 @@ class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
 class TeamDirectory;
+class TeamPage;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -243,6 +244,9 @@ class MainWindow final : public QMainWindow {
     void updateTeamRoles();
     void showTeamMenu(const QString& teamId);
     void openTeam(const QString& teamId);
+    // #466: the team page in the workspace, or the empty page of a repository without one.
+    void showTeamPage(const QString& teamId, const QString& repository);
+    void openTeamMember(const QString& sessionId);
     void joinTeam(const QString& teamId, const QString& sessionId);
     void leaveTeam(const QString& teamId, const QString& sessionId);
     void deleteTeam(const QString& teamId);
@@ -448,6 +452,7 @@ class MainWindow final : public QMainWindow {
     RemoteControlView* remoteControl_{nullptr};
     remote::DaemonClient* accountDaemon_{nullptr};
     TeamDirectory* teams_{nullptr};
+    QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     // The Create worktree card asked to open Agent Workspace on what it creates.
