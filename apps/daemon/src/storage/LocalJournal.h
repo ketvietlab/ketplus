@@ -179,6 +179,21 @@ struct LargeEventFragment final {
     QString errorMessage;
 };
 
+// ADR 0112: one entry of a team's append-only Updates log.
+struct TeamUpdateRecord final {
+    qint64 id{0};
+    qint64 teamId{0};
+    QString at;
+    QString actor;
+    QString kind;
+    QString taskId;
+    QString text;
+    QJsonObject data;
+    // Starts the leader's digest (ADR 0112 §7); other updates ride along.
+    bool actionable{false};
+    bool digested{false};
+};
+
 class LocalJournal final {
   public:
     // 2: mcpToolCall metadata-only projection with sanitized argument summaries (ADR 0008).
@@ -465,6 +480,23 @@ class LocalJournal final {
     conversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
+    // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at
+    // most one team. insertTeam returns the new id, which is never reused.
+    [[nodiscard]] std::optional<qint64> insertTeam(const QString& repository, QJsonObject document,
+                                                   const QStringList& sessions,
+                                                   QString* error = nullptr);
+    // Replaces the document when the stored revision is `expectedRevision`.
+    bool saveTeam(qint64 teamId, qint64 expectedRevision, const QJsonObject& document,
+                  const QStringList& sessions, QString* error = nullptr);
+    bool deleteTeam(qint64 teamId, QString* error = nullptr);
+    [[nodiscard]] QList<QJsonObject> teamDocuments() const;
+    [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
+    [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
+                                                         QString* error = nullptr);
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
+                                                      int limit) const;
+    bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: the conversation's current work report ledger, empty before its first report.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
     // Stores a ledger whose version is newer than the stored one.
@@ -473,6 +505,8 @@ class LocalJournal final {
 
   private:
     bool initializeAgents();
+    bool initializeTeams();
+    bool writeTeamMembers(qint64 teamId, const QStringList& sessions, QString* error);
     bool initializeRemoteAudit();
     // The audit's eventual 90-day, 10,000-row cap. Run from pruneRetention and every 256 audit
     // rows, because commands refused before they ran store no command result to trigger it.

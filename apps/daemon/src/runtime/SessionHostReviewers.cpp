@@ -38,6 +38,11 @@ QJsonObject SessionHost::conversationReviewer(const QJsonObject& request, const 
     if (const auto checked = checkedSession(request, &session); !checked.isEmpty())
         return checked;
     const QString sessionId = session->stored.id;
+    // ADR 0112: the team's reviewer reviews a member's tasks; the setting waits meanwhile.
+    if (apply && teams_->isMember(sessionId))
+        return failure(QStringLiteral("team_member"),
+                       QStringLiteral("This conversation is on a team, whose reviewer reviews "
+                                      "its tasks."));
     if (apply) {
         const auto payload = request.value(QStringLiteral("payload")).toObject();
         QString reviewerId = payload.value(QStringLiteral("reviewer_session_id")).toString();

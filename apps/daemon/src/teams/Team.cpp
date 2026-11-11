@@ -1,0 +1,290 @@
+#include "teams/Team.h"
+
+#include <QDateTime>
+
+namespace ketplus::daemon::teams {
+namespace {
+
+QJsonArray strings(const QStringList& values) { return QJsonArray::fromStringList(values); }
+
+QStringList stringList(const QJsonValue& value) {
+    QStringList result;
+    for (const auto& item : value.toArray())
+        result.append(item.toString());
+    return result;
+}
+
+QJsonObject toJson(const HistoryEntry& entry) {
+    QJsonObject json{{QStringLiteral("at"), entry.at},
+                     {QStringLiteral("actor"), entry.actor},
+                     {QStringLiteral("kind"), entry.kind},
+                     {QStringLiteral("text"), entry.text}};
+    if (!entry.data.isEmpty())
+        json.insert(QStringLiteral("data"), entry.data);
+    return json;
+}
+
+HistoryEntry historyFromJson(const QJsonObject& json) {
+    return {.at = json.value(QStringLiteral("at")).toString(),
+            .actor = json.value(QStringLiteral("actor")).toString(),
+            .kind = json.value(QStringLiteral("kind")).toString(),
+            .text = json.value(QStringLiteral("text")).toString(),
+            .data = json.value(QStringLiteral("data")).toObject()};
+}
+
+Member memberFromJson(const QJsonObject& json) {
+    return {.sessionId = json.value(QStringLiteral("session_id")).toString(),
+            .role = json.value(QStringLiteral("role")).toString(),
+            .name = json.value(QStringLiteral("name")).toString(),
+            .lane = json.value(QStringLiteral("lane")).toString(),
+            .paths = stringList(json.value(QStringLiteral("paths"))),
+            .joinedAt = json.value(QStringLiteral("joined_at")).toString()};
+}
+
+Task taskFromJson(const QJsonObject& json) {
+    Task task;
+    task.id = json.value(QStringLiteral("id")).toString();
+    task.title = json.value(QStringLiteral("title")).toString();
+    task.description = json.value(QStringLiteral("description")).toString();
+    task.lane = json.value(QStringLiteral("lane")).toString();
+    task.dependsOn = stringList(json.value(QStringLiteral("depends_on")));
+    for (const auto& value : json.value(QStringLiteral("criteria")).toArray())
+        task.criteria.append({.text = value.toObject().value(QStringLiteral("text")).toString(),
+                              .met = value.toObject().value(QStringLiteral("met")).toBool()});
+    task.owner = json.value(QStringLiteral("owner")).toString();
+    task.state = json.value(QStringLiteral("state")).toString(state::todo);
+    task.resumeState = json.value(QStringLiteral("resume_state")).toString();
+    task.question = json.value(QStringLiteral("question")).toString();
+    task.branch = json.value(QStringLiteral("branch")).toString();
+    task.worktree = json.value(QStringLiteral("worktree")).toString();
+    task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
+    task.headCommit = json.value(QStringLiteral("head_commit")).toString();
+    task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
+    task.round = json.value(QStringLiteral("round")).toInt();
+    task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
+    task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
+    task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
+    for (const auto& value : json.value(QStringLiteral("history")).toArray())
+        task.history.append(historyFromJson(value.toObject()));
+    return task;
+}
+
+Decision decisionFromJson(const QJsonObject& json) {
+    return {.id = json.value(QStringLiteral("id")).toString(),
+            .kind = json.value(QStringLiteral("kind")).toString(QStringLiteral("question")),
+            .question = json.value(QStringLiteral("question")).toString(),
+            .context = json.value(QStringLiteral("context")).toString(),
+            .choices = stringList(json.value(QStringLiteral("choices"))),
+            .recommended = json.value(QStringLiteral("recommended")).toString(),
+            .taskId = json.value(QStringLiteral("task_id")).toString(),
+            .raisedBy = json.value(QStringLiteral("raised_by")).toString(),
+            .raisedAt = json.value(QStringLiteral("raised_at")).toString(),
+            .state = json.value(QStringLiteral("state")).toString(QStringLiteral("open")),
+            .answer = json.value(QStringLiteral("answer")).toString(),
+            .answeredAt = json.value(QStringLiteral("answered_at")).toString(),
+            .reason = json.value(QStringLiteral("reason")).toString()};
+}
+
+} // namespace
+
+QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }
+
+const Member* Team::member(const QString& sessionId) const {
+    for (const Member& entry : members)
+        if (entry.sessionId == sessionId)
+            return &entry;
+    return nullptr;
+}
+
+Member* Team::member(const QString& sessionId) {
+    for (Member& entry : members)
+        if (entry.sessionId == sessionId)
+            return &entry;
+    return nullptr;
+}
+
+const Member* Team::memberWithRole(const QString& wanted) const {
+    for (const Member& entry : members)
+        if (entry.role == wanted)
+            return &entry;
+    return nullptr;
+}
+
+int Team::count(const QString& wanted) const {
+    int total = 0;
+    for (const Member& entry : members)
+        total += entry.role == wanted ? 1 : 0;
+    return total;
+}
+
+const Task* Team::task(const QString& wanted) const {
+    for (const Task& entry : tasks)
+        if (entry.id == wanted)
+            return &entry;
+    return nullptr;
+}
+
+Task* Team::task(const QString& wanted) {
+    for (Task& entry : tasks)
+        if (entry.id == wanted)
+            return &entry;
+    return nullptr;
+}
+
+Decision* Team::decision(const QString& wanted) {
+    for (Decision& entry : decisions)
+        if (entry.id == wanted)
+            return &entry;
+    return nullptr;
+}
+
+int Team::openDecisions() const {
+    int total = 0;
+    for (const Decision& entry : decisions)
+        total += entry.state == QStringLiteral("open") ? 1 : 0;
+    return total;
+}
+
+QStringList Team::memberSessions() const {
+    QStringList sessions;
+    for (const Member& entry : members)
+        sessions.append(entry.sessionId);
+    return sessions;
+}
+
+QJsonObject toJson(const Member& member) {
+    QJsonObject json{{QStringLiteral("session_id"), member.sessionId},
+                     {QStringLiteral("role"), member.role},
+                     {QStringLiteral("name"), member.name},
+                     {QStringLiteral("joined_at"), member.joinedAt}};
+    if (member.role == role::developer) {
+        json.insert(QStringLiteral("lane"), member.lane);
+        json.insert(QStringLiteral("paths"), strings(member.paths));
+    }
+    return json;
+}
+
+QJsonObject toJson(const Task& task, const bool withHistory) {
+    QJsonArray criteria;
+    int met = 0;
+    for (const Criterion& criterion : task.criteria) {
+        criteria.append(QJsonObject{{QStringLiteral("text"), criterion.text},
+                                    {QStringLiteral("met"), criterion.met}});
+        met += criterion.met ? 1 : 0;
+    }
+    QJsonObject json{{QStringLiteral("id"), task.id},
+                     {QStringLiteral("title"), task.title},
+                     {QStringLiteral("description"), task.description},
+                     {QStringLiteral("lane"), task.lane},
+                     {QStringLiteral("depends_on"), strings(task.dependsOn)},
+                     {QStringLiteral("criteria"), criteria},
+                     {QStringLiteral("criteria_met"), met},
+                     {QStringLiteral("owner"), task.owner},
+                     {QStringLiteral("state"), task.state},
+                     {QStringLiteral("resume_state"), task.resumeState},
+                     {QStringLiteral("question"), task.question},
+                     {QStringLiteral("branch"), task.branch},
+                     {QStringLiteral("worktree"), task.worktree},
+                     {QStringLiteral("base_commit"), task.baseCommit},
+                     {QStringLiteral("head_commit"), task.headCommit},
+                     {QStringLiteral("pull_request"), task.pullRequest},
+                     {QStringLiteral("round"), task.round},
+                     {QStringLiteral("outside_lane"), strings(task.outsideLane)},
+                     {QStringLiteral("assignment_held"), task.assignmentHeld},
+                     {QStringLiteral("leader_may_merge"), task.leaderMayMerge}};
+    if (withHistory) {
+        QJsonArray history;
+        for (const HistoryEntry& entry : task.history)
+            history.append(toJson(entry));
+        json.insert(QStringLiteral("history"), history);
+    }
+    return json;
+}
+
+QJsonObject toJson(const Decision& decision) {
+    return {{QStringLiteral("id"), decision.id},
+            {QStringLiteral("kind"), decision.kind},
+            {QStringLiteral("question"), decision.question},
+            {QStringLiteral("context"), decision.context},
+            {QStringLiteral("choices"), strings(decision.choices)},
+            {QStringLiteral("recommended"), decision.recommended},
+            {QStringLiteral("task_id"), decision.taskId},
+            {QStringLiteral("raised_by"), decision.raisedBy},
+            {QStringLiteral("raised_at"), decision.raisedAt},
+            {QStringLiteral("state"), decision.state},
+            {QStringLiteral("answer"), decision.answer},
+            {QStringLiteral("answered_at"), decision.answeredAt},
+            {QStringLiteral("reason"), decision.reason}};
+}
+
+QJsonObject toJson(const Team& team) {
+    QJsonArray members;
+    for (const Member& member : team.members)
+        members.append(toJson(member));
+    QJsonArray tasks;
+    int done = 0;
+    for (const Task& task : team.tasks) {
+        tasks.append(toJson(task));
+        done += task.state == state::done ? 1 : 0;
+    }
+    QJsonArray decisions;
+    for (const Decision& decision : team.decisions)
+        decisions.append(toJson(decision));
+    return {{QStringLiteral("id"), QString::number(team.id)},
+            {QStringLiteral("repository"), team.repository},
+            {QStringLiteral("name"), team.name},
+            {QStringLiteral("goal"), team.goal},
+            {QStringLiteral("integration_branch"), team.integrationBranch},
+            {QStringLiteral("merge_policy"), team.mergePolicy},
+            {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
+            {QStringLiteral("paused"), team.paused},
+            {QStringLiteral("paused_reason"), team.pausedReason},
+            {QStringLiteral("shared_paths"), strings(team.sharedPaths)},
+            {QStringLiteral("max_rounds"), team.maxRounds},
+            {QStringLiteral("turn_budget"), team.turnBudget},
+            {QStringLiteral("automatic_turns"), team.automaticTurns},
+            {QStringLiteral("plan_approved"), team.planApproved},
+            {QStringLiteral("members"), members},
+            {QStringLiteral("tasks"), tasks},
+            {QStringLiteral("tasks_done"), done},
+            {QStringLiteral("decisions"), decisions},
+            {QStringLiteral("open_decisions"), team.openDecisions()},
+            {QStringLiteral("next_task"), team.nextTask},
+            {QStringLiteral("next_decision"), team.nextDecision},
+            {QStringLiteral("revision"), team.revision},
+            {QStringLiteral("created_at"), team.createdAt},
+            {QStringLiteral("changed_at"), team.changedAt}};
+}
+
+Team teamFromJson(const QJsonObject& json) {
+    Team team;
+    team.id = json.value(QStringLiteral("id")).toString().toLongLong();
+    team.repository = json.value(QStringLiteral("repository")).toString();
+    team.name = json.value(QStringLiteral("name")).toString();
+    team.goal = json.value(QStringLiteral("goal")).toString();
+    team.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
+    team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
+    team.leaderWritesRequirements =
+        json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
+    team.paused = json.value(QStringLiteral("paused")).toBool();
+    team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
+    team.sharedPaths = stringList(json.value(QStringLiteral("shared_paths")));
+    team.maxRounds = json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds);
+    team.turnBudget = json.value(QStringLiteral("turn_budget")).toInt(defaultTurnBudget);
+    team.automaticTurns = json.value(QStringLiteral("automatic_turns")).toInt();
+    team.planApproved = json.value(QStringLiteral("plan_approved")).toBool();
+    for (const auto& value : json.value(QStringLiteral("members")).toArray())
+        team.members.append(memberFromJson(value.toObject()));
+    for (const auto& value : json.value(QStringLiteral("tasks")).toArray())
+        team.tasks.append(taskFromJson(value.toObject()));
+    for (const auto& value : json.value(QStringLiteral("decisions")).toArray())
+        team.decisions.append(decisionFromJson(value.toObject()));
+    team.nextTask = json.value(QStringLiteral("next_task")).toInt(1);
+    team.nextDecision = json.value(QStringLiteral("next_decision")).toInt(1);
+    team.revision = json.value(QStringLiteral("revision")).toInteger();
+    team.createdAt = json.value(QStringLiteral("created_at")).toString();
+    team.changedAt = json.value(QStringLiteral("changed_at")).toString();
+    return team;
+}
+
+} // namespace ketplus::daemon::teams

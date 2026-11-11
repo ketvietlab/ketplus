@@ -53,6 +53,11 @@ class AgentHostPort {
     // Returns the tool's answer, ok or failure.
     virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                          const QJsonObject& payload) = 0;
+    // ADR 0112: a member of a team. Its own reviewer (ADR 0067) does not run meanwhile.
+    [[nodiscard]] virtual bool onTeam(const QString& sessionId) const {
+        (void)sessionId;
+        return false;
+    }
     // #125: the turn's answer asks the user to approve or decide, so it ends as
     // "Waiting for you". Returns the tool's answer.
     virtual QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
