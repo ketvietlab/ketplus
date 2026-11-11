@@ -10,6 +10,7 @@
 
 #include <QDateTime>
 #include <QDeadlineTimer>
+#include <QElapsedTimer>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
@@ -187,6 +188,14 @@ class CloudControlClient final : public QObject {
     // name, answered sealed to the phone that asked.
     void executeWorktreeCommand(const QJsonObject& command, const QJsonObject& payload,
                                 const QByteArray& senderAgreementKey);
+    // ADR 0116: a team command, checked against this Mac, its owner and the capability it
+    // names, run by the session host and answered sealed to the device that sent it.
+    void executeTeamCommand(const QJsonObject& command, const QJsonObject& payload,
+                            const QByteArray& senderAgreementKey);
+    // ADR 0116 §3: a team change reaches the phones with the next heartbeat, at most one
+    // every teamHeartbeatMilliseconds.
+    void noteTeamChanged();
+    static constexpr int teamHeartbeatMilliseconds = 2'000;
     void startCreatedConversation(const QJsonObject& command, const QJsonObject& payload,
                                   const QString& worktreePath,
                                   const QByteArray& senderAgreementKey);
@@ -215,6 +224,8 @@ class CloudControlClient final : public QObject {
     QTimer syncTimer_;
     QTimer commandTimer_;
     QTimer stateSyncTimer_;
+    QTimer teamSyncTimer_;
+    QElapsedTimer lastTeamSync_;
     QUrl baseUrl_;
     RelayWakeups wakeups_;
     transport::RemotePeers* peers_{nullptr};

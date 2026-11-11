@@ -30,6 +30,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
     src/cloud/CloudControlUploadProgress.cpp
+    src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
@@ -108,6 +109,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/Team.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
+    src/teams/TeamRemoteView.cpp
+    src/teams/TeamRemoteView.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorAssign.cpp
@@ -125,6 +128,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamTasks.cpp
     src/runtime/TeamGit.cpp
     src/runtime/TeamGit.h

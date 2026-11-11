@@ -77,6 +77,14 @@ ketplus_add_daemon_test(ketplus_team_lane_tests TeamLaneTest.cpp)
 ketplus_add_daemon_test(ketplus_team_payload_tests TeamPayloadTest.cpp)
 ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
 ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
+# ADR 0116: team commands from paired phones, checked against the contract's fixture.
+ketplus_add_daemon_test(ketplus_team_remote_tests TeamRemoteTest.cpp)
+target_compile_definitions(ketplus_team_remote_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+ketplus_add_daemon_test(ketplus_team_remote_cloud_tests TeamRemoteCloudTest.cpp)
+target_sources(ketplus_team_remote_cloud_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_compile_definitions(ketplus_team_remote_cloud_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 ketplus_add_daemon_test(ketplus_work_report_tests WorkReportTest.cpp)
 ketplus_add_daemon_test(ketplus_awaiting_reply_tests AwaitingReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_tag_catalog_tests TagCatalogTest.cpp)

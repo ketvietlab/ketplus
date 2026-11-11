@@ -107,6 +107,21 @@ class CloudPrivacyTestAccess {
                                 const QJsonObject& payload, const QByteArray& senderKey) {
         client.executeWorktreeCommand(command, payload, senderKey);
     }
+    static void teamCommand(CloudControlClient& client, const QJsonObject& command,
+                            const QJsonObject& payload, const QByteArray& senderKey) {
+        client.executeTeamCommand(command, payload, senderKey);
+    }
+    static QByteArray resultAad(CloudControlClient& client, const QJsonObject& command, int attempt,
+                                const QString& status, const QString& code,
+                                const QJsonObject& content) {
+        return client.commandResultAssociatedData(command, attempt, status, code, content);
+    }
+    static bool teamSyncPending(const CloudControlClient& client) {
+        return client.teamSyncTimer_.isActive();
+    }
+    static bool stateSyncPending(const CloudControlClient& client) {
+        return client.stateSyncTimer_.isActive();
+    }
     static RemoteWorktreeQuota& worktreeQuota(CloudControlClient& client) {
         return client.worktreeQuota_;
     }

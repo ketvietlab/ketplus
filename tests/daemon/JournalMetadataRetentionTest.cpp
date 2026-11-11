@@ -81,7 +81,8 @@ class Fixture {
                 .arg(count);
         return exec(
             prefix +
-            (audit ? "INSERT INTO remote_command_audit SELECT "
+            (audit ? "INSERT INTO remote_command_audit(command_id, kind, device_id, "
+                     "device_key_version, session_id, result_code, recorded_at) SELECT "
                      "'old-'||x,'turn.start','device',1,'s','ok','2099-01-01T00:00:00.000Z' FROM n"
                    : "INSERT INTO command_results SELECT "
                      "'old-'||x,json_object('text',printf('%1000s','x')),'2099-01-01T00:00:00.000Z'"

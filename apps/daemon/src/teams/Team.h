@@ -103,6 +103,9 @@ struct Task final {
     // ADR 0114 §5: the task was offered for merging (ready, its dependencies done), once.
     bool mergeOffered{false};
     QList<HistoryEntry> history;
+    // ADR 0116 §4: the team revision at which this task last changed, the fence of a change
+    // a paired phone asks for.
+    qint64 changedRevision{0};
 };
 
 struct Decision final {
@@ -121,6 +124,8 @@ struct Decision final {
     QString answer;
     QString answeredAt;
     QString reason;
+    // ADR 0116 §4: the team revision at which this decision last changed.
+    qint64 changedRevision{0};
 };
 
 // A member that must leave a worktree that was handed to someone else. It is stored with
@@ -170,6 +175,10 @@ struct Team final {
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};
+    // ADR 0116 §4: the team revisions at which its settings (name, goal, branch, merge
+    // setting, paused and its reason) and its member list last changed.
+    qint64 settingsRevision{0};
+    qint64 membersRevision{0};
     QString createdAt;
     QString changedAt;
 
