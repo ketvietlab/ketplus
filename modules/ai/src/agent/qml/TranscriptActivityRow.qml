@@ -173,7 +173,7 @@ Column {
     // kind's icon as in the mock.
     property bool compact: false
     // Where the title starts; details and images line up under it.
-    readonly property real contentInset: KetTheme.px(25, KetTheme.zoom)
+    readonly property real contentInset: KetTheme.px(30, KetTheme.zoom)
 
     function parseObject(text) {
         try {
@@ -350,6 +350,21 @@ Column {
             onImageClicked: function (source) {
                 root.imageClicked(source);
             }
+        }
+        // The mock's line under a generated image, in the image's column: what it was made from.
+        Text {
+            objectName: "imagePromptLine"
+            visible: root.subtype === "imageGeneration" && root.commandDescription.length > 0
+            width: parent.width
+            topPadding: KetTheme.px(2, KetTheme.zoom)
+            text: "<b>Prompt</b>&nbsp;&nbsp;" + root.commandDescription.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            textFormat: Text.StyledText
+            wrapMode: Text.Wrap
+            maximumLineCount: 3
+            elide: Text.ElideRight
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         }
     }
 

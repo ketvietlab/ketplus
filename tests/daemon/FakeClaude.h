@@ -135,6 +135,10 @@ for line in sys.stdin:
             def late(session_id=session_id, turn_id=turn_id, thread_id=thread_id):
                 finish(session_id, turn_id, thread_id)
             threading.Timer(0.2, late).start()
+        elif params.get('prompt') == 'ask-approval':
+            finish(session_id, turn_id, thread_id,
+                   'The PR is ready.\n\n| Task | Status |\n|---|---|\n| Tests | done |\n\n'
+                   'Should I push and open the PR?')
         elif 'no-findings' in params.get('prompt', ''):
             finish(session_id, turn_id, thread_id, 'Looks fine.\nVerdict: no findings')
         else:
