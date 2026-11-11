@@ -140,6 +140,10 @@ struct Team final {
     // ADR 0114 §2: tasks waiting for the reviewer, first in first out, and the one it reviews.
     QStringList reviewQueue;
     QString reviewing;
+    // The id of the message that asks for that review, chosen when the review starts and
+    // stored with it, before the message is sent. Empty with a review in flight only in a
+    // journal written before reviews were bound to their request.
+    QString reviewingMessage;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};

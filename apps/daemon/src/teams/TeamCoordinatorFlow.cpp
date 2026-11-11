@@ -14,7 +14,8 @@ QJsonObject heldJson(const TeamMessage& message) {
             {QStringLiteral("kind"), message.kind},
             {QStringLiteral("task_id"), message.taskId},
             {QStringLiteral("body"), message.body},
-            {QStringLiteral("expect_reply"), message.expectReply}};
+            {QStringLiteral("expect_reply"), message.expectReply},
+            {QStringLiteral("id"), message.id}};
 }
 
 TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
@@ -25,7 +26,8 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
             .kind = json.value(QStringLiteral("kind")).toString(),
             .taskId = json.value(QStringLiteral("task_id")).toString(),
             .body = json.value(QStringLiteral("body")).toString(),
-            .expectReply = json.value(QStringLiteral("expect_reply")).toBool()};
+            .expectReply = json.value(QStringLiteral("expect_reply")).toBool(),
+            .id = json.value(QStringLiteral("id")).toString()};
 }
 
 // Every update since the last digest, grouped by task, the actionable ones marked.

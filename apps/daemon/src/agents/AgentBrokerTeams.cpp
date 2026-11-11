@@ -10,12 +10,13 @@ namespace ketplus::daemon {
 QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& fromTitle,
                                      const QString& toSession, const QString& kind,
                                      const QString& body, const bool expectReply,
-                                     QString* messageId) {
+                                     QString* messageId, const QString& id) {
     const auto target = host_->agentConversation(toSession);
     if (!target)
         return QStringLiteral("The member's conversation no longer exists.");
     AgentMessageRecord message;
-    message.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // A team that must know the id before the message is sent chooses it.
+    message.id = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id;
     message.chainId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     message.hop = 1;
     if (const auto sender =

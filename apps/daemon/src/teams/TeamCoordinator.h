@@ -53,6 +53,9 @@ struct TeamMessage final {
     QString taskId;
     QString body;
     bool expectReply{false};
+    // The id the queued message gets, when the team must know it before it is sent (a
+    // review); empty lets the broker choose one.
+    QString id;
 };
 
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
@@ -239,8 +242,10 @@ class TeamCoordinator : public QObject {
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
-    void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
-                        const QString& failure = {});
+    // `messageId` is the review request that ended. A review is bound to its request from
+    // the moment it starts, sent or still held, so a request with another id is ignored.
+    void reviewFinished(const QString& reviewerSession, const QString& messageId,
+                        const QString& text, bool noFindings, const QString& failure = {});
 
     // The quiet period after which an idle leader receives the digest (ADR 0114 §7).
     static constexpr int defaultQuietPeriodMs = 20000;

@@ -87,6 +87,14 @@ class FakeHost final : public TeamHostPort {
     QList<std::pair<QString, QJsonObject>> notes;
 };
 
+// The reviewer of `session`'s team answers the request its review in flight is bound to.
+inline void finishReview(TeamCoordinator& teams, const QString& session, const QString& text,
+                         const bool noFindings, const QString& failure = {}) {
+    const Team* team = teams.teamOf(session);
+    teams.reviewFinished(session, team ? team->reviewingMessage : QString{}, text, noFindings,
+                         failure);
+}
+
 inline Team standardTeam() {
     Team team;
     team.repository = QStringLiteral("/repo");

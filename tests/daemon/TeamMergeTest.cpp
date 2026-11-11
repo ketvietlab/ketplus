@@ -47,7 +47,7 @@ class TeamMergeTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, owner).ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, owner).ok());
         QCOMPARE(teams_->team(team_)->reviewing, id);
-        teams_->reviewFinished("rev", "Verdict: no findings", true);
+        finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(get(id).state, state::ready);
     }
     const Team& team() { return *teams_->team(team_); }
@@ -211,7 +211,7 @@ class TeamMergeTest final : public QObject {
             QVERIFY(teams_->updateTask(team_, second, {{"depends_on", QJsonArray{first}}}, "lead")
                         .ok());
             QVERIFY(teams_->moveTask(team_, second, state::inReview, "dev2").ok());
-            teams_->reviewFinished("rev", "Verdict: no findings", true);
+            finishReview(*teams_, "rev", "Verdict: no findings", true);
             QCOMPARE(get(second).state, state::ready);
             QVERIFY2(!get(second).mergeOffered, qPrintable(policy));
             QCOMPARE(merges().size(), 0);
@@ -271,7 +271,7 @@ class TeamMergeTest final : public QObject {
         // Reviewed again at the new commit, it is offered again.
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
-        teams_->reviewFinished("rev", "Verdict: no findings", true);
+        finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(get(id).state, state::ready);
         QCOMPARE(get(id).headCommit, QStringLiteral("later"));
         QCOMPARE(merges().size(), 2);

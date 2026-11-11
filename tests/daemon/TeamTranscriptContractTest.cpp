@@ -90,8 +90,8 @@ class TeamTranscriptContractTest final : public QObject {
         QVERIFY(request.value("facts").toStringList().first().startsWith("Round 1 of"));
         QCOMPARE(request.value("criteria").toList().size(), 2);
 
-        teams_->reviewFinished("rev", "web/cart.txt:3 high: the total is wrong.\nVerdict: findings",
-                               false);
+        finishReview(*teams_, "rev", "web/cart.txt:3 high: the total is wrong.\nVerdict: findings",
+                     false);
         const QVariantMap verdict = blockOf(host_.of("review").last());
         QCOMPARE(verdict.value("kind").toString(), QStringLiteral("verdict"));
         QCOMPARE(verdict.value("taskId").toString(), id);
