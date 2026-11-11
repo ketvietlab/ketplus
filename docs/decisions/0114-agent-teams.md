@@ -182,7 +182,12 @@ may be journaled after the turn has answered.
    of the integration branch, in a worktree beside the repository as ADR 0111 places
    them (`<repository>-team-<team-id>-t-<n>`), and
    re-points the owner's conversation at it with the worktree switch of ADR 0111 before
-   the assignment turn starts. A handover re-points the new owner. *Rejected*: one
+   the assignment turn starts. A handover re-points the new owner. The previous owner leaves
+   the task's worktree only when its conversation stands in it: it goes to the task it
+   works on, else to another task of its own, else back to the repository; a conversation
+   that stands elsewhere is left alone. The move is stored with the handover
+   (`relocations`). A conversation that cannot move during its turn leaves when the turn
+   ends or before the team's next message to it, unless the task came back to it. *Rejected*: one
    worktree per developer switching branches — a handover would have to move
    uncommitted work between worktrees, and a developer could carry it into the wrong
    task.

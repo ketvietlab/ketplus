@@ -110,6 +110,15 @@ struct Decision final {
     QString reason;
 };
 
+// A member that must leave a worktree that was handed to someone else. It is stored with
+// the handover and kept until the conversation has left: a conversation cannot always move
+// while its turn runs (ADR 0114, point 1).
+struct Relocation final {
+    QString session;
+    QString from;
+    bool operator==(const Relocation&) const = default;
+};
+
 struct Team final {
     qint64 id{0};
     QString repository;
@@ -144,6 +153,7 @@ struct Team final {
     // stored with it, before the message is sent. Empty with a review in flight only in a
     // journal written before reviews were bound to their request.
     QString reviewingMessage;
+    QList<Relocation> relocations;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};

@@ -3,6 +3,10 @@
 
 #include "storage/LocalJournal.h"
 
+#include <QDir>
+
+#include <utility>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -368,6 +372,16 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
         task->worktree = worktree->worktree;
         task->baseCommit = worktree->baseCommit;
     }
+    // The previous owner must not stay in a worktree that is someone else's now. Only a
+    // conversation that stands in it has to leave, and the move is stored with the handover:
+    // a conversation that cannot move during its turn leaves when the turn ends.
+    if (!previous.isEmpty() && team->member(previous) && !task->worktree.isEmpty()) {
+        const auto conversation = host_->teamConversation(previous);
+        const Relocation move{.session = previous, .from = task->worktree};
+        if (conversation && QDir::cleanPath(conversation->worktree) == QDir::cleanPath(move.from) &&
+            !team->relocations.contains(move))
+            team->relocations.append(move);
+    }
     // One assignment: the owner changes in the same commit, so a failure leaves the old one.
     task->owner = owner;
     addHistory(*task, actor, QStringLiteral("owner"),
@@ -393,6 +407,18 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                                    {QStringLiteral("body"),
                                     QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
                                         .arg(taskId, member->name, reason.trimmed())}});
+    if (!previous.isEmpty()) {
+        if (const QString waiting = settleRelocations(teamId, previous); !waiting.isEmpty()) {
+            Team* stored = mutableTeam(teamId);
+            const Team unmoved = *stored;
+            addHistory(*stored->task(taskId), QStringLiteral("daemon"), QStringLiteral("worktree"),
+                       QStringLiteral("The previous owner's conversation leaves %1 when its "
+                                      "turn ends: %2")
+                           .arg(stored->task(taskId)->worktree, waiting));
+            (void)commit(*stored, unmoved, QStringLiteral("daemon"), {});
+        }
+        team = mutableTeam(teamId);
+    }
     // A task held for the first plan stays held with its new owner.
     if (!team->task(taskId)->assignmentHeld)
         deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
@@ -575,6 +601,56 @@ QString TeamCoordinator::assignmentText(const Team& team, const Task& task, cons
                             "the task, and hand it to review (state in_review) once the criteria "
                             "are met and your work is committed.");
     return lines.join(QLatin1Char('\n'));
+}
+
+QString TeamCoordinator::settleRelocations(const qint64 teamId, const QString& sessionId) {
+    Team* team = mutableTeam(teamId);
+    if (!team || team->relocations.isEmpty())
+        return {};
+    QString waiting;
+    QList<Relocation> kept;
+    for (const Relocation& move : std::as_const(team->relocations)) {
+        if (move.session != sessionId) {
+            kept.append(move);
+            continue;
+        }
+        const QString from = QDir::cleanPath(move.from);
+        const auto conversation = host_->teamConversation(sessionId);
+        // Settled without a move: the conversation is gone or stands elsewhere already, or
+        // the task came back to this member.
+        if (!team->member(sessionId) || !conversation ||
+            QDir::cleanPath(conversation->worktree) != from)
+            continue;
+        // It goes to the task it works on, else to another task of its own, else to the
+        // repository.
+        QString home = team->repository;
+        bool mine = false;
+        bool working = false;
+        for (const Task& task : std::as_const(team->tasks)) {
+            if (task.owner != sessionId || task.state == state::done || task.worktree.isEmpty())
+                continue;
+            if (QDir::cleanPath(task.worktree) == from) {
+                mine = true;
+            } else if (!working && (task.state == state::inProgress || home == team->repository)) {
+                home = task.worktree;
+                working = task.state == state::inProgress;
+            }
+        }
+        if (mine)
+            continue;
+        if (const QString error = host_->pointConversationAt(sessionId, home); !error.isEmpty()) {
+            waiting = error;
+            kept.append(move);
+        }
+    }
+    if (kept.size() != team->relocations.size()) {
+        const Team before = *team;
+        team->relocations = kept;
+        // A move that stays stored is tried again and found settled.
+        if (commit(*team, before, QStringLiteral("daemon"), {}))
+            qWarning("Unable to forget a settled move out of a handed-over worktree.");
+    }
+    return waiting;
 }
 
 void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& storedTask,

@@ -321,6 +321,9 @@ class TeamCoordinator : public QObject {
     void askFirstPlan(Team& team);
     void askFirstPlanAgain(qint64 teamId);
     // Points the owner at the task's worktree and sends the assignment.
+    // Moves a member out of the worktrees it was handed out of and forgets each move that
+    // is settled: done, or no longer needed. Returns why one is still waiting, if any.
+    QString settleRelocations(qint64 teamId, const QString& sessionId);
     void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
                            const QString& reason = {});
     [[nodiscard]] static QString assignmentText(const Team& team, const Task& task,
