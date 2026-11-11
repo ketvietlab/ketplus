@@ -89,6 +89,10 @@ core target. The local slice includes:
 - durable sidebar read markers through `session.mark_seen` (`last_seen_cursor` in
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
+- the "Waiting for you" flag (`awaiting_reply` in the journal, `session.list`
+  and `turn.completed`, cleared by a new message, a new turn or
+  `session.mark_done`; set by the `request_user_decision` MCP tool or a final
+  answer ending with a question; feature `session.awaiting_reply/1`, ADR 0112);
 - archiving through `session.set_archived` (`archived_at` in the journal and in
   `session.list`, feature `session.archive/1`). The idle pass deletes one
   conversation archived for longer than the Storage option (30 days, 90 by default,
@@ -98,7 +102,10 @@ core target. The local slice includes:
 - conversation tags through `session.tags.set` (`tags` in the journal and in
   `session.list`, feature `session.tags/1`): at most 8 labels of up to 64 bytes,
   one per case-insensitive name
-  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md));
+  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md)); the tag catalog
+  through `tags.catalog` and `tags.catalog.set` (journal table `tag_catalog`, feature
+  `tags.catalog/1`), with the `tags.changed` push to every desktop window
+  ([ADR 0113](decisions/0113-tag-catalog.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
   its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
   journal copies the source generation's transcript from one read snapshot in

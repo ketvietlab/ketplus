@@ -191,7 +191,18 @@ class TeamReviewTest final : public QObject {
         QCOMPARE(reviewsTo("rev2").first().taskId, id);
     }
 
+    void theReviewerReviewsATaskEndToEnd_data() {
+        QTest::addColumn<QString>("title");
+        QTest::addColumn<QString>("verdict");
+        // The fake reviewer answers "Verdict: no findings" to a prompt naming no-findings,
+        // and without a verdict line, which counts as findings, to any other.
+        QTest::newRow("no findings") << "Cart no-findings" << "ready";
+        QTest::newRow("findings") << "Cart" << "in_progress";
+    }
+
     void theReviewerReviewsATaskEndToEnd() {
+        QFETCH(QString, title);
+        QFETCH(QString, verdict);
         agent_test::Fixture fixture;
         QVERIFY(fixture.open(true));
         const QString repository = fixture.directory.filePath("shop");
@@ -215,9 +226,8 @@ class TeamReviewTest final : public QObject {
         const QString teamId = created.value("team").toObject().value("id").toString();
         const QString developer = members.at(1).toObject().value("session_id").toString();
         const QString reviewer = members.at(2).toObject().value("session_id").toString();
-        // The fake reviewer answers "Verdict: no findings" to a prompt naming no-findings.
         QVERIFY(command("team.task.create", {{"team_id", teamId},
-                                             {"title", "Cart no-findings"},
+                                             {"title", title},
                                              {"criteria", QJsonArray{"Adds an item"}}})
                     .value("ok")
                     .toBool());
@@ -249,13 +259,25 @@ class TeamReviewTest final : public QObject {
                 .value("state")
                 .toString();
         };
-        QTRY_COMPARE_WITH_TIMEOUT(state(), QStringLiteral("ready"), 10000);
+        const int turnsBefore = fixture.count(developer, "turn.completed");
+        QTRY_COMPARE_WITH_TIMEOUT(state(), verdict, 10000);
         const auto requests = fixture.journal->agentMessagesOf(reviewer, 1, 10);
         QVERIFY(!requests.isEmpty());
         QCOMPARE(requests.first().kind, QStringLiteral("review"));
         QVERIFY(requests.first().body.contains("web/cart.txt"));
         QVERIFY(requests.first().body.contains("+cart"));
         QVERIFY(agent_test::logText(fixture.claudeLog).contains("Adds an item"));
+        if (verdict == QStringLiteral("in_progress")) {
+            // The findings start an ordinary turn of the owner, whatever its provider: they
+            // are not a review request, so they are neither refused nor read-only.
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") > turnsBefore,
+                                     8000);
+            const auto received = fixture.journal->agentMessagesOf(developer, 1, 10);
+            QVERIFY(!received.isEmpty());
+            QCOMPARE(received.first().kind, QStringLiteral("review"));
+            QCOMPARE(received.first().state, QStringLiteral("delivered"));
+            QVERIFY(received.first().body.contains("found issues"));
+        }
     }
 };
 

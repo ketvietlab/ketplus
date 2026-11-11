@@ -347,7 +347,8 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     QVERIFY(!visibleIds().contains(QStringLiteral("thread-3")));
     QVERIFY(!visibleIds().contains(QStringLiteral("thread-4")));
 
-    auto* showMore = bar.findChild<QToolButton*>(QStringLiteral("productShowMoreConversations"));
+    auto* showMore =
+        bar.findChild<QAbstractButton*>(QStringLiteral("productShowMoreConversations"));
     QVERIFY(showMore);
     QVERIFY(!showMore->isHidden());
     showMore->click();
@@ -574,16 +575,24 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
                     {"title", "Two"},
                     {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
     bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    auto* filter = bar.findChild<QComboBox*>("conversationTagFilter");
-    QVERIFY(filter && filter->isVisible());
-    filter->setCurrentIndex(filter->findData("UI"));
+    // As in the mock, no filter shows until a tag in the conversation header is chosen.
+    auto* filter = bar.findChild<QWidget*>("sidebarTagFilter");
+    QVERIFY(filter && !filter->isVisible());
+    bar.setTagFilter("UI");
+    QVERIFY(filter->isVisible());
+    QCOMPARE(filter->accessibleName(), QString("Tagged UI"));
     const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");
     QCOMPARE(rows.size(), 2);
     for (auto* row : rows)
         QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    filter->setCurrentIndex(0);
-    for (auto* row : rows)
-        QVERIFY(row->isVisible());
+    // New rows keep the active filter.
+    bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
+    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
+    QTest::mouseClick(filter->findChild<QAbstractButton*>("sidebarTagFilterClear"), Qt::LeftButton);
+    QVERIFY(!filter->isVisible());
+    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+        QTRY_VERIFY(row->isVisible());
     auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
     QVERIFY(warning && !warning->isVisible());
     bar.setStorageStatus({{"ok", true},
