@@ -12,6 +12,8 @@ Column {
     required property string groupKey
     required property string detailsData
     required property string detailsRef
+    // The workspace's lightbox, which a screenshot in a grouped row opens like any other.
+    required property var preview
     readonly property var details: {
         const value = detailsRef.length > 0 ? host.resolveTranscriptPayload(detailsRef) : detailsData;
         try { return JSON.parse(value || "{}"); } catch (_) { return {}; }
@@ -49,6 +51,11 @@ Column {
             imageSources: modelData.images || []
             running: !!modelData.running
             compact: true
+            onImageClicked: function (source) {
+                const all = images.map(image => String(image));
+                const index = all.indexOf(source.toString());
+                root.preview.showImages(index < 0 ? [source] : all, Math.max(0, index));
+            }
         }
     }
     Text {

@@ -537,6 +537,7 @@ Item {
                         groupKey: messageDelegate.groupKey
                         detailsData: messageDelegate.detailsData
                         detailsRef: messageDelegate.detailsRef
+                        preview: messageDelegate.preview
                     }
                 }
                 Component {
