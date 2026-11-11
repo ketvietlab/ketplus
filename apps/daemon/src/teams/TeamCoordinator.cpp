@@ -50,6 +50,13 @@ void TeamCoordinator::load() {
             teamBySession_.insert(member.sessionId, team.id);
         teams_.insert(team.id, std::move(team));
     }
+    // A review whose diff was being read when the daemon stopped is still queued: nothing was
+    // stored for it. It starts now, not at the team's next change.
+    const QList<qint64> ids = teams_.keys();
+    for (const qint64 id : ids)
+        if (const Team* team = this->team(id);
+            team && team->reviewing.isEmpty() && !team->reviewQueue.isEmpty())
+            pumpReviews(id);
 }
 
 QList<const Team*> TeamCoordinator::teams(const QString& repository) const {

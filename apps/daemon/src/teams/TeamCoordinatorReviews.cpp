@@ -25,6 +25,14 @@ QString utf8Prefix(const QString& text, const qsizetype maximumBytes) {
     return prefix;
 }
 
+// The first queued task that is still In review: the one the next review is for.
+const Task* nextInReview(const Team& team) {
+    for (const QString& id : team.reviewQueue)
+        if (const Task* task = team.task(id); task && task->state == state::inReview)
+            return task;
+    return nullptr;
+}
+
 } // namespace
 
 QString TeamCoordinator::reviewText(const Team& team, const Task& task,
@@ -69,21 +77,51 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
     Team* team = mutableTeam(teamId);
     if (!team || !team->reviewing.isEmpty() || team->reviewQueue.isEmpty())
         return;
+    if (!team->memberWithRole(role::reviewer) || reviewDiffs_.contains(teamId))
+        return;
+    const Task* next = nextInReview(std::as_const(*team));
+    if (!next) {
+        // Every queued task left In review while it waited: the queue is emptied.
+        const Team before = *team;
+        team->reviewQueue.clear();
+        (void)commit(*team, before, QStringLiteral("daemon"), {});
+        return;
+    }
+    reviewDiffs_.insert(teamId);
+    host_->askDiff(*team, *next,
+                   [self = QPointer<TeamCoordinator>(this), teamId, asked = *next,
+                    repository = team->repository,
+                    integration = team->integrationBranch](const std::optional<TaskDiff>& diff) {
+                       if (!self)
+                           return;
+                       self->reviewDiffs_.remove(teamId);
+                       self->startReview(teamId, asked, repository, integration, diff);
+                   });
+}
+
+void TeamCoordinator::startReview(const qint64 teamId, const Task& asked, const QString& repository,
+                                  const QString& integration, const std::optional<TaskDiff>& diff) {
+    Team* team = mutableTeam(teamId);
+    if (!team || !team->reviewing.isEmpty() || team->reviewQueue.isEmpty())
+        return;
     const Member* reviewer = team->memberWithRole(role::reviewer);
     if (!reviewer)
         return;
+    // The diff is of one task's branch against the integration branch the team had. Another
+    // task at the head of the queue, or another branch on either side, needs its own diff.
+    const Task* next = nextInReview(std::as_const(*team));
+    if (!next || next->id != asked.id || next->branch != asked.branch ||
+        next->worktree != asked.worktree || next->baseCommit != asked.baseCommit ||
+        next->headCommit != asked.headCommit || team->repository != repository ||
+        team->integrationBranch != integration) {
+        pumpReviews(teamId);
+        return;
+    }
     // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
-    QString taskId;
-    // A task that left In review while it waited is dropped from the queue.
-    while (!team->reviewQueue.isEmpty() && taskId.isEmpty()) {
-        const QString next = team->reviewQueue.takeFirst();
-        if (const Task* task = team->task(next); task && task->state == state::inReview)
-            taskId = next;
-    }
-    if (taskId.isEmpty()) {
-        (void)commit(*team, before, QStringLiteral("daemon"), {});
-        return;
+    const QString taskId = asked.id;
+    // The tasks queued before it left In review while they waited.
+    while (!team->reviewQueue.isEmpty() && team->reviewQueue.takeFirst() != taskId) {
     }
     Task* task = team->task(taskId);
     ++task->round;
@@ -93,7 +131,6 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
     const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     team->reviewingMessage = requestId;
     const QString reviewerSession = reviewer->sessionId;
-    const auto diff = host_->taskDiff(*team, *task);
     addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"),
                QStringLiteral("Review round %1 of %2 sent to %3.")
                    .arg(task->round)

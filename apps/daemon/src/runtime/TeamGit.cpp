@@ -70,6 +70,21 @@ std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
     return std::nullopt;
 }
 
+std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Task& task) {
+    const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
+    // The branch against the integration branch it was cut from (ADR 0114 §2).
+    const QString range = QStringLiteral("%1...%2").arg(
+        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
+    const auto diff = output(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
+                                         QStringLiteral("--no-ext-diff"), range});
+    const auto names =
+        output(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
+    if (!diff || !names)
+        return std::nullopt;
+    return teams::TaskDiff{.diff = *diff,
+                           .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+}
+
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,
                                        const teams::TaskQuestion question) {
     QHash<QString, teams::TaskFacts> answers;

@@ -46,7 +46,10 @@ integration branch it was cut from. The verdict line of ADR 0067 decides: `no fi
 makes the task `ready`; `findings`, or a reply without the line, returns it to its owner
 with round + 1. Past `max_rounds` (default 2, 1 to 3) the task is `blocked` and the
 leader's digest says why. A busy reviewer **queues** requests first in, first out,
-instead of skipping them. The reviewer is therefore a Claude conversation, the only
+instead of skipping them. The daemon reads the diff off its event loop before the review
+starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
+again, and a diff that is no longer for the next task or the team's integration branch is
+read again. The reviewer is therefore a Claude conversation, the only
 provider that enforces the read-only guard. A member's own Reviewer setting stays
 stored but does not run while it is on a team, and `session.reviewer.set` is refused
 with `team_member`. *Rejected*: a second review engine — it would drift from 0067.

@@ -93,19 +93,19 @@ std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) con
 
 std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
                                                      const teams::Task& task) const {
-    const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
-    // The branch against the integration branch it was cut from (ADR 0114 §2).
-    const QString range = QStringLiteral("%1...%2").arg(
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
-    const auto diff =
-        team_git::output(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
-                                     QStringLiteral("--no-ext-diff"), range});
-    const auto names =
-        team_git::output(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
-    if (!diff || !names)
-        return std::nullopt;
-    return teams::TaskDiff{.diff = *diff,
-                           .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+    return team_git::taskDiff(team, task);
+}
+
+// A review's diff is read on the thread of the team's other questions to git.
+void SessionHost::askDiff(const teams::Team& team, const teams::Task& task,
+                          teams::TaskDiffDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            std::optional<teams::TaskDiff> diff = team_git::taskDiff(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), diff = std::move(diff)] { done(diff); },
+                Qt::QueuedConnection);
+        });
 }
 
 QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
