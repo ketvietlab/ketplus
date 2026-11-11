@@ -74,13 +74,13 @@ Rectangle {
     // The header gives way from the right as the conversation narrows (the details pane takes
     // half the workspace): tags first, then the Reviewer label, then the title elides to its
     // minimum, then the worktree keeps only its icon, then the number (the sidebar shows it),
-    // then Compact window and New conversation (the sidebar and the menus have both). With the
-    // pane open, its Open content menu replaces the Changes, Terminal and Report openers.
+    // then Compact window and New conversation (the sidebar and the menus have both). Changes,
+    // Terminal and Report stay while the details pane is open; they switch its tab.
     readonly property real gap: px(8)
     readonly property real room: width - px(16) - actions.width - px(10) - px(24)
     readonly property real minimumTitle: px(80)
     // Measured from the buttons, not the row, so hiding the global pair cannot feed back.
-    readonly property int iconActions: 2 + (window.compact ? 0 : 1) + (detailsOpen ? 0 : 3)
+    readonly property int iconActions: 2 + (window.compact ? 0 : 1) + 3
     readonly property real fullActionsWidth: iconActions * compactButton.implicitWidth
         + (planButton.visible ? planButton.implicitWidth + actions.spacing : 0)
         + (iconActions - 1) * actions.spacing
@@ -291,19 +291,16 @@ Rectangle {
             onClicked: header.toggleDetails("plan")
         }
         KetIconButton {
-            visible: !header.detailsOpen
             iconName: "compare"
             text: "Changes"
             onClicked: header.toggleDetails("changes")
         }
         KetIconButton {
-            visible: !header.detailsOpen
             iconName: "terminal"
             text: "Terminal"
             onClicked: header.toggleDetails("terminal")
         }
         KetIconButton {
-            visible: !header.detailsOpen
             iconName: "view-list"
             text: "Report"
             onClicked: header.toggleDetails("report")
