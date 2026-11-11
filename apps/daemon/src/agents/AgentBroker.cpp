@@ -540,6 +540,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         if (reviewRequest(message))
             origin.review = true;
     }
+    origin.turn = host_->agentTurnSequence(sessionId) + 1;
     turns_.insert(sessionId, origin);
     const QString error =
         host_->startAgentTurn(sessionId, receiver->generation,
@@ -661,10 +662,13 @@ void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, c
     }
     if (type == QStringLiteral("runtime.error")) {
         // A turn the provider refused to start ends with this alone, no turn.completed: its
-        // requests would wait for an answer until they expire. An error inside a turn that
-        // still runs leaves the conversation busy and is finished by that turn's end.
-        if (const auto conversation = host_->agentConversation(sessionId);
-            conversation && conversation->idle)
+        // requests would wait for an answer until they expire. The host says so on the
+        // event and names the turn, because the event may be journaled late: an error
+        // inside a turn that goes on, or one of an earlier turn, ends nothing here.
+        const auto origin = turns_.constFind(sessionId);
+        if (origin != turns_.cend() && origin->turn > 0 &&
+            payload.value(QStringLiteral("turn_start_failed")).toBool() &&
+            payload.value(QStringLiteral("turn_sequence")).toInteger() == origin->turn)
             finishTurn(sessionId, generation, QStringLiteral("failed"));
         scheduleDelivery(sessionId);
         return;

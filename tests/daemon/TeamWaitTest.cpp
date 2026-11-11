@@ -142,6 +142,22 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(team().held.size(), 1);
     }
 
+    // The wait ended while the team was paused, so its wake is held for Resume. The user's
+    // Stop ends that too; an ordinary Pause and Resume still delivers it (above).
+    void theUsersStopAlsoDropsAHeldWake() {
+        (void)inProgress();
+        QVERIFY(teams_->wait(team_, "dev1", 1, "CI").ok());
+        QVERIFY(teams_->wait(team_, "dev2", 1, "a deployment").ok());
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(!teams_->isWaiting("dev1") && !teams_->isWaiting("dev2"), 2000);
+        QCOMPARE(team().held.size(), 2);
+        teams_->memberTurnEnded("dev1", true);
+        QCOMPARE(team().held.size(), 1);
+        host_.messages.clear();
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        QCOMPARE(kinds(), QStringList{"wait>dev2"});
+    }
+
     void aFailedMessageOutsideTheTeamWakesItsSender() {
         (void)inProgress();
         const int turns = team().automaticTurns;
