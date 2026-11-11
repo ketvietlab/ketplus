@@ -1023,7 +1023,7 @@ class DesktopDaemonClientTest final : public QObject {
             QCOMPARE(request.value("message_type").toString(), "session.attach");
     }
 
-    // ADR 0112: team.changed and team.removed carry no session and answer no request.
+    // ADR 0114: team.changed and team.removed carry no session and answer no request.
     void teamEventsReachTheirOwnSignal() {
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));

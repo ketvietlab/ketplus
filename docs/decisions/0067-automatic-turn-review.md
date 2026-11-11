@@ -2,7 +2,7 @@
 
 Status: accepted (2026-11-08). Implements #120; the header picker is part of #159.
 
-See also: ADR 0112 (agent teams) reuses this engine with a second trigger: a team's
+See also: ADR 0114 (agent teams) reuses this engine with a second trigger: a team's
 reviewer reviews each task when it enters In review, and a member's own setting pauses.
 
 ## Context

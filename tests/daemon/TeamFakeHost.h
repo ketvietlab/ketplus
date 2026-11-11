@@ -1,7 +1,7 @@
 #pragma once
 
 // A fake runtime for the team coordinator: conversations, worktrees and the messages a team
-// sends, all in memory (ADR 0112).
+// sends, all in memory (ADR 0114).
 #include "teams/TeamCoordinator.h"
 
 #include <QHash>
@@ -92,7 +92,7 @@ inline Team standardTeam() {
     team.repository = QStringLiteral("/repo");
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
-    // The first plan is approved unless a test is about it (ADR 0112, open point 5).
+    // The first plan is approved unless a test is about it (ADR 0114, open point 5).
     team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
                     {.sessionId = "dev1",

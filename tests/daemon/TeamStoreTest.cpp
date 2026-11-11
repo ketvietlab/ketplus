@@ -1,4 +1,4 @@
-// ADR 0112: the team store and the membership rules, on a real journal with a fake runtime.
+// ADR 0114: the team store and the membership rules, on a real journal with a fake runtime.
 // No provider is started.
 #include "storage/LocalJournal.h"
 #include "teams/TeamCoordinator.h"

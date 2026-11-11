@@ -3,7 +3,7 @@
 Status: accepted
 Date: 2026-11-01
 
-See also: ADR 0112 (agent teams) adds roles, tasks, digests and role addressing on
+See also: ADR 0114 (agent teams) adds roles, tasks, digests and role addressing on
 top of these messages; nothing here changes.
 
 ## Context

@@ -20,7 +20,7 @@ Item {
             label: tag,
             color: KetTheme.t.accent
         } : tag)
-    // ADR 0112 (#467): a member's role, set by its team, leads its tags and cannot be edited.
+    // ADR 0114 (#467): a member's role, set by its team, leads its tags and cannot be edited.
     readonly property var teamRole: (agentHost.teamRoles || {})[selectedConversation.sessionId || ""] || null
     readonly property var tags: (teamRole ? [{
                 label: teamRole.label,

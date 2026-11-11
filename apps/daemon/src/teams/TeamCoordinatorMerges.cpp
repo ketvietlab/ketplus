@@ -1,4 +1,4 @@
-// ADR 0112 §5 and open point 3: who merges a reviewed task, and how the daemon knows it is
+// ADR 0114 §5 and open point 3: who merges a reviewed task, and how the daemon knows it is
 // merged. The daemon never merges; it notices the integration branch containing the task's
 // branch, the same way for a merge in the app and one made by hand.
 #include "teams/TeamCoordinator.h"
@@ -20,7 +20,7 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
         if (task.state != state::ready || task.mergeOffered || !dependenciesDone(team, task))
             continue;
         task.mergeOffered = true;
-        // The setting at the moment the task can be merged applies (ADR 0112 §5).
+        // The setting at the moment the task can be merged applies (ADR 0114 §5).
         if (team.mergePolicy == QStringLiteral("user")) {
             raiseDecision(team, QStringLiteral("merge"),
                           QStringLiteral("Merge %1 \"%2\"?").arg(task.id, task.title),

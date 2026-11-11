@@ -448,7 +448,7 @@ class AgentWorkspaceView final : public QWidget {
         emit settingsRequested(section);
     }
     Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
-    // ADR 0112 (#467): each member conversation's role, by daemon session id, as
+    // ADR 0114 (#467): each member conversation's role, by daemon session id, as
     // {team_id, team_name, role, label, color}. The header shows it first and has no Reviewer.
     Q_PROPERTY(QVariantMap teamRoles READ teamRoles NOTIFY teamRolesChanged)
     QVariantMap teamRoles() const { return teamRoles_; }

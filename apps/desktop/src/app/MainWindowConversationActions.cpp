@@ -100,7 +100,7 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
         menu.insertAction(menu.actions().value(0), done);
         menu.insertSeparator(menu.actions().value(1));
     }
-    // ADR 0112 (#464): join a team of its repository, or leave its team.
+    // ADR 0114 (#464): join a team of its repository, or leave its team.
     const QString sessionId = conversationSessionId(path, conversationId);
     if (teams_ != nullptr && teams_->isAvailable())
         addConversationTeamActions(menu, teams_->teams(sidebarRepositoryForPath(executionPath)),

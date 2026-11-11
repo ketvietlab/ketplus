@@ -295,7 +295,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
-            // The daemon session, which names the conversation on a team (ADR 0112).
+            // The daemon session, which names the conversation on a team (ADR 0114).
             {QStringLiteral("sessionId"), session->threadId},
             {QStringLiteral("tags"), listedTags(session)},
             // Before the first turn the labels wait here (#429); they go out with the start.

@@ -1,4 +1,4 @@
-// ADR 0112 §4: the check outside a lane. After a developer's turn the daemon compares the files
+// ADR 0114 §4: the check outside a lane. After a developer's turn the daemon compares the files
 // changed on each of its open tasks with the owner's prefixes and the team's shared paths.
 // The flag blocks nothing; it is actionable in the leader's digest and clears itself.
 #include "teams/TeamCoordinator.h"

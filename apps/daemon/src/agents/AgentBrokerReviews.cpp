@@ -254,7 +254,7 @@ void AgentBroker::reviewFinishedTurn(const QString& sessionId, const qint64 gene
     const auto working = host_->agentConversation(sessionId);
     if (!reviewer || !working || working->generation != generation)
         return;
-    // ADR 0112: the team's reviewer reviews a member's tasks instead.
+    // ADR 0114: the team's reviewer reviews a member's tasks instead.
     if (host_->onTeam(sessionId))
         return;
     // Cancelled, failed or stopped turns trigger nothing; their changes stay in the next diff.

@@ -493,7 +493,7 @@ void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
     socket->write(frame);
 }
 
-// ADR 0112: team.changed and team.removed reach every authenticated client, never an agent.
+// ADR 0114: team.changed and team.removed reach every authenticated client, never an agent.
 void LocalIpcServer::broadcastTeamEvent(const QString& type, const QJsonObject& payload) {
     const QJsonObject envelope{
         {QStringLiteral("protocol_version"), protocol::currentVersion},

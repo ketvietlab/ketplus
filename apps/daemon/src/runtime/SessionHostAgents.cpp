@@ -186,7 +186,7 @@ QString SessionHost::agentInstructions(const Session& session) const {
         journal_->conversationNumber(session.stored.id, session.stored.generation);
     if (number.isEmpty())
         return {};
-    // ADR 0112: a member also gets its role's instructions, current at every turn.
+    // ADR 0114: a member also gets its role's instructions, current at every turn.
     const QString team = teamInstructionsFor(session.stored.id);
     return team.isEmpty() ? agent_messaging::toolInstructions(number)
                           : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;

@@ -11,7 +11,7 @@
 
 namespace ketplus {
 
-// ADR 0112: the desktop's copy of the daemon's teams. The daemon owns every team; this cache
+// ADR 0114: the desktop's copy of the daemon's teams. The daemon owns every team; this cache
 // reads them once (team.list), then follows team.changed and team.removed so a team created on
 // another client appears without a reload. Every change goes back through the daemon.
 class TeamDirectory final : public QObject {

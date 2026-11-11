@@ -1,4 +1,4 @@
-// ADR 0112 §6: the task side of teams in the session runtime — the task's worktree, the
+// ADR 0114 §6: the task side of teams in the session runtime — the task's worktree, the
 // owner's conversation, team messages, and the teams.tasks/1 requests.
 #include "runtime/SessionHost.h"
 
@@ -41,7 +41,7 @@ QStringList strings(const QJsonValue& value) {
 
 } // namespace
 
-// ADR 0112, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
+// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
 // worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
 std::optional<teams::TaskWorktree>
 SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) {
@@ -113,7 +113,7 @@ QString SessionHost::headCommit(const QString& worktree) const {
 std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
                                                      const teams::Task& task) const {
     const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
-    // The branch against the integration branch it was cut from (ADR 0112 §2).
+    // The branch against the integration branch it was cut from (ADR 0114 §2).
     const QString range = QStringLiteral("%1...%2").arg(
         team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
     const auto diff = gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
@@ -250,7 +250,7 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
         return answer(teams_->setCriteria(teamId, taskId,
                                           strings(payload.value(QStringLiteral("criteria"))), user),
                       taskId);
-    // ADR 0112 §3: decisions, answered only by the user through a client.
+    // ADR 0114 §3: decisions, answered only by the user through a client.
     const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
     if (type == QStringLiteral("team.decision.list")) {
         QJsonArray decisions;

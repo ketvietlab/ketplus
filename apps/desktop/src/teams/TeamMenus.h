@@ -15,7 +15,7 @@ class Dialog;
 
 namespace ketplus {
 
-// ADR 0112 and #464: the sidebar's team entries. Every disabled entry says why in
+// ADR 0114 and #464: the sidebar's team entries. Every disabled entry says why in
 // ket::Style::kDescriptionProperty, as the conversation menu does.
 namespace team_roles {
 inline constexpr int maximumDevelopers = 5;

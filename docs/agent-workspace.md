@@ -1061,7 +1061,7 @@ spend cap or bill. Consult Anthropic Console for actual usage. See
 
 ## Teams
 
-[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+[ADR 0114](decisions/0114-agent-teams.md) (epic #450). A team is several conversations of
 one repository on one goal: exactly one **leader**, one to five **developers** and exactly
 one **reviewer** (a Claude conversation). A conversation is on at most one team.
 

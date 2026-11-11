@@ -1,4 +1,4 @@
-// ADR 0112 and #464: a team is a folder inside its repository in the sidebar. The order of the
+// ADR 0114 and #464: a team is a folder inside its repository in the sidebar. The order of the
 // rows, the folder and conversation menus with their reasons, joining by drag and the missing
 // feature, against a fake daemon. Run with QT_QPA_PLATFORM=offscreen.
 #include "KetBadge.h"

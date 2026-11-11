@@ -17,7 +17,7 @@ struct TeamUpdateRecord;
 
 namespace teams {
 
-// What the coordinator reads about a conversation (ADR 0112).
+// What the coordinator reads about a conversation (ADR 0114).
 struct TeamConversation final {
     QString sessionId;
     qint64 generation{0};
@@ -32,7 +32,7 @@ struct TeamConversation final {
     bool idle{false};
 };
 
-// A task's own branch and worktree, cut from the integration branch (ADR 0112, point 1).
+// A task's own branch and worktree, cut from the integration branch (ADR 0114, point 1).
 struct TaskWorktree final {
     QString branch;
     QString worktree;
@@ -96,14 +96,14 @@ class TeamHostPort {
         (void)task;
         return std::nullopt;
     }
-    // Paths changed in the task's worktree against its base, committed or not (ADR 0112 §4).
+    // Paths changed in the task's worktree against its base, committed or not (ADR 0114 §4).
     [[nodiscard]] virtual std::optional<QStringList> changedPaths(const Team& team,
                                                                   const Task& task) const {
         (void)team;
         (void)task;
         return std::nullopt;
     }
-    // Whether the integration branch contains the task's branch (ADR 0112, open point 3);
+    // Whether the integration branch contains the task's branch (ADR 0114, open point 3);
     // nothing when git failed.
     [[nodiscard]] virtual std::optional<bool> isMerged(const Team& team, const Task& task) const {
         (void)team;
@@ -171,7 +171,7 @@ class TeamCoordinator : public QObject {
                             const QString& reason = {});
     TeamResult removeMember(qint64 teamId, const QString& sessionId, const QString& actor);
 
-    // Tasks (ADR 0112 §6), in TeamCoordinatorTasks.cpp. `actor` is "user", "daemon" or the
+    // Tasks (ADR 0114 §6), in TeamCoordinatorTasks.cpp. `actor` is "user", "daemon" or the
     // session id of the member that acts; the daemon refuses what its role may not do.
     TeamResult createTask(qint64 teamId, const TaskDraft& draft, const QString& actor,
                           QString* taskId = nullptr);
@@ -192,9 +192,9 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
 
-    // A member's turn ended (ADR 0112 §7): after the leader's turn the waiting digest is sent.
+    // A member's turn ended (ADR 0114 §7): after the leader's turn the waiting digest is sent.
     void memberTurnEnded(const QString& sessionId);
-    // ADR 0112 §3 (TeamCoordinatorDecisions.cpp). Only the leader raises a decision; only the
+    // ADR 0114 §3 (TeamCoordinatorDecisions.cpp). Only the leader raises a decision; only the
     // user answers one, with one of its choices or free text.
     TeamResult raiseQuestion(qint64 teamId, const QJsonObject& draft, const QString& actor,
                              QString* decisionId = nullptr);
@@ -203,20 +203,20 @@ class TeamCoordinator : public QObject {
     TeamResult withdrawDecision(qint64 teamId, const QString& decisionId, const QString& reason,
                                 const QString& actor);
 
-    // ADR 0112 §5 (TeamCoordinatorMerges.cpp): marks every Ready task the integration branch
+    // ADR 0114 §5 (TeamCoordinatorMerges.cpp): marks every Ready task the integration branch
     // contains as done. Run when a member's turn ends and when a client reads the team.
     void checkMerged(qint64 teamId);
 
-    // ADR 0112 §2: the team's reviewer answered the review it was sent, or its turn failed
+    // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
     void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
                         const QString& failure = {});
 
-    // The quiet period after which an idle leader receives the digest (ADR 0112 §7).
+    // The quiet period after which an idle leader receives the digest (ADR 0114 §7).
     static constexpr int defaultQuietPeriodMs = 20000;
     void setQuietPeriod(int milliseconds) { quietPeriod_ = milliseconds; }
 
-    // A deleted conversation leaves its team (ADR 0112, open point 4).
+    // A deleted conversation leaves its team (ADR 0114, open point 4).
     void conversationDeleted(const QString& sessionId);
     // Archiving a member is refused; a reason, or nothing when it may be archived.
     [[nodiscard]] std::optional<TeamError> archiveRefusal(const QString& sessionId) const;
@@ -254,14 +254,14 @@ class TeamCoordinator : public QObject {
     // Moves a task and records it; no permission check. Adds the actionable updates.
     void applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                    const QString& reason, QList<Update>& updates);
-    // The leader's first turn, once the team has a goal (ADR 0112, #456/#458).
+    // The leader's first turn, once the team has a goal (ADR 0114, #456/#458).
     void startLeader(qint64 teamId);
     // Starts a turn of `toSession` after the commit that caused it, counted against the
     // budget; held while the team is paused (TeamCoordinatorFlow.cpp).
     virtual void wake(const Team& team, const TeamMessage& message);
     // Sends the messages held while paused, in order, once the team runs again.
     void releaseHeld(qint64 teamId);
-    // ADR 0112 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
+    // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
     // open tasks changed with its lane and the shared paths.
     void checkLanes(qint64 teamId, const QString& developer);
     // After a lane or the shared paths changed: clears the flagged paths they now cover.
@@ -280,7 +280,7 @@ class TeamCoordinator : public QObject {
     void scheduleDigest(qint64 teamId);
     // One digest of every update since the last one, when one of them is actionable.
     void sendDigest(qint64 teamId);
-    // ADR 0112, open point 5: holds an assignment the leader makes before the first plan is
+    // ADR 0114, open point 5: holds an assignment the leader makes before the first plan is
     // approved, behind one "Start these N tasks?" decision. True when it was held.
     bool holdForFirstPlan(qint64 teamId, const QString& taskId, const QString& actor);
     // Points the owner at the task's worktree and sends the assignment.

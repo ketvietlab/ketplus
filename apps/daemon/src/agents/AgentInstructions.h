@@ -11,7 +11,7 @@ namespace ketplus::daemon::agent_messaging {
 
 // Host policy for the injected ketplus_agents tools, naming the conversation's own number.
 [[nodiscard]] QString toolInstructions(const QString& ownNumber);
-// ADR 0112: what a member of a team may do, by role. `lane` and `paths` are a developer's.
+// ADR 0114: what a member of a team may do, by role. `lane` and `paths` are a developer's.
 struct TeamRoleContext final {
     QString team;
     QString goal;

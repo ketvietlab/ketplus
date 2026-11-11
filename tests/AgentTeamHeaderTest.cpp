@@ -36,7 +36,7 @@ QObject* menuItem(QObject* menu, const QString& name) {
 
 } // namespace
 
-// ADR 0112 (#467): a member's header shows its role first, locked, and has no Reviewer choice;
+// ADR 0114 (#467): a member's header shows its role first, locked, and has no Reviewer choice;
 // leaving the team restores the choice with the setting it had.
 void AgentWorkspaceViewTest::teamMemberHeaderShowsItsRoleInsteadOfReviewer() {
     ketplus::AgentWorkspaceView view;

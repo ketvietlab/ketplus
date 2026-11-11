@@ -504,7 +504,7 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("session.reviewer.") && !localClient(clientId))
         return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
-    // ADR 0112: teams are the user's; agents use the team_* tools instead.
+    // ADR 0114: teams are the user's; agents use the team_* tools instead.
     if (type.startsWith("team.") && !localClient(clientId))
         return error("forbidden", "Teams are managed from the local Desktop UI.");
     if (type == "session.work_report.read" && !localClient(clientId))
@@ -2564,7 +2564,7 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
         approvals_->expireAssistantQuestions(sessionId, generation);
     if (!alive.isNull() && agents_ != nullptr)
         agents_->noteEvent(sessionId, generation, type, contextualPayload);
-    // ADR 0112 §7: the leader's digest waits for the end of its turn.
+    // ADR 0114 §7: the leader's digest waits for the end of its turn.
     if (!alive.isNull() && teams_ && (type == "turn.completed" || type == "runtime.stopped"))
         teams_->memberTurnEnded(sessionId);
     return true;
