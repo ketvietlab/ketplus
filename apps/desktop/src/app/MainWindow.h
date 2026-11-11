@@ -448,6 +448,10 @@ class MainWindow final : public QMainWindow {
     QTabWidget* agentDetailTabs_{nullptr};
     // Hide content pane keeps its tabs; the next opener shows it again.
     bool agentDetailPaneHidden_{false};
+    // Whether the pane was last laid out as shown, and its share of the workspace width; the
+    // split is resized only when the pane appears, so a width the user drags to stays.
+    bool agentDetailPaneShown_{false};
+    double agentDetailPaneShare_{0.45};
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};

@@ -319,10 +319,12 @@ current-window value.
   scan lands the previous list stays, and a prompt or steering input sent in that
   window rescans synchronously first, so it never carries another worktree's skills.
 - Every daemon conversation shows its number (`#4821`, ADR 0027) at the start of
-  its sidebar row and before the header title. Typing `#` in the composer offers
+  its sidebar row and before the header title. Typing `#` or `@agent/` in the composer offers
   numbered conversations by number or title; the daemon lists the ones a
   message names for the agent, which contacts them through `ketplus_agents`
-  only when asked. A turn another agent started shows its message as a
+  only when asked. The content pane beside the transcript opens at 45% of the
+  workspace (transcript 55%) and keeps any width it is dragged to while its tabs
+  change. A turn another agent started shows its message as a
   user bubble under a muted "From @agent/1093 · title · provider" label
   (reviews keep "Review request from …"). A team's own message (#468: an assignment, the
   leader's digest, a review request or its verdict, an answered decision) is drawn as one

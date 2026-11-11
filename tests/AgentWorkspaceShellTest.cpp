@@ -228,6 +228,52 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(disk.readAll(), QByteArray("VERSION 3\n"));
         editor->undoEdit();
     }
+    // The content pane opens at 45% of the workspace and keeps any width it is dragged to.
+    void detailPaneOpensAtFortyFivePercentAndResizesFreely() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1440, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(agent);
+        const auto open = [&](const QString& name) {
+            QFile file(workspace.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("text\n");
+            file.close();
+            emit agent->fileOpenRequested(QUrl::fromLocalFile(file.fileName()).toString());
+        };
+        open("one.txt");
+        auto* pane = window.findChild<QWidget*>("agentDetailPane");
+        QVERIFY(pane);
+        auto* split = qobject_cast<QSplitter*>(pane->parentWidget());
+        QVERIFY(split);
+        QTRY_VERIFY(pane->isVisible());
+        const auto share = [&] { return double(pane->width()) / (pane->width() + agent->width()); };
+        QTRY_VERIFY(qAbs(share() - 0.45) < 0.02);
+
+        // Drag the handle until the pane is about a quarter of the workspace.
+        struct Handle : QSplitter {
+            using QSplitter::moveSplitter;
+        };
+        const int total = pane->width() + agent->width() + split->handleWidth();
+        static_cast<Handle*>(split)->moveSplitter(total - total / 4, split->indexOf(pane));
+        QTRY_VERIFY(share() < 0.3);
+        const int dragged = pane->width();
+
+        // Opening another file switches tabs without resetting the width.
+        open("two.txt");
+        QCOMPARE(window.findChild<QTabWidget*>("agentDetailTabs")->count(), 2);
+        QCOMPARE(pane->width(), dragged);
+    }
+
     // ADR 0106: one Report tab, for the selected conversation only.
     void workReportOpensOneTabForTheActiveConversation() {
         QTemporaryDir settings;
