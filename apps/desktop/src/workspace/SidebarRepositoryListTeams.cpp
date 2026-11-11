@@ -229,11 +229,12 @@ bool SidebarRepositoryList::handleDrag(QObject* watched, QEvent* event) {
             return false;
         pressedRow_.clear();
         auto* data = new QMimeData;
-        data->setData(kConversationMimeType,
-                      QJsonDocument(QJsonObject{{QStringLiteral("session_id"), sessionId},
-                                                {QStringLiteral("repository"),
-                                                 row->parentWidget()->property("repositoryPath").toString()}})
-                          .toJson(QJsonDocument::Compact));
+        data->setData(
+            kConversationMimeType,
+            QJsonDocument(QJsonObject{{QStringLiteral("session_id"), sessionId},
+                                      {QStringLiteral("repository"),
+                                       row->parentWidget()->property("repositoryPath").toString()}})
+                .toJson(QJsonDocument::Compact));
         auto* drag = new QDrag(row);
         drag->setMimeData(data);
         drag->setPixmap(row->grab());
@@ -293,7 +294,7 @@ void SidebarRepositoryList::onRepositoryAction(const QString& path, QWidget* anc
     if (chosen == actions.conversation)
         emit newConversationRequested(path);
     else if (chosen == actions.team)
-        emit newTeamRequested(path);
+        afterMenuCloses(this, [this, path] { emit newTeamRequested(path); });
 }
 
 } // namespace ketplus

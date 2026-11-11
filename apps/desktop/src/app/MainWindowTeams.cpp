@@ -154,9 +154,9 @@ void MainWindow::showTeamMenu(const QString& teamId) {
     if (chosen == actions.open)
         openTeam(teamId);
     else if (chosen == actions.addMember)
-        showAddTeamMemberDialog(teamId);
+        afterMenuCloses(this, [this, teamId] { showAddTeamMemberDialog(teamId); });
     else if (chosen == actions.remove)
-        deleteTeam(teamId);
+        afterMenuCloses(this, [this, teamId] { deleteTeam(teamId); });
 }
 
 void MainWindow::openTeam(const QString& teamId) {

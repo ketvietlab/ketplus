@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QLabel>
 #include <QMenu>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -121,6 +122,10 @@ RepositoryAddMenuActions addRepositoryAddMenuActions(QMenu& menu) {
     return {.conversation =
                 entry(menu, tr("New conversation"), u"plus", "newRepositoryConversationAction"),
             .team = entry(menu, tr("New team…"), u"users", "newTeamAction")};
+}
+
+void afterMenuCloses(QObject* context, std::function<void()> action) {
+    QTimer::singleShot(kMenuCloseMs, context, std::move(action));
 }
 
 QString joinRefusal(const QJsonObject& team, const QString& sessionId) {

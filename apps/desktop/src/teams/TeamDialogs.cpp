@@ -11,6 +11,8 @@
 
 #include <QButtonGroup>
 #include <QCoreApplication>
+#include <QEvent>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
@@ -41,6 +43,57 @@ QLabel* note(QWidget* parent, const char* name) {
 void showNote(QLabel* label, const QString& text) {
     label->setText(text);
     label->setVisible(!text.isEmpty());
+}
+
+// An agent's label as wide as its button allows; the whole label stays in the tooltip. A
+// ket::Button is as wide as its text, so a long model name used to push the form past the card.
+class FittedLabel final : public QObject {
+  public:
+    FittedLabel(ket::Button* button, QString text) : QObject(button), button_(button) {
+        button->setMinimumWidth(80);
+        button->setSizePolicy(QSizePolicy::Ignored, button->sizePolicy().verticalPolicy());
+        button->installEventFilter(this);
+        setText(std::move(text));
+    }
+
+    void setText(QString text) {
+        text_ = std::move(text);
+        button_->setToolTip(text_);
+        fit();
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == button_ &&
+            (event->type() == QEvent::Resize || event->type() == QEvent::Show))
+            fit();
+        return false;
+    }
+
+  private:
+    void fit() {
+        const QFontMetrics metrics(button_->font());
+        // What the button adds around its text, measured on the text it shows now.
+        const int chrome = button_->sizeHint().width() - metrics.horizontalAdvance(button_->text());
+        const int room = button_->width() - chrome;
+        const QString shown = !button_->isVisible() || metrics.horizontalAdvance(text_) <= room
+                                  ? text_
+                                  : metrics.elidedText(text_, Qt::ElideRight, qMax(0, room));
+        if (shown != button_->text())
+            button_->setText(shown);
+    }
+
+    ket::Button* button_;
+    QString text_;
+};
+
+void setAgentLabel(ket::Button* button, const QString& text) {
+    for (QObject* child : button->children()) {
+        if (auto* fitted = dynamic_cast<FittedLabel*>(child)) {
+            fitted->setText(text);
+            return;
+        }
+    }
+    new FittedLabel(button, text);
 }
 
 QJsonArray splitPaths(const QString& text) {
@@ -112,8 +165,8 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     developers_->setAccessibleName(tr("Developers"));
     developers_->setCurrentIndex(kDefaultDevelopers - 1);
     for (const QString& role : {leader, developer, reviewer}) {
-        auto* button = new ket::Button(team_agents::label(models_, agents_.value(role)),
-                                       ket::ButtonVariant::Secondary, this);
+        auto* button = new ket::Button({}, ket::ButtonVariant::Secondary, this);
+        setAgentLabel(button, team_agents::label(models_, agents_.value(role)));
         button->setObjectName(QStringLiteral("teamAgent_") + role);
         button->setAccessibleName(tr("Agent of the %1").arg(team_roles::label(role).toLower()));
         connect(button, &QAbstractButton::clicked, this, [this, role] { chooseAgent(role); });
@@ -159,7 +212,7 @@ int NewTeamForm::memberCount() const { return developers_->currentIndex() + 1 + 
 
 void NewTeamForm::setAgent(const QString& role, const TeamAgent& agent) {
     agents_.insert(role, agent);
-    agentButtons_.value(role)->setText(team_agents::label(models_, agent));
+    setAgentLabel(agentButtons_.value(role), team_agents::label(models_, agent));
     if (errors_.remove(role) > 0)
         rows_.value(role)->setError({});
 }
@@ -297,8 +350,7 @@ AddDeveloperForm::AddDeveloperForm(TeamDirectory* teams, const QJsonObject& team
     : QWidget(parent), teams_(teams), team_(team), models_(models),
       agent_(team_agents::defaults(models).developer), name_(new ket::TextField(this)),
       lane_(new ket::TextField(this)), paths_(new ket::TextField(this)),
-      agentButton_(
-          new ket::Button(team_agents::label(models, agent_), ket::ButtonVariant::Secondary, this)),
+      agentButton_(new ket::Button({}, ket::ButtonVariant::Secondary, this)),
       nameRow_(new ket::FieldRow(tr("Name"), name_, {}, this)), hint_(note(this, "teamDialogHint")),
       error_(note(this, "teamDialogError")) {
     setObjectName(QStringLiteral("addDeveloperForm"));
@@ -310,6 +362,7 @@ AddDeveloperForm::AddDeveloperForm(TeamDirectory* teams, const QJsonObject& team
     paths_->setObjectName(QStringLiteral("developerPathsField"));
     paths_->setPlaceholderText(tr("src/web, docs/web"));
     agentButton_->setObjectName(QStringLiteral("teamAgent_developer"));
+    setAgentLabel(agentButton_, team_agents::label(models_, agent_));
     layout->addWidget(nameRow_);
     layout->addWidget(new ket::FieldRow(tr("Lane"), lane_, {}, this));
     layout->addWidget(new ket::FieldRow(
@@ -344,7 +397,7 @@ QString AddDeveloperForm::error() const { return error_->isHidden() ? QString{} 
 
 void AddDeveloperForm::setAgent(const TeamAgent& agent) {
     agent_ = agent;
-    agentButton_->setText(team_agents::label(models_, agent_));
+    setAgentLabel(agentButton_, team_agents::label(models_, agent_));
 }
 
 QJsonObject AddDeveloperForm::payload() const {

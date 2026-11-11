@@ -111,7 +111,7 @@ class AgentWorkspaceView final : public QWidget {
     // builder's "Ask for a change to <flow>…". Empty keeps the composer's wording.
     Q_PROPERTY(
         QString composerHint READ composerHint WRITE setComposerHint NOTIFY composerHintChanged)
-    // The details pane is open: its Open content menu replaces the header's openers.
+    // The details pane is open; the header's openers then switch its tab.
     Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
     // #429: the labels the header's Add tag menu offers, each as {label, color}.
     Q_PROPERTY(QVariantList tagCatalog READ tagCatalog NOTIFY tagCatalogChanged)
@@ -328,7 +328,9 @@ class AgentWorkspaceView final : public QWidget {
     // a listing lands, so a binding that reads it asks again.
     Q_INVOKABLE QVariantList fileMentionSuggestions(const QString& query);
     // ADR 0027: `#` completes conversation numbers from the directory below.
-    Q_INVOKABLE QVariantList conversationMentionSuggestions(const QString& query) const;
+    // `prefix` is how the user started the mention, "#" or "@agent/"; suggestions insert it.
+    Q_INVOKABLE QVariantList conversationMentionSuggestions(
+        const QString& query, const QString& prefix = QStringLiteral("#")) const;
     Q_INVOKABLE void refreshFileMentions();
     int fileMentionRevision() const { return fileMentionRevision_; }
     Q_INVOKABLE void chooseAttachments();

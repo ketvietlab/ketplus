@@ -5,6 +5,8 @@
 #include <QList>
 #include <QString>
 
+#include <functional>
+
 class QAction;
 class QMenu;
 class QWidget;
@@ -45,6 +47,12 @@ struct RepositoryAddMenuActions {
     QAction* team = nullptr;
 };
 RepositoryAddMenuActions addRepositoryAddMenuActions(QMenu& menu);
+
+// Runs a menu's choice once the closed menu has left the screen. A ket::Dialog over the Agent
+// Workspace draws a snapshot of the screen beneath its backdrop; opened while the menu was still
+// on screen, the snapshot kept the menu, which then seemed not to close.
+inline constexpr int kMenuCloseMs = 150;
+void afterMenuCloses(QObject* context, std::function<void()> action);
 
 // The conversation menu's team entries: "Add to <team>" for each team of its repository while
 // it is on none, or "Remove from <team>…" while it is on one. Each action carries the team id

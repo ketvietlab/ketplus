@@ -9,6 +9,8 @@
 
 namespace ketplus::daemon::agent_messaging {
 
+// "4821" from "4821", "#4821" or "@agent/4821", trimmed; other text unchanged.
+[[nodiscard]] QString bareNumber(const QString& reference);
 // Host policy for the injected ketplus_agents tools, naming the conversation's own number.
 [[nodiscard]] QString toolInstructions(const QString& ownNumber);
 // ADR 0114: what a member of a team may do, by role. `lane` and `paths` are a developer's.
@@ -29,7 +31,7 @@ struct TeamRoleContext final {
 // Replaces the user-facing response guidance in turns a message started. `messages` are the
 // delivered `agent_messages`; whether one expects a reply decides if the final message is sent.
 [[nodiscard]] QString automaticTurnGuidance(const QJsonArray& messages);
-// Conversations the user referenced with `#NNNN`.
+// Conversations the user referenced with `#NNNN` or `@agent/NNNN`.
 [[nodiscard]] QString referenceText(const QList<AgentConversation>& conversations);
 
 } // namespace ketplus::daemon::agent_messaging

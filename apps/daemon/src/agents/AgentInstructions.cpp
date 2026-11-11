@@ -7,11 +7,21 @@
 
 namespace ketplus::daemon::agent_messaging {
 
+QString bareNumber(const QString& reference) {
+    const QString text = reference.trimmed();
+    if (text.startsWith(QLatin1Char('#')))
+        return text.mid(1);
+    if (text.startsWith(QStringLiteral("@agent/"), Qt::CaseInsensitive))
+        return text.mid(7);
+    return text;
+}
+
 QString toolInstructions(const QString& ownNumber) {
     return QStringLiteral(
                "[KetPlus agent messaging]\n"
-               "This conversation is #%1 on this computer. Other KetPlus conversations (Claude, "
-               "Codex or Cursor) have their own numbers. The ketplus_agents MCP server (tool "
+               "This conversation is #%1 on this computer, which KetPlus also shows as "
+               "@agent/%1. Other KetPlus conversations (Claude, Codex or Cursor) have their own "
+               "numbers, written #NNNN or @agent/NNNN. The ketplus_agents MCP server (tool "
                "names may have the mcp__ketplus_agents__ prefix) lets you contact them: "
                "agents_list finds conversations by number, title, provider or repository; "
                "agents_send sends a message to a number; agents_inbox lists messages addressed "
@@ -169,7 +179,8 @@ QString referenceText(const QList<AgentConversation>& conversations) {
                      conversation.idle ? QStringLiteral("idle") : QStringLiteral("working"),
                      conversation.worktree));
     return QStringLiteral("[KetPlus conversation references]\n"
-                          "The user's text names these KetPlus conversations by number. Contact "
+                          "The user's text names these KetPlus conversations by number, as #NNNN "
+                          "or @agent/NNNN. Contact "
                           "them with the ketplus_agents tools only when the user asks you to; "
                           "a number like this can also be an issue or pull request.\n") +
            lines.join(QLatin1Char('\n')) + QStringLiteral("\n[/KetPlus conversation references]");
