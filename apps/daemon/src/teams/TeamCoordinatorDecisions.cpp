@@ -152,6 +152,10 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         resume = text.startsWith(QStringLiteral("Continue"));
         if (!resume)
             team->pausedReason = QStringLiteral("user");
+    } else if (kind == QStringLiteral("merge")) {
+        // ADR 0112 §5: the user allows exactly this merge.
+        if (Task* ready = team->task(taskId); ready && text == leaderMergesChoice)
+            ready->leaderMayMerge = true;
     } else if (kind == firstPlan && text == startPlan) {
         team->planApproved = true;
         for (Task& task : team->tasks)
@@ -188,7 +192,7 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
     for (const QString& to : QStringList{leaderSession, owner}) {
         const Team* current = this->team(teamId);
         if (to.isEmpty() || !current || !current->member(to) ||
-            (to == owner && owner == leaderSession))
+            (to == owner && (owner == leaderSession || kind == QStringLiteral("merge"))))
             continue;
         wake(*current, {.teamId = teamId,
                         .teamName = current->name,

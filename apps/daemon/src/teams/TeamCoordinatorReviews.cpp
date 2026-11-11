@@ -142,6 +142,7 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                         {QStringLiteral("text"), findings}});
             applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
                       QStringLiteral("reviewed, no findings"), updates);
+            offerMerges(*team, updates);
         } else {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
                        QStringLiteral("Round %1: findings.").arg(round),

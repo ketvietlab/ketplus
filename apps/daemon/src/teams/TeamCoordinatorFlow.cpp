@@ -161,6 +161,7 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId) {
         return;
     const Member* member = team->member(sessionId);
     const qint64 teamId = team->id;
+    checkMerged(teamId);
     if (member && member->role == role::developer)
         checkLanes(teamId, sessionId);
     else if (member && member->role == role::leader)

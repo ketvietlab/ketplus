@@ -103,6 +103,13 @@ class TeamHostPort {
         (void)task;
         return std::nullopt;
     }
+    // Whether the integration branch contains the task's branch (ADR 0112, open point 3);
+    // nothing when git failed.
+    [[nodiscard]] virtual std::optional<bool> isMerged(const Team& team, const Task& task) const {
+        (void)team;
+        (void)task;
+        return std::nullopt;
+    }
     virtual QString postTeamMessage(const TeamMessage& message) {
         (void)message;
         return {};
@@ -196,6 +203,10 @@ class TeamCoordinator : public QObject {
     TeamResult withdrawDecision(qint64 teamId, const QString& decisionId, const QString& reason,
                                 const QString& actor);
 
+    // ADR 0112 §5 (TeamCoordinatorMerges.cpp): marks every Ready task the integration branch
+    // contains as done. Run when a member's turn ends and when a client reads the team.
+    void checkMerged(qint64 teamId);
+
     // ADR 0112 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
     void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
@@ -258,6 +269,9 @@ class TeamCoordinator : public QObject {
     // Sets a task's outside paths and records the change; false when nothing changed.
     bool flagOutside(Team& team, Task& task, const QStringList& outside, const QString& why,
                      QList<Update>& updates);
+    // Offers each Ready task whose dependencies are done for merging, once: an actionable
+    // update for the leader, and under mergePolicy "user" a "Merge T-n?" decision.
+    void offerMerges(Team& team, QList<Update>& updates);
     // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp).
     void pumpReviews(qint64 teamId);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,

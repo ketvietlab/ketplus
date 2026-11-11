@@ -150,6 +150,22 @@ std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
     return paths;
 }
 
+std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::Task& task) const {
+    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
+        return std::nullopt;
+    // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
+    QProcess process;
+    process.setWorkingDirectory(team.repository);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
+                   QStringLiteral("--is-ancestor"), task.branch, team.integrationBranch});
+    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
+        return std::nullopt;
+    if (process.exitCode() == 0 || process.exitCode() == 1)
+        return process.exitCode() == 0;
+    return std::nullopt;
+}
+
 void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                                       const QString& text, const QString& failure) {
     if (teams_ && request.kind == QStringLiteral("review"))

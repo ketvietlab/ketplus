@@ -129,6 +129,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
+        // ADR 0112, open point 3: reading the team notices a merge made outside the app.
+        teams_->checkMerged(teamId);
         const teams::Team* team = teams_->team(teamId);
         if (!team)
             return failure(QStringLiteral("team_not_found"),
