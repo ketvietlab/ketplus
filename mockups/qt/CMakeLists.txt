@@ -19,7 +19,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 868c6ffed7303bf05fe1a75a9d9d94edb75df0f0 # ket-qt PR #38 (centred status items)
+    GIT_TAG 8e8940b11e5039a5d26592d780184771bb935ec6 # ket-qt fix/dialog-backdrop-dark (a dark window dims behind a dialog)
 )
 FetchContent_MakeAvailable(ketqt)
 
