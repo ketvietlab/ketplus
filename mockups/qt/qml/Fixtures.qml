@@ -398,7 +398,7 @@ QtObject {
           rows: [["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
                  ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
         { id: "claude", name: "Claude Agent SDK", note: "", badge: "Ready", tone: "success",
-          rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Claude subscription"],
+          rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Claude subscription"],
                  ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
         { id: "cursor", name: "Cursor CLI", note: "", badge: "Ready", tone: "success",
           rows: [["Version", "2026.9.18"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"],
@@ -474,7 +474,7 @@ QtObject {
             ],
             primary: "Check again", secondary: "Add an API key", secondaryAction: "settings/providers",
             ready: "Claude is signed in",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "No credential found"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "No credential found"]]
         },
         "sidecar-missing": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: true, tone: "danger",
@@ -502,7 +502,7 @@ QtObject {
             ],
             primary: "Retry", secondary: "Use an API key", secondaryAction: "settings/providers",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Expired at 09:12"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Expired at 09:12"]]
         },
         "key-rejected": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: false, tone: "danger",
@@ -517,7 +517,7 @@ QtObject {
             ],
             primary: "Open Settings", primaryAction: "settings/providers", secondary: "Retry", secondaryAction: "retry",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "API key · rejected"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "API key · rejected"]]
         },
         "limit": {
             provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
