@@ -34,6 +34,14 @@ QtObject {
         UI: "#4f6bed", Performance: "#c2780a", Review: "#7c5cd6", Atlas: "#3f8f7a",
         Account: "#2f8f4e", Bug: "#d1453b", Docs: "#5b6b7f"
     })
+    // A member's role in its team (Fixtures.teams): the first tag of its conversation. The team
+    // sets it, so it is not among the tags a user adds or removes.
+    // A team has one leader, one reviewer and this many developers at most (and one at least).
+    readonly property int mostDevelopers: 5
+    readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
+    function roleTag(role) {
+        return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
+    }
 
     function tag(label) { return { label: label, color: tagColors[label] || "#5b6b7f" } }
 
@@ -65,8 +73,10 @@ QtObject {
                   tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
                 { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
                   tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },
+                // The reviewer of the Release 1.4 team (Fixtures.teams). A reviewer runs on Claude.
                 { number: "4583", title: "Review fix scroll anchor", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running" },
+                  tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running",
+                  provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" },
                 { number: "6120", title: "Profile the editor startup", status: KetTheme.ConversationStatus.Error,
                   tags: [tag("Performance"), tag("Bug")], worktree: "develop", transcript: "error" },
                 // A turn the provider ended: the guide in the transcript (workspace/setup-expired…).
@@ -74,7 +84,13 @@ QtObject {
                   tags: [tag("Performance")], worktree: "develop", transcript: "setup", setup: "expired",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "5904", title: "Draft release notes", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Docs")], worktree: "develop", transcript: "short" }
+                  tags: [tag("Docs")], worktree: "develop", transcript: "short" },
+                // The rest of the Docs refresh team (teams).
+                { number: "5911", title: "Rewrite the build guide", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Docs")], worktree: "docs/1.4", transcript: "short" },
+                { number: "5923", title: "Review the user guide", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Docs"), tag("Review")], worktree: "docs/1.4", transcript: "short",
+                  provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" }
             ]
         },
         {
@@ -565,4 +581,128 @@ QtObject {
             { number: "8854", title: "Review the startup flow", provider: "Claude", size: "80 MB", note: "5,200 commands" }
         ]
     })
+
+    // Teams (concept): conversations that share one goal. The leader, who also writes the
+    // requirements, assigns tasks; each developer owns a lane of the code (path prefixes) and a
+    // reviewer checks the lanes it is given. A task has one owner, who also holds its worktree,
+    // and acceptance criteria only the leader changes. Questions for the user wait in
+    // `decisions`; `updates` are task changes that woke nobody and reach the leader as one digest.
+    // Members are conversations of `repositories` above, so their rows open them.
+    readonly property var teams: [
+        {
+            id: "release", name: "Release 1.4",
+            goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
+            repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
+            members: [
+                { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
+                  lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
+                { number: "2035", title: "Refine navigation", role: "developer", provider: "Claude · Opus 5.5",
+                  lane: "Navigation", paths: ["apps/desktop/src/workspace/"], state: "waiting", now: "T-1 is in review" },
+                { number: "8213", title: "Finish the repository picker", role: "developer", provider: "Claude · Opus 5.5",
+                  lane: "Repository picker", paths: ["apps/desktop/src/app/picker/"], state: "working", now: "T-3 · step 3 of 4" },
+                { number: "8215", title: "Follow up on the new UI", role: "developer", provider: "Claude · Opus 5.5",
+                  lane: "Settings", paths: ["apps/desktop/src/settings/", "apps/desktop/src/overlays/"], state: "blocked", now: "T-5 waits for your decision" },
+                { number: "4583", title: "Review fix scroll anchor", role: "reviewer", provider: "Claude · Opus 5.5",
+                  lane: "", reviews: ["Navigation", "Repository picker", "Settings"], paths: [], state: "working", now: "Reviewing T-1 · #412" }
+            ],
+            tasks: [
+                { id: "T-1", title: "Sidebar destinations and their counts", owner: "2035", lane: "Navigation", state: "review",
+                  pr: "#412", branch: "feat/nav-destinations", worktree: "ketplus-desktop-nav", dependsOn: "",
+                  criteria: [
+                      { text: "The four destinations match the mock at 100% and 125% zoom", done: true },
+                      { text: "Source Control shows the number of changed files", done: true },
+                      { text: "Every destination is reachable by keyboard", done: true }],
+                  history: [
+                      { when: "Today, 09:10", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/2035" },
+                      { when: "Today, 11:42", text: "@agent/2035 opened #412 and moved the task to In review" },
+                      { when: "Today, 11:43", text: "@agent/4583 started the review" }] },
+                { id: "T-2", title: "Quick search opens with ⌘K", owner: "2035", lane: "Navigation", state: "done",
+                  pr: "#405", branch: "feat/quick-search-shortcut", worktree: "", dependsOn: "",
+                  criteria: [
+                      { text: "⌘K opens Quick search from every screen", done: true },
+                      { text: "Escape returns focus to where it was", done: true }],
+                  history: [
+                      { when: "Yesterday, 16:20", text: "@agent/4583 passed the review with one finding" },
+                      { when: "Yesterday, 16:48", text: "@agent/2035 fixed the finding and merged #405 into release/1.4" }] },
+                { id: "T-3", title: "Repository picker: recent and pinned repositories", owner: "8213", lane: "Repository picker", state: "doing",
+                  pr: "", branch: "feat/picker-recents", worktree: "ketplus-desktop-picker", dependsOn: "",
+                  outsideLane: { path: "apps/desktop/src/workspace/ActivityBar.cpp", lane: "Navigation", owner: "2035" },
+                  criteria: [
+                      { text: "The five most recent repositories come first", done: true },
+                      { text: "A pinned repository stays above the recent ones", done: true },
+                      { text: "Typing filters by name and by path", done: false },
+                      { text: "The list works with 0, 1 and 200 repositories", done: false }],
+                  criteriaNote: "Changed today at 10:05: “200 repositories” was added. @agent/8213 was told.",
+                  history: [
+                      { when: "Today, 09:12", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" },
+                      { when: "Today, 10:05", text: "@agent/4821 changed the acceptance criteria" },
+                      { when: "Today, 11:30", text: "@agent/8213 edited ActivityBar.cpp, a file of the Navigation lane" }] },
+                { id: "T-4", title: "Repository picker: empty and error states", owner: "8213", lane: "Repository picker", state: "todo",
+                  pr: "", branch: "", worktree: "", dependsOn: "T-3",
+                  criteria: [
+                      { text: "No repository yet: one action that opens a folder", done: false },
+                      { text: "A repository that moved says so and offers Locate", done: false }],
+                  history: [
+                      { when: "Today, 09:14", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" }] },
+                { id: "T-5", title: "Settings: zoom and text size", owner: "8215", lane: "Settings", state: "blocked",
+                  pr: "", branch: "feat/settings-zoom", worktree: "ketplus-desktop-settings", dependsOn: "", decision: "D-1",
+                  criteria: [
+                      { text: "Zoom offers 90% to 150% in steps of 10", done: true },
+                      { text: "Text size is in pixels, from 12 to 18", done: true },
+                      { text: "A change applies as the decision says", done: false }],
+                  history: [
+                      { when: "Today, 09:15", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8215" },
+                      { when: "Today, 11:05", text: "@agent/8215 asked whether a change applies at once; @agent/4821 put it to you" }] },
+                { id: "T-6", title: "Settings: the update reminder", owner: "8215", lane: "Settings", state: "review",
+                  pr: "#418", branch: "feat/update-reminder", worktree: "", dependsOn: "",
+                  criteria: [
+                      { text: "The reminder shows the version and what Restart does", done: true },
+                      { text: "It stays out of the way of a running turn", done: true }],
+                  history: [
+                      { when: "Today, 10:50", text: "@agent/8215 opened #418 and moved the task to In review" }] },
+                { id: "T-7", title: "Keyboard path through the sidebar", owner: "", lane: "Navigation", state: "todo",
+                  pr: "", branch: "", worktree: "", dependsOn: "T-1",
+                  criteria: [
+                      { text: "Tab reaches every row in reading order", done: false },
+                      { text: "Arrow keys move inside a repository's conversations", done: false }],
+                  history: [
+                      { when: "Today, 09:20", text: "@agent/4821 wrote the acceptance criteria" }] },
+                { id: "T-8", title: "Release notes and the version number", owner: "4821", lane: "", state: "todo",
+                  pr: "", branch: "", worktree: "", dependsOn: "T-1, T-3, T-5", decision: "D-2",
+                  criteria: [
+                      { text: "The full test suite passes on release/1.4", done: false },
+                      { text: "The notes name every change a user can see", done: false }],
+                  history: [
+                      { when: "Today, 09:22", text: "@agent/4821 kept this task for the end of the epic" }] }
+            ],
+            decisions: [
+                { id: "D-1", question: "Should a change of zoom or text size apply at once, or after Apply?",
+                  detail: "Applying at once is what Appearance already does for the theme. An Apply button lets you compare before the window changes.",
+                  askedBy: "4821", task: "T-5", when: "42 min ago", options: ["Apply at once", "After Apply"], recommended: 0 },
+                { id: "D-2", question: "Which languages do the 1.4 release notes ship in?",
+                  detail: "Vietnamese adds about a day: the notes are reviewed by a person, not by the team.",
+                  askedBy: "4821", task: "T-8", when: "2 hours ago", options: ["English only", "English and Vietnamese"], recommended: 0 }
+            ],
+            updates: [
+                { icon: "pull-request", text: "T-1 moved to In review", detail: "@agent/2035 · #412", when: "18 min ago" },
+                { icon: "warning", text: "T-3 edited a file of another lane", detail: "@agent/8213 · ActivityBar.cpp belongs to Navigation", when: "30 min ago", warning: true },
+                { icon: "clock", text: "T-5 is blocked on a decision", detail: "@agent/8215 · D-1 waits for you", when: "55 min ago" },
+                { icon: "pull-request", text: "T-6 moved to In review", detail: "@agent/8215 · #418", when: "1 hour ago" }
+            ]
+        },
+        {
+            id: "docs", name: "Docs refresh",
+            goal: "Bring the user guide in line with 1.4.",
+            repository: "ketplus-desktop", branch: "docs/1.4", paused: false, merges: "user",
+            members: [
+                { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
+                  lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },
+                { number: "5911", title: "Rewrite the build guide", role: "developer", provider: "Claude · Opus 5.5",
+                  lane: "Guides", paths: ["docs/guide/"], state: "idle", now: "No task yet" },
+                { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Claude · Opus 5.5",
+                  lane: "", paths: [], reviews: ["Guides"], state: "idle", now: "No review yet" }
+            ],
+            tasks: [], decisions: [], updates: []
+        }
+    ]
 }

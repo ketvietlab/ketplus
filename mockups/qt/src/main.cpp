@@ -3,10 +3,11 @@
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
 //   --open=model|mode|limits|reviewer|composer|images|mermaid   a composer panel, the image viewer
 //   or diagrams; plan presses the Plan ring, atlas-toggle presses Atlas twice
-//   --scroll=0.5                                   scroll the transcript or the Connections intro
+//   --scroll=0.5                        scroll the transcript, the Connections intro or a team
 //   (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
-//   --smoke                                  open every screen; exit non-zero on QML warnings
+//   --size=1024x640                                             the window's size
+//   --smoke         open every screen and run the teams checks; exit non-zero on QML warnings
 //   --edition=lite --chrome=windows|linux       KétPlus instead of Pro, with that platform's chrome
 //   --display=secondary|<index>      open on another display, leaving the main one free
 //   --keys                     with --smoke and --edition=lite: drive the menu bar by keyboard
@@ -88,8 +89,10 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption keys(
         QStringLiteral("keys"),
         QStringLiteral("With --smoke: choose a menu item by keyboard. It activates the window."));
+    const QCommandLineOption size(
+        QStringLiteral("size"), QStringLiteral("Window size, as 1024x640."), QStringLiteral("WxH"));
     parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke, edition,
-                       chrome, display, keys});
+                       chrome, display, keys, size});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -153,6 +156,8 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+    if (const QStringList parts = parser.value(size).split(QLatin1Char('x')); parts.size() == 2)
+        window->resize(parts.at(0).toInt(), parts.at(1).toInt());
     if (parser.isSet(display)) {
         const QList<QScreen*> screens = QGuiApplication::screens();
         QScreen* target = nullptr;
@@ -186,6 +191,33 @@ int main(int argc, char* argv[]) {
         QMetaObject::invokeMethod(window, "openEveryOverlay");
         QTimer::singleShot(300, &application, &QCoreApplication::quit);
         QApplication::exec();
+        // Teams: a pointer drags a conversation onto a team's folder, then the mock checks
+        // its own rules. A broken rule is a QML warning, so it fails the run.
+        if (window->metaObject()->indexOfMethod("teamChecks()") >= 0) {
+            // The fixture teams again (the last screen has none), then the workspace.
+            for (const char* id : {"teams", "workspace"})
+                QMetaObject::invokeMethod(window, "showScreen",
+                                          Q_ARG(QVariant, QString::fromLatin1(id)));
+            QMetaObject::invokeMethod(window, "prepareTeamDrag");
+            QTest::qWait(150);
+            QVariant points;
+            QMetaObject::invokeMethod(window, "teamDragPoints", Q_RETURN_ARG(QVariant, points));
+            const QVariantList drag = points.toList();
+            if (drag.size() == 4) {
+                const QPoint from(drag.at(0).toInt(), drag.at(1).toInt());
+                const QPoint to(drag.at(2).toInt(), drag.at(3).toInt());
+                QTest::mousePress(window, Qt::LeftButton, {}, from);
+                for (int step = 1; step <= 8; ++step)
+                    QTest::mouseMove(window, from + (to - from) * step / 8, 20);
+                QTest::mouseRelease(window, Qt::LeftButton, {}, to, 20);
+                QTest::qWait(150);
+            } else {
+                qWarning(
+                    "QML teams check failed: no conversation row or team folder to drag between");
+            }
+            QMetaObject::invokeMethod(window, "teamChecks");
+            QTest::qWait(100);
+        }
         if (controller.edition == QLatin1String("lite") && parser.isSet(keys)) {
             // The Windows menu bar without a pointer: F10 focuses File, Right ×4 reaches
             // View, Down opens it, Down Down Enter chooses Search in Files. Keys reach Qt
