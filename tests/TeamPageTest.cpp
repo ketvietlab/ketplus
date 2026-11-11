@@ -391,6 +391,14 @@ class TeamPageTest final : public QObject {
         dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
         QPointer<ket::Dialog> handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
         QVERIFY(handover && handover->isOpen());
+        // Cancelled, it opens again as a new dialog with the same fields.
+        handover->reject();
+        QTRY_VERIFY(!handover);
+        QVERIFY(body->handoverOwner());
+        dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
+        handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
+        QVERIFY(handover && handover->isOpen());
+        QVERIFY(body->handoverReason()->isVisibleTo(&window));
         window.findChild<ket::Button*>("teamHandoverButton")->click();
         QCOMPARE(daemon_.count("team.task.handover"), 0);
         QVERIFY(!body->error().isEmpty());
@@ -413,8 +421,15 @@ class TeamPageTest final : public QObject {
         QVERIFY(dialog->isOpen());
         QVERIFY(dialog->findChild<QLabel*>("teamTaskOwner")->text().contains("Dev 2"));
         // The handover closed itself and left its fields with the task.
-        QTRY_VERIFY(!handover || !handover->isOpen());
+        QTRY_VERIFY(!handover);
         QVERIFY(body->handoverOwner());
+        // And after a handover that went through: Dev 1 can take it back.
+        dialog->findChild<ket::Button*>("teamHandoverOpen")->click();
+        handover = window.findChild<ket::Dialog*>("teamHandoverDialog");
+        QVERIFY(handover && handover->isOpen());
+        QCOMPARE(body->handoverOwner()->currentData().toString(), QStringLiteral("dev1"));
+        handover->reject();
+        QTRY_VERIFY(!handover);
         QSignalSpy asked(&page, &TeamPage::conversationRequested);
         dialog->findChild<ket::Button*>("teamTaskOpenOwner")->click();
         QCOMPARE(asked.size(), 1);

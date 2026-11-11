@@ -37,9 +37,13 @@ ket::Dialog* TeamTaskDialog::openHandover() {
     hand->setObjectName(QStringLiteral("teamHandoverButton"));
     connect(hand, &QAbstractButton::clicked, this, &TeamTaskDialog::handOver);
     // The fields outlive the dialog: they come back here before it deletes its body.
-    connect(dialog, &ket::Dialog::finished, this, [this] {
+    connect(dialog, &ket::Dialog::finished, this, [this, dialog] {
         form_->hide();
         form_->setParent(this);
+        // A finished dialog only hides: forget it, so Hand over… opens a new one.
+        if (handover_ == dialog)
+            handover_ = nullptr;
+        dialog->deleteLater();
     });
     handover_ = dialog;
     dialog->open();
