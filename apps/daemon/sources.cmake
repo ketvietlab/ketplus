@@ -129,6 +129,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
     src/runtime/SessionHostArchive.cpp
+    src/runtime/SessionHostAwaiting.cpp
+    src/runtime/AwaitingReply.h
     src/runtime/SessionHostTags.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp

@@ -143,6 +143,18 @@ class DesktopZoomTest final : public QObject {
             if (!capture.isEmpty()) {
                 QDir().mkpath(capture);
                 QVERIFY(bar->grab().save(capture + QString("/sidebar-%1.png").arg(zoom)));
+                // The mock's workspace/storage-warning: the journal banner above Update ready.
+                bar->setStorageStatus(
+                    {{"ok", true},
+                     {"status", QVariantMap{{"warning", true},
+                                            {"over_limit", true},
+                                            {"database_page_bytes", 9'000'000'000LL},
+                                            {"limit_bytes", 5'000'000'000LL}}}});
+                bar->setPendingUpdate("1.8.0", true);
+                QTest::qWait(40);
+                QVERIFY(bar->grab().save(capture + QString("/sidebar-storage-%1.png").arg(zoom)));
+                bar->setStorageStatus({{"ok", true}, {"status", QVariantMap{{"warning", false}}}});
+                bar->setPendingUpdate({});
                 QVERIFY(agent->quickView()->grabWindow().save(capture +
                                                               QString("/agent-%1.png").arg(zoom)));
             }

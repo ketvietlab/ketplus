@@ -91,9 +91,23 @@ qsizetype markdownLinkEnd(const QString& text, const qsizetype start,
     return end < 0 ? start : end;
 }
 
+// An inline link or image whose destination names a network scheme.
+bool remoteDestination(const QString& link) {
+    static const QRegularExpression destination(QStringLiteral(R"(\]\(\s*<?([a-z][a-z0-9+.-]+):)"),
+                                                QRegularExpression::CaseInsensitiveOption);
+    const auto match = destination.match(link);
+    if (!match.hasMatch())
+        return false;
+    const QString scheme = match.captured(1).toLower();
+    return scheme != QLatin1String("file") && scheme != QLatin1String("data") &&
+           scheme != QLatin1String("qrc");
+}
+
+// A backslash ends the URL: it is the escape this file put before a raw `<`, and an autolink
+// that swallowed it would end in `\\>` and never close.
 qsizetype bareUrlEnd(const QString& text, const qsizetype start) {
     static const QRegularExpression url(
-        QStringLiteral(R"((?<![\p{L}\p{N}/@])https?://[^\s<>`"']+)"),
+        QStringLiteral(R"((?<![\p{L}\p{N}/@])https?://[^\s<>`"'\\]+)"),
         QRegularExpression::CaseInsensitiveOption);
     const auto match = url.match(text, start, QRegularExpression::NormalMatch,
                                  QRegularExpression::AnchorAtOffsetMatchOption);
@@ -159,6 +173,17 @@ QString transformInline(const QString& text, const bool linkify, const QSet<QStr
                 output += text.mid(index, end - index);
                 index = end;
                 continue;
+            }
+            // A remote image reads as a link to it: the transcript never fetches it, and the
+            // reader still sees where it points.
+            if (character == u'!' && index + 1 < size && text.at(index + 1) == u'[') {
+                const qsizetype end = markdownLinkEnd(text, index + 1, references);
+                if (end > index + 1) {
+                    const QString link = text.mid(index + 1, end - index - 1);
+                    output += remoteDestination(link) ? link : u'!' + link;
+                    index = end;
+                    continue;
+                }
             }
             if (character == u'[') {
                 const qsizetype end = markdownLinkEnd(text, index, references);

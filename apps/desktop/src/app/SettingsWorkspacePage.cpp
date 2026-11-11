@@ -91,11 +91,13 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // Storage has its own controls; Restore defaults does not apply to it.
     addSection(tr("Storage"), QStringLiteral("storage"),
                new SettingsStoragePage(std::move(storageRequester), this), false);
+    // Sparkle keeps the update preferences; Restore defaults does not reset them.
     addSection(tr("Updates"), QStringLiteral("updates"),
-               new SettingsUpdatesPage(AppUpdater::instance(), this));
+               new SettingsUpdatesPage(AppUpdater::instance(), this), false);
     addStyleRules(QStringLiteral(R"QSS(
 QLabel#storageUsage, QLabel#storageStatus, QComboBox#storageDetailDays,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
+QLabel#computerStatus, QLabel#browserToolsStatus { color:%3; font-size:{{body}}px; }
 )QSS"));
     connect(this, &SettingsWorkspace::linkActivated, this, [this](const QString& id) {
         if (id == QStringLiteral("agent-models"))

@@ -560,8 +560,13 @@ QString TeamCoordinator::assignmentText(const Team& team, const Task& task, cons
     return lines.join(QLatin1Char('\n'));
 }
 
-void TeamCoordinator::deliverAssignment(const Team& team, const Task& task, const QString& from,
-                                        const bool handover, const QString& reason) {
+void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& storedTask,
+                                        const QString& from, const bool handover,
+                                        const QString& reason) {
+    // Copies: recording a failed move below detaches the stored lists the arguments refer
+    // into, and the old ones are freed with `before`.
+    const Team team = storedTeam;
+    const Task task = storedTask;
     if (const QString error = host_->pointConversationAt(task.owner, task.worktree);
         !error.isEmpty()) {
         Team* stored = mutableTeam(team.id);

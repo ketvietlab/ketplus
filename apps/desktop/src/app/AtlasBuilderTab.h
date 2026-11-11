@@ -13,6 +13,10 @@ class QLabel;
 class QPalette;
 class QAbstractButton;
 
+namespace ket {
+class Badge;
+}
+
 namespace ketplus {
 
 class AgentWorkspaceView;
@@ -56,6 +60,8 @@ class AtlasBuilderTab final : public QWidget {
     void watchBundle();
     void refreshPreview();
     void updateAiButton();
+    void updateFlowContext();
+    void setPreviewValidated(bool validated);
     void observeMessages();
 
     AtlasIndex* index_{nullptr};
@@ -66,7 +72,9 @@ class AtlasBuilderTab final : public QWidget {
     QLabel* explanation_{nullptr};
     QLabel* guidance_{nullptr};
     QLabel* samplePrompt_{nullptr};
-    QLabel* flowContext_{nullptr};
+    QLabel* flowGlyph_{nullptr};
+    QLabel* subtitle_{nullptr};
+    ket::Badge* validated_{nullptr};
     QFrame* chatFrame_{nullptr};
     AgentWorkspaceView* chat_{nullptr};
     QAbstractButton* collapse_{nullptr};

@@ -3,6 +3,7 @@
 #include "agent/CodexAppServer.h"
 #include "agent/ProviderSetupGuide.h"
 
+#include <QGuiApplication>
 #include <QJsonObject>
 #include <QPointer>
 
@@ -15,6 +16,15 @@ ProviderRuntimeStatus::ProviderRuntimeStatus(CodexAppServer* server, QObject* pa
         if (ready)
             refresh();
     });
+    // The guide sends the reader to a terminal; coming back reads the state again, so a
+    // provider set up meanwhile is ready without a restart.
+    if (qGuiApp != nullptr)
+        connect(qGuiApp, &QGuiApplication::applicationStateChanged, this,
+                [this](const Qt::ApplicationState state) {
+                    if (state == Qt::ApplicationActive &&
+                        !state_.value(QStringLiteral("setups")).toMap().isEmpty())
+                        refresh();
+                });
     // A daemon restart may bring a different provider CLI.
     connect(server_, &CodexAppServer::serverStopped, this, [this] {
         ++generation_;
