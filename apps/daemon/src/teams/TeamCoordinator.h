@@ -148,8 +148,10 @@ class TeamCoordinator : public QObject {
     TeamCoordinator(LocalJournal* journal, TeamHostPort* host, QObject* parent = nullptr);
     ~TeamCoordinator() override;
 
-    // Reads the stored teams. Called once at start.
+    // Reads the stored teams, at start and again when that failed. A journal that cannot
+    // be read keeps the teams in memory as they were.
     void load();
+    [[nodiscard]] bool isLoaded() const noexcept { return loaded_; }
 
     [[nodiscard]] QList<const Team*> teams(const QString& repository = {}) const;
     [[nodiscard]] const Team* team(qint64 teamId) const;
@@ -304,6 +306,7 @@ class TeamCoordinator : public QObject {
     TeamHostPort* host_{nullptr};
     QHash<qint64, Team> teams_;
     QHash<QString, qint64> teamBySession_;
+    bool loaded_{false};
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
 

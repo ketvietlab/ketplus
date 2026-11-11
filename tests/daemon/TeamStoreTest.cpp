@@ -305,6 +305,36 @@ class TeamStoreTest final : public QObject {
         QVERIFY(teams.teams().isEmpty());
         QVERIFY(teams.create(standard(), "user").ok());
     }
+
+    // A journal that cannot be read is not a journal without teams: the coordinator says it
+    // has not loaded, keeps what it knew, and reads again when asked.
+    void anUnreadableJournalIsNotAnEmptyOne() {
+        LocalJournal journal(journalPath());
+        TeamCoordinator teams(&journal, &host_);
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QVERIFY(teams.create(standard(), "user").ok());
+        const auto sql = [this](const QString& statement) {
+            bool ran = false;
+            {
+                auto database = QSqlDatabase::addDatabase("QSQLITE", "break-journal");
+                database.setDatabaseName(journalPath());
+                ran = database.open() && QSqlQuery(database).exec(statement);
+                database.close();
+            }
+            QSqlDatabase::removeDatabase("break-journal");
+            return ran;
+        };
+        QVERIFY(sql("ALTER TABLE teams RENAME TO teams_away"));
+        QTest::ignoreMessage(QtWarningMsg, "Unable to read the teams from the journal.");
+        teams.load();
+        QVERIFY(!teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+        QVERIFY(sql("ALTER TABLE teams_away RENAME TO teams"));
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(TeamStoreTest)

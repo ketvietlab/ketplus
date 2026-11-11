@@ -31,9 +31,18 @@ TeamCoordinator::TeamCoordinator(LocalJournal* journal, TeamHostPort* host, QObj
 TeamCoordinator::~TeamCoordinator() = default;
 
 void TeamCoordinator::load() {
+    // A journal that could not be read is not a journal without teams: say so, so a client
+    // asks again instead of showing none.
+    bool read = false;
+    const QList<QJsonObject> documents = journal_->teamDocuments(&read);
+    loaded_ = read;
+    if (!read) {
+        qWarning("Unable to read the teams from the journal.");
+        return;
+    }
     teams_.clear();
     teamBySession_.clear();
-    for (const QJsonObject& document : journal_->teamDocuments()) {
+    for (const QJsonObject& document : documents) {
         Team team = teamFromJson(document);
         if (team.id <= 0)
             continue;
