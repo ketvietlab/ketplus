@@ -4,6 +4,8 @@ add_library(ketplus_ai STATIC
     src/agent/TranscriptStepItems.cpp
     src/agent/TranscriptTurnFiles.cpp
     src/agent/TranscriptTurnFiles.h
+    src/agent/ConversationChangesPane.cpp
+    src/agent/ConversationChangesPane.h
     src/agent/WorkReportPane.cpp
     src/agent/WorkReportPane.h
     src/agent/WorkReportText.cpp
@@ -68,6 +70,8 @@ add_library(ketplus_ai STATIC
     src/agent/MermaidLabelContrast.h
     src/agent/TranscriptFileLinks.cpp
     src/agent/TranscriptFileLinks.h
+    src/agent/TranscriptNetworkPolicy.cpp
+    src/agent/TranscriptNetworkPolicy.h
     src/agent/TranscriptTrace.cpp
     src/agent/TranscriptTrace.h
     src/agent/ChatMarkdown.cpp
@@ -114,6 +118,7 @@ add_library(ketplus_ai STATIC
 )
 target_link_libraries(ketplus_ai
     PUBLIC
+        Qt6::Network
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
@@ -199,6 +204,8 @@ set_source_files_properties(src/agent/qml/TranscriptAgentNote.qml PROPERTIES QT_
 set_source_files_properties(src/agent/qml/TranscriptTeamBlock.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTeamBlock.qml")
 set_source_files_properties(src/agent/qml/TranscriptWorkReport.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptWorkReport.qml")
 set_source_files_properties(src/agent/qml/WorkReportPane.qml PROPERTIES QT_RESOURCE_ALIAS "WorkReportPane.qml")
+set_source_files_properties(src/agent/qml/ConversationChangesPane.qml PROPERTIES QT_RESOURCE_ALIAS "ConversationChangesPane.qml")
+set_source_files_properties(src/agent/qml/ManageTagsDialog.qml PROPERTIES QT_RESOURCE_ALIAS "ManageTagsDialog.qml")
 set_source_files_properties(src/agent/qml/TranscriptTrimmedDetail.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTrimmedDetail.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
@@ -317,6 +324,8 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptTeamBlock.qml
         src/agent/qml/TranscriptWorkReport.qml
         src/agent/qml/WorkReportPane.qml
+        src/agent/qml/ConversationChangesPane.qml
+        src/agent/qml/ManageTagsDialog.qml
         src/agent/qml/TranscriptTrimmedDetail.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml

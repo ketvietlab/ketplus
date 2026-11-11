@@ -94,7 +94,7 @@ Item {
                 return null;
         }
         const turnModel = errorModel ? shell.modelForId(errorModel) : null;
-        const modelName = turnModel ? turnModel.displayName
+        const modelName = turnModel && turnModel.displayName ? turnModel.displayName
                         : errorModel || shell.modelLabel || shell.selectedModel || "";
         const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider,
                                              errorCode, errorDetail || body, modelName);
@@ -130,6 +130,14 @@ Item {
         view.messageModel.sourceRevision;
         const rows = view.messageModel.count;
         return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
+    }
+    // A failed turn whose error banner sits just above it: the banner already says so, and the
+    // mock's workspace/error shows no "Failed" line under it.
+    readonly property bool failureShownAbove: {
+        if (subtype !== "turnEnd" || status !== "failed" || index < 1 || !view.messageModel)
+            return false;
+        view.messageModel.sourceRevision;
+        return view.messageModel.get(index - 1).kind === "error";
     }
     // An event line that opens the transcript ("Switched from…", "Forked from…") starts where a
     // day divider would, right under the top padding.
@@ -424,7 +432,7 @@ Item {
             TranscriptNotice {
                 objectName: "transcriptNotice"
                 width: parent.width
-                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup
+                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup && !messageDelegate.failureShownAbove
                 height: visible ? implicitHeight : 0
 
                 title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")
@@ -946,7 +954,6 @@ Item {
                 property var codeFences: []
                 property bool codeFencesIdentity: true
                 property var codeBlocks: []
-                property var inlineCode: []
                 property string lastActivatedLink: ""
                 property double lastLinkActivationTime: 0
                 function activateLink(link) {
@@ -982,7 +989,6 @@ Item {
                     try {
                         host.formatMessageDocument(textDocument, font.pixelSize, width);
                         codeBlocks = host.messageCodeBlocks(textDocument);
-                        inlineCode = host.messageInlineCode(textDocument);
                         mermaidPlaceholders = host.mermaidPlaceholderPositions(textDocument);
                         const layout = host.mermaidLayout(textDocument, messageKey);
                         mermaidBlocks = layout.blocks;
@@ -1081,21 +1087,6 @@ Item {
                                 bodyText.applyMermaidMode();
                             });
                         }
-                    }
-                }
-                Repeater {
-                    model: bodyText.inlineCode
-                    delegate: Rectangle {
-                        objectName: "messageInlineCodeChip"
-                        required property var modelData
-                        x: modelData.x
-                        y: modelData.y + bodyText.topPadding
-                        width: modelData.width
-                        height: modelData.height
-                        z: -1
-                        radius: KetTheme.px(4, KetTheme.zoom)
-                        readonly property color ink: KetTheme.t.textMain
-                        color: Qt.rgba(ink.r, ink.g, ink.b, 0.11)
                     }
                 }
                 Loader {
@@ -1348,22 +1339,6 @@ Item {
             TranscriptMessageImages {
                 row: messageDelegate
                 sources: kind === "user" ? [] : messageDelegate.messageImages
-            }
-            // The mock's line under a generated image: what it was made from.
-            Text {
-                objectName: "imagePromptLine"
-                visible: messageDelegate.subtype === "imageGeneration" && messageDelegate.commandDescription.length > 0 && messageDelegate.messageImages.length > 0
-                width: parent.width
-                height: visible ? implicitHeight + KetTheme.px(8, KetTheme.zoom) : 0
-                topPadding: KetTheme.px(8, KetTheme.zoom)
-                text: "<b>Prompt</b>&nbsp;&nbsp;" + messageDelegate.commandDescription.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                textFormat: Text.StyledText
-                wrapMode: Text.Wrap
-                maximumLineCount: 3
-                elide: Text.ElideRight
-                color: KetTheme.t.textSecondary
-                font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.px(13, KetTheme.zoom)
             }
 
         }

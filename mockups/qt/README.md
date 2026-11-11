@@ -23,12 +23,13 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ## Evidence
 
 ```sh
-KetPlusMock --smoke                                    # every screen, fails on QML warnings
+KetPlusMock --smoke                                    # every screen and the teams checks, fails on QML warnings
 KetPlusMock --edition=lite --smoke                     # the same for KétPlus, and every Search result
 KetPlusMock --edition=lite --smoke --keys              # also chooses View > Search in Files by keyboard
 KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
+KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
 ```
 
@@ -41,12 +42,14 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
+| `teams` | `task`, `large`, `empty`, `ready`, `paused` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision). `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
 | `workspace` | `plan-ready`, `plan-planning`, `plan-running`, `plan-continuing`, `plan-blocked`, `plan-paused`, `plan-limit`, `plan-complete` | Concept: Plan is a document tab in the existing right pane; the transcript and composer remain visible. Automatic planning from repository context, compact tasks and source references, daemon follow-up, Stop, blocker and budget states. See [the harness preview](marketing/plan-harness/README.md). |
 | `workspace` | `content-tabs`, `content-terminal`, `content-file` | Editor-style right pane with two files, two independent terminal sessions and the conversation plan. Closable tabs, horizontal overflow, `+` and open-documents menu (`--open=content-tabs`). |
+| `workspace` | `team-assignment`, `team-digest`, `team-review`, `team-verdict`, `team-decision` | What a team sends into its members' conversations, each as one block (`TeamTranscriptBlock`): the developer's assignment (criteria, lane, branch, who assigned it), the leader's digest (ten changes grouped by task, what needs the leader marked), the reviewer's request (criteria and the change in short), the owner's verdict (findings and the round) and the leader's answered decision. Open T-n, and a digest group's title, open the task on the team page |
 | `workspace` | `turn-report` | English marketing sample: end-of-turn status, evidence, blockers, next actions and owners. Uses the existing final-answer Markdown table renderer; all release data is fictional. |
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
 | `workspace` | `setup-cli-missing`, `setup-cli-outdated`, `setup-signed-out`, `setup-claude-signed-out`, `setup-sidecar-missing` | A provider that cannot start a turn: a new conversation with its setup guide above the composer, which keeps the draft (see Provider setup) |
@@ -120,6 +123,68 @@ the steps of an activity group.
 | Reconnecting, turn-ending error | `runtime.error` (`will_retry`) | ✓ | ✓ | ✓ |
 | Turn end: completed, stopped, failed; Claude cost | `turn.completed`, `usage.session` | ✓ | ✓ | ✓ |
 | Detail trimmed by journal compaction | ketvietlab/ketplus#128 | ✓ | – | – |
+
+## Teams
+
+A concept, not built in the app: several conversations that share one goal. Agent messaging
+(ADR 0027) has no owner of a task, no roles and no shared view of the work; a team adds them.
+
+- **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
+  the conversations that belong to no team. The folder lists its members' conversations (leader,
+  developers, reviewer), each with its role as its first tag. The icon folds it, the name opens
+  the team's page, and the count is the decisions that wait for the user. A conversation belongs to one team at a time.
+- **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
+  offers New conversation and New team…. A team has one leader and one reviewer, always; New team
+  asks for a name, a goal, an integration branch, who merges a reviewed task into it (the leader or
+  the user; the team menu changes it later), the number of developers (one to five) and the
+  model and effort each role uses, from the app's Model & context dialog. The reviewer's dialog
+  offers Claude only, the provider that keeps a review read-only (ADR 0067). Create starts every
+  member as a named conversation (Lead *team*, Developer 1, Reviewer 1); developers have no lane
+  until the leader gives one. Add member starts one more developer: its lane, its agent and a
+  required name. A conversation that already exists joins without a dialog, as a developer:
+  dragged onto the team's folder, or from its menu's Add to *team*. The role is the
+  conversation's first tag, in the sidebar and in its header; the team sets it, so the tag menu
+  lists it locked and cannot remove it. A member's header has no Reviewer choice: its
+  team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
+  Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
+  has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove
+  from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the
+  conversations; a removed member's open tasks become unassigned. A team keeps its leader, its
+  reviewer and at least one developer, and has five developers at most; an action that would break
+  that is disabled and says why. A conversation joins only a team of its own repository. The
+  conversations New team and Add member start are kept beside the fixtures' (`Main.started`), so
+  they outlive their team.
+- **Checks**: `--smoke` drags a conversation onto a team's folder with the pointer, then runs
+  `TeamsScreen.selfCheck`: a removed member and a deleted team leave their conversations, team ids
+  stay unique after a deletion, one to five developers, no join across repositories.
+- **The page** (`qml/screens/TeamsScreen.qml`) answers three questions in order: what waits for
+  the user, where every task stands, and who holds what.
+- **Leader**: one conversation that assigns tasks, orders the merges into the team's integration
+  branch and is the only one that reports to the user. It also writes the requirements (the
+  acceptance criteria of each task) unless New team turns that off. It neither codes nor reviews.
+- **Developer**: owns a lane, a named set of path prefixes. An edit outside the lane is flagged on
+  the task ("Outside its lane"); the leader decides who makes that change.
+- **Reviewer**: one conversation that checks every lane against the acceptance criteria and never
+  merges. It keeps up with two or three developers; at four the page says reviews will queue and
+  suggests a second team (`teams/large`).
+- **Task**: one owner, who also holds its worktree; To do, In progress, In review, Blocked or Done;
+  its branch, worktree, pull request and what it depends on. Only the leader changes the
+  acceptance criteria, and a change is recorded in the task's history. Hand over changes the owner,
+  who receives all of that.
+- **Waiting for you**: a question that changes the product waits here with its choices instead of
+  in one conversation. The answer goes to the leader and to the owner of the task it blocks.
+- **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
+
+- **In a transcript**: the daemon's messages to a member (assignment, digest, review, verdict,
+  decision) are blocks, not paragraphs (`workspace/team-*`). Each is one accessible item named by
+  its kind and title. A client that does not know a kind shows the message body as text.
+- **Ready to merge**: a task that passed review with every criterion met. Under the `user` merge
+  setting the team asks "Merge T-n?" in Waiting for you (`teams/ready`).
+- **Paused**: a team that used its automatic turns says so above its decisions and asks whether to
+  go on (`teams/paused`).
+
+Not drawn yet: a team on the phone. ket-qt has the group header whose name activates instead of
+folding (ket-qt #47); Két Symbol still needs a team icon (the mock uses `bot`).
 
 ## Provider setup
 

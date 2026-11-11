@@ -453,6 +453,15 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     if (!report.isEmpty() &&
         report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)
         completed.insert(QStringLiteral("work_report"), report);
+    // #125: a finished turn whose answer asks the user to decide ends as Waiting for you.
+    const bool finished = status.isEmpty() || status == QStringLiteral("completed") ||
+                          status == QStringLiteral("ready");
+    const bool awaiting = finished && endsWaitingForUser(session);
+    setAwaitingReply(session, awaiting);
+    if (awaiting)
+        completed.insert(QStringLiteral("awaiting_reply"), true);
+    session.lastAnswerText.clear();
+    session.decisionRequested = false;
     return completed;
 }
 

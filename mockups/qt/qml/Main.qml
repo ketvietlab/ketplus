@@ -20,7 +20,11 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "connections", "connections/no-activity", "connections/signed-out",
+        "changes", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
+        // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
+        "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
+        "workspace/team-verdict", "workspace/team-decision",
+        "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
@@ -58,6 +62,97 @@ Basic.ApplicationWindow {
     // connections/no-activity.
     property bool remoteActivity: true
     property string tagFilter
+    // Teams (concept): folders in the sidebar; a team's name opens its page (teams).
+    readonly property var teamList: teams.teams
+    readonly property string currentTeam: teams.team ? teams.team.id : ""
+    function openTeam(id) {
+        teams.showTeam(id)
+        screen = "teams"
+    }
+    // The sidebar's team actions. Each shows the team's page behind its dialog.
+    function newTeam(repositoryName) {
+        screen = "teams"
+        teams.startNewTeam(repositoryName)
+    }
+    // With a number, that conversation joins as a developer; without, Add a member opens.
+    function addTeamMember(id, number) {
+        if (number) {
+            teams.join(id, number)
+            return
+        }
+        screen = "teams"
+        teams.startAddMember(id)
+    }
+    function deleteTeam(id) {
+        screen = "teams"
+        teams.startDelete(id)
+    }
+    function removeTeamMember(id, number) {
+        screen = "teams"
+        teams.startRemove(id, number)
+    }
+    // A team block's Open T-n: the task on its team's page.
+    function openTeamTask(taskId) {
+        teams.showTeam(Fixtures.teams[0].id)
+        screen = "teams"
+        teams.showTask(taskId)
+    }
+    // Which member reads which team block: the developer, the leader, the reviewer, the owner.
+    readonly property var teamTranscripts: ({ "team-assignment": "8213", "team-digest": "4821",
+                                              "team-review": "4583", "team-verdict": "8215",
+                                              "team-decision": "4821" })
+    function openTeamMember(id, number) {
+        teams.showTeam(id)
+        teams.openConversation(number)
+    }
+    // Conversations the mock started (New team, Add member), by repository, beside the
+    // fixtures' own. They outlive the team that started them.
+    property var started: ({})
+    property int startedCount: 0
+    function conversationsOf(repository) {
+        const fixture = Fixtures.repositories.find(r => r.name === repository)
+        return (fixture ? fixture.conversations : []).concat(started[repository] || [])
+    }
+    function findConversation(number) {
+        for (const r of Fixtures.repositories) {
+            const match = conversationsOf(r.name).find(c => c.number === number)
+            if (match)
+                return { repository: r.name, conversation: match }
+        }
+        return null
+    }
+    // A new conversation with nothing sent yet; `agent` is { id, label, model, effort }.
+    function startConversation(repository, title, agent) {
+        let blank = null
+        for (const r of Fixtures.repositories)
+            blank = blank || r.conversations.find(c => c.transcript === "welcome")
+        let number = ""
+        do {
+            number = String(6101 + 7 * startedCount++)
+        } while (findConversation(number))
+        const conversation = Object.assign({}, blank || {}, {
+            number: number, title: title, tags: [], transcript: "welcome",
+            status: KetTheme.ConversationStatus.NotStarted,
+            provider: agent.label, providerId: agent.id, model: agent.model, effort: agent.effort })
+        const next = Object.assign({}, started)
+        next[repository] = (next[repository] || []).concat([conversation])
+        started = next
+        return conversation
+    }
+    // Run by --smoke after a pointer dragged a conversation onto a team's folder.
+    function prepareTeamDrag() { sidebar.foldTeamsExcept("release") }
+    function teamDragPoints() { return sidebar.dragCheckPoints("9410", "release") }
+    function teamChecks() {
+        const failures = teams.selfCheck()
+        if (sidebar.dragged)
+            failures.push("the dragged conversation is still held after the drop")
+        const joined = teamOf("9410")
+        if (!joined || joined.id !== "release")
+            failures.push("the pointer drag did not add 9410 to Release 1.4")
+        for (const failure of failures)
+            console.warn("QML teams check failed: " + failure)
+    }
+    function teamOf(number) { return teamList.find(t => t.members.some(m => m.number === number)) || null }
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
 
@@ -183,6 +278,14 @@ Basic.ApplicationWindow {
             workspace.openPlan(state.slice(5))
             return
         }
+        if (name === "workspace" && teamTranscripts[state]) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            const repo = Fixtures.repositories[0]
+            const member = repo.conversations.find(c => c.number === teamTranscripts[state])
+            openConversation(repo.name, Object.assign({}, member, { transcript: state }))
+            return
+        }
         if (name === "workspace" && state.startsWith("setup-")) {
             setCompact(false)
             workspace.detailsOpen = false
@@ -228,6 +331,8 @@ Basic.ApplicationWindow {
             if (state === "sign-in")
                 Qt.callLater(connections.openSignIn)
         }
+        if (name === "teams")
+            teams.showState(state)
         if (name === "editor") {
             editorTerminal = state === "terminal"
             editorFile = state.startsWith("markdown") ? "licensing.md"
@@ -257,6 +362,7 @@ Basic.ApplicationWindow {
         deleteDialog.close()
         connections.openActivity("iPhone 16")
         connections.closeActivity()
+        teams.openEveryOverlay()
         toast.show("Smoke test")
     }
 
@@ -303,6 +409,10 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
+        else if (["repo-menu", "team-menu", "row-menu", "drag-member"].includes(Mock.initialPanel))
+            Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
+        else if (screen === "teams" && Mock.initialPanel)
+            Qt.callLater(() => teams.openDialog(Mock.initialPanel))
         else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
@@ -345,7 +455,7 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: ["workspace", "editor", "changes", "connections", "settings",
-                           "atlas", "mobile-picker"].indexOf(app.screen)
+                           "atlas", "mobile-picker", "teams"].indexOf(app.screen)
 
             WorkspaceScreen { id: workspace; window: app }
             EditorScreen { window: app }
@@ -354,6 +464,7 @@ Basic.ApplicationWindow {
             SettingsScreen { window: app }
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }
+            TeamsScreen { id: teams; window: app }
         }
     }
 

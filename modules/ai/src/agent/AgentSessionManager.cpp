@@ -229,6 +229,7 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
+    installTagCatalog();
     // A reviewer or work report read sent before the daemon listed its sessions is answered
     // "unknown session".
     connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
@@ -297,8 +298,8 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             // The daemon session, which names the conversation on a team (ADR 0112).
             {QStringLiteral("sessionId"), session->threadId},
             {QStringLiteral("tags"), listedTags(session)},
-            {QStringLiteral("tagsEditable"),
-             !session->threadId.isEmpty() && server_->hasTagSupport()},
+            // Before the first turn the labels wait here (#429); they go out with the start.
+            {QStringLiteral("tagsEditable"), server_->hasTagSupport()},
             {QStringLiteral("agentTurnNumber"), session->agentTurnNumber},
             {QStringLiteral("agentTurnTitle"), session->agentTurnTitle},
             {QStringLiteral("agentTurnReply"), session->agentTurnReply},
@@ -309,6 +310,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
              session->running && (!session->pendingQuestionRequests.isEmpty() ||
                                   !session->pendingInputIds.isEmpty())},
             {QStringLiteral("completed"), session->completed},
+            {QStringLiteral("awaitingReply"), session->awaitingReply && !session->running},
             {QStringLiteral("seen"), session->lastSeenCursor >= session->lastEventCursor},
             {QStringLiteral("lastTurnStartedAt"), session->lastTurnStartedAt},
             {QStringLiteral("ownsWorktree"), session->ownsWorktree},
@@ -1580,6 +1582,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
     // A change of this desktop's own is on its way; its answer carries the newer list.
+    session->awaitingReply = stored.value(QStringLiteral("awaiting_reply")).toBool();
     if (stored.contains(QStringLiteral("tags")) && !session->tagSyncPending)
         session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();

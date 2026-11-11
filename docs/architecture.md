@@ -183,8 +183,11 @@ Qt application shell
   width. The toggle pulses while running and labels pending questions without
   automatically opening chat or stealing focus; Stop remains a separate action.
   The preview's stable bundle path plus selected flow ID and Builder conversation
-  form the prompt context. `@Flow` is a preferred focus hint, never a filesystem
-  isolation or authorization boundary.
+  form the prompt context. The selected flow is a preferred focus hint, never a
+  filesystem isolation or authorization boundary. As in the mock's `--screen=atlas`, the
+  header names it with its screen count ("Getting started · 2 screens"). It also shows
+  "Validated preview", or "Checking changes" while a manifest is mid-write. The composer
+  asks "Ask for a change to <flow>…".
 - The root CMake build selects the edition (ADR 0029). Pro composes its targets
   with the `KetPlusCM::*` targets of `core/`. Product code must not include files by reaching through
   `core/`; exported include paths and targets form the boundary.

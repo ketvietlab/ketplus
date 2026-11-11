@@ -5,7 +5,7 @@ import KetPlusMock
 
 // One block of a conversation, in the order the journal replays it. `host.type`:
 //   day, user, steer, queued, commentary, answer, activity, changes, question, approval,
-//   agent, event, reconnect, error, working, turn, trimmed
+//   agent, event, reconnect, error, working, turn, trimmed, team (TeamTranscriptBlock, #468)
 // See TranscriptFixtures for the fields each type reads and the journal events behind it.
 Loader {
     id: host
@@ -21,7 +21,7 @@ Loader {
         day: day, user: user, steer: user, queued: queued, commentary: commentary,
         answer: answer, activity: activity, changes: changes, question: question,
         approval: approval, agent: agent, event: event, reconnect: reconnect, error: error,
-        working: working, turn: turn, trimmed: note
+        working: working, turn: turn, trimmed: note, team: team
     })[host.block.type] || null
 
     // A quiet line of the transcript: an icon, a bold label and the rest.
@@ -68,6 +68,8 @@ Loader {
     }
 
     Component { id: day; KetDayDivider { text: host.block.text } }
+
+    Component { id: team; TeamTranscriptBlock { block: host.block; window: host.window } }
 
     // user.message (text, images, a message from another conversation) and turn.steered.
     Component {
