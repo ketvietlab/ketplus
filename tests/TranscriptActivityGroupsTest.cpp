@@ -466,13 +466,10 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Used 2 subagents"));
     }
 
-    void evidenceAndUnknownRowsRemainIndividuallyVisible() {
-        QVariantMap capture = activity("b1", "ketplusBrowser");
-        capture.insert("eventType", "browser.screenshot");
-        QList<QVariantMap> rows{activity("c1", "command"), capture,
-                                activity("c2", "command"), activity("u1", "futureTool"),
-                                activity("c3", "command"), activity("q1", "question"),
-                                activity("c4", "command")};
+    void unknownRowsAndQuestionsRemainIndividuallyVisible() {
+        QList<QVariantMap> rows{activity("c1", "command"), activity("u1", "futureTool"),
+                                activity("c2", "command"), activity("q1", "question"),
+                                activity("c3", "command")};
         assignActivityGroups(rows);
         for (const auto& row : rows)
             QVERIFY(row.value("groupRole").toString().isEmpty());
@@ -503,13 +500,15 @@ class TranscriptActivityGroupsTest final : public QObject {
         }
     }
 
-    void captureAndComparisonAlwaysSplitBrowserGroups_data() {
+    void captureAndComparisonAreBrowserSteps_data() {
         QTest::addColumn<QString>("tool");
         QTest::newRow("capture") << QStringLiteral("browser_capture");
         QTest::newRow("compare") << QStringLiteral("visual_compare");
     }
 
-    void captureAndComparisonAlwaysSplitBrowserGroups() {
+    // As in the mock ("Used ketplus_browser, node_repl · 5 steps" with its Captured step),
+    // a capture or comparison is a step of its group; the open group shows its image.
+    void captureAndComparisonAreBrowserSteps() {
         QFETCH(QString, tool);
         auto capture = activityMessage({{"id", "capture"},
                                         {"type", "mcpToolCall"},
@@ -521,24 +520,13 @@ class TranscriptActivityGroupsTest final : public QObject {
             auto evidence = activity("evidence", "ketplusBrowser");
             evidence.insert("eventType", event);
             evidence.insert("images", QVariantList{"ketplus-media-unavailable:0"});
-            QList<QVariantMap> rows{activity("before-1", "ketplusBrowser"),
-                                    activity("before-2", "ketplusBrowser"),
-                                    capture,
-                                    activity("middle-1", "ketplusBrowser"),
-                                    activity("middle-2", "ketplusBrowser"),
-                                    evidence,
-                                    activity("after-1", "ketplusBrowser"),
-                                    activity("after-2", "ketplusBrowser")};
+            QList<QVariantMap> rows{activity("before", "ketplusBrowser"), capture,
+                                    activity("middle", "ketplusBrowser"), evidence,
+                                    activity("after", "ketplusBrowser")};
             assignActivityGroups(rows);
-            for (const int leader : {0, 3, 6})
-                QCOMPARE(rows.at(leader).value("groupSize").toInt(), 2);
-            QVERIFY(rows.at(2).value("groupRole").toString().isEmpty());
-            QVERIFY(rows.at(5).value("groupRole").toString().isEmpty());
-            // An empty/failed capture or comparison stays outside the group as well.
-            rows[2].insert("running", false);
-            rows[2].insert("status", "failed");
-            assignActivityGroups(rows, 2, 2);
-            QVERIFY(rows.at(2).value("groupRole").toString().isEmpty());
+            QCOMPARE(rows.at(0).value("groupSize").toInt(), 5);
+            for (const int member : {1, 2, 3, 4})
+                QCOMPARE(rows.at(member).value("groupRole").toString(), "member");
         }
     }
 

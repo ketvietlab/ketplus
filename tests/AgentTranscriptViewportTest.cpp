@@ -226,7 +226,10 @@ class AgentTranscriptViewportTest final : public QObject {
         QVERIFY(QMetaObject::invokeMethod(transcript, "noteTranscriptInput"));
         QTest::qWait(60);
         QCOMPARE(requests.size(), 4); // No more older history.
-        QCOMPARE(header->height(), 0.0);
+        // The header stays as the mock's 24 px top padding, with nothing in it.
+        QCOMPARE(header->height(), 24.0);
+        QVERIFY(!indicator->isVisible());
+        QVERIFY(!button->isVisible());
     }
 
     void idlePrefetchSkipsReaderAtNewestMessage() {

@@ -667,6 +667,8 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         if (turnStatus != QStringLiteral("failed"))
             publishDeferredFinal(session);
         session->completed = turnStatus == QStringLiteral("completed");
+        session->awaitingReply =
+            session->completed && turn.value(QStringLiteral("awaitingReply")).toBool();
         session->turnId.clear();
         session->cancelRequested = false;
         if (session->completed && session->lastEventCursor <= session->lastSeenCursor)

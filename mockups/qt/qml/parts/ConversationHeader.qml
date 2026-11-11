@@ -11,6 +11,12 @@ Rectangle {
 
     required property var window
     required property var conversation
+    // The conversation's team and role, when it is a member of one (Main.teamOf).
+    readonly property var membership: {
+        const team = window && window.teamOf ? window.teamOf(conversation.number) : null
+        const who = team ? team.members.find(m => m.number === conversation.number) : null
+        return who ? { team: team, role: who.role } : null
+    }
     property bool detailsOpen: false
     property var planRun: null
     property int status: conversation.status
@@ -30,6 +36,7 @@ Rectangle {
 
     signal toggleDetails(string tab)
 
+    function openManageTags() { manageTags.open() }
     function openReviewerMenu() { reviewerMenu.popup(reviewerButton, 0, reviewerButton.height) }
     function chooseReviewer(name) {
         const next = Object.assign({}, reviewers)
@@ -89,10 +96,12 @@ Rectangle {
     readonly property real fixedWidth: (numberLabel.visible ? numberLabel.implicitWidth + gap : 0)
                                        + statusBadge.implicitWidth
                                        + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + gap
+    // A team's member is reviewed by its team's reviewer, so it has no Reviewer choice.
+    readonly property real reviewerRoom: membership ? 0 : reviewerProbe.implicitWidth
     readonly property bool fullReviewer: fixedWidth + titleButton.implicitWidth + gap
-                                         + reviewerProbe.implicitWidth <= room
+                                         + reviewerRoom <= room
     readonly property bool showTags: fullReviewer && fixedWidth + titleButton.implicitWidth + gap
-                                     + reviewerProbe.implicitWidth + tagsProbe.implicitWidth <= room
+                                     + reviewerRoom + tagsProbe.implicitWidth <= room
 
     // Off-screen measures of the full Reviewer button and the tag group.
     Row {
@@ -192,7 +201,7 @@ Rectangle {
 
         KetButton {
             id: reviewerButton
-            visible: !header.window.compact
+            visible: !header.window.compact && !header.membership
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             variant: header.reviewer ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
@@ -204,6 +213,22 @@ Rectangle {
                 visible: reviewerButton.hovered && !reviewerMenu.visible
                 text: (header.fullReviewer ? "" : (header.reviewer ? "Reviewer: " + header.reviewer + ". " : "Reviewer. "))
                       + "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
+            }
+        }
+
+        // A team member's role: the team sets it, so it has no way to remove it here.
+        KetTag {
+            id: roleTag
+            visible: !!header.membership && !header.window.compact
+            anchors.verticalCenter: parent.verticalCenter
+            text: header.membership ? Fixtures.roleTag(header.membership.role).label : ""
+            tagColor: header.membership ? Fixtures.roleTag(header.membership.role).color : "transparent"
+            filterable: true
+            onClicked: header.window.openTeam(header.membership.team.id)
+            KetToolTip {
+                visible: roleTag.hovered
+                text: header.membership ? roleTag.text + " of " + header.membership.team.name
+                      + ". The team sets this tag; change the role from the team's page." : ""
             }
         }
 
@@ -287,6 +312,15 @@ Rectangle {
 
     KetMenu {
         id: tagMenu
+        KetMenuItem {
+            visible: !!header.membership
+            height: visible ? implicitHeight : 0
+            enabled: false
+            iconName: "lock"
+            text: header.membership ? Fixtures.roleTag(header.membership.role).label : ""
+            description: header.membership ? "Set by " + header.membership.team.name : ""
+        }
+        KetMenuSeparator { visible: !!header.membership; height: visible ? implicitHeight : 0 }
         Repeater {
             model: Object.keys(Fixtures.tagColors)
             KetMenuItem {
@@ -299,7 +333,15 @@ Rectangle {
             }
         }
         KetMenuSeparator {}
-        KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.window.notify("Tags are managed from any conversation") }
+        KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.openManageTags() }
+    }
+
+    ManageTagsDialog {
+        id: manageTags
+        parent: Basic.Overlay.overlay
+        // The daemon's default catalog, in its order.
+        tags: ["UI", "Performance", "Review", "Atlas", "Account", "Bug", "Docs"].map(label => Fixtures.tag(label))
+        onSaved: (tags, renames) => header.window.notify("Tags saved")
     }
 
     KetMenu {
@@ -320,13 +362,12 @@ Rectangle {
             checked: header.reviewer === text
             onTriggered: header.chooseReviewer(text)
         }
+        // As the app (ADR 0067): Codex cannot be held read only yet, so it cannot review.
         KetMenuItem {
             text: "Codex · GPT-5.6 Sol"
-            description: "Starts a reviewer in this worktree, read only"
+            description: "Cannot review yet: Codex cannot be held read only"
             iconName: "bot"
-            checkable: true
-            checked: header.reviewer === text
-            onTriggered: header.chooseReviewer(text)
+            enabled: false
         }
         KetMenuSection { text: "Existing conversation" }
         // Appended in order after the section: a Repeater inside a Menu misplaces its items.

@@ -2,6 +2,7 @@
 #include "agent/FileChangeStatistics.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptFileLocation.h"
+#include "agent/TranscriptNetworkPolicy.h"
 #include "agent/TranscriptNormalizer.h"
 #include "agent/TranscriptStepItems.h"
 #include "agent/WorkReportText.h"
@@ -649,7 +650,8 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         const QString path = item.value(QStringLiteral("path")).toString();
         QVariantList images =
             mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (images.isEmpty() && !path.isEmpty())
+        // A path on another machine is named, never opened for its thumbnail.
+        if (images.isEmpty() && !path.isEmpty() && !namesAnotherMachine(path))
             images.append(QUrl::fromLocalFile(path).toString());
         const QString title =
             completed ? QStringLiteral("Viewed an image") : QStringLiteral("Viewing an image");
@@ -670,7 +672,8 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         const QString path = item.value(QStringLiteral("savedPath")).toString();
         QVariantList images =
             mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (images.isEmpty() && !path.isEmpty())
+        // A path on another machine is named, never opened for its thumbnail.
+        if (images.isEmpty() && !path.isEmpty() && !namesAnotherMachine(path))
             images.append(QUrl::fromLocalFile(path).toString());
         const QString title =
             (completed ? QStringLiteral("Generated an image")
@@ -831,7 +834,8 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                 safePayload, {QStringLiteral("path"), QStringLiteral("image_path")});
             if (!imagePath.isEmpty()) {
                 const QUrl imageUrl(imagePath);
-                if (imageUrl.scheme().isEmpty() || imageUrl.isLocalFile())
+                if (!namesAnotherMachine(imagePath) && !namesAnotherMachine(imageUrl) &&
+                    (imageUrl.scheme().isEmpty() || imageUrl.isLocalFile()))
                     entry.insert(QStringLiteral("images"),
                                  QVariantList{imageUrl.isLocalFile()
                                                   ? imageUrl.toString()
