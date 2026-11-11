@@ -487,6 +487,11 @@ void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
     const QByteArray frame = protocol::encodeFrame(envelope);
     if (frame.size() > protocol::maximumFrameBytes + 4 ||
         socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+        // The client cannot read past this, so it is dropped; the log names what was too big.
+        qWarning("Dropping a client: %s of %lld bytes with %lld queued exceeds the frame limit.",
+                 qUtf8Printable(envelope.value(QStringLiteral("message_type")).toString()),
+                 static_cast<long long>(frame.size()),
+                 static_cast<long long>(socket->bytesToWrite()));
         socket->abort();
         return;
     }

@@ -181,7 +181,8 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
 
 void TeamCoordinator::addHistory(Task& task, const QString& actor, const QString& kind,
                                  const QString& text, const QJsonObject& data) {
-    task.history.append({.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data});
+    task.history.append(
+        bounded({.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data}));
 }
 
 Decision& TeamCoordinator::raiseDecision(Team& team, const QString& kind, const QString& question,

@@ -25,11 +25,11 @@ QJsonObject toJson(const HistoryEntry& entry) {
 }
 
 HistoryEntry historyFromJson(const QJsonObject& json) {
-    return {.at = json.value(QStringLiteral("at")).toString(),
-            .actor = json.value(QStringLiteral("actor")).toString(),
-            .kind = json.value(QStringLiteral("kind")).toString(),
-            .text = json.value(QStringLiteral("text")).toString(),
-            .data = json.value(QStringLiteral("data")).toObject()};
+    return bounded({.at = json.value(QStringLiteral("at")).toString(),
+                    .actor = json.value(QStringLiteral("actor")).toString(),
+                    .kind = json.value(QStringLiteral("kind")).toString(),
+                    .text = json.value(QStringLiteral("text")).toString(),
+                    .data = json.value(QStringLiteral("data")).toObject()});
 }
 
 Member memberFromJson(const QJsonObject& json) {
@@ -62,6 +62,8 @@ Task taskFromJson(const QJsonObject& json) {
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
+    if (task.outsideLane.size() > maximumOutsidePaths)
+        task.outsideLane.resize(maximumOutsidePaths);
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
     task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
@@ -87,6 +89,26 @@ Decision decisionFromJson(const QJsonObject& json) {
 }
 
 } // namespace
+
+HistoryEntry bounded(HistoryEntry entry) {
+    if (entry.text.size() > maximumHistoryText)
+        entry.text = QStringLiteral("%1… (%2 more characters)")
+                         .arg(entry.text.left(maximumHistoryText))
+                         .arg(entry.text.size() - maximumHistoryText);
+    const QStringList keys = entry.data.keys();
+    for (const QString& key : keys) {
+        QJsonArray list = entry.data.value(key).toArray();
+        if (list.size() <= maximumHistoryListItems)
+            continue;
+        const QString total = key + QStringLiteral("_total");
+        if (!entry.data.contains(total))
+            entry.data.insert(total, list.size());
+        while (list.size() > maximumHistoryListItems)
+            list.removeLast();
+        entry.data.insert(key, list);
+    }
+    return entry;
+}
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }
 
