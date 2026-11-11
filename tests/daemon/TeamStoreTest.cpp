@@ -182,7 +182,7 @@ class TeamStoreTest final : public QObject {
         }
         const auto result = teams.create(team, QStringLiteral("user"));
         QVERIFY(!result.ok());
-        QCOMPARE(result.error->code, code);
+        QCOMPARE(result.error.value_or(TeamError{}).code, code);
         QVERIFY(teams.teams().isEmpty());
         QVERIFY(journal.teamDocuments().isEmpty());
         QVERIFY(!journal.teamOfSession(QStringLiteral("lead")));
@@ -198,35 +198,43 @@ class TeamStoreTest final : public QObject {
         Team other = draft({member("dev3", role::leader, "Lead"),
                             member("dev1", role::developer, "D", {"x"}),
                             member("rev2", role::reviewer, "R")});
-        QCOMPARE(teams.create(other, "user").error->code, QStringLiteral("already_member"));
+        QCOMPARE(teams.create(other, "user").error.value_or(TeamError{}).code,
+                 QStringLiteral("already_member"));
         // The leader and the reviewer stay; the team is deleted instead.
-        QCOMPARE(teams.removeMember(id, "lead", "user").error->code,
+        QCOMPARE(teams.removeMember(id, "lead", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("role_required"));
-        QCOMPARE(teams.removeMember(id, "rev", "user").error->code,
+        QCOMPARE(teams.removeMember(id, "rev", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("role_required"));
-        QCOMPARE(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user").error->code,
+        QCOMPARE(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user")
+                     .error.value_or(TeamError{})
+                     .code,
                  QStringLiteral("role_taken"));
         QCOMPARE(teams.addMember(id, member("elsewhere", role::developer, "E", {"z"}), "user")
-                     .error->code,
+                     .error.value_or(TeamError{})
+                     .code,
                  QStringLiteral("other_repository"));
         QCOMPARE(teams.addMember(id, member("dev3", role::developer, "D3", {"apps/api/v2"}), "user")
-                     .error->code,
+                     .error.value_or(TeamError{})
+                     .code,
                  QStringLiteral("lane_overlap"));
         for (const QString& next : {"dev3", "dev4", "dev5"})
             QVERIFY(teams
                         .addMember(id, member(next, role::developer, next, {QString("l/") + next}),
                                    "user")
                         .ok());
-        QCOMPARE(
-            teams.addMember(id, member("dev6", role::developer, "D6", {"l6"}), "user").error->code,
-            QStringLiteral("team_full"));
-        QCOMPARE(teams.updateMember(id, "dev1", "Web", {"apps/api"}, "user").error->code,
+        QCOMPARE(teams.addMember(id, member("dev6", role::developer, "D6", {"l6"}), "user")
+                     .error.value_or(TeamError{})
+                     .code,
+                 QStringLiteral("team_full"));
+        QCOMPARE(teams.updateMember(id, "dev1", "Web", {"apps/api"}, "user")
+                     .error.value_or(TeamError{})
+                     .code,
                  QStringLiteral("lane_overlap"));
         QVERIFY(teams.updateMember(id, "dev1", "Web", {"apps/web", "packages/ui"}, "user").ok());
         QCOMPARE(teams.team(id)->member("dev1")->paths, (QStringList{"apps/web", "packages/ui"}));
         for (const QString& gone : {"dev2", "dev3", "dev4", "dev5"})
             QVERIFY(teams.removeMember(id, gone, "user").ok());
-        QCOMPARE(teams.removeMember(id, "dev1", "user").error->code,
+        QCOMPARE(teams.removeMember(id, "dev1", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("last_developer"));
         // A removed developer can join another team and is archived freely.
         QVERIFY(!teams.isMember("dev2"));

@@ -30,12 +30,75 @@ struct TeamConversation final {
     bool idle{false};
 };
 
+// A task's own branch and worktree, cut from the integration branch (ADR 0112, point 1).
+struct TaskWorktree final {
+    QString branch;
+    QString worktree;
+    QString baseCommit;
+};
+
+// A message the team sends into a member's conversation through the broker (ADR 0027).
+struct TeamMessage final {
+    qint64 teamId{0};
+    QString teamName;
+    QString toSession;
+    // The member it comes from, or empty for the team itself (a digest, a decision).
+    QString fromSession;
+    // "assignment", "digest", "review", "decision" or "team".
+    QString kind;
+    QString taskId;
+    QString body;
+    bool expectReply{false};
+};
+
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
 class TeamHostPort {
   public:
     virtual ~TeamHostPort() = default;
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
+    // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
+    virtual std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
+                                                           QString* error) {
+        (void)team;
+        (void)task;
+        *error = QStringLiteral("Worktrees are not available.");
+        return std::nullopt;
+    }
+    // Points the conversation at a worktree before its next turn. Returns an error.
+    virtual QString pointConversationAt(const QString& sessionId, const QString& worktree) {
+        (void)sessionId;
+        (void)worktree;
+        return {};
+    }
+    // Whether the worktree has changes that are not committed; nothing when git failed.
+    [[nodiscard]] virtual std::optional<bool> hasUncommittedWork(const QString& worktree) const {
+        (void)worktree;
+        return false;
+    }
+    [[nodiscard]] virtual QString headCommit(const QString& worktree) const {
+        (void)worktree;
+        return {};
+    }
+    // Queues the message; it starts a turn when the receiver is idle. Returns an error.
+    virtual QString postTeamMessage(const TeamMessage& message) {
+        (void)message;
+        return {};
+    }
+    // Shows a line in the conversation without starting a turn.
+    virtual void noteInConversation(const QString& sessionId, const QJsonObject& note) {
+        (void)sessionId;
+        (void)note;
+    }
+};
+
+// A new task as the leader or the user writes it.
+struct TaskDraft final {
+    QString title;
+    QString description;
+    QString lane;
+    QStringList dependsOn;
+    QStringList criteria;
 };
 
 struct TeamResult final {
@@ -79,6 +142,27 @@ class TeamCoordinator : public QObject {
                             const QString& reason = {});
     TeamResult removeMember(qint64 teamId, const QString& sessionId, const QString& actor);
 
+    // Tasks (ADR 0112 §6), in TeamCoordinatorTasks.cpp. `actor` is "user", "daemon" or the
+    // session id of the member that acts; the daemon refuses what its role may not do.
+    TeamResult createTask(qint64 teamId, const TaskDraft& draft, const QString& actor,
+                          QString* taskId = nullptr);
+    // title, description, lane, depends_on (leader, user); pull_request and note (owner,
+    // leader, user); met: [{index, met}] (owner, user).
+    TeamResult updateTask(qint64 teamId, const QString& taskId, const QJsonObject& changes,
+                          const QString& actor);
+    TeamResult assignTask(qint64 teamId, const QString& taskId, const QString& owner,
+                          const QString& actor);
+    TeamResult handoverTask(qint64 teamId, const QString& taskId, const QString& owner,
+                            const QString& reason, const QString& actor);
+    // `note` is the question of a blocked task.
+    TeamResult moveTask(qint64 teamId, const QString& taskId, const QString& to,
+                        const QString& actor, const QString& note = {});
+    TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
+                           const QString& actor);
+    // "user", "daemon", the member's role, or empty for a stranger.
+    [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
+    [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
+
     // A deleted conversation leaves its team (ADR 0112, open point 4).
     void conversationDeleted(const QString& sessionId);
     // Archiving a member is refused; a reason, or nothing when it may be archived.
@@ -114,6 +198,17 @@ class TeamCoordinator : public QObject {
     static void addHistory(Task& task, const QString& actor, const QString& kind,
                            const QString& text, const QJsonObject& data = {});
     [[nodiscard]] std::optional<Candidate> candidate(const QString& sessionId) const;
+    // Moves a task and records it; no permission check. Adds the actionable updates.
+    void applyMove(Team& team, Task& task, const QString& to, const QString& actor,
+                   const QString& reason, QList<Update>& updates);
+    // Sends a message that starts a turn of `toSession`, after the commit that caused it.
+    virtual void wake(const Team& team, const TeamMessage& message);
+    // Points the owner at the task's worktree and sends the assignment.
+    void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
+                           const QString& reason = {});
+    [[nodiscard]] static QString assignmentText(const Team& team, const Task& task,
+                                                const QString& fromName, bool handover,
+                                                const QString& reason);
 
     LocalJournal* journal_{nullptr};
     TeamHostPort* host_{nullptr};

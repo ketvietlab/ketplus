@@ -89,7 +89,8 @@ QJsonArray features(const int minor) {
             QStringLiteral("tags.catalog/1"),
             QStringLiteral("session.work_report/1"),
             QStringLiteral("session.awaiting_reply/1"),
-            QStringLiteral("teams/1")};
+            QStringLiteral("teams/1"),
+            QStringLiteral("teams.tasks/1")};
 }
 
 QString timestamp() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }

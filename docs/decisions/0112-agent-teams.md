@@ -123,8 +123,9 @@ the last one, grouped by task. Other updates ride along in the next digest.
 ## Open points, fixed here
 
 1. **A developer's working directory.** *Chosen*: a task owns its worktree. When a task
-   is first assigned the daemon creates branch `team/<team-id>/<task-id>` from the head
-   of the integration branch, in a worktree under the daemon's worktree directory, and
+   is first assigned the daemon creates branch `team/<team-id>/t-<n>` from the head
+   of the integration branch, in a worktree beside the repository as ADR 0111 places
+   them (`<repository>-team-<team-id>-t-<n>`), and
    re-points the owner's conversation at it with the worktree switch of ADR 0111 before
    the assignment turn starts. A handover re-points the new owner. *Rejected*: one
    worktree per developer switching branches — a handover would have to move

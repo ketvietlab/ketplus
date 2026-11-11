@@ -234,6 +234,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
+    // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
     QList<Update> updates;
     if (changes.contains(QStringLiteral("name"))) {
@@ -331,6 +332,8 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
+    // Before any pointer into the team: the copy shares its lists until they detach.
+    const Team before = *team;
     const auto found = candidate(member.sessionId);
     if (!found)
         return {.error = TeamError{QStringLiteral("invalid_payload"),
@@ -342,7 +345,6 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
     }
     if (auto refused = rules::canAddMember(*team, member, *found))
         return {.error = refused};
-    const Team before = *team;
     member.joinedAt = nowIso();
     team->members.append(member);
     // An empty role filled again lifts the pause it caused (ADR 0112, point 4).
@@ -373,6 +375,8 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
+    // Before any pointer into the team: the copy shares its lists until they detach.
+    const Team before = *team;
     Member* member = team->member(sessionId);
     if (!member || member->role != role::developer)
         return {.error = TeamError{QStringLiteral("not_member"),
@@ -384,7 +388,6 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
                     QStringLiteral("A lane's paths are relative to the repository root.")}};
     if (auto overlap = rules::laneOverlap(*team, sessionId, *normalised))
         return {.error = overlap};
-    const Team before = *team;
     const QString oldLane = member->lane;
     const QStringList oldPaths = member->paths;
     member->lane = lane.trimmed().isEmpty() ? oldLane : lane.trimmed();
@@ -443,9 +446,10 @@ TeamResult TeamCoordinator::removeMember(const qint64 teamId, const QString& ses
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
+    // Before any pointer into the team: the copy shares its lists until they detach.
+    const Team before = *team;
     if (auto refused = rules::canRemoveMember(*team, sessionId))
         return {.error = refused};
-    const Team before = *team;
     const QString name = team->member(sessionId)->name;
     QList<Update> updates;
     unassignTasksOf(*team, sessionId, actor, QStringLiteral("%1 left the team").arg(name), updates);

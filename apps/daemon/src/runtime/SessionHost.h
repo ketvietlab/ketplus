@@ -283,6 +283,13 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
+    std::optional<teams::TaskWorktree>
+    createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
+    QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
+    [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
+    [[nodiscard]] QString headCommit(const QString& worktree) const override;
+    QString postTeamMessage(const teams::TeamMessage& message) override;
+    void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
     void startTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);

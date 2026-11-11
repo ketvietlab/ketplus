@@ -108,10 +108,13 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamRules.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorTasks.cpp
+    src/agents/AgentBrokerTeams.cpp
     src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamTasks.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
