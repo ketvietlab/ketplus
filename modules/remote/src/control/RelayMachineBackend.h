@@ -32,7 +32,8 @@ class RelayMachineBackend final : public MachineBackend {
         int verifyWorktrees{32};
         // A read (pendingApprovals) is not stored; it gives up after this long.
         int readTimeoutMilliseconds{30000};
-        // A result whose completion could not be recorded is read back after this long.
+        // A result whose completion could not be recorded is read back after this long, doubling
+        // to 30 s while the outbox stays unwritable.
         int recordRetryMilliseconds{1000};
         // The relay keeps a command for 15 minutes; an older outbox entry is given up.
         qint64 commandLifetimeMilliseconds{15 * 60 * 1000};
@@ -141,6 +142,8 @@ class RelayMachineBackend final : public MachineBackend {
     QTimer* events_{nullptr};
     QHash<QString, Callback> callbacks_;
     QSet<QString> delivering_;
+    // Completions not yet recorded in the outbox, by id: how often a record was retried.
+    QHash<QString, int> recordAttempts_;
     // Outbox commands added by this process and never handed to the relay: only these can be
     // withdrawn, because only these provably never reached it.
     QSet<QString> unsent_;

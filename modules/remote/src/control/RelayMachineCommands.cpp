@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QTimer>
 #include <QUuid>
+#include <algorithm>
 
 // Commands of the Relay backend: every command that changes host state goes through the durable
 // outbox, and its result is applied once, after the host signature is verified. Reads sent as
@@ -33,7 +34,9 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
         callback({}, QStringLiteral("This conversation is not in the verified list."));
         return;
     }
-    if (!watched_.contains(sessionId))
+    // A write follows its conversation's events; a read (pendingApprovals) does not, so it never
+    // starts polling again for a conversation the UI has closed.
+    if (durable && !watched_.contains(sessionId))
         watched_.insert(sessionId, row.value("lastEventCursor").toInteger());
     const auto token = QUuid::createUuid().toString(QUuid::Id128);
     const QJsonObject intent{{"id", "command_" + token},
@@ -241,9 +244,15 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
         // Recorded before it is applied: otherwise a restart would apply it again. It stays
         // pending, with its callback, and is read back again while the link stays up (and on
         // the next connection).
-        qWarning("Relay command outbox not updated: %s", qUtf8Printable(storage));
+        // Backs off (doubling to 30 s) and warns once while the file stays unwritable.
+        const auto attempt = recordAttempts_.value(id);
+        if (attempt == 0)
+            qWarning("Relay command outbox not updated: %s", qUtf8Printable(storage));
+        recordAttempts_.insert(id, attempt + 1);
+        const auto delay = std::min<qint64>(
+            qint64(options_.recordRetryMilliseconds) << std::min(attempt, 15), 30000);
         const auto generation = generation_;
-        QTimer::singleShot(options_.recordRetryMilliseconds, this, [this, id, generation] {
+        QTimer::singleShot(delay, this, [this, id, generation] {
             if (generation != generation_ || state_ != ConnectionState::Connected ||
                 delivering_.contains(id))
                 return;
@@ -255,6 +264,7 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
         });
         return;
     }
+    recordAttempts_.remove(id);
     unsent_.remove(id);
     const auto result = command.value("result").toObject();
     const auto status = command.value("status").toString();
