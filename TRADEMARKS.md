@@ -19,13 +19,13 @@ reviewers can see the product as shipped. Publishing them grants no licence:
 - The ketPlus mark: `mockups/qt/assets/ketplus-mark-v2.png` and its derivatives
   `mockups/qt/assets/ketplus-mark-v2-64.png` and `mockups/qt/assets/ketplus-mark-v2-128.png`.
 - Every image derived from that mark, wherever it appears in this repository: copies and
-  resized versions of the mark, the application icons for every platform, the wordmark
-  lockups (the mark with `ketPlus`, with or without the framed **Pro** badge), the README
-  lockups, the installer artwork and screenshots that show them. This includes the
-  `ketplus-mark*.png`, `*lockup*.png` and `ketplus-app-icon.png` files and the
-  `KetPlus.icns` / `KetPlus.ico` icons under `assets/` and `core/assets/`, and the Linux
-  icon sets and installer artwork under `packaging/` and `core/assets/linux/` once they
-  are present.
+  resized versions of the mark, the wordmark lockups (the mark with `ketPlus`, with or
+  without the framed **Pro** badge), the README lockups, and the application icons,
+  installer artwork and screenshots drawn from it. As the applications move to the mark,
+  this covers the `ketplus-mark*.png` and `*lockup*.png` files, the `ketplus-app-icon.png`,
+  `KetPlus.icns` and `KetPlus.ico` icons under `assets/` and `core/assets/`, and the Linux
+  icon sets and installer artwork under `packaging/` and `core/assets/linux/`. An icon still
+  drawn from Két Symbol stays under that licence, as below, until it is replaced.
 
 ## What stays under its own licence
 
@@ -36,8 +36,8 @@ change them:
   Font Names "KÉT" and "KET". The wordmark lockups are set in KÉT Sans; the font licence
   covers the font, not the lockups.
 - **Két Symbol** icons, including the KetPlus Terminal icon drawing: CC BY 4.0, credited
-  "Két Symbol © 2026 Két Việt, CC BY 4.0". The Két, Lampion and Fold names are not licensed
-  by it.
+  "Két Symbol © 2026 Két Việt, CC BY 4.0". The Két, Két Symbol, Lampion and Két Việt names are
+  not licensed by it.
 
 `docs/licensing.md` lists every third-party component and its licence.
 
@@ -47,6 +47,6 @@ You may refer to ketPlus by name to describe the project truthfully, for example
 that your work is based on or compatible with it. You may not use the names, the mark or
 the lockups for your own product, fork, build or service, or in a way that suggests it is
 made or endorsed by Két Việt. A fork or redistributed build must use its own name and icon,
-and must not connect to a hosted service under the ketPlus name.
+including in the name it shows for any service it offers or connects to.
 
 For any other use, ask the owner first through the repository's issue tracker.
