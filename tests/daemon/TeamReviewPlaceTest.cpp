@@ -5,6 +5,7 @@
 #include "TeamFakeHost.h"
 #include "runtime/TeamPullRequests.h"
 
+#include <QDir>
 #include <QFile>
 #include <QStandardPaths>
 #include <QTest>
@@ -161,10 +162,13 @@ class TeamReviewPlaceTest final : public QObject {
         // Entering review again, it has the team's one round, now past.
         again(id);
         QCOMPARE(task(id).roundLimit, 1);
+        // Its own round shows as the last one, never "round 2 of 1".
+        QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 2)"));
+        QVERIFY(last(id, "review")->text.startsWith("Review round 2 of 2 sent to"));
         finishReview(*teams_, "rev", "Verdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).question,
-                 QStringLiteral("Review round limit reached (2 of 1) with findings."));
+                 QStringLiteral("Review round limit reached (2 of 2) with findings."));
     }
 
     void onThePullRequestTheBoardKeepsTheVerdictAndTheLink() {
@@ -174,6 +178,8 @@ class TeamReviewPlaceTest final : public QObject {
         const QString asked = reviewsTo("rev").first().body;
         QVERIFY(asked.contains("posted as a review comment on " + pullRequest));
         QVERIFY(asked.contains("Do not post it yourself"));
+        QVERIFY(asked.contains("write it in English"));
+        QVERIFY(asked.contains("name no folder of this computer and no person"));
         const QString findings = "web/cart.ts:4 high: no total.\nVerdict: findings";
         finishReview(*teams_, "rev", findings, false);
         // The daemon posted the reviewer's words; the reviewer stayed read-only.
@@ -211,6 +217,30 @@ class TeamReviewPlaceTest final : public QObject {
         QCOMPARE(accepted->data.value("comment_url").toString(), second);
         QVERIFY(accepted->text.contains(second));
         QCOMPARE(task(id).state, state::ready);
+    }
+
+    void theCommentNamesNoFolderOfThisComputerAndNoMember() {
+        QVERIFY(teams_->update(team_, {{"review_place", "pull_request"}}, "user").ok());
+        const QString id = inReview(pullRequest);
+        const QString worktree = task(id).worktree;
+        QVERIFY(!worktree.isEmpty());
+        finishReview(*teams_, "rev",
+                     worktree + "/web/cart.ts:4 high: no total.\n" + team().repository +
+                         "/api/cart.ts:9 low.\nSee " + QDir::homePath() +
+                         "/notes.txt\nVerdict: findings",
+                     false);
+        QCOMPARE(host_.comments.size(), 1);
+        const QString body = host_.comments.first().second;
+        QVERIFY(body.contains("<task worktree>/web/cart.ts:4 high: no total."));
+        QVERIFY(body.contains("<repository>/api/cart.ts:9 low."));
+        QVERIFY(body.contains("See ~/notes.txt"));
+        QVERIFY(!body.contains(worktree));
+        QVERIFY(!body.contains(QDir::homePath()));
+        // Neither the reviewer's name nor the task's title, which the user may have written
+        // in another language.
+        QVERIFY(!body.contains("Reviewer"));
+        QVERIFY(!body.contains("Cart"));
+        QVERIFY(body.startsWith("**Team review of " + id + ", round 1 of 2**"));
     }
 
     void noFindingsOnThePullRequestMakeTheTaskReady() {

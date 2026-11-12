@@ -5,9 +5,12 @@
 
 #include "agents/ReviewVerdict.h"
 
+#include <QDir>
 #include <QJsonObject>
 #include <QPointer>
 #include <QUuid>
+
+#include <algorithm>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -43,6 +46,26 @@ QString diffKey(const qint64 teamId, const QString& reviewer) {
 
 bool onPullRequest(const Task& task) { return task.reviewPlace == place::pullRequest; }
 
+// The "of n" a round shows: a task past a limit lowered after its last round shows its own
+// round as the last one, not "round 2 of 1".
+int shownLimit(const int limit, const int round) { return std::max(limit, round); }
+
+// T-40: a comment on a public pull request names no folder of this computer. The task's
+// worktree, the team's repository and the home folder are replaced, longest first.
+QString publicText(QString text, const Team& team, const Task& task) {
+    QList<std::pair<QString, QString>> paths{{task.worktree, QStringLiteral("<task worktree>")},
+                                             {team.repository, QStringLiteral("<repository>")},
+                                             {QDir::homePath(), QStringLiteral("~")}};
+    std::sort(paths.begin(), paths.end(),
+              [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
+    for (const auto& [path, name] : paths) {
+        const QString folder = QDir::cleanPath(path);
+        if (folder.size() > 1)
+            text.replace(folder, name);
+    }
+    return text;
+}
+
 } // namespace
 
 int TeamCoordinator::roundLimit(const Team& team, const Task& task) {
@@ -68,7 +91,7 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
         QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
             .arg(team.name, task.id, task.title)
             .arg(task.round)
-            .arg(roundLimit(team, task)),
+            .arg(shownLimit(roundLimit(team, task), task.round)),
         QStringLiteral("Branch: %1, against %2").arg(task.branch, team.integrationBranch),
         QStringLiteral("Worktree: %1").arg(task.worktree)};
     if (TeamCoordinator::recordsPullRequest(task))
@@ -118,7 +141,10 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
               << QStringLiteral("This team reviews on the pull request: your reply, as you write "
                                 "it, is posted as a review comment on %1, and the board keeps "
                                 "only the verdict and the comment's link. Do not post it "
-                                "yourself; the review stays read-only.")
+                                "yourself; the review stays read-only. The comment may be "
+                                "public: write it in English, cite files by their path in the "
+                                "repository, and name no folder of this computer and no "
+                                "person.")
                      .arg(task.pullRequest);
     else if (team.reviewPlace == place::pullRequest)
         lines << QString{}
@@ -217,7 +243,7 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
                                          "had no verdict.")
                         : QStringLiteral("Review round %1 of %2 sent to %3."))
                        .arg(task->round)
-                       .arg(task->roundLimit)
+                       .arg(shownLimit(task->roundLimit, task->round))
                        .arg(reviewerName);
     if (onPullRequest(*task))
         sent += QStringLiteral(" Its findings go to the pull request.");
@@ -260,14 +286,13 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
     if (reviewComments_.contains(messageId))
         return;
     reviewComments_.insert(messageId);
-    const Member* reviewer = team->member(reviewerSession);
+    // No member's name in it: the comment may be on a public repository.
     const QString body =
-        QStringList{QStringLiteral("**Team review of %1 \"%2\", round %3 of %4**%5")
-                        .arg(task->id, task->title)
+        QStringList{QStringLiteral("**Team review of %1, round %2 of %3**")
+                        .arg(task->id)
                         .arg(task->round)
-                        .arg(roundLimit(*team, *task))
-                        .arg(reviewer ? QStringLiteral(" by %1").arg(reviewer->name) : QString{}),
-                    QString{}, utf8Prefix(text.trimmed(), commentBytes)}
+                        .arg(shownLimit(roundLimit(*team, *task), task->round)),
+                    QString{}, utf8Prefix(publicText(text.trimmed(), *team, *task), commentBytes)}
             .join(QLatin1Char('\n'));
     host_->askPostReviewComment(*team, *task, body,
                                 [self = QPointer<TeamCoordinator>(this), reviewerSession, messageId,
@@ -392,7 +417,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             if (round >= limit) {
                 // Past the limit the leader decides (ADR 0114 §2); with one round, after it.
                 task->resumeState = state::inProgress;
-                task->question = roundLimitQuestion(round, limit);
+                task->question = roundLimitQuestion(round, shownLimit(limit, round));
                 if (!link.isEmpty())
                     task->question += QStringLiteral(" The findings: %1").arg(link);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
@@ -418,7 +443,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                                            "found issues.")
                                 .arg(team->name, taskId, task->title)
                                 .arg(round)
-                                .arg(limit),
+                                .arg(shownLimit(limit, round)),
                             QString{},
                             link.isEmpty()
                                 ? findings

@@ -127,8 +127,13 @@ replies as on the board, with the verdict line; the message tells it that its re
 posted as a review comment on the task's pull request and not to post it itself. The
 guard keeps refusing `gh pr comment` and `gh pr review`: the reviewer stays read-only,
 and **the daemon posts the reply** with `gh pr comment <url> --body-file -` on the same
-bounded worker as the pull request probe (ADR 0118), headed with the task, the round and
-the reviewer. *Rejected*: letting the guard allow a comment — it would widen a security
+bounded worker as the pull request probe (ADR 0118), headed with the task id and the
+round only. The pull request may be public, so the reviewer is told to write the comment
+in English and name no folder of this computer and no person, and the daemon replaces
+the task's worktree, the team's repository and the home folder in it (`<task worktree>`,
+`<repository>`, `~`) before posting; no member's name or task title is in the header. A
+round past a limit lowered since the task's last round shows as its own last round
+("round 2 of 2"), never "2 of 1". *Rejected*: letting the guard allow a comment — it would widen a security
 property of ADR 0067 for one provider, and the daemon reaches the same comment for every
 reviewer. While the comment is posted the review stays bound to its request, so a stale
 or repeated answer is ignored and the reviewer takes no other review. Then the board
