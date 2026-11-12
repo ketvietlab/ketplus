@@ -46,6 +46,7 @@ bool RemotePeers::accept(const QString& id, const QString& device, int version,
     peer->grant = grant;
     peer->link = link;
     peer->epoch = epoch;
+    link->setDiagnosticEpoch(epoch);
     peer->created = now();
     peer->lastPing = now();
     peers_.insert(id, peer);
