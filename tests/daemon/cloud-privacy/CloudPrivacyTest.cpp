@@ -2307,6 +2307,92 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(outcome(QStringLiteral("running"), 2).isNull());
     }
 
+    void awaitingAgentReplyTracksDurablePendingRequests() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        StoredSession sender{QStringLiteral("sender-synthetic"),
+                             directory.path(),
+                             QStringLiteral("codex"),
+                             {},
+                             {},
+                             QStringLiteral("ready")};
+        sender.generation = 1;
+        QVERIFY(journal.upsertSession(sender));
+        const QDateTime now =
+            QDateTime::fromString(QStringLiteral("2026-01-01T12:00:00.000Z"), Qt::ISODateWithMs);
+        AgentMessageRecord message;
+        message.id = QStringLiteral("request-synthetic");
+        message.chainId = QStringLiteral("chain-synthetic");
+        message.fromSession = sender.id;
+        message.fromGeneration = 1;
+        message.fromNumber = QStringLiteral("1234");
+        message.toSession = QStringLiteral("receiver-synthetic");
+        message.toGeneration = 1;
+        message.toNumber = QStringLiteral("5678");
+        message.kind = QStringLiteral("request");
+        message.expectReply = true;
+        message.body = QStringLiteral("Synthetic request");
+        message.state = QStringLiteral("queued");
+        message.createdAt = now.toString(Qt::ISODateWithMs);
+        message.expiresAt = now.addSecs(3600).toString(Qt::ISODateWithMs);
+        const auto waiting = [&] { return journal.sessionsAwaitingAgentReply(now); };
+        QVERIFY(waiting().isEmpty());
+        QVERIFY(journal.insertAgentMessage(message));
+        for (const QString& state : {QStringLiteral("queued"), QStringLiteral("held"),
+                                     QStringLiteral("releasing"), QStringLiteral("delivered")}) {
+            message.state = state;
+            QVERIFY(journal.updateAgentMessage(message));
+            QCOMPARE(waiting(), QSet<QString>{sender.id});
+        }
+        for (const QString& state :
+             {QStringLiteral("answered"), QStringLiteral("failed"), QStringLiteral("expired")}) {
+            message.state = state;
+            QVERIFY(journal.updateAgentMessage(message));
+            QVERIFY(waiting().isEmpty());
+        }
+        message.state = QStringLiteral("delivered");
+        message.expectReply = false;
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(waiting().isEmpty());
+        message.expectReply = true;
+        message.expiresAt = now.toString(Qt::ISODateWithMs);
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(waiting().isEmpty());
+        message.expiresAt = now.addSecs(3600).toString(Qt::ISODateWithMs);
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(waiting().contains(sender.id));
+        AgentMessageRecord second = message;
+        second.id = QStringLiteral("second-request-synthetic");
+        QVERIFY(journal.insertAgentMessage(second));
+        message.state = QStringLiteral("answered");
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(waiting().contains(sender.id));
+        second.state = QStringLiteral("failed");
+        QVERIFY(journal.updateAgentMessage(second));
+        QVERIFY(waiting().isEmpty());
+        message.state = QStringLiteral("delivered");
+        QVERIFY(journal.updateAgentMessage(message));
+        sender.generation = 2;
+        QVERIFY(journal.upsertSession(sender));
+        QVERIFY(waiting().isEmpty());
+    }
+
+    void awaitingAgentReplyRemainsInsideSealedMetadata() {
+        StoredSession session;
+        session.id = QStringLiteral("session-synthetic");
+        session.worktreePath = QStringLiteral("/synthetic/worktree");
+        for (const bool waiting : {true, false}) {
+            const auto sealed = Access::metadata(
+                session, {{session.id, {{QStringLiteral("awaitingAgentReply"), waiting}}}});
+            QCOMPARE(sealed.value(QStringLiteral("awaitingAgentReply")).toBool(), waiting);
+            QVERIFY(!Access::snapshots({session}).first().toObject().contains(
+                QStringLiteral("awaitingAgentReply")));
+        }
+        QVERIFY(!Access::metadata(session).contains(QStringLiteral("awaitingAgentReply")));
+    }
+
     // ADR 0027: the phone shows the conversation number, which the relay never reads.
     void sealedMetadataCarriesTheConversationNumber() {
         StoredSession session;
