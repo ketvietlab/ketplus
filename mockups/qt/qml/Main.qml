@@ -13,7 +13,7 @@ Basic.ApplicationWindow {
 
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
-        "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
+        "brand", "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
         "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/report",
@@ -141,6 +141,11 @@ Basic.ApplicationWindow {
     // Run by --smoke after a pointer dragged a conversation onto a team's folder.
     function prepareTeamDrag() { sidebar.foldTeamsExcept("release") }
     function teamDragPoints() { return sidebar.dragCheckPoints("9410", "release") }
+    function brandChecks() {
+        const brand = sidebar.brandLockup
+        if (brand.x < 0 || brand.x + brand.width > sidebar.width || brand.height < brand.implicitHeight)
+            console.warn("QML brand check failed: sidebar lockup clips")
+    }
     function teamChecks() {
         const failures = teams.selfCheck()
         if (sidebar.dragged)
@@ -454,7 +459,7 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: ["workspace", "editor", "changes", "connections", "settings",
-                           "atlas", "mobile-picker", "teams"].indexOf(app.screen)
+                           "atlas", "mobile-picker", "teams", "brand"].indexOf(app.screen)
 
             WorkspaceScreen { id: workspace; window: app }
             EditorScreen { window: app }
@@ -464,6 +469,7 @@ Basic.ApplicationWindow {
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }
             TeamsScreen { id: teams; window: app }
+            BrandScreen { }
         }
     }
 

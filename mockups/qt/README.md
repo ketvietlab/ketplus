@@ -273,3 +273,24 @@ the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
 (`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
 trademark and is not licensed. The Mermaid renderings use the Két Mermaid theme from the Két
 Design System (MIT, `core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
+
+## Brand approval specimen
+
+Open **Brand** in the sidebar (`--screen=brand`). It compares Lite/iOS and Pro at
+17, 32 and 64 px on light and dark backgrounds, the mark at 16–128 px, 60 pt iOS
+icon tiles, and the alternate `KétPlus` casing. The default wordmark is `ketPlus`.
+
+The supplied KetPlusMark PNG is cropped to artwork bounds (alpha ≥ 8/255 ignores
+near-transparent isolated noise), centred in a square with a 4% margin on each
+side, and resampled to 1024, 128 and 64 px. The original is unchanged. Sampled
+colours are mid indigo `#4332C8` and lilac `#AD97FA`; the latter is used on dark
+surfaces for contrast. The previous Két Symbol SVGs are superseded pending
+approval and retained with their attribution.
+
+`BrandLockup` owns mark geometry and wordmark spacing. KÉT Sans Black (900,
+registered by Qt as `KET Sans`) is embedded; smoke checks the resolved family,
+Black face and weight. `ket` follows the main text colour, `Plus` the brand
+indigo, with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
+a transparent rounded frame with a 1.5 px stroke scaled with interface zoom,
+0.35 em horizontal / 0.12 em vertical padding, and a 0.3 em wordmark gap.
+The brand colours are scoped specimen values, not global theme replacements.

@@ -128,7 +128,7 @@ Item {
 
             Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                source: transcript.asset + "ketplus-mark.svg"
+                source: transcript.asset + "ketplus-mark-v2.png"
                 width: transcript.px(44)
                 height: width
                 sourceSize: Qt.size(width * 2, height * 2)

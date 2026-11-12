@@ -9,6 +9,7 @@ import KetPlusMock
 // repositories with their conversations, the update notice and the account.
 Rectangle {
     id: sidebar
+    property alias brandLockup: brand
 
     required property var window
     property var expanded: ({})
@@ -90,33 +91,14 @@ Rectangle {
         spacing: 0
 
         // Brand.
-        Row {
+        BrandLockup {
+            id: brand
+            objectName: "sidebarBrand"
+            edition: "pro"
+            size: sidebar.px(17)
             Layout.leftMargin: sidebar.px(11)
             Layout.topMargin: sidebar.px(16)
             Layout.bottomMargin: sidebar.px(14)
-            spacing: sidebar.px(6)
-
-            Image {
-                anchors.verticalCenter: parent.verticalCenter
-                // The bare KétPlus Pro mark (Két Symbol, CC BY 4.0): two Chàm tones on light,
-                // Chàm and a near-white plus on dark.
-                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-bare-"
-                        + (KetTheme.dark ? "dark" : "light") + ".svg"
-                sourceSize: Qt.size(width * 2, height * 2)
-                width: sidebar.px(24)
-                height: width
-            }
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.StyledText
-                // The wordmark is Bold (700); "Pro" is Regular.
-                text: "<b>Két<font color='" + KetTheme.t.accentText + "'>Plus</font></b> Pro"
-                color: KetTheme.t.textMain
-                font.family: KetTheme.fontFamily
-                font.pixelSize: sidebar.px(17)
-                font.weight: Font.Normal
-            }
         }
 
         // Quick search opens the command palette.
@@ -181,7 +163,8 @@ Rectangle {
                     { id: "workspace", text: "Agent Workspace", icon: "chats" },
                     { id: "editor", text: "Files & Editor", icon: "folder" },
                     { id: "changes", text: "Source Control", icon: "branch", count: 3 },
-                    { id: "connections", text: "Connections", icon: "network" }
+                    { id: "connections", text: "Connections", icon: "network" },
+                    { id: "brand", text: "Brand", icon: "palette" }
                 ]
 
                 KetNavItem {
