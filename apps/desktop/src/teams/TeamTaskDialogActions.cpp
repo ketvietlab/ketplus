@@ -2,6 +2,7 @@
 #include "KetDialog.h"
 #include "KetSelect.h"
 #include "KetTextField.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
@@ -69,6 +70,10 @@ void TeamTaskDialog::readHistory(const bool earlier) {
         });
 }
 
+QString TeamTaskDialog::handoverKey() const {
+    return TeamCommands::key(teamId_, QStringLiteral("task/%1/handover").arg(taskId_));
+}
+
 ket::Dialog* TeamTaskDialog::openHandover() {
     if (handover_ || !canHandOver_)
         return handover_;
@@ -90,6 +95,7 @@ ket::Dialog* TeamTaskDialog::openHandover() {
     auto* hand = dialog->addButton(ownerSession_.isEmpty() ? tr("Assign") : tr("Hand over"),
                                    ket::ButtonVariant::Primary);
     hand->setObjectName(QStringLiteral("teamHandoverButton"));
+    teams_->commands()->bind(hand, handoverKey());
     connect(hand, &QAbstractButton::clicked, this, &TeamTaskDialog::handOver);
     // The fields outlive the dialog: they come back here before it deletes its body.
     connect(dialog, &ket::Dialog::finished, this, [this, dialog] {
@@ -125,22 +131,22 @@ void TeamTaskDialog::handOver() {
     // replaced by a new one with a new draft, is not touched by it; the task itself shows
     // the new owner either way.
     const QPointer<ket::Dialog> asked(handover_);
-    teams_->request(QStringLiteral("team.task.handover"),
-                    {{QStringLiteral("team_id"), teamId_},
-                     {QStringLiteral("task_id"), taskId_},
-                     {QStringLiteral("owner"), owner},
-                     {QStringLiteral("reason"), reason}},
-                    [alive, asked, fail](const QJsonObject&, const QString& error) {
-                        if (!alive || asked != alive->handover_)
-                            return;
-                        fail(error);
-                        if (!error.isEmpty())
-                            return;
-                        alive->reason_->clear();
-                        // Done: back to the task, which now shows its new owner.
-                        if (alive->handover_)
-                            alive->handover_->accept();
-                    });
+    teams_->commands()->send(handoverKey(), {}, QStringLiteral("team.task.handover"),
+                             {{QStringLiteral("team_id"), teamId_},
+                              {QStringLiteral("task_id"), taskId_},
+                              {QStringLiteral("owner"), owner},
+                              {QStringLiteral("reason"), reason}},
+                             [alive, asked, fail](const QJsonObject&, const QString& error) {
+                                 if (!alive || asked != alive->handover_)
+                                     return;
+                                 fail(error);
+                                 if (!error.isEmpty())
+                                     return;
+                                 alive->reason_->clear();
+                                 // Done: back to the task, which now shows its new owner.
+                                 if (alive->handover_)
+                                     alive->handover_->accept();
+                             });
 }
 
 ket::Dialog* TeamTaskDialog::present(QWidget* anchor, TeamDirectory* teams, const QString& teamId,

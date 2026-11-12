@@ -1,4 +1,4 @@
-# Brand approval evidence
+# Approved brand evidence
 
 Rendered with the standalone Qt mock, offscreen, at 1600 × 1300 and zoom 1.
 Both screenshots contain light and dark specimens; the app sidebar follows the
@@ -32,3 +32,6 @@ Qt @2x substitution of the 1024 px source. A separate offscreen render using
 for the large marks; the master source remains sharp. Badge placement now uses
 the wordmark’s x-height and preserves a fractional stroke. The icon-to-wordmark
 gap is 0.12× mark height following Jay’s further feedback.
+
+Jay approved the mark and `ketPlus` casing on 2026-11-12 (D-5). The current
+screenshots omit the discarded alternate casing and retain the approved specimens.

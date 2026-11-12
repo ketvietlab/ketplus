@@ -21,6 +21,7 @@
 #include <QLayout>
 #include <QMenu>
 #include <QMimeData>
+#include <QPointer>
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalSpy>
@@ -136,6 +137,42 @@ class SidebarTeamsTest final : public QObject {
     void init() {
         QSettings().remove(QStringLiteral("sidebar"));
         ket::Appearance::instance().setZoom(1.0);
+    }
+
+    // A turn starting or ending changes what the rows are built from, so the tree is built again.
+    // The new tree is on screen in the same pass: a group left to the layout's queued show drew an
+    // empty sidebar until the next event loop turn, and running agents made it flicker.
+    void aRebuiltTreeIsShownAtOnce() {
+        QWidget window;
+        auto* list = new SidebarRepositoryList(&window);
+        list->setRepositories({repository("/repo")});
+        window.resize(280, 600);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCoreApplication::processEvents();
+        const QVector<ket::SidebarRow*> before = rowsIn(list);
+        QVERIFY(!before.isEmpty());
+        const QPointer<ket::SidebarRow> old = before.first();
+
+        SidebarRepository running = repository("/repo");
+        QVariantMap other = running.conversations.first().toMap();
+        other.insert("running", true);
+        other.insert("agentTurnNumber", "12");
+        running.conversations[0] = other;
+        list->setRepositories({running});
+
+        // No event processed since: the rebuilt tree must already be visible and laid out.
+        const QVector<ket::SidebarRow*> after = rowsIn(list);
+        QVERIFY(old.isNull());
+        QCOMPARE(after.size(), before.size());
+        for (auto* row : after) {
+            QVERIFY2(row->isVisible(), qPrintable(row->accessibleName()));
+        }
+        auto* header = list->findChild<ket::SidebarRepositoryHeader*>(
+            QStringLiteral("productRepositoryGroupButton"));
+        QVERIFY(header != nullptr && header->isVisible());
+        QVERIFY(header->height() > 0);
+        QVERIFY(list->layoutProblems().isEmpty());
     }
 
     // The repository is the root; its teams are branches directly under it, then the

@@ -5,6 +5,9 @@ add_library(ketplus_remote STATIC
     src/DaemonPaths.h
     src/DaemonClient.cpp
     src/DaemonClient.h
+    src/DaemonMachineBackend.cpp
+    src/DaemonMachineBackend.h
+    src/MachineBackend.h
     src/SessionCatalogReader.cpp
     src/SessionCatalogReader.h
     src/LargeEventReassembler.cpp

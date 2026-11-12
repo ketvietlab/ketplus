@@ -1094,6 +1094,15 @@ one **reviewer** (a Claude conversation). A conversation is on at most one team.
   other state changes start nothing.
 - **Decisions.** Only the leader raises one; the user answers on the team page. The
   folder in the sidebar shows the count.
+- **Commands from the page.** Every control that sends a team command (a decision's
+  choices, Pause and Resume, the menu's merge policy and Delete, Remove…, and the Save,
+  Create, Add and Hand over of the team dialogs) goes through `TeamCommands`. In the same
+  pass as the click, the control keeps the kit's pressed look and every control of the
+  same command is disabled. Activating one again sends nothing until the daemon answers.
+  After 10 seconds the control, or the label beside a decision, says it is still waiting;
+  it stays pending until the answer comes. A refusal gives the controls back and shows the
+  daemon's reason. The state is held per command and not per widget, so a page rebuilt
+  meanwhile is still pending.
 - **Limits.** 40 automatic turns per team since the user last acted on it, then the team
   pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
   message until Resume.

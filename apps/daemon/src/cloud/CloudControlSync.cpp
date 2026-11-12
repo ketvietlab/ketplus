@@ -90,18 +90,26 @@ void CloudControlClient::heartbeat() {
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
         const QPointer<CloudControlClient> guard(this);
+        // Only one heartbeat runs at a time (heartbeatInFlight_), so the cache is handed to its
+        // thread and back without sharing.
+        WorktreeRevisionCache revisionCache = std::move(revisionCache_);
+        revisionCache_ = {};
         heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestEpoch,
-                              workspaceId, machineId, salt]() {
+                              workspaceId, machineId, salt,
+                              revisionCache = std::move(revisionCache)]() mutable {
             QHash<QString, QJsonObject> metadata;
+            revisionCache.retain(stored);
             const QList<QJsonArray> batches =
                 heartbeatSessionBatches(CloudControlClient::sessionSnapshots(
                     stored, workspaceId, machineId, salt, repositories, &metadata, agentMetadata,
-                    tagColors));
+                    tagColors, &revisionCache, QDateTime::currentMSecsSinceEpoch()));
             QMetaObject::invokeMethod(
                 guard,
-                [guard, batches, metadata, requestEpoch, workspaceId, machineId]() {
+                [guard, batches, metadata, requestEpoch, workspaceId, machineId,
+                 revisionCache = std::move(revisionCache)]() mutable {
                     if (!guard)
                         return;
+                    guard->revisionCache_ = std::move(revisionCache);
                     if (guard->accountEpoch_ != requestEpoch ||
                         guard->workspaceId_ != workspaceId || guard->machineId_ != machineId) {
                         guard->heartbeatInFlight_ = false;
@@ -375,8 +383,10 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                 EventUploadBackoff& backoff = eventUploadBackoff_[uploadKey];
                 backoff.failures += 1;
                 backoff.refused = eventUploadRefused(status);
+                backoff.gap =
+                    status == 409 && responseCode(value, {}) == QStringLiteral("event_cursor_gap");
                 const qint64 delay =
-                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused);
+                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused, backoff.gap);
                 backoff.retryAt.setRemainingTime(delay);
                 qWarning("event upload for session %s failed: %d %s; next attempt in %llds",
                          qUtf8Printable(sessionId), status, qUtf8Printable(lastError_),
@@ -407,6 +417,7 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                     eventUploadLimits_.insert(uploadKey, limit * 2);
             }
             if (accepted > 0) {
+                knownUploadedCursors_.insert(uploadKey, accepted);
                 QString storageError;
                 if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
                                                            accepted) ||
@@ -417,6 +428,7 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                                                  generation, accepted) ||
                     !journal_->pruneAcknowledgedCloudEvents()) {
                     registeredCloudCursors_.remove(uploadKey);
+                    knownUploadedCursors_.remove(uploadKey);
                     lastError_ = storageError.isEmpty() ? journal_->errorString() : storageError;
                     return;
                 }

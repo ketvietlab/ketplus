@@ -7,6 +7,7 @@
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
 #include "git/GitChangesPanel.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
@@ -226,7 +227,8 @@ void MainWindow::showTeamPage(const QString& teamId, const QString& repository) 
 void MainWindow::joinTeam(const QString& teamId, const QString& sessionId) {
     if (teams_ == nullptr || sessionId.isEmpty())
         return;
-    teams_->request(
+    teams_->commands()->send(
+        TeamCommands::key(teamId, QStringLiteral("member/%1/join").arg(sessionId)), {},
         QStringLiteral("team.member.join"),
         {{QStringLiteral("team_id"), teamId}, {QStringLiteral("session_id"), sessionId}},
         [this](const QJsonObject&, const QString& error) {
@@ -243,7 +245,9 @@ void MainWindow::leaveTeam(const QString& teamId, const QString& sessionId) {
         TeamDirectory::member(*team, sessionId).value(QStringLiteral("name")).toString();
     auto* dialog = teamLeaveConfirmation(this, *team, name);
     connect(dialog, &ket::Dialog::accepted, this, [this, teamId, sessionId] {
-        teams_->request(
+        // The page's Remove… for this member waits for the answer (TeamCommands).
+        teams_->commands()->send(
+            TeamCommands::key(teamId, QStringLiteral("member/%1/remove").arg(sessionId)), {},
             QStringLiteral("team.member.remove"),
             {{QStringLiteral("team_id"), teamId}, {QStringLiteral("session_id"), sessionId}},
             [this](const QJsonObject&, const QString& error) {
@@ -260,11 +264,13 @@ void MainWindow::deleteTeam(const QString& teamId) {
         return;
     auto* dialog = teamDeleteConfirmation(this, *team);
     connect(dialog, &ket::Dialog::accepted, this, [this, teamId] {
-        teams_->request(QStringLiteral("team.delete"), {{QStringLiteral("team_id"), teamId}},
-                        [this](const QJsonObject&, const QString& error) {
-                            if (!error.isEmpty())
-                                statusBar()->showMessage(error, 7000);
-                        });
+        teams_->commands()->send(TeamCommands::key(teamId, QStringLiteral("delete")), {},
+                                 QStringLiteral("team.delete"),
+                                 {{QStringLiteral("team_id"), teamId}},
+                                 [this](const QJsonObject&, const QString& error) {
+                                     if (!error.isEmpty())
+                                         statusBar()->showMessage(error, 7000);
+                                 });
     });
     dialog->open();
 }

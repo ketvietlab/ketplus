@@ -64,7 +64,7 @@ QtObject {
                   worktree: "develop", transcript: "activity" },
                 // A finished turn and a running one, both closed by the work report (Fixtures.turnReport).
                 { number: "8213", title: "Finish the repository picker", status: KetTheme.ConversationStatus.Completed,
-                  worktree: "develop", transcript: "report" },
+                  unread: true, worktree: "develop", transcript: "report" },
                 { number: "8215", title: "Follow up on the new UI", status: KetTheme.ConversationStatus.Working,
                   worktree: "develop", transcript: "report-running" },
                 { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
