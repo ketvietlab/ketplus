@@ -59,9 +59,9 @@ class ControlV2Client final : public QObject {
     // queued entries are reported in `pending` and worktreesVerified() announces each verdict.
     // An entry is shown only when the host echoes its ids and labels, and is otherwise rejected
     // as unsigned_index_entry, worktree_not_granted or verification_failed. A verdict is cached
-    // per catalog scope (ids, labels, revisions); one without an answer is retried after
-    // verifyRetryMilliseconds. Each shown worktree has `verified` = "conversation" or
-    // "host_read".
+    // per catalog scope (ids, labels, revisions); one without an answer, and a
+    // worktree_not_granted one, is asked again after verifyRetryMilliseconds. Each shown worktree
+    // has `verified` = "conversation" or "host_read".
     void projection(const QJsonObject& options, Callback done);
     // One bounded transcript window over Control v2, shaped as the local daemon's
     // session.transcript_window page. `window` takes snapshot_cursor (defaults to the session's
