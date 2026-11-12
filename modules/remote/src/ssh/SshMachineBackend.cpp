@@ -282,6 +282,9 @@ void SshMachineBackend::steerTurn(const QString& sessionId, const qint64 generat
                                   const QJsonObject& request, Callback callback) {
     operations_->steerTurn(sessionId, generation, request, std::move(callback));
 }
+void SshMachineBackend::createSession(const QJsonObject& request, Callback callback) {
+    operations_->createSession(request, std::move(callback));
+}
 void SshMachineBackend::stopTurn(const QString& sessionId, const qint64 generation,
                                  Callback callback) {
     operations_->stopTurn(sessionId, generation, std::move(callback));

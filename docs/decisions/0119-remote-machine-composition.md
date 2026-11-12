@@ -172,8 +172,11 @@ A request made before Connected is the route's to hold or fail. The local and
 SSH routes both speak through `DaemonClient`, which queues it until the hello,
 as it always has. A request made while a route is Offline (it will not retry
 on its own) fails at once with the state's reason rather than leaving the UI
-waiting unseen; the Relay route does the same. Writes are never replayed after
-a drop (the existing `DaemonClient` rule).
+waiting unseen; the Relay route does the same. While Connecting or
+Reconnecting the Relay route holds a request until Connected, bounded by the
+relay's 15-minute command lifetime. Writes are never replayed after a drop
+(the existing `DaemonClient` rule); the Relay route's outbox is the exception
+described below.
 
 ### SSH trust
 
@@ -227,12 +230,19 @@ data. No relay change is needed.
 worktree index (`GET /v2/mobile/worktrees`) is a plaintext heartbeat copy with
 no host signature, so an entry no verified conversation covers is not shown on
 the relay's word. For each such entry of a pinned machine, lazily and up to a
-bound per listing (`verify_worktrees`, default 32, at most 100), the client
-sends the existing `worktree.configuration.read` command. The host answers
-inside its signed, sealed result with the catalog scope it holds for that
-worktree (`repositoryId`, `worktreeId`, `repositoryLabel`, `worktreeLabel`,
-`catalogRevision`, `lifecycleRevision`). The entry is shown, marked
-`verified: "host_read"`, only when every field equals the index entry.
+bound of new checks per listing (`verify_worktrees`, default 32, at most 100),
+the client sends the existing `worktree.configuration.read` command in the
+background: at most four at a time, each abandoned after five seconds. No
+listing waits for it; an entry being checked is reported in `pending`, and
+`MachineBackend::catalogChanged` announces each verdict. The verdict is cached
+per catalog scope (ids, labels and the index's revisions), so a worktree is
+checked once until its scope changes; a check that got no answer is tried again
+after 30 seconds. The host answers inside its signed, sealed result with the
+catalog scope it holds for that worktree (`repositoryId`, `worktreeId`,
+`repositoryLabel`, `worktreeLabel`). The host keeps no catalog or lifecycle
+revision (it accepts only 0), so the revisions are not part of the comparison.
+The entry is shown, marked `verified: "host_read"`, only when every echoed
+field equals the index entry.
 Otherwise it is reported in `rejected` with a stable reason:
 `unsigned_index_entry` (beyond the bound or not active), `worktree_not_granted`
 (the relay refused the command as forbidden) or `verification_failed` (no
@@ -249,8 +259,14 @@ only that stored ciphertext is submitted again, so the relay's idempotency key
 answers with the command it already has and the host's command journal runs it
 once. A result is verified (host signature, original scope) before a callback
 or `commandCompleted` sees it, and each command id is applied at most once,
-including after a restart. Plaintext never reaches the file. An entry older
-than the relay's 15-minute command lifetime is given up.
+including after a restart: its completion is written to the outbox before the
+result is applied, and a result that cannot be recorded stays pending until a
+later connection. Plaintext never reaches the file. An entry older than the
+relay's 15-minute command lifetime is given up. A reported failure means the
+command will never be sent: on `disconnectFromRelay()` or a fatal answer, a
+command that never left this device is withdrawn from the outbox and fails,
+and one the relay may already hold is answered `{"status": "queued",
+"command_id"}`, with its outcome arriving later through `commandCompleted`.
 
 **Connection states** follow the relay link: `Connecting` until the first
 successful read, `Connected`, `Reconnecting` with bounded backoff (1 s doubling

@@ -255,8 +255,13 @@ command, runs it once and signs its result: a full turn with an approval and a
 question, a session created in an empty host-verified worktree, per-worktree
 verification (a mismatched scope, an ungranted worktree, the bound), an outbox
 retry of the same ciphertext across a simulated restart, offline and
-reconnect, and a revoked credential that fences an in-flight result. No
-network, account or provider is used.
+reconnect, and a revoked credential that fences an in-flight result. It also
+covers lazy, cached and bounded worktree verification that never delays a
+listing, a backend destroyed mid-request, live events resuming after a fence
+during an events poll, requests held while reconnecting, a failure reported
+only for a command that is never sent (one the relay holds is queued and
+completes once), and a result applied only after its completion is recorded.
+No network, account or provider is used.
 
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`
 uses temporary repositories/journals and a fake Codex process;

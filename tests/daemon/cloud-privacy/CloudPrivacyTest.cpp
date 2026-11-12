@@ -2822,8 +2822,9 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(worktree.value("worktreeId").toString(), id("worktree"));
         QVERIFY(!worktree.value("repositoryLabel").toString().isEmpty());
         QVERIFY(!worktree.value("worktreeLabel").toString().isEmpty());
-        QCOMPARE(worktree.value("catalogRevision").toInt(-1), 0);
-        QCOMPARE(worktree.value("lifecycleRevision").toInt(-1), 0);
+        // The host keeps no catalog revision, so it echoes none (ADR 0119).
+        QVERIFY(!worktree.contains("catalogRevision"));
+        QVERIFY(!worktree.contains("lifecycleRevision"));
         // The host path never leaves the machine.
         QVERIFY(!plaintext.contains(canonical.toUtf8()));
     }
