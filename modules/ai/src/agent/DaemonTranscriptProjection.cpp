@@ -201,22 +201,22 @@ QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
 }
 
 void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
-    if (agentMessages.isEmpty())
-        return;
     QStringList senders;
-    bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
-        const QString sender = QStringLiteral("@agent/") + message.value("from_number").toString();
-        if (!senders.contains(sender))
+        const QString number = message.value("from_number").toString();
+        const QString sender = number.isEmpty() ? message.value("from_title").toString()
+                                                : QStringLiteral("@agent/") + number;
+        if (!sender.isEmpty() && !senders.contains(sender))
             senders.append(sender);
-        reviews = reviews && message.value("kind").toString() == QStringLiteral("review");
     }
-    const QJsonObject first = agentMessages.first().toObject();
+    const QJsonObject first =
+        agentMessages.isEmpty() ? QJsonObject{} : agentMessages.first().toObject();
     // As the mock's "From @agent/8941 · DS Icon · Claude"; the sender's note says it replied.
-    QString label = (reviews ? QStringLiteral("Review request from ") : QStringLiteral("From ")) +
-                    senders.join(QStringLiteral(", "));
-    if (senders.size() == 1) {
+    QString label =
+        QStringLiteral("From ") +
+        (senders.isEmpty() ? QStringLiteral("System") : senders.join(QStringLiteral(", ")));
+    if (senders.size() == 1 && !first.value("from_number").toString().isEmpty()) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
         if (const QString provider = first.value("from_provider").toString(); !provider.isEmpty())
@@ -703,7 +703,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                 entry.insert("eventType", "turn.steered");
                 entry.insert("provider", data.value("provider").toString());
             }
-            if (data.value("origin").toString() == QStringLiteral("agent")) {
+            if (const auto origin = data.value("origin").toString();
+                origin == "agent" || origin == "system" || origin == "team") {
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
                 // #468: a team's own message is drawn as its block; the text stays the body.
                 if (const QVariantMap block =

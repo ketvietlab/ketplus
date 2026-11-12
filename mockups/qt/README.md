@@ -344,3 +344,10 @@ stroke disables pixel alignment to preserve 1.5 px at 100% zoom. Jay’s direct
 review changed the original Black 900 requirement to Bold 700 and increased the
 mark relative to the wordmark. A further review tightened the icon-to-wordmark
 gap from 0.35× to 0.12× mark height. The unused Black face is no longer embedded.
+
+
+Agent message cards share the same bordered surface in both directions. Incoming
+headers use `From @agent/NNNN · Title · Provider`, or the system/team name;
+outgoing headers retain Message/Reply/Notice to. Bodies are selectable plain text,
+collapsed to four lines with explicit Expand/Collapse controls. Structured team
+details and task links appear on expansion. Owner input keeps its user bubble.

@@ -158,6 +158,10 @@ void AgentWorkspaceViewTest::teamBlockOpensItsTask() {
     view.setTeamRoles({{"lead-session", QVariantMap{{"team_id", "7"}, {"team_name", "Shop"}}}});
     view.resetMessages(rows, "team-block");
     auto* root = view.quickView()->rootObject();
+    QQuickItem* toggle = nullptr;
+    QTRY_VERIFY((toggle = findVisibleItem(root, "transcriptAgentNoteExpand")));
+    QVERIFY(!findVisibleItem(root, "transcriptTeamBlock"));
+    QVERIFY(QMetaObject::invokeMethod(toggle, "clicked"));
     QQuickItem* block = nullptr;
     QTRY_VERIFY((block = findVisibleItem(root, "transcriptTeamBlock")) != nullptr);
     QCOMPARE(countVisible(root, "transcriptTeamBlock"), 1);
@@ -173,6 +177,8 @@ void AgentWorkspaceViewTest::teamBlockOpensItsTask() {
 
     // The assignment's Open T-3 asks for its task on the team the block names.
     view.resetMessages(transcriptOf(assignmentMessage()), "team-block-assignment");
+    QTRY_VERIFY((toggle = findVisibleItem(root, "transcriptAgentNoteExpand")));
+    QVERIFY(QMetaObject::invokeMethod(toggle, "clicked"));
     QQuickItem* open = nullptr;
     QTRY_VERIFY((open = findVisibleItem(root, "transcriptTeamBlockOpenTask")) != nullptr);
     QSignalSpy requested(&view, &ketplus::AgentWorkspaceView::teamTaskRequested);
@@ -195,7 +201,7 @@ void AgentWorkspaceViewTest::unknownTeamMessageStaysText() {
     view.resetMessages(rows, "team-text");
     auto* root = view.quickView()->rootObject();
     QQuickItem* body = nullptr;
-    QTRY_VERIFY((body = findVisibleItem(root, "messageBody")) != nullptr);
+    QTRY_VERIFY((body = findVisibleItem(root, "transcriptAgentNoteBody")) != nullptr);
     QVERIFY(body->property("text").toString().contains("you joined as a developer"));
     QVERIFY(!findVisibleItem(root, "transcriptTeamBlock"));
 }

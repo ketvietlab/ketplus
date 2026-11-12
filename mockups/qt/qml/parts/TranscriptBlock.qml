@@ -18,11 +18,99 @@ Loader {
 
     width: parent ? parent.width : 0
     sourceComponent: ({
-        day: day, user: user, steer: user, queued: queued, commentary: commentary,
+        day: day, user: host.block.from ? incoming : user, steer: host.block.from ? incoming : user, queued: queued, commentary: commentary,
         answer: answer, activity: activity, changes: changes, question: question,
         approval: approval, agent: agent, event: event, reconnect: reconnect, error: error,
         working: working, turn: turn, trimmed: note, team: team
     })[host.block.type] || null
+
+    // Both message directions use the same four-line, selectable preview.
+    component AgentCard: Rectangle {
+        id: card
+        property string label
+        property string message
+        property string details: ""
+        property color iconColor: KetTheme.t.accentText
+        property bool incoming: false
+        property bool expanded: false
+        property bool extraContent: false
+        property bool expandBody: true
+        width: parent ? parent.width : 0
+        implicitHeight: cardColumn.implicitHeight + host.px(20)
+        radius: host.px(6)
+        color: KetTheme.t.panelBgSubtle
+        border.color: KetTheme.t.panelBorder
+        Column {
+            id: cardColumn
+            x: host.px(14)
+            y: host.px(10)
+            width: parent.width - 2 * x
+            spacing: host.px(6)
+            Row {
+                width: parent.width
+                spacing: host.px(8)
+                KetIcon {
+                    name: card.incoming ? "arrow-down" : "send"
+                    box: host.px(14)
+                    color: card.iconColor
+                }
+                Text {
+                    width: parent.width - host.px(22)
+                    function escaped(value) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+                    text: "<b>" + escaped(card.label) + "</b>" + (card.details ? "&nbsp;&nbsp;" + escaped(card.details) : "")
+                    wrapMode: Text.Wrap
+                    textFormat: Text.StyledText
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: host.px(13)
+                }
+            }
+            TextEdit {
+                id: cardBody
+                width: parent.width
+                height: card.expanded && card.expandBody ? contentHeight : Math.min(contentHeight, metrics.height * 4)
+                clip: true
+                text: card.message
+                textFormat: TextEdit.PlainText
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.Wrap
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: host.px(13)
+            }
+            KetButton {
+                visible: cardBody.contentHeight > metrics.height * 4 + 1 || card.extraContent
+                text: card.expanded ? "Collapse" : "Expand"
+                variant: KetTheme.ButtonVariant.Ghost
+                controlSize: KetTheme.ControlSize.Small
+                onClicked: {
+                    let scroll = card.parent;
+                    while (scroll && scroll.contentY === undefined)
+                        scroll = scroll.parent;
+                    const top = scroll ? card.mapToItem(scroll, 0, 0).y : 0;
+                    card.expanded = !card.expanded;
+                    if (scroll)
+                        Qt.callLater(() => {
+                            scroll.contentY += card.mapToItem(scroll, 0, 0).y - top;
+                        });
+                }
+            }
+        }
+        FontMetrics {
+            id: metrics
+            font.family: KetTheme.fontFamily
+            font.pixelSize: host.px(13)
+        }
+    }
+    Component {
+        id: incoming
+        AgentCard {
+            incoming: true
+            label: "From " + (host.block.from.number ? "@agent/" + host.block.from.number + " · " : "") + host.block.from.title + (host.block.from.provider ? " · " + host.block.from.provider : "")
+            message: host.block.text
+        }
+    }
 
     // A quiet line of the transcript: an icon, a bold label and the rest.
     component Line: Row {
@@ -69,22 +157,31 @@ Loader {
 
     Component { id: day; KetDayDivider { text: host.block.text } }
 
-    Component { id: team; TeamTranscriptBlock { block: host.block; window: host.window } }
+    Component {
+        id: team
+        Column {
+            AgentCard {
+                id: teamCard
+                incoming: true
+                label: "From " + host.block.team
+                message: host.block.text || host.block.title || host.block.kind
+                extraContent: true
+                expandBody: false
+            }
+            TeamTranscriptBlock {
+                width: parent.width
+                visible: teamCard.expanded
+                block: host.block
+                window: host.window
+            }
+        }
+    }
 
-    // user.message (text, images, a message from another conversation) and turn.steered.
+    // Owner-authored user.message and turn.steered; incoming messages use the card above.
     Component {
         id: user
         Column {
             spacing: host.px(6)
-            Text {
-                visible: !!host.block.from
-                anchors.right: parent.right
-                text: host.block.from ? "From @agent/" + host.block.from.number + " · " + host.block.from.title
-                                         + " · " + host.block.from.provider : ""
-                color: KetTheme.t.textMuted
-                font.family: KetTheme.fontFamily
-                font.pixelSize: host.px(12)
-            }
             Row {
                 visible: !!(host.block.images && host.block.images.length)
                 anchors.right: parent.right
@@ -273,18 +370,18 @@ Loader {
     // agent_message.state of an outgoing request, reply or notice.
     Component {
         id: agent
-        Note {
+        AgentCard {
             readonly property var states: ({
-                sent: "Sent", replied: "Replied", failed: "Not delivered", expired: "Expired",
-                held: "Held until the turn ends"
-            })
-            iconName: "send"
+                    sent: "Sent",
+                    replied: "Replied",
+                    failed: "Not delivered",
+                    expired: "Expired",
+                    held: "Held until the turn ends"
+                })
+            label: (host.block.kind === "reply" ? "Reply to" : host.block.kind === "notice" ? "Notice to" : "Message to") + " @agent/" + host.block.peer.number
+            details: host.block.peer.title + " · " + host.block.peer.provider + " · " + states[host.block.state] + (host.block.expectReply && host.block.state === "sent" ? " · reply requested" : "")
+            message: host.block.text || ""
             iconColor: host.block.state === "failed" ? KetTheme.t.danger : KetTheme.t.accentText
-            label: (host.block.kind === "reply" ? "Reply to" : host.block.kind === "notice" ? "Notice to" : "Message to")
-                   + " @agent/" + host.block.peer.number
-            message: host.block.peer.title + " · " + host.block.peer.provider + " · " + states[host.block.state]
-                     + (host.block.expectReply && host.block.state === "sent" ? " · reply requested" : "")
-                     + (host.block.text ? "<br>" + host.block.text : "")
         }
     }
 

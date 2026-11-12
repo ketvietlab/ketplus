@@ -47,6 +47,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void fileStepsOpenTheirDiffInline();
     void claudeEditOpensItsDiffInline();
     void sentAgentMessageReadsAsTheMockNote();
+    void incomingAgentCardsClampAndExpand();
+    void agentCardEvidence();
     void teamMessagesReadAsTheirBlocks();
     void teamBlockOpensItsTask();
     void unknownTeamMessageStaysText();
