@@ -218,10 +218,17 @@ class AtlasWorkspaceTest final : public QObject {
                          {QStringLiteral("This Mac"), QStringLiteral("Linux lab")},
                          QStringLiteral("linux-1"));
         QCOMPARE(machineSelect->currentData().toString(), QStringLiteral("linux-1"));
+        // The picked machine lists no repositories yet: the notice says so.
+        bar->setRepositories({});
         bar->setRemoteMachineSelected(true);
-        QVERIFY(bar->findChild<QLabel*>(QStringLiteral("productMachineNotice"))->isVisible());
+        auto* notice = bar->findChild<QLabel*>(QStringLiteral("productMachineNotice"));
+        QVERIFY(notice->isVisible());
         QVERIFY(!bar->findChild<QAbstractButton*>(QStringLiteral("productAddRepositoryButton"))
                      ->isEnabled());
+        // Once its backend lists one, the sidebar shows it and the notice goes.
+        bar->setRepositories({ketplus::SidebarRepository{.path = QStringLiteral("/srv/ketplus"),
+                                                         .name = QStringLiteral("ketplus")}});
+        QVERIFY(!notice->isVisible());
     }
 
     void ownsSeparateTabs() {

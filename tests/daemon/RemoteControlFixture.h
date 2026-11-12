@@ -150,14 +150,18 @@ struct EncryptedFixture {
             QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", hostKeys}});
     }
     QJsonObject event(int cursor = 1) {
+        return event(cursor, "assistant.delta", {{"delta", "private fixture text"}});
+    }
+    // A host-sealed event of any type for opaque-session, as the relay stores it.
+    QJsonObject event(int cursor, const QString& type, const QJsonObject& data) {
         QJsonObject event{{"workspaceId", "workspace"}, {"sessionId", "opaque-session"},
                           {"sessionGeneration", 3},     {"cursor", cursor},
-                          {"turnSequence", 1},          {"eventType", "assistant.delta"}};
-        const auto aad = CloudCrypto::canonical({"ketplus", 2, "event", "workspace",
-                                                 "opaque-session", 3, cursor, 1, "assistant.delta",
-                                                 "opaque-session:3:1", 1, "linux-host", 1});
-        event.insert("content", host.encrypt("{\"delta\":\"private fixture text\"}", aad,
-                                             "opaque-session", 3, 1, "linux-host", 1));
+                          {"turnSequence", 1},          {"eventType", type}};
+        const auto aad =
+            CloudCrypto::canonical({"ketplus", 2, "event", "workspace", "opaque-session", 3, cursor,
+                                    1, type, "opaque-session:3:1", 1, "linux-host", 1});
+        event.insert("content", host.encrypt(QJsonDocument(data).toJson(QJsonDocument::Compact),
+                                             aad, "opaque-session", 3, 1, "linux-host", 1));
         return event;
     }
 };

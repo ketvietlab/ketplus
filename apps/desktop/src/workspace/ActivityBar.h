@@ -53,6 +53,7 @@ class ActivityBar final : public QWidget {
     [[nodiscard]] SidebarRepositoryList* repositoryList() const { return repositoryList_; }
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
+    // A remote machine is picked: no Add repository, and a notice while it lists none.
     void setRemoteMachineSelected(bool selected);
     // Shows the "Update ready" reminder above the identity button; empty hides it.
     void setStorageStatus(const QVariantMap& result);
@@ -86,6 +87,7 @@ class ActivityBar final : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
+    void refreshMachineNotice();
     void syncShownWidth();
     void refreshIdentityText();
     ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
@@ -104,6 +106,8 @@ class ActivityBar final : public QWidget {
     QComboBox* machineSelect_{nullptr};
     QToolButton* repositoryAction_{nullptr};
     QLabel* machineNotice_{nullptr};
+    bool remoteMachineSelected_{false};
+    int repositoryCount_{0};
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QLabel* identityAvatar_{nullptr};
