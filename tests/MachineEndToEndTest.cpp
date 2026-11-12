@@ -11,6 +11,7 @@
 #include "remote/LinuxMachinesSection.h"
 #include "remote/LinuxRelayMachines.h"
 #include "remote/LinuxSshMachines.h"
+#include "remote/RemoteControlView.h"
 #include "ssh/SshMachineBackend.h"
 #include "ssh/SshMachineStore.h"
 #include "ui/Theme.h"
@@ -107,6 +108,73 @@ class LoopbackDaemon {
     QProcess process_;
 };
 
+// As MainWindow::ensureRemoteControl does with its own Connections page: every listed machine's
+// backend is registered, and the activity bar's picker lists it after This Mac.
+void followConnections(QObject* context, LinuxMachinesSection& connections, MainWindow& window,
+                       ActivityBar* bar,
+                       std::function<remote::MachineBackend*(const QString&)> backendOf) {
+    QObject::connect(&connections, &LinuxMachinesSection::machinesChanged, context,
+                     [&window, bar, backendOf](const QStringList& ids, const QStringList& names) {
+                         auto* selection = window.machineComposition()->selection();
+                         selection->syncBackends(ids, backendOf);
+                         QStringList choices{QStringLiteral("local")};
+                         choices.append(ids);
+                         QStringList labels{QStringLiteral("This Mac")};
+                         labels.append(names);
+                         bar->setMachines(choices, labels, selection->machineId());
+                     });
+}
+
+QComboBox* machinePicker(ActivityBar* bar) {
+    return bar->findChild<QComboBox*>("productMachineSelect");
+}
+
+// The user picks a machine in the activity bar's picker.
+bool pick(ActivityBar* bar, const QString& machineId) {
+    auto* picker = machinePicker(bar);
+    const int index = picker != nullptr ? picker->findData(machineId) : -1;
+    if (index < 0)
+        return false;
+    picker->setCurrentIndex(index);
+    return true;
+}
+
+// With KETPLUS_E2E_SCREENSHOTS set to a folder, saves what the user sees for the PR.
+void screenshot(QWidget* widget, const QString& name) {
+    const QString folder = qEnvironmentVariable("KETPLUS_E2E_SCREENSHOTS");
+    if (folder.isEmpty() || widget == nullptr)
+        return;
+    // A toast names this run's temporary folder; it is not part of the flow.
+    for (auto* child : widget->findChildren<QWidget*>())
+        if (QByteArray(child->metaObject()->className()).contains("Toast"))
+            child->hide();
+    QTest::qWait(100);
+    widget->grab().save(QDir(folder).filePath(name + ".png"));
+}
+
+// The Connections page as the window shows it, with this flow's Linux machine rows.
+void screenshotConnections(LinuxMachineModel* model, const QString& name) {
+    if (qEnvironmentVariable("KETPLUS_E2E_SCREENSHOTS").isEmpty())
+        return;
+    RemoteControlView page;
+    page.linuxMachines()->setModel(model);
+    page.resize(1100, 1400);
+    page.show();
+    QTest::qWait(300);
+    screenshot(&page, name);
+}
+
+// The picker's open list, as the user sees it.
+void screenshotPicker(ActivityBar* bar, const QString& name) {
+    if (qEnvironmentVariable("KETPLUS_E2E_SCREENSHOTS").isEmpty())
+        return;
+    auto* picker = machinePicker(bar);
+    picker->showPopup();
+    QTest::qWait(200);
+    screenshot(picker->view()->window(), name);
+    picker->hidePopup();
+}
+
 // One listed host's Relay route over the loopback relay, as SystemRelayLink wraps it.
 class LoopbackRelayLink final : public LinuxRelayLink {
   public:
@@ -142,6 +210,9 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(settings_.isValid() && workspace_.isValid());
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
+        // This Mac's daemon is never this user's running one.
+        qputenv("KETPLUS_DAEMON_DATA_DIR", QDir(settings_.path()).filePath("daemon").toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", QDir(settings_.path()).filePath("no-daemon").toUtf8());
         qputenv("KETPLUS_CONVERSATION_WORKTREES",
                 QDir(settings_.path()).filePath("conversation-worktrees.sqlite").toUtf8());
     }
@@ -186,13 +257,9 @@ class MachineEndToEndTest final : public QObject {
         auto* bar = window.findChild<ActivityBar*>();
         QVERIFY(bar != nullptr);
         MachineSelection* selection = window.machineComposition()->selection();
-        // As the window does for its own Connections page: every listed machine is registered.
-        connect(&connections, &LinuxMachinesSection::machinesChanged, this,
-                [&](const QStringList& ids, const QStringList&) {
-                    selection->syncBackends(ids, [&ssh](const QString& id) {
-                        return static_cast<remote::MachineBackend*>(ssh.backend(id));
-                    });
-                });
+        followConnections(this, connections, window, bar, [&ssh](const QString& id) {
+            return static_cast<remote::MachineBackend*>(ssh.backend(id));
+        });
 
         // The saved row's Connect, as the user presses it: its daemon has not named itself yet.
         QCOMPARE(model.machines().size(), 1);
@@ -220,6 +287,7 @@ class MachineEndToEndTest final : public QObject {
             return state != nullptr ? state->text() : QString{};
         };
         QTRY_COMPARE(rowState(), LinuxMachineModel::stateText(LinuxMachine::State::Connected));
+        screenshotConnections(&model, "ssh-connections");
 
         // A conversation already on the host, started there earlier.
         struct Started {
@@ -237,7 +305,7 @@ class MachineEndToEndTest final : public QObject {
 
         // The picker selects the machine: its sidebar lists its repository, worktree and
         // conversation, and the Agent Workspace is the machine's.
-        emit bar->machineRequested(machineId);
+        QVERIFY(pick(bar, machineId));
         MachineWorkspaceView* view = window.machineComposition()->existingView();
         QVERIFY(shown(view));
         QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
@@ -253,6 +321,8 @@ class MachineEndToEndTest final : public QObject {
             patience);
         const auto repositories = window.machineComposition()->sidebarRepositories();
         QCOMPARE(repositories.size(), 1);
+        // The machine's repositories are listed, so the sidebar does not call them unavailable.
+        QTRY_VERIFY(!window.findChild<QLabel*>("productMachineNotice")->isVisibleTo(&window));
         QCOMPARE(QFileInfo(repositories.first().path).canonicalFilePath(), canonical);
 
         // A new conversation in the remote worktree; it asks for an approval.
@@ -297,6 +367,8 @@ class MachineEndToEndTest final : public QObject {
         approve->click();
         QTRY_VERIFY2_WITH_TIMEOUT(transcriptRows(*view).join('\n').contains("finished"),
                                   qPrintable(approvalState()), patience);
+        screenshot(&window, "ssh-window");
+        screenshotPicker(bar, "ssh-picker");
         QTRY_VERIFY_WITH_TIMEOUT(
             view->findChild<QPushButton*>("machineApprove") == nullptr ||
                 !view->findChild<QPushButton*>("machineApprove")->isVisibleTo(view),
@@ -329,7 +401,7 @@ class MachineEndToEndTest final : public QObject {
         QCOMPARE(view->openSessionId(), created);
 
         // This Mac again: the local Agent Workspace and sidebar, none of the machine's rows.
-        emit bar->machineRequested("local");
+        QVERIFY(pick(bar, "local"));
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
         QVERIFY(!shown(view));
         QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));
@@ -419,12 +491,9 @@ class MachineEndToEndTest final : public QObject {
         auto* bar = window.findChild<ActivityBar*>();
         QVERIFY(bar != nullptr);
         MachineSelection* selection = window.machineComposition()->selection();
-        connect(&connections, &LinuxMachinesSection::machinesChanged, this,
-                [&](const QStringList& ids, const QStringList&) {
-                    selection->syncBackends(ids, [&relayMachines](const QString& id) {
-                        return relayMachines.backend(id);
-                    });
-                });
+        followConnections(this, connections, window, bar, [&relayMachines](const QString& id) {
+            return relayMachines.backend(id);
+        });
 
         const QString machineId = CloudCrypto::keyFingerprint(fixture.hostKeys);
         relayMachines.setListed(
@@ -441,9 +510,10 @@ class MachineEndToEndTest final : public QObject {
             return state != nullptr ? state->text() : QString{};
         };
         QTRY_COMPARE(rowState(), LinuxMachineModel::stateText(LinuxMachine::State::Connected));
+        screenshotConnections(&model, "relay-connections");
 
         // The picker selects the machine. Its worktree is pending until the host verifies it.
-        emit bar->machineRequested(machineId);
+        QVERIFY(pick(bar, machineId));
         MachineWorkspaceView* view = window.machineComposition()->existingView();
         QVERIFY(shown(view));
         QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
@@ -504,6 +574,8 @@ class MachineEndToEndTest final : public QObject {
         send->click();
         QTRY_VERIFY_WITH_TIMEOUT(transcriptRows(*view).join('\n').contains("private fixture text"),
                                  patience);
+        screenshot(&window, "relay-window");
+        screenshotPicker(bar, "relay-picker");
         // The relay only ever saw ciphertext.
         for (const auto& body : std::as_const(network.bodies))
             QVERIFY(!body.contains("continue over the relay"));
@@ -559,7 +631,7 @@ class MachineEndToEndTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(composer->isEnabled(), patience);
 
         // This Mac again.
-        emit bar->machineRequested("local");
+        QVERIFY(pick(bar, "local"));
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
         QVERIFY(!shown(view));
         QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));

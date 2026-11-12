@@ -248,6 +248,18 @@ changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
 
+`ketplus_machine_end_to_end_tests` (macOS Desktop, offscreen) is the #419
+acceptance: the real `MainWindow` with Connections' SSH and Relay classes
+selects a Linux machine in the picker, starts a conversation in a remote
+worktree, answers an approval, sees the transcript update, survives a stopped
+daemon or relay with Reconnecting/Offline shown and automatic recovery, and
+returns to This Mac. The SSH case needs `sshd` (it skips without one) and uses a
+real `ketplus_daemon` with FakeCodex; the Relay case uses
+`tests/daemon/SyntheticRelay.h` and in-memory credentials. Set
+`KETPLUS_E2E_SCREENSHOTS=<folder>` to save the Connections page, the window and
+the open machine picker for each route (the PR evidence under
+`mockups/qt/evidence/linux-e2e/`).
+
 `ketplus_remote_relay_backend_tests` drives ADR 0119's `RelayMachineBackend`
 against a loopback relay whose replies are shaped like the deployed relay's
 session, worktree and command DTOs, with a synthetic host that decrypts each
