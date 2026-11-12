@@ -74,15 +74,30 @@ bool reviewRequest(const AgentMessageRecord& message) {
     return message.kind == QStringLiteral("review") && message.expectReply;
 }
 
+// A team's review round (ADR 0114 §2): sent by the team itself, which has no conversation.
+// Conversations always send with their own session id, so none can ask for this profile.
+bool teamReviewRequest(const AgentMessageRecord& message) {
+    return reviewRequest(message) && message.fromSession.isEmpty();
+}
+
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
         entries.append(originEntry(message));
     QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
                        {QStringLiteral("agent_messages"), entries}};
-    // ADR 0067: the turn reviews another conversation and runs read-only.
-    if (std::any_of(messages.cbegin(), messages.cend(), reviewRequest))
+    // ADR 0067: the turn reviews another conversation and runs read-only. ADR 0114 §2: a turn
+    // that only a team's review rounds start verifies: it may build and test, not change the
+    // work. A turn review of ADR 0067 in the same batch keeps the whole turn read-only.
+    if (std::any_of(messages.cbegin(), messages.cend(), reviewRequest)) {
         origin.insert(QStringLiteral("review_guard"), true);
+        const bool verify =
+            std::all_of(messages.cbegin(), messages.cend(), [](const AgentMessageRecord& message) {
+                return !reviewRequest(message) || teamReviewRequest(message);
+            });
+        origin.insert(QStringLiteral("review_profile"),
+                      verify ? QStringLiteral("verify") : QStringLiteral("read"));
+    }
     if (!messages.isEmpty() && messages.first().delivery.startsWith("user_authorized:"))
         origin.insert(QStringLiteral("user_release_id"),
                       messages.first().delivery.mid(QStringLiteral("user_authorized:").size()));
@@ -361,6 +376,21 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
                {QStringLiteral("to"), conversationJson(*receiver)}});
 }
 
+namespace {
+
+// A review request is read only in the review turn it starts (ADR 0067, ADR 0114 §2). Shown in
+// another turn, under that turn's permissions, it could be carried out outside its guard.
+bool withheldFrom(const AgentMessageRecord& message, const QString& sessionId) {
+    return reviewRequest(message) && message.toSession == sessionId &&
+           (message.state == QStringLiteral("queued") || message.state == QStringLiteral("held"));
+}
+
+const QString withheldBody = QStringLiteral(
+    "(A review request. It is delivered in a review turn of its own when this turn ends; do not "
+    "start the review here.)");
+
+} // namespace
+
 QJsonObject AgentBroker::inbox(const AgentConversation& caller, const QJsonObject& payload) const {
     const QString wanted = payload.value(QStringLiteral("message_id")).toString();
     if (!wanted.isEmpty()) {
@@ -370,7 +400,8 @@ QJsonObject AgentBroker::inbox(const AgentConversation& caller, const QJsonObjec
             return failure(QStringLiteral("message_not_found"),
                            QStringLiteral("No such message for this conversation."));
         QJsonObject value = messageJson(*message);
-        value.insert(QStringLiteral("body"), message->body);
+        value.insert(QStringLiteral("body"),
+                     withheldFrom(*message, caller.sessionId) ? withheldBody : message->body);
         return ok({{QStringLiteral("message"), value}});
     }
     const int limit = std::clamp(payload.value(QStringLiteral("limit")).toInt(20), 1, 50);
@@ -382,6 +413,11 @@ QJsonObject AgentBroker::inbox(const AgentConversation& caller, const QJsonObjec
                                                       ? QStringLiteral("incoming")
                                                       : QStringLiteral("outgoing"));
         constexpr qsizetype previewBytes = 2000;
+        if (withheldFrom(message, caller.sessionId)) {
+            value.insert(QStringLiteral("body"), withheldBody);
+            values.append(value);
+            continue;
+        }
         value.insert(QStringLiteral("body"), truncatedUtf8(message.body, previewBytes));
         if (message.body.toUtf8().size() > previewBytes)
             value.insert(QStringLiteral("truncated"), true);

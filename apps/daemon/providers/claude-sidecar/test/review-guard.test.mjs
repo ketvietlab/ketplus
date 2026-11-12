@@ -11,7 +11,7 @@ test("a review turn stays in plan mode and refuses every write without a prompt"
   // Run the real sidecar against a fake SDK; never import or call an authenticated provider.
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ketplus-claude-review-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  for (const file of ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "session-usage.mjs"])
+  for (const file of ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs"])
     await fs.copyFile(new URL(`../${file}`, import.meta.url), path.join(root, file));
   const sdk = path.join(root, "node_modules/@anthropic-ai/claude-agent-sdk");
   await fs.mkdir(sdk, { recursive: true });

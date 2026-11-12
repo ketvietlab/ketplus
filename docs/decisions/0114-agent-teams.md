@@ -55,7 +55,13 @@ instead of skipping them. The daemon reads the diff off its event loop before th
 starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
 again, and a diff that is no longer for the next task or the team's integration branch is
 read again. The reviewer is therefore a Claude conversation, the only
-provider that enforces the read-only guard. A member's own Reviewer setting stays
+provider that enforces the review guard. A team's review round runs under the guard's
+**verify** profile (ADR 0067): the reviewer may build, run tests and use the browser
+without a prompt and write only in its own scratch directory; it cannot change a
+tracked file, commit, push, merge, approve or close a pull request, delete a branch or
+worktree, or change its own permissions. No permission prompt is forwarded from a
+review turn. The reviewer's other turns (its clean-up, the leader's messages) keep its
+own mode, as before. A member's own Reviewer setting stays
 stored but does not run while it is on a team, and `session.reviewer.set` is refused
 with `team_member`. *Rejected*: a second review engine — it would drift from 0067.
 
@@ -298,7 +304,7 @@ what the leader and the developers may do without asking. `full` needs
 `risk_acknowledged`, as it does for one conversation (`execution_policy_denied` otherwise). It is the execution policy of
 those conversations when the team starts them, at creation and for a developer added
 later; the user changes one member in its conversation. The reviewer is not in it: its
-review turns are read-only whatever its conversation's policy is (ADR 0067).
+review turns run under the verify profile whatever its conversation's policy is (ADR 0067).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,

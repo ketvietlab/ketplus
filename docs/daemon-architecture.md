@@ -968,7 +968,10 @@ of the markdown matrix.
 broker diffs two snapshot trees of the worktree (written through a copy of its
 index) and sends the reviewer a `review` request with `expect_reply`. The
 reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
-in plan mode and denies every permission request. Review requests never join a
+in plan mode and denies every permission request. A team's review round runs under
+the guard's verify profile instead (ADR 0067, `review-guard.mjs`): commands in the
+provider sandbox with writes limited to `review-scratch/<session id>` and the
+temporary directories, and a `PreToolUse` hook that refuses changes to the work. Review requests never join a
 user turn. The verdict line of the reply, whether it is the final answer or an
 `agents_send` reply, decides whether the working agent starts a fix turn or the
 reply is only recorded. `session.reviewer.get/set` are local Desktop operations;

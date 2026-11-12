@@ -102,8 +102,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   desktop's `TeamDirectory`.
   Dialogs (#465): New team sends one `team.create` with the name, goal, integration
   branch, who merges, the permissions of the leader and the developers (`execution_policy`:
-  Read only, Workspace or Full access; Workspace unless chosen; the reviewer stays
-  read-only), one to five developers and each role's agent (Claude leads and
+  Read only, Workspace or Full access; Workspace unless chosen; the reviewer's review
+  rounds run under the verify profile of ADR 0067: builds, tests and the browser, no
+  change to the work), one to five developers and each role's agent (Claude leads and
   reviews, another ready provider develops; the reviewer's chooser offers Claude only).
   A refusal keeps the dialog open with the error at the role it names. Add a developer
   sends `team.member.add` with a required name, lane, paths and agent, hints at the

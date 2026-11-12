@@ -1438,8 +1438,12 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     turnOptions.insert(QStringLiteral("mode"), it->stored.mode);
     // Only the broker's review requests set this; clients cannot (ADR 0067).
     turnOptions.remove(QStringLiteral("review_guard"));
-    if (agentOrigin.value(QStringLiteral("review_guard")).toBool())
+    turnOptions.remove(QStringLiteral("review_profile"));
+    if (agentOrigin.value(QStringLiteral("review_guard")).toBool()) {
         turnOptions.insert(QStringLiteral("review_guard"), true);
+        turnOptions.insert(QStringLiteral("review_profile"),
+                           agentOrigin.value(QStringLiteral("review_profile")).toString());
+    }
     turnOptions.insert(QStringLiteral("compactWindow"),
                        context_harness::compactWindowJson(it->stored.compactWindow));
     if (it->stored.contextRevision > 1) {
@@ -1590,6 +1594,7 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     if (!threadId.isEmpty())
         sessionsByThread_.remove(threadId);
     QDir(handoffDirectory(sessionId)).removeRecursively();
+    QDir(reviewScratchDirectory(sessionId)).removeRecursively();
     deferredJournalBytes_ -= session->deferredJournalBytes;
     deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
