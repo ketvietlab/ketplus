@@ -55,6 +55,9 @@ Task taskFromJson(const QJsonObject& json) {
     task.round = json.value(QStringLiteral("round")).toInt();
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
+    task.roundLimit = json.value(QStringLiteral("round_limit")).toInt();
+    task.reviewPlace = json.value(QStringLiteral("review_place")).toString();
+    task.reviewComment = json.value(QStringLiteral("review_comment")).toString();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
     task.allowedPaths = stringList(json.value(QStringLiteral("allowed_paths")));
     if (task.outsideLane.size() > maximumOutsidePaths)
@@ -313,6 +316,9 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("round"), task.round},
                      {QStringLiteral("reviewer"), task.reviewer},
                      {QStringLiteral("missing_verdicts"), task.missingVerdicts},
+                     {QStringLiteral("round_limit"), task.roundLimit},
+                     {QStringLiteral("review_place"), task.reviewPlace},
+                     {QStringLiteral("review_comment"), task.reviewComment},
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
@@ -387,6 +393,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("paused_reason"), team.pausedReason},
             {QStringLiteral("shared_paths"), strings(team.sharedPaths)},
             {QStringLiteral("max_rounds"), team.maxRounds},
+            {QStringLiteral("review_place"), team.reviewPlace},
             {QStringLiteral("turn_budget"), team.turnBudget},
             {QStringLiteral("automatic_turns"), team.automaticTurns},
             {QStringLiteral("plan_approved"), team.planApproved},
@@ -430,7 +437,12 @@ Team teamFromJson(const QJsonObject& json) {
     team.paused = json.value(QStringLiteral("paused")).toBool();
     team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
     team.sharedPaths = stringList(json.value(QStringLiteral("shared_paths")));
-    team.maxRounds = json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds);
+    // A team saved when three rounds were allowed keeps the most there are now.
+    team.maxRounds = std::clamp(json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds),
+                                1, maximumReviewRounds);
+    team.reviewPlace = json.value(QStringLiteral("review_place")).toString() == place::pullRequest
+                           ? place::pullRequest
+                           : place::board;
     team.turnBudget = json.value(QStringLiteral("turn_budget")).toInt(defaultTurnBudget);
     team.automaticTurns = json.value(QStringLiteral("automatic_turns")).toInt();
     team.planApproved = json.value(QStringLiteral("plan_approved")).toBool();

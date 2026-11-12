@@ -112,6 +112,27 @@ std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget) {
     return std::nullopt;
 }
 
+std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds) {
+    const double number = value.toDouble(-1);
+    if (!value.isDouble() || number != std::floor(number) || number < 1 ||
+        number > maximumReviewRounds)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("A team reviews a task in one or two rounds before the "
+                                      "leader decides."));
+    *rounds = static_cast<int>(number);
+    return std::nullopt;
+}
+
+std::optional<TeamError> validReviewPlace(const QJsonValue& value, QString* place) {
+    const QString text = value.toString();
+    if (text != place::board && text != place::pullRequest)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("A team reviews on the board (\"board\") or on the pull "
+                                      "request (\"pull_request\")."));
+    *place = text;
+    return std::nullopt;
+}
+
 std::optional<TeamError> validBranch(const QString& branch) {
     if (branch.isEmpty())
         return std::nullopt;
@@ -156,6 +177,12 @@ std::optional<TeamError> canCreate(const Team& team, const QList<Candidate>& can
     if (team.mergePolicy != role::leader && team.mergePolicy != QStringLiteral("user"))
         return refusal(QStringLiteral("invalid_payload"),
                        QStringLiteral("Who merges tasks is \"leader\" or \"user\"."));
+    int rounds = 0;
+    if (auto invalid = validReviewRounds(team.maxRounds, &rounds))
+        return invalid;
+    QString place;
+    if (auto invalid = validReviewPlace(team.reviewPlace, &place))
+        return invalid;
     QSet<QString> seen;
     Team growing = team;
     growing.members.clear();

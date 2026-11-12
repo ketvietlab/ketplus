@@ -147,6 +147,23 @@ class FakeHost final : public TeamHostPort {
         else
             done(facts);
     }
+    // T-40: a review on the pull request posts its findings there; the comment gets a link
+    // unless `commentError` is set. Held like git with `holdAnswers`.
+    void askPostReviewComment(const Team& team, const Task& task, const QString& body,
+                              ReviewCommentDone done) override {
+        (void)team;
+        comments.append({task.pullRequest, body});
+        const ReviewComment answer = commentError.isEmpty()
+                                         ? ReviewComment{.url = QStringLiteral("%1#issuecomment-%2")
+                                                                    .arg(task.pullRequest)
+                                                                    .arg(comments.size()),
+                                                         .error = {}}
+                                         : ReviewComment{.url = {}, .error = commentError};
+        if (holdAnswers)
+            held.append([done, answer] { done(answer); });
+        else
+            done(answer);
+    }
     // ADR 0114 §10: the disk under the team and a done task's worktree removal. The removal
     // deletes the folder unless `removalError` says why it failed.
     void askStorage(const QString& volumePath, const QStringList& worktrees,
@@ -209,6 +226,9 @@ class FakeHost final : public TeamHostPort {
     QSet<QString> dirty;
     QSet<QString> unreadable;
     QSet<QString> hangingPullRequests;
+    // T-40: the comments posted, as {pull request, body}.
+    QList<std::pair<QString, QString>> comments;
+    QString commentError;
     QHash<QString, QStringList> changed;
     QSet<QString> merged;
     bool holdAnswers = false;

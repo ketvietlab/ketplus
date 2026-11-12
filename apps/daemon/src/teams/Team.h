@@ -33,11 +33,22 @@ inline const QString leaderMergesChoice = QStringLiteral("Let the leader merge t
 inline const QString wakeLeaderChoice = QStringLiteral("Wake the leader again");
 inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
 
+// T-40: where a team's reviews happen: on the board (the reviewer's reply is the record) or
+// on the task's pull request (the findings become a comment there, and the board keeps the
+// verdict and the comment's link).
+namespace place {
+inline const QString board = QStringLiteral("board");
+inline const QString pullRequest = QStringLiteral("pull_request");
+} // namespace place
+
 inline constexpr int maximumDevelopers = 5;
 // T-23: a team has one or two reviewers.
 inline constexpr int maximumReviewers = 2;
 inline constexpr int maximumCriteria = 20;
+// T-40: the review rounds a team gives a task before the leader decides. The user's rule is
+// at most two review passes, so a team chooses one or two.
 inline constexpr int defaultReviewRounds = 2;
+inline constexpr int maximumReviewRounds = 2;
 // Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
 // the daemon's global value until the user changes it (Settings → Teams), and the range a
 // team's own value and the global one keep.
@@ -114,6 +125,13 @@ struct Task final {
     QString reviewer;
     // T-19: replies in a row without a verdict line for the round in review.
     int missingVerdicts{0};
+    // T-40: the team's rounds and review place when the task last entered review, so a
+    // change of the team's settings applies to tasks that enter review afterwards. The place
+    // is the board for a task without a pull request. Zero and empty: never reviewed.
+    int roundLimit{0};
+    QString reviewPlace;
+    // The link of the comment its last review on the pull request left there.
+    QString reviewComment;
     QStringList outsideLane;
     // T-38: paths this task may change whatever its owner's lane, beside the team's shared
     // paths (such as a contract or a fixture it must update). Sent only when set.
@@ -188,6 +206,7 @@ struct Team final {
     QString pausedReason;
     QStringList sharedPaths;
     int maxRounds{defaultReviewRounds};
+    QString reviewPlace{place::board};
     int turnBudget{defaultTurnBudget};
     int automaticTurns{0};
     bool planApproved{false};

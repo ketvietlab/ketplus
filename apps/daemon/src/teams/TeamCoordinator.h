@@ -108,6 +108,13 @@ struct PullRequestFact final {
     QString error;
 };
 using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
+// T-40: the comment a review on the pull request left there: its link, or the error in
+// words when it could not be posted.
+struct ReviewComment final {
+    QString url;
+    QString error;
+};
+using ReviewCommentDone = std::function<void(const ReviewComment&)>;
 // The error of pointing a conversation at a worktree; empty when it worked.
 using PointDone = std::function<void(const QString&)>;
 
@@ -163,6 +170,15 @@ class TeamHostPort {
                                .mergeCommit = {},
                                .error = QStringLiteral("Pull requests cannot be checked here.")});
         done(facts);
+    }
+    // T-40: posts `body` as a comment on the task's pull request and answers its link on the
+    // caller's thread. The reviewer stays read-only (ADR 0067): the daemon posts its words.
+    virtual void askPostReviewComment(const Team& team, const Task& task, const QString& body,
+                                      ReviewCommentDone done) {
+        (void)team;
+        (void)task;
+        (void)body;
+        done({.url = {}, .error = QStringLiteral("Comments cannot be posted here.")});
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
@@ -346,7 +362,8 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths, max_rounds and turn_budget; other keys are ignored.
+    // shared_paths, max_rounds (1 or 2), review_place ("board" or "pull_request") and
+    // turn_budget; other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
     // ADR 0114, open point 2 (TeamCoordinatorSettings.cpp): what a new team starts from,
@@ -472,7 +489,8 @@ class TeamCoordinator : public QObject {
     // with git.
     [[nodiscard]] bool checksOpen() const {
         return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() || !laneChecks_.isEmpty() ||
-               !reviewDiffs_.isEmpty() || !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
+               !reviewDiffs_.isEmpty() || !reviewComments_.isEmpty() || !worktreeWaits_.isEmpty() ||
+               handoffsAsked_ > 0;
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
@@ -625,6 +643,13 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] static bool blockedByReview(const Task& task);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,
                                             const std::optional<TaskDiff>& diff);
+    // T-40: records the answer of the review bound to `messageId`, with the comment its
+    // findings left on the pull request when it was reviewed there.
+    void recordReview(const QString& reviewerSession, const QString& messageId, const QString& text,
+                      bool noFindings, const QString& failure,
+                      const std::optional<ReviewComment>& comment);
+    // The rounds a task in review has: those of the team when it entered review.
+    [[nodiscard]] static int roundLimit(const Team& team, const Task& task);
     // Restarts the quiet period of the team's digest.
     void scheduleDigest(qint64 teamId);
     // One digest of every update since the last one, when one of them is actionable.
@@ -675,6 +700,8 @@ class TeamCoordinator : public QObject {
     // for the merge check, "<team>/<developer>" for the lane check.
     // Reviewers whose next review waits for git to read its diff, as "<team>/<session>".
     QSet<QString> reviewDiffs_;
+    // T-40: reviews whose comment is being posted on the pull request, by request id.
+    QSet<QString> reviewComments_;
     QSet<qint64> mergeChecks_;
     QSet<qint64> mergeChecksAgain_;
     QSet<qint64> pullRequestChecks_;

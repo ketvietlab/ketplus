@@ -410,6 +410,15 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         if (const auto invalid = teams::rules::validTurnBudget(
                 payload.value(QStringLiteral("turn_budget")), &draft.turnBudget))
             return failure(invalid->code, invalid->message);
+    // T-40: a client that sends neither (an older phone) gets two rounds on the board.
+    if (payload.contains(QStringLiteral("max_rounds")))
+        if (const auto invalid = teams::rules::validReviewRounds(
+                payload.value(QStringLiteral("max_rounds")), &draft.maxRounds))
+            return failure(invalid->code, invalid->message);
+    if (payload.contains(QStringLiteral("review_place")))
+        if (const auto invalid = teams::rules::validReviewPlace(
+                payload.value(QStringLiteral("review_place")), &draft.reviewPlace))
+            return failure(invalid->code, invalid->message);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
     // Lanes are checked before anything starts, with placeholder ids.
     for (int index = 0; index < members.size(); ++index)

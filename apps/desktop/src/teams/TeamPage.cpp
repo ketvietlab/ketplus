@@ -13,6 +13,7 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
+#include "teams/TeamReviewSettings.h"
 #include "teams/TeamTurnBudget.h"
 
 #include <QFileInfo>
@@ -411,6 +412,7 @@ void TeamPage::buildHeading(const QJsonObject& team) {
              ? tr("You merge tasks")
              : tr("The leader merges tasks"),
          "teamPageMerges");
+    fact(QStringLiteral("eye"), team_review::summary(team), "teamPageReview");
     fact(QStringLiteral("clock"), team_budget::usage(team), "teamPageTurns");
     if (!tasks.isEmpty())
         fact({}, tr("%1 of %2 tasks done").arg(done).arg(tasks.size()), "teamPageProgress");
@@ -431,6 +433,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         menu.addAction(paused ? tr("Resume automatic turns") : tr("Pause automatic turns"));
     auto* budget = menu.addAction(ket::Icons::icon(u"clock"), tr("Automatic turns…"));
     budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
+    auto* review = menu.addAction(ket::Icons::icon(u"eye"), tr("Review…"));
+    review->setObjectName(QStringLiteral("teamPageReview"));
     // T-23: a second reviewer, at any team size; a team has at most two.
     auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
     reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
@@ -446,6 +450,7 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     commands->bind(merges, commandKey(QStringLiteral("merge_policy")));
     commands->bind(pause, commandKey(QStringLiteral("paused")));
     commands->bind(budget, commandKey(QStringLiteral("turn_budget")));
+    commands->bind(review, commandKey(QStringLiteral("review")));
     commands->bind(remove, commandKey(QStringLiteral("delete")));
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
     if (chosen == create)
@@ -462,6 +467,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
              {{QStringLiteral("paused"), !paused}});
     else if (chosen == budget)
         afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
+    else if (chosen == review)
+        afterMenuCloses(this, [this, team] { (void)teamReviewSettings(this, teams_, team); });
     else if (chosen == reviewer)
         afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)

@@ -117,4 +117,59 @@ QHash<QString, teams::PullRequestFact> ask(const QString& directory, const QStri
     return facts;
 }
 
+QString commentUrl(const QByteArray& output) {
+    const QStringList lines = QString::fromUtf8(output).split(u'\n', Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+        const QString line = it->trimmed();
+        if (line.startsWith(QStringLiteral("https://")) && line.contains(u'#') &&
+            !line.contains(u' '))
+            return line;
+    }
+    return {};
+}
+
+teams::ReviewComment comment(const QString& directory, const QString& url, const QString& body,
+                             const QString& program, const int timeoutMs,
+                             const std::atomic_bool* cancelled) {
+    const auto failed = [](const QString& error) {
+        return teams::ReviewComment{.url = {}, .error = error};
+    };
+    const QString tool = program.isEmpty() ? findGh() : program;
+    if (tool.isEmpty())
+        return failed(QStringLiteral("The GitHub command line tool (gh) is not installed."));
+    QProcess process;
+    if (!directory.isEmpty())
+        process.setWorkingDirectory(directory);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("GH_PROMPT_DISABLED"), QStringLiteral("1"));
+    environment.insert(QStringLiteral("GH_NO_UPDATE_NOTIFIER"), QStringLiteral("1"));
+    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    process.setProcessEnvironment(environment);
+    process.start(tool, {QStringLiteral("pr"), QStringLiteral("comment"), url,
+                         QStringLiteral("--body-file"), QStringLiteral("-")});
+    if (!process.waitForStarted(5000))
+        return failed(QStringLiteral("gh could not be started."));
+    process.write(body.toUtf8());
+    process.closeWriteChannel();
+    QElapsedTimer clock;
+    clock.start();
+    bool finished = false;
+    while (!(finished = process.waitForFinished(200)) && clock.elapsed() < timeoutMs &&
+           !(cancelled && cancelled->load()))
+        ;
+    if (!finished) {
+        process.kill();
+        process.waitForFinished(1000);
+        return failed(QStringLiteral("gh did not answer in time."));
+    }
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        const QString message =
+            QString::fromUtf8(process.readAllStandardError()).trimmed().section(u'\n', 0, 0);
+        return failed(message.isEmpty() ? QStringLiteral("gh failed.") : message.left(200));
+    }
+    const QString link = commentUrl(process.readAllStandardOutput());
+    return link.isEmpty() ? failed(QStringLiteral("gh posted the comment but gave no link."))
+                          : teams::ReviewComment{.url = link, .error = {}};
+}
+
 } // namespace ketplus::daemon::team_pull_requests

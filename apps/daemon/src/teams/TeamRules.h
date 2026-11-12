@@ -64,6 +64,9 @@ inline constexpr qsizetype maximumMentionTitleCharacters = 80;
 // A team's automatic-turn budget: a whole number from minimumTurnBudget to maximumTurnBudget.
 // Sets `budget` when it is one.
 [[nodiscard]] std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget);
+// T-40: a team's review rounds (1 or 2) and review place ("board" or "pull_request").
+[[nodiscard]] std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds);
+[[nodiscard]] std::optional<TeamError> validReviewPlace(const QJsonValue& value, QString* place);
 // ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the
 // part it acts on changed after that revision: a decision answer its decision, team.update
 // the settings, team.delete the settings and the members, a member change the members, a
