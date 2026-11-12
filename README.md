@@ -234,3 +234,6 @@ Third-party components retain their respective licenses, and the KÉT Sans font
 is fetched from its official release at build time under its own license. See
 [docs/licensing.md](docs/licensing.md) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The ketPlus and ketPlus Pro names, the ketPlus mark and its lockups are trademarks,
+all rights reserved; the MPL grants no licence to them. See [TRADEMARKS.md](TRADEMARKS.md).

@@ -4,6 +4,9 @@ KetPlus Desktop includes, links, or derives assets from the components below.
 Their complete source-distribution license texts are stored in
 `third_party/licenses` and must accompany binary distributions.
 
+The ketPlus names, mark and lockups are trademarks, all rights reserved, and are
+not covered by any licence listed here; see `TRADEMARKS.md` at the repository root.
+
 | Component | Version | License file |
 | --- | --- | --- |
 | KetPlus CM | `cm-v0.3.6` — https://github.com/ketvietlab/ketplus/tree/cm-v0.3.6 | `KetPlus-CM-MPL-2.0.txt` |
