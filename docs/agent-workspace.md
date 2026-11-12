@@ -34,8 +34,10 @@ routes share every line of UI code. Every way into the Agent Workspace (the
 activity bar, View > Agent Workspace, the compact window) shows the selected
 machine's. A picked machine with no backend yet opens Connections with an empty
 sidebar, never This Mac's lists, and its workspace shows once Connections
-registers the backend. Backends deliver events in the local protocol's shape
-(`session_id`, `event_type`), so the UI reads one shape on every route.
+registers the backend. Backends deliver live events in the local session.event
+shape on every route (`session_id`, `cursor`, `payload {event_type, data}`);
+transcript windows carry `event_type` and the data as `payload`.
+`remote::windowEvent()` reads both, so the UI reads one shape.
 
 - **Sidebar.** `listRepositories` and `listConversations` are read together and
   replace the lists at once. Rows are keyed by repository id and session id;

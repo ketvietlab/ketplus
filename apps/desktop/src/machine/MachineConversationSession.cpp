@@ -144,7 +144,8 @@ void MachineConversationSession::loadApprovalsPage(
         }));
 }
 
-void MachineConversationSession::applyEvent(const QJsonObject& event) {
+void MachineConversationSession::applyEvent(const QJsonObject& delivered) {
+    const QJsonObject event = remote::windowEvent(delivered);
     if (event.value(QLatin1String("session_id")).toString() != sessionId_)
         return;
     if (event.contains(QLatin1String("session_generation")) &&
