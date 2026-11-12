@@ -107,7 +107,9 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
     for (const QString& reviewer : std::as_const(idle)) {
         team = mutableTeam(teamId);
         const ReviewSlot* slot = team ? team->reviewSlot(reviewer) : nullptr;
-        if (!slot || !team->member(reviewer))
+        // A commit() below pumps again and may already have asked for this reviewer's diff.
+        if (!slot || !team->member(reviewer) || !slot->reviewing.isEmpty() ||
+            reviewDiffs_.contains(diffKey(teamId, reviewer)))
             continue;
         const Task* next = nextInReview(std::as_const(*team), *slot);
         if (!next) {
