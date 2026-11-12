@@ -247,6 +247,8 @@ class MainWindow final : public QMainWindow {
     // #466: the team page in the workspace, or the empty page of a repository without one.
     void showTeamPage(const QString& teamId, const QString& repository);
     void openTeamMember(const QString& sessionId);
+    // A goal's `@agent/<number>` mention, from the team page.
+    void openConversationNumber(const QString& number);
     void openTeamTask(const QString& teamId, const QString& taskId);
     void joinTeam(const QString& teamId, const QString& sessionId);
     void leaveTeam(const QString& teamId, const QString& sessionId);

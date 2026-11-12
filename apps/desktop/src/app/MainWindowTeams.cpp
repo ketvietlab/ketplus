@@ -194,6 +194,21 @@ void MainWindow::openTeamMember(const QString& sessionId) {
     statusBar()->showMessage(tr("That conversation is not listed in this window yet."), 5000);
 }
 
+void MainWindow::openConversationNumber(const QString& number) {
+    if (agentManager_ == nullptr || number.isEmpty())
+        return;
+    for (const QString& path : agentManager_->conversationPaths().values())
+        for (const QVariant& value : agentManager_->conversations(path)) {
+            const QVariantMap conversation = value.toMap();
+            if (conversation.value(QStringLiteral("number")).toString() == number) {
+                openSidebarConversation(path, conversation.value(QStringLiteral("id")).toString());
+                return;
+            }
+        }
+    statusBar()->showMessage(tr("@agent/%1 is not a conversation on this computer.").arg(number),
+                             5000);
+}
+
 void MainWindow::showTeamPage(const QString& teamId, const QString& repository) {
     if (teams_ == nullptr)
         return;
@@ -205,6 +220,10 @@ void MainWindow::showTeamPage(const QString& teamId, const QString& repository) 
     workspaceSplit_->addWidget(teamPage_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(teamPage_), 1);
     connect(teamPage_, &TeamPage::conversationRequested, this, &MainWindow::openTeamMember);
+    if (agentManager_ != nullptr)
+        teamPage_->setConversationDirectory(
+            [this] { return agentManager_->numberedConversations(); });
+    connect(teamPage_, &TeamPage::mentionRequested, this, &MainWindow::openConversationNumber);
     connect(teamPage_, &TeamPage::addMemberRequested, this, &MainWindow::showAddTeamMemberDialog);
     connect(teamPage_, &TeamPage::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     connect(teamPage_, &TeamPage::deleteRequested, this, &MainWindow::deleteTeam);
@@ -294,10 +313,14 @@ void MainWindow::showNewTeamDialog(const QString& repository) {
         agentDialogOpen(this, QStringLiteral("newTeamDialog")))
         return;
     const auto open = [this, repository](const QVariantList& models) {
-        NewTeamForm::present(this, teams_, repository, models, [this](const QJsonObject& team) {
-            statusBar()->showMessage(
-                tr("Team %1 created.").arg(team.value(QStringLiteral("name")).toString()), 5000);
-        });
+        NewTeamForm::present(
+            this, teams_, repository, models,
+            [this](const QJsonObject& team) {
+                statusBar()->showMessage(
+                    tr("Team %1 created.").arg(team.value(QStringLiteral("name")).toString()),
+                    5000);
+            },
+            [this] { return agentManager_->numberedConversations(); });
     };
     // The roles choose among the models the app lists; read them first if it has none yet.
     if (!agentManager_->models().isEmpty()) {

@@ -4,6 +4,7 @@
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetEmptyState.h"
+#include "KetExpandableText.h"
 #include "KetIcon.h"
 #include "KetIcons.h"
 #include "KetStyle.h"
@@ -303,6 +304,11 @@ void TeamPage::addSection(const QString& title, const QString& count, const char
     layout_->addWidget(row);
 }
 
+void TeamPage::setConversationDirectory(team_goal::ConversationDirectory directory) {
+    conversations_ = std::move(directory);
+    rebuild();
+}
+
 void TeamPage::buildHeading(const QJsonObject& team) {
     auto* row = new QWidget(column_);
     auto* line = new QHBoxLayout(row);
@@ -325,10 +331,13 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     title->setAccessibleName(name);
     titles->addWidget(title);
     if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
-        auto* purpose = new Text(goal, row);
-        purpose->setObjectName(QStringLiteral("teamPageGoal"));
-        purpose->setTone(QStringLiteral("text-secondary"));
-        purpose->setType(14);
+        auto* purpose =
+            team_goal::foldedGoal(goal, conversations_ ? conversations_() : QVariantList{}, row);
+        purpose->setExpanded(goalExpanded_);
+        connect(purpose, &ket::ExpandableText::expandedChanged, this,
+                [this](const bool expanded) { goalExpanded_ = expanded; });
+        connect(purpose, &ket::ExpandableText::mentionActivated, this,
+                &TeamPage::mentionRequested);
         titles->addWidget(purpose);
     }
     line->addLayout(titles, 1);

@@ -6,6 +6,7 @@
 #include "KetFieldRow.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
+#include "KetTextArea.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
 #include "teams/TeamCommands.h"
@@ -23,6 +24,8 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QShortcut>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -138,9 +141,11 @@ QScrollArea* scrolling(QWidget* form, QWidget* anchor) {
 } // namespace
 
 NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
-                         const QVariantList& models, QWidget* parent)
+                         const QVariantList& models, team_goal::ConversationDirectory conversations,
+                         QWidget* parent)
     : QWidget(parent), teams_(teams), repository_(repository), models_(models),
-      name_(new ket::TextField(this)), goal_(new ket::TextField(this)),
+      name_(new ket::TextField(this)), goal_(new ket::TextArea(this)),
+      goalEditor_(new TeamGoalEditor(goal_, std::move(conversations))),
       branch_(new ket::TextField(this)), leaderMerges_(new ket::Radio(tr("The leader"), this)),
       userMerges_(new ket::Radio(tr("Me"), this)), permissions_(new ket::Select(this)),
       developers_(new ket::SegmentedControl({"1", "2", "3", "4", "5"}, this)),
@@ -151,13 +156,22 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     layout->setContentsMargins(0, 0, 0, 0);
     name_->setObjectName(QStringLiteral("teamNameField"));
     name_->setPlaceholderText(tr("Checkout"));
-    goal_->setObjectName(QStringLiteral("teamGoalField"));
-    goal_->setPlaceholderText(tr("One sentence, or an issue"));
     branch_->setObjectName(QStringLiteral("teamIntegrationBranchField"));
     branch_->setPlaceholderText(tr("The branch reviewed tasks merge into"));
     rows_.insert(QStringLiteral("name"), new ket::FieldRow(tr("Name"), name_, {}, this));
     layout->addWidget(rows_.value(QStringLiteral("name")));
-    layout->addWidget(new ket::FieldRow(tr("Goal"), goal_, {}, this));
+    rows_.insert(QStringLiteral("goal"),
+                 new ket::FieldRow(tr("Goal"), goal_,
+                                   tr("The leader breaks it into tasks and may ask the "
+                                      "conversations it mentions for context."),
+                                   this));
+    layout->addWidget(rows_.value(QStringLiteral("goal")));
+    // ADR 0114: an unknown mention or a goal above the limit shows at once, before Create.
+    connect(goalEditor_, &TeamGoalEditor::problemChanged, this, [this](const QString& problem) {
+        rows_.value(QStringLiteral("goal"))->setError(problem);
+        if (problem.isEmpty())
+            errors_.remove(QStringLiteral("goal"));
+    });
     layout->addWidget(new ket::FieldRow(tr("Integration branch"), branch_, {}, this));
 
     auto* merges = new QWidget(this);
@@ -332,6 +346,8 @@ bool NewTeamForm::validate() {
     clearErrors();
     if (name_->text().trimmed().isEmpty())
         errors_.insert(QStringLiteral("name"), tr("Name the team."));
+    if (const QString goal = goalEditor_->problem(); !goal.isEmpty())
+        errors_.insert(QStringLiteral("goal"), goal);
     if (const QString budget = team_budget::error(budget_->text()); !budget.isEmpty())
         errors_.insert(QStringLiteral("turn_budget"), budget);
     budget_->setInvalid(errors_.contains(QStringLiteral("turn_budget")));
@@ -345,6 +361,8 @@ bool NewTeamForm::validate() {
         rows_.value(it.key())->setError(it.value());
     if (!errors_.value(QStringLiteral("name")).isEmpty())
         name_->setFocus();
+    else if (!errors_.value(QStringLiteral("goal")).isEmpty())
+        goal_->editor()->setFocus();
     return errors_.isEmpty();
 }
 
@@ -355,9 +373,11 @@ void NewTeamForm::showErrors(const QJsonObject& refusal) {
     const bool aboutName = role.isEmpty() && message.contains(QStringLiteral("The team")) &&
                            message.contains(QStringLiteral("name"));
     const bool aboutBudget = message.startsWith(QStringLiteral("Automatic turns"));
+    const bool aboutGoal = message.startsWith(QStringLiteral("The goal"));
     const QString where = rows_.contains(role) ? role
                           : aboutName          ? QStringLiteral("name")
                           : aboutBudget        ? QStringLiteral("turn_budget")
+                          : aboutGoal          ? QStringLiteral("goal")
                                                : QString{};
     errors_.insert(where, message);
     if (where.isEmpty())
@@ -439,11 +459,12 @@ QString NewTeamForm::hint() const { return hint_->isHidden() ? QString{} : hint_
 
 ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const QString& repository,
                                   const QVariantList& models,
-                                  std::function<void(const QJsonObject& team)> created) {
+                                  std::function<void(const QJsonObject& team)> created,
+                                  team_goal::ConversationDirectory conversations) {
     auto* dialog = new ket::Dialog(tr("New team"), anchor);
     dialog->setObjectName(QStringLiteral("newTeamDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    auto* form = new NewTeamForm(teams, repository, models);
+    auto* form = new NewTeamForm(teams, repository, models, std::move(conversations));
     QScrollArea* scroll = scrolling(form, anchor);
     form->follow(scroll->viewport());
     dialog->setBody(scroll);
@@ -466,6 +487,17 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
                              dialog->accept();
                          });
                      });
+    // Return starts a new line in the goal; Cmd/Ctrl+Return creates the team from anywhere in
+    // the form, as the button does.
+    for (const QKeySequence& keys : {QKeySequence(Qt::CTRL | Qt::Key_Return),
+                                     QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
+        auto* shortcut = new QShortcut(keys, dialog);
+        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        QObject::connect(shortcut, &QShortcut::activated, create, [create] {
+            if (create->isEnabled())
+                create->click();
+        });
+    }
     dialog->open();
     form->nameField()->setFocus();
     return dialog;

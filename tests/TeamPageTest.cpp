@@ -2,6 +2,7 @@
 // paused states, answering, the task dialog, the handover request and a live update.
 // Run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamPage.h"
+#include "KetExpandableText.h"
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetDialog.h"
@@ -183,7 +184,7 @@ class TeamPageTest final : public QObject {
         page.show();
         QTRY_COMPARE(page.updates().size(), 2);
         QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop"));
-        QCOMPARE(page.findChild<QLabel*>("teamPageGoal")->text(),
+        QCOMPARE(page.findChild<ket::ExpandableText*>("teamPageGoal")->text(),
                  QStringLiteral("Checkout in one page"));
         QCOMPARE(page.findChild<QLabel*>("teamPageRepository")->text(), QStringLiteral("shop"));
         QCOMPARE(page.findChild<QLabel*>("teamPageBranch")->text(), QStringLiteral("team/shop"));

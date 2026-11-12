@@ -138,7 +138,7 @@ class TeamDialogsTest final : public QObject {
     void createSendsOneRequestWithThePlan() {
         NewTeamForm form(teams_.get(), "/repo", bothProviders);
         form.nameField()->setText(" Shop ");
-        form.findChild<ket::TextField*>("teamGoalField")->setText("Checkout in one page");
+        form.goalField()->setText("Checkout in one page");
         form.findChild<ket::TextField*>("teamIntegrationBranchField")->setText("team/shop");
         form.findChild<ket::Radio*>("teamUserMerges")->setChecked(true);
         // Workspace unless chosen; the help says what the choice means.
