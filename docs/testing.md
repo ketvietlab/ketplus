@@ -251,7 +251,7 @@ stage/install and check the runtime outside the Qt SDK; see
 
 The machine picker geometry regression also mounts the real ActivityBar at 240 px
 in light/dark and checks all four connection states remain readable before the
-trailing machine name is elided. `ketplus_remote_workspace_tests` checks that the
+trailing route/name is elided in the closed label; the popup stays name-first. `ketplus_remote_workspace_tests` checks that the
 signed-out Linux section shares the introduction's 24 px column at wide/narrow widths.
 
 `ketplus_machine_end_to_end_tests` (macOS Desktop, offscreen) is the #419

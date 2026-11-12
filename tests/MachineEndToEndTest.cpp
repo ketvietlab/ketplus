@@ -1,6 +1,4 @@
 #include "FakeCodex.h"
-#include "KetAppearance.h"
-#include "KetSelect.h"
 #include "KetSidebarTree.h"
 #include "MachineTranscriptRows.h"
 #include "SshFixture.h"
@@ -21,6 +19,7 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include <QScopeGuard>
+#include <QStyleOptionComboBox>
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -202,6 +201,7 @@ class MachineEndToEndTest final : public QObject {
         const auto restoreTheme = qScopeGuard([&] { theme.setMode(ThemeManager::Mode::Light); });
         theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
         ActivityBar bar;
+        bar.applyPalette(theme.palette(), 100);
         bar.resize(240, 760);
         bar.show();
         QCOMPARE(bar.width(), 240);
@@ -216,18 +216,20 @@ class MachineEndToEndTest final : public QObject {
             const QString label = LinuxMachineModel::pickerLabel(machine);
             bar.setMachines({QStringLiteral("fixture")}, {label}, QStringLiteral("fixture"));
             QCoreApplication::processEvents();
-            auto* select = qobject_cast<ket::Select*>(picker);
-            QVERIFY(select);
-            const auto recipe = select->recipe();
-            const auto& appearance = ket::Appearance::instance();
-            const int textWidth =
-                qFloor(select->width() - appearance.scaled(2 * recipe.paddingInline +
-                                                           recipe.iconSize + recipe.spacing));
-            QFont fieldFont = picker->font();
-            fieldFont.setPixelSize(qRound(appearance.scaled(recipe.fontPixels)));
-            const QString shown =
-                QFontMetrics(fieldFont).elidedText(label, Qt::ElideRight, textWidth);
-            QVERIFY2(shown.startsWith(LinuxMachineModel::stateText(state)), qPrintable(shown));
+            QCOMPARE(picker->currentText(), label); // Popup remains name-first.
+            QVERIFY(label.startsWith(machine.name));
+            const QString closed = picker->currentData(Qt::UserRole + 1).toString();
+            QString stateLabel = LinuxMachineModel::stateText(state);
+            while (stateLabel.endsWith(QLatin1Char('.')) || stateLabel.endsWith(QChar(0x2026)))
+                stateLabel.chop(1);
+            QVERIFY(closed.startsWith(stateLabel + QStringLiteral(" · ")));
+            QVERIFY(!closed.contains(QStringLiteral("...")));
+            QStyleOptionComboBox option;
+            option.initFrom(picker);
+            option.currentText = closed;
+            const QRect text = picker->style()->subControlRect(
+                QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, picker);
+            QVERIFY(picker->fontMetrics().horizontalAdvance(stateLabel) <= text.width());
             QVERIFY(picker->geometry().right() < bar.width());
             QVERIFY(picker->parentWidget()->rect().contains(picker->geometry()));
             if (state == LinuxMachine::State::Reconnecting) {

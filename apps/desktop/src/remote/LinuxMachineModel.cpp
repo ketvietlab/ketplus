@@ -282,9 +282,7 @@ QString LinuxMachineModel::pickerLabel(const LinuxMachine& machine) {
         machine.state == LinuxMachine::State::Connected &&
         hostAway(machine, QDateTime::currentDateTimeUtc()))
         state = tr("Host offline");
-    // Preserve the state at narrow sidebar widths before the route and machine name
-    // are elided by the picker. The popup keeps the complete label.
-    return tr("%1 · %2 · %3").arg(state, routeText(machine.route), machine.name);
+    return tr("%1 · %2 · %3").arg(machine.name, routeText(machine.route), state);
 }
 
 QString validateSshHost(const QString& host) {
