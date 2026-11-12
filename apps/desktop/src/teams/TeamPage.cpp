@@ -330,16 +330,6 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     title->setType(roomy_ ? 30 : 24, QFont::DemiBold);
     title->setAccessibleName(name);
     titles->addWidget(title);
-    if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
-        auto* purpose =
-            team_goal::foldedGoal(goal, conversations_ ? conversations_() : QVariantList{}, row);
-        purpose->setExpanded(goalExpanded_);
-        connect(purpose, &ket::ExpandableText::expandedChanged, this,
-                [this](const bool expanded) { goalExpanded_ = expanded; });
-        connect(purpose, &ket::ExpandableText::mentionActivated, this,
-                &TeamPage::mentionRequested);
-        titles->addWidget(purpose);
-    }
     line->addLayout(titles, 1);
     auto* add = new ket::Button(tr("Add member"), ket::ButtonVariant::Secondary, row);
     add->setObjectName(QStringLiteral("teamPageAddMember"));
@@ -356,6 +346,17 @@ void TeamPage::buildHeading(const QJsonObject& team) {
             [this, more] { showMenu(more, *teams_->team(teamId_)); });
     line->addWidget(more, 0, Qt::AlignTop);
     layout_->addWidget(row);
+    if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
+        auto* purpose =
+            team_goal::foldedGoal(goal, conversations_ ? conversations_() : QVariantList{}, column_);
+        purpose->setExpanded(goalExpanded_);
+        connect(purpose, &ket::ExpandableText::expandedChanged, this,
+                [this](const bool expanded) { goalExpanded_ = expanded; });
+        connect(purpose, &ket::ExpandableText::mentionActivated, this,
+                &TeamPage::mentionRequested);
+        // The goal whole, under the heading at the column's width (ADR 0114).
+        layout_->addWidget(purpose);
+    }
 
     // Where the team works, who merges, and how far it is.
     const QJsonArray tasks = team.value(QStringLiteral("tasks")).toArray();

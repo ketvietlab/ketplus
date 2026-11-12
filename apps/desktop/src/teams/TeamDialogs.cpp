@@ -165,6 +165,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
                                    tr("The leader breaks it into tasks and may ask the "
                                       "conversations it mentions for context."),
                                    this));
+    rows_.value(QStringLiteral("goal"))->setStacked(true);
     layout->addWidget(rows_.value(QStringLiteral("goal")));
     // ADR 0114: an unknown mention or a goal above the limit shows at once, before Create.
     connect(goalEditor_, &TeamGoalEditor::problemChanged, this, [this](const QString& problem) {
@@ -433,6 +434,8 @@ void NewTeamForm::setCompact(const bool compact) {
     developers_->setMinimumWidth(compact ? developers_->sizeHint().width() * 3 / 4 : 0);
     for (ket::FieldRow* row : findChildren<ket::FieldRow*>())
         row->setStacked(compact);
+    // The goal is the leader's main input: it takes the card's whole width.
+    rows_.value(QStringLiteral("goal"))->setStacked(true);
 }
 
 void NewTeamForm::fit() {

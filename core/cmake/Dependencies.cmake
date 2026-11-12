@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG ee1cc9f401e19aac720a79695e6e65d558675125 # ket-qt #55 (multi-line text field) on #53/#54
+    GIT_TAG 7a1ef101e09017488194b78f701790e533025945 # ket-qt #55 (multi-line text field) on #53/#54
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"

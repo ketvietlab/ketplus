@@ -2,16 +2,17 @@
 // paused states, answering, the task dialog, the handover request and a live update.
 // Run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamPage.h"
-#include "KetExpandableText.h"
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetEmptyState.h"
+#include "KetExpandableText.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
 #include "KetTextField.h"
 #include "teams/TeamDirectory.h"
+#include "teams/TeamGoal.h"
 #include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
 #include "teams/TeamTurnBudget.h"
@@ -635,6 +636,60 @@ class TeamPageTest final : public QObject {
         if (!capture.isEmpty())
             QVERIFY(window.grab().save(capture + "/app-team-budget-" + name + ".png"));
         dialog->reject();
+    }
+
+    // ADR 0114: a long goal on the team page, folded under the heading with Show more and its
+    // mention named after its conversation, as the mock's team page, in both themes.
+    // KETPLUS_TEAM_GOAL_CAPTURE (a folder) saves it folded and open beside the mock's.
+    void theFoldedGoalFitsInBothThemes_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void theFoldedGoalFitsInBothThemes() {
+        QFETCH(bool, dark);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        QJsonObject team = fixture();
+        team.insert("goal", QStringLiteral(
+                                "Ship the new navigation, the repository picker and Settings.\n\n"
+                                "Context: the old sidebar confused people who work in several "
+                                "repositories. @agent/8213 rebuilt the picker and knows its "
+                                "edge cases.\n\nOut of scope: the account flow.\n\n"
+                                "Done when every screen matches the mock in light and dark."));
+        start(team);
+        QWidget window;
+        window.resize(1280, 860);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.setConversationDirectory([] {
+            return QVariantList{
+                QVariantMap{{"number", "8213"}, {"title", "Finish the repository picker"}}};
+        });
+        page.resize(window.size());
+        window.show();
+        // The page rebuilds its sections when the team changes, so the goal is looked up again.
+        const auto goal = [&page] { return page.findChild<ket::ExpandableText*>("teamPageGoal"); };
+        QTRY_VERIFY(goal() && goal()->isVisible() && goal()->text().contains("@agent/8213"));
+        QTest::qWait(100);
+        QVERIFY(goal()->isFoldable());
+        QCOMPARE(goal()->visibleLineCount(), team_goal::foldedLines);
+        QVERIFY(goal()->accessibleDescription().contains("Finish the repository picker"));
+        const QRect frame(QPoint(0, 0), window.size());
+        QVERIFY(frame.contains(QRect(goal()->mapTo(&window, QPoint()), goal()->size())));
+        const QString capture = qEnvironmentVariable("KETPLUS_TEAM_GOAL_CAPTURE");
+        const QString name = dark ? QStringLiteral("dark") : QStringLiteral("light");
+        if (!capture.isEmpty())
+            QVERIFY(window.grab().save(capture + "/app-team-page-" + name + ".png"));
+        const int folded = goal()->height();
+        goal()->setExpanded(true);
+        QTRY_VERIFY(goal() && goal()->visibleLineCount() > team_goal::foldedLines);
+        // The page makes room for the whole goal and Show less.
+        QTRY_VERIFY(goal()->height() >= goal()->heightForWidth(goal()->width()));
+        QVERIFY(goal()->height() > folded);
+        QVERIFY(page.findChild<QWidget*>("teamPageFacts")->geometry().top() >=
+                goal()->geometry().bottom());
+        if (!capture.isEmpty())
+            QVERIFY(window.grab().save(capture + "/app-team-page-open-" + name + ".png"));
     }
 
     // A team.changed from another client updates the page in place of where the reader was.

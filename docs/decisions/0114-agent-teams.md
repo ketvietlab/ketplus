@@ -218,6 +218,34 @@ that turn carried as `turn_failed` instead of leaving them to expire. A `runtime
 without the mark, or of another turn, ends nothing: an error inside a turn that goes on
 may be journaled after the turn has answered.
 
+### 9. The goal is long and may mention conversations (decided 2026-11-12)
+
+The goal is the leader's main input, so it is written like a brief, not a title.
+
+- **Length.** A goal keeps its line breaks and holds up to 16,000 characters
+  (`teams::rules::maximumGoalCharacters`). The daemon refuses a longer one on
+  `team.create` and `team.update` with `invalid_payload`, naming the count. Nothing cuts
+  a goal: the leader's first turn, the journal and the remote summary carry it whole.
+  New team shows the count under the field and says so before Create.
+- **Mentions.** `@agent/<number>` in the goal names a conversation on this computer
+  that holds context, as in the composer. A mention means context only:
+  - Creating the team messages nobody and adds nobody to it.
+  - The leader's first turn lists the mentioned conversations, each with its number and
+    title, or says that no conversation has that number. It tells the leader that it
+    may ask them through agent messaging (`agents_send`).
+  - A mention starts at the start of the goal, after a space, or after an opening
+    bracket or quote, so an e-mail address is not one.
+- **The field.** New team uses the kit's multi-line field (`ket::TextArea`). It shows
+  six lines, grows to fourteen, then scrolls. Return starts a new line, and
+  Cmd/Ctrl+Return creates the team. Typing `@` opens the composer's conversation picker
+  and inserts the mention as one token. A number no conversation has is marked, and the
+  form names it before the team can start.
+- **Where it shows.** The team page shows the goal under its name, folded after three
+  lines with Show more, and a mention there opens its conversation. Every other place
+  (the sidebar folder's tooltip) shows its first line, cut at the end. The desktop app
+  has no place to change a goal after the team exists. A place added later uses the
+  same field.
+
 ## Open points, fixed here
 
 1. **A developer's working directory.** *Chosen*: a task owns its worktree. When a task

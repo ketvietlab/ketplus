@@ -463,8 +463,9 @@ class TeamDialogsTest final : public QObject {
         auto* form = dialog->findChild<NewTeamForm*>();
         QTRY_VERIFY(form->developerCount()->geometry().right() <
                     form->agentButton("developer")->geometry().left());
+        // The goal is a large field: its label stays above it at every width.
         for (const ket::FieldRow* row : form->findChildren<ket::FieldRow*>())
-            QVERIFY(!row->isStacked());
+            QVERIFY(row->isStacked() == (row->control() == form->goalField()));
         dialog->reject();
         problems.removeAll(QString{});
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));

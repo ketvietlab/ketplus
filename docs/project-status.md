@@ -46,6 +46,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
   role and lane, and each member's instructions explain its role. The leader's first
   turn carries the goal.
+  The goal (ADR 0114 §9): up to 16,000 characters, kept whole with its line breaks and
+  refused above that, never cut. New team writes it in the kit's multi-line field. Typing
+  `@` mentions a conversation (`@agent/<number>`), and a number no conversation has stops
+  Create. A mention is context only: the leader's first turn lists the mentioned
+  conversations with number and title and says it may ask them, and creating the team
+  messages nobody. The team page folds the goal after three lines, and a mention there
+  opens its conversation. Paired devices get the goal whole (ADR 0116).
   Automatic turns (#459): only an assignment, a handover, a review and an answered
   decision start a member's turn; every other change waits in Updates for the leader's
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause

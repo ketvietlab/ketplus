@@ -270,8 +270,11 @@ At most 100 entries are returned, followed by `teams_total`.
 refusal.
 
 - **The team.**
-  - Identity: `id`, `revision`, `repository_id`, `name`, `goal` (up to 4,000
-    characters).
+  - Identity: `id`, `revision`, `repository_id`, `name`, `goal` (up to 16,000
+    characters, whole, with its line breaks and its `@agent/<number>` mentions as plain
+    text; ADR 0114 §9). The goal was cut to 4,000 characters before; it is now sent whole
+    as the same string field, so the contract and its version do not change and an older
+    phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
     `leader_writes_requirements` (who writes requirements), `execution_policy`.
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.

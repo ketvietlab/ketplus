@@ -160,7 +160,11 @@ Column {
             KetToolTip {
                 visible: name.hovered && !name.pressed
                 delay: 1200
-                text: folder.team.goal
+                // Outside the team page the goal keeps one line, cut at the end (ADR 0114).
+                text: {
+                    const line = String(folder.team.goal || "").split("\n")[0]
+                    return line.length > 120 ? line.slice(0, 119) + "…" : line
+                }
             }
         }
 

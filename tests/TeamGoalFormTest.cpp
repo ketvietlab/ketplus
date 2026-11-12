@@ -15,6 +15,7 @@
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamGoal.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -30,13 +31,13 @@ using namespace ketplus;
 namespace {
 
 QVariantMap model(const QString& provider, const QString& id) {
-    return {{"provider", provider},
-            {"model", id},
-            {"displayName", id},
-            {"isDefault", true},
-            {"defaultReasoningEffort", "medium"},
-            {"supportedReasoningEfforts",
-             QVariantList{QVariantMap{{"reasoningEffort", "medium"}}}}};
+    return {
+        {"provider", provider},
+        {"model", id},
+        {"displayName", id},
+        {"isDefault", true},
+        {"defaultReasoningEffort", "medium"},
+        {"supportedReasoningEfforts", QVariantList{QVariantMap{{"reasoningEffort", "medium"}}}}};
 }
 
 const QVariantList models{model("codex", "gpt-5"), model("claude", "opus")};
@@ -46,7 +47,8 @@ QVariantList directory() {
                         {"title", "Finish the repository picker"},
                         {"provider", "claude"},
                         {"path", "/work/shop"}},
-            QVariantMap{{"number", "8215"}, {"title", "Follow up on the new UI"}, {"provider", "codex"}}};
+            QVariantMap{
+                {"number", "8215"}, {"title", "Follow up on the new UI"}, {"provider", "codex"}}};
 }
 
 void type(QWidget* widget, const QString& text) {
@@ -83,12 +85,12 @@ class TeamGoalFormTest final : public QObject {
     void init() {
         sent_.clear();
         teams_ = std::make_unique<TeamDirectory>();
-        teams_->setTransport([this](const QString& type, const QJsonObject& payload,
-                                    TeamDirectory::Reply reply) {
-            if (type != "team.list" && type != "team.settings.get")
-                sent_.append({type, payload});
-            reply({{"ok", true}, {"team", QJsonObject{{"id", "9"}}}}, {});
-        });
+        teams_->setTransport(
+            [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
+                if (type != "team.list" && type != "team.settings.get")
+                    sent_.append({type, payload});
+                reply({{"ok", true}, {"team", QJsonObject{{"id", "9"}}}}, {});
+            });
         teams_->setAvailable(true);
     }
 
@@ -206,6 +208,71 @@ class TeamGoalFormTest final : public QObject {
         QVERIFY(over->error("goal").contains(QLocale().toString(team_goal::maximumCharacters + 5)));
         // The text is never cut.
         QCOMPARE(over->goalField()->text().size(), team_goal::maximumCharacters + 5);
+    }
+
+    // The goal with a drawn mention and the picker open on the next one, as the mock's
+    // `--open=new-team-goal`, in both themes and in a small window: the field, the picker and
+    // Create stay inside the window. KETPLUS_TEAM_GOAL_CAPTURE (a folder) saves them beside the
+    // mock's.
+    void theGoalFitsInBothThemesAndASmallWindow_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<QSize>("size");
+        QTest::newRow("light") << false << QSize(1280, 860);
+        QTest::newRow("dark") << true << QSize(1280, 860);
+        QTest::newRow("small") << false << QSize(760, 600);
+    }
+    void theGoalFitsInBothThemesAndASmallWindow() {
+        QFETCH(bool, dark);
+        QFETCH(QSize, size);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        QMainWindow window;
+        window.resize(size);
+        window.show();
+        window.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&window));
+        ket::Dialog* dialog =
+            NewTeamForm::present(&window, teams_.get(), "/repo", models, {}, directory);
+        auto* made = dialog->findChild<NewTeamForm*>();
+        made->nameField()->setText("Onboarding rework");
+        ket::TextArea* goal = made->goalField();
+        goal->setText(QStringLiteral(
+            "Make the first run explain itself: a new user should reach a first answer without "
+            "reading the guide.\n\nContext: the welcome tour was cut in 1.3 and support tickets "
+            "doubled (see https://example.invalid/issues/139). @agent/8213 rebuilt the "
+            "repository picker and knows where onboarding starts.\n\nOut of scope: the account "
+            "flow and pricing.\n\n"));
+        QTextEdit* editor = goal->editor();
+        editor->setFocus();
+        editor->moveCursor(QTextCursor::End);
+        QTest::qWait(300); // the dialog settles before the picker is placed
+        type(editor, "Ask @");
+        QTRY_VERIFY(goal->isMentionOpen());
+        QCOMPARE(goal->mentions()->numbers(), QStringList{"8213"});
+        const QRect frame(QPoint(0, 0), window.size());
+        const auto inside = [&window, &frame](const QWidget* widget) {
+            return frame.contains(QRect(widget->mapTo(&window, QPoint()), widget->size()));
+        };
+        QVERIFY(inside(dialog->card()));
+        QVERIFY(inside(goal));
+        QVERIFY(inside(goal->mentionPicker()));
+        const ket::Button* create = nullptr;
+        for (const ket::Button* button : dialog->findChildren<ket::Button*>())
+            if (button->isVisible() && button->text().startsWith(QStringLiteral("Create")))
+                create = button;
+        QVERIFY(create);
+        QVERIFY(inside(create));
+        if (const QString capture = qEnvironmentVariable("KETPLUS_TEAM_GOAL_CAPTURE");
+            !capture.isEmpty())
+            QVERIFY(window.grab().save(capture +
+                                       QStringLiteral("/app-new-team-%1.png")
+                                           .arg(QString::fromLatin1(QTest::currentDataTag()))));
+        // In a small window the picker may cover the footer; Escape closes it, not the dialog.
+        QTest::keyClick(editor, Qt::Key_Escape);
+        QVERIFY(!goal->isMentionOpen());
+        QVERIFY(dialog->isVisible());
+        QVERIFY(create->isVisible());
+        dialog->reject();
     }
 
     void theTeamPageFoldsTheGoalAndOpensAMention() {

@@ -50,6 +50,11 @@ QtObject {
         return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
     }
 
+    // The goal --open=new-team-goal types: paragraphs of context, a link and a mention.
+    readonly property string longTeamGoal: "Make the first run explain itself: a new user should reach a first answer without reading the guide.\n\n"
+        + "Context: the welcome tour was cut in 1.3 and support tickets doubled (see https://example.invalid/issues/139). "
+        + "@agent/8213 rebuilt the repository picker and knows where onboarding starts.\n\n"
+        + "Out of scope: the account flow and pricing."
     readonly property var repositories: [
         {
             name: "ketplus-desktop",
@@ -681,7 +686,12 @@ QtObject {
     readonly property var teams: [
         {
             id: "release", name: "Release 1.4",
-            goal: "Ship the new navigation, the repository picker and Settings in ketPlus Pro 1.4.",
+            goal: "Ship the new navigation, the repository picker and Settings in ketPlus Pro 1.4.\n\n"
+                  + "Context: the 1.3 sidebar confused people who work in several repositories, so the tree groups "
+                  + "conversations under their repository and team. @agent/8213 rebuilt the repository picker and knows "
+                  + "its empty and error states; ask it before splitting that work.\n\n"
+                  + "Done means: every screen of the mock matches the app in light and dark, and the release notes say what moved.\n"
+                  + "Out of scope: the account flow and pricing.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
             turnBudget: 60, automaticTurns: 23,
             members: [
