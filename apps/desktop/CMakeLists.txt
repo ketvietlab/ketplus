@@ -85,6 +85,7 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageTasks.cpp
     src/teams/TeamPageStorage.cpp
     src/teams/TeamWorktreeDialog.cpp
+    src/teams/TeamWorktreeRemoveAll.cpp
     src/teams/TeamWorktreeDialog.h
     src/teams/TeamCommands.cpp
     src/teams/TeamTaskDialog.cpp

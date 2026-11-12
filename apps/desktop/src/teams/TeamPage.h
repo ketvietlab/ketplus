@@ -1,12 +1,15 @@
 #pragma once
 
 #include "teams/TeamGoal.h"
+#include "teams/TeamWorktreeDialog.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
 #include <QString>
 #include <QWidget>
+
+#include <optional>
 
 class QLabel;
 class QScrollArea;
@@ -91,6 +94,8 @@ class TeamPage final : public QWidget {
     [[nodiscard]] static QString doneTasks(const QJsonObject& team);
     void buildDiskBanner();
     void buildDoneWorktrees(const QJsonObject& team);
+    void buildRemovalSummary();
+    void forgetStaleRemoval();
     void buildUpdates();
     void buildEmpty();
     void fillTasks();
@@ -140,6 +145,9 @@ class TeamPage final : public QWidget {
     // team.storage.get's last answer; empty when the daemon has none.
     QJsonObject storage_;
     bool storagePending_{false};
+    // T-62: "Remove all…" is running, and what its last run did (kept until the next one).
+    bool removingAll_{false};
+    std::optional<team_storage::Outcome> removalOutcome_;
     QString storageTasks_{QStringLiteral("-")};
 };
 

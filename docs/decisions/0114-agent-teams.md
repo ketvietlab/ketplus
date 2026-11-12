@@ -419,6 +419,18 @@ is paused, stopped or removed on its own at any level.
   entry is written once every move has answered and names what happened to each one; a
   conversation that could not be moved is named with the reason, in the history and in
   the answer's `note`, which the dialog shows instead of closing.
+- **Remove all (T-62, 2026-11-13).** The section's header has "Remove all…" while at
+  least one worktree is listed. One confirmation names how many worktrees and their total
+  size ("at least" when a size is unknown); nothing is removed before it. The page then
+  sends `team.worktree.remove` for each listed worktree, one after the other answered, in
+  the list's order, so each goes through the same guards and the same git order as a
+  single Remove; there is no bulk request in the daemon. A refusal or a failure keeps that
+  worktree listed with its reason in the daemon's or git's words, and the others are still
+  removed. The dialog and the page show a summary (removed N, kept M with their reasons),
+  each removal adds `worktree_removed` to its task's history as before, and "Remove all…"
+  and every Remove… are disabled while the run lasts. The page's summary stays when the
+  run removed every worktree (the section then says none is left on disk), and goes once
+  a worktree it names as kept is no longer listed, such as after removing it by hand.
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
