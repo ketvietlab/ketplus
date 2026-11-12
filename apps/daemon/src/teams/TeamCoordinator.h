@@ -232,6 +232,9 @@ class TeamHostPort {
         (void)id;
         return false;
     }
+    // ADR 0114 §2: the team continued; the messages its members' agents sent each other and
+    // that waited for it are delivered.
+    virtual void releaseTeamHeldMessages(const QStringList& sessionIds) { (void)sessionIds; }
     // Shows a line in the conversation without starting a turn.
     virtual void noteInConversation(const QString& sessionId, const QJsonObject& note) {
         (void)sessionId;
@@ -278,6 +281,11 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] const Team* team(qint64 teamId) const;
     [[nodiscard]] const Team* teamOf(const QString& sessionId) const;
     [[nodiscard]] bool isMember(const QString& sessionId) const { return teamOf(sessionId); }
+    // ADR 0114 §2: one automatic turn of a member that a teammate's message starts, counted
+    // against the team's budget like a turn the team starts. Empty when it may start;
+    // "team_paused" or "team_budget" (the budget is used up: the team pauses and asks) when
+    // the message waits for the team to continue.
+    QString takeMemberTurn(const QString& sessionId);
     // The repository of a worktree the team made for one of its tasks; nothing for another
     // path. Such a worktree belongs to its team's repository, so git is not asked (T-32).
     [[nodiscard]] QString taskWorktreeRepository(const QString& worktree) const;
@@ -489,6 +497,8 @@ class TeamCoordinator : public QObject {
     // Starts a turn of `toSession` after the commit that caused it, counted against the
     // budget; held while the team is paused (TeamCoordinatorFlow.cpp).
     virtual void wake(const Team& team, const TeamMessage& message);
+    // Pauses a running team whose budget is used up and asks whether to continue.
+    void pauseIfBudgetUsed(Team& team, QList<Update>& updates);
     // Sends the messages held while paused, in order, once the team runs again.
     void releaseHeld(qint64 teamId);
     // T-28 (TeamCoordinatorOutbox.cpp): the send step of wake(): settles the receiver's moves,

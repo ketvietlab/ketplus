@@ -351,11 +351,16 @@ The goal is the leader's main input, so it is written like a brief, not a title.
      sending. 5 keeps a team able to do a round of work; 200 keeps a forgotten team from
      running for days unattended. A value outside the range found in the journal counts as
      none (40).
-   The loop guard of ADR 0027 (hop 6, 30 turns a
-   chain, 20 an hour per conversation) applies to every automatic turn on top. Team
-   messages start their own chain, so an `agents_send` loop inside a team still stops at
-   the hop and chain limits. `paused` holds every team message until Resume, in order;
-   a running turn is not interrupted.
+   Inside a team the budget is the only limit on automatic turns. A turn that teammates'
+   messages start (`agents_send` from one member to another) counts once against the
+   budget, as a turn the team starts does; the loop guard of ADR 0027 (hop 6, 30 turns a
+   chain, 20 an hour) does not apply to messages from the team or between its members. A
+   member's message that finds the team paused or its budget used up is held as
+   `team_paused` or `team_budget`; Continue or Resume delivers it, in order, together with
+   messages an earlier build's loop guard held inside the team. A turn only the team
+   started begins a new exchange, so what it sends outside the team is guarded from hop 1.
+   Messages to or from conversations outside the team keep the loop guard. `paused` holds
+   every team message until Resume, in order; a running turn is not interrupted.
 3. **How the daemon knows a task is merged.** *Chosen*: the task's head commit is an
    ancestor of the integration branch (`git merge-base --is-ancestor`), checked when a
    member's turn ends and when a client reads the team. No hosting service is called, so

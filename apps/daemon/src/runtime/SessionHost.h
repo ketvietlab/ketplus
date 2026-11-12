@@ -323,6 +323,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     conversationByNumber(const QString& number) const override;
     [[nodiscard]] QString conversationRepository(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
+    [[nodiscard]] bool teamLimitsMessage(const AgentMessageRecord& message) const override;
+    QString takeTeamTurn(const QString& sessionId) override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
@@ -362,6 +364,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                       const QJsonObject& payload);
     [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
+    void releaseTeamHeldMessages(const QStringList& sessionIds) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
     [[nodiscard]] bool repositoryKnown(const QString& worktreePath) const;
     void noteRepository(const QString& worktreePath, const QString& repository) const;

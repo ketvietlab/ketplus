@@ -76,6 +76,9 @@ class FakeHost final : public TeamHostPort {
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override {
         notes.append({sessionId, note});
     }
+    void releaseTeamHeldMessages(const QStringList& sessionIds) override {
+        released.append(sessionIds);
+    }
     // With `holdAnswers`, git is read when it is asked and the answer waits for answer(), as
     // the session runtime answers a check after the caller's turn.
     void askTasks(const Team& team, const QList<Task>& tasks, const TaskQuestion question,
@@ -181,6 +184,7 @@ class FakeHost final : public TeamHostPort {
     QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
+    QStringList released;
 };
 
 // The first reviewer's share of the reviews (T-23), empty when the team has no reviewer.

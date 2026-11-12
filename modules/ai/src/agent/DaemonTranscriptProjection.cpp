@@ -281,6 +281,25 @@ QString agentMessageStateText(const QJsonObject& data) {
     if (state == "delivered")
         return outgoing ? QStringLiteral("Message delivered to %1.").arg(named)
                         : QStringLiteral("Received the authorized message from %1.").arg(named);
+    if (state == QStringLiteral("released"))
+        return outgoing ? QStringLiteral("The team continued: your message to %1 is delivered.")
+                              .arg(named)
+                        : QStringLiteral("The team continued: the message from %1 is delivered.")
+                              .arg(named);
+    // ADR 0114 §2: inside a team its budget holds messages, and continuing the team sends them.
+    if (state == QStringLiteral("held") &&
+        (reason == QStringLiteral("team_paused") || reason == QStringLiteral("team_budget"))) {
+        const QString why = reason == QStringLiteral("team_budget")
+                                ? QStringLiteral("the team used its automatic turns")
+                                : QStringLiteral("the team is paused");
+        return outgoing ? QStringLiteral("Message to %1 is held because %2. It is delivered when "
+                                         "the team continues.")
+                              .arg(peer, why)
+                        : QStringLiteral("A message from %1 is held because %2. It is delivered "
+                                         "when the team continues, or send a message here to "
+                                         "read it now.")
+                              .arg(peer, why);
+    }
     if (state == QStringLiteral("held")) {
         const QString why = reason == QStringLiteral("hop_limit")
                                 ? QStringLiteral("the agents exchanged too many messages")

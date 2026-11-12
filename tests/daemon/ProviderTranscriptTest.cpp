@@ -831,6 +831,9 @@ class ProviderTranscriptTest : public QObject {
         QTest::addColumn<QString>("meta");
         QTest::newRow("delivered") << "delivered" << "" << "Delivered";
         QTest::newRow("held") << "held" << "hop_limit" << "Held · waiting for approval there";
+        QTest::newRow("held by the team")
+            << "held" << "team_budget" << "Held · until the team continues";
+        QTest::newRow("released by the team") << "released" << "team_continued" << "Delivering";
         QTest::newRow("no reply") << "failed" << "no_reply" << "Delivered · no reply";
         QTest::newRow("turn stopped")
             << "failed" << "turn_interrupted" << "Delivered · stopped before replying";
@@ -895,6 +898,26 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(agentMessageStateText(
                      {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "no_changes"}}),
                  "No review: this turn changed no files.");
+        // ADR 0114 §2: inside a team its budget holds a message, and continuing it delivers.
+        QCOMPARE(agentMessageStateText({{"state", "held"},
+                                        {"reason", "team_budget"},
+                                        {"direction", "incoming"},
+                                        {"peer_number", "1093"}}),
+                 "A message from @agent/1093 is held because the team used its automatic turns. "
+                 "It is delivered when the team continues, or send a message here to read it "
+                 "now.");
+        QCOMPARE(agentMessageStateText({{"state", "held"},
+                                        {"reason", "team_paused"},
+                                        {"direction", "outgoing"},
+                                        {"peer_number", "1093"}}),
+                 "Message to @agent/1093 is held because the team is paused. It is delivered when "
+                 "the team continues.");
+        QCOMPARE(agentMessageStateText({{"state", "released"},
+                                        {"reason", "team_continued"},
+                                        {"direction", "incoming"},
+                                        {"peer_number", "1093"},
+                                        {"peer_title", "Developer 1"}}),
+                 "The team continued: the message from @agent/1093 · Developer 1 is delivered.");
         QCOMPARE(agentMessageStateText({{"state", "review_skipped"}, {"reason", "round_limit"}}),
                  "No review: this exchange used all its review rounds.");
         QCOMPARE(agentMessageStateText(

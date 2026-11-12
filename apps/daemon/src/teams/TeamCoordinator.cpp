@@ -503,6 +503,12 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         return {.error = failed};
     if (resumed) {
         releaseHeld(teamId);
+        if (const Team* current = this->team(teamId)) {
+            QStringList members;
+            for (const Member& member : current->members)
+                members.append(member.sessionId);
+            host_->releaseTeamHeldMessages(members);
+        }
         scheduleDigest(teamId);
     }
     startLeader(teamId);
