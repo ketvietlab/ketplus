@@ -2,6 +2,7 @@
 #include "DaemonMachineBackend.h"
 
 #include <QDir>
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -59,12 +60,24 @@ class MachineBackendTest final : public QObject {
         const QJsonObject accept{{QStringLiteral("decision"), QStringLiteral("accept")}};
         const QJsonObject answer{{QStringLiteral("answers"), QJsonObject{}}};
         const QJsonObject listOptions{{QStringLiteral("session_catalog_live_only"), true}};
+        const QJsonObject worktrees{
+            {QStringLiteral("query"), QStringLiteral("fix")},
+            {QStringLiteral("offset"), 20},
+            {QStringLiteral("limit"), 20},
+            {QStringLiteral("repository_path"), QStringLiteral("/src/app")}};
+        const QJsonObject largeEvent{{QStringLiteral("ref"), QStringLiteral("e9")},
+                                     {QStringLiteral("offset"), 0}};
 
-        backend.listRepositories(count);
-        backend.listWorktrees(QStringLiteral("s1"), 3, 1, count);
+        int repositoryAnswers = 0;
+        backend.listRepositories([&repositoryAnswers](const QJsonObject&, const QString& error) {
+            QVERIFY(error.isEmpty());
+            ++repositoryAnswers;
+        });
+        backend.listWorktrees(QStringLiteral("s1"), 3, worktrees, count);
         backend.listConversations(listOptions, count);
         backend.transcriptWindow(QStringLiteral("s1"), 3, window, count);
         backend.transcriptPage(QStringLiteral("s1"), 3, page, count);
+        backend.transcriptLargeEvent(QStringLiteral("s1"), 3, largeEvent, count);
         backend.startTurn(QStringLiteral("s1"), 3, turn, count);
         backend.steerTurn(QStringLiteral("s1"), 3, steer, count);
         backend.stopTurn(QStringLiteral("s1"), 3, count);
@@ -75,10 +88,11 @@ class MachineBackendTest final : public QObject {
 
         const QList<RecordedCall> expected{
             {QStringLiteral("workspace.list"), {}, {}, -1},
-            {QStringLiteral("session.worktrees"), {{QStringLiteral("limit"), 1}}, "s1", 3},
+            {QStringLiteral("session.worktrees"), worktrees, "s1", 3},
             {QStringLiteral("session.list"), listOptions, {}, 0},
             {QStringLiteral("session.transcript_window"), window, "s1", 3},
             {QStringLiteral("session.transcript_page"), page, "s1", 3},
+            {QStringLiteral("session.transcript_large_event"), largeEvent, "s1", 3},
             {QStringLiteral("session.start_turn"), turn, "s1", 3},
             {QStringLiteral("session.steer"), steer, "s1", 3},
             {QStringLiteral("session.interrupt"), {}, "s1", 3},
@@ -98,7 +112,8 @@ class MachineBackendTest final : public QObject {
              "s1",
              3},
         };
-        QCOMPARE(answered, expected.size());
+        QCOMPARE(repositoryAnswers, 1);
+        QCOMPARE(answered + repositoryAnswers, expected.size());
         QCOMPARE(calls.size(), expected.size());
         for (qsizetype i = 0; i < expected.size(); ++i) {
             QCOMPARE(calls[i].type, expected[i].type);
@@ -106,6 +121,61 @@ class MachineBackendTest final : public QObject {
             QCOMPARE(calls[i].sessionId, expected[i].sessionId);
             QCOMPARE(calls[i].generation, expected[i].generation);
         }
+    }
+
+    void repositoriesUseTheNeutralShape() {
+        QString failure;
+        DaemonMachineBackend backend(
+            QStringLiteral("local"), MachineBackend::Route::Local,
+            [&failure](const QString&, const QJsonObject&, const QString&, qint64,
+                       const MachineBackend::Callback& callback) {
+                if (!failure.isEmpty()) {
+                    callback({}, failure);
+                    return;
+                }
+                callback(
+                    {{QStringLiteral("workspaces"),
+                      QJsonArray{
+                          QJsonObject{{QStringLiteral("path"), QStringLiteral("/Users/me/dev/app")},
+                                      {QStringLiteral("available"), true}},
+                          QJsonObject{{QStringLiteral("path"), QString()}},
+                          QJsonObject{{QStringLiteral("path"), QStringLiteral("/Volumes/old/site")},
+                                      {QStringLiteral("available"), false}}}}},
+                    {});
+            });
+        QJsonObject result;
+        backend.listRepositories(
+            [&result](const QJsonObject& reply, const QString&) { result = reply; });
+        const QJsonArray expected{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("/Users/me/dev/app")},
+                        {QStringLiteral("label"), QStringLiteral("app")},
+                        {QStringLiteral("path"), QStringLiteral("/Users/me/dev/app")},
+                        {QStringLiteral("available"), true}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("/Volumes/old/site")},
+                        {QStringLiteral("label"), QStringLiteral("site")},
+                        {QStringLiteral("path"), QStringLiteral("/Volumes/old/site")},
+                        {QStringLiteral("available"), false}}};
+        QCOMPARE(result, (QJsonObject{{QStringLiteral("repositories"), expected}}));
+
+        failure = QStringLiteral("Daemon busy.");
+        QString error;
+        result = {{QStringLiteral("stale"), true}};
+        backend.listRepositories([&](const QJsonObject& reply, const QString& message) {
+            result = reply;
+            error = message;
+        });
+        QCOMPARE(error, failure);
+        QVERIFY(result.isEmpty());
+    }
+
+    void anSshClientKeepsItsIdentity() {
+        DaemonClient client;
+        DaemonMachineBackend backend(&client, QStringLiteral("SHA256:abc"),
+                                     MachineBackend::Route::Ssh);
+        QCOMPARE(backend.machineId(), QStringLiteral("SHA256:abc"));
+        QCOMPARE(backend.route(), MachineBackend::Route::Ssh);
+        // Only This Mac's route turns a missing local install into Offline.
+        QCOMPARE(backend.connectionState(), State::Connecting);
     }
 
     void transportReadinessDrivesTheConnectionState() {

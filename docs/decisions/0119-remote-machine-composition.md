@@ -1,13 +1,15 @@
-# 0118: Remote machine composition and the machine-neutral backend
+# 0119: Remote machine composition and the machine-neutral backend
 
 Status: proposed
 Date: 2026-11-12
 
-Issue #419 scope item 1. Amends ADR 0022 (a Linux host is reached only through Control v2) and
-`docs/linux-headless-daemon.md`.
+Issue #419 scope item 1. Amends
+[ADR 0022](0022-linux-headless-remote-host.md) (a Linux host is reached only
+through Control v2) and `docs/linux-headless-daemon.md`.
 
 The team task named this ADR 0102; that number was already taken by
-`0102-activity-files-backfill.md`, so it is 0118.
+`0102-activity-files-backfill.md`, and 0118 by
+`0118-team-tasks-done-by-pull-request.md`, so it is 0119.
 
 ## Context
 
@@ -31,18 +33,50 @@ machine. It carries the operations Desktop needs and nothing transport-specific:
 
 | Operation | Local protocol request |
 | --- | --- |
-| `listRepositories` | `workspace.list` |
-| `listWorktrees` | `session.worktrees` |
+| `listRepositories` | `workspace.list`, mapped to the neutral repository shape |
+| `listWorktrees` | `session.worktrees` (query, offset, limit, repository_path) |
 | `listConversations` | `session.list` |
 | `transcriptWindow`, `transcriptPage` | `session.transcript_window`, `session.transcript_page` |
+| `transcriptLargeEvent` | `session.transcript_large_event` |
 | `startTurn`, `steerTurn`, `stopTurn` | `session.start_turn`, `session.steer`, `session.interrupt` |
 | `pendingApprovals` | `session.pending_approvals` |
 | `resolveApproval`, `answerQuestion` | `approval.resolve`, `question.answer` |
 | `connectionStateChanged`, `eventReceived` | readiness of the route; session events |
 
 Requests and results are the daemon's local protocol objects on every route, so
-a consumer parses one shape. Each backend has a `machineId` (`local` for This
-Mac, the host's machine id otherwise) and a `Route`: `Local`, `Relay` or `Ssh`.
+a consumer parses one shape, with two exceptions where the routes differ:
+
+- **Repositories** use a neutral shape no route has to fake:
+  `{"repositories": [{"id", "label", "path", "available"}]}`. The local and
+  SSH routes map `workspace.list` (`workspaces[{path, available}]`) to
+  `id` = `path` and `label` = the last path component. The Relay sends the
+  salted repository id and label it already uses and no `path`, so a consumer
+  shows a path only where one is present and keys everything else by `id`.
+  `workspace.list` joins `DaemonClient`'s read set that is replayed after a
+  disconnect.
+- **Large transcript events.** A local or SSH page may carry `large_event`
+  references; the consumer reads each fragment with `transcriptLargeEvent`.
+  The Relay reassembles large events on the host before it encrypts a page,
+  so its pages carry no references and its `transcriptLargeEvent` fails.
+
+Each backend has a `machineId` (see "Machine identity") and a `Route`:
+`Local`, `Relay` or `Ssh`.
+
+### Machine identity
+
+`local` names This Mac. A Linux machine is named by its daemon's host key
+fingerprint (the ADR 0034 key pinned at pairing), which is the same whichever
+route reaches it:
+
+- The Relay backend maps its relay machine id to the pinned fingerprint.
+- The SSH backend reads the fingerprint from the daemon's `daemon.hello`
+  reply. Today the hello carries no machine identity; scope item 3 adds the
+  host key fingerprint to it (a new protocol minor) and makes the daemon
+  create its host key without a cloud sign-in, so a free SSH-only host has one.
+- A host reachable over both routes is therefore one machine: one picker row,
+  one conversation list, and conversations bound to the fingerprint keep
+  their binding when the route changes. Desktop prefers SSH while it is
+  reachable and falls back to the Relay.
 
 Three implementations:
 
@@ -50,10 +84,15 @@ Three implementations:
   maps operations to request types and `readyChanged` / `disconnected` to
   connection states; queueing before the hello, replay after a disconnect and
   reconnect backoff stay in `DaemonClient`. This Mac behaves exactly as before.
-- **SSH** — the same `DaemonMachineBackend` with a `DaemonClient` whose socket is
-  an SSH-forwarded stream to the Linux user's own daemon socket
-  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`). The wire protocol is the local one; only
-  the transport differs (see "SSH trust").
+- **SSH** — the same `DaemonMachineBackend`, constructed with the host's
+  machine id and `Route::Ssh`, over a `DaemonClient` whose socket is an
+  SSH-forwarded private local socket to the Linux user's own daemon socket
+  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`). The wire protocol is the local one;
+  only the transport differs (see "SSH trust"). Connection reasons are
+  route-neutral ("The ketPlus daemon is not running."), and only the local
+  route turns a missing local daemon install into Offline; the SSH route
+  reports its own reasons (host unreachable, key changed, not installed on the
+  host).
 - **Relay** — a backend over `ControlV2Client` that turns each operation into an
   encrypted Control v2 command and each authenticated, decrypted event page into
   `eventReceived`. It is scope item 2 of #419.
@@ -104,9 +143,14 @@ Writes are never replayed after a drop (the existing `DaemonClient` rule).
 ### SSH trust
 
 SSH carries the daemon's **local** protocol, unchanged, to the Linux user's own
-daemon socket. Desktop runs the system `ssh` with the user's configuration and
-forwards a stream to the socket (`ssh -W` / stream-local forwarding); it never
-opens an inbound port on the host and never talks to another user's socket.
+daemon socket. Desktop runs the system `ssh` with the user's configuration and OpenSSH
+stream-local forwarding,
+`ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -L <local socket>:<remote socket> <host>`,
+where the local socket lives in a directory only the Mac user can open and is
+removed when the connection ends. `DaemonClient` connects to that local socket
+as it does to This Mac's. `ssh -W` is not used: it forwards to a TCP host and
+port, not to a Unix socket. Desktop never opens an inbound port on the host and
+never talks to another user's socket.
 
 - **Confidentiality and integrity** come from SSH. The local protocol adds no
   encryption of its own on this route, and none is needed: the stream ends at a

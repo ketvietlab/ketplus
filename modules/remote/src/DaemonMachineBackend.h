@@ -6,7 +6,7 @@ namespace ketplus::remote {
 
 class DaemonClient;
 
-// ADR 0118: a MachineBackend that speaks the daemon's local protocol to a connected socket.
+// ADR 0119: a MachineBackend that speaks the daemon's local protocol to a connected socket.
 // This Mac uses it over DaemonClient's Unix socket; the SSH route reuses it with a DaemonClient
 // whose socket SSH forwards to the Linux user's own daemon socket. It only maps operations to
 // request types and transport readiness to connection states: queueing, replay after a
@@ -19,9 +19,12 @@ class DaemonMachineBackend final : public MachineBackend {
         std::function<void(const QString& type, const QJsonObject& payload,
                            const QString& sessionId, qint64 generation, Callback callback)>;
 
-    // This Mac's daemon. The client stays owned by its creator; once it is destroyed the
-    // machine is Offline and requests fail.
-    DaemonMachineBackend(DaemonClient* client, QObject* parent = nullptr);
+    // A daemon behind a DaemonClient: This Mac's socket (the defaults), or for the SSH route a
+    // client whose socket SSH forwards, with the host's machine id and Route::Ssh. The client
+    // stays owned by its creator; once it is destroyed the machine is Offline and requests fail.
+    explicit DaemonMachineBackend(DaemonClient* client, QObject* parent = nullptr);
+    DaemonMachineBackend(DaemonClient* client, QString machineId, Route route,
+                         QObject* parent = nullptr);
     // Any transport that carries the same protocol. Its owner reports readiness with
     // setTransportReady() and setTransportUnavailable().
     DaemonMachineBackend(QString machineId, Route route, DaemonCall call,
@@ -40,13 +43,15 @@ class DaemonMachineBackend final : public MachineBackend {
     void setTransportUnavailable(const QString& reason);
 
     void listRepositories(Callback callback) override;
-    void listWorktrees(const QString& sessionId, qint64 generation, int limit,
+    void listWorktrees(const QString& sessionId, qint64 generation, const QJsonObject& request,
                        Callback callback) override;
     void listConversations(const QJsonObject& options, Callback callback) override;
     void transcriptWindow(const QString& sessionId, qint64 generation, const QJsonObject& request,
                           Callback callback) override;
     void transcriptPage(const QString& sessionId, qint64 generation, const QJsonObject& request,
                         Callback callback) override;
+    void transcriptLargeEvent(const QString& sessionId, qint64 generation,
+                              const QJsonObject& request, Callback callback) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,

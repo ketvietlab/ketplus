@@ -670,7 +670,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   (0.1.29), systemd user unit, authenticated `ketplusctl`, browser-approved
   device authorization and a durable zero-session workspace catalog. A Qt
   Control v2 client backend is available, but remote Desktop UI/composition
-  remains deferred. ADR 0118 records the remote composition (one
+  remains deferred. ADR 0119 records the remote composition (one
   `MachineBackend` for the local socket, the Relay and SSH; machine binding;
   connection states; the SSH trust decision); its local adapter
   `DaemonMachineBackend` is in `ketplus_remote`. See `linux-headless-daemon.md`

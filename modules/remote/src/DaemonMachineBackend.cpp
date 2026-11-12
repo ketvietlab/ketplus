@@ -2,27 +2,39 @@
 
 #include "DaemonClient.h"
 
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QPointer>
 
 #include <utility>
 
 namespace ketplus::remote {
 
+namespace {
+
+QString notRunning() { return QStringLiteral("The ketPlus daemon is not running."); }
+
+} // namespace
+
 DaemonMachineBackend::DaemonMachineBackend(DaemonClient* client, QObject* parent)
+    : DaemonMachineBackend(client, QStringLiteral("local"), Route::Local, parent) {}
+
+DaemonMachineBackend::DaemonMachineBackend(DaemonClient* client, QString machineId,
+                                           const Route route, QObject* parent)
     : DaemonMachineBackend(
-          QStringLiteral("local"), Route::Local,
+          std::move(machineId), route,
           [client = QPointer<DaemonClient>(client)](const QString& type, const QJsonObject& payload,
                                                     const QString& sessionId,
                                                     const qint64 generation, Callback callback) {
               if (!client) {
-                  callback({}, QStringLiteral("KetPlus Daemon is not running."));
+                  callback({}, notRunning());
                   return;
               }
               client->call(type, payload, sessionId, generation, std::move(callback));
           },
           parent) {
     if (!client) {
-        setTransportUnavailable(QStringLiteral("KetPlus Daemon is not running."));
+        setTransportUnavailable(notRunning());
         return;
     }
     connect(client, &DaemonClient::readyChanged, this,
@@ -31,12 +43,12 @@ DaemonMachineBackend::DaemonMachineBackend(DaemonClient* client, QObject* parent
     connect(client, &DaemonClient::disconnected, this,
             [this](const QString& reason) { setTransportReady(false, reason); });
     connect(client, &DaemonClient::eventReceived, this, &MachineBackend::eventReceived);
-    connect(client, &QObject::destroyed, this,
-            [this] { setTransportUnavailable(QStringLiteral("KetPlus Daemon is not running.")); });
+    connect(client, &QObject::destroyed, this, [this] { setTransportUnavailable(notRunning()); });
     if (client->isReady())
         setTransportReady(true);
-    else if (!client->isAvailable())
-        setTransportUnavailable(QStringLiteral("KetPlus Daemon is not installed."));
+    // Only This Mac launches its own daemon; an SSH route reports "not installed" itself.
+    else if (route_ == Route::Local && !client->isAvailable())
+        setTransportUnavailable(QStringLiteral("The ketPlus daemon is not installed."));
 }
 
 DaemonMachineBackend::DaemonMachineBackend(QString machineId, const Route route, DaemonCall call,
@@ -77,16 +89,34 @@ void DaemonMachineBackend::request(const QString& type, const QJsonObject& paylo
 }
 
 void DaemonMachineBackend::listRepositories(Callback callback) {
-    request(QStringLiteral("workspace.list"), {}, {}, -1, std::move(callback));
+    // workspace.list names registered checkouts by path; the neutral shape adds an id and label.
+    request(QStringLiteral("workspace.list"), {}, {}, -1,
+            [callback = std::move(callback)](const QJsonObject& result, const QString& error) {
+                if (!error.isEmpty()) {
+                    callback({}, error);
+                    return;
+                }
+                QJsonArray repositories;
+                for (const auto& value : result.value(QStringLiteral("workspaces")).toArray()) {
+                    const auto workspace = value.toObject();
+                    const QString path = workspace.value(QStringLiteral("path")).toString();
+                    if (path.isEmpty())
+                        continue;
+                    repositories.append(
+                        QJsonObject{{QStringLiteral("id"), path},
+                                    {QStringLiteral("label"), QFileInfo(path).fileName()},
+                                    {QStringLiteral("path"), path},
+                                    {QStringLiteral("available"),
+                                     workspace.value(QStringLiteral("available")).toBool()}});
+                }
+                callback({{QStringLiteral("repositories"), repositories}}, {});
+            });
 }
 
 void DaemonMachineBackend::listWorktrees(const QString& sessionId, const qint64 generation,
-                                         const int limit, Callback callback) {
-    QJsonObject payload;
-    if (limit > 0)
-        payload.insert(QStringLiteral("limit"), limit);
-    request(QStringLiteral("session.worktrees"), payload, sessionId, generation,
-            std::move(callback));
+                                         const QJsonObject& request, Callback callback) {
+    this->request(QStringLiteral("session.worktrees"), request, sessionId, generation,
+                  std::move(callback));
 }
 
 void DaemonMachineBackend::listConversations(const QJsonObject& options, Callback callback) {
@@ -102,6 +132,12 @@ void DaemonMachineBackend::transcriptWindow(const QString& sessionId, const qint
 void DaemonMachineBackend::transcriptPage(const QString& sessionId, const qint64 generation,
                                           const QJsonObject& request, Callback callback) {
     this->request(QStringLiteral("session.transcript_page"), request, sessionId, generation,
+                  std::move(callback));
+}
+
+void DaemonMachineBackend::transcriptLargeEvent(const QString& sessionId, const qint64 generation,
+                                                const QJsonObject& request, Callback callback) {
+    this->request(QStringLiteral("session.transcript_large_event"), request, sessionId, generation,
                   std::move(callback));
 }
 

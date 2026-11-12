@@ -4,7 +4,7 @@ KetPlus 0.1.29 can build and install the private daemon independently of Desktop
 The Linux server owns provider processes, repositories, the durable SQLite journal,
 session keys and approval decisions. iOS and a remote Desktop client communicate
 through Control v2. Nothing connects to the local Unix socket over the network;
-a Desktop on the user's own SSH access reaches it only through SSH (ADR 0118).
+a Desktop on the user's own SSH access reaches it only through SSH (ADR 0119).
 The daemon opens outbound HTTPS and WebSocket connections to the relay; this
 topology needs no inbound TCP port or display server.
 
@@ -166,7 +166,7 @@ The scoped results and remaining deployment checks for 0.1.29 are recorded in
 
 ## Qt backend prepared for Desktop
 
-ADR 0118 defines how Desktop composes a remote machine: one machine-neutral
+ADR 0119 defines how Desktop composes a remote machine: one machine-neutral
 `MachineBackend` (`modules/remote/src/MachineBackend.h`) implemented by the
 local socket (`DaemonMachineBackend`), a Relay backend over `ControlV2Client`
 and an SSH route that carries the local protocol to the user's own socket; how
