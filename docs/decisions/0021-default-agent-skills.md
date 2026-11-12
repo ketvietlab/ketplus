@@ -36,7 +36,7 @@ desktop's skill wrapping.
 
 - Updating a shipped skill is a KetPlus release: copy the new text into
   `assets/agent-skills` and advance the product version. The ket-design-system copy
-  keeps its MIT `LICENSE`; the other two are KetViet proprietary.
+  keeps its MIT `LICENSE`; the other two are Két Việt proprietary.
 - The policy is model guidance, not enforcement.
 
 ## Alternatives considered

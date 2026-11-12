@@ -23,8 +23,8 @@ These stay outside this repository and are proprietary:
 
 | Capability | Repository |
 | --- | --- |
-| Cloud control, relay, gateway configuration, accounts, entitlements, and KétRouter service | `ketviet` or dedicated service repositories |
-| iOS and Android remote client | `ketplus-app` |
+| Cloud control, relay, gateway configuration, accounts, entitlements, and KétRouter service | the private relay service or dedicated service repositories |
+| iOS and Android remote client | the private mobile app |
 
 If a feature is useful in the editor alone, it belongs in `core/` so Lite ships
 it. Agent, Atlas, daemon and remote-session behavior stays out of `core/`. Code
@@ -90,3 +90,8 @@ depend on Qt Widgets, QML, or the desktop executable.
 The whole repository is MPL 2.0, applied at file level. Re-run the dependency
 and distribution audit in `licensing.md` whenever adding a library, bundling an
 external tool, or changing static/dynamic linkage.
+
+Public-tree hygiene: proprietary mobile apps and hosted services live in private
+repositories. Do not publish their repository links, source revisions, file paths,
+service/schema names or infrastructure details. Use generic ownership descriptions;
+public library target names and license notices remain part of the public API.

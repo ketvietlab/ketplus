@@ -168,7 +168,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
 
 // Native Qt mapping of @ketvietlab/design-system's public semantic contract.
 // Keep these roles aligned with packages/design-system/src/foundations/tokens.css;
-// the values below were verified against ketviet e8adee2d (design system 0.1.44).
+// the values below were verified against the published package (design system 0.1.44).
 struct KdsPalette final {
     QString page, panel, raised, hover, text, secondary, muted, disabled, border, strong, input;
     QString accent, accentHover, accentActive, accentSubtle, accentBorder, accentText;

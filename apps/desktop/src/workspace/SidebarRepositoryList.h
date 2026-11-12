@@ -51,7 +51,7 @@ struct SidebarRepository final {
     }
 };
 
-// The order the phones use too (ketplus-app MobileWorkspaceData): conversations by
+// The order the phones use too (the companion mobile client): conversations by
 // "lastTurnStartedAt", newest first, then title and id; repositories by their newest
 // conversation, then name and path. An explicit conversation repository switch promotes its target.
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories);

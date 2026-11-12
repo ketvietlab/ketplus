@@ -1,7 +1,6 @@
 {
-  "source_commit": "e8adee2da3bfeea66c01f46f110fdc5243fb23c0",
-  "theme_path": "ketsuite/packages/design-system/src/runtime/mermaid-theme.js",
-  "tokens_path": "ketsuite/packages/design-system/src/foundations/tokens.css",
+  "theme_path": "@ketvietlab/design-system/src/runtime/mermaid-theme.js",
+  "tokens_path": "@ketvietlab/design-system/src/foundations/tokens.css",
   "package": "@ketvietlab/design-system",
   "version": "0.1.44",
   "license": "MIT",

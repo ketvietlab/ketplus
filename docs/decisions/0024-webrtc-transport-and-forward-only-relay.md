@@ -5,20 +5,15 @@ Date: 2026-10-12
 
 ## Context
 
-The Control v2 relay stores every encrypted transcript event in PostgreSQL
-(`ketplus_control.SessionEvent`) for 24 hours, the hot replica of
+The Control v2 relay stores every encrypted transcript event in the hosted relay
+for a bounded period, the hot replica of
 [ADR 0004](0004-canonical-transcript-hybrid-retention.md). Each appended event costs an insert,
 several cursor and digest reads, a push job and a realtime notification, so relay load grows with
 the number of events rather than the number of users or sessions. Phones read the newest turns and
 catch up after backgrounding from that table.
 
 The daemon journal is already the full-history authority, and the relay cannot read the content it
-stores (against an active relay only since devices are pinned per Mac, [ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)). Staging `productivity-web` has crashed on heap exhaustion; memory was raised as a stopgap
-and the dominant heap owner has not been identified.
-
-KétViewer already uses WebRTC between two devices, with in-memory signaling and short-lived TURN
-credentials issued by `ketviewer_control` in `ketviet`. Its coturn staging deployment exists as a
-runbook and is not deployed.
+stores (against an active relay only since devices are pinned per Mac, [ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)). Hosted relay implementations and deployment details remain private.
 
 ## Decision
 

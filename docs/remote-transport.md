@@ -9,7 +9,7 @@ Same-machine Desktop keeps IPC. No current iPhone release is claimed to use P2P.
 
 This document specifies how a paired remote client and the daemon agree on the transport, set up a
 WebRTC connection through the relay, authenticate it, and exchange frames, and how both ends
-structure the code. Field names follow Control v2; exact relay endpoints are settled in `ketviet`
+structure the code. Field names follow Control v2; exact relay endpoints are settled in the private relay service
 in phase 2.
 
 ## Terms
@@ -22,7 +22,7 @@ failures and unrelated 404 responses keep the enrollment for retry.
 - **Host**: the daemon of one machine.
 - **Client**: a paired device (iOS, Android, or Desktop on another machine). Desktop on the same
   machine keeps local IPC and is not a client here.
-- **Relay**: the Control v2 service, the `ketplus` tenant in `ketviet`.
+- **Relay**: the Control v2 service, the `ketplus` tenant in the private relay service.
 - **Path**: a direct WebRTC connection, a WebRTC connection through TURN, or the relay.
 - **Connection**: one WebRTC peer connection between a host and a client, named by a
   relay-issued `connectionId`.
@@ -109,7 +109,7 @@ database or logs, and it forgets a connection 60 seconds after its last signal o
 
 ## TURN credentials
 
-`iceServers` carries coturn REST credentials, the scheme `ketviewer_control` already issues:
+`iceServers` carries coturn REST credentials, the scheme the private relay service already issues:
 username `<expiry>:<random id>` and credential `base64(HMAC-SHA1(secret, username))`. The ID is
 random per issue, so TURN logs name neither a device nor a machine.
 
@@ -277,7 +277,7 @@ With `events.forward_only/1`:
 - This path refuses frames over 64 KiB. Large results keep the mailbox's continuation
   (`requestedByteCap`).
 
-The forwarding is built in `ketviet` in phase 2. `AtlasLiveTunnel` keeps its own `/v2/atlas/tunnel`
+The forwarding is built in the private relay service in phase 2. `AtlasLiveTunnel` keeps its own `/v2/atlas/tunnel`
 socket.
 
 ## Code structure

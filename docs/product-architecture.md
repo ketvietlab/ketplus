@@ -10,7 +10,7 @@ ERP are independent products that share platform capabilities.
 | --- | --- | --- | --- |
 | KétPlus (Lite) | Lightweight native editor with workspace, Git, terminal, and document preview; default editor on Lampion | Public `ketplus`, `KETPLUS_EDITION=lite`, MPL 2.0 | Free open-source distribution |
 | KétPlus Pro | Full productivity IDE with Agent Workspace, Atlas, daemon, and remote sessions | Public `ketplus`, `KETPLUS_EDITION=pro`, MPL 2.0 | Free desktop client that drives paid services |
-| KétPlus App | iOS/Android remote session client | Private `ketplus-app`, proprietary | App Store and Play Store subscription or purchase |
+| KétPlus App | iOS/Android remote session client | Private the private mobile app, proprietary | App Store and Play Store subscription or purchase |
 | KétPlus Daemon | Local and headless Linux session/process control plane | Public `ketplus/apps/daemon`, MPL 2.0 | Host side of managed remote sessions |
 | KétRouter | Multi-provider model gateway similar to OpenRouter | Private service | Usage-based credits and billing |
 | Flow | Organization task and work management | Separate product outside ERP | Organization subscription |
@@ -27,8 +27,7 @@ ketplus/                         public, MPL-2.0 (ADR 0029)
   modules/{ai,atlas,browser,remote}/
   packaging/  docs/  tests/
 
-ketplus-app/                     private mobile clients
-ketviet/                         relay, gateway, accounts and billing services
+Mobile clients and hosted services live in private repositories.
 ```
 
 Until ADR 0029 the Pro desktop was the private `ketplus-desktop` repository,

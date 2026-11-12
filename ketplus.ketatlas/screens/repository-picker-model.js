@@ -2,8 +2,8 @@
 ((root) => {
     const repositories = [
         { id: "ketplus-desktop", path: "/workspace/ketplus-desktop", preferred: "desktop-main", conversations: ["Linux Daemon", "Entitlement"] },
-        { id: "ketviet", path: "/workspace/ketviet", preferred: "ketviet-pilot", conversations: ["Product Handoff", "Phone integration"] },
-        { id: "ketplus-app", path: "/workspace/ketplus-app", preferred: "mobile-main", conversations: ["Question sheet", "iPhone connection"] },
+        { id: "sample-project", path: "/workspace/sample-project", preferred: "sample-project-pilot", conversations: ["Product Handoff", "Phone integration"] },
+        { id: "sample-mobile", path: "/workspace/sample-mobile", preferred: "mobile-main", conversations: ["Question sheet", "iPhone connection"] },
         { id: "ketplus", path: "/workspace/ketplus", preferred: "cm-main", conversations: ["Mermaid theme"] },
         { id: "ketchat-desktop", path: "/workspace/ketchat-desktop", preferred: "chat-main", conversations: ["Mac PP", "iOS PP"] },
         { id: "fusetter", path: "/workspace/fusetter", preferred: "fusetter-main", conversations: ["114", "116"] },
@@ -11,11 +11,11 @@
     const worktrees = [
         { id: "desktop-main", repo: "ketplus-desktop", branch: "develop", path: "/workspace/ketplus-desktop", main: true },
         { id: "desktop-status", repo: "ketplus-desktop", branch: "fix/compaction-status", path: "/workspace/ketplus-desktop-compaction" },
-        { id: "ketviet-main", repo: "ketviet", branch: "integration", path: "/workspace/ketviet", main: true },
-        { id: "ketviet-pilot", repo: "ketviet", branch: "feat/ketview-production-pilot", path: "/workspace/ketviet-ketview-pilot", used: true },
-        { id: "ketviet-phone", repo: "ketviet", branch: "feat/ketphone-recording", path: "/workspace/ketviet-ketphone-g1" },
-        { id: "mobile-main", repo: "ketplus-app", branch: "develop", path: "/workspace/ketplus-app", main: true },
-        { id: "mobile-questions", repo: "ketplus-app", branch: "fix/question-sheet", path: "/workspace/ketplus-app-questions" },
+        { id: "sample-project-main", repo: "sample-project", branch: "integration", path: "/workspace/sample-project", main: true },
+        { id: "sample-project-pilot", repo: "sample-project", branch: "feat/ketview-production-pilot", path: "/workspace/sample-project-ketview-pilot", used: true },
+        { id: "sample-project-phone", repo: "sample-project", branch: "feat/ketphone-recording", path: "/workspace/sample-project-ketphone-g1" },
+        { id: "mobile-main", repo: "sample-mobile", branch: "develop", path: "/workspace/sample-mobile", main: true },
+        { id: "mobile-questions", repo: "sample-mobile", branch: "fix/question-sheet", path: "/workspace/sample-mobile-questions" },
         { id: "cm-main", repo: "ketplus", branch: "develop", path: "/workspace/ketplus", main: true },
         { id: "chat-main", repo: "ketchat-desktop", branch: "develop", path: "/workspace/ketchat-desktop", main: true },
         { id: "fusetter-main", repo: "fusetter", branch: "develop", path: "/workspace/fusetter", main: true },
@@ -28,13 +28,13 @@
         return {
             conversationId: "conversation-ketviewer-core", title: "KétViewer Core",
             repo: repo.id, tree: requestedTree?.repo === repo.id ? requestedTree.id : repo.preferred,
-            agentTree: "ketviet-pilot", running: params.get("turn") !== "idle",
+            agentTree: "sample-project-pilot", running: params.get("turn") !== "idle",
             draft: "Check the pilot deployment and keep the current changes.",
             repoQuery: "", treeQuery: params.get("search") || "", lastTrees: {},
             scenario: ["error", "offline", "loading", "stale"].includes(params.get("scenario")) ? params.get("scenario") : "ready",
             open: params.get("picker") !== "closed", step: params.get("step") === "worktrees" ? "worktrees" : "repositories",
             drawer: false, pending: null,
-            failed: params.get("scenario") === "error" ? { repo: "ketviet", tree: "ketviet-pilot" } : null,
+            failed: params.get("scenario") === "error" ? { repo: "sample-project", tree: "sample-project-pilot" } : null,
             request: 0, receipt: "", collapsed: [],
         };
     }

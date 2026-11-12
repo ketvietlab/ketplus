@@ -4,8 +4,6 @@
   "adapter": "@ketvietlab/design-system",
   "source": "@ketvietlab/design-system",
   "version": "0.1.44",
-  "revision": "e8adee2da3bfeea66c01f46f110fdc5243fb23c0",
-  "repository": "https://github.com/ketvietlab/ketsuite",
   "materialization": "Exact public CSS with local imports inlined; canonical SSR contracts; no token overrides.",
   "registeredComponents": 161,
   "files": [
@@ -15,7 +13,7 @@
     },
     {
       "path": "assets/ket-design-system-contracts.js",
-      "sha256": "b46ef993494b32edcaa006c9eaa95a629a7e72cf467a175591f0c194b2f332ef"
+      "sha256": "4996ea556767caf1169b3f7f70e7fb1d59dcd0bb834dbad0690aba64bf17e81b"
     },
     {
       "path": "assets/ket-design-system-runtime.js",

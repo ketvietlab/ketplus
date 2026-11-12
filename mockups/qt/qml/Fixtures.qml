@@ -99,7 +99,7 @@ QtObject {
             ]
         },
         {
-            name: "ketviet",
+            name: "sample-project",
             conversations: [
                 { number: "7992", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
                   worktree: "main", transcript: "activity" },
@@ -118,7 +118,7 @@ QtObject {
             ]
         },
         {
-            name: "ketplus-app",
+            name: "sample-mobile",
             conversations: [
                 { number: "1187", title: "Question sheet", status: KetTheme.ConversationStatus.Completed,
                   worktree: "develop", transcript: "short" },
@@ -318,13 +318,13 @@ QtObject {
         { name: "ketplus-desktop", count: 2, worktrees: [
             { branch: "develop", main: true, path: "/workspace/ketplus-desktop" },
             { branch: "fix/compaction-status", path: "/workspace/ketplus-desktop-compaction" }] },
-        { name: "ketviet", count: 3, agent: true, worktrees: [
-            { branch: "main", main: true, path: "/workspace/ketviet" },
-            { branch: "feat/ketview-production-pilot", path: "/workspace/ketviet-pilot" },
-            { branch: "fix/relay-timeout", path: "/workspace/ketviet-relay" }] },
-        { name: "ketplus-app", count: 2, worktrees: [
-            { branch: "develop", main: true, path: "/workspace/ketplus-app" },
-            { branch: "feat/question-sheet", path: "/workspace/ketplus-app-questions" }] },
+        { name: "sample-project", count: 3, agent: true, worktrees: [
+            { branch: "main", main: true, path: "/workspace/sample-project" },
+            { branch: "feat/ketview-production-pilot", path: "/workspace/sample-project-pilot" },
+            { branch: "fix/relay-timeout", path: "/workspace/sample-project-relay" }] },
+        { name: "sample-mobile", count: 2, worktrees: [
+            { branch: "develop", main: true, path: "/workspace/sample-mobile" },
+            { branch: "feat/question-sheet", path: "/workspace/sample-mobile-questions" }] },
         { name: "ketplus", count: 1, worktrees: [
             { branch: "integration", main: true, path: "/workspace/ketplus" }] },
         { name: "ketchat-desktop", count: 1, worktrees: [
@@ -596,86 +596,11 @@ QtObject {
     // `teams/live`: a team as its members write it. Choices are sentences, a task carries a long
     // Markdown description, lanes and paths are long, and an update is a paragraph. The page and
     // its dialogs must stay inside their width with this content.
-    readonly property var liveTeam: ({
-        id: "pilot", name: "Kingfruit Pilot",
-        goal: "Đưa Kingfruit vào chạy thử: thuế theo người mua, nhập và sửa hàng loạt sản phẩm, bán hàng tại quầy và báo cáo cuối ngày.",
-        repository: "ketviet", branch: "integration", paused: false, merges: "leader",
-        turnBudget: 40, automaticTurns: 12,
-        members: [
-            { number: "1280", title: "Lead Kingfruit Pilot", role: "leader", provider: "Claude · Opus 5.5",
-              lane: "", paths: [], state: "working", now: "Chờ quyết định D-1 để chia tiếp việc" },
-            { number: "1283", title: "Developer 1", role: "developer", provider: "Claude · Opus 5.5",
-              lane: "Thuế, Kế toán & Bán hàng",
-              paths: ["ketsuite/packages/ketsuite/src/modules/account/", "ketsuite/packages/ketsuite/src/modules/product/", "ketsuite/packages/ketsuite/src/modules/sale/"],
-              state: "working", now: "T-1 · bước 2 trên 5" },
-            { number: "1284", title: "Developer 2", role: "developer", provider: "Codex · GPT-5.6 Luna",
-              lane: "Kho, Mua hàng & Sản xuất",
-              paths: ["ketsuite/packages/ketsuite/src/modules/stock/", "ketsuite/packages/ketsuite/src/modules/purchase/"],
-              state: "blocked", now: "T-3 chờ quyết định của bạn" },
-            { number: "1285", title: "Developer 3", role: "developer", provider: "Claude · Opus 5.5",
-              lane: "Giao diện quầy & báo cáo cuối ngày",
-              paths: ["apps/ketsuite/apps/commerce/", "ketsuite/packages/ketsuite/src/modules/report/"],
-              state: "waiting", now: "T-4 đang được review" },
-            { number: "1286", title: "Reviewer", role: "reviewer", provider: "Claude · Opus 5.5",
-              lane: "", reviews: [], paths: [], state: "working", now: "Đang review T-4 · #2251" }
-        ],
-        tasks: [
-            { id: "T-1", title: "Thuế cho tổ chức trong nhập và sửa hàng loạt sản phẩm", owner: "1283",
-              lane: "Thuế, Kế toán & Bán hàng", state: "doing", pr: "", branch: "team/1/t-1", worktree: "ketviet-team-1-t-1", dependsOn: "",
-              description: "**Bối cảnh:** PR #2241 (`feat/commerce-pilot` → `integration`, chưa merge) thêm `account.ProductTax.organisationTaxId` (thuế bán cho người mua là tổ chức) và `partner.CompanyTerms.buyerTaxKind`. Kingfruit: trái cây bán cho cá nhân 5%, bán cho tổ chức thì không kê khai. Thẻ Kế toán của sản phẩm đã sửa được từng cái; còn thiếu đường nhập tệp và sửa hàng loạt để kế toán đặt cho cả catalogue.\n\n**Nhánh nền:** phải có code của #2241. Rẽ từ `origin/integration` sau khi #2241 merge; nếu leader báo chưa merge thì rẽ từ `origin/feat/commerce-pilot`. Không rẽ từ `develop`. Làm trong worktree riêng, không sửa checkout chính.\n\n**File chính:**\n\n- `ketsuite/packages/ketsuite/src/modules/product/{bulk-edit,bulk-history,import-catalogue,import-execution,import-format,import-history}.ts`\n- `product/functions/{bulk-edit,imports,import-export}.ts`, `product_backend/bulk/*`\n- luật kiểm có sẵn ở `product/save-record.ts` và `account/product-tax.ts`\n- Docs: `product-imports.md`, `product-bulk-edit.md` trong `ketsuite/docs`\n\n**Kiểm scoped** (AGENTS.md), deployment `commerce` (`apps/ketsuite/apps/commerce.ts`): chỉ chạy file test http liên quan trong `ketsuite/test/`, cộng `ketsuite/test/ketjs-deployment-contract.test.ts` và `apps/ketsuite/e2e/deployments.e2e.test.ts`. Không chạy full suite.",
-              criteria: [
-                  { text: "Tệp nhập có cột thuế cho tổ chức; dòng sai mã thuế bị từ chối kèm số dòng và lý do", done: true },
-                  { text: "Sửa hàng loạt đặt được thuế cho tổ chức cho mọi sản phẩm đã chọn, có xem trước và hoàn tác", done: false },
-                  { text: "Lịch sử nhập và lịch sử sửa hàng loạt ghi ai đổi thuế, từ giá trị nào sang giá trị nào", done: false },
-                  { text: "Test http liên quan và hai test deployment đều qua", done: false }],
-              history: [
-                  { when: "Today, 09:02", text: "@agent/1280 wrote the acceptance criteria and assigned @agent/1283" },
-                  { when: "Today, 09:40", text: "@agent/1283 started the task in ketviet-team-1-t-1" }] },
-            { id: "T-2", title: "Người mua là tổ chức: chọn loại thuế trên đơn bán và hoá đơn", owner: "1283",
-              lane: "Thuế, Kế toán & Bán hàng", state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-1",
-              description: "Đơn bán và hoá đơn lấy `buyerTaxKind` của đối tác để chọn thuế của từng dòng. Người bán vẫn đổi được trên từng dòng khi có lý do.",
-              criteria: [
-                  { text: "Đơn cho tổ chức dùng thuế tổ chức của sản phẩm; đơn cho cá nhân giữ thuế cũ", done: false },
-                  { text: "Đổi người mua sau khi có dòng thì hỏi trước khi tính lại thuế", done: false }],
-              history: [{ when: "Today, 09:03", text: "@agent/1280 wrote the acceptance criteria" }] },
-            { id: "T-3", title: "Tự mở lệnh sản xuất khi bán hàng chế biến hết tồn", owner: "1284",
-              lane: "Kho, Mua hàng & Sản xuất", state: "blocked", pr: "", branch: "team/1/t-3", worktree: "ketviet-team-1-t-3", dependsOn: "", decision: "D-1",
-              description: "Hàng chế biến (trái cây cắt sẵn, nước ép) bán tại quầy khi hết tồn. Việc này cần quyết định D-1 trước khi viết phần gom lệnh.",
-              criteria: [
-                  { text: "Lệnh sản xuất mở theo quyết định D-1", done: false },
-                  { text: "Nguyên liệu thiếu hiện trên lệnh, kèm số lượng cần mua", done: false }],
-              history: [
-                  { when: "Today, 09:05", text: "@agent/1280 wrote the acceptance criteria and assigned @agent/1284" },
-                  { when: "Today, 10:12", text: "@agent/1284 asked how orders are grouped; @agent/1280 put it to you" }] },
-            { id: "T-4", title: "Báo cáo cuối ngày của quầy: doanh thu theo hình thức thanh toán", owner: "1285",
-              lane: "Giao diện quầy & báo cáo cuối ngày", state: "review", pr: "#2251", branch: "team/1/t-4", worktree: "", dependsOn: "",
-              description: "Một trang in được trên khổ K80: tiền mặt, chuyển khoản, thẻ, công nợ; chênh lệch so với tiền đếm cuối ca.",
-              criteria: [
-                  { text: "Tổng từng hình thức khớp sổ quỹ của ca", done: true },
-                  { text: "In vừa khổ K80, không cắt dòng", done: true }],
-              history: [
-                  { when: "Today, 10:48", text: "@agent/1285 opened #2251 and moved the task to In review" },
-                  { when: "Today, 10:49", text: "@agent/1286 started the review" }] }
-        ],
-        decisions: [
-            { id: "D-1", question: "Khi bán hàng chế biến mà hết tồn, hệ thống tự mở lệnh sản xuất theo cách nào?",
-              detail: "Kingfruit có khoảng 40 món chế biến tại quầy. Mở lệnh theo từng sản phẩm thì bếp nhận nhiều lệnh nhỏ trong giờ cao điểm; gom theo nhóm thì ít lệnh hơn nhưng một món gấp phải chờ cả nhóm. Lựa chọn này quyết định mô hình dữ liệu của T-3 và khó đổi sau khi chạy thử.",
-              askedBy: "1280", task: "T-3", when: "38 min ago",
-              options: ["Theo nhóm sản phẩm: mỗi nhóm một lệnh, gom mọi món hết tồn trong 15 phút",
-                        "Theo từng sản phẩm: mỗi món hết tồn mở một lệnh riêng ngay khi bán",
-                        "Không tự mở: bán hàng báo hết tồn, quản lý bếp tự mở lệnh"],
-              recommended: 0 },
-            { id: "D-2", question: "Merge T-4 into integration?",
-              detail: "The review passed with no findings and every criterion is met.",
-              askedBy: "", kind: "merge", task: "T-4", when: "Just now", options: ["Merge", "Not yet"], recommended: 0 }
-        ],
-        updates: [
-            { icon: "pull-request", text: "T-4 moved to In review", detail: "@agent/1285 · #2251", when: "12 min ago" },
-            { icon: "info", text: "T-1: đã xong phần nhập tệp. Cột `Thuế tổ chức` nhận mã thuế hoặc tên thuế; dòng sai mã bị từ chối kèm số dòng. Còn lại: sửa hàng loạt (xem trước, hoàn tác) và hai bảng lịch sử. Test http `product-imports.http.test.ts` qua 41/41; chưa chạy hai test deployment vì #2241 vừa đổi `commerce.ts`, sẽ chạy lại sau khi rebase lên `origin/integration`.",
-              detail: "@agent/1283 · Thuế, Kế toán & Bán hàng", when: "25 min ago" },
-            { icon: "clock", text: "T-3 is blocked on a decision", detail: "@agent/1284 · D-1 waits for you", when: "38 min ago" },
-            { icon: "warning", text: "T-1 edited a file of another lane", detail: "@agent/1283 · ketsuite/packages/ketsuite/src/modules/stock/valuation.ts belongs to Kho, Mua hàng & Sản xuất", when: "1 hour ago", warning: true }
-        ]
+    // Synthetic long-form variant; no private repository tasks or source paths.
+    readonly property var liveTeam: Object.assign({}, teams[0], {
+        id: "pilot", name: "Sample release",
+        goal: "Prepare a sample release with clear tasks, review criteria and decisions. "
+              + "This fixture demonstrates layout only and contains no live project data."
     })
 
     readonly property var teams: [

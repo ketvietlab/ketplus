@@ -43,8 +43,8 @@ Lampion.
   `apps/desktop/src/remote` and the daemon's host side in `apps/daemon/src/cloud`. Users
   can audit the end-to-end encryption, and the daemon does not have to close again
   because it shares the protocol and keys with the client.
-- `ketplus-app` (iOS and Android) and the relay, gateway, account and KétRouter services
-  in `ketviet` stay private and proprietary. Paid features are enforced by those services,
+- the private mobile app (iOS and Android) and the relay, gateway, account and KétRouter services
+  in the private relay service stay private and proprietary. Paid features are enforced by those services,
   never by a build flag: anyone may build KétPlus Pro from source.
 - Each edition keeps its own version and tag (`lite-v*`, `pro-v*`;
   `docs/release-process.md`). Earlier `cm-v*` tags stay as they are.

@@ -175,7 +175,7 @@ Basic.ApplicationWindow {
         height = on ? Math.min(height, KetTheme.px(760, KetTheme.zoom)) : wideSize.height
     }
     property var archived: [
-        { number: "1022", title: "Spike the relay handshake", repository: "ketviet", when: "Oct 28" },
+        { number: "1022", title: "Spike the relay handshake", repository: "sample-project", when: "Oct 28" },
         { number: "0871", title: "Old onboarding copy", repository: "ketplus-desktop", when: "Oct 12" }
     ]
 

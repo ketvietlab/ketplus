@@ -3,7 +3,8 @@ name: build
 permissions:
   contents: read
 
-# Integration has no CI: authors test what they change before merging there.
+# Integration has no native build CI: authors test changes locally. The separate
+# lightweight public-tree workflow checks publication boundaries on every PR.
 # The build runs on promotion pull requests into develop, on release pull
 # requests into main and on the production main commit. The promotion pull
 # request already built the head that lands on develop.
@@ -39,6 +40,8 @@ jobs:
           version: "6.11.1"
           modules: qtwebsockets
           cache: true
+      - name: Guard public repository boundaries
+        run: python3 tests/hygiene/test_public_tree.py
       - name: Install headless build dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
       - name: Configure independent daemon
