@@ -12,7 +12,7 @@ For each theme:
   cleared in the test, reproducing the previous fixed-bottom placement over the input.
 - `composer-*-after.png`: the real measured composer reservation restored; the toast
   is fully above the attachment and multi-line input with the recipe gap.
-- `*-native-scene.png`: original QQuickView frame used by the corresponding capture.
+- `*-native-scene.png`: one original QQuickView frame per theme, shared by both captures.
 
 QWidget::grab excludes embedded native QQuickView pixels on the offscreen platform.
 The test therefore composes the original QQuickView frame and real QWidget toast
@@ -22,8 +22,9 @@ alongside them so the capture method is reviewable.
 
 The geometry assertions wait for a laid-out viewport, check the initial exact gap,
 verify the composer grows with a multi-line draft and attachment and the toast moves
-up, retain separation after resize, and check the ordinary bottom position returns
-when the workspace is hidden. The before/after images use the grown composer.
+up, retain separation after resize and reparenting/moving a new ancestor, and check
+the ordinary bottom position returns
+when the composer is hidden in transcript-only mode or the workspace is hidden. The before/after images use the grown composer.
 
 Reproduce with `QT_QPA_PLATFORM=offscreen KETPLUS_TOAST_CAPTURES=<scratch>` and run
 `ketplus_agent_shell_tests windowToastsStayAboveTheRealComposer` from a task build.

@@ -11,8 +11,20 @@ import KetPlusMock.Native
 Item {
     id: screen
 
-    readonly property real toastBottomAvoidance: composerBar.visible
-        ? composerBar.parent.height - composerBar.y : 0
+    property Item toastCoordinateSpace: null
+    readonly property real toastBottomAvoidance: {
+        if (!composerBar.visible || !toastCoordinateSpace)
+            return 0
+        // Track ancestor geometry explicitly, then map into the toast parent's space.
+        for (let item = composerBar; item; item = item.parent) {
+            item.y; item.height; item.scale; item.rotation
+        }
+        for (let item = toastCoordinateSpace; item; item = item.parent) {
+            item.y; item.height; item.scale; item.rotation
+        }
+        return Math.max(0, toastCoordinateSpace.height
+                        - composerBar.mapToItem(toastCoordinateSpace, 0, 0).y)
+    }
     required property var window
     property bool detailsOpen: false
     property var contentSession: null

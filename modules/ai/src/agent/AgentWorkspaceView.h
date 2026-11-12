@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QKeySequence>
 #include <QMap>
+#include <QPointer>
 #include <QSet>
 #include <QSize>
 #include <QUrl>
@@ -691,9 +692,15 @@ class AgentWorkspaceView final : public QWidget {
   private:
     // Emits the transcript-only reason and returns true when local actions are unavailable.
     bool localActionRefused();
-    QString localActionReason_;
     void setupToastAvoidance();
+    void refreshToastAncestors();
+    void stopToastAvoidance();
     void updateToastAvoidance();
+
+    QString localActionReason_;
+    QList<QPointer<QWidget>> toastAncestors_;
+    QPointer<QWidget> toastHost_;
+    bool toastAvoidanceTeardown_{false};
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};

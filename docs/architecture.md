@@ -460,6 +460,8 @@ ownership. Pairing confirmation and changed-claim rejection remain daemon-backed
 Agent Workspace maps its QML composer's upper edge through the embedded view into
 window coordinates and registers the reserved bottom height with the kit's generic
 Toast API. Composer and ancestor geometry/visibility notifications refresh the
-reservation; hiding the owning workspace clears it so non-composer views retain
-the default position. The mock and workspace-local QML toast use the equivalent
-Quick reservation. This changes overlay placement only, not transcript/input layout.
+reservation; reparenting refreshes the watched widget ancestors and releases the
+old window only when this workspace owns its reservation. Hiding the workspace or
+its composer clears the owned reservation, and teardown disables geometry callbacks
+before unloading QML. The mock and workspace-local QML toast map the composer into
+the toast parent's coordinate space for the equivalent Quick reservation. This changes overlay placement only, not transcript/input layout.

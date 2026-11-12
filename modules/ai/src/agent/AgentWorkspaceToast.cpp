@@ -12,8 +12,7 @@ constexpr char ownerProperty[] = "_ketplus_toast_composer_owner";
 }
 
 void AgentWorkspaceView::setupToastAvoidance() {
-    for (QWidget* ancestor = this; ancestor; ancestor = ancestor->parentWidget())
-        ancestor->installEventFilter(this);
+    refreshToastAncestors();
     if (auto* root = view_->rootObject()) {
         auto* composer = root->findChild<QQuickItem*>(QStringLiteral("agentBottomComposer"));
         for (auto* item = composer; item; item = item->parentItem()) {
@@ -24,18 +23,46 @@ void AgentWorkspaceView::setupToastAvoidance() {
                     &AgentWorkspaceView::updateToastAvoidance);
         }
     }
-    if (window() != this)
-        connect(this, &QObject::destroyed, window(), [host = window(), owner = this] {
-            if (host->property(ownerProperty).value<QObject*>() == owner) {
-                host->setProperty(ownerProperty, QVariant());
-                ket::Toast::setBottomAvoidance(host, 0);
-            }
-        });
     QTimer::singleShot(0, this, &AgentWorkspaceView::updateToastAvoidance);
 }
 
+void AgentWorkspaceView::refreshToastAncestors() {
+    if (toastAvoidanceTeardown_)
+        return;
+    for (const auto& ancestor : toastAncestors_)
+        if (ancestor)
+            ancestor->removeEventFilter(this);
+    toastAncestors_.clear();
+    for (QWidget* ancestor = this; ancestor; ancestor = ancestor->parentWidget()) {
+        ancestor->installEventFilter(this);
+        toastAncestors_.append(ancestor);
+    }
+    updateToastAvoidance();
+}
+
+void AgentWorkspaceView::stopToastAvoidance() {
+    toastAvoidanceTeardown_ = true;
+    if (toastHost_ && toastHost_->property(ownerProperty).value<QObject*>() == this) {
+        toastHost_->setProperty(ownerProperty, QVariant());
+        ket::Toast::setBottomAvoidance(toastHost_, 0);
+    }
+    for (const auto& ancestor : toastAncestors_)
+        if (ancestor)
+            ancestor->removeEventFilter(this);
+    toastAncestors_.clear();
+}
+
 void AgentWorkspaceView::updateToastAvoidance() {
+    if (toastAvoidanceTeardown_)
+        return;
     QWidget* host = window();
+    if (toastHost_ != host) {
+        if (toastHost_ && toastHost_->property(ownerProperty).value<QObject*>() == this) {
+            toastHost_->setProperty(ownerProperty, QVariant());
+            ket::Toast::setBottomAvoidance(toastHost_, 0);
+        }
+        toastHost_ = host;
+    }
     auto* root = view_->rootObject();
     auto* composer =
         root ? root->findChild<QQuickItem*>(QStringLiteral("agentBottomComposer")) : nullptr;

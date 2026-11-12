@@ -713,7 +713,18 @@ Item {
     Kit.KetToast {
         id: workspaceToast
         objectName: "workspaceToast"
-        bottomAvoidance: composerArea.visible ? composerArea.parent.height - composerArea.y : 0
+        bottomAvoidance: {
+            if (!composerArea.visible)
+                return 0
+            // mapToItem does not establish binding dependencies on ancestor geometry.
+            for (let item = composerArea; item; item = item.parent) {
+                item.y; item.height; item.scale; item.rotation
+            }
+            for (let item = parent; item; item = item.parent) {
+                item.y; item.height; item.scale; item.rotation
+            }
+            return Math.max(0, parent.height - composerArea.mapToItem(parent, 0, 0).y)
+        }
     }
 
     function openTranscriptFind() {

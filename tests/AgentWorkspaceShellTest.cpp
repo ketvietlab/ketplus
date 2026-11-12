@@ -146,6 +146,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(
             QFileInfo(QSettings().fileName()).absoluteFilePath().startsWith(settings.path() + "/"));
         ketplus::ThemeManager theme(*qApp);
+        const auto restoreTheme =
+            qScopeGuard([&] { theme.setMode(ketplus::ThemeManager::Mode::Light); });
         theme.setMode(dark ? ketplus::ThemeManager::Mode::Dark
                            : ketplus::ThemeManager::Mode::Light);
         QVERIFY(!QSettings().contains(QStringLiteral("workspace/lastRoot")));
@@ -203,7 +205,8 @@ class AgentWorkspaceShellTest final : public QObject {
                 const QString name =
                     QStringLiteral("composer-%1-%2").arg(dark ? "dark" : "light", state);
                 QVERIFY(frame.save(QDir(directory).filePath(name + ".png")));
-                QVERIFY(scene.save(QDir(directory).filePath(name + "-native-scene.png")));
+                QVERIFY(scene.save(QDir(directory).filePath(
+                    QStringLiteral("composer-%1-native-scene.png").arg(dark ? "dark" : "light"))));
             }
         };
         const int reserved = window.height() - composerTop();
@@ -215,6 +218,25 @@ class AgentWorkspaceShellTest final : public QObject {
         capture(QStringLiteral("after"));
         window.resize(1100, 860);
         QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        auto* inset = new QWidget(&window);
+        inset->setGeometry(0, 40, window.width(), window.height() - 80);
+        workspace->setParent(inset);
+        workspace->setGeometry(inset->rect());
+        inset->show();
+        workspace->show();
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        inset->move(0, 60);
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        layout->addWidget(workspace);
+        workspace->show();
+        delete inset;
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        workspace->setTranscriptOnly(QStringLiteral("Synthetic remote transcript"));
+        QTRY_VERIFY(!composer->isVisible());
+        QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
+        workspace->setTranscriptOnly(QString());
+        QTRY_VERIFY(composer->isVisible());
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
         workspace->hide();
         QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
         ket::Toast baseline(QStringLiteral("Files and Source Control"), &window,
