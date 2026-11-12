@@ -10,6 +10,8 @@ add_library(ketplus_desktop_support STATIC
     src/machine/MachineCatalog.h
     src/machine/MachineComposition.cpp
     src/machine/MachineComposition.h
+    src/machine/MachineConversationActions.cpp
+    src/machine/MachineConversationActions.h
     src/machine/MachineConversationSession.cpp
     src/machine/MachineConversationSession.h
     src/machine/MachineSelection.cpp

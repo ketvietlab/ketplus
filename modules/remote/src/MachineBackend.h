@@ -30,6 +30,11 @@ class MachineBackend : public QObject {
 
     using Callback = std::function<void(const QJsonObject& result, const QString& error)>;
 
+    // Conversation operations a route may not carry yet. The UI offers each one everywhere and
+    // disables it, with unsupportedReason(), where supports() is false (ADR 0119 "Parity").
+    enum class Feature { Rename, Fork, Archive, Attachments };
+    Q_ENUM(Feature)
+
     using QObject::QObject;
     ~MachineBackend() override = default;
 
@@ -89,6 +94,25 @@ class MachineBackend : public QObject {
     virtual void answerQuestion(const QString& sessionId, qint64 generation,
                                 const QString& questionId, const QJsonObject& resolution,
                                 Callback callback) = 0;
+
+    // Whether this route carries `feature` now (a daemon names its features in the hello, so a
+    // route that is not Connected may not know yet). The default carries none.
+    [[nodiscard]] virtual bool supports(Feature feature) const {
+        Q_UNUSED(feature);
+        return false;
+    }
+    // Why a feature is disabled, for its tooltip.
+    [[nodiscard]] virtual QString unsupportedReason(Feature feature) const;
+    // session.rename {title}.
+    virtual void renameConversation(const QString& sessionId, qint64 generation,
+                                    const QString& title, Callback callback);
+    // session.fork {fork_session_id}: a copy of the conversation under the client-chosen id, so
+    // a retried request cannot fork twice. The result names the new session_id and generation.
+    virtual void forkConversation(const QString& sessionId, qint64 generation,
+                                  const QString& forkSessionId, Callback callback);
+    // session.set_archived {archived}.
+    virtual void setConversationArchived(const QString& sessionId, qint64 generation, bool archived,
+                                         Callback callback);
 
   signals:
     void connectionStateChanged(ketplus::remote::MachineBackend::ConnectionState state,

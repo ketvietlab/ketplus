@@ -10,11 +10,13 @@ class QLabel;
 class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
+class QToolButton;
 
 namespace ketplus {
 
 class MachineApprovalCards;
 class MachineCatalog;
+class MachineConversationActions;
 class MachineConversationSession;
 
 // ADR 0119: the Agent Workspace for a machine other than This Mac. It reads the selected
@@ -34,6 +36,8 @@ class MachineWorkspaceView final : public QWidget {
     void startNewConversation(const QString& repositoryId = {});
     [[nodiscard]] MachineConversationSession* session() const;
     [[nodiscard]] QString openSessionId() const;
+    // Rename, fork and archive of this machine's conversations (the sidebar menu uses it too).
+    [[nodiscard]] MachineConversationActions* actions() const { return actions_; }
 
   signals:
     // A conversation was opened or created, for the sidebar's selection.
@@ -43,6 +47,8 @@ class MachineWorkspaceView final : public QWidget {
     void catalogChanged();
     void render();
     void renderWorktrees();
+    void renderTranscript();
+    void renderActions(bool newConversation);
     void submit();
     void createConversation(const QString& prompt);
     // `reload` reads the conversation again (and the route follows it) when it was not shown.
@@ -59,13 +65,22 @@ class MachineWorkspaceView final : public QWidget {
     QString createCommand_; // a createSession the Relay queued
     QString createError_;
     QMetaObject::Connection createCompletion_;
+    MachineConversationActions* actions_{nullptr};
+    QString actionError_;
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
+    QToolButton* more_{nullptr};
+    QLabel* transcriptNote_{nullptr};
+    QPushButton* older_{nullptr};
+    QString renderedSession_;
+    qint64 renderedFirstCursor_{0};
+    int renderedRows_{0};
     QComboBox* worktrees_{nullptr};
     QListWidget* transcript_{nullptr};
     MachineApprovalCards* approvals_{nullptr};
     QPlainTextEdit* composer_{nullptr};
     QLabel* composerReason_{nullptr};
+    QPushButton* attach_{nullptr};
     QPushButton* send_{nullptr};
     QPushButton* stop_{nullptr};
 };

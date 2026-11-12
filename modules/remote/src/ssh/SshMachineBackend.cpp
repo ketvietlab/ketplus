@@ -353,4 +353,20 @@ void SshMachineBackend::answerQuestion(const QString& sessionId, const qint64 ge
     operations_->answerQuestion(sessionId, generation, questionId, resolution, std::move(callback));
 }
 
+bool SshMachineBackend::supports(const Feature feature) const {
+    return state_ == ConnectionState::Connected && operations_->supports(feature);
+}
+void SshMachineBackend::renameConversation(const QString& sessionId, const qint64 generation,
+                                           const QString& title, Callback callback) {
+    operations_->renameConversation(sessionId, generation, title, std::move(callback));
+}
+void SshMachineBackend::forkConversation(const QString& sessionId, const qint64 generation,
+                                         const QString& forkSessionId, Callback callback) {
+    operations_->forkConversation(sessionId, generation, forkSessionId, std::move(callback));
+}
+void SshMachineBackend::setConversationArchived(const QString& sessionId, const qint64 generation,
+                                                const bool archived, Callback callback) {
+    operations_->setConversationArchived(sessionId, generation, archived, std::move(callback));
+}
+
 } // namespace ketplus::remote::ssh

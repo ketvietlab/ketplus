@@ -51,6 +51,12 @@ class MachineConversationSession final : public QObject {
     // Reads the newest transcript window and the pending approvals; the route follows the
     // conversation's events from then on.
     void load();
+    // Reads the page before the oldest cached event (MachineBackend::transcriptPage) and adds
+    // it in front, newest first, after its large events are reassembled. One page at a time;
+    // a reload drops a page still in flight.
+    void loadOlder();
+    [[nodiscard]] bool hasOlder() const { return hasOlder_; }
+    [[nodiscard]] bool loadingOlder() const { return loadingOlder_; }
     // The conversation is no longer shown: the route stops following it
     // (MachineBackend::conversationClosed). The cached transcript stays.
     void close();
@@ -86,6 +92,10 @@ class MachineConversationSession final : public QObject {
     QVector<QJsonObject> approvals_;
     QString lastError_;
     quint64 approvalsLoad_{0};
+    quint64 windowLoad_{0}; // a newer window or page supersedes the one in flight
+    qint64 snapshotCursor_{0};
+    bool hasOlder_{false};
+    bool loadingOlder_{false};
     int waiting_{0};
     bool open_{false};
     QHash<QString, QString> queued_; // Relay command id -> the card it answers (or empty)

@@ -1,9 +1,11 @@
 #include "machine/MachineConversationSession.h"
 
+#include "MachineLargeEvents.h"
 #include "MachineRows.h"
 
 #include <QJsonArray>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -95,18 +97,91 @@ void MachineConversationSession::load() {
     if (backend_ == nullptr)
         return;
     open_ = true;
-    backend_->transcriptWindow(sessionId_, generation_, {{QStringLiteral("turn_limit"), 3}},
-                               guarded([this](const QJsonObject& result, const QString& error) {
-                                   if (!error.isEmpty()) {
-                                       fail(error); // the cached transcript stays as it was
-                                       return;
-                                   }
-                                   lastError_.clear();
-                                   transcript_.reset(
-                                       result.value(QLatin1String("events")).toArray());
-                                   emit changed();
-                               }));
+    const quint64 load = ++windowLoad_;
+    loadingOlder_ = false;
+    backend_->transcriptWindow(
+        sessionId_, generation_, {{QStringLiteral("turn_limit"), 3}},
+        guarded([this, load](const QJsonObject& window, const QString& error) {
+            if (load != windowLoad_)
+                return;
+            if (!error.isEmpty()) {
+                fail(error); // the cached transcript stays as it was
+                return;
+            }
+            remote::resolveLargeEvents(
+                backend_, sessionId_, generation_, window,
+                guarded([this, load](const QJsonObject& result, const QString& resolveError) {
+                    if (load != windowLoad_)
+                        return;
+                    if (!resolveError.isEmpty()) {
+                        fail(resolveError);
+                        return;
+                    }
+                    lastError_.clear();
+                    transcript_.reset(result.value(QLatin1String("events")).toArray());
+                    snapshotCursor_ = result.value(QLatin1String("snapshot_cursor")).toInteger();
+                    hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
+                                transcript_.firstCursor() > 1;
+                    emit changed();
+                }));
+        }));
     loadApprovals();
+}
+
+void MachineConversationSession::loadOlder() {
+    if (backend_ == nullptr || !hasOlder_ || loadingOlder_)
+        return;
+    const qint64 before = transcript_.firstCursor();
+    if (before <= 1) {
+        hasOlder_ = false;
+        emit changed();
+        return;
+    }
+    // One request both routes read: the daemon's session.transcript_page (before_cursor,
+    // limit) and the Relay's window before a cursor (before_cursor, turn_limit, a snapshot
+    // fence that covers live events read since the window).
+    const QJsonObject request{
+        {QStringLiteral("before_cursor"), before},
+        {QStringLiteral("limit"), 3},
+        {QStringLiteral("turn_limit"), 3},
+        {QStringLiteral("snapshot_cursor"), std::max(snapshotCursor_, before - 1)}};
+    const quint64 load = windowLoad_;
+    loadingOlder_ = true;
+    emit changed();
+    const auto failed = [this, load](const QString& error) {
+        if (load != windowLoad_)
+            return;
+        loadingOlder_ = false;
+        fail(error); // nothing is added; scrolling up again retries
+    };
+    backend_->transcriptPage(
+        sessionId_, generation_, request,
+        guarded([this, load, before, failed](const QJsonObject& page, const QString& error) {
+            if (load != windowLoad_)
+                return;
+            if (!error.isEmpty()) {
+                failed(error);
+                return;
+            }
+            remote::resolveLargeEvents(
+                backend_, sessionId_, generation_, page,
+                guarded([this, load, before, failed](const QJsonObject& result,
+                                                     const QString& resolveError) {
+                    if (load != windowLoad_)
+                        return;
+                    if (!resolveError.isEmpty()) {
+                        failed(resolveError);
+                        return;
+                    }
+                    loadingOlder_ = false;
+                    const QJsonArray events = result.value(QLatin1String("events")).toArray();
+                    transcript_.prepend(events);
+                    // A page that adds nothing ends paging, so a confused route cannot loop.
+                    hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
+                                transcript_.firstCursor() < before && transcript_.firstCursor() > 1;
+                    emit changed();
+                }));
+        }));
 }
 
 void MachineConversationSession::loadApprovals() {

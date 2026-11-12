@@ -99,9 +99,42 @@ Three implementations:
 Existing consumers (`CodexAppServer`, `SessionCatalogReader`, the Connections
 sections) still hold a `DaemonClient` today. They move to a `MachineBackend` one
 at a time, each with its own tests; the local adapter lands first so that move
-changes no behaviour. Operations a consumer needs later (for example fork,
-rename, archive) are added to the interface with their local mapping when that
-consumer moves, not speculatively.
+changes no behaviour. Operations a consumer needs later are added to the
+interface with their local mapping when that consumer moves, not speculatively.
+
+### Parity of conversation operations
+
+`MachineBackend::supports(Feature)` says whether the machine can run a
+conversation operation now, and `unsupportedReason(Feature)` says why not
+("Available once this machine is connected." while it is not Connected, "Not
+available on Linux machines yet." or "Not available through the Relay yet."
+otherwise). Desktop offers every operation on every route: one that is not
+supported is disabled with that reason as its tooltip, never hidden, and an
+operation that fails shows its error.
+
+| Operation | `MachineBackend` | Local and SSH | Relay |
+|---|---|---|---|
+| Rename | `renameConversation` | `session.rename {title}` | Control v2 `session.rename` |
+| Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | not offered: Desktop's Control v2 client does not carry `session.fork` |
+| Archive | `setConversationArchived` | `session.set_archived {archived}`, daemon feature `session.archive/1` | not offered: `session.set_archived` is not a host remote operation |
+| Attachments | none | not offered: `MachineBackend` has no staging operations | not offered |
+| Older transcript pages | `transcriptPage` | `session.transcript_page {before_cursor, limit}` | window before a cursor, with a snapshot fence |
+| Large events | `transcriptLargeEvent` (`remote::resolveLargeEvents`) | fragments, checked by `LargeEventReassembler` | reassembled on the host |
+
+The client names a fork (`fork_session_id`), so a retried request cannot fork
+twice. A queued Relay rename finishes when the host confirms the command.
+
+**Rich renderer (deferred, leader decision A).** A remote conversation uses a
+simplified widget transcript, with a visible note above it: "Simplified
+transcript: rich rendering of conversations on Linux machines is not available
+yet." This Mac's renderer is `AgentWorkspaceView`, which is the whole Agent
+Workspace: its QML composer is bound to the local provider and model
+configuration, file and conversation mentions read from the local disk,
+attachments, worktree activation, terminal, details and changes panes, the
+reviewer, background tasks and Atlas results (about 80 signals). Hosting it
+for a remote machine needs either each of those routed through
+`MachineBackend` or a read-only transcript mode in `modules/ai`. Either is
+tracked separately and is not part of this decision.
 
 ### Machine identity
 
@@ -349,6 +382,11 @@ The code is `ControlV2Client::entitlements()` and
   worktree picker, transcript, composer and approvals of a selected remote
   machine to its backend (agent-workspace.md, "Remote machines"). This Mac keeps
   its existing composition, so its behaviour does not change.
+- Remote parity (T-18): older pages and large events through `MachineBackend`
+  (`MachineConversationSession::loadOlder`, `remote::resolveLargeEvents`),
+  rename, fork and archive through `MachineConversationActions` with the
+  reasons above, and the visible note for the simplified transcript
+  (`tests/MachineTranscriptPagingTest.cpp`).
 - Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
   against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).
