@@ -88,6 +88,7 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     layout->addWidget(approvals_);
     layout->addWidget(composer_);
     layout->addLayout(actions);
+    setupToastAvoidance();
     connect(send_, &QPushButton::clicked, this, &MachineWorkspaceView::submit);
     connect(stop_, &QPushButton::clicked, this, [this] {
         if (session_ != nullptr)

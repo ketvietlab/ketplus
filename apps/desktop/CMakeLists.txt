@@ -23,6 +23,7 @@ add_library(ketplus_desktop_support STATIC
     src/machine/MachineTranscript.cpp
     src/machine/MachineTranscript.h
     src/machine/MachineWorkspaceView.cpp
+    src/machine/MachineWorkspaceToast.cpp
     src/machine/MachineWorkspaceView.h
     src/remote/PairingQrCode.h
     ${ketplus_pairing_qr_source}
