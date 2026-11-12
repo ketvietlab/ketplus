@@ -13,6 +13,7 @@
 #include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
+#include "teams/TeamReviewSettings.h"
 #include "teams/TeamTurnBudget.h"
 
 #include <QButtonGroup>
@@ -192,6 +193,8 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow->addStretch();
     mergeRow_ = mergeRow;
     layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
+    review_ = new TeamReviewFields(team_review::standardRounds, team_review::board, {}, this);
+    layout->addWidget(review_);
 
     budget_ = team_budget::field(tr("Automatic turns"), this);
     budget_->setObjectName(QStringLiteral("teamTurnBudgetField"));
@@ -339,6 +342,8 @@ QJsonObject NewTeamForm::payload() const {
                         permissions_->currentData().toString() == QStringLiteral("full")},
                        {QStringLiteral("leader_writes_requirements"), requirements_->isChecked()},
                        {QStringLiteral("turn_budget"), budget_->text().trimmed().toInt()},
+                       {QStringLiteral("max_rounds"), review_->rounds()},
+                       {QStringLiteral("review_place"), review_->place()},
                        {QStringLiteral("plan"),
                         QJsonObject{{QStringLiteral("leader"), agents_.value(leader).json()},
                                     {QStringLiteral("developers"), developers}}}};

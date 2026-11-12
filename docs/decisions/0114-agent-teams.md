@@ -62,7 +62,8 @@ One engine, a second trigger. A task entering `in_review` sends the team's revie
 `review` message with the task's criteria and the diff of the task's branch against the
 integration branch it was cut from. The verdict line of ADR 0067 decides: `no findings`
 makes the task `ready`; `findings` returns it to its owner with round + 1. Past
-`max_rounds` (default 2, 1 to 3) the task is `blocked` and the leader's digest says why.
+`max_rounds` the task is `blocked` and the leader's digest says why (see *Review rounds
+and where a team reviews* below).
 A reply without the line has **no verdict** (T-19): it does not count a round and goes
 to no one but the reviewer, which is asked once more as the same round. A second reply
 without a verdict blocks the task with one actionable update for the leader. The
@@ -102,6 +103,49 @@ review turn. The reviewer's other turns (its clean-up, the leader's messages) ke
 own mode, as before. A member's own Reviewer setting stays
 stored but does not run while it is on a team, and `session.reviewer.set` is refused
 with `team_member`. *Rejected*: a second review engine — it would drift from 0067.
+
+**Review rounds and where a team reviews (T-40, decided 2026-11-12).** Both are team
+settings, chosen in New team and changed in the team's Review settings (`team.create` and
+`team.update` take `max_rounds` and `review_place`):
+
+- `max_rounds` is **1 or 2**, default 2. The user's rule is at most two review passes,
+  so nothing higher is offered or accepted; any other value is refused with
+  `invalid_payload` ("A team reviews a task in one or two rounds before the leader
+  decides."). A team stored when three were allowed reads as two. With one round, a
+  task whose only round ends with findings is `blocked` for the leader with the
+  `round_limit` update, exactly as the second round is with two.
+- `review_place` is `board` (default) or `pull_request`; anything else is refused in
+  words.
+- A task takes both when it **enters a round** (`round_limit`, `review_place` on the
+  task), so a change applies to tasks that enter review afterwards; a round in flight
+  keeps what it started with. The place is `board` for a task without a pull request
+  URL, and the review message and the history say so ("Reviewed on the board: the task
+  has no pull request").
+
+On the pull request, the reviewer reviews the same diff under the same verify guard and
+replies as on the board, with the verdict line; the message tells it that its reply is
+posted as a review comment on the task's pull request and not to post it itself. The
+guard keeps refusing `gh pr comment` and `gh pr review`: the reviewer stays read-only,
+and **the daemon posts the reply** with `gh pr comment <url> --body-file -` on the same
+bounded worker as the pull request probe (ADR 0118), headed with the task, the round and
+the reviewer. *Rejected*: letting the guard allow a comment — it would widen a security
+property of ADR 0067 for one provider, and the daemon reaches the same comment for every
+reviewer. While the comment is posted the review stays bound to its request, so a stale
+or repeated answer is ignored and the reviewer takes no other review. Then the board
+follows it as it follows a review on the board:
+
+- the round is counted; the `verdict` entry keeps the verdict, the round,
+  `place: pull_request` and `comment_url`, not the findings' text;
+- findings return the task to its owner with the comment's link and the findings;
+- the round limit blocks it for the leader, the question naming the link;
+- `team_review_accept` on such a task names the last comment's link in its history
+  (`comment_url`) beside the leader's evidence.
+
+A comment that cannot be posted (no `gh`, not signed in, offline) does not lose the
+review: the verdict is recorded on the board with the findings' text, `comment_error`
+and the reason in words. A reply without a verdict is never posted. A restart while a
+comment is posted leaves the review bound with no answer coming; the leader voids or
+accepts it as any stalled review.
 
 ### 3. Decisions live on the team page (decided)
 
@@ -490,6 +534,11 @@ what the leader and the developers may do without asking. `full` needs
 those conversations when the team starts them, at creation and for a developer added
 later; the user changes one member in its conversation. The reviewer is not in it: its
 review turns run under the verify profile whatever its conversation's policy is (ADR 0067).
+
+`team.create` and `team.update` take `max_rounds` (1 or 2; 2 when absent) and
+`review_place` (`board` or `pull_request`; `board` when absent), and the team's document
+returns both (§2). These are local commands; the relay contract and the phone's
+`team.update` are unchanged, so a phone creates a team with two rounds on the board.
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,

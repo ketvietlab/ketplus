@@ -27,6 +27,7 @@ class TextField;
 namespace ketplus {
 
 class TeamDirectory;
+class TeamReviewFields;
 
 // #465: a whole team in one dialog. One team.create; on a refusal the dialog stays open with
 // what was typed and the error at the role it names.
@@ -90,6 +91,7 @@ class NewTeamForm final : public QWidget {
     ket::FieldRow* permissionsRow_{nullptr};
     // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
     ket::TextField* budget_{nullptr};
+    TeamReviewFields* review_{nullptr};
     ket::SegmentedControl* developers_;
     // T-23: one or two reviewers; two review two tasks at the same time.
     ket::SegmentedControl* reviewers_;
