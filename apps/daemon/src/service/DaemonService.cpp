@@ -214,6 +214,7 @@ bool DaemonService::start() {
     ipc_ = std::make_unique<LocalIpcServer>(host_.get(), configuration_.socketName, token,
                                             cloud_.get());
     ipc_->setClaudeCredentials(claudeCredentials_.get());
+    ipc_->setHostKeyFingerprint([cloud = cloud_.get()] { return cloud->hostKeyFingerprint(); });
     connect(ipc_.get(), &LocalIpcServer::shutdownRequested, QCoreApplication::instance(),
             &QCoreApplication::quit, Qt::QueuedConnection);
     if (!ipc_->listen()) {

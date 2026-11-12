@@ -507,6 +507,10 @@ bool CloudControlClient::storeString(const QString& account, const QString& valu
     return credentials_.write(account, value.toUtf8(), error);
 }
 
+QString CloudControlClient::hostKeyFingerprint(QString* error) {
+    return DevicePins::hostFingerprint(crypto_.publicKeys(error));
+}
+
 void CloudControlClient::createPairing(LocalCallback callback) {
     ensureDaemonCredential([this, callback = std::move(callback)](const bool ready,
                                                                   const QString& error) {

@@ -27,9 +27,18 @@ class DaemonClient final : public QObject {
     [[nodiscard]] bool hasFeature(const QString& feature) const {
         return features_.contains(feature);
     }
+    // ADR 0119 "Machine identity": the host key fingerprint the daemon named at daemon.hello
+    // (daemon.host_identity/1); empty until then or from a daemon that names none.
+    [[nodiscard]] QString hostKeyFingerprint() const { return hostKeyFingerprint_; }
     [[nodiscard]] bool hasCapability(const QString& capability) const {
         return ready_ && capabilities_.contains(capability);
     }
+    // ADR 0119 "Host key rotation": the machine id a remote route last trusted. Set, a hello that
+    // names another fingerprint (or none) fails closed: nothing queued is sent, every call fails
+    // with identityRejectedReason() and the client stops reconnecting until this is set again.
+    void setTrustedHostKeyFingerprint(const QString& fingerprint);
+    [[nodiscard]] bool identityRejected() const noexcept { return identityRejected_; }
+    [[nodiscard]] static QString identityRejectedReason();
     // Set before connecting; only transcript-aware Desktop opts into summary-only events.
     void setActivityGroupsEnabled(bool enabled) { activityGroupsEnabled_ = enabled; }
     void call(const QString& type, const QJsonObject& payload, const QString& sessionId,
@@ -47,6 +56,8 @@ class DaemonClient final : public QObject {
     // A daemon push that is not a session event, such as `tags.changed` (#429).
     void noticeReceived(const QString& type, const QJsonObject& payload);
     void disconnected(const QString& reason);
+    // The hello named `presented` instead of the trusted fingerprint (empty: it named none).
+    void hostIdentityRejected(const QString& presented);
 
   private:
     friend class DaemonClientTestAccess;
@@ -102,6 +113,9 @@ class DaemonClient final : public QObject {
     QString clientId_;
     QStringList features_;
     QStringList capabilities_;
+    QString hostKeyFingerprint_;
+    QString trustedHostKeyFingerprint_;
+    bool identityRejected_{false};
     bool activityGroupsEnabled_{false};
     int protocolMinor_{0};
     bool ready_{false};

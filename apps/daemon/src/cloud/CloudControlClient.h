@@ -65,6 +65,10 @@ class CloudControlClient final : public QObject {
                       relayInterruptTtlMilliseconds,
                   "a Stop must be claimed before the relay expires it");
 
+    // ADR 0119 "Machine identity": the fingerprint of this host's key set, the same one a pairing
+    // QR code carries. The keys are created on first use, so a host has one without signing in.
+    [[nodiscard]] QString hostKeyFingerprint(QString* error = nullptr);
+
   private:
     friend class CloudPrivacyTestAccess;
     using ReplyCallback = std::function<void(int, const QJsonValue&, const QString&)>;

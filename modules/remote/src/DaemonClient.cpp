@@ -170,8 +170,27 @@ bool DaemonClient::isAvailable() const noexcept { return !daemonExecutable().isE
 
 bool DaemonClient::isReady() const noexcept { return ready_; }
 
+void DaemonClient::setTrustedHostKeyFingerprint(const QString& fingerprint) {
+    trustedHostKeyFingerprint_ = fingerprint;
+    if (!std::exchange(identityRejected_, false))
+        return;
+    // An explicit re-trust: connect again, as a first attempt.
+    reconnectAttempt_ = 0;
+    connectToDaemon();
+}
+
+QString DaemonClient::identityRejectedReason() {
+    return QStringLiteral("This machine's identity changed. Check it in Connections before "
+                          "trusting it again.");
+}
+
 void DaemonClient::call(const QString& type, const QJsonObject& payload, const QString& sessionId,
                         const qint64 generation, ResponseCallback callback) {
+    if (identityRejected_) {
+        if (callback)
+            callback({}, identityRejectedReason());
+        return;
+    }
     QueuedCall call{{}, type, payload, sessionId, generation, std::move(callback), ++nextSequence_};
     enqueue(std::move(call));
     if (!ready_) {
@@ -217,7 +236,7 @@ QString DaemonClient::defaultStatePath() { return DaemonPaths::state(); }
 QString DaemonClient::defaultTokenPath() { return DaemonPaths::token(); }
 
 void DaemonClient::connectToDaemon() {
-    if (ready_ || socket_.state() == QLocalSocket::ConnectedState ||
+    if (identityRejected_ || ready_ || socket_.state() == QLocalSocket::ConnectedState ||
         socket_.state() == QLocalSocket::ConnectingState) {
         return;
     }
@@ -226,7 +245,7 @@ void DaemonClient::connectToDaemon() {
 }
 
 void DaemonClient::scheduleReconnect() {
-    if (reconnectTimer_.isActive() || ready_) {
+    if (identityRejected_ || reconnectTimer_.isActive() || ready_) {
         return;
     }
     const int exponent = qMin(reconnectAttempt_++, 6);
@@ -306,6 +325,17 @@ void DaemonClient::authenticate() {
             features_.clear();
             for (const QJsonValue& value : result.value(QStringLiteral("features")).toArray())
                 features_.append(value.toString());
+            hostKeyFingerprint_ = result.value(QStringLiteral("host_key_fingerprint")).toString();
+            if (!trustedHostKeyFingerprint_.isEmpty() &&
+                hostKeyFingerprint_ != trustedHostKeyFingerprint_) {
+                // Fail closed before anything queued reaches a machine we did not trust.
+                identityRejected_ = true;
+                reconnectTimer_.stop();
+                failPending(identityRejectedReason());
+                emit hostIdentityRejected(hostKeyFingerprint_);
+                socket_.abort();
+                return;
+            }
             const QString daemonVersion = result.value(QStringLiteral("daemon_version")).toString();
             const QVersionNumber running = QVersionNumber::fromString(daemonVersion);
             const QVersionNumber bundled =
