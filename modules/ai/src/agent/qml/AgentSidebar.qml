@@ -339,7 +339,7 @@ Rectangle {
                 spacing: 1
                 Text {
                     width: parent.width
-                    text: "KetPlus"
+                    text: "ketPlus"
                     color: KetTheme.t.textMain
                     elide: Text.ElideRight
                     font.family: KetTheme.fontFamily
