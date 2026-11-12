@@ -48,9 +48,19 @@ and a digest instead of status messages — and leaves messaging as it is.
 One engine, a second trigger. A task entering `in_review` sends the team's reviewer a
 `review` message with the task's criteria and the diff of the task's branch against the
 integration branch it was cut from. The verdict line of ADR 0067 decides: `no findings`
-makes the task `ready`; `findings`, or a reply without the line, returns it to its owner
-with round + 1. Past `max_rounds` (default 2, 1 to 3) the task is `blocked` and the
-leader's digest says why. A busy reviewer **queues** requests first in, first out,
+makes the task `ready`; `findings` returns it to its owner with round + 1. Past
+`max_rounds` (default 2, 1 to 3) the task is `blocked` and the leader's digest says why.
+A reply without the line has **no verdict** (T-19): it does not count a round and goes
+to no one but the reviewer, which is asked once more as the same round. A second reply
+without a verdict blocks the task with one actionable update for the leader. The
+history records each such reply as a `verdict` entry with `no_verdict`. The leader
+corrects the record with two tools, refused with `role_forbidden` for any other role:
+`team_review_void` (task and reason) voids the last counted round of a task that is
+`ready`, `in_progress` or blocked by its review, and returns it to `in_review` with the
+round back by one and its open merge decisions withdrawn; `team_review_accept` (task,
+evidence such as a pull request review's URL, and reason) makes a task in review, or
+blocked by its review, `ready` and drops a queued or running review of it. Both leave
+history (`verdict_voided`, `review_accepted`) and need no new commit. A busy reviewer **queues** requests first in, first out,
 instead of skipping them. The daemon reads the diff off its event loop before the review
 starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
 again, and a diff that is no longer for the next task or the team's integration branch is

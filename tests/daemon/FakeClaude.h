@@ -141,6 +141,8 @@ for line in sys.stdin:
                    'Should I push and open the PR?')
         elif 'no-findings' in params.get('prompt', ''):
             finish(session_id, turn_id, thread_id, 'Looks fine.\nVerdict: no findings')
+        elif 'with-findings' in params.get('prompt', ''):
+            finish(session_id, turn_id, thread_id, 'README.md:1 needs work.\nVerdict: findings')
         else:
             finish(session_id, turn_id, thread_id)
     elif method == 'thread/fork':

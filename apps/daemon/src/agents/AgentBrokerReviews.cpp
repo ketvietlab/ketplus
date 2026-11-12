@@ -1,5 +1,6 @@
 // ADR 0067: automatic review of a conversation's finished turns by its chosen reviewer.
 #include "agents/AgentBroker.h"
+#include "agents/ReviewVerdict.h"
 #include "storage/LocalJournal.h"
 
 #include <QDateTime>
@@ -65,17 +66,6 @@ void runGit(QObject* owner, const QString& directory, const QStringList& argumen
     QTimer::singleShot(gitTimeoutMs, process, [process] { process->kill(); });
     process->start(QStringLiteral("git"),
                    QStringList{QStringLiteral("--no-optional-locks")} + arguments);
-}
-
-// The reviewer's last "Verdict:" line. A missing one counts as findings; rounds still bound it.
-bool reportsNoFindings(const QString& text) {
-    static const QRegularExpression verdict(
-        QStringLiteral("^\\W*verdict\\W*:\\s*(no findings|findings)\\b"),
-        QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
-    QString last;
-    for (auto match = verdict.globalMatch(text); match.hasNext();)
-        last = match.next().captured(1).toLower();
-    return last == QStringLiteral("no findings");
 }
 
 // `git diff --name-status` lines as "path (added)", "old → new (renamed)" and so on.
@@ -193,7 +183,9 @@ QString reviewBody(const AgentConversation& working, const QString& base, const 
 
 // A snapshot is the tree of every tracked and untracked (not ignored) file, written through
 // a copy of the worktree's index so neither the worktree nor its index changes.
-bool AgentBroker::verdictHasNoFindings(const QString& text) { return reportsNoFindings(text); }
+bool AgentBroker::verdictHasNoFindings(const QString& text) {
+    return reviewVerdict(text) == ReviewVerdict::noFindings;
+}
 
 void AgentBroker::snapshotWorktree(const QString& worktree,
                                    std::function<void(std::optional<QString>)> done) {
@@ -381,9 +373,11 @@ bool AgentBroker::recordReviewReply(AgentMessageRecord& reply, const AgentMessag
     if (request.kind != QStringLiteral("review"))
         return false;
     const auto reviewer = journal_->conversationReviewer(request.fromSession);
-    const bool noFindings = reportsNoFindings(reply.body);
+    // T-19: only findings start a fix turn; a reply without a verdict line is recorded as
+    // "no verdict" and sends nothing to fix.
+    const ReviewVerdict verdict = reviewVerdict(reply.body);
     const bool fix =
-        !noFindings && reviewer && reviewer->autoFix &&
+        verdict == ReviewVerdict::findings && reviewer && reviewer->autoFix &&
         journal_->reviewRequestsInChain(request.chainId, request.fromSession) < reviewer->maxRounds;
     if (fix)
         return false; // Delivered as usual: the idle working agent starts a turn on it.
@@ -402,8 +396,7 @@ bool AgentBroker::recordReviewReply(AgentMessageRecord& reply, const AgentMessag
                               {QStringLiteral("kind"), reply.kind},
                               {QStringLiteral("state"), QStringLiteral("review_recorded")},
                               {QStringLiteral("reply_to"), request.id},
-                              {QStringLiteral("verdict"), noFindings ? QStringLiteral("no_findings")
-                                                                     : QStringLiteral("findings")},
+                              {QStringLiteral("verdict"), verdictName(verdict)},
                               {QStringLiteral("body"), reply.body},
                               {QStringLiteral("direction"), QStringLiteral("incoming")},
                               {QStringLiteral("peer_number"), reply.fromNumber},
