@@ -242,7 +242,7 @@ QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"@mono@"; font
 QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
 QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{px:22}}px; font-weight:500; }
 QLabel#linuxMachinesNotice { color:@secondary@; font-size:{{body}}px; }
-QLabel#linuxMachinesNotice[remoteTone="danger"] { color:@danger@; }
+QLabel#linuxMachinesNotice[remoteTone="danger"], QLabel#linuxMachineError, QLabel#linuxDetailsError, QLabel#linuxSshFeedback[remoteTone="danger"] { color:@danger@; }
 QFrame[remoteRole="surface"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
 QFrame[remoteRole="surfaceAccent"] { border:1px solid @accentBorder@; border-radius:7px; background:@panel@; }
 QFrame[remoteRole="signInCard"] { border:1px solid @border@; border-radius:9px; background:@panel@; }
@@ -521,7 +521,7 @@ QWidget* RemoteControlView::createControlPage() {
         // Linux pairing goes through its own account, so only phones wait for this Mac's relay.
         phone->setEnabled(!offline_ && !requestInFlight_);
         auto* linux = menu.addAction(tr("Connect a Linux machine"));
-        linux->setToolTip(tr("Through the KetPlus Relay"));
+        linux->setToolTip(tr("Over SSH or the ketPlus Relay"));
         const auto* chosen = menu.exec(pairButton_->mapToGlobal(QPoint(0, pairButton_->height())));
         if (chosen == phone)
             createPairing();
