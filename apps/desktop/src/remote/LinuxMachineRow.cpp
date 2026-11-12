@@ -260,10 +260,12 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     form->addRow(tr("State"), state);
     // The Relay host's own presence: Connected means only that the Relay answers.
     auto* host = value("linuxDetailsHost");
+    host->setWordWrap(false);
     form->addRow(tr("Host"), host);
-    auto* pending = value("linuxDetailsPending");
-    form->addRow(QString(), pending);
+    // What waits for the host: pending outcomes, and how long new requests may wait.
     auto* wait = value("linuxDetailsWait");
+    // Short lines, laid out unwrapped: a wrapped label in the form is sized a line too tall.
+    wait->setWordWrap(false);
     form->addRow(QString(), wait);
     auto* fingerprint = value("linuxDetailsFingerprint");
     const QFont plain = fingerprint->font();
@@ -272,8 +274,8 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         mono.setFamily(family);
     mono.setStyleHint(QFont::Monospace);
     mono.setPixelSize(13); // the mock's 13 px, so a SHA256 key fits the card on one line
-    form->addRow(machine.route == LinuxMachine::Route::Ssh ? tr("Host key") : tr("Host identity"),
-                 fingerprint);
+    // The daemon's host key on either route (ADR 0119): the SSH key, or the one pinned at pairing.
+    form->addRow(tr("Host key"), fingerprint);
     auto* verifiedLabel = value("linuxDetailsVerified");
     form->addRow(QString(), verifiedLabel);
     auto* unavailable = value("linuxDetailsUnavailable");
@@ -332,9 +334,8 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         });
     }
     // What can change while the card is open: the state, the key once verified, the error.
-    const auto refresh = [guard, id, dialog, form, state, host, pending, wait, unavailable,
-                          fingerprint, verifiedLabel, error, connect, disconnect, forget, trust,
-                          plain, mono] {
+    const auto refresh = [guard, id, dialog, form, state, host, wait, unavailable, fingerprint,
+                          verifiedLabel, error, connect, disconnect, forget, trust, plain, mono] {
         const auto* current = guard ? guard->machine(id) : nullptr;
         if (!current) {
             dialog->reject();
@@ -346,9 +347,11 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         host->setText(presence);
         host->setProperty("remoteTone", hostAway(*current) ? QStringLiteral("warning") : QString());
         form->setRowVisible(host, !presence.isEmpty());
-        pending->setText(pendingText(*current));
-        form->setRowVisible(pending, !pending->text().isEmpty());
-        wait->setText(waitText(*current));
+        QStringList waits;
+        for (const auto& line : {pendingText(*current), waitText(*current)})
+            if (!line.isEmpty())
+                waits.append(line);
+        wait->setText(waits.join(QLatin1Char('\n')));
         form->setRowVisible(wait, !wait->text().isEmpty());
         unavailable->setText(unavailableText(*current));
         form->setRowVisible(unavailable, !unavailable->text().isEmpty());

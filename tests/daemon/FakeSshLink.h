@@ -127,7 +127,7 @@ class FakeLink final : public SshLink {
         setTunnelState(SshTunnel::State::Idle);
     }
     [[nodiscard]] SshTunnel::State state() const override { return state_; }
-    [[nodiscard]] QString fingerprint() const override { return QStringLiteral("SHA256:sshkey"); }
+    [[nodiscard]] QString fingerprint() const override { return hostKey; }
     [[nodiscard]] bool fingerprintVerified() const override {
         return state_ != SshTunnel::State::HostKeyMismatch;
     }
@@ -161,6 +161,8 @@ class FakeLink final : public SshLink {
     }
 
     bool autoConnect{true};
+    // The SSH host key the link reports as verified.
+    QString hostKey{QStringLiteral("SHA256:sshkey")};
     int opens{0};
     QString knownHosts;
     SshTunnel::HostKeyPrompt prompt;

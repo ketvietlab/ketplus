@@ -24,7 +24,29 @@ Known differences:
   card shows only the badge.
 - The app's Details card is 540 px wide instead of 500 px. At the app's font
   metrics, the full SHA256 key needs that width to stay on one line.
-- The app captures set `LinuxMachineModel::setBackendsAttached(true)`: they
-  show the UI as it will be once T-6 attaches the SSH and Relay backends.
-  Until then the SSH mode and Connect / Disconnect are hidden and a Relay
-  machine reads "Available".
+- The rows captures above set `LinuxMachineModel::setBackendsAttached(true)`
+  on a hand-written model. The wired captures below come from the real
+  controllers.
+
+## Wired backends (T-13)
+
+The same capture run also renders Connections with the real controllers
+attached. `LinuxSshMachines` drives `SshMachineBackend` over a fake link to a
+fake daemon (`tests/daemon/FakeSshLink.h`), connected from the connect card.
+`LinuxRelayMachines` drives a fake Relay link (`tests/FakeRelayLink.h`) for a
+host that the Relay lists with its pinned key, last seen 9 minutes ago.
+
+| | Mock | App |
+| --- | --- | --- |
+| Rows | [mock-rows.png](mock-rows.png) | [app-wired-rows-light.png](app-wired-rows-light.png), [dark](app-wired-rows-dark.png) |
+| Relay Details | [mock-details.png](mock-details.png) | [app-wired-relay-details.png](app-wired-relay-details.png) |
+| SSH Details with Remove | [mock-details.png](mock-details.png) | [app-wired-ssh-details.png](app-wired-ssh-details.png) |
+
+Differences from the mock:
+
+- A Relay host that has not been seen for more than two minutes reads "Host
+  offline" with "last seen …" under its detail line, and its Details says that
+  requests wait for the host for up to 15 minutes. The mock has no presence.
+- Details names the daemon's key "Host key" on both routes. On the Relay it is
+  the key pinned at pairing, shown as Verified.
+- Remove appears only for SSH machines.

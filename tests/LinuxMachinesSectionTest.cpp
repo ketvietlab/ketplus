@@ -1,4 +1,5 @@
 #include "remote/LinuxMachinesSection.h"
+#include "FakeRelayLink.h"
 #include "control/ControlV2Client.h"
 #include "remote/AccountEntitlements.h"
 #include "remote/LinuxMachineModel.h"
@@ -26,6 +27,7 @@ class RemoteControlTestAccess {
         client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
     }
     static void pin(ControlV2Client& client, const QJsonObject& pins) { client.hostPins_ = pins; }
+    static void signOut(ControlV2Client& client) { client.credential_ = {}; }
     static void entitle(ControlV2Client& client, const QJsonArray& entitlements) {
         client.credential_.insert(QStringLiteral("entitlements"), entitlements);
     }
@@ -57,6 +59,7 @@ class LinuxMachinesSectionTest final : public QObject {
     void enterConnectsAndAHostKeyFocusesReject();
     void detailsShowAnOfferedKeyAsAMismatchAndOfferRetrust();
     void theRelayFollowsTheAccountEntitlement();
+    void theRelayStopsWhenTheSessionIsRevoked();
     void aForgottenKeyReopensTheCardOnThatHost();
 
   private:
@@ -652,6 +655,32 @@ void LinuxMachinesSectionTest::detailsShowAnOfferedKeyAsAMismatchAndOfferRetrust
     button(details, QStringLiteral("linuxDetailsRemove"))->click();
     QCOMPARE(removed.size(), 1);
     QCOMPARE(removed.first().first().toString(), QStringLiteral("ssh-1"));
+}
+
+void LinuxMachinesSectionTest::theRelayStopsWhenTheSessionIsRevoked() {
+    LinuxMachinesSection section;
+    QPointer<testing::FakeRelayLink> link;
+    section.attachRelayBackend([&link](const QString& relayId) {
+        auto made = std::make_unique<testing::FakeRelayLink>(relayId);
+        link = made.get();
+        return made;
+    });
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QString::fromLatin1(relayEntitlementName)});
+    section.syncEntitlement();
+    section.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"),
+                                QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+    QVERIFY(link);
+    QCOMPARE(link->connects, 1);
+    QCOMPARE(section.model()->machines().first().state, State::Connected);
+    QCOMPARE(section.machineBackend(QStringLiteral("SHA256:pinned")), link->backend());
+    // The relay refused the refresh credential: signed out, so the Relay stops.
+    remote::RemoteControlTestAccess::signOut(*section.client_);
+    emit section.client_->credentialRevoked();
+    QCOMPARE(link->disconnects, 1);
+    QVERIFY(!section.model()->relayEntitled());
+    QVERIFY(!section.model()->machines().first().connectable);
 }
 
 void LinuxMachinesSectionTest::theRelayFollowsTheAccountEntitlement() {

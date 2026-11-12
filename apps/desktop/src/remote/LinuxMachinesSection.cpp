@@ -88,6 +88,11 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
         if (error.isEmpty())
             refreshMachines();
     });
+    // A revoked session is signed out: the Relay stops and its rows offer no Connect.
+    connect(client_, &remote::ControlV2Client::credentialRevoked, this, [this] {
+        syncEntitlement();
+        render();
+    });
     presence_ = new QTimer(this);
     presence_->setInterval(60 * 1000);
     connect(presence_, &QTimer::timeout, this, [this] {
@@ -153,10 +158,8 @@ void LinuxMachinesSection::attachRelayBackend(LinuxRelayMachines::LinkFactory li
     relay_ = new LinuxRelayMachines(
         model_, links ? std::move(links) : LinuxRelayMachines::systemLinks(client_), this);
     presence_->start();
+    // The listing arrives when Connections opens (activate()).
     syncEntitlement();
-    // The rows the section already lists get their links.
-    if (client_->signedIn())
-        refreshMachines();
     render();
 }
 

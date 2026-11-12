@@ -181,6 +181,7 @@ target_link_libraries(ketplus_conversation_attention_tests PRIVATE
 )
 
 ketplus_add_gui_test(ketplus_remote_workspace_tests RemoteControlViewTest.cpp)
+target_include_directories(ketplus_remote_workspace_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ketplus_remote_workspace_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
