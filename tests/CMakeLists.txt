@@ -64,6 +64,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentUsageCostDetailsTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
     AgentWorkspaceMotionTest.cpp
