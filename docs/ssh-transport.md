@@ -37,7 +37,7 @@ child environment sets `SSH_ASKPASS_REQUIRE=never`, which also covers
    `/dev/null` and `KnownHostsCommand` set to a private script that records
    `%H %t %K` (name, type, key) in a 0700 temporary directory. With no known key
    ssh refuses the host before authentication, so the probe offers no
-   credential and runs nothing on the host. OpenSSH 8.5 or later is required.
+   credential and runs nothing on the host.
 3. **Verify.** `ssh-keygen -F <name>` looks the name up in each user file and
    in the KetPlus-owned file, matching plain, `[host]:port` and hashed entries
    as ssh does. `ssh -G` prints known_hosts paths unquoted, so a path with a
@@ -100,12 +100,23 @@ Steps 4 and 5 pass the user files and the KetPlus file as `UserKnownHostsFile`
 and restrict `HostKeyAlgorithms` to the verified key type, so ssh checks the key
 again; a key that changes after the probe fails closed in ssh itself.
 
+## OpenSSH versions
+
+- Client: OpenSSH 8.5 or later, for `KnownHostsCommand` (step 2). It also
+  covers `ssh -W <socket path>`, which needs Unix-domain socket forwarding
+  (`direct-streamlocal@openssh.com`, OpenSSH 6.7).
+- Host: OpenSSH 6.7 or later with `AllowStreamLocalForwarding` left at its
+  default (`yes`, or `local`). With it disabled, or with a stale socket file
+  that nothing accepts on, locate succeeds but every forward fails: the tunnel
+  stays `Offline` with growing backoff and never reports `Connected`.
+- Tested with OpenSSH 9.6p1 (Linux) and 10.0p2 (macOS).
+
 ## States
 
 | State | Meaning | Next |
 | --- | --- | --- |
 | `Connecting` | Resolving, probing, locating or forwarding. | |
-| `Connected` | `device()` is the daemon connection. | |
+| `Connected` | The forwarder stayed up for `settleMilliseconds` (1.5 s) after the bridge connected, or carried daemon bytes sooner; `device()` is the daemon connection. | |
 | `Offline` | The host, the forward or the daemon connection failed or closed. | Reconnects. |
 | `DaemonSocketMissing` | The host is reachable but no daemon listens at the resolved socket, or it has no local token. | Reconnects. |
 | `DaemonTokenInsecure` | The daemon token is readable by other users. | Waits for `open()`. |
@@ -115,7 +126,20 @@ again; a key that changes after the probe fails closed in ssh itself.
 
 A reconnect repeats the whole route, including host-key verification. Its delay
 doubles from `initialBackoffMilliseconds` (1 s) up to
-`maximumBackoffMilliseconds` (30 s) and resets after each `Connected`.
+`maximumBackoffMilliseconds` (30 s). It resets only when daemon bytes come back
+through the channel, not when the settle timer fires: the timer shows only that
+the forwarder is still running, and a slow link or a ProxyJump hop can fail
+later. A bridge that fails within the settle period never reports `Connected`;
+one that fails later reports it at most once per growing backoff interval.
+
+`hostKeyStatus()` follows the same steps: `Verified` once the key matched (on
+the CA path once ssh accepted the certificate in the locate call, even when
+the daemon socket or token is then missing),
+`Mismatch` whenever the tunnel stops in `HostKeyMismatch`, including a refusal
+by ssh in the locate or forward call. Teardown (`close()`, a failed attempt or
+the destructor) kills any running ssh child without blocking: the child is
+detached from the tunnel and deletes itself once it is reaped, so no `QProcess`
+is destroyed while it runs.
 
 ## Security properties
 
@@ -154,7 +178,12 @@ cleared on close and absent from every log message), rejection, a changed key
 a key of another known type, finds a different one, or finds no known type,
 a second probe that cannot reach the host (`Offline`), `@revoked` and
 `@cert-authority` lines, a refused account, a stopped daemon that later starts,
-a permissive or missing token, and reconnection after the daemon drops the
+a permissive or missing token, a key that changes between the lookup and
+locate (`Mismatch`), a stale daemon socket that fails every forward (never
+`Connected`, backoff grows), a forward that fails after the settle timer
+reported `Connected` (the backoff still grows), a CA-signed host certificate
+accepted with no daemon running (`Verified`), destroying a connected tunnel without a
+`QProcess` warning, and reconnection after the daemon drops the
 connection (the token is empty in every state but `Connected`). Parser,
 error-classification and socket/token-resolution cases run without sshd. Where `/usr/sbin/sshd` is missing
 or cannot run as the user, the sshd cases skip.

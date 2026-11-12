@@ -8,6 +8,7 @@
 #include <QLoggingCategory>
 #include <QProcess>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -304,6 +305,10 @@ class SshTunnelTest : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::Connected, patience);
         QCOMPARE(tunnel.daemonCredential(), fixture.token);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.daemonConnections.size(), 2, patience);
+        // The backoff resets once daemon bytes come back through the new channel.
+        QVERIFY(tunnel.reconnectAttempts() >= 1);
+        tunnel.device()->write("ping");
+        QTRY_VERIFY_WITH_TIMEOUT(tunnel.device()->bytesAvailable() >= 4, patience);
         QCOMPARE(tunnel.reconnectAttempts(), 0);
         tunnel.close();
         QCOMPARE(tunnel.state(), SshTunnel::State::Idle);
@@ -392,10 +397,177 @@ class SshTunnelTest : public QObject {
         // A CA line for the host hands the check to ssh, which needs a certificate this host
         // does not present: it fails closed rather than prompting.
         fixture.trust(publicKey(fixture.path("other"), {}), "@cert-authority");
+        // ssh has not accepted a certificate yet, so the status is never Verified on the way.
+        QList<HostKeyStatus> seen;
+        QTimer sampler;
+        QObject::connect(&sampler, &QTimer::timeout, &sampler,
+                         [&] { seen.append(tunnel.hostKeyStatus()); });
+        sampler.start(5);
         tunnel.open();
         QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::HostKeyMismatch, patience);
+        sampler.stop();
+        QVERIFY(!seen.contains(HostKeyStatus::Verified));
+        QCOMPARE(tunnel.hostKeyStatus(), HostKeyStatus::Mismatch);
         QVERIFY(!asked);
         QCOMPARE(fixture.daemonConnections.size(), 0);
+    }
+
+    void aKeyThatChangesAfterTheProbeIsAMismatch() {
+        SshFixture fixture;
+        if (!fixture.start())
+            QSKIP(qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        const auto keygen = QStandardPaths::findExecutable("ssh-keygen");
+        QVERIFY(!keygen.isEmpty());
+        // The lookup sees the recorded key; the host's entry then changes before locate().
+        const auto other = publicKey(fixture.path("other"), {});
+        const auto script = fixture.path("keygen.sh");
+        QVERIFY(writeFile(script, QStringLiteral("#!/bin/sh\n'%1' \"$@\"\nstatus=$?\n"
+                                                 "printf '%2 %3 %4\\n' > '%5'\nexit $status\n")
+                                      .arg(keygen, fixture.knownName(), other.type, other.base64,
+                                           fixture.path("user_known_hosts"))
+                                      .toUtf8()));
+        QVERIFY(
+            QFile::setPermissions(script, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        auto options = fixture.options();
+        options.keygenProgram = script;
+        SshTunnel tunnel({"fixture", {}, 0}, options);
+        tunnel.open();
+        QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::HostKeyMismatch, patience);
+        QCOMPARE(tunnel.hostKeyStatus(), HostKeyStatus::Mismatch);
+        QVERIFY(!tunnel.device());
+        QCOMPARE(fixture.daemonConnections.size(), 0);
+    }
+
+    void aBridgeThatFailsAfterLocateStaysOfflineWithoutFlapping() {
+        SshFixture fixture;
+        if (!fixture.start(true, false))
+            QSKIP(qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        // A stale socket: locate() finds it, but nothing accepts on it, so `ssh -W` fails.
+        QProcess bind;
+        bind.start("python3", {"-c",
+                               "import socket,sys;"
+                               "socket.socket(socket.AF_UNIX).bind(sys.argv[1])",
+                               fixture.path("daemon.sock")});
+        if (!bind.waitForFinished(10000) || bind.exitCode() != 0)
+            QSKIP("python3 is unavailable");
+        SshTunnel tunnel({"fixture", {}, 0}, fixture.options());
+        QList<SshTunnel::State> states;
+        QObject::connect(&tunnel, &SshTunnel::stateChanged, &tunnel,
+                         [&](SshTunnel::State state) { states.append(state); });
+        tunnel.open();
+        QTRY_VERIFY_WITH_TIMEOUT(tunnel.reconnectAttempts() >= 3, patience);
+        QVERIFY(!states.contains(SshTunnel::State::Connected));
+        QVERIFY(states.contains(SshTunnel::State::Offline));
+        QCOMPARE(tunnel.remoteSocketPath(), fixture.path("daemon.sock"));
+        QVERIFY(!tunnel.device());
+        QVERIFY(tunnel.daemonCredential().isEmpty());
+        tunnel.close();
+    }
+
+    void aBridgeReportedConnectedBacksOffUntilDaemonBytesCome() {
+        SshFixture fixture;
+        if (!fixture.start(true, false))
+            QSKIP(qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        QProcess bind;
+        bind.start("python3", {"-c",
+                               "import socket,sys;"
+                               "socket.socket(socket.AF_UNIX).bind(sys.argv[1])",
+                               fixture.path("daemon.sock")});
+        if (!bind.waitForFinished(10000) || bind.exitCode() != 0)
+            QSKIP("python3 is unavailable");
+        // A short settle period: the timer reports Connected before ssh finds the stale socket,
+        // as on a slow link. Without daemon bytes the backoff still grows.
+        // The forwarder fails a second late, like a slow hop.
+        const auto ssh = QStandardPaths::findExecutable("ssh");
+        QVERIFY(!ssh.isEmpty());
+        const auto slow = fixture.path("slow-ssh.sh");
+        QVERIFY(writeFile(slow, QStringLiteral("#!/bin/sh\ncase \" $* \" in *\" -W \"*) sleep 1;; "
+                                               "esac\nexec '%1' \"$@\"\n")
+                                    .arg(ssh)
+                                    .toUtf8()));
+        QVERIFY(
+            QFile::setPermissions(slow, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        auto options = fixture.options();
+        options.sshProgram = slow;
+        options.settleMilliseconds = 100;
+        SshTunnel tunnel({"fixture", {}, 0}, options);
+        QList<int> attempts;
+        QList<SshTunnel::State> states;
+        QObject::connect(&tunnel, &SshTunnel::stateChanged, &tunnel, [&](SshTunnel::State state) {
+            states.append(state);
+            if (state == SshTunnel::State::Offline)
+                attempts.append(tunnel.reconnectAttempts());
+        });
+        tunnel.open();
+        QTRY_VERIFY_WITH_TIMEOUT(attempts.size() >= 3, patience);
+        QVERIFY(states.contains(SshTunnel::State::Connected));
+        for (qsizetype i = 1; i < attempts.size(); ++i)
+            QVERIFY2(attempts.at(i) > attempts.at(i - 1),
+                     qPrintable(
+                         QStringLiteral("%1 then %2").arg(attempts.at(i - 1)).arg(attempts.at(i))));
+        tunnel.close();
+    }
+
+    void aCertificateAcceptedBySshIsVerifiedEvenWithoutADaemon() {
+        SshFixture fixture;
+        if (!fixture.start(true, false))
+            QSKIP(qPrintable(fixture.skip));
+        // Restart sshd with a host certificate signed by a CA the client trusts.
+        QVERIFY(keygen(fixture.path("ca")));
+        QVERIFY(!runTool("ssh-keygen", {"-q", "-s", fixture.path("ca"), "-I", "fixture-host", "-h",
+                                        "-n", "127.0.0.1", fixture.path("host.pub")})
+                     .isNull() ||
+                QFile::exists(fixture.path("host-cert.pub")));
+        QFile config(fixture.path("sshd_config"));
+        QVERIFY(config.open(QIODevice::Append));
+        config.write(
+            QStringLiteral("HostCertificate %1\n").arg(fixture.path("host-cert.pub")).toUtf8());
+        config.close();
+        fixture.sshd.kill();
+        fixture.sshd.waitForFinished(5000);
+        fixture.sshd.start("/usr/sbin/sshd", {"-D", "-e", "-f", fixture.path("sshd_config")});
+        bool up = false;
+        for (int attempt = 0; attempt < 100 && !up; ++attempt) {
+            QTcpSocket socket;
+            socket.connectToHost(QHostAddress::LocalHost, quint16(fixture.port));
+            up = socket.waitForConnected(100);
+            if (!up)
+                QTest::qWait(50);
+        }
+        QVERIFY(up);
+        fixture.trust(publicKey(fixture.path("ca"), {}), "@cert-authority");
+        SshTunnel tunnel({"fixture", {}, 0}, fixture.options());
+        tunnel.open();
+        QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::DaemonSocketMissing, patience);
+        QCOMPARE(tunnel.hostKeyStatus(), HostKeyStatus::Verified);
+        tunnel.close();
+    }
+
+    void destroyingAConnectedTunnelReapsItsProcesses() {
+        SshFixture fixture;
+        if (!fixture.start())
+            QSKIP(qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        logged().clear();
+        const auto previous = qInstallMessageHandler(capture);
+        {
+            SshTunnel tunnel({"fixture", {}, 0}, fixture.options());
+            tunnel.open();
+            QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::Connected, patience);
+        }
+        {
+            SshTunnel tunnel({"fixture", {}, 0}, fixture.options());
+            tunnel.open();
+            QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::Connected, patience);
+            tunnel.close();
+        }
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        qInstallMessageHandler(previous);
+        for (const auto& message : std::as_const(logged()))
+            QVERIFY2(!message.contains("Destroyed while process"), qPrintable(message));
     }
 
     void aDaemonTokenOthersCanReadIsRefused() {
