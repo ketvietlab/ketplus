@@ -20,7 +20,6 @@ bool fatalCode(const QString& error) {
 // Failures of the link itself; any other error belongs to one request.
 bool transient(const QString& error) {
     return error == QLatin1String("Control transport failed.") ||
-           error == QLatin1String("Control refused the request.") ||
            error == QLatin1String("Invalid or oversized Control response.") ||
            error == QLatin1String("Credential refresh failed.") ||
            error == QLatin1String("Account changed while the request was pending.");
@@ -357,6 +356,12 @@ void RelayMachineBackend::transcriptWindow(const QString& sessionId, qint64 gene
                                                       page.value("snapshot_cursor").toInteger());
                                   done(page, error);
                               }));
+}
+
+void RelayMachineBackend::conversationClosed(const QString& sessionId) {
+    // Events are polled only for open conversations; opening it again follows it from the
+    // cursor of that read.
+    watched_.remove(sessionId);
 }
 
 void RelayMachineBackend::transcriptPage(const QString& sessionId, qint64 generation,

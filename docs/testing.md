@@ -260,7 +260,12 @@ covers lazy, cached and bounded worktree verification that never delays a
 listing, a backend destroyed mid-request, live events resuming after a fence
 during an events poll, requests held while reconnecting, a failure reported
 only for a command that is never sent (one the relay holds is queued and
-completes once), and a result applied only after its completion is recorded.
+completes once), and a result applied only after its completion is recorded
+and re-read while the link stays up. A `pendingApprovals` read never reaches
+the outbox or a restart, a refusal without a code fails only its command, event
+polls stop for closed conversations and stay bounded after many opens and
+closes, and a worktree granted after a `worktree_not_granted` verdict appears
+once the verdict expires.
 No network, account or provider is used.
 
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`

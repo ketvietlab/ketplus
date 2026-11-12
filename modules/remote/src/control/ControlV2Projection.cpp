@@ -315,7 +315,11 @@ void ControlV2Client::pumpWorktreeVerification() {
                     if (!error.isEmpty()) {
                         verdict.detail = error;
                         if (error.contains("forbidden")) {
+                            // Grants change without a scope change: asked again later, so a
+                            // worktree granted afterwards appears without a new sign-in.
                             verdict.reason = QStringLiteral("worktree_not_granted");
+                            verdict.until =
+                                QDateTime::currentMSecsSinceEpoch() + verifyRetryMilliseconds_;
                         } else {
                             // No answer: tried again in a later listing, not on every one.
                             verdict.reason = QStringLiteral("verification_failed");

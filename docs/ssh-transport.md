@@ -116,7 +116,7 @@ again; a key that changes after the probe fails closed in ssh itself.
 | State | Meaning | Next |
 | --- | --- | --- |
 | `Connecting` | Resolving, probing, locating or forwarding. | |
-| `Connected` | The forwarder stayed up for `settleMilliseconds` (1.5 s) after the bridge connected, or carried daemon bytes sooner; `device()` is the daemon connection. | |
+| `Connected` | The forwarder stayed up for `settleMilliseconds` (0.5 s) after the bridge connected, or carried daemon bytes sooner; `device()` is the daemon connection. | |
 | `Offline` | The host, the forward or the daemon connection failed or closed. | Reconnects. |
 | `DaemonSocketMissing` | The host is reachable but no daemon listens at the resolved socket, or it has no local token. | Reconnects. |
 | `DaemonTokenInsecure` | The daemon token is readable by other users. | Waits for `open()`. |

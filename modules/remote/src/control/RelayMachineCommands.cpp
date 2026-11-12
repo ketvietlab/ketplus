@@ -4,14 +4,15 @@
 #include <QTimer>
 #include <QUuid>
 
-// Writes of the Relay backend: every command goes through the durable outbox, and its result is
-// applied once, after the host signature is verified (RelayMachineBackend.cpp holds the reads).
+// Commands of the Relay backend: every command that changes host state goes through the durable
+// outbox, and its result is applied once, after the host signature is verified. Reads sent as
+// commands (pendingApprovals) are not stored (RelayMachineBackend.cpp holds the other reads).
 namespace ketplus::remote {
 namespace {
-// Errors that leave a command in the outbox for the next connection.
+// Errors that leave a command in the outbox for the next connection. A refusal without a code
+// ("Control refused the request.") belongs to the command, not to the link.
 bool linkFailure(const QString& error) {
     return error == QLatin1String("Control transport failed.") ||
-           error == QLatin1String("Control refused the request.") ||
            error == QLatin1String("Invalid or oversized Control response.") ||
            error == QLatin1String("Credential refresh failed.") ||
            error == QLatin1String("Account changed while the request was pending.") ||
@@ -22,9 +23,9 @@ bool linkFailure(const QString& error) {
 
 void RelayMachineBackend::sessionCommand(const QString& kind, const QString& sessionId,
                                          qint64 generation, const QJsonObject& plaintext,
-                                         Callback callback) {
-    if (hold(callback, [this, kind, sessionId, generation, plaintext](Callback again) {
-            sessionCommand(kind, sessionId, generation, plaintext, std::move(again));
+                                         Callback callback, bool durable) {
+    if (hold(callback, [this, kind, sessionId, generation, plaintext, durable](Callback again) {
+            sessionCommand(kind, sessionId, generation, plaintext, std::move(again), durable);
         }))
         return;
     const auto row = sessionRow(sessionId, generation);
@@ -45,7 +46,7 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
                              {"kind", kind}};
     const auto generationNow = generation_;
     client_->prepareCommand(intent, plaintext,
-                            guarded([this, generationNow, callback = std::move(callback)](
+                            guarded([this, generationNow, durable, callback = std::move(callback)](
                                         const QJsonValue& value, const QString& error) mutable {
                                 // Nothing is stored or sent yet, so a fence or an error here is a
                                 // plain failure.
@@ -57,9 +58,77 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
                                     callback({}, error);
                                     return;
                                 }
+                                if (!durable) {
+                                    submitRead(value.toObject(), std::move(callback));
+                                    return;
+                                }
                                 persistAndDeliver(OutboxRoute::Session, value.toObject(),
                                                   std::move(callback));
                             }));
+}
+
+void RelayMachineBackend::submitRead(const QJsonObject& envelope, Callback callback) {
+    // A read changes nothing on the host: it is never written to the outbox, and a lost one is
+    // simply asked again by its caller.
+    const auto generation = generation_;
+    client_->submit(envelope, guarded([this, envelope, generation, callback = std::move(callback)](
+                                          const QJsonValue&, const QString& error) mutable {
+                        if (generation != generation_) {
+                            callback({}, reason_);
+                            return;
+                        }
+                        if (!error.isEmpty()) {
+                            if (linkFailure(error) || fatal(error))
+                                failed(error);
+                            callback({}, error);
+                            return;
+                        }
+                        pollRead(envelope,
+                                 QDateTime::currentMSecsSinceEpoch() +
+                                     options_.readTimeoutMilliseconds,
+                                 std::move(callback));
+                    }));
+}
+
+void RelayMachineBackend::pollRead(const QJsonObject& envelope, qint64 deadline,
+                                   Callback callback) {
+    const auto generation = generation_;
+    client_->command(
+        envelope, guarded([this, envelope, deadline, generation, callback = std::move(callback)](
+                              const QJsonValue& value, const QString& error) mutable {
+            if (generation != generation_) {
+                callback({}, reason_);
+                return;
+            }
+            if (!error.isEmpty()) {
+                if (linkFailure(error) || fatal(error))
+                    failed(error);
+                callback({}, error);
+                return;
+            }
+            const auto command = value.toObject();
+            if (command.contains("result")) {
+                const auto failure =
+                    command.value("status").toString() == QLatin1String("completed")
+                        ? QString{}
+                        : command.value("resultCode").toString(QStringLiteral("failed"));
+                callback(command.value("result").toObject(), failure);
+                return;
+            }
+            if (QDateTime::currentMSecsSinceEpoch() >= deadline) {
+                callback({}, QStringLiteral("The host did not answer in time."));
+                return;
+            }
+            QTimer::singleShot(
+                options_.commandPollMilliseconds, this,
+                [this, envelope, deadline, generation, callback = std::move(callback)]() mutable {
+                    if (generation != generation_) {
+                        callback({}, reason_);
+                        return;
+                    }
+                    pollRead(envelope, deadline, std::move(callback));
+                });
+        }));
 }
 
 void RelayMachineBackend::persistAndDeliver(OutboxRoute route, const QJsonObject& envelope,
@@ -170,8 +239,20 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
     QString storage;
     if (!outbox_.complete(id, &storage)) {
         // Recorded before it is applied: otherwise a restart would apply it again. It stays
-        // pending, with its callback, and is read back on the next connection.
+        // pending, with its callback, and is read back again while the link stays up (and on
+        // the next connection).
         qWarning("Relay command outbox not updated: %s", qUtf8Printable(storage));
+        const auto generation = generation_;
+        QTimer::singleShot(options_.recordRetryMilliseconds, this, [this, id, generation] {
+            if (generation != generation_ || state_ != ConnectionState::Connected ||
+                delivering_.contains(id))
+                return;
+            for (const auto& entry : outbox_.pending())
+                if (entry.id() == id) {
+                    delivering_.insert(id);
+                    poll(entry);
+                }
+        });
         return;
     }
     unsent_.remove(id);
@@ -298,8 +379,9 @@ void RelayMachineBackend::pendingApprovals(const QString& sessionId, qint64 gene
     QJsonObject payload;
     if (!afterId.isEmpty())
         payload.insert("after_id", afterId);
+    // A read: it changes nothing on the host, so it is not stored in the outbox.
     sessionCommand(QStringLiteral("session.pending_approvals"), sessionId, generation, payload,
-                   std::move(callback));
+                   std::move(callback), false);
 }
 
 void RelayMachineBackend::resolveApproval(const QString& sessionId, qint64 generation,

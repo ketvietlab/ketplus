@@ -246,13 +246,15 @@ field equals the index entry.
 Otherwise it is reported in `rejected` with a stable reason:
 `unsigned_index_entry` (beyond the bound or not active), `worktree_not_granted`
 (the relay refused the command as forbidden) or `verification_failed` (no
-answer, a bad signature or a different scope). This needs no relay change and
+answer, a bad signature or a different scope). A `worktree_not_granted`
+verdict expires after 30 seconds like any other, because grants change without
+a scope change: a worktree granted later appears without a new sign-in. This needs no relay change and
 no relay deploy. **Option A**, a relay-side index whose entries the host
 seals (as it already seals session metadata), would remove the per-entry round
 trip and is future work in the private relay service.
 
 **Durable command outbox.** Every write (`startTurn`, `steerTurn`, `stopTurn`,
-`pendingApprovals`, `resolveApproval`, `answerQuestion`, `createSession`) is
+`resolveApproval`, `answerQuestion`, `createSession`) is
 prepared and encrypted once, written to a per-machine owner-only
 `CommandOutbox` file, and only then submitted. After a restart or reconnect,
 only that stored ciphertext is submitted again, so the relay's idempotency key
@@ -260,8 +262,18 @@ answers with the command it already has and the host's command journal runs it
 once. A result is verified (host signature, original scope) before a callback
 or `commandCompleted` sees it, and each command id is applied at most once,
 including after a restart: its completion is written to the outbox before the
-result is applied, and a result that cannot be recorded stays pending until a
-later connection. Plaintext never reaches the file. An entry older than the
+result is applied, and a result that cannot be recorded stays pending and is
+read back again every second while the link stays up (and on a later
+connection). `pendingApprovals` is a read the relay carries as a command: it is
+submitted and polled for its signed result without touching the outbox, so it
+writes nothing to disk, is never replayed and does not count toward the
+outbox's 256-entry cap; a lost one is asked again by its caller. A refusal
+without an error code (`Control refused the request.`) fails that command and
+leaves the link `Connected`; only transport failures and invalid responses
+keep a command for the next connection. Events are polled only for
+conversations the UI has open: `MachineBackend::conversationClosed` removes a
+conversation that is closed or deselected, so the poll load does not grow with
+every conversation ever opened. Plaintext never reaches the file. An entry older than the
 relay's 15-minute command lifetime is given up. A reported failure means the
 command will never be sent: on `disconnectFromRelay()` or a fatal answer, a
 command that never left this device is withdrawn from the outbox and fails,

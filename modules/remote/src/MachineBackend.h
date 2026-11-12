@@ -70,6 +70,8 @@ class MachineBackend : public QObject {
     // and SSH routes), plus "repository_id" on the Relay. The result names the new session_id.
     virtual void createSession(const QJsonObject& request, Callback callback) = 0;
 
+    // The conversation is no longer open or selected: a route that follows its events stops.
+    virtual void conversationClosed(const QString& sessionId) { Q_UNUSED(sessionId); }
     // Turns. `request` is the session.start_turn / session.steer payload.
     virtual void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                            Callback callback) = 0;

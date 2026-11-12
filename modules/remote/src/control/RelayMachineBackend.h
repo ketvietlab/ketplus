@@ -30,6 +30,10 @@ class RelayMachineBackend final : public MachineBackend {
         int maximumBackoffMilliseconds{30000};
         // Index worktrees without a conversation verified per repository listing.
         int verifyWorktrees{32};
+        // A read (pendingApprovals) is not stored; it gives up after this long.
+        int readTimeoutMilliseconds{30000};
+        // A result whose completion could not be recorded is read back after this long.
+        int recordRetryMilliseconds{1000};
         // The relay keeps a command for 15 minutes; an older outbox entry is given up.
         qint64 commandLifetimeMilliseconds{15 * 60 * 1000};
     };
@@ -64,6 +68,8 @@ class RelayMachineBackend final : public MachineBackend {
     void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                               const QJsonObject& request, Callback callback) override;
     void createSession(const QJsonObject& request, Callback callback) override;
+    // Stops following the conversation's events until it is opened again.
+    void conversationClosed(const QString& sessionId) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
@@ -108,8 +114,11 @@ class RelayMachineBackend final : public MachineBackend {
     }
     void project(std::function<void(const QJsonObject&, const QString&)> done);
     [[nodiscard]] QJsonObject sessionRow(const QString& id, qint64 generation) const;
+    // `durable`: a command that changes host state goes through the outbox; a read does not.
     void sessionCommand(const QString& kind, const QString& sessionId, qint64 generation,
-                        const QJsonObject& plaintext, Callback callback);
+                        const QJsonObject& plaintext, Callback callback, bool durable = true);
+    void submitRead(const QJsonObject& envelope, Callback callback);
+    void pollRead(const QJsonObject& envelope, qint64 deadline, Callback callback);
     void persistAndDeliver(OutboxRoute route, const QJsonObject& envelope, Callback callback);
     void resume();
     void deliver(const CommandOutbox::Entry& entry);
