@@ -365,6 +365,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void learnRepositories(const QStringList& paths, std::function<void()> then);
     [[nodiscard]] QStringList teamCommandPaths(const QJsonObject& payload) const;
     void startTeams();
+    // Reads the teams and gives back the member name to members an agent message titled.
+    void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
     // Has the git a task command will ask for read off the event loop, then calls `then`,
