@@ -12,6 +12,7 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPage.h"
+#include "teams/TeamReviewerForm.h"
 #include "terminal/TerminalPanel.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/ExplorerPanel.h"
@@ -206,6 +207,8 @@ void MainWindow::showTeamPage(const QString& teamId, const QString& repository) 
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(teamPage_), 1);
     connect(teamPage_, &TeamPage::conversationRequested, this, &MainWindow::openTeamMember);
     connect(teamPage_, &TeamPage::addMemberRequested, this, &MainWindow::showAddTeamMemberDialog);
+    connect(teamPage_, &TeamPage::addReviewerRequested, this,
+            &MainWindow::showAddTeamReviewerDialog);
     connect(teamPage_, &TeamPage::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     connect(teamPage_, &TeamPage::deleteRequested, this, &MainWindow::deleteTeam);
     connect(teamPage_, &TeamPage::removeMemberRequested, this, &MainWindow::leaveTeam);
@@ -319,6 +322,14 @@ void MainWindow::showAddTeamMemberDialog(const QString& teamId) {
         agentDialogOpen(this, QStringLiteral("addDeveloperDialog")))
         return;
     AddDeveloperForm::present(this, teams_, *team, agentManager_->models());
+}
+
+void MainWindow::showAddTeamReviewerDialog(const QString& teamId) {
+    const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
+    if (!team || agentManager_ == nullptr ||
+        agentDialogOpen(this, QStringLiteral("addReviewerDialog")))
+        return;
+    AddReviewerForm::present(this, teams_, *team, agentManager_->models());
 }
 
 } // namespace ketplus

@@ -53,6 +53,8 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageParts.cpp
     src/teams/TeamPageParts.h
     src/teams/TeamPageSections.cpp
+    src/teams/TeamReviewerForm.cpp
+    src/teams/TeamReviewerForm.h
     src/teams/TeamPageTasks.cpp
     src/teams/TeamCommands.cpp
     src/teams/TeamTaskDialog.cpp

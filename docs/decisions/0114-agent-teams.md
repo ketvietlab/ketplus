@@ -39,7 +39,9 @@ and a digest instead of status messages — and leaves messaging as it is.
   (`team.member.add` with `role: "reviewer"`, `team.member.remove`) a second one is added,
   and either one is removed while the other stays. A third reviewer is refused with
   `role_taken`, and removing the last one with `last_reviewer`. A paired phone's New team
-  keeps one reviewer.
+  keeps one reviewer. On the desktop, the Team page's queue banner offers "Add a second
+  reviewer" while a team with three or more developers has one, and each reviewer's row
+  shows its own review and how many tasks wait for it (`reviews`).
 - The **leader** is the only member that reports to the user. It breaks the goal into
   tasks, writes their acceptance criteria (unless `leaderWritesRequirements` is off),
   assigns them, changes lanes and orders the merges. It neither writes code nor

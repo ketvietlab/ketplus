@@ -144,6 +144,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
       branch_(new ket::TextField(this)), leaderMerges_(new ket::Radio(tr("The leader"), this)),
       userMerges_(new ket::Radio(tr("Me"), this)), permissions_(new ket::Select(this)),
       developers_(new ket::SegmentedControl({"1", "2", "3", "4", "5"}, this)),
+      reviewers_(new ket::SegmentedControl({"1", "2"}, this)),
       requirements_(new ket::Checkbox(tr("The leader also writes the requirements"), this)),
       hint_(note(this, "teamDialogHint")), error_(note(this, "teamDialogError")) {
     setObjectName(QStringLiteral("newTeamForm"));
@@ -216,6 +217,9 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     developers_->setObjectName(QStringLiteral("teamDeveloperCount"));
     developers_->setAccessibleName(tr("Developers"));
     developers_->setCurrentIndex(kDefaultDevelopers - 1);
+    reviewers_->setObjectName(QStringLiteral("teamReviewerCount"));
+    reviewers_->setAccessibleName(tr("Reviewers"));
+    reviewers_->setCurrentIndex(0);
     for (const QString& role : {leader, developer, reviewer}) {
         auto* button = new ket::Button({}, ket::ButtonVariant::Secondary, this);
         setAgentLabel(button, team_agents::label(models_, agents_.value(role)));
@@ -229,6 +233,9 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
         if (role == developer) {
             developerRow_ = row;
             row->addWidget(developers_);
+        } else if (role == reviewer) {
+            reviewerRow_ = row;
+            row->addWidget(reviewers_);
         } else {
             auto* fixed = new QLabel(QStringLiteral("1"), control);
             fixed->setObjectName(QStringLiteral("teamFixedCount_") + role);
@@ -236,7 +243,9 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
             row->addWidget(fixed);
         }
         row->addWidget(button, 1);
-        const QString label = role == developer ? tr("Developers") : team_roles::label(role);
+        const QString label = role == developer  ? tr("Developers")
+                              : role == reviewer ? tr("Reviewers")
+                                                 : team_roles::label(role);
         auto* field = new ket::FieldRow(label, control, {}, this);
         rows_.insert(role, field);
         layout->addWidget(field);
@@ -253,6 +262,8 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     layout->addStretch();
     connect(developers_, &ket::SegmentedControl::currentChanged, this,
             [this] { emit memberCountChanged(memberCount()); });
+    connect(reviewers_, &ket::SegmentedControl::currentChanged, this,
+            [this] { emit memberCountChanged(memberCount()); });
     connect(name_, &QLineEdit::textChanged, this, [this] {
         if (!errors_.value(QStringLiteral("name")).isEmpty() &&
             !name_->text().trimmed().isEmpty()) {
@@ -262,7 +273,9 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     });
 }
 
-int NewTeamForm::memberCount() const { return developers_->currentIndex() + 1 + 2; }
+int NewTeamForm::memberCount() const {
+    return 1 + developers_->currentIndex() + 1 + reviewers_->currentIndex() + 1;
+}
 
 void NewTeamForm::setAgent(const QString& role, const TeamAgent& agent) {
     agents_.insert(role, agent);
@@ -311,8 +324,16 @@ QJsonObject NewTeamForm::payload() const {
                        {QStringLiteral("turn_budget"), budget_->text().trimmed().toInt()},
                        {QStringLiteral("plan"),
                         QJsonObject{{QStringLiteral("leader"), agents_.value(leader).json()},
-                                    {QStringLiteral("developers"), developers},
-                                    {QStringLiteral("reviewer"), agents_.value(reviewer).json()}}}};
+                                    {QStringLiteral("developers"), developers}}}};
+    // T-23: two reviewers go as "reviewers", both on the reviewer's agent; one stays "reviewer".
+    QJsonObject plan = result.value(QStringLiteral("plan")).toObject();
+    if (reviewers_->currentIndex() == 1) {
+        const QJsonObject agent = agents_.value(reviewer).json();
+        plan.insert(QStringLiteral("reviewers"), QJsonArray{agent, agent});
+    } else {
+        plan.insert(QStringLiteral("reviewer"), agents_.value(reviewer).json());
+    }
+    result.insert(QStringLiteral("plan"), plan);
     if (const QString goal = goal_->text().trimmed(); !goal.isEmpty())
         result.insert(QStringLiteral("goal"), goal);
     if (const QString branch = branch_->text().trimmed(); !branch.isEmpty())
@@ -408,6 +429,7 @@ void NewTeamForm::setCompact(const bool compact) {
     const auto direction = compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
     mergeRow_->setDirection(direction);
     developerRow_->setDirection(direction);
+    reviewerRow_->setDirection(direction);
     // Stacked, the count takes the row's width and may give some of its own up.
     developers_->setExpanding(compact);
     developers_->setMinimumWidth(compact ? developers_->sizeHint().width() * 3 / 4 : 0);
@@ -505,7 +527,7 @@ AddDeveloperForm::AddDeveloperForm(TeamDirectory* teams, const QJsonObject& team
     const int developers = TeamDirectory::count(team_, developer);
     if (isFull())
         showNote(hint_, tr("A team has at most five developers."));
-    else if (developers + 1 >= kQueueHintDevelopers)
+    else if (developers + 1 >= kQueueHintDevelopers && TeamDirectory::count(team_, reviewer) < 2)
         showNote(hint_, tr("With %1 developers the single reviewer becomes the queue: tasks "
                            "wait their turn for review.")
                             .arg(developers + 1));

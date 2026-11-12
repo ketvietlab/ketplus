@@ -534,9 +534,15 @@ class SidebarTeamsTest final : public QObject {
         };
         QCOMPARE(leave(team("7", 2), "s-lead").second,
                  QStringLiteral("The leader leads the team. Delete the team instead."));
-        QCOMPARE(
-            leave(team("7", 2), "s-rev").second,
-            QStringLiteral("The team's reviewer reviews every task. Delete the team instead."));
+        QCOMPARE(leave(team("7", 2), "s-rev").second,
+                 QStringLiteral("A team keeps at least one reviewer: add another before removing "
+                                "this one."));
+        // T-23: one of two reviewers leaves.
+        QJsonObject reviewed = team("7", 2);
+        QJsonArray members = reviewed.value("members").toArray();
+        members.append(member("s-rev2", "reviewer", "Review 2"));
+        reviewed.insert("members", members);
+        QVERIFY(leave(reviewed, "s-rev").first);
         QCOMPARE(leave(team("7", 1), "s-dev1").second,
                  QStringLiteral("A team keeps at least one developer."));
         QVERIFY(leave(team("7", 2), "s-dev2").first);

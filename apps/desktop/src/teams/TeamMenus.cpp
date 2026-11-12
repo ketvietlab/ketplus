@@ -143,8 +143,9 @@ QString leaveRefusal(const QJsonObject& team, const QString& sessionId) {
         TeamDirectory::member(team, sessionId).value(QStringLiteral("role")).toString();
     if (role == QStringLiteral("leader"))
         return tr("The leader leads the team. Delete the team instead.");
-    if (role == QStringLiteral("reviewer"))
-        return tr("The team's reviewer reviews every task. Delete the team instead.");
+    if (role == QStringLiteral("reviewer") &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) <= 1)
+        return tr("A team keeps at least one reviewer: add another before removing this one.");
     if (TeamDirectory::count(team, QStringLiteral("developer")) <= 1)
         return tr("A team keeps at least one developer.");
     return {};

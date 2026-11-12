@@ -455,20 +455,20 @@ void TeamPage::buildBanners(const QJsonObject& team) {
         layout_->addWidget(banner);
     }
     const int developers = TeamDirectory::count(team, QStringLiteral("developer"));
-    if (developers >= kQueueBannerDevelopers) {
+    // T-23: a second reviewer takes the queue away, so the banner offers one until it is there.
+    if (developers >= kQueueBannerDevelopers &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) < 2) {
         auto* banner = new ket::Banner(
             ket::BannerTone::Info, tr("The reviewer is the queue"),
             tr("%1 developers share one reviewer, so finished tasks wait their turn. A second "
-               "team gives the next developers their own.")
+               "reviewer reviews another task at the same time.")
                 .arg(developers),
             column_);
         banner->setObjectName(QStringLiteral("teamQueueBanner"));
-        QAbstractButton* another = banner->setAction(tr("New team…"));
-        another->setObjectName(QStringLiteral("teamQueueNewTeam"));
-        connect(another, &QAbstractButton::clicked, this,
-                [this, repository = team.value(QStringLiteral("repository")).toString()] {
-                    emit newTeamRequested(repository);
-                });
+        QAbstractButton* second = banner->setAction(tr("Add a second reviewer"));
+        second->setObjectName(QStringLiteral("teamQueueAddReviewer"));
+        connect(second, &QAbstractButton::clicked, this,
+                [this] { emit addReviewerRequested(teamId_); });
         layout_->addWidget(banner);
     }
 }

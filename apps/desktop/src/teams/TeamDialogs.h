@@ -85,6 +85,8 @@ class NewTeamForm final : public QWidget {
     // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
     ket::TextField* budget_{nullptr};
     ket::SegmentedControl* developers_;
+    // T-23: one or two reviewers; two review two tasks at the same time.
+    ket::SegmentedControl* reviewers_;
     ket::Checkbox* requirements_;
     QLabel* hint_;
     QLabel* error_;
@@ -96,6 +98,7 @@ class NewTeamForm final : public QWidget {
     // The rows that hold two controls side by side.
     QBoxLayout* mergeRow_{nullptr};
     QBoxLayout* developerRow_{nullptr};
+    QBoxLayout* reviewerRow_{nullptr};
     QWidget* viewport_{nullptr};
     bool fitting_{false};
 };

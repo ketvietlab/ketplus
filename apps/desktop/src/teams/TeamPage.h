@@ -49,6 +49,8 @@ class TeamPage final : public QWidget {
   signals:
     void conversationRequested(const QString& sessionId);
     void addMemberRequested(const QString& teamId);
+    // T-23: the banner's "Add a second reviewer".
+    void addReviewerRequested(const QString& teamId);
     void newTeamRequested(const QString& repository);
     void deleteRequested(const QString& teamId);
     void removeMemberRequested(const QString& teamId, const QString& sessionId);

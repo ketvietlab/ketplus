@@ -14,6 +14,7 @@
 #include "KetToggle.h"
 #include "teams/TeamAgentDialog.h"
 #include "teams/TeamDirectory.h"
+#include "teams/TeamReviewerForm.h"
 #include "teams/TeamTurnBudget.h"
 #include "ui/Theme.h"
 
@@ -495,6 +496,45 @@ class TeamDialogsTest final : public QObject {
             QVERIFY(button->sizeHint().width() <= button->width() + 1);
         }
         dialog->reject();
+    }
+
+    // T-23: two reviewers go as "reviewers", both on the reviewer's agent.
+    void aTeamIsCreatedWithTwoReviewers() {
+        NewTeamForm form(teams_.get(), "/repo", bothProviders);
+        auto* count = form.findChild<ket::SegmentedControl*>("teamReviewerCount");
+        QVERIFY(count);
+        const int members = form.memberCount();
+        count->setCurrentIndex(1);
+        QCOMPARE(form.memberCount(), members + 1);
+        const QJsonObject plan = form.payload().value("plan").toObject();
+        QVERIFY(!plan.contains("reviewer"));
+        const QJsonArray reviewers = plan.value("reviewers").toArray();
+        QCOMPARE(reviewers.size(), 2);
+        for (const auto& value : reviewers)
+            QCOMPARE(value.toObject().value("provider").toString(), QStringLiteral("claude"));
+        count->setCurrentIndex(0);
+        QVERIFY(form.payload().value("plan").toObject().contains("reviewer"));
+    }
+
+    void aSecondReviewerIsAddedAndAThirdIsNot() {
+        AddReviewerForm form(teams_.get(), team(3), bothProviders);
+        QVERIFY(!form.isFull());
+        QCOMPARE(form.nameField()->text(), QStringLiteral("Reviewer 2"));
+        form.submit({});
+        QCOMPARE(daemon_.sent.size(), 1);
+        QCOMPARE(daemon_.sent.first().first, QStringLiteral("team.member.add"));
+        const QJsonObject sent = daemon_.sent.first().second;
+        QCOMPARE(sent.value("role").toString(), QStringLiteral("reviewer"));
+        QCOMPARE(sent.value("provider").toString(), QStringLiteral("claude"));
+        QCOMPARE(sent.value("team_id").toString(), QStringLiteral("7"));
+        QJsonObject full = team(3);
+        QJsonArray members = full.value("members").toArray();
+        members.append(QJsonObject{{"session_id", "rev2"}, {"role", "reviewer"}});
+        full.insert("members", members);
+        AddReviewerForm third(teams_.get(), full, bothProviders);
+        QVERIFY(third.isFull());
+        QVERIFY(third.error().contains("two reviewers"));
+        QVERIFY(!third.validate());
     }
 
     void addingADeveloperNeedsANameAndStopsAtFive() {
