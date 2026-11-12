@@ -12,6 +12,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
+#include <QTimer>
 
 #include <memory>
 
@@ -69,6 +70,25 @@ class TeamReplyTest final : public QObject {
                                               });
         if (reply.isEmpty())
             (void)QTest::qWaitFor([&] { return !reply.isEmpty(); }, 60000);
+        return reply;
+    }
+
+    // Sends a command through the event loop, as a client's socket delivers it, and measures
+    // the wait before it is handled and the time until its reply.
+    QJsonObject queued(const QString& type, const QJsonObject& payload, qint64* waited,
+                       qint64* total) {
+        QJsonObject reply;
+        QElapsedTimer clock;
+        clock.start();
+        QTimer::singleShot(0, [&] {
+            *waited = clock.elapsed();
+            fixture_->host->handleCommandDeferred(agent_test::request(type, payload),
+                                                  "desktop-test", [&](const QJsonObject& result) {
+                                                      reply = result;
+                                                      *total = clock.elapsed();
+                                                  });
+        });
+        (void)QTest::qWaitFor([&] { return !reply.isEmpty(); }, 60000);
         return reply;
     }
 
@@ -247,11 +267,22 @@ class TeamReplyTest final : public QObject {
         qInfo("event loop: 50 ms wait took %lld ms while the outbox's git runs", loop.elapsed());
         QVERIFY2(loop.elapsed() < 400, qPrintable(QString::number(loop.elapsed())));
         QCOMPARE(count("assignment"), 0);
-        const QJsonObject created =
-            timed("team.task.create", {{"team_id", teamId_}, {"title", "Search"}}, &elapsed);
-        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
-        qInfo("team.task.create during the outbox's git: reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        // Commands sent through the event loop while the switches' git runs (two entries of
+        // two calls of half a second each), with the members' turns that Start set off.
+        for (int index = 0; index < 5; ++index) {
+            qint64 waited = -1;
+            qint64 total = -1;
+            const QJsonObject created =
+                queued("team.task.create",
+                       {{"team_id", teamId_}, {"title", QStringLiteral("Search %1").arg(index)}},
+                       &waited, &total);
+            QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+            qInfo("team.task.create %d during the outbox's git: waited %lld ms, replied after "
+                  "%lld ms, %d assignments sent",
+                  index, waited, total, count("assignment"));
+            QVERIFY2(total < replyBudgetMs, qPrintable(QString::number(total)));
+            QTest::qWait(100);
+        }
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 60000);
         const auto first = fixture_->journal->agentMessagesOf(developers_.at(0), 1, 50);
         const auto second = fixture_->journal->agentMessagesOf(developers_.at(1), 1, 50);
