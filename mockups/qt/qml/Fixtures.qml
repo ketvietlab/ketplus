@@ -681,7 +681,7 @@ QtObject {
     readonly property var teams: [
         {
             id: "release", name: "Release 1.4",
-            goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
+            goal: "Ship the new navigation, the repository picker and Settings in ketPlus Pro 1.4.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
             turnBudget: 60, automaticTurns: 23,
             members: [
