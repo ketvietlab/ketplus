@@ -8,7 +8,6 @@ Item {
     property string edition: "lite"
     property real size: 17
     property bool dark: KetTheme.dark
-    property string stem: "ket"
     property color textColor: KetTheme.t.textMain
     readonly property color brandColor: dark ? "#AD97FA" : "#4332C8"
     readonly property real markSize: size * 1.45
@@ -27,7 +26,7 @@ Item {
         x: lockup.markSize * 1.12
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.StyledText
-        text: lockup.stem + "<font color='" + lockup.brandColor + "'>Plus</font>"
+        text: "ket<font color='" + lockup.brandColor + "'>Plus</font>"
         color: lockup.textColor
         font.family: "KET Sans"
         font.weight: Font.Bold
