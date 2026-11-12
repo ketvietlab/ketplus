@@ -28,6 +28,9 @@ struct TeamRoleContext final {
 [[nodiscard]] QString teamInstructions(const TeamRoleContext& context);
 // Provider input for delivered messages: each is framed as a peer's message, not user text.
 [[nodiscard]] QString deliveryText(const QList<AgentMessageRecord>& messages);
+// True for text deliveryText framed, or a title or preview cut from it: the envelope's marker
+// is delivery metadata, never a conversation's subject (T-26).
+[[nodiscard]] bool isDeliveryText(const QString& text);
 // Replaces the user-facing response guidance in turns a message started. `messages` are the
 // delivered `agent_messages`; whether one expects a reply decides if the final message is sent.
 [[nodiscard]] QString automaticTurnGuidance(const QJsonArray& messages);

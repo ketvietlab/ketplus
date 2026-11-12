@@ -85,6 +85,9 @@ QString SessionHost::createMemberConversation(const QString& worktree, const QSt
     session.stored.state = QStringLiteral("ready");
     session.stored.generation = 1;
     session.stored.title = title;
+    // Codex is told the member name once the thread starts, so its thread reads as it.
+    if (provider == QStringLiteral("codex"))
+        session.pendingProviderTitle = title;
     session.stored.model = model;
     session.stored.effort = effort;
     if (!executionPolicy.isEmpty())
@@ -140,7 +143,7 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
     // The teams could not be read when the daemon started: read them now, or say so. No team
     // request acts on teams that are not all there.
     if (!teams_->isLoaded())
-        teams_->load();
+        loadTeams();
     if (!teams_->isLoaded())
         return failure(QStringLiteral("teams_unavailable"),
                        QStringLiteral("The teams could not be read. Try again."));
