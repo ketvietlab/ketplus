@@ -113,6 +113,9 @@ Item {
                     reviewing: "T-6", queue: [] }]) })
         if (state === "task")
             Qt.callLater(() => screen.showTask("T-3"))
+        // `teams/goal-open`: the team's goal opened with Show more.
+        if (state === "goal-open")
+            Qt.callLater(() => { teamGoalText.expanded = true })
         if (state === "live-task")
             Qt.callLater(() => { screen.showState("live"); screen.showTask("T-1") })
         if (state === "ready")
@@ -153,10 +156,31 @@ Item {
                               : team.name + " has " + budget + " automatic turns")
     }
 
+    Timer {
+        id: goalTyping
+        interval: 400
+        onTriggered: {
+            teamGoal.input.insert(teamGoal.text.length, "\n\nAsk @agent/")
+            teamGoal.cursorPosition = teamGoal.text.length
+        }
+    }
+
     // `--open=new-team|add-member|task|handover` opens a dialog for review captures.
     function openDialog(name) {
         if (name === "new-team")
             startNewTeam("")
+        else if (name === "new-team-goal" || name === "new-team-unknown") {
+            // A long goal with a mention drawn as a token, and the picker open on the next one;
+            // `new-team-unknown` mentions a number no conversation has.
+            startNewTeam("")
+            teamName.text = "Onboarding rework"
+            teamGoal.text = Fixtures.longTeamGoal + (name === "new-team-unknown" ? " Also @agent/9999." : "")
+            teamGoal.cursorPosition = teamGoal.text.length
+            teamGoal.focusInput()
+            // Typed once the dialog has settled, as a user would: the picker opens below.
+            if (name === "new-team-goal")
+                goalTyping.start()
+        }
         else if (name === "delete-team" && team)
             disbandDialog.open()
         else if (name === "turn-budget" && team)
@@ -604,7 +628,6 @@ Item {
                 width: parent.width
                 eyebrow: screen.team && screen.team.paused ? "TEAM · PAUSED" : "TEAM"
                 title: screen.team ? screen.team.name : ""
-                description: screen.team ? screen.team.goal : ""
                 KetButton {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Add member"
@@ -619,6 +642,25 @@ Item {
                     text: "Team actions"
                     onClicked: teamMenu.popup(moreButton, moreButton.width - teamMenu.width, moreButton.height + screen.px(4))
                 }
+            }
+
+            // The goal whole, folded after three lines (ADR 0114); a mention opens its
+            // conversation. Everywhere else the goal keeps one line.
+            KetExpandableText {
+                id: teamGoalText
+                objectName: "teamPageGoal"
+                width: parent.width
+                visible: text !== ""
+                text: screen.team ? screen.team.goal : ""
+                foldedLines: 3
+                mentionTitles: {
+                    const titles = {}
+                    for (const repository of Fixtures.repositories)
+                        for (const conversation of repository.conversations || [])
+                            titles[conversation.number] = conversation.title
+                    return titles
+                }
+                onMentionActivated: number => screen.openConversation(number)
             }
 
             // Where the team works, and how far it is.
@@ -1665,8 +1707,11 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Goal"
-                help: "One sentence, or an issue. The leader breaks it into tasks."
-                KetTextField { id: teamGoal; width: parent.width; placeholderText: "Finish epic #139" }
+                // The leader's main input: the card's whole width.
+                stacked: true
+                help: "The leader breaks it into tasks and may ask the conversations it mentions for context."
+                error: teamGoal.problem
+                TeamGoalField { id: teamGoal; width: parent.width }
             }
             KetFieldRow {
                 width: parent.width
@@ -1816,7 +1861,7 @@ Item {
                 onClicked: {
                     newTeamDialog.tried = true
                     const name = teamName.text.trim()
-                    if (name === "" || Fixtures.turnBudgetError(teamBudget.text) !== "")
+                    if (name === "" || teamGoal.problem !== "" || Fixtures.turnBudgetError(teamBudget.text) !== "")
                         return
                     newTeamDialog.accept()
                     screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,

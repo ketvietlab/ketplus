@@ -219,7 +219,9 @@ builds keep working. Minor 1 features are `provider.runtime_status`,
 `session.fork` (ADR 0016), `transcript.window/1` and
 `transcript.large_event/1`. The per-response fields
 `transcript_window_version` and `transcript_large_event_version` remain for
-minor-0 clients. `DaemonClient` exposes `protocolMinor()` and `hasFeature()`;
+minor-0 clients. Later minor-1 features are additive the same way; for
+example `daemon.host_identity/1` adds `host_key_fingerprint` to the hello reply
+(ADR 0119 "Machine identity"). `DaemonClient` exposes `protocolMinor()` and `hasFeature()`;
 Desktop reports `provider/runtimeStatus` as unsupported when the daemon lacks
 the feature. ADR 0003's rollover stays the path for major changes.
 

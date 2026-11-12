@@ -281,7 +281,7 @@ int main(int argc, char* argv[]) {
         return ids.isEmpty() || qmlProblems > 0 ? 1 : 0;
     }
     if (const QString file = parser.value(screenshot); !file.isEmpty()) {
-        QTimer::singleShot(700, window, [window, file] {
+        QTimer::singleShot(1200, window, [window, file] {
             QApplication::exit(window->grabWindow().save(file) ? 0 : 1);
         });
     }

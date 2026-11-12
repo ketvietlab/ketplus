@@ -20,6 +20,12 @@ class FakeHost final : public TeamHostPort {
         const auto it = conversations.constFind(sessionId);
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
     }
+    std::optional<TeamConversation> conversationByNumber(const QString& number) const override {
+        for (const TeamConversation& conversation : conversations)
+            if (conversation.number == number)
+                return conversation;
+        return std::nullopt;
+    }
     QString conversationRepository(const QString& sessionId) const override {
         return conversations.contains(sessionId) ? QStringLiteral("/repo") : QString{};
     }

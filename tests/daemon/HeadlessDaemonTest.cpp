@@ -276,6 +276,59 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(configuration.statePath, directory.filePath("daemon/journal.sqlite3"));
         QCOMPARE(configuration.tokenPath, directory.filePath("daemon/local.token"));
     }
+    void helloNamesTheHostKeyWithoutSignInAndKeepsItAcrossRestarts() {
+#if defined(Q_OS_UNIX)
+        // ADR 0119 "Machine identity": an SSH client names a Linux machine by the fingerprint the
+        // daemon reports at daemon.hello. A fresh, never signed-in host must have one, and the
+        // same one after a restart, or every reconnect would look like a different machine.
+        QTemporaryDir directory("/tmp/kp-identity-XXXXXX");
+        QVERIFY(directory.isValid());
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        environment.insert("KETPLUS_DAEMON_SOCKET", directory.filePath("socket"));
+        QMap<QByteArray, QByteArray> saved;
+        for (const auto& key : {"KETPLUS_DAEMON_TOKEN_FILE", "KETPLUS_DAEMON_SOCKET",
+                                "KETPLUS_DAEMON_DATA_DIR", "KETPLUS_DISABLE_DAEMON_AUTOSTART"})
+            saved.insert(key, qgetenv(key));
+        const auto restore = qScopeGuard([&] {
+            for (auto it = saved.cbegin(); it != saved.cend(); ++it)
+                it.value().isNull() ? qunsetenv(it.key().constData())
+                                    : qputenv(it.key().constData(), it.value());
+        });
+        qputenv("KETPLUS_DAEMON_DATA_DIR", directory.path().toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", directory.filePath("socket").toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", directory.filePath("daemon/local.token").toUtf8());
+        qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+        const auto fingerprintOfOneRun = [&]() -> QString {
+            QProcess daemon;
+            daemon.setProcessEnvironment(environment);
+            daemon.start(KETPLUS_TEST_DAEMON,
+                         {"--codex", "/nonexistent/codex", "--claude", "/nonexistent/claude",
+                          "--cursor", "/nonexistent/agent"});
+            if (!daemon.waitForStarted())
+                return {};
+            const auto stop = qScopeGuard([&] {
+                daemon.terminate();
+                if (!daemon.waitForFinished(5000)) {
+                    daemon.kill();
+                    daemon.waitForFinished();
+                }
+            });
+            ketplus::remote::DaemonClient client;
+            client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&) {});
+            if (!QTest::qWaitFor([&] { return client.isReady(); }, 10000))
+                return {};
+            if (!client.hasFeature(QStringLiteral("daemon.host_identity/1")))
+                return {};
+            return client.hostKeyFingerprint();
+        };
+        const QString first = fingerprintOfOneRun();
+        // base64url(SHA-256) of the host's key set, as a pairing QR code carries it.
+        QCOMPARE(first.size(), 43);
+        QCOMPARE(fingerprintOfOneRun(), first);
+#endif
+    }
+
     void administratorCliAuthenticatesAndSigtermLeavesTheJournalUsable() {
 #if defined(Q_OS_UNIX)
         QTemporaryDir directory("/tmp/kp-headless-XXXXXX");

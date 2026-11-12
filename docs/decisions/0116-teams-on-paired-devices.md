@@ -167,7 +167,7 @@ describes them.
 
 | Phone | Kind | Payload | Answer |
 | --- | --- | --- | --- |
-| Home, a reconnect | `team.list` | `{}` | `teams` (directory entries, §6), `teams_total` |
+| Home, a reconnect | `team.list` | `{}` | `teams` (directory entries, §6), `teams_total`, `settings?` (the Mac's global automatic-turn budget, §6) |
 | Team page | `team.get` | `team_id`, `known_revision?` | `team` (summary) and `updates` (newest 20), `updates_has_more`; `{unchanged: true, revision}` when `known_revision` is current |
 | Task sheet | `team.task.get` | `team_id`, `task_id`, `history_limit` (1 to 50, 20 by default), `history_before?` | `task` (detail), `history_total`, `history_start` |
 | Show older Updates | `team.updates.list` | `team_id`, `before_id?`, `limit` (1 to 50) | `updates`, `has_more` |
@@ -182,7 +182,7 @@ describes them.
 | Who merges | `team.update` | `team_id`, `merge_policy` (`leader` or `user`), `expected_revision` | settings | none |
 | Automatic turns | `team.update` | `team_id`, `turn_budget` (a whole number from 5 to 200, ADR 0114 open point 2), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
-| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?` (without it, an older phone's team takes the global value of Settings → Teams) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
+| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?` (without it, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
@@ -266,12 +266,26 @@ objects carries a local path or a tag.
 
 At most 100 entries are returned, followed by `teams_total`.
 
+**Settings**: `team.list` also answers an optional object `settings` with the Mac's
+global automatic-turn budget. It has the four fields of the local `team.settings.get`, with
+the same names and meanings: `turn_budget` (the value of Settings → Teams that a team
+created without its own takes), `turn_budget_minimum`, `turn_budget_maximum` and
+`turn_budget_default`. New team uses it to say what an empty budget field means and
+to check a typed one against the bounds. It is read-only: no remote kind changes the
+global value, and `team.settings.update` stays a local kind. An older phone ignores
+the object. A daemon that does not send it leaves the phone on its label "The Mac's
+default (Settings → Teams)", and the daemon still applies the global value. The relay
+stores the answer as ciphertext and needs no change.
+
 **Summary**: `team.get`, and the `team` of a change's result or of a `stale_team`
 refusal.
 
 - **The team.**
-  - Identity: `id`, `revision`, `repository_id`, `name`, `goal` (up to 4,000
-    characters).
+  - Identity: `id`, `revision`, `repository_id`, `name`, `goal` (up to 16,000
+    characters and 24 KiB of UTF-8, whole, with its line breaks and its `@agent/<number>` mentions as plain
+    text; ADR 0114 §9). The goal was cut to 4,000 characters before; it is now sent whole
+    as the same string field, so the contract and its version do not change and an older
+    phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
     `leader_writes_requirements` (who writes requirements), `execution_policy`.
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.

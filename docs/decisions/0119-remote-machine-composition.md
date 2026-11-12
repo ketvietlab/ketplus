@@ -1,6 +1,6 @@
 # 0119: Remote machine composition and the machine-neutral backend
 
-Status: proposed
+Status: accepted
 Date: 2026-11-12
 
 Issue #419 scope item 1. Amends
@@ -62,32 +62,19 @@ a consumer parses one shape, with two exceptions where the routes differ:
 Each backend has a `machineId` (see "Machine identity") and a `Route`:
 `Local`, `Relay` or `Ssh`.
 
-### Machine identity
-
-`local` names This Mac. A Linux machine is named by its daemon's host key
-fingerprint (the ADR 0034 key pinned at pairing), which is the same whichever
-route reaches it:
-
-- The Relay backend maps its relay machine id to the pinned fingerprint.
-- The SSH backend reads the fingerprint from the daemon's `daemon.hello`
-  reply. Today the hello carries no machine identity; scope item 3 adds the
-  host key fingerprint to it (a new protocol minor) and makes the daemon
-  create its host key without a cloud sign-in, so a free SSH-only host has one.
-- A host reachable over both routes is therefore one machine: one picker row,
-  one conversation list, and conversations bound to the fingerprint keep
-  their binding when the route changes. Desktop prefers SSH while it is
-  reachable and falls back to the Relay.
-
 Three implementations:
 
 - **Local** — `DaemonMachineBackend` over `DaemonClient`'s Unix socket. It only
   maps operations to request types and `readyChanged` / `disconnected` to
   connection states; queueing before the hello, replay after a disconnect and
   reconnect backoff stay in `DaemonClient`. This Mac behaves exactly as before.
-- **SSH** — the same `DaemonMachineBackend`, constructed with the host's
-  machine id and `Route::Ssh`, over a `DaemonClient` whose socket is an
-  SSH-forwarded private local socket to the Linux user's own daemon socket
-  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`). The wire protocol is the local one;
+- **SSH** — `SshMachineBackend` (`ketplus_remote_ssh_backend`): the same
+  `DaemonMachineBackend` operations with the host's machine id and
+  `Route::Ssh`, over a remote-mode `DaemonClient` that adopts `SshTunnel`'s
+  connection, which `ssh -W` bridges to the Linux user's own daemon socket
+  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`).
+  The remote-mode client never starts, replaces or reconnects a daemon;
+  `SshTunnel` owns reconnects. The wire protocol is the local one;
   only the transport differs (see "SSH trust"). Connection reasons are
   route-neutral ("The ketPlus daemon is not running."), and only the local
   route turns a missing local daemon install into Offline; the SSH route
@@ -103,6 +90,50 @@ at a time, each with its own tests; the local adapter lands first so that move
 changes no behaviour. Operations a consumer needs later (for example fork,
 rename, archive) are added to the interface with their local mapping when that
 consumer moves, not speculatively.
+
+### Machine identity
+
+`local` names This Mac. A Linux machine is named by its daemon's host key
+fingerprint (the key pinned at pairing,
+[ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)), which is the same whichever
+route reaches it:
+
+- The Relay backend maps its relay machine id to the pinned fingerprint.
+- The SSH backend reads the fingerprint from the daemon's `daemon.hello`
+  reply: `host_key_fingerprint`, advertised by the `daemon.host_identity/1`
+  feature at protocol minor 1. It is `CloudCrypto::keyFingerprint` of the
+  daemon's key set, the same value a pairing QR code carries as `fp`. The
+  daemon creates its keys on first use, so a host that never signed in to the
+  cloud has one, and keeps them in its own credential store across restarts.
+- A host reachable over both routes is therefore one machine: one picker row,
+  one conversation list, and conversations bound to the fingerprint keep
+  their binding when the route changes. Desktop prefers SSH while it is
+  reachable and falls back to the Relay.
+
+### Host key rotation
+
+An SSH machine has two keys, and they rotate independently:
+
+- **The SSH host key** (OpenSSH's, checked against the KetPlus known_hosts
+  file, docs/ssh-transport.md). A changed key is `HostKeyMismatch`: the
+  machine is Offline with the reason and Desktop never bypasses it. The user
+  checks the new key on the host, removes the old entry and connects again,
+  which is a first-use acceptance of the new key. The machine id does not
+  change, because it is the daemon's key, not the SSH server's.
+- **The daemon host key**, which is the machine id. It changes only when the
+  daemon's credential store is lost or replaced (a reinstall or a new user
+  account). Desktop stores, for each SSH target, the machine id it last
+  trusted. When a hello names a different fingerprint, or none, the
+  connection fails closed before any request is sent: `DaemonClient` drops
+  the session, fails what it queued with the reason, stops reconnecting, and
+  the machine is Offline with "This machine's identity changed". Connections
+  then shows the trusted and the presented fingerprint. Only an explicit
+  "Trust the new identity" replaces the stored id. When the user does that,
+  every conversation binding recorded with the old id moves to the new id in
+  one rewrite, so the user keeps their conversations on that host. Rejecting
+  leaves the machine Offline, and removing the machine forgets both. A Relay
+  pairing is not moved: the Relay pins the old key (#88), so that route needs
+  a new pairing.
 
 ### Binding to the selected machine
 
@@ -135,22 +166,27 @@ the selected machine's backend, never a transport:
 | Reconnecting | A Connected session dropped; the route retries on its own | Last lists stay visible but read-only; composer and approval buttons are disabled with "Reconnecting…" and the reason |
 | Offline | The route cannot reach the host or will not retry (host key changed, not installed, signed out, revoked) | Connections shows "Offline" and the reason with Connect; the picker row is dimmed; opening the machine shows the reason instead of a list |
 
-A request made before Connected is the route's to hold or fail. The local route
-queues it in `DaemonClient` until the hello, as it always has; a remote route
-fails it with the state's reason rather than leaving the UI waiting unseen.
-Writes are never replayed after a drop (the existing `DaemonClient` rule).
+A request made before Connected is the route's to hold or fail. The local and
+SSH routes both speak through `DaemonClient`, which queues it until the hello,
+as it always has. A request made while a route is Offline (it will not retry
+on its own) fails at once with the state's reason rather than leaving the UI
+waiting unseen; the Relay route does the same. Writes are never replayed after
+a drop (the existing `DaemonClient` rule).
 
 ### SSH trust
 
 SSH carries the daemon's **local** protocol, unchanged, to the Linux user's own
-daemon socket. Desktop runs the system `ssh` with the user's configuration and OpenSSH
-stream-local forwarding,
-`ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -L <local socket>:<remote socket> <host>`,
-where the local socket lives in a directory only the Mac user can open and is
-removed when the connection ends. `DaemonClient` connects to that local socket
-as it does to This Mac's. `ssh -W` is not used: it forwards to a TCP host and
-port, not to a Unix socket. Desktop never opens an inbound port on the host and
-never talks to another user's socket.
+daemon socket. Desktop runs the system `ssh` with the user's configuration and
+bridges the socket with `ssh -W <remote socket> <host>` in batch mode
+(docs/ssh-transport.md). Current OpenSSH connects `-W` to a Unix socket path as
+well as to a TCP host and port. The forward travels on ssh's stdin and stdout,
+so ssh binds no listener on either side. On the Mac, a one-connection
+`QLocalServer` in a directory only the Mac user can open bridges that stdio to
+the one `QLocalSocket` that `SshTunnel::device()` returns, and it is removed
+when the connection ends. A `DaemonClient` in its remote mode adopts that
+socket and sends `daemon.hello` on it at once, within the daemon's 10-second
+hello deadline. Desktop never opens an inbound port on the host and never talks
+to another user's socket.
 
 - **Confidentiality and integrity** come from SSH. The local protocol adds no
   encryption of its own on this route, and none is needed: the stream ends at a
@@ -159,20 +195,23 @@ never talks to another user's socket.
 - **Host authentication** comes from SSH. The host key is verified against the
   user's `known_hosts`. For a host not yet known, Connections displays the
   host key's SHA256 fingerprint and the user explicitly accepts it on first use;
-  Desktop then adds it to `known_hosts`. A changed host key is refused and the
+  Desktop then adds it to its own KetPlus `known_hosts` file, never the user's. A changed host key is refused and the
   machine is Offline with the reason; Desktop never offers to bypass it.
 - **Client authentication** comes from the user's SSH keys or SSH agent. KetPlus
   never stores, prompts for or forwards an SSH password, and runs `ssh` in batch
   mode so a password or keyboard-interactive prompt fails instead of appearing.
 - **Daemon authentication**: the hello still needs the daemon's local token.
-  Desktop reads it from the user's own token file over the same SSH connection,
-  keeps it in memory for that connection only and never writes it to This Mac.
+  Desktop reads it from the user's own token file over the verified SSH route
+  (the locate step, `SshTunnel::daemonCredential()`), keeps it in memory while
+  that connection is up and never writes it to This Mac. A token readable by
+  other users is refused (`DaemonTokenInsecure`).
 - The SSH route is the user's own access to their own account, so it needs no
   KetPlus account, pairing or Relay. Approvals on that host are answered by
   whoever holds that SSH access, exactly as `ketplusctl` on the host would.
 
 **Relay** keeps Control v2 unchanged: end-to-end encryption between Desktop and
-the host, host keys pinned at pairing (#88, ADR 0034), and a relay that sees only
+the host, host keys pinned at pairing (#88,
+[ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)), and a relay that sees only
 ciphertext. The two routes never mix: a Relay machine is never reached over SSH
 by the Relay's identity, and an SSH machine needs no Relay credential.
 

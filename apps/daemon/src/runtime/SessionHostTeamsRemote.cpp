@@ -250,6 +250,10 @@ QJsonObject SessionHost::remoteTeamAnswer(const QString& type, const QJsonObject
         result = {{QStringLiteral("ok"), true},
                   {QStringLiteral("teams"), entries},
                   {QStringLiteral("teams_total"), teams.size()}};
+        // ADR 0116: the global automatic-turn budget, read-only, so New team on the phone
+        // can say what an empty field means. No remote kind changes it.
+        if (teams_)
+            result.insert(QStringLiteral("settings"), teams_->teamSettings());
     } else if (type == QStringLiteral("team.get")) {
         const QJsonArray updates = answer.value(QStringLiteral("updates")).toArray();
         result = {{QStringLiteral("ok"), true},

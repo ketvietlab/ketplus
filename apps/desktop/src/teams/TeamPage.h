@@ -1,5 +1,7 @@
 #pragma once
 
+#include "teams/TeamGoal.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
@@ -43,11 +45,15 @@ class TeamPage final : public QWidget {
     [[nodiscard]] QTableWidget* tasksTable() const { return tasks_; }
     [[nodiscard]] QJsonArray updates() const { return updates_; }
     void setTaskFilter(const QString& state);
+    // Names the goal's mentions and marks the numbers not on this computer.
+    void setConversationDirectory(team_goal::ConversationDirectory directory);
     // Opens the task dialog (description, criteria, dependencies, history, Hand over…).
     ket::Dialog* openTask(const QString& taskId);
 
   signals:
     void conversationRequested(const QString& sessionId);
+    // A mention in the goal: `number` is the conversation's `@agent/` number.
+    void mentionRequested(const QString& number);
     void addMemberRequested(const QString& teamId);
     // T-23: the banner's "Add a second reviewer".
     void addReviewerRequested(const QString& teamId);
@@ -117,6 +123,9 @@ class TeamPage final : public QWidget {
     team_page::Text* taskHint_{nullptr};
     // What the last rebuild laid out for; a resize across either rebuilds.
     bool roomy_{false};
+    // The goal stays open across rebuilds once the user opened it.
+    bool goalExpanded_{false};
+    team_goal::ConversationDirectory conversations_;
     bool compact_{false};
     bool segmented_{true};
     int segmentedWidth_{0};

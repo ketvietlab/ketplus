@@ -1,5 +1,6 @@
 #include "teams/TeamRules.h"
 
+#include <QRegularExpression>
 #include <QSet>
 
 #include <algorithm>
@@ -55,6 +56,33 @@ std::optional<TeamError> laneOverlap(const Team& team, const QString& exceptSess
                             .arg(mine, member.name.isEmpty() ? member.lane : member.name));
     }
     return std::nullopt;
+}
+
+std::optional<TeamError> validGoal(const QString& goal) {
+    if (goal.size() > maximumGoalCharacters)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("The goal has %1 characters; a team keeps at most %2.")
+                           .arg(goal.size())
+                           .arg(maximumGoalCharacters));
+    if (const qsizetype bytes = goal.toUtf8().size(); bytes > maximumGoalBytes)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("The goal takes %1 bytes as UTF-8; a team keeps at most %2, "
+                                      "so it reaches the leader whole.")
+                           .arg(bytes)
+                           .arg(maximumGoalBytes));
+    return std::nullopt;
+}
+
+QStringList goalMentions(const QString& goal) {
+    static const QRegularExpression mention(
+        QStringLiteral("(?:^|(?<=[\\s(\\[{'\"]))@agent/([A-Za-z0-9_-]+)"));
+    QStringList numbers;
+    for (auto it = mention.globalMatch(goal); it.hasNext();) {
+        const QString number = it.next().captured(1);
+        if (!numbers.contains(number))
+            numbers.append(number);
+    }
+    return numbers;
 }
 
 std::optional<TeamError> validName(const QString& name, const QString& what) {

@@ -71,7 +71,13 @@
           ]
         }
       ],
-      "teams_total": 1
+      "teams_total": 1,
+      "settings": {
+        "turn_budget": 40,
+        "turn_budget_minimum": 5,
+        "turn_budget_maximum": 200,
+        "turn_budget_default": 40
+      }
     }
   },
   "snapshot": {

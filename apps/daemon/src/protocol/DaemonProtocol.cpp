@@ -101,25 +101,17 @@ QJsonArray features(const int minor) {
     if (minor < 1)
         return {};
     return {QStringLiteral("provider.claude.credentials/1"),
-            QStringLiteral("provider.runtime_status"),
-            QStringLiteral("session.fork"),
-            QStringLiteral("transcript.large_event/1"),
-            QStringLiteral("transcript.window/1"),
-            QStringLiteral("transcript.activity_groups/1"),
-            QStringLiteral("session.tasks/1"),
-            QStringLiteral("session.tombstones/1"),
-            QStringLiteral("session.catalog_live/1"),
-            QStringLiteral("session.compact_window/1"),
-            QStringLiteral("agents.messaging/1"),
-            QStringLiteral("session.archive/1"),
-            QStringLiteral("session.tags/1"),
-            QStringLiteral("tags.catalog/1"),
-            QStringLiteral("session.work_report/1"),
-            QStringLiteral("session.awaiting_reply/1"),
-            QStringLiteral("teams/1"),
-            QStringLiteral("teams.tasks/1"),
-            QStringLiteral("teams.summary/1"),
-            QStringLiteral("teams.settings/1"),
+            // daemon.hello carries host_key_fingerprint, the ADR 0119 machine id.
+            QStringLiteral("daemon.host_identity/1"), QStringLiteral("provider.runtime_status"),
+            QStringLiteral("session.fork"), QStringLiteral("transcript.large_event/1"),
+            QStringLiteral("transcript.window/1"), QStringLiteral("transcript.activity_groups/1"),
+            QStringLiteral("session.tasks/1"), QStringLiteral("session.tombstones/1"),
+            QStringLiteral("session.catalog_live/1"), QStringLiteral("session.compact_window/1"),
+            QStringLiteral("agents.messaging/1"), QStringLiteral("session.archive/1"),
+            QStringLiteral("session.tags/1"), QStringLiteral("tags.catalog/1"),
+            QStringLiteral("session.work_report/1"), QStringLiteral("session.awaiting_reply/1"),
+            QStringLiteral("teams/1"), QStringLiteral("teams.tasks/1"),
+            QStringLiteral("teams.summary/1"), QStringLiteral("teams.settings/1"),
             QStringLiteral("transport.oversized/1")};
 }
 
