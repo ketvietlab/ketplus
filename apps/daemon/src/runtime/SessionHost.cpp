@@ -1289,7 +1289,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return error(
             QStringLiteral("computer_policy_error"),
             QStringLiteral("KetPlus could not turn off computer use for this remote turn."));
-    (void)worktreeCatalogRoot(*it); // Persist repository identity before a checkout is removed.
+    // Persist repository identity before a checkout is removed; git runs off this thread.
+    rememberRepositoryIdentity(it->stored.worktreePath);
     const bool worktreeMissing = !QFileInfo(it->stored.worktreePath).isDir();
     noteWorktreesBeforeTurn(*it);
     QJsonArray input = payload.value(QStringLiteral("input")).toArray();
@@ -2297,6 +2298,11 @@ void SessionHost::refreshProviderTitle(const QString& sessionId, const qint64 ge
             const bool customTitle = !providerName.isEmpty();
             const QString candidate =
                 customTitle ? providerName : thread.value(QStringLiteral("preview")).toString();
+            // A team member keeps its member name, and no conversation is titled from the
+            // envelope of an agent message a turn started with (T-26).
+            if (!customTitle &&
+                (self->onTeam(sessionId) || agent_messaging::isDeliveryText(candidate)))
+                return;
             if (!candidate.trimmed().isEmpty() && candidate != current->stored.title) {
                 (void)self->updateSessionTitle(*current, conversation_title::suggest(candidate),
                                                customTitle);

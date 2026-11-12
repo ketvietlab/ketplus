@@ -56,6 +56,8 @@ struct TeamMessage final {
     // The id the queued message gets, when the team must know it before it is sent (a
     // review); empty lets the broker choose one.
     QString id;
+    // An assignment: the worktree its receiver is pointed at before the message is sent.
+    QString pointAt;
 };
 
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
@@ -100,6 +102,8 @@ struct PullRequestFact final {
     QString error;
 };
 using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
+// The error of pointing a conversation at a worktree; empty when it worked.
+using PointDone = std::function<void(const QString&)>;
 
 class TeamHostPort {
   public:
@@ -172,6 +176,12 @@ class TeamHostPort {
         (void)worktree;
         return {};
     }
+    // The same, with git off the caller's thread: `done` runs on it once the switch is
+    // stored, so a slow git holds up no command and no conversation's events (T-28).
+    virtual void askPointConversationAt(const QString& sessionId, const QString& worktree,
+                                        PointDone done) {
+        done(pointConversationAt(sessionId, worktree));
+    }
     // Whether the worktree has changes that are not committed; nothing when git failed.
     [[nodiscard]] virtual std::optional<bool> hasUncommittedWork(const QString& worktree) const {
         (void)worktree;
@@ -210,6 +220,12 @@ class TeamHostPort {
         (void)message;
         return {};
     }
+    // Whether a message with this id was queued already: the outbox sends each entry once,
+    // also when the daemon stopped between sending it and forgetting it (T-28).
+    [[nodiscard]] virtual bool teamMessagePosted(const QString& id) const {
+        (void)id;
+        return false;
+    }
     // Shows a line in the conversation without starting a turn.
     virtual void noteInConversation(const QString& sessionId, const QJsonObject& note) {
         (void)sessionId;
@@ -247,6 +263,10 @@ class TeamCoordinator : public QObject {
     // be read keeps the teams in memory as they were.
     void load();
     [[nodiscard]] bool isLoaded() const noexcept { return loaded_; }
+    // T-28: what a command sets off, pointing members at worktrees and sending their messages,
+    // is stored in the team's outbox with the change and sent after the command is answered,
+    // one entry per event-loop pass. Off, it is sent at once, as the tests of the rules expect.
+    void setDeferSending(bool defer) noexcept { deferSending_ = defer; }
 
     [[nodiscard]] QList<const Team*> teams(const QString& repository = {}) const;
     [[nodiscard]] const Team* team(qint64 teamId) const;
@@ -440,6 +460,16 @@ class TeamCoordinator : public QObject {
     virtual void wake(const Team& team, const TeamMessage& message);
     // Sends the messages held while paused, in order, once the team runs again.
     void releaseHeld(qint64 teamId);
+    // T-28 (TeamCoordinatorOutbox.cpp): the send step of wake(): settles the receiver's moves,
+    // points it at its worktree and queues the message.
+    void send(qint64 teamId, const TeamMessage& message);
+    void scheduleOutbox();
+    void sendFromOutbox();
+    // The rest of one outbox entry once its conversation points at the task's worktree.
+    // `settle` moves the conversation out of a handed-over worktree first, as send() does.
+    void finishOutboxEntry(qint64 teamId, const QJsonObject& entry, bool deliver, bool settle);
+    void forgetRelocations(qint64 teamId, const QString& sessionId);
+    void notePointError(qint64 teamId, const TeamMessage& message, const QString& error);
     // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
     // open tasks changed with its lane and the shared paths.
     void checkLanes(qint64 teamId, const QString& developer);
@@ -530,6 +560,10 @@ class TeamCoordinator : public QObject {
     int handoffsAsked_{0};
     QHash<QString, qint64> teamBySession_;
     bool loaded_{false};
+    bool deferSending_{false};
+    bool outboxScheduled_{false};
+    // An outbox entry waits for git: the next one waits for it, so the order is kept.
+    bool outboxSending_{false};
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
 

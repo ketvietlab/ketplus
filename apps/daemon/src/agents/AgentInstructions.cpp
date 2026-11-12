@@ -155,6 +155,10 @@ QString deliveryText(const QList<AgentMessageRecord>& messages) {
     return blocks.join(QStringLiteral("\n\n"));
 }
 
+bool isDeliveryText(const QString& text) {
+    return text.trimmed().startsWith(QStringLiteral("[KetPlus agent message]"));
+}
+
 QString automaticTurnGuidance(const QJsonArray& messages) {
     const bool replyExpected = std::any_of(messages.begin(), messages.end(), [](const auto& value) {
         return value.toObject().value(QStringLiteral("expect_reply")).toBool();

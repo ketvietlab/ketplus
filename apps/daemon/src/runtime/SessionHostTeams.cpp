@@ -1,6 +1,7 @@
 // ADR 0114: the session runtime's side of agent teams.
 #include "runtime/SessionHost.h"
 
+#include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
 #include "runtime/TeamGit.h"
 
@@ -144,9 +145,33 @@ bool SessionHost::onTeam(const QString& sessionId) const {
     return teams_ && teams_->isMember(sessionId);
 }
 
+void SessionHost::loadTeams() {
+    teams_->load();
+    if (!teams_->isLoaded())
+        return;
+    // T-26: earlier builds titled a member from its first agent message, so the conversation
+    // read "[KetPlus agent message]". Only that shape is repaired; a user's rename stays.
+    for (const teams::Team* team : teams_->teams()) {
+        for (const teams::Member& member : team->members) {
+            auto it = sessions_.find(member.sessionId);
+            if (it == sessions_.end() || member.name.isEmpty() ||
+                !agent_messaging::isDeliveryText(it->stored.title))
+                continue;
+            if (!updateSessionTitle(*it, member.name, false))
+                continue;
+            if (it->stored.adapter == QStringLiteral("codex")) {
+                it->pendingProviderTitle = member.name;
+                syncProviderTitle(*it);
+            }
+        }
+    }
+}
+
 void SessionHost::startTeams() {
     teams_ = new teams::TeamCoordinator(journal_, static_cast<teams::TeamHostPort*>(this), this);
-    teams_->load();
+    // T-28: a team command is answered before the git and the messages it sets off.
+    teams_->setDeferSending(true);
+    loadTeams();
     connect(teams_, &teams::TeamCoordinator::teamChanged, this, [this](const QJsonObject& team) {
         emit teamEvent(QStringLiteral("team.changed"),
                        {{QStringLiteral("team"), team},

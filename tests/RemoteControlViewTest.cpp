@@ -13,6 +13,7 @@
 #include "KetEmptyState.h"
 #include "KetFieldRow.h"
 #include "KetRecipes.h"
+#include "KetSegmentedControl.h"
 
 #include <QAccessible>
 #include <QJsonArray>
@@ -503,8 +504,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
     section.resize(640, 320);
     section.show();
     remote::RemoteControlTestAccess::signIn(*section.client_);
-    section.machineIds_ = {QStringLiteral("build-box")};
-    section.render();
+    section.model()->setRelayMachines({{QStringLiteral("build-box"), {}}});
     // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
     const auto iconInk = [&section] {
         auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));
@@ -775,8 +775,33 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
              auditEntry("m5", "session.configuration.apply", "tablet-1", "ok", now.addDays(-3),
                         "s5", true, "Release notes draft")});
         remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->client_);
-        view.linuxMachines_->machineIds_ = {QStringLiteral("build-node-01")};
-        view.linuxMachines_->render();
+        // The evidence shows the UI as it will be with T-6's backends attached.
+        view.linuxMachines_->model()->setBackendsAttached(true);
+        // The mock's Linux machines: SSH connected, Relay offline, SSH with a changed host key.
+        const auto machine = [](const QString& name, const QString& detail,
+                                LinuxMachine::Route route, LinuxMachine::State state,
+                                const QString& fingerprint, LinuxMachine::Error error) {
+            LinuxMachine value;
+            value.id = name;
+            value.name = name;
+            value.detail = detail;
+            value.route = route;
+            value.state = state;
+            value.fingerprint = fingerprint;
+            value.error = error;
+            return value;
+        };
+        view.linuxMachines_->model()->setMachines(
+            {machine("build-node-01", "Ubuntu 24.04 LTS · Ready for remote work",
+                     LinuxMachine::Route::Ssh, LinuxMachine::State::Connected,
+                     "SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e",
+                     LinuxMachine::Error::None),
+             machine("build-node-02", "Linux · Trusted", LinuxMachine::Route::Relay,
+                     LinuxMachine::State::Offline,
+                     "SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s",
+                     LinuxMachine::Error::None),
+             machine("old-host", "Ubuntu 22.04", LinuxMachine::Route::Ssh,
+                     LinuxMachine::State::Offline, {}, LinuxMachine::Error::HostKeyMismatch)});
         QTest::qWait(50);
         for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
             appTheme->previewMode(mode);
@@ -788,10 +813,38 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                                                      : QStringLiteral("connections-dark.png")));
         }
         appTheme->cancelPreview();
+        // The Linux dialogs, as `--open=linux-hostkey`, `--open=linux-relay` and
+        // `--open=linux-details`.
+        view.resize(1280 - 240, 900);
+        auto* linuxModel = view.linuxMachines_->model();
+        view.linuxMachines_->beginPairing();
+        if (auto* connect = view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog"))) {
+            connect->findChild<QLineEdit*>(QStringLiteral("linuxSshHost"))
+                ->setText(QStringLiteral("build-node-03"));
+            connect->findChild<QAbstractButton*>(QStringLiteral("linuxSshConnect"))->click();
+            linuxModel->presentHostKey(
+                QStringLiteral("build-node-03"),
+                QStringLiteral("SHA256:Zx9yW8vU7tS6rQ5pO4nM3lK2jI1hG0fE9dC8bA7"));
+            captureWindow(view, QStringLiteral("linux-hostkey"));
+            auto* modes =
+                connect->findChild<ket::SegmentedControl*>(QStringLiteral("linuxConnectMode"));
+            modes->setCurrentIndex(1);
+            emit modes->currentChanged(1);
+            captureWindow(view, QStringLiteral("linux-relay"));
+            connect->reject();
+            QTRY_VERIFY(!view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog")));
+        }
+        for (auto* row : view.findChildren<QFrame*>(QStringLiteral("linuxMachineRow")))
+            if (row->property("machineId").toString() == QStringLiteral("build-node-01"))
+                row->findChild<QAbstractButton*>(QStringLiteral("linuxMachineDetails"))->click();
+        if (auto* details =
+                view.findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"))) {
+            captureWindow(view, QStringLiteral("linux-details"));
+            details->reject();
+        }
         view.renderDevices({});
         view.activity_->render({});
-        view.linuxMachines_->machineIds_.clear();
-        view.linuxMachines_->render();
+        view.linuxMachines_->model()->setRelayMachines({});
         view.resize(size);
     }
 

@@ -4,6 +4,8 @@
 #include <QPointer>
 #include <QWidget>
 
+#include "remote/LinuxMachineModel.h"
+
 class QLabel;
 class QAbstractButton;
 class QVBoxLayout;
@@ -27,25 +29,29 @@ class LinuxMachinesSection final : public QWidget {
     // Shows the section's own Connect button, for when the page's Add menu is not shown.
     void setPairingEntryShown(bool shown);
     [[nodiscard]] QStringList machineIds() const;
+    // The machines the section shows. It owns its own model until another is set; the Relay's
+    // trusted machines are written into whichever model it has.
+    [[nodiscard]] LinuxMachineModel* model() const { return model_; }
+    void setModel(LinuxMachineModel* model);
 
   signals:
     void machinesChanged(const QStringList& ids, const QStringList& names);
 
   private:
     friend class RemoteControlViewTest;
+    friend class LinuxMachinesSectionTest;
     void render();
     void signIn();
-    void startPairing();
     void refreshMachines();
     void setNotice(const QString& message, bool error = false);
 
     remote::ControlV2Client* client_;
-    // The open pairing card is a child of the window, so the section deletes it itself.
-    QPointer<ket::Dialog> pairingDialog_;
+    LinuxMachineModel* model_{nullptr};
+    // The open connect card is a child of the window, so the section deletes it itself.
+    QPointer<ket::Dialog> connectDialog_;
     QLabel* count_;
     QLabel* notice_;
     QVBoxLayout* rows_;
-    QStringList machineIds_;
     bool loading_{false};
     bool pairingEntryShown_{false};
 };

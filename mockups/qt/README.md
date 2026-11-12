@@ -43,7 +43,7 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `teams` | `task`, `large`, `empty`, `ready`, `paused`, `live`, `live-task` | Concept: a team's page (see Teams). `live` is a team as its members write it (choices that are sentences, a long Markdown task description, long lanes and paths, an update that is a paragraph) and `live-task` opens its first task; the page and the dialog must stay inside their width with it. `task` opens a task, `large` adds a fourth developer, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision with the team's own budget; the header shows the turns used of it). `--open=new-team` (with Permissions: what the leader and the developers may do without asking, Workspace unless chosen; the reviewer stays read-only; and Automatic turns, filled from Settings › Teams), `turn-budget` (the team's own automatic turns, changed while it runs), `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
-| `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
+| `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard; `--open=linux` the Connect a Linux machine dialog (SSH), `--open=linux-hostkey` its first-use host key, `--open=linux-relay` its Relay pairing, `--open=linux-details` a machine's Details |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `teams`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), teams (automatic turns per team: what a new team's budget starts from), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
@@ -323,17 +323,19 @@ wordmark pixel size so the icon has more presence.
 The supplied KetPlusMark PNG is cropped to artwork bounds (alpha ≥ 8/255 ignores
 near-transparent isolated noise), centred in a square with a 4% margin on each
 side of the final square (rounded to whole pixels), and resampled to 1024, 128
-and 64 px. The original is unchanged. Sampled
-colours are mid indigo `#4332C8` and lilac `#AD97FA`; the latter is used on dark
-surfaces for contrast.
+and 64 px. The artwork's hue is shifted from
+its original hue to the interface accent blue (hue 228.7°, the kit's `accent-text`); only
+hue changes, saturation, value and alpha are kept, and all three sizes come from
+the one 1024 px master.
 
 `BrandLockup` owns mark geometry and wordmark spacing. KÉT Sans Bold (700,
 registered by Qt as `KET Sans`) is embedded; smoke checks the resolved family,
-Bold face and weight. `ket` follows the main text colour, `Plus` the brand
-indigo, with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
+Bold face and weight. `ket` follows the main text colour, `Plus` the kit's
+`accent-text` token (`#1238DB` light, 7.4:1 on the sidebar `#F7F5F5`; `#9EB5FF`
+dark, 8.65:1 on `#171B20`), with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
 a transparent rounded frame with a 1.5 px stroke scaled with interface zoom,
 0.35 em horizontal / 0.12 em vertical padding, and a 0.3 em wordmark gap.
-The brand colours are scoped specimen values, not global theme replacements.
+The frame and Pro text use the same token; there is no separate brand colour.
 
 The Brand navigation entry retains the approved lockup specimens.
 The badge is centred on the wordmark’s x-height; its fractional

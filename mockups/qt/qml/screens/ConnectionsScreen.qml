@@ -6,8 +6,8 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 
-// Connections: this Mac, paired phones and trusted Linux machines (through the KetPlus
-// Relay, as the app; there is no SSH), and the account. Pairing and trust are
+// Connections: this Mac, paired phones and trusted Linux machines (over SSH or through the
+// ketPlus Relay, ADR 0118), and the account. Pairing and trust are
 // deterministic prototype states. Signed
 // out, it introduces connecting (parts/ConnectionsIntro) and opens the app's browser
 // sign-in dialog.
@@ -16,7 +16,15 @@ Item {
 
     required property var window
     property var phones: [{ name: "iPhone 16", detail: "KetPlus App · Paired" }]
-    property var machines: [{ name: "build-node-01", detail: "Linux · Trusted", via: "Relay" }]
+    // ADR 0118's states: Connecting, Connected, Reconnecting, Offline; `error` names a failure.
+    property var machines: [
+        { name: "build-node-01", detail: "Ubuntu 24.04 LTS · Ready for remote work", via: "SSH", state: "Connected", fingerprint: "SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e", error: "" },
+        { name: "build-node-02", detail: "Linux · Trusted", via: "Relay", state: "Offline", fingerprint: "SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s", error: "" },
+        { name: "old-host", detail: "Ubuntu 22.04", via: "SSH", state: "Offline", fingerprint: "", error: "Host key changed" }
+    ]
+    property int linuxMode: 0
+    property bool linuxHostKeyShown: false
+    property var detailsMachine: null
     property bool historyOpen: false
     property bool linuxLinkChecked: false
     property bool pairClaimed: false
@@ -51,6 +59,16 @@ Item {
             pairDialog.open()
         else if (name === "linux")
             linuxDialog.open()
+        else if (name === "linux-hostkey") {
+            linuxDialog.open()
+            screen.linuxHostKeyShown = true
+        } else if (name === "linux-relay") {
+            linuxDialog.open()
+            screen.linuxMode = 1
+        } else if (name === "linux-details") {
+            screen.detailsMachine = screen.machines[0]
+            linuxDetailsDialog.open()
+        }
         else if (name === "signin")
             openSignIn()
     }
@@ -377,15 +395,34 @@ Item {
                     iconName: "terminal"
                     name: modelData.name
                     detail: modelData.detail
-                    // As the app: trusted through the Relay, with no SSH details or Disconnect.
-                    badges: [{ text: "Available", tone: KetTheme.BadgeTone.Success },
+                    badges: [{ text: modelData.error !== "" ? modelData.error
+                                     : modelData.state === "Connecting" || modelData.state === "Reconnecting" ? modelData.state + "…"
+                                     : modelData.state,
+                               tone: modelData.error !== "" ? KetTheme.BadgeTone.Danger
+                                     : modelData.state === "Connected" ? KetTheme.BadgeTone.Success
+                                     : modelData.state === "Offline" ? KetTheme.BadgeTone.Neutral
+                                     : KetTheme.BadgeTone.Warning },
                              { text: modelData.via, tone: KetTheme.BadgeTone.Neutral }]
+                    KetButton {
+                        text: "Details"
+                        variant: KetTheme.ButtonVariant.Ghost
+                        onClicked: { screen.detailsMachine = modelData; linuxDetailsDialog.open() }
+                    }
+                    KetButton {
+                        text: modelData.state === "Offline" ? "Connect" : "Disconnect"
+                        variant: KetTheme.ButtonVariant.Ghost
+                        onClicked: {
+                            const next = screen.machines.slice()
+                            next[index] = Object.assign({}, modelData, { state: modelData.state === "Offline" ? "Connected" : "Offline", error: "" })
+                            screen.machines = next
+                        }
+                    }
                 }
             }
             Row {
                 spacing: screen.px(8)
                 KetIcon { name: "shield"; box: screen.px(13); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "Linux machines connect through an authenticated outbound relay. Compare the identity shown here with ketplusctl on Linux."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+                Text { text: "Linux machines connect over your SSH access (free) or through the ketPlus Relay (Pro). Verify the host fingerprint or pairing code before trusting one."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
             }
 
             Item {
@@ -426,7 +463,7 @@ Item {
     KetMenu {
         id: addMenu
         KetMenuItem { text: "Pair a phone or tablet"; description: "Scan a code with the KetPlus App"; iconName: "smartphone"; onTriggered: pairDialog.open() }
-        KetMenuItem { text: "Connect a Linux machine"; description: "Through the KetPlus Relay"; iconName: "terminal"; onTriggered: linuxDialog.open() }
+        KetMenuItem { text: "Connect a Linux machine"; description: "Over SSH or the ketPlus Relay"; iconName: "terminal"; onTriggered: linuxDialog.open() }
     }
 
     // The app's pairing: scan the code, then compare the confirmation code on both screens
@@ -559,40 +596,130 @@ Item {
         ]
     }
 
-    // The app's Linux pairing: a one-time ketplus:// link from ketplusctl, the identity
-    // compared on both machines, then the approval checked.
+    // The app's "Connect a Linux machine": SSH (free) with the user's own keys and a
+    // first-use host key, or the ketPlus Relay (Pro) pairing link from ketplusctl. No password.
     KetDialog {
         id: linuxDialog
         title: "Connect a Linux machine"
-        onOpened: { screen.linuxLinkChecked = false; identityMatch.checked = false }
+        onOpened: { screen.linuxLinkChecked = false; screen.linuxHostKeyShown = false; screen.linuxMode = 0; identityMatch.checked = false }
+        KetSegmentedControl {
+            options: ["SSH (free)", "ketPlus Relay (Pro)"]
+            currentIndex: screen.linuxMode
+            onActivated: index => screen.linuxMode = index
+        }
         KetFieldRow {
+            visible: screen.linuxMode === 0
             // The dialog body is a ColumnLayout: a width binding would let the row overflow.
+            Layout.fillWidth: true
+            label: "Host"
+            help: "A host from ~/.ssh/config or user@host[:port]. ketPlus uses your SSH keys, agent and known_hosts and never asks for a password."
+            KetTextField { width: parent.width; enabled: !screen.linuxHostKeyShown; placeholderText: "build-node-02 or user@host:22" }
+        }
+        Rectangle {
+            visible: screen.linuxMode === 0 && screen.linuxHostKeyShown
+            Layout.fillWidth: true
+            implicitHeight: hostKeyColumn.implicitHeight + screen.px(28)
+            radius: screen.px(8)
+            color: KetTheme.t.surfaceRaised
+            border.color: KetTheme.t.panelBorder
+            Column {
+                id: hostKeyColumn
+                x: screen.px(16); y: screen.px(14)
+                width: parent.width - screen.px(32)
+                spacing: screen.px(10)
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: "This is the first connection to build-node-03. Compare its host key with the one on the machine (ssh-keygen -lf on its public host key) before you accept it."
+                    color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13)
+                }
+                Text { text: "SHA256:Zx9yW8vU7tS6rQ5pO4nM3lK2jI1hG0fE9dC8bA7"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
+                Row {
+                    anchors.right: parent.right
+                    spacing: screen.px(8)
+                    KetButton { text: "Reject"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.linuxHostKeyShown = false }
+                    KetButton {
+                        text: "Accept and connect"
+                        variant: KetTheme.ButtonVariant.Primary
+                        onClicked: {
+                            screen.machines = screen.machines.concat([{ name: "build-node-03", detail: "Debian 13 · Ready for remote work", via: "SSH", state: "Connected", fingerprint: "SHA256:Zx9yW8vU7tS6rQ5pO4nM3lK2jI1hG0fE9dC8bA7", error: "" }])
+                            linuxDialog.accept()
+                            screen.window.notify("build-node-03 connected over SSH.")
+                        }
+                    }
+                }
+            }
+        }
+        KetFieldRow {
+            visible: screen.linuxMode === 1
             Layout.fillWidth: true
             label: "Pairing link"
             help: "Run ketplusctl pairing create on the machine and paste the ketplus:// link it shows."
             KetTextField { width: parent.width; echoMode: TextInput.Password; placeholderText: "ketplus://pair?ticket=…&secret=…" }
         }
         Text {
-            visible: screen.linuxLinkChecked
+            visible: screen.linuxMode === 1 && screen.linuxLinkChecked
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: "Compare the first six characters of claimDigest shown by ketplusctl pairing status: 7F3A9C"
             color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13)
         }
-        KetCheckbox { id: identityMatch; visible: screen.linuxLinkChecked; text: "I checked the identity on both machines." }
+        KetCheckbox { id: identityMatch; visible: screen.linuxMode === 1 && screen.linuxLinkChecked; text: "I checked the identity on both machines." }
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: linuxDialog.reject() },
-            KetButton { text: "Check link"; onClicked: screen.linuxLinkChecked = true },
             KetButton {
+                visible: screen.linuxMode === 0
+                text: "Connect"
+                variant: KetTheme.ButtonVariant.Primary
+                enabled: !screen.linuxHostKeyShown
+                onClicked: screen.linuxHostKeyShown = true
+            },
+            KetButton { visible: screen.linuxMode === 1; text: "Check link"; onClicked: screen.linuxLinkChecked = true },
+            KetButton {
+                visible: screen.linuxMode === 1
                 text: "Check approval"
                 variant: KetTheme.ButtonVariant.Primary
                 enabled: identityMatch.checked
                 onClicked: {
-                    screen.machines = screen.machines.concat([{ name: "build-node-02", detail: "Linux · Trusted", via: "Relay" }])
+                    screen.machines = screen.machines.concat([{ name: "build-node-04", detail: "Linux · Trusted", via: "Relay", state: "Connected", fingerprint: "SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s", error: "" }])
                     linuxDialog.accept()
-                    screen.window.notify("build-node-02 trusted")
+                    screen.window.notify("Linux machine trusted.")
                 }
             }
+        ]
+    }
+
+    // The app's Linux machine Details: the route and the verified fingerprint.
+    KetDialog {
+        id: linuxDetailsDialog
+        title: screen.detailsMachine ? screen.detailsMachine.name : ""
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: screen.px(18)
+            rowSpacing: screen.px(10)
+            Text { text: "Route"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+            Text {
+                Layout.fillWidth: true
+                text: screen.detailsMachine && screen.detailsMachine.via === "SSH" ? "SSH, with your SSH keys and known_hosts" : "ketPlus Relay, end-to-end encrypted"
+                color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13)
+            }
+            Text { text: "State"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+            Text { text: screen.detailsMachine ? (screen.detailsMachine.error || screen.detailsMachine.state) : ""; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+            Text { text: screen.detailsMachine && screen.detailsMachine.via === "SSH" ? "Host key" : "Host identity"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WrapAnywhere
+                text: screen.detailsMachine && screen.detailsMachine.fingerprint !== "" ? screen.detailsMachine.fingerprint : "Not verified yet"
+                color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13)
+            }
+            Item { implicitWidth: 1; implicitHeight: 1; visible: screen.detailsMachine && screen.detailsMachine.fingerprint !== "" }
+            Text { visible: screen.detailsMachine && screen.detailsMachine.fingerprint !== ""; text: "Verified"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+        }
+        actions: [
+            KetButton { text: "Close"; variant: KetTheme.ButtonVariant.Ghost; onClicked: linuxDetailsDialog.reject() },
+            KetButton { text: "Disconnect"; enabled: screen.detailsMachine && screen.detailsMachine.state !== "Offline"; onClicked: linuxDetailsDialog.accept() },
+            KetButton { text: "Connect"; variant: KetTheme.ButtonVariant.Primary; enabled: screen.detailsMachine && screen.detailsMachine.state === "Offline"; onClicked: linuxDetailsDialog.accept() }
         ]
     }
 
