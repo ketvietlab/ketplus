@@ -210,7 +210,11 @@ host grants the key), `host_key_not_pinned`, `host_key_changed`,
 `host_upgrade_required` (a host that does not seal title and state),
 `invalid_index_entry`, `unsigned_index_entry` (a worktree with no verified
 conversation) or `verification_failed` (with the error in `detail`).
-Every read verifies the relay-served keys against the pins again.
+Every read verifies the relay-served keys against the pins again. A projected
+row also carries `adapter`, `lastEventCursor`, `currentTurnSequence` and
+`workspaceRevision` from the relay index. These are unsigned relay routing
+values, not host-signed: they choose what to fetch, and every event or page
+fetched with them is verified on its own. Sealing them is a future extension.
 
 `ControlV2Client::transcriptWindow` pages a transcript over Control v2 with a
 sealed `transcript.restore_window` request and returns the local
@@ -222,11 +226,13 @@ with the host's pinned signing key and the page digest is checked before use.
 A large event in the page is fetched through a continuation chain (each
 request bound to the previous response digest) and reassembled with
 `LargeEventReassembler` before the page is delivered. A root request gets a
-590-second deadline, under the relay's 10-minute limit, and its continuations
-share it. When the host refuses a page (for example, sealed fragments over the
-byte cap), the client asks again at the same snapshot with half the
-`event_limit`, down to one event. A failed or abandoned request is cancelled
-at the relay.
+540-second deadline, a minute under the relay's 600-second limit so clock skew
+never makes the relay reject it, and its continuations share it. When the host
+refuses a page (for example, sealed fragments over the byte cap), the relay
+answers the poll with 410 `restore_window_unavailable` (or a page with status
+`failed`); the client then asks again at the same snapshot with half the
+`event_limit`, down to one event. An abandoned request is cancelled at the
+relay.
 
 Any host-signed content naming a signing key version other than the pinned
 one that opened its session key fails closed (events, metadata and restore

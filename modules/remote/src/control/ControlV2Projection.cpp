@@ -135,7 +135,10 @@ void ControlV2Client::projectNext(const std::shared_ptr<ProjectionState>& state)
         projectNext(state);
         return;
     }
-    // Routing scope only: everything shown comes from the sealed metadata below.
+    // Routing scope only: everything shown comes from the sealed metadata below. adapter,
+    // lastEventCursor, currentTurnSequence and workspaceRevision are unsigned relay routing
+    // values, not host-signed: they select what to fetch, and every event or page fetched with
+    // them is verified on its own.
     QJsonObject row;
     for (const auto* key : {"id", "generation", "workspaceId", "machineId", "adapter",
                             "lastEventCursor", "currentTurnSequence", "workspaceRevision"})

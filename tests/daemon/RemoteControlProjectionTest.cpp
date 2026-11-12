@@ -64,6 +64,9 @@ struct RestoreHost {
     // The host refuses a root page with more events, as it does one too large for its byte cap.
     int maximumEvents{128};
     QSet<QString> failed;
+    // The relay answers a failed restore request 410 restore_window_unavailable
+    // (readTranscriptRestoreResponses); false serves the 200 page with status "failed" instead.
+    bool failedAs410{true};
     QStringList cancelled;
     // As the relay's commandDto: a missing optional field is null, never absent.
     static QJsonValue orNull(const QJsonObject& command, const char* key) {
@@ -149,6 +152,9 @@ struct RestoreHost {
             path.mid(responsesPrefix.size()).chopped(QStringLiteral("/responses").size());
         const auto command = requests.value(id);
         const auto after = QUrlQuery(request.url()).queryItemValue("afterCursor").toLongLong();
+        if (failed.contains(id) && failedAs410)
+            return std::pair{410, QJsonObject{{"code", "restore_window_unavailable"},
+                                              {"message", "restore_window_unavailable"}}};
         QJsonArray selected;
         for (const auto& value : responses.value(id))
             if (value.toObject().value("responseCursor").toInteger() > after)
@@ -417,37 +423,40 @@ class RemoteControlProjectionTest final : public QObject {
     }
 
     void anOversizedPageIsRequestedAgainWithFewerEvents() {
-        FixtureTransport network;
-        ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
-        EncryptedFixture fixture(client, network);
-        RemoteControlTestAccess::restorePoll(client, 1);
-        RestoreHost host(fixture);
-        host.clientSigning = CloudCrypto::fromBase64Url(
-            client.identity().value("keys").toObject().value("signingPublicKey").toString());
-        host.large = R"({"item_id":"item-big"})";
-        host.maximumEvents = 32;
-        network.handler = [&](const QNetworkRequest& request, const QByteArray& body) {
-            return host.answer(request, body);
-        };
-        auto target = session;
-        target.insert("lastEventCursor", 9);
-        QString failure = "pending";
-        QJsonObject page;
-        client.transcriptWindow(target, {}, [&](const QJsonValue& value, const QString& error) {
-            page = value.toObject();
-            failure = error;
-        });
-        QTRY_VERIFY(failure != "pending");
-        QVERIFY2(failure.isEmpty(), qPrintable(failure));
-        QCOMPARE(page.value("events").toArray().size(), 3);
-        QList<int> limits;
-        for (const auto& payload : std::as_const(host.payloads))
-            if (!payload.contains("large_event"))
-                limits.append(payload.value("event_limit").toInt());
-        QCOMPARE(limits, (QList<int>{128, 64, 32}));
-        // Every root was the same snapshot at the same position.
-        for (const auto& command : std::as_const(host.requests))
-            QCOMPARE(command.value("snapshotCursor").toInteger(), 9);
+        for (const bool as410 : {true, false}) {
+            FixtureTransport network;
+            ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+            EncryptedFixture fixture(client, network);
+            RemoteControlTestAccess::restorePoll(client, 1);
+            RestoreHost host(fixture);
+            host.clientSigning = CloudCrypto::fromBase64Url(
+                client.identity().value("keys").toObject().value("signingPublicKey").toString());
+            host.large = R"({"item_id":"item-big"})";
+            host.maximumEvents = 32;
+            host.failedAs410 = as410;
+            network.handler = [&](const QNetworkRequest& request, const QByteArray& body) {
+                return host.answer(request, body);
+            };
+            auto target = session;
+            target.insert("lastEventCursor", 9);
+            QString failure = "pending";
+            QJsonObject page;
+            client.transcriptWindow(target, {}, [&](const QJsonValue& value, const QString& error) {
+                page = value.toObject();
+                failure = error;
+            });
+            QTRY_VERIFY(failure != "pending");
+            QVERIFY2(failure.isEmpty(), qPrintable(failure));
+            QCOMPARE(page.value("events").toArray().size(), 3);
+            QList<int> limits;
+            for (const auto& payload : std::as_const(host.payloads))
+                if (!payload.contains("large_event"))
+                    limits.append(payload.value("event_limit").toInt());
+            QCOMPARE(limits, (QList<int>{128, 64, 32}));
+            // Every root was the same snapshot at the same position.
+            for (const auto& command : std::as_const(host.requests))
+                QCOMPARE(command.value("snapshotCursor").toInteger(), 9);
+        }
     }
 
     void aTamperedRestoreResponseOrChangedHostKeyVersionIsNeverDelivered() {

@@ -35,6 +35,8 @@ add_library(ketplus_remote_control STATIC
     src/control/ControlV2Client.h src/control/ControlV2Client.cpp
     src/control/ControlV2Authentication.cpp src/control/ControlV2Sessions.cpp
     src/control/ControlV2Content.h src/control/ControlV2Projection.cpp
+    src/control/ControlV2Restore.cpp
+    src/control/ControlV2Restore.h
     src/control/ControlV2Transcript.cpp)
 target_link_libraries(ketplus_remote_control PUBLIC ketplus_control_crypto Qt6::Network)
 target_include_directories(ketplus_remote_control PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
