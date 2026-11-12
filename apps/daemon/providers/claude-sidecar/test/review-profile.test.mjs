@@ -242,6 +242,9 @@ test("a turn review outside a team keeps the read profile, also against settings
     { tool: "Write", input: { file_path: "/nonexistent/x", content: "x" } },
     { tool: "mcp__ketplus_browser__browser_capture", input: {} },
     { tool: "mcp__ketplus_agents__agents_send", input: {} },
+    { tool: "WebFetch", input: { url: "https://example.invalid/" } },
+    { tool: "WebSearch", input: { query: "x" } },
+    { tool: "KillShell", input: { shell_id: "1" } },
   ]);
   // No profile, or a verify profile without a scratch directory, is read-only.
   for (const params of [{}, { reviewProfile: "read" }, { reviewProfile: "verify" }]) {
@@ -255,7 +258,8 @@ test("a turn review outside a team keeps the read profile, also against settings
     assert.equal(result.query.instructions, "");
     assert.deepEqual(result.query.allowedTools, ["mcp__ketplus_agents__*"]);
     assert.deepEqual(result.decisions.map((decision) => [decision.hook, decision.behavior]),
-      [["allow", "allow"], ["deny", "deny"], ["deny", "deny"], ["deny", "deny"], ["allow", "allow"]]);
+      [["allow", "allow"], ["deny", "deny"], ["deny", "deny"], ["deny", "deny"], ["allow", "allow"],
+        ["deny", "deny"], ["deny", "deny"], ["deny", "deny"]]);
     assert.equal(result.decisions[1].message, "A review is read-only: reply with your findings instead.");
   }
 });

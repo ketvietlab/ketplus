@@ -69,8 +69,9 @@ that start it (`review_profile` next to `review_guard` in the turn's origin), an
 clients can set neither:
 
 - **read**: a review request from another conversation, the review of one finished
-  turn described above. This is a reading job: plan mode, reading and search tools,
-  the agents server, and every other tool (Bash included) refused without a prompt.
+  turn described above. This is a reading job: plan mode, the local reading and search
+  tools (Read, Glob, Grep, LS, NotebookRead, ToolSearch), the agents server, and every
+  other tool (Bash, WebFetch and WebSearch included) refused without a prompt.
   The refusal is a `PreToolUse` hook, as for the verify profile: plan mode alone only
   tells the model not to act, and an allow rule in a user or project settings file
   lets a tool call past `canUseTool`, which is how Bash ran in guarded reviews before.

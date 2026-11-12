@@ -23,6 +23,8 @@ export function reviewProfile(params) {
 const readTools = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite", "TodoRead",
   "WebFetch", "WebSearch", "BashOutput", "KillShell", "KillBash", "ListMcpResourcesTool",
   "ReadMcpResourceTool", "ToolSearch"]);
+// A read review (ADR 0067) reaches nothing outside the checkout: no web tools, no shells.
+const readReviewTools = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead", "ToolSearch"]);
 const editTools = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const modeTools = new Set(["ExitPlanMode", "EnterPlanMode"]);
 
@@ -124,7 +126,7 @@ export function reviewDecision(profile, tool, toolInput, { scratch = "", cwd = p
   const allow = { behavior: "allow", updatedInput: input };
   const deny = (message) => ({ behavior: "deny", message });
   if (agentsInjected && tool.startsWith("mcp__ketplus_agents__")) return allow;
-  if (profile !== "verify") return readTools.has(tool) && tool !== "KillShell" && tool !== "KillBash" ? allow : deny(readRefusal);
+  if (profile !== "verify") return readReviewTools.has(tool) ? allow : deny(readRefusal);
   if (browserInjected && tool.startsWith("mcp__ketplus_browser__")) return allow;
   if (modeTools.has(tool)) return deny(refusal("change its permission mode"));
   if (tool === "AskUserQuestion") return deny(refusal("ask the user a question; nobody answers a review turn"));
