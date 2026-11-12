@@ -12,7 +12,7 @@ The repository and licensing split is (ADR 0029):
 | Repository or product | Visibility | License |
 | --- | --- | --- |
 | `ketplus` / KétPlus (Lite) and KétPlus Pro | Public | MPL 2.0 |
-| `ketplus-app` | Private | Proprietary |
+| the private mobile app | Private | Proprietary |
 | Ketsuite cloud services (relay, gateway, accounts, KétRouter) | Private | Proprietary |
 
 The Lite edition contains only `core/`: the native editor, workspace, Git

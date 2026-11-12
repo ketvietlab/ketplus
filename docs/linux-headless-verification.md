@@ -23,40 +23,5 @@ removal failure during logout. The final two regressions failed before their fix
 
 Reproduce native checks using `docs/testing.md`. Linux build, staging,
 clean-runtime acceptance and administration commands are in
-[`linux-headless-daemon.md`](linux-headless-daemon.md). Cloud commands run from
-the `ketviet` repository's `apps/ketsuite` directory:
-
-```sh
-npm run test:ketplus-linux
-KETPLUS_TEST_PG=postgres://TEST_USER@127.0.0.1:TEST_PORT/postgres npm run test:ketplus-headless:postgres
-```
-
-The PostgreSQL helper creates and drops unique test databases and refuses
-non-loopback targets. iOS verification runs from the companion repository after
-generating its Xcode project as described in that repository's development guide:
-
-```sh
-swift test --package-path apps/ios --no-parallel
-xcodebuild -project apps/ios/KetPlusRemote.xcodeproj \
-  -scheme KetPlusRemote -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath apps/ios/.build/simulator CODE_SIGNING_ALLOWED=NO build
-```
-
-The archive is `KetPlus-Daemon-0.1.29-Linux-aarch64.tar.gz`. It contains both
-executables, deployed Qt libraries and SQLite plugin, Claude sidecar, agent
-skills, license notices and `share/systemd/user/ketplus-daemon.service`.
-The local artifact has compiled Control URL `http://127.0.0.1:43110` and cannot
-override it at runtime. Rebuild for the intended relay before deploying; this
-artifact is for isolated acceptance only.
-
-An earlier x86_64 build compiled under ARM-hosted emulation, but Qt process
-creation failed with `Resource error (fork failure): Invalid argument`, including
-in a minimal QProcess fixture. This does not establish x86_64 runtime acceptance.
-The added GitHub Linux lane targets native Ubuntu x86_64; its CI result must be
-checked separately from these local results.
-
-No systemd user manager boot, production relay rollout, real provider turn,
-physical-phone pairing, push delivery or device installation was verified.
-Desktop remote UI/composition remains deferred and Android remains its v1
-preview. Remaining Qt backend integration limits are listed in the runbook.
+[`linux-headless-daemon.md`](linux-headless-daemon.md). Private relay and mobile acceptance procedures are maintained with those services.
+This public repository documents only its native daemon/client checks.

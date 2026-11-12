@@ -23,7 +23,7 @@
 .connection-window-dots { display: flex; gap: 4px; }
 .connection-window-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--kv-border-strong); }
 /* Real captures: desktop workspace.html?state=question (1280×760) and KetPlus Mobile
-   (ketplus-app ketplus-worktree-mobile.ketatlas @ bf9d14f6, 393×852 @2x). */
+   (sample-mobile ketplus-worktree-mobile.ketatlas @ bf9d14f6, 393×852 @2x). */
 .connection-desktop > .connection-screen { display: block; width: 100%; height: calc(100% - 26px); object-fit: cover; object-position: left top; }
 .connection-phone { position: absolute; right: 18px; top: 26px; width: 160px; aspect-ratio: 393 / 852; padding: 4px; box-sizing: content-box; border-radius: 26px; background: #111214; box-shadow: 0 0 0 1px rgb(255 255 255 / 8%) inset, 0 18px 36px rgb(0 0 0 / 16%); }
 .connection-phone > .connection-screen { display: block; width: 100%; height: 100%; border-radius: 22px; }

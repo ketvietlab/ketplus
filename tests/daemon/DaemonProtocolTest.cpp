@@ -1302,11 +1302,11 @@ class DaemonProtocolTest final : public QObject {
                 .value("item")
                 .toObject();
         };
-        QCOMPARE(tool("apps/ios/App.swift").value("path").toString(), "apps/ios/App.swift");
+        QCOMPARE(tool("src/mobile/App.swift").value("path").toString(), "src/mobile/App.swift");
         QCOMPARE(tool("/etc/hosts").value("path").toString(), "/etc/hosts");
         QVERIFY(!tool("../other/file").contains("path"));
         QVERIFY(!tool("a/../../b").contains("path"));
-        QVERIFY(!tool("apps/ios/App.swift").contains("outsideWorktree"));
+        QVERIFY(!tool("src/mobile/App.swift").contains("outsideWorktree"));
         const QJsonObject outside =
             projectEventPayloadForCloud(
                 QStringLiteral("item.completed"),

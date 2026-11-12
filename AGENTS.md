@@ -19,10 +19,11 @@ Product, identity, gateway, Router, and monetization decisions live in
 
 ## Non-negotiable boundaries
 
-- This repository is public under MPL 2.0. Everything committed or pushed is
-  published. The mobile apps (`ketplus-app`) and the relay, gateway, account and
-  billing services (`ketviet`) are proprietary and stay out of it; do not copy
-  their implementation, endpoints, or internal hostnames here.
+- This repository is public under MPL 2.0. The mobile apps and hosted services
+  are proprietary and live in private repositories. Do not publish their repository
+  links, source revisions, file paths, service/schema names or infrastructure details.
+  Do not copy their implementation, endpoints or internal hostnames here.
+  Describe external ownership generically; preserve public library API names and licenses.
 - Security must not depend on the source or protocol staying private. Paid
   features are enforced by the hosted services, never by a build flag.
 - `core/` must build without any Pro directory. Do not add `KETPLUS_EDITION`
@@ -65,7 +66,8 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
 5. Run `git diff --check` before committing. A `core/` change also runs the Lite
    suite (`ctest --preset lite-dev`).
 6. Branch from `integration` and open the pull request into `integration`; it
-   has no CI, so step 3 is the check. Only `integration` is promoted into
+   has no native build CI, so step 3 is the check; the lightweight public-tree
+   boundary guard still runs on pull requests. Only `integration` is promoted into
    `develop`, and `main` is production, updated only by an explicit release
    (`docs/release-process.md`).
 

@@ -771,12 +771,15 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
-        const QString linkedTwo = directory.filePath(QStringLiteral("ketviet-feature-two"));
-        const QString linkedThree = directory.filePath(QStringLiteral("ketviet-feature-three"));
-        const QString promoted = directory.filePath(QStringLiteral("ketviet-feature-promoted"));
-        const QString stale = directory.filePath(QStringLiteral("ketviet-hospitality-stale"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
+        const QString linkedTwo = directory.filePath(QStringLiteral("sample-project-feature-two"));
+        const QString linkedThree =
+            directory.filePath(QStringLiteral("sample-project-feature-three"));
+        const QString promoted =
+            directory.filePath(QStringLiteral("sample-project-feature-promoted"));
+        const QString stale =
+            directory.filePath(QStringLiteral("sample-project-hospitality-stale"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -828,7 +831,7 @@ class AgentWorkspaceShellTest final : public QObject {
         };
 
         // Worktrees are carried by conversations, not listed as a sidebar level.
-        QTRY_COMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QTRY_COMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
         QVERIFY(
             window.findChildren<QToolButton*>(QStringLiteral("productWorktreeButton")).isEmpty());
 
@@ -838,7 +841,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QTRY_COMPARE(agentView->activePath(), QFileInfo(linked).canonicalFilePath());
         QTest::qWait(300);
         // A linked worktree keeps the main repository identity.
-        QCOMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QCOMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
         auto* sourceControl =
             window.findChild<QAbstractButton*>(QStringLiteral("sourceControlActivityButton"));
         QVERIFY(sourceControl);
@@ -867,14 +870,14 @@ class AgentWorkspaceShellTest final : public QObject {
         const QString title = window.windowTitle();
         window.switchToWorktree(stale);
         QCOMPARE(window.windowTitle(), title);
-        QCOMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QCOMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
 
         QSignalSpy created(worktreeCreator, &ketplus::AgentWorktreeCreator::created);
         worktreeCreator->create(repository, repository, QStringLiteral("feature/created-active"),
                                 QStringLiteral("main"));
         QTRY_COMPARE_WITH_TIMEOUT(created.count(), 1, 5000);
         const QString createdPath =
-            QFileInfo(directory.filePath(QStringLiteral("ketviet-feature-created-active")))
+            QFileInfo(directory.filePath(QStringLiteral("sample-project-feature-created-active")))
                 .canonicalFilePath();
         QVERIFY(!createdPath.isEmpty());
         QTRY_COMPARE(agentView->activePath(), createdPath);
@@ -986,8 +989,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1140,8 +1143,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1296,7 +1299,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1356,7 +1359,7 @@ class AgentWorkspaceShellTest final : public QObject {
             confirm->click();
         }
         const QString createdPath =
-            directory.filePath(QStringLiteral("ketviet-feature-from-picker"));
+            directory.filePath(QStringLiteral("sample-project-feature-from-picker"));
         QTRY_VERIFY_WITH_TIMEOUT(
             manager->conversationOwnedWorktreePaths(agentPath, conversation).size() == 1, 5000);
         QCOMPARE(
@@ -1376,7 +1379,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1448,7 +1451,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(conversationButton(QStringLiteral("New conversation")) != nullptr,
                                  5000);
         const QString linkedPath =
-            QFileInfo(directory.filePath(QStringLiteral("ketviet-feature-sidebar-listed")))
+            QFileInfo(directory.filePath(QStringLiteral("sample-project-feature-sidebar-listed")))
                 .canonicalFilePath();
         QVERIFY(!linkedPath.isEmpty());
         QCOMPARE(conversationButton(QStringLiteral("New conversation"))
@@ -1672,7 +1675,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
         const QString ketplus = directory.filePath(QStringLiteral("ketplus"));
-        const QString ketviet = directory.filePath(QStringLiteral("ketviet"));
+        const QString sampleProject = directory.filePath(QStringLiteral("sample-project"));
         const QString linked = directory.filePath(QStringLiteral("ketplus-refactor"));
         const auto git = [](const QString& repository, const QStringList& arguments) {
             QProcess process;
@@ -1681,7 +1684,7 @@ class AgentWorkspaceShellTest final : public QObject {
             return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
                    process.exitCode() == 0;
         };
-        for (const QString& repository : {ketplus, ketviet}) {
+        for (const QString& repository : {ketplus, sampleProject}) {
             QVERIFY(QDir().mkpath(repository));
             QVERIFY(git(repository, {QStringLiteral("init"), QStringLiteral("-q"),
                                      QStringLiteral("-b"), QStringLiteral("main")}));
@@ -1696,7 +1699,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(
             git(ketplus, {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-qb"),
                           QStringLiteral("refactor"), linked, QStringLiteral("HEAD")}));
-        const QString atlas = QDir(ketviet).filePath(QStringLiteral("design/crm.ketatlas"));
+        const QString atlas = QDir(sampleProject).filePath(QStringLiteral("design/crm.ketatlas"));
         QVERIFY(QDir().mkpath(atlas));
         QFile manifest(QDir(atlas).filePath(QStringLiteral("atlas.json")));
         QVERIFY(manifest.open(QIODevice::WriteOnly | QIODevice::Text));
@@ -1717,7 +1720,7 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* index = window.findChild<ketplus::AtlasIndex*>();
         QVERIFY(view && manager && index);
         const QString ketplusPath = QFileInfo(ketplus).canonicalFilePath();
-        const QString ketvietPath = QFileInfo(ketviet).canonicalFilePath();
+        const QString sampleProjectPath = QFileInfo(sampleProject).canonicalFilePath();
         const QString linkedPath = QFileInfo(linked).canonicalFilePath();
         manager->activate(linkedPath);
         const QString id = manager->activeConversationId(linkedPath);
@@ -1732,9 +1735,9 @@ class AgentWorkspaceShellTest final : public QObject {
         };
         QTRY_VERIFY(conversationButton() != nullptr);
 
-        window.openFolder(ketviet);
+        window.openFolder(sampleProject);
         QVERIFY(QDir(linkedPath).removeRecursively());
-        QCOMPARE(index->workspaceRoot(), ketvietPath);
+        QCOMPARE(index->workspaceRoot(), sampleProjectPath);
         QTRY_COMPARE(index->atlases().size(), 1);
 
         // Still listed under ketplus in the sidebar; that is the row the reader clicks.

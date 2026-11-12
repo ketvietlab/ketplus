@@ -2,7 +2,7 @@
 
 Ngày: 2026-09-12. Phạm vi: review, không sửa implementation, không đăng review lên GitHub.
 
-- PR: https://github.com/ketvietlab/ketplus-desktop/pull/16
+- PR: private companion service documentation
 - Design HEAD: `3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5`.
 - Base/native desktop đối chiếu: `4b1412112b2f45a1e59689658f3b54f08439b133`.
 - Đầu vào transcript: [review kiến trúc trước đó](2026-09-12-transcript-architecture-review.md).
@@ -43,8 +43,8 @@ có files/conversations/context độc lập trong màn Worktrees.
 Còn một lỗi route cụ thể: khi đang ở feature/onboarding, mở Worktrees rồi chọn dòng develop,
 dòng này truyền query rỗng nên kế thừa tree hiện tại, không quay về develop.
 
-- [Conversation catalog và routing](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/conversations.js#L1).
-- [Worktree develop link](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/workspace.js#L128).
+- private companion service documentation.
+- private companion service documentation.
 
 Sửa spec: mỗi repository/worktree có selectedConversation riêng; conversation gắn session
 identity bền vững, không dùng branch label làm identity. Fixture nên có ít nhất hai
@@ -57,8 +57,8 @@ session đang chạy. Test đổi A → B → A giữ đúng lịch sử, draft,
 Nội dung đang gõ không được lưu trước điều hướng. Việc Atlas giữ draft khi hide/show chat
 không bao phủ mở dialog, chuyển conversation, đổi theme hoặc mở context pane.
 
-- [Điều hướng dialog](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/actions.js#L23).
-- [Composer rỗng](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/workspace.js#L1).
+- private companion service documentation.
+- private companion service documentation.
 
 Sửa spec: lưu draft theo conversation; dialog không thay owner của draft. Text, attachment,
 scope tag và vị trí đọc phải giữ khi thao tác phụ. Chỉ clear input đã được daemon nhận;
@@ -73,9 +73,9 @@ native cho phép session tiếp tục chạy khi Desktop disconnect hoặc thư 
 Composer vẫn cho gõ khi running, nhưng chỉ có Stop và Enter bị bỏ qua, dù footer ghi Enter
 để gửi. Native hiện có steering; mock chưa thể hiện gửi bổ sung vào turn đang chạy.
 
-- [Question, retry, stop transitions](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/atlas.json#L173).
-- [Composer state](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/workspace.js#L2).
-- [Running Enter handler](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/actions.js#L472).
+- private companion service documentation.
+- private companion service documentation.
+- private companion service documentation.
 
 Sửa spec:
 
@@ -95,7 +95,7 @@ Workspace hiện có một đoạn transcript mẫu ngắn và một restore log
 loading older, retry trang cũ, nội dung mới khi đang đọc phía trên, Latest, partial page
 hoặc lịch sử cần Mac online. Vì vậy chưa thể dùng mock này để nghiệm thu yêu cầu transcript.
 
-- [Transcript mock](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/workspace.js#L28).
+- private companion service documentation.
 
 Bổ sung journey riêng:
 
@@ -131,9 +131,9 @@ Mock có các regression/điểm không nhất quán:
 - Chưa thể hiện submitting/failure khi confirm/revoke, token hết hạn và sign-out effects.
   Close/Decline cần gắn với hủy pairing ticket như native, không chỉ đóng UI.
 
-- [Connections copy, device rows và dialogs](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/connections.js#L1).
-- [Email-only demo validation](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/actions.js#L296).
-- [Hybrid decision](https://github.com/ketvietlab/ketplus-desktop/blob/4b1412112b2f45a1e59689658f3b54f08439b133/docs/decisions/0004-canonical-transcript-hybrid-retention.md).
+- private companion service documentation.
+- private companion service documentation.
+- private companion service documentation.
 
 Copy nên nói lịch sử đầy đủ lưu trên Mac; phần gần nhất được đồng bộ để dùng trên thiết bị
 đã kết nối. Chi tiết retention nằm ở disclosure/help, không bắt user hiểu daemon/relay.
@@ -146,8 +146,8 @@ Card truyền `project`, nhưng `K.url()` không giữ key này cho bước ti�
 KetPlus Mobile rồi mở preview làm mất project; phần builder chat còn hard-code Onboarding.
 Với nhiều Atlas thật, flow hiện không chứng minh được người dùng đang sửa/preview đúng bundle.
 
-- [URL context allowlist](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/core.js#L25).
-- [Library, builder và preview](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/atlas.js#L17).
+- private companion service documentation.
+- private companion service documentation.
 
 Sửa spec: giữ bundle identity/path + worktree + conversation + flow ID qua library → map
 → try screen → continue designing. Display title không phải identity. Cần trạng thái bundle
@@ -161,8 +161,8 @@ Tuy nhiên, UI nói `Limit your request to one flow`, còn response nói flow c�
 Một screen/CSS có thể dùng chung ở nhiều flow nên scope theo prompt không thể bảo đảm điều đó.
 DESIGN.md đã ghi không bảo đảm provider behavior, nhưng UI copy vẫn tạo kỳ vọng mạnh hơn.
 
-- [Flow scope copy](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/atlas-flows.js#L24).
-- [Builder response](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/atlas.js#L58).
+- private companion service documentation.
+- private companion service documentation.
 
 Chọn một contract rõ: tag là ngữ cảnh ưu tiên và UI nói đúng giới hạn; hoặc strict scope cần
 dependency impact check, validate candidate và thông báo/xác nhận thay đổi shared assets.
@@ -171,7 +171,7 @@ làm mất map đang dùng. Không tự coi receipt demo là kết quả kiểm 
 
 ## Các điểm nhỏ nhưng cần đưa về đúng quyết định đã chốt
 
-- [Connections dùng icon monitor](https://github.com/ketvietlab/ketplus-desktop/blob/3abe5c4e02418fd7e81ddecabd7cd57bc46d18a5/ketplus.ketatlas/screens/shell.js#L6),
+- private companion service documentation,
   khác yêu cầu Lucide `unplug` trước đó.
 - Signed-out screen đi thẳng vào form lớn, khác quyết định chỉ có nút Đăng nhập trước khi
   mở form. Nếu chủ động đổi UX thì ghi rõ thay đổi, không mặc định xem đã được duyệt.
