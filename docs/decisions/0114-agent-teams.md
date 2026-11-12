@@ -118,9 +118,14 @@ settings, chosen in New team and changed in the team's Review settings (`team.cr
 - A lowered limit applies from the **next review request**, never retroactively: a
   review in flight keeps its limit, and a task that already had as many passes as the
   team now allows is `blocked` with an actionable `round_limit` update when it next
-  enters In review, instead of being reviewed. Its limit then becomes the team's, so a
-  leader who hands it to review again gets that pass. A raised limit gives a task its
-  new passes at its next request.
+  enters In review, or when a reviewer takes it from the queue if the limit was
+  lowered while it waited, instead of being reviewed. Its limit then becomes the
+  team's, so a leader who hands it to review again gets that pass. A raised limit gives
+  a task its new passes at its next request. Voiding a pass (`team_review_void`) after
+  the limit was lowered hands the task back to In review, so the same check applies:
+  it is blocked, and the leader hands it to review once more to get the voided pass
+  again. A team stored with `max_rounds: 3` before T-53, when three was out of range
+  and read as two, now reads as three.
 - `review_place` is `board` (default) or `pull_request`; anything else is refused in
   words.
 - A task takes both when it **enters a round** (`round_limit`, `review_place` on the

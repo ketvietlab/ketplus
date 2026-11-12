@@ -30,18 +30,18 @@ class TeamReviewPlaceTest final : public QObject {
     qint64 team_{0};
 
     // A task of dev1, with a pull request when `url` is set, handed to review.
-    QString inReview(const QString& url = {}) {
+    QString inReview(const QString& url = {}, const QString& owner = QStringLiteral("dev1")) {
         QString id;
         if (!teams_
                  ->createTask(team_, {.title = "Cart", .lane = "Web", .criteria = {"Adds an item"}},
                               "lead", &id)
                  .ok() ||
-            !teams_->assignTask(team_, id, "dev1", "lead").ok() ||
-            !teams_->moveTask(team_, id, state::inProgress, "dev1").ok())
+            !teams_->assignTask(team_, id, owner, "lead").ok() ||
+            !teams_->moveTask(team_, id, state::inProgress, owner).ok())
             return {};
         if (!url.isEmpty() && !teams_->updateTask(team_, id, {{"pull_request", url}}, "lead").ok())
             return {};
-        if (!teams_->moveTask(team_, id, state::inReview, "dev1").ok())
+        if (!teams_->moveTask(team_, id, state::inReview, owner).ok())
             return {};
         return id;
     }
@@ -218,6 +218,37 @@ class TeamReviewPlaceTest final : public QObject {
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).question,
                  QStringLiteral("Review round limit reached (2 of 2) with findings."));
+    }
+
+    // T-53 round 1 (L1): a limit lowered while the task waits behind another review applies
+    // when the reviewer takes it, not one pass later.
+    void aLimitLoweredWhileQueuedBlocksWhenTheReviewerTakesIt() {
+        QVERIFY(teams_->update(team_, {{"max_rounds", 3}}, "user").ok());
+        const QString waiting = inReview();
+        for (int pass = 1; pass <= 2; ++pass) {
+            finishReview(*teams_, "rev", "Verdict: findings", false);
+            QCOMPARE(task(waiting).state, state::inProgress);
+            if (pass == 1)
+                again(waiting);
+        }
+        // The reviewer is busy with another task when it asks for its third pass.
+        const QString other = inReview({}, QStringLiteral("dev2"));
+        QVERIFY(!other.isEmpty());
+        QCOMPARE(task(other).round, 1);
+        again(waiting);
+        QCOMPARE(task(waiting).state, state::inReview);
+        QCOMPARE(task(waiting).round, 2);
+        QVERIFY(teams_->update(team_, {{"max_rounds", 2}}, "user").ok());
+        const int sent = reviewsTo("rev").size();
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        QCOMPARE(task(other).state, state::inProgress);
+        // Taken from the queue: past the new limit, so it goes to the leader.
+        QTRY_COMPARE(task(waiting).state, state::blocked);
+        QCOMPARE(task(waiting).round, 2);
+        QCOMPARE(task(waiting).roundLimit, 2);
+        QCOMPARE(reviewsTo("rev").size(), sent);
+        QVERIFY(task(waiting).question.contains("Max review passes is now 2"));
+        QCOMPARE(team().reviewSlot("rev")->reviewing, QString());
     }
 
     // A raised limit gives the task in progress its new passes at the next request.
