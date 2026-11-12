@@ -17,11 +17,12 @@ using namespace ketplus::test;
 
 namespace {
 
-// An event as the Relay delivers it (ADR 0119 Control v2 spelling).
+// An event as RelayMachineBackend delivers it: the local shape (MachineBackend.h), with the
+// Relay's own generation.
 QJsonObject relayEvent(const QString& session, qint64 cursor, const QString& type,
                        const QJsonObject& payload) {
-    return {{"sessionId", session}, {"sessionGeneration", 4}, {"cursor", cursor},
-            {"eventType", type},    {"turnSequence", 1},      {"payload", payload}};
+    return {{"session_id", session}, {"session_generation", 4}, {"cursor", cursor},
+            {"event_type", type},    {"turn_sequence", 1},      {"payload", payload}};
 }
 
 QPushButton* option(QWidget& view, const QString& id) {
@@ -33,8 +34,8 @@ QPushButton* option(QWidget& view, const QString& id) {
 
 } // namespace
 
-// Review round 1 of T-14: the Relay's event spelling, whole question requests, the listing's
-// running state, conversations outside listed repositories, and conversationClosed().
+// A Relay conversation's events, whole question requests, the listing's running state,
+// conversations outside listed repositories, and conversationClosed().
 class MachineConversationTest final : public QObject {
     Q_OBJECT
 

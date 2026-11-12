@@ -12,6 +12,8 @@
 #include <QAction>
 #include <QSplitter>
 
+#include <utility>
+
 namespace ketplus {
 
 MachineComposition* MainWindow::machineComposition() {
@@ -28,6 +30,7 @@ MachineComposition* MainWindow::machineComposition() {
             [this](const QString& machineId, const bool remote) {
                 if (machineId != selectedMachineId_) {
                     // Connections no longer lists the picked machine: back to This Mac.
+                    machines_->awaitingBackend = false;
                     const bool shown = machines_->shown();
                     selectedMachineId_ = machineId;
                     activityBar_->setRemoteMachineSelected(remote);
@@ -41,9 +44,11 @@ MachineComposition* MainWindow::machineComposition() {
                 if (!remote)
                     return;
                 refreshSidebarRepositories();
-                // A backend arrived for the picked machine. Connections, where the user connects
-                // it, stays open; anywhere else the machine's workspace shows.
-                if (machines_->selection()->backend() != nullptr && !remoteWorkspaceMode_)
+                // A backend arrived for the picked machine: its workspace shows if it was picked
+                // without one, or wherever the window is not on Connections.
+                if (machines_->selection()->backend() == nullptr)
+                    return;
+                if (std::exchange(machines_->awaitingBackend, false) || !remoteWorkspaceMode_)
                     setMachineWorkspaceVisible(true);
             });
     return machines_;
@@ -56,6 +61,7 @@ void MainWindow::selectMachine(const QString& machineId) {
     const bool local = machineId == QStringLiteral("local");
     activityBar_->setRemoteMachineSelected(!local);
     MachineSelection* selection = machineComposition()->selection();
+    machines_->awaitingBackend = false;
     selection->select(machineId);
     refreshSidebarRepositories();
     if (local) {
@@ -63,8 +69,12 @@ void MainWindow::selectMachine(const QString& machineId) {
         setAgentWorkspaceVisible(true);
     } else if (selection->backend() == nullptr) {
         // No route to this machine yet: Connections connects it. The sidebar stays empty
-        // rather than showing This Mac's lists.
+        // rather than showing This Mac's lists. Opening Connections may register it at once.
         setRemoteWorkspaceVisible(true);
+        if (selection->backend() != nullptr)
+            setMachineWorkspaceVisible(true);
+        else
+            machines_->awaitingBackend = selection->machineId() == machineId;
     } else {
         setMachineWorkspaceVisible(true);
     }

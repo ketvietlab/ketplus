@@ -1,7 +1,5 @@
 #include "machine/MachineTranscript.h"
 
-#include "MachineRows.h"
-
 namespace ketplus {
 
 void MachineTranscript::reset(const QJsonArray& events) {
@@ -11,8 +9,7 @@ void MachineTranscript::reset(const QJsonArray& events) {
         apply(event.toObject());
 }
 
-bool MachineTranscript::apply(const QJsonObject& delivered) {
-    const QJsonObject event = remote::normalizedEvent(delivered);
+bool MachineTranscript::apply(const QJsonObject& event) {
     const qint64 cursor = event.value(QLatin1String("cursor")).toInteger();
     if (cursor > 0) {
         if (cursor <= lastCursor_)

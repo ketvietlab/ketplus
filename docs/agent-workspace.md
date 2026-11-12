@@ -30,8 +30,12 @@ ADR 0119 "Binding to the selected machine". The window keeps one
 each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
 Choosing another machine in the picker binds `MachineCatalog` to its backend and
 shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
-routes share every line of UI code. A picked machine with no backend yet opens
-Connections with an empty sidebar; it never shows This Mac's lists.
+routes share every line of UI code. Every way into the Agent Workspace (the
+activity bar, View > Agent Workspace, the compact window) shows the selected
+machine's. A picked machine with no backend yet opens Connections with an empty
+sidebar, never This Mac's lists, and its workspace shows once Connections
+registers the backend. Backends deliver events in the local protocol's shape
+(`session_id`, `event_type`), so the UI reads one shape on every route.
 
 - **Sidebar.** `listRepositories` and `listConversations` are read together and
   replace the lists at once. Rows are keyed by repository id and session id;
@@ -58,7 +62,13 @@ Connections with an empty sidebar; it never shows This Mac's lists.
   still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
   `catalogChanged()` lists again and fills them in.
 - **Approvals and questions.** Cards answer through the conversation's machine;
-  an answer that fails marks the card expired.
+  an answer that fails marks the card expired. A question card answers every
+  question of the request at once (single or multiple options, a custom or
+  secret answer), as the daemon refuses a partial answer.
+- **Following a conversation.** Deselecting a conversation, switching machines
+  or closing the view calls `MachineBackend::conversationClosed()`. After a
+  reconnect the listing says whether its turn still runs. A conversation outside
+  every listed repository is listed under its own worktree.
 - **Held and queued writes.** A route may hold a request while it is
   Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
   says it waits for the machine instead of looking hung. A Relay write may
@@ -67,12 +77,18 @@ Connections with an empty sidebar; it never shows This Mac's lists.
   conversation, or an expired card) is applied on
   `MachineBackend::commandCompleted()`, which moved to the interface so the UI
   needs no Relay type.
-- **Registration.** Connections calls `MachineSelection::syncBackends()` from
-  its `machinesChanged` slot: each listed id with a backend is registered or
-  replaced (a replacement for the selected machine rebinds every view), and
-  every other remote machine is forgotten before its backend is deleted.
+- **Registration.** The window's slot for `RemoteControlView::machinesChanged`
+  (`MainWindowRemote.cpp`) calls `MachineSelection::syncBackends()` with
+  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the Relay's
+  while it is the row's route. Each listed id with a backend is registered or
+  replaced (a replacement for the selected machine rebinds every view); a listed
+  machine without one stays selectable and shows as not connected; a machine no
+  longer listed is forgotten, and if it was selected the window returns to This
+  Mac.
 
-Tests: `tests/MachineCompositionTest.cpp` against `tests/FakeMachineBackend.h`.
+Tests: `tests/MachineCompositionTest.cpp` and `tests/MachineConversationTest.cpp`
+against `tests/FakeMachineBackend.h`; `tests/MachineWindowTest.cpp` on
+`MainWindow`, with Connections over a fake SSH daemon.
 
 ## Context compaction
 

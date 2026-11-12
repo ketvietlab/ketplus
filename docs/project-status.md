@@ -173,8 +173,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   daemon's host key fingerprint (for the Relay, the one pinned at pairing); the
   Relay's machine id is a route attribute, so a host on both routes is one row,
   reached over SSH. The activity bar's picker shows each machine's route and
-  state, and `LinuxMachinesSection::machineBackend(id)` supplies the backend
-  that the window's `MachineSelection` binds to.
+  state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
+  `LinuxMachinesSection::machineBackend(id)` in the window's `MachineSelection`
+  through `syncBackends()`, so a picked Linux machine shows its own workspace.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores

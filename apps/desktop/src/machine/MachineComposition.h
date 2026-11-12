@@ -40,6 +40,9 @@ class MachineComposition final : public QObject {
     [[nodiscard]] bool shown() const;
     // The sidebar rows of the selected remote machine.
     [[nodiscard]] QVector<SidebarRepository> sidebarRepositories() const;
+    // Picked with no backend yet, so Connections opened instead: its workspace shows once
+    // Connections registers the backend.
+    bool awaitingBackend{false};
 
   signals:
     // The selected machine changed (`remote` false for This Mac).

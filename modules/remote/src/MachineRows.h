@@ -62,10 +62,6 @@ struct MachineConversation final {
 // A write the route queued ({"status": "queued", "command_id"}): its command id, whose outcome
 // arrives through MachineBackend::commandCompleted(). Empty for any other result.
 [[nodiscard]] QString queuedCommandId(const QJsonObject& result);
-// A session event (eventReceived(), or a transcript window's `events`) in the local protocol's
-// spelling: `session_id`, `session_generation`, `cursor`, `turn_sequence`, `event_type`,
-// `payload`. The Relay delivers `sessionId`, `sessionGeneration`, `eventType`, `turnSequence`.
-[[nodiscard]] QJsonObject normalizedEvent(const QJsonObject& event);
 // createSession(): the new conversation's id and generation.
 [[nodiscard]] MachineConversation createdSession(const QJsonObject& result);
 

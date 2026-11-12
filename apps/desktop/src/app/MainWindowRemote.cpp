@@ -43,11 +43,11 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
                     choices.append(ids);
                     QStringList labels{tr("This Mac")};
                     labels.append(names);
-                    if (selectedMachineId_ != QStringLiteral("local") &&
-                        !ids.contains(selectedMachineId_)) {
-                        selectedMachineId_ = QStringLiteral("local");
-                        machineComposition()->selection()->select(selectedMachineId_);
-                    }
+                    // ADR 0119: every listed machine's backend, SSH or the Relay fallback. A
+                    // machine no longer listed is forgotten (MainWindowMachine follows it).
+                    auto* section = remoteControl_->linuxMachines();
+                    machineComposition()->selection()->syncBackends(
+                        ids, [section](const QString& id) { return section->machineBackend(id); });
                     activityBar_->setMachines(choices, labels, selectedMachineId_);
                     activityBar_->setRemoteMachineSelected(selectedMachineId_ !=
                                                            QStringLiteral("local"));

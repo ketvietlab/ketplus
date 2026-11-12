@@ -52,8 +52,7 @@ void MachineCatalog::setBackend(remote::MachineBackend* backend) {
         connect(backend, &remote::MachineBackend::catalogChanged, this, &MachineCatalog::refresh));
     connections_.append(connect(
         backend, &remote::MachineBackend::eventReceived, this, [this](const QJsonObject& event) {
-            if (changesConversationList(
-                    remote::normalizedEvent(event).value(QLatin1String("event_type")).toString()))
+            if (changesConversationList(event.value(QLatin1String("event_type")).toString()))
                 refresh();
         }));
     connections_.append(
