@@ -80,6 +80,12 @@ void CloudControlClient::heartbeat() {
             host_ ? host_->agentTurnSenders() : QHash<QString, QJsonObject>{};
         for (auto it = senders.cbegin(); it != senders.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("agentTurn"), it.value());
+        // ADR 0116 §3: a member's team, its revision and the member's role; a conversation
+        // on no team has no `team` field.
+        const QHash<QString, QJsonObject> teams =
+            host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
+        for (auto it = teams.cbegin(); it != teams.cend(); ++it)
+            agentMetadata[it.key()].insert(QStringLiteral("team"), it.value());
         const quint64 requestEpoch = accountEpoch_;
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
@@ -134,7 +140,8 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
     QJsonObject body{
         {QStringLiteral("machineId"), machineId},
         {QStringLiteral("controlProtocolVersion"), 2},
-        {QStringLiteral("capabilities"), QJsonArray{"transport.webrtc/1"}},
+        // ADR 0116 §1: this daemon serves team commands and writes the `team` metadata.
+        {QStringLiteral("capabilities"), QJsonArray{"transport.webrtc/1", "teams.remote/1"}},
         {QStringLiteral("localProtocolVersion"), 0},
         {QStringLiteral("daemonVersion"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
         {QStringLiteral("observedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},

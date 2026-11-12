@@ -69,6 +69,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
     task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
+    task.changedRevision = json.value(QStringLiteral("changed_revision")).toInteger();
     for (const auto& value : json.value(QStringLiteral("history")).toArray())
         task.history.append(historyFromJson(value.toObject()));
     return task;
@@ -87,7 +88,8 @@ Decision decisionFromJson(const QJsonObject& json) {
             .state = json.value(QStringLiteral("state")).toString(QStringLiteral("open")),
             .answer = json.value(QStringLiteral("answer")).toString(),
             .answeredAt = json.value(QStringLiteral("answered_at")).toString(),
-            .reason = json.value(QStringLiteral("reason")).toString()};
+            .reason = json.value(QStringLiteral("reason")).toString(),
+            .changedRevision = json.value(QStringLiteral("changed_revision")).toInteger()};
 }
 
 } // namespace
@@ -262,7 +264,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
-                     {QStringLiteral("merge_offered"), task.mergeOffered}};
+                     {QStringLiteral("merge_offered"), task.mergeOffered},
+                     {QStringLiteral("changed_revision"), task.changedRevision}};
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)
@@ -285,7 +288,8 @@ QJsonObject toJson(const Decision& decision) {
             {QStringLiteral("state"), decision.state},
             {QStringLiteral("answer"), decision.answer},
             {QStringLiteral("answered_at"), decision.answeredAt},
-            {QStringLiteral("reason"), decision.reason}};
+            {QStringLiteral("reason"), decision.reason},
+            {QStringLiteral("changed_revision"), decision.changedRevision}};
 }
 
 QJsonObject toJson(const Team& team) {
@@ -334,6 +338,8 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("next_task"), team.nextTask},
             {QStringLiteral("next_decision"), team.nextDecision},
             {QStringLiteral("revision"), team.revision},
+            {QStringLiteral("settings_revision"), team.settingsRevision},
+            {QStringLiteral("members_revision"), team.membersRevision},
             {QStringLiteral("created_at"), team.createdAt},
             {QStringLiteral("changed_at"), team.changedAt}};
 }
@@ -375,6 +381,8 @@ Team teamFromJson(const QJsonObject& json) {
     team.nextTask = json.value(QStringLiteral("next_task")).toInt(1);
     team.nextDecision = json.value(QStringLiteral("next_decision")).toInt(1);
     team.revision = json.value(QStringLiteral("revision")).toInteger();
+    team.settingsRevision = json.value(QStringLiteral("settings_revision")).toInteger();
+    team.membersRevision = json.value(QStringLiteral("members_revision")).toInteger();
     team.createdAt = json.value(QStringLiteral("created_at")).toString();
     team.changedAt = json.value(QStringLiteral("changed_at")).toString();
     return team;

@@ -77,6 +77,8 @@ struct RemoteCommandAudit final {
     QString sessionId;
     QString resultCode;
     QDateTime recordedAt;
+    // ADR 0116 §5: the team a team command acted on, which names no conversation.
+    QString teamId;
 };
 
 // One staged fork's read snapshot and copy position. Destroying it releases the snapshot;

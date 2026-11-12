@@ -144,6 +144,15 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
     if (!teams_->isLoaded())
         return failure(QStringLiteral("teams_unavailable"),
                        QStringLiteral("The teams could not be read. Try again."));
+    // ADR 0116 §4: a change drawn from an older revision of the part it acts on is refused,
+    // with the team as it is now. Local clients that send no expected_revision are unfenced.
+    if (const teams::Team* fenced = teams_->team(teamId)) {
+        if (const auto stale = teams::rules::fence(*fenced, type, payload)) {
+            QJsonObject refusal = failure(*stale);
+            refusal.insert(QStringLiteral("team"), teams_->teamJson(*fenced));
+            return refusal;
+        }
+    }
     if (type == QStringLiteral("team.list")) {
         const QString repository = payload.value(QStringLiteral("repository")).toString();
         QJsonArray list;

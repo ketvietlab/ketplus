@@ -295,8 +295,9 @@ the role that may.
 ## Consequences
 
 - The daemon, not the prompt, enforces every role rule; role instructions only explain.
-- The phone does not show teams yet; the cloud projection is unchanged. ADR 0116 says how a
-  paired phone reads and changes teams.
+- A paired phone reads and changes teams as ADR 0116 says: the daemon advertises
+  `teams.remote/1`, answers sealed `team.*` mailbox commands through the same
+  `TeamCoordinator` rules, and adds a `team` field to the sealed session metadata.
 - An older client without `teams/1` shows the members as ordinary conversations, and
   unknown message kinds (`assignment`, `digest`, `decision`) as plain text.
 

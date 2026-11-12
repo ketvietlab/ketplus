@@ -44,6 +44,13 @@ namespace rules {
 // A branch a team names (its integration branch): empty for none, or a name git accepts
 // (`git check-ref-format --branch`) that cannot be read as an option.
 [[nodiscard]] std::optional<TeamError> validBranch(const QString& branch);
+// ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the
+// part it acts on changed after that revision: a decision answer its decision, team.update
+// the settings, team.delete the settings and the members, a member change the members, a
+// handover its task. A change without it, or a part that does not exist, is left to the
+// command's own rules.
+[[nodiscard]] std::optional<TeamError> fence(const Team& team, const QString& type,
+                                             const QJsonObject& payload);
 
 } // namespace rules
 } // namespace ketplus::daemon::teams

@@ -366,11 +366,19 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
 QByteArray CloudCrypto::decryptSealed(const QJsonObject& content, const QByteArray& associatedData,
                                       const QByteArray& senderSigningKey, const QString& requestId,
                                       QString* error) {
+    return decryptSealedAs(content, associatedData, senderSigningKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), error);
+}
+
+QByteArray CloudCrypto::decryptSealedAs(const QJsonObject& content,
+                                        const QByteArray& associatedData,
+                                        const QByteArray& senderSigningKey,
+                                        const QString& requestId, const QString& keyId,
+                                        QString* error) {
     if (content.value(QStringLiteral("version")).toInt() != 1 ||
         content.value(QStringLiteral("algorithm")).toString() != QStringLiteral("A256GCM") ||
         content.value(QStringLiteral("keyEpoch")).toInt() != 1 ||
-        content.value(QStringLiteral("keyId")).toString() !=
-            QStringLiteral("session-create:%1").arg(requestId)) {
+        content.value(QStringLiteral("keyId")).toString() != keyId) {
         if (error)
             *error = QStringLiteral("The sealed command envelope is invalid.");
         return {};
@@ -417,6 +425,17 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
                                        const QString& requestId, const QString& recipientDeviceId,
                                        const int recipientKeyVersion, const QString& senderDeviceId,
                                        const int senderKeyVersion, QString* error) {
+    return encryptSealedAs(plaintext, associatedData, recipientAgreementKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), recipientDeviceId,
+                           recipientKeyVersion, senderDeviceId, senderKeyVersion, error);
+}
+
+QJsonObject
+CloudCrypto::encryptSealedAs(const QByteArray& plaintext, const QByteArray& associatedData,
+                             const QByteArray& recipientAgreementKey, const QString& requestId,
+                             const QString& keyId, const QString& recipientDeviceId,
+                             const int recipientKeyVersion, const QString& senderDeviceId,
+                             const int senderKeyVersion, QString* error) {
     PKeyContext context(EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, nullptr), EVP_PKEY_CTX_free);
     EVP_PKEY* generated = nullptr;
     if (!context || EVP_PKEY_keygen_init(context.get()) != 1 ||
@@ -446,7 +465,7 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
         return {};
     return {{QStringLiteral("version"), 1},
             {QStringLiteral("algorithm"), QStringLiteral("A256GCM")},
-            {QStringLiteral("keyId"), QStringLiteral("session-create:%1").arg(requestId)},
+            {QStringLiteral("keyId"), keyId},
             {QStringLiteral("keyEpoch"), 1},
             {QStringLiteral("senderDeviceId"), senderDeviceId},
             {QStringLiteral("senderKeyVersion"), senderKeyVersion},

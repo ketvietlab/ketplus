@@ -163,6 +163,13 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         }
         sync();
     });
+    // ADR 0116 §3: phones learn of a team change from the members' sealed metadata.
+    teamSyncTimer_.setSingleShot(true);
+    connect(&teamSyncTimer_, &QTimer::timeout, this, [this] {
+        lastTeamSync_.restart();
+        stateSyncTimer_.start(0);
+    });
+    connect(host_, &SessionHost::teamEvent, this, &CloudControlClient::noteTeamChanged);
     connect(host_, &SessionHost::eventReady, this, [this](const QJsonObject& event) {
         peers_->eventsChanged(event.value("session_id").toString());
         QTimer::singleShot(0, this, &CloudControlClient::uploadEvents);

@@ -1,6 +1,6 @@
 # ADR 0116: A paired phone reads and changes teams
 
-Status: proposed (2026-11-11). Extends ADR 0114 and ADR 0115. Uses ADR 0025 (remote
+Status: accepted (2026-11-12); the daemon side is implemented, the phone app is pending. Extends ADR 0114 and ADR 0115. Uses ADR 0025 (remote
 transport), ADR 0113 (sealed session metadata).
 
 ## Context

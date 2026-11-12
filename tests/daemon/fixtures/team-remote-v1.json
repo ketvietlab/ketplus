@@ -1,0 +1,954 @@
+{
+  "version": 1,
+  "description": "ADR 0116 conformance: a team snapshot, an answered decision (Start for the first plan), a stale_team refusal and the associated data of team commands. Encrypted bodies are placeholders; payload and result are the plaintext inside them.",
+  "capability": "teams.remote/1",
+  "associatedDataRule": "JSON.stringify of the command associated data followed by ownerSubjectId, repositoryId (\"\" when absent), expectedCatalogRevision (-1 when absent), recipientDeviceId, recipientKeyVersion, ephemeralPublicKey",
+  "resultAssociatedDataRule": "JSON.stringify of the command-result associated data (keyId team-result:<id>, sender the Mac) followed by ownerSubjectId and the result's recipient: the command content's senderDeviceId and senderKeyVersion",
+  "sessionMetadataTeam": {
+    "id": "3",
+    "revision": 11,
+    "role": "developer"
+  },
+  "directory": {
+    "request": {
+      "id": "team-command-0005",
+      "idempotencyKey": "mobile-request-team-0005",
+      "kind": "team.list",
+      "capability": "teams.read",
+      "workspaceId": "workspace-1",
+      "machineId": "machine-1",
+      "content": {
+        "version": 1,
+        "algorithm": "A256GCM",
+        "keyId": "team-command:team-command-0005",
+        "keyEpoch": 1,
+        "senderDeviceId": "mobile-1",
+        "senderKeyVersion": 1,
+        "nonce": "AAAAAAAAAAAAAAAA",
+        "ciphertext": "c2VhbGVkLXRlYW0tY29tbWFuZA",
+        "tag": "AAAAAAAAAAAAAAAAAAAAAA",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "recipientDeviceId": "machine-1",
+        "recipientKeyVersion": 2,
+        "ephemeralPublicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    },
+    "payload": {},
+    "result": {
+      "ok": true,
+      "teams": [
+        {
+          "id": "3",
+          "revision": 11,
+          "repository_id": "repository-1",
+          "name": "Mobile Refactor",
+          "paused": false,
+          "paused_reason": "",
+          "open_decisions": 1,
+          "tasks_total": 3,
+          "tasks_done": 0,
+          "members": [
+            {
+              "session_id": "session-leader",
+              "number": "9692",
+              "role": "leader"
+            },
+            {
+              "session_id": "session-dev-1",
+              "number": "3651",
+              "role": "developer"
+            },
+            {
+              "session_id": "session-dev-2",
+              "number": "4120",
+              "role": "developer"
+            },
+            {
+              "session_id": "session-reviewer",
+              "number": "6913",
+              "role": "reviewer"
+            }
+          ]
+        }
+      ],
+      "teams_total": 1
+    }
+  },
+  "snapshot": {
+    "request": {
+      "id": "team-command-0002",
+      "idempotencyKey": "mobile-request-team-0002",
+      "kind": "team.get",
+      "capability": "teams.read",
+      "workspaceId": "workspace-1",
+      "machineId": "machine-1",
+      "content": {
+        "version": 1,
+        "algorithm": "A256GCM",
+        "keyId": "team-command:team-command-0002",
+        "keyEpoch": 1,
+        "senderDeviceId": "mobile-1",
+        "senderKeyVersion": 1,
+        "nonce": "AAAAAAAAAAAAAAAA",
+        "ciphertext": "c2VhbGVkLXRlYW0tY29tbWFuZA",
+        "tag": "AAAAAAAAAAAAAAAAAAAAAA",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "recipientDeviceId": "machine-1",
+        "recipientKeyVersion": 2,
+        "ephemeralPublicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    },
+    "ownerSubjectId": "owner-1",
+    "associatedData": "[\"ketplus\",2,\"command\",\"team-command-0002\",\"workspace-1\",\"machine-1\",\"\",0,\"mobile-request-team-0002\",\"teams.read\",\"team.get\",\"team-command:team-command-0002\",1,\"mobile-1\",1,\"owner-1\",\"\",-1,\"machine-1\",2,\"CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk\"]",
+    "payload": {
+      "team_id": "3"
+    },
+    "sealedResult": {
+      "keyId": "team-result:team-command-0002",
+      "keyEpoch": 1,
+      "senderDeviceId": "machine-1",
+      "senderKeyVersion": 2,
+      "recipientDeviceId": "mobile-1",
+      "recipientKeyVersion": 1,
+      "associatedData": "[\"ketplus\",2,\"command-result\",\"team-command-0002\",\"workspace-1\",\"machine-1\",\"\",0,1,\"completed\",\"ok\",\"team-result:team-command-0002\",1,\"machine-1\",2,\"owner-1\",\"mobile-1\",1]"
+    },
+    "result": {
+      "ok": true,
+      "team": {
+        "id": "3",
+        "revision": 11,
+        "repository_id": "repository-1",
+        "name": "Mobile Refactor",
+        "goal": "Update desktop sidebar and bring the team feature to mobile",
+        "integration_branch": "integration",
+        "merge_policy": "leader",
+        "leader_writes_requirements": true,
+        "execution_policy": "ask",
+        "paused": false,
+        "paused_reason": "",
+        "plan_approved": false,
+        "held_count": 3,
+        "turn_budget": 40,
+        "automatic_turns": 12,
+        "turns_left": 28,
+        "review": {
+          "reviewing": "T-4",
+          "queued": []
+        },
+        "tasks_total": 3,
+        "tasks_done": 0,
+        "open_decisions": 1,
+        "decisions_total": 1,
+        "created_at": "2026-11-11T07:58:00.000Z",
+        "changed_at": "2026-11-11T08:05:00.000Z",
+        "members": [
+          {
+            "session_id": "session-leader",
+            "session_generation": 1,
+            "number": "9692",
+            "title": "Lead Mobile Refactor",
+            "role": "leader",
+            "state": "idle",
+            "now": null,
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-1",
+            "session_generation": 1,
+            "number": "3651",
+            "title": "Remote protocol",
+            "role": "developer",
+            "lane": "Remote protocol",
+            "paths": [
+              "apps/daemon",
+              "docs/decisions",
+              "contracts"
+            ],
+            "state": "working",
+            "now": {
+              "task_id": "T-3",
+              "title": "ADR and contract: how a paired phone reads and changes teams"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-2",
+            "session_generation": 1,
+            "number": "4120",
+            "title": "Mobile UI",
+            "role": "developer",
+            "lane": "Mobile UI",
+            "paths": [
+              "apps/ios"
+            ],
+            "state": "waiting_for_review",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "codex",
+              "model": "gpt-5.6-luna",
+              "effort": "medium"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-reviewer",
+            "session_generation": 1,
+            "number": "6913",
+            "title": "Reviewer",
+            "role": "reviewer",
+            "state": "working",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          }
+        ],
+        "tasks": [
+          {
+            "id": "T-3",
+            "title": "ADR and contract: how a paired phone reads and changes teams",
+            "state": "in_progress",
+            "owner": "session-dev-1",
+            "lane": "Remote protocol",
+            "depends_on": [],
+            "criteria_total": 7,
+            "criteria_met": 2,
+            "round": 0,
+            "pull_request": "",
+            "branch": "team/3/t-3",
+            "worktree_id": "worktree-t-3",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 11
+          },
+          {
+            "id": "T-4",
+            "title": "iOS: adopt the KetUI kit in the app",
+            "state": "in_review",
+            "owner": "session-dev-2",
+            "lane": "Mobile UI",
+            "depends_on": [],
+            "criteria_total": 5,
+            "criteria_met": 5,
+            "round": 1,
+            "pull_request": "https://example.invalid/pull/71",
+            "branch": "team/3/t-4",
+            "worktree_id": "worktree-t-4",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          },
+          {
+            "id": "T-6",
+            "title": "Daemon: serve teams to paired devices as the ADR of T-3 says",
+            "state": "todo",
+            "owner": "",
+            "lane": "Remote protocol",
+            "depends_on": [
+              "T-3"
+            ],
+            "criteria_total": 6,
+            "criteria_met": 0,
+            "round": 0,
+            "pull_request": "",
+            "branch": "",
+            "worktree_id": "",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          }
+        ],
+        "decisions": [
+          {
+            "id": "D-1",
+            "kind": "first_plan",
+            "question": "Start these 3 tasks?",
+            "context": "T-3 to Remote protocol, T-4 to Mobile UI, T-6 to Remote protocol after T-3.",
+            "choices": [
+              "Start",
+              "Change the plan"
+            ],
+            "recommended": "Start",
+            "task_id": "",
+            "raised_by": {
+              "role": "daemon"
+            },
+            "raised_at": "2026-11-11T08:00:00.000Z",
+            "state": "open",
+            "answer": "",
+            "answered_at": "",
+            "delivers_to": [
+              {
+                "role": "leader",
+                "session_id": "session-leader",
+                "number": "9692"
+              }
+            ],
+            "changed_revision": 7
+          }
+        ]
+      },
+      "updates": [
+        {
+          "id": 42,
+          "kind": "task_state",
+          "at": "2026-11-11T08:04:00.000Z",
+          "actor": {
+            "role": "developer",
+            "number": "4120",
+            "session_id": "session-dev-2"
+          },
+          "task_id": "T-4",
+          "pull_request_number": 71,
+          "text": "T-4 moved to In review",
+          "actionable": false,
+          "warning": false
+        },
+        {
+          "id": 41,
+          "kind": "decision_raised",
+          "at": "2026-11-11T08:00:00.000Z",
+          "actor": {
+            "role": "daemon"
+          },
+          "task_id": "",
+          "pull_request_number": null,
+          "text": "D-1 waits for you: Start these 3 tasks?",
+          "actionable": false,
+          "warning": false
+        }
+      ],
+      "updates_has_more": false
+    }
+  },
+  "taskDetail": {
+    "payload": {
+      "team_id": "3",
+      "task_id": "T-3"
+    },
+    "result": {
+      "ok": true,
+      "task": {
+        "id": "T-3",
+        "title": "ADR and contract: how a paired phone reads and changes teams",
+        "state": "in_progress",
+        "owner": "session-dev-1",
+        "lane": "Remote protocol",
+        "depends_on": [],
+        "criteria_total": 7,
+        "criteria_met": 2,
+        "round": 0,
+        "pull_request": "",
+        "branch": "team/3/t-3",
+        "worktree_id": "worktree-t-3",
+        "assignment_held": false,
+        "outside_lane_total": 1,
+        "decision_id": "",
+        "changed_revision": 11,
+        "description": "Write the ADR and the contract for teams on paired devices.",
+        "criteria": [
+          {
+            "text": "An ADR with the next free number.",
+            "met": true
+          },
+          {
+            "text": "The read model is specified field by field.",
+            "met": true
+          },
+          {
+            "text": "Criterion 3.",
+            "met": false
+          },
+          {
+            "text": "Criterion 4.",
+            "met": false
+          },
+          {
+            "text": "Criterion 5.",
+            "met": false
+          },
+          {
+            "text": "Criterion 6.",
+            "met": false
+          },
+          {
+            "text": "Criterion 7.",
+            "met": false
+          }
+        ],
+        "outside_lane": [
+          {
+            "path": "apps/ios/Sources/KetPlusRemoteCore/Teams.swift",
+            "lane": "Mobile UI",
+            "owner_number": "4120"
+          }
+        ],
+        "criteria_note": "Changed today at 08:03: a criterion was added. @agent/3651 was told.",
+        "history": [
+          {
+            "at": "2026-11-11T08:03:00.000Z",
+            "actor": {
+              "role": "leader",
+              "number": "9692",
+              "session_id": "session-leader"
+            },
+            "kind": "criteria",
+            "text": "Added a criterion."
+          }
+        ]
+      },
+      "history_total": 1,
+      "history_start": 0
+    }
+  },
+  "unchanged": {
+    "payload": {
+      "team_id": "3",
+      "known_revision": 11
+    },
+    "result": {
+      "ok": true,
+      "unchanged": true,
+      "revision": 11
+    }
+  },
+  "answeredDecision": {
+    "request": {
+      "id": "team-command-0001",
+      "idempotencyKey": "mobile-request-team-0001",
+      "kind": "team.decision.answer",
+      "capability": "teams.write",
+      "workspaceId": "workspace-1",
+      "machineId": "machine-1",
+      "content": {
+        "version": 1,
+        "algorithm": "A256GCM",
+        "keyId": "team-command:team-command-0001",
+        "keyEpoch": 1,
+        "senderDeviceId": "mobile-1",
+        "senderKeyVersion": 1,
+        "nonce": "AAAAAAAAAAAAAAAA",
+        "ciphertext": "c2VhbGVkLXRlYW0tY29tbWFuZA",
+        "tag": "AAAAAAAAAAAAAAAAAAAAAA",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "recipientDeviceId": "machine-1",
+        "recipientKeyVersion": 2,
+        "ephemeralPublicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    },
+    "ownerSubjectId": "owner-1",
+    "associatedData": "[\"ketplus\",2,\"command\",\"team-command-0001\",\"workspace-1\",\"machine-1\",\"\",0,\"mobile-request-team-0001\",\"teams.write\",\"team.decision.answer\",\"team-command:team-command-0001\",1,\"mobile-1\",1,\"owner-1\",\"\",-1,\"machine-1\",2,\"CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk\"]",
+    "payload": {
+      "team_id": "3",
+      "decision_id": "D-1",
+      "choice": "Start",
+      "expected_revision": 11
+    },
+    "status": "completed",
+    "resultCode": "ok",
+    "result": {
+      "ok": true,
+      "team": {
+        "id": "3",
+        "revision": 12,
+        "repository_id": "repository-1",
+        "name": "Mobile Refactor",
+        "goal": "Update desktop sidebar and bring the team feature to mobile",
+        "integration_branch": "integration",
+        "merge_policy": "leader",
+        "leader_writes_requirements": true,
+        "execution_policy": "ask",
+        "paused": false,
+        "paused_reason": "",
+        "plan_approved": true,
+        "held_count": 0,
+        "turn_budget": 40,
+        "automatic_turns": 12,
+        "turns_left": 28,
+        "review": {
+          "reviewing": "T-4",
+          "queued": []
+        },
+        "tasks_total": 3,
+        "tasks_done": 0,
+        "open_decisions": 0,
+        "decisions_total": 1,
+        "created_at": "2026-11-11T07:58:00.000Z",
+        "changed_at": "2026-11-11T08:05:00.000Z",
+        "members": [
+          {
+            "session_id": "session-leader",
+            "session_generation": 1,
+            "number": "9692",
+            "title": "Lead Mobile Refactor",
+            "role": "leader",
+            "state": "idle",
+            "now": null,
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-1",
+            "session_generation": 1,
+            "number": "3651",
+            "title": "Remote protocol",
+            "role": "developer",
+            "lane": "Remote protocol",
+            "paths": [
+              "apps/daemon",
+              "docs/decisions",
+              "contracts"
+            ],
+            "state": "working",
+            "now": {
+              "task_id": "T-3",
+              "title": "ADR and contract: how a paired phone reads and changes teams"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-2",
+            "session_generation": 1,
+            "number": "4120",
+            "title": "Mobile UI",
+            "role": "developer",
+            "lane": "Mobile UI",
+            "paths": [
+              "apps/ios"
+            ],
+            "state": "waiting_for_review",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "codex",
+              "model": "gpt-5.6-luna",
+              "effort": "medium"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-reviewer",
+            "session_generation": 1,
+            "number": "6913",
+            "title": "Reviewer",
+            "role": "reviewer",
+            "state": "working",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          }
+        ],
+        "tasks": [
+          {
+            "id": "T-3",
+            "title": "ADR and contract: how a paired phone reads and changes teams",
+            "state": "in_progress",
+            "owner": "session-dev-1",
+            "lane": "Remote protocol",
+            "depends_on": [],
+            "criteria_total": 7,
+            "criteria_met": 2,
+            "round": 0,
+            "pull_request": "",
+            "branch": "team/3/t-3",
+            "worktree_id": "worktree-t-3",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 11
+          },
+          {
+            "id": "T-4",
+            "title": "iOS: adopt the KetUI kit in the app",
+            "state": "in_review",
+            "owner": "session-dev-2",
+            "lane": "Mobile UI",
+            "depends_on": [],
+            "criteria_total": 5,
+            "criteria_met": 5,
+            "round": 1,
+            "pull_request": "https://example.invalid/pull/71",
+            "branch": "team/3/t-4",
+            "worktree_id": "worktree-t-4",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          },
+          {
+            "id": "T-6",
+            "title": "Daemon: serve teams to paired devices as the ADR of T-3 says",
+            "state": "todo",
+            "owner": "",
+            "lane": "Remote protocol",
+            "depends_on": [
+              "T-3"
+            ],
+            "criteria_total": 6,
+            "criteria_met": 0,
+            "round": 0,
+            "pull_request": "",
+            "branch": "",
+            "worktree_id": "",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          }
+        ],
+        "decisions": [
+          {
+            "id": "D-1",
+            "kind": "first_plan",
+            "question": "Start these 3 tasks?",
+            "context": "T-3 to Remote protocol, T-4 to Mobile UI, T-6 to Remote protocol after T-3.",
+            "choices": [
+              "Start",
+              "Change the plan"
+            ],
+            "recommended": "Start",
+            "task_id": "",
+            "raised_by": {
+              "role": "daemon"
+            },
+            "raised_at": "2026-11-11T08:00:00.000Z",
+            "state": "answered",
+            "answer": "Start",
+            "answered_at": "2026-11-11T08:06:00.000Z",
+            "delivers_to": [
+              {
+                "role": "leader",
+                "session_id": "session-leader",
+                "number": "9692"
+              }
+            ],
+            "changed_revision": 12
+          }
+        ]
+      }
+    },
+    "audit": {
+      "kind": "team.decision.answer",
+      "device_id": "mobile-1",
+      "device_key_version": 1,
+      "session_id": "",
+      "team_id": "3",
+      "result_code": "ok"
+    }
+  },
+  "refusal": {
+    "request": {
+      "id": "team-command-0003",
+      "idempotencyKey": "mobile-request-team-0003",
+      "kind": "team.task.handover",
+      "capability": "teams.write",
+      "workspaceId": "workspace-1",
+      "machineId": "machine-1",
+      "content": {
+        "version": 1,
+        "algorithm": "A256GCM",
+        "keyId": "team-command:team-command-0003",
+        "keyEpoch": 1,
+        "senderDeviceId": "mobile-1",
+        "senderKeyVersion": 1,
+        "nonce": "AAAAAAAAAAAAAAAA",
+        "ciphertext": "c2VhbGVkLXRlYW0tY29tbWFuZA",
+        "tag": "AAAAAAAAAAAAAAAAAAAAAA",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "recipientDeviceId": "machine-1",
+        "recipientKeyVersion": 2,
+        "ephemeralPublicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    },
+    "ownerSubjectId": "owner-1",
+    "associatedData": "[\"ketplus\",2,\"command\",\"team-command-0003\",\"workspace-1\",\"machine-1\",\"\",0,\"mobile-request-team-0003\",\"teams.write\",\"team.task.handover\",\"team-command:team-command-0003\",1,\"mobile-1\",1,\"owner-1\",\"\",-1,\"machine-1\",2,\"CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk\"]",
+    "payload": {
+      "team_id": "3",
+      "task_id": "T-3",
+      "expected_revision": 10,
+      "owner": "session-dev-2",
+      "reason": "Handed over from iPhone"
+    },
+    "status": "rejected",
+    "resultCode": "stale_team",
+    "sealedResult": {
+      "keyId": "team-result:team-command-0003",
+      "keyEpoch": 1,
+      "senderDeviceId": "machine-1",
+      "senderKeyVersion": 2,
+      "recipientDeviceId": "mobile-1",
+      "recipientKeyVersion": 1,
+      "associatedData": "[\"ketplus\",2,\"command-result\",\"team-command-0003\",\"workspace-1\",\"machine-1\",\"\",0,1,\"rejected\",\"stale_team\",\"team-result:team-command-0003\",1,\"machine-1\",2,\"owner-1\",\"mobile-1\",1]"
+    },
+    "result": {
+      "ok": false,
+      "error_code": "stale_team",
+      "error_message": "T-3 changed since you saw it.",
+      "team": {
+        "id": "3",
+        "revision": 11,
+        "repository_id": "repository-1",
+        "name": "Mobile Refactor",
+        "goal": "Update desktop sidebar and bring the team feature to mobile",
+        "integration_branch": "integration",
+        "merge_policy": "leader",
+        "leader_writes_requirements": true,
+        "execution_policy": "ask",
+        "paused": false,
+        "paused_reason": "",
+        "plan_approved": false,
+        "held_count": 3,
+        "turn_budget": 40,
+        "automatic_turns": 12,
+        "turns_left": 28,
+        "review": {
+          "reviewing": "T-4",
+          "queued": []
+        },
+        "tasks_total": 3,
+        "tasks_done": 0,
+        "open_decisions": 1,
+        "decisions_total": 1,
+        "created_at": "2026-11-11T07:58:00.000Z",
+        "changed_at": "2026-11-11T08:05:00.000Z",
+        "members": [
+          {
+            "session_id": "session-leader",
+            "session_generation": 1,
+            "number": "9692",
+            "title": "Lead Mobile Refactor",
+            "role": "leader",
+            "state": "idle",
+            "now": null,
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-1",
+            "session_generation": 1,
+            "number": "3651",
+            "title": "Remote protocol",
+            "role": "developer",
+            "lane": "Remote protocol",
+            "paths": [
+              "apps/daemon",
+              "docs/decisions",
+              "contracts"
+            ],
+            "state": "working",
+            "now": {
+              "task_id": "T-3",
+              "title": "ADR and contract: how a paired phone reads and changes teams"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-dev-2",
+            "session_generation": 1,
+            "number": "4120",
+            "title": "Mobile UI",
+            "role": "developer",
+            "lane": "Mobile UI",
+            "paths": [
+              "apps/ios"
+            ],
+            "state": "waiting_for_review",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "codex",
+              "model": "gpt-5.6-luna",
+              "effort": "medium"
+            },
+            "changed_revision": 3
+          },
+          {
+            "session_id": "session-reviewer",
+            "session_generation": 1,
+            "number": "6913",
+            "title": "Reviewer",
+            "role": "reviewer",
+            "state": "working",
+            "now": {
+              "task_id": "T-4",
+              "title": "iOS: adopt the KetUI kit in the app"
+            },
+            "agent": {
+              "provider": "claude",
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            },
+            "changed_revision": 3
+          }
+        ],
+        "tasks": [
+          {
+            "id": "T-3",
+            "title": "ADR and contract: how a paired phone reads and changes teams",
+            "state": "in_progress",
+            "owner": "session-dev-1",
+            "lane": "Remote protocol",
+            "depends_on": [],
+            "criteria_total": 7,
+            "criteria_met": 2,
+            "round": 0,
+            "pull_request": "",
+            "branch": "team/3/t-3",
+            "worktree_id": "worktree-t-3",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 11
+          },
+          {
+            "id": "T-4",
+            "title": "iOS: adopt the KetUI kit in the app",
+            "state": "in_review",
+            "owner": "session-dev-2",
+            "lane": "Mobile UI",
+            "depends_on": [],
+            "criteria_total": 5,
+            "criteria_met": 5,
+            "round": 1,
+            "pull_request": "https://example.invalid/pull/71",
+            "branch": "team/3/t-4",
+            "worktree_id": "worktree-t-4",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          },
+          {
+            "id": "T-6",
+            "title": "Daemon: serve teams to paired devices as the ADR of T-3 says",
+            "state": "todo",
+            "owner": "",
+            "lane": "Remote protocol",
+            "depends_on": [
+              "T-3"
+            ],
+            "criteria_total": 6,
+            "criteria_met": 0,
+            "round": 0,
+            "pull_request": "",
+            "branch": "",
+            "worktree_id": "",
+            "assignment_held": false,
+            "outside_lane_total": 0,
+            "decision_id": "",
+            "changed_revision": 9
+          }
+        ],
+        "decisions": [
+          {
+            "id": "D-1",
+            "kind": "first_plan",
+            "question": "Start these 3 tasks?",
+            "context": "T-3 to Remote protocol, T-4 to Mobile UI, T-6 to Remote protocol after T-3.",
+            "choices": [
+              "Start",
+              "Change the plan"
+            ],
+            "recommended": "Start",
+            "task_id": "",
+            "raised_by": {
+              "role": "daemon"
+            },
+            "raised_at": "2026-11-11T08:00:00.000Z",
+            "state": "open",
+            "answer": "",
+            "answered_at": "",
+            "delivers_to": [
+              {
+                "role": "leader",
+                "session_id": "session-leader",
+                "number": "9692"
+              }
+            ],
+            "changed_revision": 7
+          }
+        ]
+      }
+    }
+  },
+  "createAssociatedData": {
+    "request": {
+      "id": "team-command-0004",
+      "idempotencyKey": "mobile-request-team-0004",
+      "kind": "team.create",
+      "capability": "teams.write",
+      "workspaceId": "workspace-1",
+      "machineId": "machine-1",
+      "repositoryId": "repository-1",
+      "expectedCatalogRevision": 7,
+      "content": {
+        "version": 1,
+        "algorithm": "A256GCM",
+        "keyId": "team-command:team-command-0004",
+        "keyEpoch": 1,
+        "senderDeviceId": "mobile-1",
+        "senderKeyVersion": 1,
+        "nonce": "AAAAAAAAAAAAAAAA",
+        "ciphertext": "c2VhbGVkLXRlYW0tY29tbWFuZA",
+        "tag": "AAAAAAAAAAAAAAAAAAAAAA",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "recipientDeviceId": "machine-1",
+        "recipientKeyVersion": 2,
+        "ephemeralPublicKey": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    },
+    "ownerSubjectId": "owner-1",
+    "associatedData": "[\"ketplus\",2,\"command\",\"team-command-0004\",\"workspace-1\",\"machine-1\",\"\",0,\"mobile-request-team-0004\",\"teams.write\",\"team.create\",\"team-command:team-command-0004\",1,\"mobile-1\",1,\"owner-1\",\"repository-1\",7,\"machine-1\",2,\"CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk\"]"
+  }
+}

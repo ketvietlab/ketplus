@@ -23,6 +23,37 @@ int roleOrder(const QString& role) {
     return role == role::leader ? 0 : role == role::developer ? 1 : 2;
 }
 
+// ADR 0116 §4: stamps each part of `team` that differs from `before` with the team's new
+// revision, so a phone's change is refused only when the part it acts on moved.
+void stampChanges(Team& team, const Team& before) {
+    const auto settings = [](const Team& one) {
+        return QJsonArray{one.name,        one.goal,   one.integrationBranch,
+                          one.mergePolicy, one.paused, one.pausedReason};
+    };
+    team.settingsRevision =
+        settings(team) == settings(before) ? before.settingsRevision : team.revision;
+    const auto members = [](const Team& one) {
+        QJsonArray list;
+        for (const Member& member : one.members)
+            list.append(toJson(member));
+        return list;
+    };
+    team.membersRevision =
+        members(team) == members(before) ? before.membersRevision : team.revision;
+    for (Task& task : team.tasks) {
+        const Task* old = before.task(task.id);
+        task.changedRevision = old ? old->changedRevision : team.revision;
+        if (old && toJson(task) != toJson(*old))
+            task.changedRevision = team.revision;
+    }
+    for (Decision& decision : team.decisions) {
+        const Decision* old = before.decision(decision.id);
+        decision.changedRevision = old ? old->changedRevision : team.revision;
+        if (old && toJson(decision) != toJson(*old))
+            decision.changedRevision = team.revision;
+    }
+}
+
 } // namespace
 
 TeamCoordinator::TeamCoordinator(LocalJournal* journal, TeamHostPort* host, QObject* parent)
@@ -100,6 +131,7 @@ QJsonObject TeamCoordinator::teamJson(const Team& team) const {
         QJsonObject entry = toJson(member);
         if (const auto conversation = host_->teamConversation(member.sessionId)) {
             entry.insert(QStringLiteral("number"), conversation->number);
+            entry.insert(QStringLiteral("session_generation"), conversation->generation);
             entry.insert(QStringLiteral("title"), conversation->title);
             entry.insert(QStringLiteral("provider"), conversation->provider);
             entry.insert(QStringLiteral("model"), conversation->model);
@@ -192,6 +224,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                                  const QList<Update>& updates) {
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
+    stampChanges(team, before);
     QString error;
     if (!journal_->saveTeam(team.id, before.revision, toJson(team), team.memberSessions(),
                             &error)) {
@@ -279,6 +312,8 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     draft.automaticTurns = 0;
     draft.nextTask = 1;
     draft.nextDecision = 1;
+    draft.settingsRevision = 1;
+    draft.membersRevision = 1;
     QString error;
     const auto id =
         journal_->insertTeam(draft.repository, toJson(draft), draft.memberSessions(), &error);

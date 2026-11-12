@@ -3,7 +3,7 @@
 Status: host phase 3 implemented; native client phase 4 and forward-only rollout
 remain pending. ADRs [0024](decisions/0024-webrtc-transport-and-forward-only-relay.md)
 and [0025](decisions/0025-remote-transport-protocol.md) define the target protocol.
-The daemon advertises only `transport.webrtc/1` in this phase, so it continues
+The daemon advertises `transport.webrtc/1` and `teams.remote/1` in this phase, so it continues
 legacy encrypted event uploads and mailbox processing for existing clients.
 Same-machine Desktop keeps IPC. No current iPhone release is claimed to use P2P.
 
@@ -32,6 +32,7 @@ Features are gated by capability name, never by version number, as on local IPC:
 | --- | --- |
 | `transport.webrtc/1` | Signals through `/v2/relay`, obtains TURN credentials and speaks the frames below. |
 | `events.forward_only/1` | Reads transcript events only from frames and host pages, never from stored events. |
+| `teams.remote/1` | Answers sealed `team.*` commands through the mailbox and adds `team` to session metadata (ADR 0116). |
 
 Each party advertises its own set:
 
@@ -334,6 +335,34 @@ Tests consume no provider quota:
   credential lifetime in phase 2.
 - Bulk isolation on real networks, and a physical iPhone on Wi-Fi and LTE.
 - The content-free push signal of ADR 0024.
+
+## Teams on paired devices
+
+ADR [0116](decisions/0116-teams-on-paired-devices.md) defines the contract; the fixture is
+`tests/daemon/fixtures/team-remote-v1.json`. The daemon side works as follows:
+
+- `team.*` commands travel through the command mailbox only. A WebRTC peer that sends one is
+  refused, and the session host keeps refusing `team.*` from the plain cloud path.
+- A command is sealed to the Mac (`keyId` `team-command:<id>`, `sessionId` empty, generation
+  0). Its additional data appends `ownerSubjectId`, `repositoryId` or empty,
+  `expectedCatalogRevision` or -1, `recipientDeviceId`, `recipientKeyVersion` and
+  `ephemeralPublicKey`. The result is sealed to the sending device (`team-result:<id>`), with
+  `ownerSubjectId`, that device's id and key version appended.
+- The sender must be a device pinned on this Mac. The command must name this Mac and its
+  current key version, and carry `teams.read` for reads and `teams.write` for changes.
+  Otherwise it is refused with `team_scope_forbidden`.
+- `team.create` names its repository by the catalog's `repositoryId`. A path in any payload is
+  refused. Results name repositories and worktrees by their salted ids, never by path.
+- Each command runs through `TeamCoordinator`, the same rules a local client meets. Changes carry
+  `expected_revision` and are fenced per part (settings, members, each task, each decision).
+  A newer part is refused with `stale_team` and the current summary. A changing result is kept
+  under the command id, so a retried command acts once.
+- A result is at most 384 KiB. Past that, the daemon drops answered decisions first, then
+  updates, then done tasks, and flags each `<part>_truncated`; otherwise `response_too_large`.
+- Session metadata carries `team {id, revision, role}` for each member. After a team change the
+  daemon sends a heartbeat, at most one every 2 seconds, so the phone sees the new revision.
+  A deleted team leaves the metadata.
+- Every changing command is written to the remote audit with its `team_id`; reads are not.
 
 ## Phase 3 host implementation and wire details
 

@@ -8,6 +8,7 @@
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 #include "teams/TeamCoordinator.h"
+#include "teams/TeamRemoteView.h"
 
 #include <QDeadlineTimer>
 #include <QHash>
@@ -60,6 +61,18 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] bool teamChecksPending() const;
     void handleCommandDeferred(const QJsonObject& request, const QString& clientId,
                                CommandCallback done);
+    // ADR 0116: a team command a paired phone sent, already opened and scoped by the cloud
+    // layer. `request` is a local team.* request whose message_id is the mailbox command id;
+    // team.create names its repository by path. The command meets the same TeamCoordinator
+    // rules as a local client's; the answer is the phone's read model (TeamRemoteView.h), and
+    // a change's answer is kept under the command id, so a repeated delivery acts once.
+    void remoteTeamCommand(const QJsonObject& request, const teams::remote::Ids& ids,
+                           CommandCallback done);
+    [[nodiscard]] static bool isRemoteTeamCommand(const QString& type);
+    [[nodiscard]] static bool isRemoteTeamRead(const QString& type);
+    // ADR 0116 §3: the `team` field {id, revision, role} of each member conversation's
+    // sealed metadata, by session id.
+    [[nodiscard]] QHash<QString, QJsonObject> teamMetadata() const;
     static constexpr int steerOutcomeTimeoutMs = 20'000;
     // Streamed text is journaled at most this often per session: consecutive deltas of one item
     // become one event. One event per provider chunk (a word or less) made every reader, above
@@ -339,6 +352,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // The member a leader names by its conversation number; empty when it is not on the team.
     [[nodiscard]] QString teamMemberByNumber(const teams::Team& team, const QString& number) const;
     [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // ADR 0116, in SessionHostTeamsRemote.cpp: the local answer of a phone's team command,
+    // for the phone.
+    [[nodiscard]] QJsonObject remoteTeamAnswer(const QString& type, const QJsonObject& request,
+                                               const teams::remote::Ids& ids);
     // A member conversation that has not had a turn yet. Returns its id, or empty with
     // `problem` set.
     QString createMemberConversation(const QString& worktree, const QString& provider,
