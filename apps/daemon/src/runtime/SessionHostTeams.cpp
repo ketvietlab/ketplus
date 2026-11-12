@@ -40,9 +40,9 @@ bool SessionHost::repositoryKnown(const QString& worktreePath) const {
 }
 
 // Only an answer is kept: git's, or the team's for a task worktree. A path that is no
-// repository yet, or a git that did not answer in time, is asked again, but not before the event
-// loop turns: a command names a path more than once, and each failed call can take the whole
-// timeout.
+// repository yet, or a git that did not answer in time, is asked again, but not before the
+// event loop turns: a command names a path more than once, and each failed call can take
+// the whole timeout.
 void SessionHost::noteRepository(const QString& worktreePath, const QString& repository) const {
     if (!repository.isEmpty()) {
         repositoryByWorktree_.insert(worktreePath, repository);
