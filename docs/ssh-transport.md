@@ -296,14 +296,26 @@ port 22). The connect card adds the target when Connect is pressed. An
 attempt that fails or is cancelled before the first connection removes the
 target and any key accepted for it. Connect, Disconnect, Remove, Forget old
 key and Trust new identity act on the backend. Saved machines with a trusted
-identity connect when the app starts: `main()` calls
-`MainWindow::startLinuxMachines()` for each window, which creates Connections
-hidden, attaches both routes and activates its machines, so the picker lists
-them before Connections is opened. The Relay machines attach only while the
+identity connect when the app starts. The Relay machines attach only while the
 account is entitled. A machine the user disconnected stays closed until they
-connect it. The hidden page polls nothing: its daemon status refresh runs
-only while Connections is shown. Each window owns its own SSH and Relay backends, as
-before; one shared set per app is a follow-up.
+connect it.
+
+The app owns one set of Linux machines, `LinuxMachines` (apps/desktop). It
+holds the account client, the `LinuxMachineModel`, one `SshMachineBackend`
+(one tunnel) per saved SSH machine, and one Relay link per Relay host, so each
+host's outbox has one writer. `main()` creates the set, attaches both routes
+and starts it once. It gives the set to every window with
+`MainWindow::useLinuxMachines()`. Each window then creates Connections
+hidden, and its section, picker and `MachineSelection` read from the set, so
+the picker lists the machines before Connections is opened. Connect,
+Disconnect, the fallback, sign-in and entitlement changes show in every
+window at once. Opening or closing a window neither starts nor drops a
+connection, and quitting the app destroys the set and closes them. A prompt
+the machines raise (the connect card after Forget old key) opens once, in the
+window where Connections was last shown; the first-use host key is asked only
+in the card that connects. The hidden page polls nothing: its daemon status
+refresh runs only while Connections is shown. A window without a set (as in
+tests) makes its own when Connections opens.
 
 `LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
 `RelayMachineBackend` for each host that the Relay's worktree index lists,
@@ -347,6 +359,11 @@ Connections' SSH route through the same fake link and daemon
 with fake links: live state, the entitlement gate, fingerprint keying with SSH
 preferred, the Relay fallback (Disconnect and Connect again, a user Disconnect
 that keeps SSH), host presence, pending outcomes and the Pro hint.
+`ketplus_machine_window_tests` shows two windows on one set: one tunnel and
+one Relay link per host, the same backend in both windows' `MachineSelection`,
+a prompt opening in one window, and the second window still connected after
+the first closes. `ketplus_remote_relay_backend_tests` keeps the commands two
+windows queue on the shared backend across a restart and applies each once.
 `ketplus_linux_machines_tests` covers the launch start (saved SSH machines and,
 only while entitled, the Relay machines connect with Connections hidden) and
 the fallback row's SSH failure and Use SSH.

@@ -78,13 +78,28 @@ Delivery depends on the receiver:
   next turn the user starts, whichever comes first.
 - **`urgent`**: delivered through `session.steer` when the receiver's provider
   supports steering into its active turn; otherwise queued. The journaled
-  `turn.steered` carries the same `origin` fields.
+  `turn.steered` carries the same `origin` fields. A busy receiver that cannot be
+  steered now (its turn has ended but a background task it started still runs, its
+  turn is starting or stopping, or its provider cannot steer) gets the message at
+  the first point the provider allows: every later event of the receiver tries the
+  steer again, and once the receiver is idle the message starts its turn as usual
+  (decided 2026-11-12).
 - **Provider failure**: the message becomes `failed` and the sender's next turn
   receives the error.
 
 `agents_send` returns the message ID and the receiver's number, title, provider
-and delivery state (`starting`, `queued` or `steered`) so the sender can verify
-the address.
+and delivery state so the sender can verify the address. The states are
+`starting` (the message starts a turn), `queued` (it arrives when the receiver's
+turn ends), `steering` (urgent, handed to the running turn), `urgent_waiting`
+(urgent, but the receiver cannot be steered now) and `recorded` (a review's
+answer). With `urgent_waiting` the receipt adds `waiting_on`, what the receiver
+waits on in words, and a `note` saying that it could not steer yet and that the
+message should not be sent again. A running turn that is inside a tool call (a
+command, another tool such as a wait loop or an MCP tool, or a web search, tracked
+from its `item.started` and `item.completed` events) can be steered, but its provider reads the steer only
+when that call ends: the receipt then says `steering` with `waiting_on` (for
+example "a command (Bash)") and a note saying so. The tool description and the
+agents' instructions name these states.
 
 A request with `expect_reply` is answered by an explicit
 `agents_send(reply_to=…)`. If the woken turn ends without one, the daemon sends

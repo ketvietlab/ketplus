@@ -8,6 +8,10 @@ legacy encrypted event uploads and mailbox processing for existing clients.
 Same-machine Desktop keeps IPC. No current iPhone release is claimed to use P2P.
 A Desktop that can already reach a Linux host over OpenSSH can instead use the
 SSH route in [`ssh-transport.md`](ssh-transport.md), which bypasses the relay.
+Desktop reaches a paired Linux host over the Relay today through Control v2
+(`RelayMachineBackend`, ADR 0119, `linux-headless-daemon.md`); this document's
+WebRTC transport is a later, direct path for that same route and changes
+nothing in how Desktop composes the machine.
 
 This document specifies how a paired remote client and the daemon agree on the transport, set up a
 WebRTC connection through the relay, authenticate it, and exchange frames, and how both ends

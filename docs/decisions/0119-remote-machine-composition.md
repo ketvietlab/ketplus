@@ -124,7 +124,8 @@ operation that fails shows its error.
 Over SSH the daemon features come from the remote daemon's `daemon.hello`, as on
 This Mac, so an older Linux daemon shows Fork and Archive disabled. The client
 names a fork (`fork_session_id`), so a retried request cannot fork twice; the
-fork opens once the machine lists it (the Relay verifies it first). A queued
+fork opens once the machine lists it (the Relay verifies it first), unless the
+reader has moved on since asking. A queued
 Relay rename or fork finishes when the host confirms the command.
 
 **Rich renderer (deferred, leader decision A).** A remote conversation uses a
@@ -393,6 +394,12 @@ The code is `ControlV2Client::entitlements()` and
 - Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
   against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).
+- Ownership: the app has one set of remote machine backends (`LinuxMachines`,
+  docs/ssh-transport.md "Connections"). It holds one SSH tunnel per saved
+  machine and one `RelayMachineBackend`, and so one outbox writer, per Relay
+  host. Every window's `MachineSelection`, picker and Connections read from that
+  set, so a machine is the same backend in every window. Windows open and close
+  without starting or dropping connections, and quitting closes them.
 - Scope item 3 (SSH transport with the fingerprint flow) and
   item 4 (Connections: route, Connected/Offline, Details with the verified fingerprint,
   Connect/Disconnect, the two-route "Connect a Linux machine" dialog) build on

@@ -199,6 +199,47 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(kinds(), QStringList{"wait>dev2"});
     }
 
+    // T-39: a wait is shown, but a digest that would only repeat waits is not sent.
+    void waitsAloneSendNoDigestAndRideAlongWithARealChange() {
+        teams_->setQuietPeriod(20);
+        teams_->setWaitMinuteForTesting(60000); // no wake-up during this test
+        const QString id = inProgress();
+        const int turns = team().automaticTurns;
+        // The leader's own wait and a developer's wait, with the leader idle and its turn over.
+        QVERIFY(teams_->wait(team_, "lead", 30, "the user's answer on the release").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 30, "CI on the pull request", id).ok());
+        teams_->memberTurnEnded("lead");
+        QTest::qWait(100);
+        QVERIFY2(host_.messages.isEmpty(), "A digest of waits only starts no turn.");
+        QCOMPARE(team().automaticTurns, turns);
+        // The team page still shows both.
+        int waits = 0;
+        for (const auto& value : teams_->updatesJson(team_))
+            waits += value.toObject().value("kind").toString() == "wait" ? 1 : 0;
+        QCOMPARE(waits, 2);
+
+        // The leader renews its wait: only the latest one is listed, not both.
+        QVERIFY(teams_->wait(team_, "lead", 20, "the user's answer, asked again").ok());
+        // A real change: the digest carries it and the latest wait of each member.
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which endpoint?").ok());
+        QTRY_COMPARE_WITH_TIMEOUT(kinds(), QStringList{"digest>lead"}, 2000);
+        const QString body = host_.messages.first().body;
+        QVERIFY(body.contains("Which endpoint?"));
+        QVERIFY(!body.contains("the user's answer on the release"));
+        QCOMPARE(body.count("Lead waits"), 1);
+        QVERIFY(body.contains("waits 20 min: the user's answer, asked again"));
+        QVERIFY(body.contains("waits 30 min: CI on the pull request"));
+        // The waits were digested with it: the next turn end repeats nothing.
+        teams_->memberTurnEnded("lead");
+        QTest::qWait(100);
+        QCOMPARE(host_.messages.size(), 1);
+        // A new wait alone after that digest sends nothing either.
+        QVERIFY(teams_->wait(team_, "dev2", 30, "a device to test on").ok());
+        teams_->memberTurnEnded("lead");
+        QTest::qWait(100);
+        QCOMPARE(host_.messages.size(), 1);
+    }
+
     void aFailedMessageOutsideTheTeamWakesItsSender() {
         (void)inProgress();
         const int turns = team().automaticTurns;

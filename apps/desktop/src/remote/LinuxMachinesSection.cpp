@@ -5,31 +5,22 @@
 #include "KetIcons.h"
 #include "KetTokens.h"
 
-#include "KetPlusProductVersion.h"
 #include "control/ControlV2Client.h"
-#include "remote/AccountEntitlements.h"
 #include "remote/LinuxConnectDialog.h"
 #include "remote/LinuxMachineRow.h"
 #include "ssh/SshMachineBackend.h"
 
-#include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QHash>
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QPointer>
 #include <QStyle>
-#include <QTimer>
-#include <QUrl>
 #include <QVBoxLayout>
 
 namespace ketplus {
 
-LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
-    : QWidget(parent), client_(new remote::ControlV2Client(
-                           QUrl(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL)), this)) {
+LinuxMachinesSection::LinuxMachinesSection(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("linuxMachinesSection"));
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -80,116 +71,113 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     footnote->setWordWrap(true);
     footnoteRow->addWidget(footnote, 1);
     outer->addLayout(footnoteRow);
-    connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
-        syncEntitlement();
-        setNotice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,
-                  !error.isEmpty());
-        render();
-        if (error.isEmpty())
-            refreshMachines();
-    });
-    // A revoked session is signed out: the Relay stops and its rows offer no Connect.
-    connect(client_, &remote::ControlV2Client::credentialRevoked, this, [this] {
-        syncEntitlement();
-        render();
-    });
-    presence_ = new QTimer(this);
-    presence_->setInterval(60 * 1000);
-    connect(presence_, &QTimer::timeout, this, [this] {
-        if (isVisible() && relay_ && relay_->enabled())
-            refreshMachines();
-        else if (isVisible())
-            render(); // "last seen" ages even without a new listing
-    });
     // The rows' icons are drawn in the theme's ink.
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
             &LinuxMachinesSection::render);
-    setModel(new LinuxMachineModel(this));
+    // The machines come with the shared set (setMachines), or with its own on first use.
+}
+
+LinuxMachines* LinuxMachinesSection::machines() const {
+    if (!machines_ && !shared_) {
+        auto* self = const_cast<LinuxMachinesSection*>(this);
+        self->machines_ = new LinuxMachines(self);
+        self->ownsMachines_ = true;
+        self->connectMachines();
+    }
+    return machines_;
+}
+
+void LinuxMachinesSection::showEvent(QShowEvent* event) {
+    machines(); // a section shown without a shared set lists its own
+    QWidget::showEvent(event);
 }
 
 QStringList LinuxMachinesSection::machineIds() const {
     QStringList ids;
-    for (const auto& machine : model_->machines())
+    for (const auto& machine : model()->machines())
         ids.append(machine.id);
     return ids;
 }
 
-void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
-    if (!model || model == model_)
+void LinuxMachinesSection::setMachines(LinuxMachines* machines) {
+    if (!machines || machines == machines_)
         return;
-    if (model_) {
-        disconnect(model_, nullptr, this, nullptr);
-        if (model_->parent() == this)
-            model_->deleteLater();
+    if (machines_) {
+        machines_->removeSection(this);
+        disconnect(machines_, nullptr, this, nullptr);
+        if (shownModel_)
+            disconnect(shownModel_, nullptr, this, nullptr);
+        if (ownsMachines_)
+            delete machines_.data();
     }
-    model_ = model;
-    connect(model_, &LinuxMachineModel::machinesChanged, this, [this] {
+    machines_ = machines;
+    ownsMachines_ = false;
+    shared_ = true;
+    connectMachines();
+    machines_->publishMachines(); // the window's picker lists the shared machines at once
+}
+
+void LinuxMachinesSection::connectMachines() {
+    machines_->addSection(this);
+    connect(machines_, &LinuxMachines::machinesChanged, this,
+            &LinuxMachinesSection::machinesChanged);
+    connectModel();
+    connect(machines_, &LinuxMachines::modelReplaced, this, [this] {
+        connectModel();
         render();
-        QStringList ids;
-        QStringList names;
-        for (const auto& machine : model_->machines()) {
-            ids.append(machine.id);
-            names.append(LinuxMachineModel::pickerLabel(machine));
-        }
-        emit machinesChanged(ids, names);
     });
-    connect(model_, &LinuxMachineModel::sshConnectPrompted, this,
-            &LinuxMachinesSection::openConnectCard);
-    connect(model_, &LinuxMachineModel::backendsAttachedChanged, this,
-            &LinuxMachinesSection::render);
-    connect(model_, &QObject::destroyed, this, [this] {
-        model_ = nullptr;
-        setModel(new LinuxMachineModel(this));
-    });
-    syncEntitlement();
+    connect(machines_, &LinuxMachines::changed, this, &LinuxMachinesSection::render);
+    connect(machines_, &LinuxMachines::notice, this, &LinuxMachinesSection::setNotice);
     render();
 }
 
-void LinuxMachinesSection::syncEntitlement() {
-    // The Relay is Pro: entitled only when the signed-in session names it (D-4: fail closed).
-    const bool entitled = client_->signedIn() && relayEntitled(client_->entitlements());
-    model_->setRelayEntitled(entitled);
-    if (relay_)
-        relay_->setEnabled(entitled);
+void LinuxMachinesSection::connectModel() {
+    // Only one model is followed: the set's current one.
+    if (shownModel_)
+        disconnect(shownModel_, nullptr, this, nullptr);
+    shownModel_ = machines_->model();
+    connect(shownModel_, &LinuxMachineModel::machinesChanged, this, &LinuxMachinesSection::render);
+    connect(shownModel_, &LinuxMachineModel::backendsAttachedChanged, this,
+            &LinuxMachinesSection::render);
+}
+
+LinuxMachineModel* LinuxMachinesSection::model() const {
+    if (auto* set = machines())
+        return set->model();
+    if (!emptyModel_)
+        const_cast<LinuxMachinesSection*>(this)->emptyModel_ =
+            new LinuxMachineModel(const_cast<LinuxMachinesSection*>(this));
+    return emptyModel_;
+}
+
+void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
+    if (auto* set = machines())
+        set->setModel(model);
 }
 
 void LinuxMachinesSection::attachRelayBackend(LinuxRelayMachines::LinkFactory links) {
-    delete relay_;
-    relay_ = new LinuxRelayMachines(
-        model_, links ? std::move(links) : LinuxRelayMachines::systemLinks(client_), this);
-    presence_->start();
-    // The listing arrives when Connections opens (activate()).
-    syncEntitlement();
-    render();
+    if (auto* set = machines())
+        set->attachRelayBackend(std::move(links));
 }
 
 void LinuxMachinesSection::attachSshBackend(QString storePath,
                                             LinuxSshMachines::LinkFactory links) {
-    delete ssh_;
-    ssh_ = new LinuxSshMachines(model_, std::move(storePath), std::move(links), this);
-    connect(ssh_, &LinuxSshMachines::notice, this, &LinuxMachinesSection::setNotice);
-    render();
+    if (auto* set = machines())
+        set->attachSshBackend(std::move(storePath), std::move(links));
 }
 
 remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) const {
-    // The route the row shows: SSH, or the Relay while it is the fallback (ADR 0119).
-    const auto* machine = model_ ? model_->machine(id) : nullptr;
-    auto* relay = relay_ ? relay_->backend(id) : nullptr;
-    if (machine && machine->route == LinuxMachine::Route::Relay && relay)
-        return relay;
-    if (auto* backend = ssh_ ? ssh_->backend(id) : nullptr)
-        return backend;
-    return relay;
+    auto* set = machines();
+    return set ? set->machineBackend(id) : nullptr;
 }
 
 void LinuxMachinesSection::activate() {
-    if (ssh_)
-        ssh_->connectSaved();
-    // A refreshed session may have gained or lost the Relay entitlement.
-    syncEntitlement();
-    render();
-    if (client_->signedIn())
-        refreshMachines();
+    // Connections is shown here: a prompt the machines raise opens in this window.
+    auto* set = machines();
+    if (!set)
+        return; // the app's set is gone: the app is quitting
+    set->setPromptSection(this);
+    set->start();
 }
 
 void LinuxMachinesSection::setPairingEntryShown(const bool shown) {
@@ -209,11 +197,15 @@ void LinuxMachinesSection::setNotice(const QString& message, const bool error) {
 }
 
 void LinuxMachinesSection::render() {
+    if (!machines_)
+        return; // the app's set is gone: the app is quitting
     while (auto* item = rows_->takeAt(0)) {
         delete item->widget();
         delete item;
     }
-    const auto& machines = model_->machines();
+    auto* shown = model();
+    auto* account = machines_->client();
+    const auto& machines = shown->machines();
     count_->setText(tr("%1 trusted").arg(machines.size()));
     const auto message = [this](const QString& text) {
         auto* box = new QFrame(this);
@@ -228,13 +220,13 @@ void LinuxMachinesSection::render() {
         rows_->addWidget(box);
         return layout;
     };
-    const auto addRows = [this, &machines] {
+    const auto addRows = [this, shown, &machines] {
         // A device row as the phones above: icon, name, its state and route, and its actions.
         for (const auto& machine : machines)
-            rows_->addWidget(makeLinuxMachineRow(machine, model_, this));
+            rows_->addWidget(makeLinuxMachineRow(machine, shown, this));
     };
     // SSH needs no account, so it is offered signed out too, once a backend can carry it.
-    const bool ssh = model_->backendsAttached();
+    const bool ssh = shown->backendsAttached();
     const auto addConnectButton = [this](QBoxLayout* layout, const ket::ButtonVariant variant) {
         auto* connectButton = new ket::Button(tr("Connect a Linux machine"), variant, this);
         connectButton->setObjectName(QStringLiteral("linuxMachinesConnect"));
@@ -242,7 +234,7 @@ void LinuxMachinesSection::render() {
                 &LinuxMachinesSection::beginPairing);
         layout->addWidget(connectButton, 0, Qt::AlignLeft);
     };
-    if (!client_->signedIn()) {
+    if (!account->signedIn()) {
         addRows();
         auto* layout = message(
             ssh ? tr("Connect over SSH with your own SSH keys; no account is needed. To pair "
@@ -259,13 +251,13 @@ void LinuxMachinesSection::render() {
             ssh && pairingEntryShown_ ? ket::ButtonVariant::Secondary : ket::ButtonVariant::Primary,
             this);
         signInButton->setObjectName(QStringLiteral("linuxMachinesSignIn"));
-        connect(signInButton, &QAbstractButton::clicked, this, &LinuxMachinesSection::signIn);
+        connect(signInButton, &QAbstractButton::clicked, machines_, &LinuxMachines::signIn);
         actions->addWidget(signInButton, 0, Qt::AlignLeft);
         actions->addStretch(1);
         layout->addLayout(actions);
         return;
     }
-    if (loading_ && machines.isEmpty()) {
+    if (machines_->loading() && machines.isEmpty()) {
         message(tr("Loading trusted machines…"));
         return;
     }
@@ -292,26 +284,13 @@ void LinuxMachinesSection::render() {
     }
 }
 
-void LinuxMachinesSection::signIn() {
-    setNotice(tr("Opening account sign-in…"));
-    client_->startSignIn([this](const QJsonValue& value, const QString& error) {
-        if (!error.isEmpty()) {
-            setNotice(error, true);
-            return;
-        }
-        const QUrl page(value.toObject().value(QStringLiteral("authorizationUrl")).toString());
-        if (!QDesktopServices::openUrl(page)) {
-            client_->cancelSignIn();
-            setNotice(tr("Could not open the account sign-in page."), true);
-            return;
-        }
-        setNotice(tr("Finish sign-in in your browser, then return here."));
-    });
-}
-
 LinuxMachinesSection::~LinuxMachinesSection() {
-    if (model_)
-        disconnect(model_, nullptr, this, nullptr);
+    if (machines_) {
+        machines_->removeSection(this);
+        disconnect(machines_, nullptr, this, nullptr);
+        if (shownModel_)
+            disconnect(shownModel_, nullptr, this, nullptr);
+    }
     delete connectDialog_.data();
 }
 
@@ -321,57 +300,20 @@ void LinuxMachinesSection::openConnectCard(const QString& sshHost) {
     if (connectDialog_)
         return;
     // SSH needs no account, so the card opens signed out too; its Relay mode offers sign-in.
-    connectDialog_ = openLinuxConnectDialog(this, model_, client_,
-                                            {[this] { signIn(); },
-                                             [this](const QString& message) {
+    QPointer<LinuxMachines> set = machines();
+    if (!set)
+        return;
+    connectDialog_ = openLinuxConnectDialog(this, model(), set->client(),
+                                            {[set] {
+                                                 if (set)
+                                                     set->signIn();
+                                             },
+                                             [this, set](const QString& message) {
                                                  setNotice(message);
-                                                 refreshMachines();
+                                                 if (set)
+                                                     set->refreshMachines();
                                              }},
                                             LinuxConnectMode::Ssh, sshHost);
-}
-
-void LinuxMachinesSection::refreshMachines() {
-    if (loading_ || !client_->signedIn())
-        return;
-    loading_ = true;
-    render();
-    client_->listWorktrees([this](const QJsonValue& value, const QString& error) {
-        loading_ = false;
-        if (!error.isEmpty()) {
-            setNotice(error, true);
-            render();
-            return;
-        }
-        // ADR 0119: each host is named by the fingerprint pinned when it was paired.
-        // Each worktree carries its host's display name and when the host last refreshed it
-        // (its heartbeat): the newest one is when the host was last seen.
-        QList<LinuxRelayListing> listed;
-        QHash<QString, qsizetype> seen;
-        for (const auto& item : value.toArray()) {
-            const auto worktree = item.toObject();
-            const auto id = worktree.value(QStringLiteral("machineId")).toString();
-            if (id.isEmpty())
-                continue;
-            const auto updated = QDateTime::fromString(
-                worktree.value(QStringLiteral("updatedAt")).toString(), Qt::ISODateWithMs);
-            const auto name = worktree.value(QStringLiteral("machineDisplayName")).toString();
-            if (!seen.contains(id)) {
-                seen.insert(id, listed.size());
-                listed.append({id, client_->pinnedFingerprint(id), name, updated});
-                continue;
-            }
-            auto& listing = listed[seen.value(id)];
-            if (updated.isValid() && (!listing.lastSeen.isValid() || updated > listing.lastSeen))
-                listing.lastSeen = updated;
-            if (listing.name.isEmpty())
-                listing.name = name;
-        }
-        if (relay_)
-            relay_->setListed(listed);
-        else
-            model_->setRelayMachines(listed);
-        render();
-    });
 }
 
 } // namespace ketplus

@@ -3,6 +3,7 @@
 #include "git/GitChangesPanel.h"
 #include "machine/MachineComposition.h"
 #include "machine/MachineSelection.h"
+#include "remote/LinuxMachines.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
@@ -63,9 +64,6 @@ void MainWindow::ensureRemoteControl() {
         return;
     remoteControl_ = new RemoteControlView(workspaceSplit_);
     remoteControl_->hide(); // shown only by setRemoteWorkspaceVisible
-    // The saved SSH machines and the SSH route of Connections (ADR 0119).
-    remoteControl_->linuxMachines()->attachSshBackend();
-    remoteControl_->linuxMachines()->attachRelayBackend();
     connect(remoteControl_, &RemoteControlView::machinesChanged, this,
             [this](const QStringList& ids, const QStringList& names) {
                 remoteMachineIds_ = ids;
@@ -86,11 +84,19 @@ void MainWindow::ensureRemoteControl() {
     connect(remoteControl_, &RemoteControlView::accountChanged, activityBar_,
             &ActivityBar::setAccount); // sign-in and sign-out happen here
     workspaceSplit_->addWidget(remoteControl_);
+    if (sharedLinuxMachines_ != nullptr) {
+        remoteControl_->linuxMachines()->setMachines(sharedLinuxMachines_);
+        return;
+    }
+    // No shared set: this window's own saved SSH machines and Relay route (ADR 0119).
+    remoteControl_->linuxMachines()->attachSshBackend();
+    remoteControl_->linuxMachines()->attachRelayBackend();
 }
 
-void MainWindow::startLinuxMachines() {
+void MainWindow::useLinuxMachines(LinuxMachines* machines) {
+    sharedLinuxMachines_ = machines;
     ensureRemoteControl();
-    remoteControl_->linuxMachines()->activate();
+    remoteControl_->linuxMachines()->setMachines(machines);
 }
 
 } // namespace ketplus

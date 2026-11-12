@@ -38,6 +38,8 @@ class MachineWorkspaceView final : public QWidget {
     [[nodiscard]] QString openSessionId() const;
     // Rename, fork and archive of this machine's conversations (the sidebar menu uses it too).
     [[nodiscard]] MachineConversationActions* actions() const { return actions_; }
+    // A fork the machine confirmed, opened once it is listed; empty when none waits.
+    [[nodiscard]] QString pendingFork() const { return pendingFork_; }
 
   signals:
     // A conversation was opened or created, for the sidebar's selection.
@@ -69,6 +71,11 @@ class MachineWorkspaceView final : public QWidget {
     QString actionError_;
     QString pendingFork_; // opened once the machine lists it (the Relay verifies it first)
     QString pendingForkMachine_;
+    struct ForkOrigin {
+        QString machineId;
+        QString openSessionId; // what the reader read when they asked; empty for the composer
+    };
+    QHash<QString, ForkOrigin> forkOrigins_; // fork request id -> where it was asked
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
     QToolButton* more_{nullptr};

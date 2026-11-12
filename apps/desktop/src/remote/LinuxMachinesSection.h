@@ -5,12 +5,12 @@
 #include <QWidget>
 
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxMachines.h"
 #include "remote/LinuxRelayMachines.h"
 #include "remote/LinuxSshMachines.h"
 
 class QLabel;
 class QAbstractButton;
-class QTimer;
 class QVBoxLayout;
 namespace ket {
 class Dialog;
@@ -33,18 +33,19 @@ class LinuxMachinesSection final : public QWidget {
     // Shows the section's own Connect button, for when the page's Add menu is not shown.
     void setPairingEntryShown(bool shown);
     [[nodiscard]] QStringList machineIds() const;
-    // The machines the section shows. It owns its own model until another is set; the Relay's
-    // trusted machines are written into whichever model it has.
-    [[nodiscard]] LinuxMachineModel* model() const { return model_; }
+    // The Linux machines the section shows: its own set until the app's shared one is set
+    // (main() shares one set with every window). Setting it emits machinesChanged at once.
+    // The section makes its own set only when it is used without a shared one.
+    [[nodiscard]] LinuxMachines* machines() const;
+    void setMachines(LinuxMachines* machines);
+    // The set's model; an empty one once the app's set is gone (quitting).
+    [[nodiscard]] LinuxMachineModel* model() const;
+    // Shows `model` instead of the set's own (LinuxMachines::setModel), for tests that drive a
+    // model and its controllers themselves.
     void setModel(LinuxMachineModel* model);
-    // Attaches the SSH backend to the current model: the saved SSH machines, the SSH mode of the
-    // connect card, and Connect, Disconnect and Remove. Production uses the defaults; tests
-    // pass a temporary store and fake links.
+    // The set's backends (LinuxMachines); a shared set is attached once, by main().
     void attachSshBackend(QString storePath = remote::ssh::SshMachineStore::defaultPath(),
                           LinuxSshMachines::LinkFactory links = LinuxSshMachines::systemLinks());
-    // Attaches the Relay backend: one link per host the Relay lists, running while the account
-    // is entitled to the Relay. Production uses RelayMachineBackend over the section's client;
-    // tests pass fake links.
     void attachRelayBackend(LinuxRelayMachines::LinkFactory links = {});
     // The ADR 0119 backend of a machine, which the window's MachineSelection registers for each
     // id in machinesChanged; null while no backend carries it.
@@ -58,25 +59,27 @@ class LinuxMachinesSection final : public QWidget {
   private:
     friend class RemoteControlViewTest;
     friend class LinuxMachinesSectionTest;
+    friend class LinuxMachines;
     void render();
-    void signIn();
-    void refreshMachines();
     void setNotice(const QString& message, bool error = false);
     void openConnectCard(const QString& sshHost);
-    void syncEntitlement();
+    void connectMachines();
+    void connectModel();
+    void showEvent(QShowEvent* event) override;
 
-    remote::ControlV2Client* client_;
-    LinuxMachineModel* model_{nullptr};
-    LinuxSshMachines* ssh_{nullptr};
-    LinuxRelayMachines* relay_{nullptr};
-    // Refreshes the Relay listing while the section is shown, so host presence stays current.
-    QTimer* presence_;
+    QPointer<LinuxMachines> machines_;
+    QPointer<LinuxMachineModel> shownModel_;
+    // What model() returns after the shared set is gone.
+    LinuxMachineModel* emptyModel_{nullptr};
+    // The set the section made for itself, deleted when a shared one replaces it.
+    bool ownsMachines_{false};
+    // A shared set was set: once it is gone (the app is quitting) none is made in its place.
+    bool shared_{false};
     // The open connect card is a child of the window, so the section deletes it itself.
     QPointer<ket::Dialog> connectDialog_;
     QLabel* count_;
     QLabel* notice_;
     QVBoxLayout* rows_;
-    bool loading_{false};
     bool pairingEntryShown_{false};
 };
 
