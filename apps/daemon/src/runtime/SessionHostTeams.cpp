@@ -146,6 +146,8 @@ bool SessionHost::onTeam(const QString& sessionId) const {
 
 void SessionHost::startTeams() {
     teams_ = new teams::TeamCoordinator(journal_, static_cast<teams::TeamHostPort*>(this), this);
+    // T-28: a team command is answered before the git and the messages it sets off.
+    teams_->setDeferSending(true);
     teams_->load();
     connect(teams_, &teams::TeamCoordinator::teamChanged, this, [this](const QJsonObject& team) {
         emit teamEvent(QStringLiteral("team.changed"),

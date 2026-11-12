@@ -91,6 +91,10 @@ void TeamCoordinator::load() {
     // ADR 0118: work merged while the daemon was stopped is reconciled now.
     for (const qint64 id : ids)
         checkPullRequests(id);
+    // T-28: what was decided before the daemon stopped and not sent yet is sent now.
+    for (const qint64 id : ids)
+        if (const Team* team = this->team(id); team && !team->outbox.isEmpty())
+            scheduleOutbox();
 }
 
 QList<const Team*> TeamCoordinator::teams(const QString& repository) const {
@@ -125,6 +129,8 @@ Team* TeamCoordinator::mutableTeamOf(const QString& sessionId) {
 
 QJsonObject TeamCoordinator::teamJson(const Team& team) const {
     QJsonObject json = toJson(team);
+    // The daemon's own bookkeeping: clients see what was sent as the members' turns.
+    json.remove(QStringLiteral("outbox"));
     QJsonArray members;
     QList<Member> ordered = team.members;
     std::stable_sort(ordered.begin(), ordered.end(), [](const Member& left, const Member& right) {
