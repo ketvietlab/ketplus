@@ -48,6 +48,7 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageParts.h
     src/teams/TeamPageSections.cpp
     src/teams/TeamPageTasks.cpp
+    src/teams/TeamCommands.cpp
     src/teams/TeamTaskDialog.cpp
     src/teams/TeamTaskDialog.h
     src/teams/TeamTaskDialogActions.cpp

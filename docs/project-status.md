@@ -671,7 +671,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   (0.1.29), systemd user unit, authenticated `ketplusctl`, browser-approved
   device authorization and a durable zero-session workspace catalog. A Qt
   Control v2 client backend is available, but remote Desktop UI/composition
-  remains deferred. See `linux-headless-daemon.md` for coverage and acceptance.
+  remains deferred. ADR 0119 records the remote composition (one
+  `MachineBackend` for the local socket, the Relay and SSH; machine binding;
+  connection states; the SSH trust decision); its local adapter
+  `DaemonMachineBackend` is in `ketplus_remote`. See `linux-headless-daemon.md`
+  for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without
   deleting history or stopping an active turn. The daemon deletes a
   conversation 30 days after it was archived (ADR 0100). Archived items are restored only

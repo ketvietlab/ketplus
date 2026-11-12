@@ -49,6 +49,24 @@ class CloudPrivacyTestAccess {
         for (auto& backoff : client.eventUploadBackoff_)
             backoff.retryAt = QDeadlineTimer(0);
     }
+    // Whether the last failed upload of a session waits on a cursor gap; -1 when it does not wait.
+    static int uploadWaitsOnGap(const CloudControlClient& client,
+                                const QString& key = "session-synthetic:1") {
+        const auto found = client.eventUploadBackoff_.constFind(key);
+        return found == client.eventUploadBackoff_.cend() ? -1 : int(found->gap);
+    }
+    // Registers every session's upload cursor, as the first upload pass does.
+    static bool registerCursors(CloudControlClient& client) {
+        return client.registerCloudCursors();
+    }
+    static void setKnownUploadedCursor(CloudControlClient& client, qint64 cursor,
+                                       const QString& key = "session-synthetic:1") {
+        client.knownUploadedCursors_.insert(key, cursor);
+    }
+    static qint64 knownUploadedCursor(const CloudControlClient& client,
+                                      const QString& key = "session-synthetic:1") {
+        return client.knownUploadedCursors_.value(key, -1);
+    }
     // Sends one heartbeat batch per entry, as the heartbeat timer does after its snapshot.
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;
