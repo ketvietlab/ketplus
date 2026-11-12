@@ -353,7 +353,11 @@ The goal is the leader's main input, so it is written like a brief, not a title.
    constraint of the database. `team_updates` is the append-only log with a digest
    mark. A team is small (seven members, tens of tasks) and always changes as a unit
    under one revision, so a document avoids six join tables and keeps every change
-   atomic. Deleting a team deletes its three kinds of rows and no conversation.
+   atomic. Deleting a team deletes its three kinds of rows and no conversation. Delete
+   team… offers "Also delete its conversations", off by default and unavailable while a
+   member runs a turn; with it the desktop deletes each member's conversation after
+   `team.delete` succeeds, the same way as the conversation's own Delete, and keeps their
+   worktrees.
    - A **deleted** conversation leaves its team: a developer as if removed (its open
      tasks become unassigned); for the leader or the reviewer the team is paused and a
      decision names the empty role.

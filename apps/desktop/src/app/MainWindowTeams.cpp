@@ -281,15 +281,29 @@ void MainWindow::deleteTeam(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
     if (!team)
         return;
-    auto* dialog = teamDeleteConfirmation(this, *team);
-    connect(dialog, &ket::Dialog::accepted, this, [this, teamId] {
-        teams_->commands()->send(TeamCommands::key(teamId, QStringLiteral("delete")), {},
-                                 QStringLiteral("team.delete"),
-                                 {{QStringLiteral("team_id"), teamId}},
-                                 [this](const QJsonObject&, const QString& error) {
-                                     if (!error.isEmpty())
-                                         statusBar()->showMessage(error, 7000);
-                                 });
+    QHash<QString, QVariantList> listed;
+    if (agentManager_ != nullptr)
+        for (const QString& path : agentManager_->conversationPaths().values())
+            listed.insert(path, agentManager_->conversations(path));
+    const TeamMemberConversations members = teamMemberConversations(*team, listed);
+    auto* dialog = teamDeleteConfirmation(this, *team, members);
+    connect(dialog, &ket::Dialog::accepted, this, [this, teamId, dialog, members] {
+        const bool withConversations = deletesTeamConversations(dialog);
+        teams_->commands()->send(
+            TeamCommands::key(teamId, QStringLiteral("delete")), {}, QStringLiteral("team.delete"),
+            {{QStringLiteral("team_id"), teamId}},
+            [this, withConversations, members](const QJsonObject&, const QString& error) {
+                if (!error.isEmpty()) {
+                    statusBar()->showMessage(error, 7000);
+                    return;
+                }
+                // After the team is gone, so a deleted leader or reviewer does not pause it
+                // first. Each deletion reports its own failure (a turn started meanwhile).
+                if (!withConversations || agentManager_ == nullptr)
+                    return;
+                for (const auto& [path, id] : members.conversations)
+                    agentManager_->deleteConversation(path, id);
+            });
     });
     dialog->open();
 }
