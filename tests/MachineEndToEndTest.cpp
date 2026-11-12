@@ -18,6 +18,8 @@
 #include "ssh/SshMachineStore.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
+#include <QScopeGuard>
+#include <QStyleOptionComboBox>
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -185,6 +187,59 @@ class MachineEndToEndTest final : public QObject {
     QTemporaryDir workspace_;
 
   private slots:
+    void pickerPreservesStateAtDefaultSidebarWidth_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
+    void pickerPreservesStateAtDefaultSidebarWidth() {
+        QFETCH(bool, dark);
+        QVERIFY(QSettings().fileName().startsWith(settings_.path() + "/"));
+        QVERIFY(!QSettings().contains(QStringLiteral("workspace/lastRoot")));
+        ThemeManager theme(*qApp);
+        const auto restoreTheme = qScopeGuard([&] { theme.setMode(ThemeManager::Mode::Light); });
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        ActivityBar bar;
+        bar.applyPalette(theme.palette(), 100);
+        bar.resize(240, 760);
+        bar.show();
+        QCOMPARE(bar.width(), 240);
+        auto* picker = machinePicker(&bar);
+        QVERIFY(picker);
+        for (auto state : {LinuxMachine::State::Connected, LinuxMachine::State::Connecting,
+                           LinuxMachine::State::Reconnecting, LinuxMachine::State::Offline}) {
+            LinuxMachine machine;
+            machine.name = QStringLiteral("A very long machine name which must be elided");
+            machine.route = LinuxMachine::Route::Ssh;
+            machine.state = state;
+            const QString label = LinuxMachineModel::pickerLabel(machine);
+            bar.setMachines({QStringLiteral("fixture")}, {label}, QStringLiteral("fixture"));
+            QCoreApplication::processEvents();
+            QCOMPARE(picker->currentText(), label); // Popup remains name-first.
+            QVERIFY(label.startsWith(machine.name));
+            const QString closed = picker->currentData(Qt::UserRole + 1).toString();
+            QString stateLabel = LinuxMachineModel::stateText(state);
+            while (stateLabel.endsWith(QLatin1Char('.')) || stateLabel.endsWith(QChar(0x2026)))
+                stateLabel.chop(1);
+            QVERIFY(closed.startsWith(stateLabel + QStringLiteral(" · ")));
+            QVERIFY(!closed.contains(QStringLiteral("...")));
+            QStyleOptionComboBox option;
+            option.initFrom(picker);
+            option.currentText = closed;
+            const QRect text = picker->style()->subControlRect(
+                QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, picker);
+            QVERIFY(picker->fontMetrics().horizontalAdvance(stateLabel) <= text.width());
+            QVERIFY(picker->geometry().right() < bar.width());
+            QVERIFY(picker->parentWidget()->rect().contains(picker->geometry()));
+            if (state == LinuxMachine::State::Reconnecting) {
+                screenshot(&bar, QStringLiteral("picker-240-%1").arg(dark ? "dark" : "light"));
+                screenshotPicker(&bar,
+                                 QStringLiteral("picker-240-open-%1").arg(dark ? "dark" : "light"));
+            }
+        }
+    }
+
     void initTestCase() {
         QVERIFY(settings_.isValid() && workspace_.isValid());
         // Application data (repository metadata, stores) stays out of the user's folders.

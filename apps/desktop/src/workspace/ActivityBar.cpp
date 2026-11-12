@@ -35,12 +35,35 @@
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStyle>
+#include <QStyleOptionComboBox>
+#include <QStylePainter>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
 namespace {
+// Keep the popup name-first, but preserve the state in the narrow closed label.
+class MachineSelect final : public QComboBox {
+  public:
+    using QComboBox::QComboBox;
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QStylePainter painter(this);
+        QStyleOptionComboBox option;
+        initStyleOption(&option);
+        const QString closed = currentData(Qt::UserRole + 1).toString();
+        if (!closed.isEmpty()) {
+            const QRect text = style()->subControlRect(QStyle::CC_ComboBox, &option,
+                                                       QStyle::SC_ComboBoxEditField, this);
+            option.currentText = fontMetrics().elidedText(closed, Qt::ElideRight, text.width());
+        }
+        painter.drawComplexControl(QStyle::CC_ComboBox, option);
+        painter.drawControl(QStyle::CE_ComboBoxLabel, option);
+    }
+};
+
 // The sidebar's journal banner opens Settings → Storage when clicked, as in the mock; the
 // banner draws itself and lets the clicks through to this button.
 class StorageNoticeButton final : public QAbstractButton {
@@ -208,7 +231,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* machineLayout = new QHBoxLayout(machineRow);
     chrome_geometry::margins(machineLayout, 8, 0, 8, 0);
     chrome_geometry::spacing(machineLayout, 4);
-    machineSelect_ = new QComboBox(machineRow);
+    machineSelect_ = new MachineSelect(machineRow);
     machineSelect_->setObjectName(QStringLiteral("productMachineSelect"));
     machineSelect_->setAccessibleName(tr("Machine for repositories"));
     machineSelect_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -495,8 +518,22 @@ void ActivityBar::setMachines(const QStringList& ids, const QStringList& names,
         return;
     const QSignalBlocker blocker(machineSelect_);
     machineSelect_->clear();
-    for (int i = 0; i < ids.size(); ++i)
-        machineSelect_->addItem(names.at(i), ids.at(i));
+    for (int i = 0; i < ids.size(); ++i) {
+        const QString label = names.at(i);
+        machineSelect_->addItem(label, ids.at(i));
+        auto parts = label.split(QStringLiteral(" · "));
+        if (parts.size() >= 3) {
+            QString state = parts.takeLast();
+            while (state.endsWith(QLatin1Char('.')) || state.endsWith(QChar(0x2026)))
+                state.chop(1);
+            const QString route = parts.takeLast();
+            machineSelect_->setItemData(i,
+                                        state + QStringLiteral(" · ") + route +
+                                            QStringLiteral(" · ") +
+                                            parts.join(QStringLiteral(" · ")),
+                                        Qt::UserRole + 1);
+        }
+    }
     const int selected = machineSelect_->findData(selectedId);
     machineSelect_->setCurrentIndex(selected >= 0 ? selected : 0);
 }

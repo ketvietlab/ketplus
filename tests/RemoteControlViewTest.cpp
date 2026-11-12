@@ -398,9 +398,11 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     // The account and history close the page, below Linux machines.
     auto* footer = view.findChild<QWidget*>(QStringLiteral("remoteLinkedFooter"));
     QVERIFY(footer);
-    auto* body = linux->parentWidget();
+    auto* column = linux->parentWidget();
+    QCOMPARE(column->objectName(), QStringLiteral("linuxMachinesColumn"));
+    auto* body = column->parentWidget();
     QCOMPARE(footer->parentWidget(), body);
-    QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(linux));
+    QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(column));
     QVERIFY(footer->isAncestorOf(view.findChild<QWidget*>(QStringLiteral("remoteAccountStrip"))));
 
     // The strip names the account the daemon reports, never a fixture (ADR 0109).
@@ -585,6 +587,12 @@ void RemoteControlViewTest::signedOutIntroFollowsTheMockAtEveryWidth() {
     QTest::qWait(1);
     RemoteConnectionsIntro* intro = view.intro_;
     QVERIFY(intro && intro->isVisible());
+    auto* linux = view.linuxMachines();
+    QVERIFY(linux);
+    QTRY_COMPARE(linux->mapTo(&view, QPoint()).x(), intro->mapTo(&view, QPoint()).x());
+    QTRY_COMPARE(linux->width(), intro->width());
+    QCOMPARE(linux->x(), InterfaceZoomMetrics::geometry(24, InterfaceZoomMetrics::current()));
+    captureWindow(view, QStringLiteral("signed-out-alignment"));
     QVERIFY(!intro->narrow_);
     auto* scene = intro->findChild<QWidget*>(QStringLiteral("remoteConnectionsScene"));
     QVERIFY(scene);
@@ -608,6 +616,8 @@ void RemoteControlViewTest::signedOutIntroFollowsTheMockAtEveryWidth() {
     // Below 860 px the scene goes under the copy and the steps stack.
     view.resize(760, 900);
     QTest::qWait(1);
+    QTRY_COMPARE(linux->mapTo(&view, QPoint()).x(), intro->mapTo(&view, QPoint()).x());
+    QTRY_COMPARE(linux->width(), intro->width());
     QVERIFY(intro->narrow_);
     QCOMPARE(scene->height(), 380);
     QVERIFY(scene->width() <= 500);
