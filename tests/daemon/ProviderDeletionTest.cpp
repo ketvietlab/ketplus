@@ -3,8 +3,10 @@
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -819,18 +821,40 @@ class ProviderDeletionTest final : public QObject {
                                                      "desktop");
         QCOMPARE(catalog.value("deleted_sessions").toArray().size(), 1);
     }
-    void unsupportedProviderKeepsItsConversation() {
+    // T-60: a provider without thread cleanup (Cursor, or one this daemon does not know)
+    // no longer blocks deletion. The conversation's KetPlus data goes; its provider history,
+    // outside KetPlus-owned paths, stays; a Codex thread it handed off from is still cleaned.
+    void providerWithoutCleanupIsDeletedLocally_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::newRow("cursor") << QStringLiteral("cursor");
+        QTest::newRow("unknown") << QStringLiteral("future-agent");
+    }
+    void providerWithoutCleanupIsDeletedLocally() {
+        QFETCH(QString, provider);
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
         StoredSession session;
-        session.id = "cursor-owned";
+        session.id = provider + "-owned";
         session.worktreePath = directory.path();
-        session.adapter = "cursor";
-        session.threadId = "cursor-thread";
+        session.adapter = provider;
+        session.threadId = provider + "-thread";
         session.state = "ready";
+        session.providerThreads =
+            QStringLiteral(R"({"codex":{"retired_thread_ids":["codex-before"]}})");
         QVERIFY(journal.upsertSession(session));
+        // The provider's own store, standing in for ~/.cursor: never touched.
+        const QString store = directory.filePath("provider-store/chat.json");
+        QVERIFY(QDir().mkpath(QFileInfo(store).path()));
+        QFile chat(store);
+        QVERIFY(chat.open(QIODevice::WriteOnly));
+        chat.write("{}");
+        chat.close();
+        // The conversation's handoff directory, which KetPlus owns.
+        const QString handoff = directory.filePath("handoff/" + session.id);
+        QVERIFY(QDir().mkpath(handoff));
         CodexAdapter adapter("/missing-provider");
         SessionHost host(&journal, &adapter);
+        QSignalSpy events(&host, &SessionHost::eventReady);
         const auto result = host.handleCommand({{"protocol_version", 0},
                                                 {"message_id", "delete"},
                                                 {"message_type", "session.delete"},
@@ -838,9 +862,20 @@ class ProviderDeletionTest final : public QObject {
                                                 {"session_generation", session.generation},
                                                 {"payload", QJsonObject{}}},
                                                "desktop");
-        QCOMPARE(result.value("error_code").toString(), "provider_cleanup_unsupported");
-        QCOMPARE(journal.sessions().size(), 1);
-        QVERIFY(journal.deletionWork().isEmpty());
+        QVERIFY2(result.value("ok").toBool(), qPrintable(result.value("error_message").toString()));
+        QVERIFY(journal.sessions().isEmpty());
+        QVERIFY(!QFileInfo::exists(handoff));
+        QVERIFY(QFileInfo::exists(store));
+        QVERIFY(!events.isEmpty());
+        QCOMPARE(events.last().first().toJsonObject().value("event_type").toString(),
+                 QString("session.deleted"));
+        // Only the Codex thread is queued; the provider's own thread is not.
+        QCOMPARE(journal.deletionWork().size(), 1);
+        const auto targets =
+            journal.deletionWork().first().toObject().value("provider_targets").toArray();
+        QCOMPARE(targets.size(), 1);
+        QCOMPARE(targets.first().toObject().value("provider").toString(), QString("codex"));
+        QCOMPARE(targets.first().toObject().value("thread_id").toString(), QString("codex-before"));
     }
     void newDeletionDefersWhenOwnershipCannotBeRead() {
         QTemporaryDir dir;

@@ -579,6 +579,12 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* message = form->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
         QVERIFY(message);
         QVERIFY(message->text().startsWith(QStringLiteral("@agent/4821 and its transcript")));
+        // T-60: what the daemon deletes and what stays with the provider.
+        auto* retained = form->findChild<QLabel*>(QStringLiteral("conversationDeleteRetained"));
+        QVERIFY(retained);
+        QVERIFY(retained->text().contains(QStringLiteral("Codex and Claude threads")));
+        QVERIFY(
+            retained->text().contains(QStringLiteral("such as Cursor, keep their own history")));
         QStringList actions;
         for (auto* button : card->card()->findChildren<QAbstractButton*>())
             if (!card->body()->isAncestorOf(button) && !button->text().isEmpty())

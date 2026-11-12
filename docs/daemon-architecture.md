@@ -938,8 +938,12 @@ without normalizing or deleting their stored values. Both the local source and
 retained catalog are checked; see
 [ADR 0057](decisions/0057-preserve-unsupported-provider-ownership.md).
 Cursor has no supported
-thread-deletion API in this integration: an unshared Cursor thread currently rejects
-permanent deletion with `provider_cleanup_unsupported` and retains its conversation.
+thread-deletion API in this integration, and its ACP sessions live in Cursor's own store
+outside KetPlus-owned paths. Deleting a Cursor conversation, or one of a provider this
+daemon does not know, removes its local transcript, journal entry, handoff and review
+scratch directories and media, and queues no provider cleanup: that provider's history
+stays with the provider, as the delete dialog says (T-60, 2026-11-12; it was rejected
+with `provider_cleanup_unsupported` before). Codex and Claude cleanup is unchanged.
 This change does not scan or delete already orphaned historical provider sessions.
 
 ## Agent messaging (ADR 0027)

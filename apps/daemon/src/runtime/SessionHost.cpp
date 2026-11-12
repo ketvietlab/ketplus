@@ -1579,17 +1579,20 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
         return error(QStringLiteral("journal_error"),
                      QStringLiteral("Provider thread ownership could not be read; the conversation "
                                     "was kept."));
+    // T-60: only Codex and Claude delete the threads KetPlus started for a conversation. A
+    // thread of another provider (Cursor, or one this daemon does not know) lives in that
+    // provider's own store, outside KetPlus-owned paths: deleting the conversation removes
+    // KetPlus's local data and leaves that history to the provider, as the delete dialog says.
+    QJsonArray cleanup;
     for (const auto& value : *targets) {
         const auto provider = value.toObject().value("provider").toString();
-        if (provider != "codex" && provider != "claude")
-            return error(
-                "provider_cleanup_unsupported",
-                "This provider cannot remove its thread data yet; the conversation was kept.");
+        if (provider == "codex" || provider == "claude")
+            cleanup.append(value);
     }
     const auto lastCursor = session->stored.lastCursor;
     QString journalError;
     if (!journal_->deleteSession(sessionId, generation, operationId, lifecycleRevision,
-                                 &journalError, *targets)) {
+                                 &journalError, cleanup)) {
         return error(QStringLiteral("journal_error"), journalError);
     }
     if (!threadId.isEmpty())

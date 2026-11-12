@@ -575,6 +575,10 @@ current-window value.
   not future output from the source.
   Deletion confirms the local transcript, optional removal of every worktree
   stored for that conversation, and optional force-delete for those worktrees.
+  The card says what else goes (T-60): Codex and Claude threads only this
+  conversation used are deleted with it; other providers, such as Cursor, keep
+  their own history, which lives outside KetPlus-owned paths, and the conversation
+  is deleted locally instead of being refused (see `docs/daemon-architecture.md`).
   Deletion failures open a visible error dialog even when the status bar is
   hidden. Confirmation keeps the original worktree/conversation identity;
   asynchronous failure retains the conversation rather than hiding its history.
