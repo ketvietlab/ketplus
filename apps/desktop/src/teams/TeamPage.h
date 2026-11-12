@@ -89,7 +89,9 @@ class TeamPage final : public QWidget {
     [[nodiscard]] int columnWidth() const;
     [[nodiscard]] bool filterFits() const;
     void showMenu(QWidget* anchor, const QJsonObject& team);
-    void send(const QString& type, QJsonObject payload, QLabel* error = nullptr);
+    // Sends a command under `what` (TeamCommands): nothing while the same one is pending.
+    void send(const QString& what, const QString& source, const QString& type, QJsonObject payload);
+    [[nodiscard]] QString commandKey(const QString& what) const;
 
     TeamDirectory* teams_;
     QString teamId_;

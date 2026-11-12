@@ -513,6 +513,22 @@ void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& stor
     // into, and the old ones are freed with `before`.
     const Team team = storedTeam;
     const Task task = storedTask;
+    const Member* sender = team.member(from);
+    TeamMessage message{.teamId = team.id,
+                        .teamName = team.name,
+                        .toSession = task.owner,
+                        .fromSession = sender ? from : QString{},
+                        .kind = QStringLiteral("assignment"),
+                        .taskId = task.id,
+                        .body =
+                            assignmentText(team, task, actorName(team, from), handover, reason)};
+    // T-28: with the outbox, the owner is pointed at the worktree when the message is sent,
+    // after the command is answered: that move asks git.
+    if (deferSending_) {
+        message.pointAt = task.worktree;
+        wake(team, message);
+        return;
+    }
     if (const QString error = host_->pointConversationAt(task.owner, task.worktree);
         !error.isEmpty()) {
         Team* stored = mutableTeam(team.id);
@@ -524,14 +540,7 @@ void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& stor
             (void)commit(*stored, before, QStringLiteral("daemon"), {});
         }
     }
-    const Member* sender = team.member(from);
-    wake(team, {.teamId = team.id,
-                .teamName = team.name,
-                .toSession = task.owner,
-                .fromSession = sender ? from : QString{},
-                .kind = QStringLiteral("assignment"),
-                .taskId = task.id,
-                .body = assignmentText(team, task, actorName(team, from), handover, reason)});
+    wake(team, message);
 }
 
 } // namespace ketplus::daemon::teams

@@ -128,6 +128,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void missingWorktreeKeepsHistoryAndCanStop();
     void missingWorktreeRestoresSavedAndDaemonSessions();
     void restoresMetadataBeforeDaemonDiscovery();
+    void teamMemberTitlesFollowTheDaemon();
     void selectingColdDaemonConversationShowsChatRestoreState();
     void runningCheckoutsIncludeExecutionWorktrees();
     void configuredTurnsAndAttachments();

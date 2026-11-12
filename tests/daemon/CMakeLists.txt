@@ -15,6 +15,11 @@ ketplus_enable_warnings(ketplus_daemon_client_upgrade_policy_tests)
 add_test(NAME ketplus_daemon_client_upgrade_policy_tests
     COMMAND ketplus_daemon_client_upgrade_policy_tests)
 
+qt_add_executable(ketplus_machine_backend_tests MachineBackendTest.cpp)
+target_link_libraries(ketplus_machine_backend_tests PRIVATE Qt6::Test ketplus_remote)
+ketplus_enable_warnings(ketplus_machine_backend_tests)
+add_test(NAME ketplus_machine_backend_tests COMMAND ketplus_machine_backend_tests)
+
 ketplus_add_daemon_test(ketplus_headless_daemon_tests HeadlessDaemonTest.cpp)
 target_compile_definitions(ketplus_headless_daemon_tests PRIVATE
     KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>" KETPLUS_TEST_CTL="$<TARGET_FILE:ketplusctl>")
@@ -70,6 +75,8 @@ ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
 ketplus_add_daemon_test(ketplus_team_flow_tests TeamFlowTest.cpp)
+ketplus_add_daemon_test(ketplus_team_title_tests TeamTitleTest.cpp)
+ketplus_add_daemon_test(ketplus_team_reply_tests TeamReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_team_stall_tests TeamStallTest.cpp)
 ketplus_add_daemon_test(ketplus_team_wait_tests TeamWaitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_review_tests TeamReviewTest.cpp)

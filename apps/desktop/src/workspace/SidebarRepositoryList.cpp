@@ -264,6 +264,10 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         }
         groups_.append(group);
         layout_->addWidget(group);
+        // A layout shows a widget added to a shown parent only on the next event loop turn, so
+        // until then the rebuilt sidebar was empty; with agents starting and ending turns it
+        // flickered. Show it now, before updates are enabled again.
+        group->show();
     }
     updateRows(repositories);
     applyPresentation();

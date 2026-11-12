@@ -251,8 +251,24 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     qint64 deletionWorkCursor_{0};
     [[nodiscard]] QJsonObject resolveResource(const QJsonObject& request);
     [[nodiscard]] QString worktreeCatalogRoot(const Session& session) const;
+    // What worktreeCatalogRoot stores for an existing checkout, without git on this thread: a
+    // turn start then holds up no other conversation's events (T-28).
+    void rememberRepositoryIdentity(const QString& worktree);
     [[nodiscard]] QJsonObject sessionWorktrees(const QJsonObject& request);
     [[nodiscard]] QJsonObject switchWorktree(const QJsonObject& request);
+    // What git says about a switch's target; read on any thread.
+    struct WorktreeFacts final {
+        bool repository{false};
+        bool registered{false};
+        QString branch;
+    };
+    [[nodiscard]] static WorktreeFacts worktreeFacts(const QString& target);
+    // The checks of a switch that need no git. Empty when it may go on, with the target.
+    [[nodiscard]] QJsonObject switchRefusal(const QJsonObject& request, Session** session,
+                                            QString* target);
+    [[nodiscard]] QJsonObject finishSwitch(Session& session, const QString& target,
+                                           const WorktreeFacts& facts, const QString& messageId);
+    [[nodiscard]] QJsonObject pointRequest(const QString& sessionId, const QString& worktree) const;
     // Where a turn runs: the conversation's worktree, or after it was deleted the repository's
     // primary worktree (else the nearest surviving parent folder).
     [[nodiscard]] QString executionDirectory(const Session& session) const;
@@ -260,7 +276,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Follows an explicitly used checkout, or a replacement of a deleted checkout, after a turn.
     void followRecreatedWorktree(Session& session);
     [[nodiscard]] QJsonObject moveSessionWorktree(Session& session, const QString& target,
-                                                  const QString& messageId);
+                                                  const QString& messageId,
+                                                  const std::optional<QString>& branch = {});
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
@@ -307,6 +324,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
+    void askPointConversationAt(const QString& sessionId, const QString& worktree,
+                                teams::PointDone done) override;
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
     void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
                   teams::TaskQuestion question, teams::TaskFactsDone done) override;
@@ -330,6 +349,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                              const QString& text, const QString& failure) override;
     void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) override;
     QString postTeamMessage(const teams::TeamMessage& message) override;
+    [[nodiscard]] bool teamMessagePosted(const QString& id) const override;
     [[nodiscard]] QJsonObject teamMembership(const QString& sessionId) const override;
     [[nodiscard]] QString teamRoleNumber(const QString& sessionId,
                                          const QString& role) const override;
@@ -345,6 +365,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void learnRepositories(const QStringList& paths, std::function<void()> then);
     [[nodiscard]] QStringList teamCommandPaths(const QJsonObject& payload) const;
     void startTeams();
+    // Reads the teams and gives back the member name to members an agent message titled.
+    void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
     // Has the git a task command will ask for read off the event loop, then calls `then`,

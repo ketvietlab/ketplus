@@ -1,5 +1,7 @@
 #include "teams/TeamDirectory.h"
 
+#include "teams/TeamCommands.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -13,6 +15,12 @@ namespace ketplus {
 TeamDirectory::TeamDirectory(QObject* parent) : QObject(parent) {}
 
 void TeamDirectory::setTransport(Transport transport) { transport_ = std::move(transport); }
+
+TeamCommands* TeamDirectory::commands() {
+    if (commands_ == nullptr)
+        commands_ = new TeamCommands(this);
+    return commands_;
+}
 
 void TeamDirectory::setAvailable(const bool available) {
     if (available_ == available && !stale_)
