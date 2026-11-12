@@ -185,7 +185,9 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs")
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")
     add_test(NAME ketplus_codex_contract_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/contract.test.mjs")
 endif()

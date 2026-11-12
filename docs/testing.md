@@ -168,6 +168,18 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Review guard changes (ADR 0067 profiles) run `ketplus_claude_sidecar_tests`, which
+includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
+`ketplus_turn_review_tests`, `ketplus_team_review_tests` and
+`ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
+command and edit the guard allows, so a wrong allow changes the test checkout.
+
+A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
+`cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
+-clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into
+its own tree (for example a font or asset generator) in a copy of the checkout in the
+scratch directory. The turn points the usual cache variables into the scratch directory.
+
 Atlas tunnel completion (`ketplus_atlas_live_tunnel_tests`, ADR 0084) exercises
 per-frame, half-window and delayed full-window credits against a synthetic
 loopback origin. It requires complete binary response bytes and exactly one EOF

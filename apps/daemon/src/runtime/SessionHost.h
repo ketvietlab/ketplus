@@ -540,6 +540,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Where a conversation's handoff transcript is written; readable by the providers it hands
     // over to.
     [[nodiscard]] QString handoffDirectory(const QString& sessionId) const;
+    // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
+    [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;
     McpMediaStore mediaStore_;
     // Whether each provider can start a turn (#170); observed failures persist next to the journal.
