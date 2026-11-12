@@ -181,7 +181,11 @@ Configuring then downloads the pinned Sparkle release (set
 keys do not match the configuration. Never pass the private key to CMake.
 `packaging/macos/publish-update.sh` archives an installed app and regenerates
 the appcast with the key from the Keychain or from a file outside the
-repository. It does not upload. Without a feed, Settings → Updates says that
+repository (including resolving the final symlink). Supply explicit channel and
+architecture inputs and matching scoped output/feed paths; release mode requires
+Developer ID signing and a stapled ticket. See `docs/release-process.md` and the
+native-settings isolation procedure in `docs/testing.md` before local QA. It does not
+upload. Without a feed, Settings → Updates says that
 the build is not configured.
 
 The direct-download install flow is: open the KetSuite-provided DMG, drag

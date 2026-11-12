@@ -24,7 +24,8 @@ path that must not trust the download server or the network.
   `SUFeedURL` and `SUPublicEDKey`, together with
   `SUVerifyUpdateBeforeExtraction`. Both must be set together; when both are
   empty (the default) Sparkle is neither downloaded nor bundled and the app
-  never contacts an update server.
+  never contacts an update server. The Sparkle delegate pins this compiled URL;
+  a restored `SUFeedURL` user default cannot override it.
 - Every archive is verified against the compiled-in EdDSA key before it is
   extracted. The private key is never stored in this repository and never
   passed to CMake. `packaging/macos/publish-update.sh` signs archives with the
@@ -74,7 +75,12 @@ path that must not trust the download server or the network.
   with the old one.
 - Production updates still require Developer ID signing and notarization of the
   app and the embedded Sparkle helpers. EdDSA verification is required either
-  way. `publish-update.sh` warns when the app is not Developer ID signed.
+  way. `publish-update.sh` defaults to release mode and refuses missing Developer ID
+  signing or a stapled notarization ticket. Explicit `--mode local-qa` is for
+  disposable local fixtures only; its output must never be published.
+- Update preparation binds an explicit staging/production channel and arm64/x86_64
+  architecture to the output path, HTTPS download prefix, compiled feed and appcast
+  metadata. Feeds and archives are separate for each pair.
 - Every published version needs a higher `PROJECT_VERSION`, which is both
   `CFBundleVersion` and `CFBundleShortVersionString`.
 - Sparkle replaces the bundle while the old daemon may still be running from
