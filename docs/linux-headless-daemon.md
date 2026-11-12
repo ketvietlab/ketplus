@@ -202,10 +202,52 @@ reads once. The claim digest is base64url, as the relay computes it.
 Desktop now uses a loopback PKCE browser handoff to obtain a UserSession for the
 backend's installation ID, and Connections can claim and approve a Linux pairing
 link after an explicit identity comparison. The sidebar lists the local machine
-and any remote machine IDs visible in the worktree index. Session/worktree index
-metadata remains sealed; presentation,
-sealed metadata projection, large-event assembly, session creation/restore,
-attachments and a durable Desktop command outbox are future integrations. The
-current backend supports ordinary session controls and workspace-file requests;
-it is not a complete remote Desktop product. A changed host signing key version
-in an event page fails closed; historical-key selection is also a future extension.
+and any remote machine IDs visible in the worktree index.
+
+`ControlV2Client::projection` opens the sealed session metadata and returns
+`{repositories, conversations, rejected}`. Everything it shows comes from the
+host-signed copy: a conversation's title, state, updated time
+(`lastTurnStartedAt`), branch and repository/worktree scope (the host now also
+seals `title`, `state`, `repositoryId`, `repositoryLabel`, `worktreeId` and
+`worktreeLabel`). Repositories and worktrees are built from verified
+conversations; the unsigned worktree index only adds revisions to a worktree
+verified that way. Anything else is never shown and is listed in `rejected`
+with a stable reason: `unpinned_host` (no stored pin names the machine, so a
+client paired before pins adopts its host through an event read first),
+`metadata_absent`, `session_key_pending` (shown on a later projection once the
+host grants the key), `host_key_not_pinned`, `host_key_changed`,
+`unauthenticated_session_metadata`, `invalid_session_metadata`,
+`host_upgrade_required` (a host that does not seal title and state),
+`invalid_index_entry`, `unsigned_index_entry` (a worktree with no verified
+conversation) or `verification_failed` (with the error in `detail`).
+Every read verifies the relay-served keys against the pins again. A projected
+row also carries `adapter`, `lastEventCursor`, `currentTurnSequence` and
+`workspaceRevision` from the relay index. These are unsigned relay routing
+values, not host-signed: they choose what to fetch, and every event or page
+fetched with them is verified on its own. Sealing them is a future extension.
+
+`ControlV2Client::transcriptWindow` pages a transcript over Control v2 with a
+sealed `transcript.restore_window` request and returns the local
+`session.transcript_window` page shape: the newest turns first
+(`before_cursor` 0), then older pages by the previous page's `before_cursor`
+at the same `snapshot_cursor`, bounded by `event_limit` (128), `turn_limit`
+(3) and `byte_cap` (4 KiB to 512 KiB). Each response fragment is decrypted
+with the host's pinned signing key and the page digest is checked before use.
+A large event in the page is fetched through a continuation chain (each
+request bound to the previous response digest) and reassembled with
+`LargeEventReassembler` before the page is delivered. A root request gets a
+540-second deadline, a minute under the relay's 600-second limit so clock skew
+never makes the relay reject it, and its continuations share it. When the host
+refuses a page (for example, sealed fragments over the byte cap), the relay
+answers the poll with 410 `restore_window_unavailable` (or a page with status
+`failed`); the client then asks again at the same snapshot with half the
+`event_limit`, down to one event. An abandoned request is cancelled at the
+relay.
+
+Any host-signed content naming a signing key version other than the pinned
+one that opened its session key fails closed (events, metadata and restore
+responses) and needs a new pairing; historical-key selection is a future
+extension. Presentation, session creation, attachments and a durable Desktop
+command outbox are future integrations. The current backend supports ordinary
+session controls and workspace-file requests; it is not a complete remote
+Desktop product.
