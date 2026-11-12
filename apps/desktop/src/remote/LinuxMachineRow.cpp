@@ -8,6 +8,7 @@
 #include "KetTokens.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -22,11 +23,48 @@ QString tr(const char* text) { return QCoreApplication::translate("LinuxMachineR
 
 bool attached(const LinuxMachineModel* model) { return model && model->backendsAttached(); }
 
+// Connected over the Relay means the Relay answers; the host itself may be away.
+bool hostAway(const LinuxMachine& machine) {
+    return LinuxMachineModel::hostAway(machine, QDateTime::currentDateTimeUtc());
+}
+
+// What the route cannot do right now, for the row and Details: the Relay without ketPlus Pro.
+QString unavailableText(const LinuxMachine& machine) {
+    return machine.connectable ? QString()
+                               : tr("The ketPlus Relay is part of ketPlus Pro. Upgrade your "
+                                    "KetSuite account to use this route; SSH stays free.");
+}
+
+// Requests over the Relay wait for the host (ADR 0119: up to 15 minutes), so nothing may suggest
+// they run at once while the link or the host is not there.
+QString waitText(const LinuxMachine& machine) {
+    if (machine.route != LinuxMachine::Route::Relay || !machine.connectable)
+        return {};
+    if (hostAway(machine))
+        return tr("Requests wait until the host is back, for up to 15 minutes.");
+    if (machine.state == LinuxMachine::State::Connecting ||
+        machine.state == LinuxMachine::State::Reconnecting)
+        return tr("Requests made now wait for the Relay, for up to 15 minutes.");
+    return {};
+}
+
+QString pendingText(const LinuxMachine& machine) {
+    if (machine.pendingCommands <= 0)
+        return {};
+    return machine.pendingCommands == 1
+               ? tr("1 request sent, outcome pending")
+               : tr("%1 requests sent, outcome pending").arg(machine.pendingCommands);
+}
+
 QString badgeTone(const LinuxMachine& machine, const bool backendsAttached) {
     if (machine.error != LinuxMachine::Error::None)
         return QStringLiteral("danger");
     if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
         return QStringLiteral("positive");
+    if (!machine.connectable)
+        return {};
+    if (machine.state == LinuxMachine::State::Connected && hostAway(machine))
+        return QStringLiteral("warning");
     switch (machine.state) {
     case LinuxMachine::State::Connected:
         return QStringLiteral("positive");
@@ -39,9 +77,13 @@ QString badgeTone(const LinuxMachine& machine, const bool backendsAttached) {
     return {};
 }
 
-// Offline machines offer Connect; any other state can be ended with Disconnect.
+// Offline machines offer Connect; any other state can be ended with Disconnect. A route that
+// cannot be used offers neither.
 bool offersConnect(const LinuxMachine& machine) {
-    return machine.state == LinuxMachine::State::Offline;
+    return machine.connectable && machine.state == LinuxMachine::State::Offline;
+}
+bool offersDisconnect(const LinuxMachine& machine) {
+    return machine.connectable && machine.state != LinuxMachine::State::Offline;
 }
 
 QLabel* roleLabel(const QString& text, const char* role, QWidget* parent) {
@@ -57,9 +99,7 @@ QLabel* badge(const QString& text, const QString& tone, QWidget* parent) {
     return label;
 }
 
-QString errorText(const LinuxMachine& machine) {
-    return LinuxMachineModel::errorMessage(machine.error, machine.name, machine.errorText);
-}
+QString errorText(const LinuxMachine& machine) { return LinuxMachineModel::errorMessage(machine); }
 
 } // namespace
 
@@ -68,6 +108,10 @@ QString linuxMachineBadgeText(const LinuxMachine& machine, const bool backendsAt
     case LinuxMachine::Error::None:
         if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
             return tr("Available");
+        if (!machine.connectable)
+            return tr("Needs Pro");
+        if (machine.state == LinuxMachine::State::Connected && hostAway(machine))
+            return tr("Host offline");
         return LinuxMachineModel::stateText(machine.state);
     case LinuxMachine::Error::HostKeyMismatch:
         return tr("Host key changed");
@@ -75,6 +119,8 @@ QString linuxMachineBadgeText(const LinuxMachine& machine, const bool backendsAt
         return tr("SSH key refused");
     case LinuxMachine::Error::DaemonNotInstalled:
         return tr("Daemon not installed");
+    case LinuxMachine::Error::IdentityChanged:
+        return tr("Identity changed");
     case LinuxMachine::Error::Other:
         break;
     }
@@ -126,6 +172,22 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     auto* detail = roleLabel(machine.detail, "deviceMeta", row);
     detail->setObjectName(QStringLiteral("linuxMachineDetail"));
     copy->addWidget(detail);
+    // The Relay host's presence once it is away, what waits for it, and why the route is closed.
+    QStringList notes;
+    if (hostAway(machine))
+        notes.append(LinuxMachineModel::presenceText(machine, QDateTime::currentDateTimeUtc()));
+    if (const auto pending = pendingText(machine); !pending.isEmpty())
+        notes.append(pending);
+    if (const auto closed = unavailableText(machine); !closed.isEmpty())
+        notes.append(closed);
+    if (!notes.isEmpty()) {
+        auto* note = roleLabel(notes.join(QStringLiteral(" · ")), "deviceMeta", row);
+        note->setObjectName(QStringLiteral("linuxMachinePresence"));
+        note->setWordWrap(true);
+        if (hostAway(machine))
+            note->setProperty("remoteTone", QStringLiteral("warning"));
+        copy->addWidget(note);
+    }
     if (machine.error != LinuxMachine::Error::None) {
         auto* error = new QLabel(errorText(machine), row);
         error->setObjectName(QStringLiteral("linuxMachineError"));
@@ -148,12 +210,14 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     });
     layout->addWidget(details, 0, Qt::AlignVCenter);
     // Nothing would carry out Connect or Disconnect before the backends are attached.
-    if (!live)
+    if (!live || (!offersConnect(machine) && !offersDisconnect(machine)))
         return row;
     const bool connect = offersConnect(machine);
     auto* toggle =
         new ket::Button(connect ? tr("Connect") : tr("Disconnect"), ket::ButtonVariant::Ghost, row);
     toggle->setObjectName(QStringLiteral("linuxMachineToggle"));
+    if (const auto wait = waitText(machine); connect && !wait.isEmpty())
+        toggle->setToolTip(wait);
     QObject::connect(toggle, &QAbstractButton::clicked, row, [guard, id, connect] {
         if (!guard)
             return;
@@ -171,7 +235,7 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     auto* dialog = new ket::Dialog(machine.name, anchor);
     dialog->setObjectName(QStringLiteral("linuxMachineDetailsDialog"));
     // Wider than the mock's 500 px: the whole SHA256 key must show to be compared.
-    dialog->setCardWidth(540);
+    dialog->setCardWidth(580);
     QObject::connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
     auto* body = new QWidget;
     auto* form = new QFormLayout(body);
@@ -194,6 +258,15 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     form->addRow(tr("Route"), route);
     auto* state = value("linuxDetailsState");
     form->addRow(tr("State"), state);
+    // The Relay host's own presence: Connected means only that the Relay answers.
+    auto* host = value("linuxDetailsHost");
+    host->setWordWrap(false);
+    form->addRow(tr("Host"), host);
+    // What waits for the host: pending outcomes, and how long new requests may wait.
+    auto* wait = value("linuxDetailsWait");
+    // Short lines, laid out unwrapped: a wrapped label in the form is sized a line too tall.
+    wait->setWordWrap(false);
+    form->addRow(QString(), wait);
     auto* fingerprint = value("linuxDetailsFingerprint");
     const QFont plain = fingerprint->font();
     QFont mono = plain;
@@ -201,11 +274,19 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         mono.setFamily(family);
     mono.setStyleHint(QFont::Monospace);
     mono.setPixelSize(13); // the mock's 13 px, so a SHA256 key fits the card on one line
+    // Over SSH, the SSH server's host key; over the Relay, the daemon identity pinned at pairing.
+    // They are different keys, so they are named apart.
     form->addRow(machine.route == LinuxMachine::Route::Ssh ? tr("Host key") : tr("Host identity"),
                  fingerprint);
     auto* verifiedLabel = value("linuxDetailsVerified");
-    verifiedLabel->setText(tr("Verified"));
     form->addRow(QString(), verifiedLabel);
+    // ADR 0119 "Host key rotation": both daemon identities are shown before the user trusts one.
+    auto* trustedIdentity = value("linuxDetailsTrustedIdentity");
+    form->addRow(tr("Trusted identity"), trustedIdentity);
+    auto* presentedIdentity = value("linuxDetailsPresentedIdentity");
+    form->addRow(tr("Presented identity"), presentedIdentity);
+    auto* unavailable = value("linuxDetailsUnavailable");
+    form->addRow(unavailable);
     auto* error = value("linuxDetailsError");
     error->setProperty("remoteTone", QStringLiteral("danger"));
     form->addRow(error);
@@ -215,8 +296,35 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     const QPointer<LinuxMachineModel> guard(model);
     ket::Button* disconnect = nullptr;
     ket::Button* connect = nullptr;
-    // Nothing would carry out Connect or Disconnect before the backends are attached.
+    ket::Button* forget = nullptr;
+    ket::Button* trust = nullptr;
+    // Nothing would carry out these before the backends are attached.
     if (model->backendsAttached()) {
+        // Only an SSH machine is ketPlus's own to remove; a Relay pairing is ended on the host.
+        if (machine.route == LinuxMachine::Route::Ssh || !machine.sshTarget.isEmpty()) {
+            auto* remove = dialog->addButton(tr("Remove"), ket::ButtonVariant::Ghost);
+            remove->setObjectName(QStringLiteral("linuxDetailsRemove"));
+            QObject::connect(remove, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+                if (guard)
+                    guard->requestRemove(id);
+                dialog->accept();
+            });
+        }
+        // The re-trust paths: shown only while their failure is the machine's.
+        forget = dialog->addButton(tr("Forget old key"));
+        forget->setObjectName(QStringLiteral("linuxDetailsForgetKey"));
+        QObject::connect(forget, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestForgetHostKey(id);
+            dialog->accept();
+        });
+        trust = dialog->addButton(tr("Trust new identity"));
+        trust->setObjectName(QStringLiteral("linuxDetailsTrustIdentity"));
+        QObject::connect(trust, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestTrustIdentity(id);
+            dialog->accept();
+        });
         disconnect = dialog->addButton(tr("Disconnect"));
         disconnect->setObjectName(QStringLiteral("linuxDetailsDisconnect"));
         QObject::connect(disconnect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
@@ -233,23 +341,44 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         });
     }
     // What can change while the card is open: the state, the key once verified, the error.
-    const auto refresh = [guard, id, dialog, form, state, fingerprint, verifiedLabel, error,
-                          connect, disconnect, plain, mono] {
+    const auto refresh = [guard, id, dialog, form, state, host, wait, unavailable, fingerprint,
+                          verifiedLabel, trustedIdentity, presentedIdentity, error, connect,
+                          disconnect, forget, trust, plain, mono] {
         const auto* current = guard ? guard->machine(id) : nullptr;
         if (!current) {
             dialog->reject();
             return;
         }
         state->setText(linuxMachineBadgeText(*current, guard->backendsAttached()));
+        const auto presence =
+            LinuxMachineModel::presenceText(*current, QDateTime::currentDateTimeUtc());
+        host->setText(presence);
+        host->setProperty("remoteTone", hostAway(*current) ? QStringLiteral("warning") : QString());
+        form->setRowVisible(host, !presence.isEmpty());
+        QStringList waits;
+        for (const auto& line : {pendingText(*current), waitText(*current)})
+            if (!line.isEmpty())
+                waits.append(line);
+        wait->setText(waits.join(QLatin1Char('\n')));
+        form->setRowVisible(wait, !wait->text().isEmpty());
+        unavailable->setText(unavailableText(*current));
+        form->setRowVisible(unavailable, !unavailable->text().isEmpty());
         const bool verified = !current->fingerprint.isEmpty();
-        fingerprint->setText(verified ? current->fingerprint : tr("Not verified yet"));
-        fingerprint->setFont(verified ? mono : plain);
+        // A key that did not verify is shown as what it is, never as the machine's key.
+        const bool offered = !verified && !current->presentedFingerprint.isEmpty();
+        const QString key = verified ? current->fingerprint : current->presentedFingerprint;
+        const bool known = verified || offered;
+        fingerprint->setText(known ? key : tr("Not verified yet"));
+        fingerprint->setFont(known ? mono : plain);
         // A key has no spaces to wrap at: let it shrink rather than push the label column.
-        fingerprint->setWordWrap(!verified);
-        fingerprint->setSizePolicy(verified ? QSizePolicy::Ignored : QSizePolicy::Preferred,
+        fingerprint->setWordWrap(!known);
+        fingerprint->setSizePolicy(known ? QSizePolicy::Ignored : QSizePolicy::Preferred,
                                    QSizePolicy::Preferred);
-        fingerprint->setToolTip(verified ? current->fingerprint : QString());
-        form->setRowVisible(verifiedLabel, verified);
+        fingerprint->setToolTip(known ? key : QString());
+        verifiedLabel->setText(verified ? tr("Verified")
+                                        : tr("Does not match the key accepted before"));
+        verifiedLabel->setProperty("remoteTone", offered ? QStringLiteral("danger") : QString());
+        form->setRowVisible(verifiedLabel, known);
         const bool failed = current->error != LinuxMachine::Error::None;
         if (failed)
             error->setText(errorText(*current));
@@ -257,7 +386,24 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         if (connect)
             connect->setEnabled(offersConnect(*current));
         if (disconnect)
-            disconnect->setEnabled(!offersConnect(*current));
+            disconnect->setEnabled(offersDisconnect(*current));
+        if (forget)
+            forget->setVisible(current->canForgetHostKey);
+        if (trust)
+            trust->setVisible(current->error == LinuxMachine::Error::IdentityChanged);
+        const bool rotated = current->error == LinuxMachine::Error::IdentityChanged;
+        trustedIdentity->setText(current->id);
+        trustedIdentity->setFont(mono);
+        presentedIdentity->setText(current->presentedIdentity.isEmpty()
+                                       ? tr("None: the daemon named no identity")
+                                       : current->presentedIdentity);
+        presentedIdentity->setFont(current->presentedIdentity.isEmpty() ? plain : mono);
+        presentedIdentity->setProperty("remoteTone", QStringLiteral("danger"));
+        form->setRowVisible(trustedIdentity, rotated);
+        form->setRowVisible(presentedIdentity, rotated);
+        // Nothing to trust when the daemon named no identity.
+        if (trust)
+            trust->setEnabled(rotated && !current->presentedIdentity.isEmpty());
     };
     refresh();
     QObject::connect(model, &LinuxMachineModel::machinesChanged, dialog, refresh);

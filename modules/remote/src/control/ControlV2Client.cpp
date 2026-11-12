@@ -33,6 +33,16 @@ ControlV2Client::ControlV2Client(QUrl origin, QObject* parent)
     hostPinsStored_ = !pins.isEmpty();
     hostPins_ = QJsonDocument::fromJson(pins).object();
 }
+std::optional<QStringList> ControlV2Client::entitlements() const {
+    const QJsonValue value = credential_.value("entitlements");
+    if (!value.isArray())
+        return std::nullopt;
+    QStringList names;
+    for (const QJsonValue& name : value.toArray())
+        if (name.isString())
+            names.append(name.toString());
+    return names;
+}
 bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
     if (!credentials_.write("host-pins", QJsonDocument(pins).toJson(QJsonDocument::Compact), error))
         return false;

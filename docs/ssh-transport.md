@@ -249,14 +249,88 @@ read. `parseSshDestination()` splits Connections' `user@host[:port]` (or
   the new one in one write, then connects. Removing the machine forgets the
   target, its id and the bindings no other saved target shares.
 
+### Accepted host keys
+
+A first-use host key that the user accepts in Connections goes into the
+KetPlus-owned known_hosts file (`SshTunnel::defaultKnownHostsFile()`), and
+its known_hosts name (`[host]:port` or the `HostKeyAlias`) is recorded with the
+target in `machines.json` (`accepted_host_keys`). `KnownHostsFile.h` edits only
+that file: `removeKnownHost()` removes a name from plain and hashed (`|1|`)
+lines as `ssh-keygen -R` does, and keeps comments, other hosts and `@revoked` /
+`@cert-authority` lines. The user's own known_hosts files are never edited.
+
+- Removing a machine also removes the keys accepted for it that no other saved
+  target shares.
+- After a host key mismatch, `forgetAcceptedHostKeys()` removes the old key
+  when ketPlus accepted it. Connections then runs the first-use step again, so
+  the new key is compared before it is accepted. If the old key is in the
+  user's own known_hosts, Connections shows the `ssh-keygen -R` command
+  instead.
+- Only the connect card answers a host key prompt. A background reconnect that
+  meets an unknown key rejects it.
+
+## Connections
+
+`LinuxSshMachines` (apps/desktop) owns one `SshMachineBackend` per saved
+target and writes each machine into `LinuxMachineModel`. Each machine is keyed
+by its ADR 0119 machine id (a saved target whose daemon has not named itself
+yet is `ssh:<target>`). The model shows its live state, the verified SSH host
+key, a presented key that did not verify (as a mismatch, never as verified),
+and an error the user can act on. A host that the Relay lists under the same
+machine id is one row reached over SSH, and the Relay's id is a route
+attribute. While SSH cannot reach that host (Offline, with no error or a
+connection failure) and the Relay is connected, the row falls back to the
+Relay: its state, Connect / Disconnect and `machineBackend(id)` are the
+Relay's. A key mismatch or a changed identity is never hidden behind the
+Relay. After an identity change, Details shows the trusted and the presented
+daemon identity before Trust new identity, which is disabled when the daemon
+named none. The `ssh-keygen -R` hint names the entry as ssh files it
+(`'[host]:port'` for a port other than 22). The connect card adds the target when Connect is pressed. An
+attempt that fails or is cancelled before the first connection removes the
+target and any key accepted for it. Connect, Disconnect, Remove, Forget old
+key and Trust new identity act on the backend. Saved machines with a trusted
+identity connect when Connections opens.
+
+`LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
+`RelayMachineBackend` for each host that the Relay's worktree index lists,
+with one owner-only outbox file per host
+(`<GenericDataLocation>/Ketsuite/KetPlus/relay/outbox-<hash>.json`). The links
+run only while the signed-in account holds the Relay entitlement (ADR 0119
+"Relay entitlement"). Without it, each Relay row shows "Needs Pro" with an
+upgrade hint and offers no Connect; SSH stays free. A row named by the pinned
+host identity shows it as verified in Details. An unpinned host is
+`relay:<relay id>` and its Details reads "Not verified yet". The listing's
+`machineDisplayName` names the row, and the newest worktree `updatedAt` (the
+host heartbeat, every 15 s) is when the host was last seen. Connected over the
+Relay means only that the Relay answers. When the host has not been seen for
+more than two minutes, the row, Details and picker say "Host offline, last
+seen …", and Connect and Details say that requests wait for the host for up to
+15 minutes (as they do while Connecting or Reconnecting). Commands still in the
+outbox are shown as "outcome pending" until `commandCompleted`. Connections
+refreshes the listing every minute while it is shown. Relay pairings are not
+removed from Desktop; Remove is offered only for SSH machines.
+
+The activity bar's machine picker labels each machine with the same route and
+state as its row (`build-node-02 · SSH · Connected`). The window's
+`MachineSelection` registers each listed id's backend from
+`LinuxMachinesSection::machineBackend(id)` on `machinesChanged`, so choosing a
+machine binds the Desktop composition to it.
+
 ### Backend tests
 
 `ketplus_remote_ssh_backend_tests` drives the backend with a fake link and a
 fake daemon. It covers the state mapping, an Offline request, the first hello,
 restart persistence without secrets, a dropped session that replays a read,
 rotation fail-closed and re-trust with binding moves, a daemon that names no
-identity, durable add and remove, an unreadable store, and destination
-parsing. `ketplus_remote_ssh_daemon_integration_tests` runs a real
+identity, durable add and remove, accepted host keys removed with their machine
+and forgotten for re-trust, an unreadable store, and destination parsing.
+`ketplus_remote_known_hosts_tests` covers `removeKnownHost()` and
+`hasKnownHost()`. `ketplus_linux_ssh_machines_tests` (offscreen) drives
+Connections' SSH route through the same fake link and daemon
+(`tests/daemon/FakeSshLink.h`). `ketplus_linux_relay_machines_tests` (offscreen) drives the Relay route
+with fake links: live state, the entitlement gate, fingerprint keying with SSH
+preferred, host presence, pending outcomes and the Pro hint.
+`ketplus_remote_ssh_daemon_integration_tests` runs a real
 `ketplus_daemon` with FakeCodex (no provider quota) behind the loopback `sshd`
 fixture (`tests/daemon/SshFixture.h`). It lists repositories and
 conversations, completes an approval round-trip, pages a transcript,

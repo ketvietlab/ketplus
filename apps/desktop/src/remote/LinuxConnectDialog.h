@@ -22,12 +22,12 @@ class LinuxMachineModel;
 // not in known_hosts comes back as a host key to accept or reject before anything is trusted.
 // No mode has a password field: SSH authenticates with the user's keys or agent (ADR 0119).
 //
-// Until the model's backends are attached (T-6) only the Relay mode is offered.
+// Until the model's backends are attached only the Relay mode is offered.
 //
 // The Relay mode is the existing pairing flow (a one-time ketplus:// link from ketplusctl and
 // the claim digest check). Without the Pro entitlement it explains that instead of pairing.
 struct LinuxConnectHooks final {
-    // The Relay needs a ketPlus account; called when the user asks to sign in.
+    // The Relay needs a KetSuite account; called when the user asks to sign in.
     std::function<void()> signIn;
     // A Relay machine was trusted or an SSH machine connected.
     std::function<void(const QString& message)> finished;
@@ -35,9 +35,11 @@ struct LinuxConnectHooks final {
 
 enum class LinuxConnectMode { Ssh, Relay };
 
-// Opens the card on `anchor`'s window; it deletes itself when it closes.
+// Opens the card on `anchor`'s window; it deletes itself when it closes. With `sshHost` the SSH
+// mode connects to that host at once (after a forgotten host key, to show the new one).
 ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                                     remote::ControlV2Client* client, LinuxConnectHooks hooks,
-                                    LinuxConnectMode mode = LinuxConnectMode::Ssh);
+                                    LinuxConnectMode mode = LinuxConnectMode::Ssh,
+                                    const QString& sshHost = {});
 
 } // namespace ketplus

@@ -1,6 +1,9 @@
 #include "ssh/SshMachineBackend.h"
 
+#include "ssh/KnownHostsFile.h"
 #include "ssh/SshMachineStore.h"
+
+#include <QPointer>
 
 #include <utility>
 
@@ -16,7 +19,10 @@ QString missingIdentity() {
 } // namespace
 
 SshTunnelLink::SshTunnelLink(SshTarget target, SshTunnelOptions options, QObject* parent)
-    : SshLink(parent), tunnel_(new SshTunnel(std::move(target), std::move(options), this)) {
+    : SshLink(parent),
+      knownHostsFile_(options.knownHostsFile.isEmpty() ? SshTunnel::defaultKnownHostsFile()
+                                                       : options.knownHostsFile) {
+    tunnel_ = new SshTunnel(std::move(target), std::move(options), this);
     connect(tunnel_, &SshTunnel::stateChanged, this, &SshLink::stateChanged);
 }
 
@@ -151,7 +157,49 @@ bool SshMachineBackend::bindConversation(const QString& conversationId, QString*
 
 bool SshMachineBackend::removeMachine(QString* error) {
     disconnectFromHost();
-    return store_->remove(targetKey(), error);
+    const QStringList released = store_->releasedHostKeys(targetKey());
+    if (!store_->remove(targetKey(), error))
+        return false;
+    const QString file = link_->knownHostsFile();
+    bool removed = true;
+    for (const QString& name : released)
+        removed = removeKnownHost(file, name, error) >= 0 && removed;
+    return removed;
+}
+
+void SshMachineBackend::setHostKeyPrompt(SshTunnel::HostKeyPrompt prompt) {
+    if (!prompt) {
+        link_->setHostKeyPrompt({});
+        return;
+    }
+    const QPointer<SshMachineBackend> self(this);
+    link_->setHostKeyPrompt(
+        [self, prompt = std::move(prompt)](const HostKey& key, std::function<void(bool)> decide) {
+            prompt(key, [self, key, decide = std::move(decide)](const bool accepted) {
+                // Remembered before the tunnel records the key, so it is never left unowned.
+                if (accepted && self)
+                    self->store_->recordAcceptedHostKey(self->targetKey(), key.knownHostsName);
+                decide(accepted);
+            });
+        });
+}
+
+bool SshMachineBackend::holdsAcceptedHostKey() const {
+    const QString file = link_->knownHostsFile();
+    for (const QString& name : store_->acceptedHostKeys(targetKey()))
+        if (hasKnownHost(file, name))
+            return true;
+    return false;
+}
+
+bool SshMachineBackend::forgetAcceptedHostKeys(QString* error) {
+    if (!holdsAcceptedHostKey())
+        return false;
+    const QString file = link_->knownHostsFile();
+    bool removed = true;
+    for (const QString& name : store_->acceptedHostKeys(targetKey()))
+        removed = removeKnownHost(file, name, error) >= 0 && removed;
+    return removed;
 }
 
 void SshMachineBackend::tunnelChanged() {

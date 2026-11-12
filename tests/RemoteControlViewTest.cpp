@@ -1,5 +1,7 @@
 #include "remote/RemoteControlView.h"
+#include "FakeRelayLink.h"
 #include "control/ControlV2Client.h"
+#include "daemon/FakeSshLink.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
@@ -47,6 +49,9 @@ class RemoteControlTestAccess {
   public:
     static void signIn(ControlV2Client& client) {
         client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
+        // A ketPlus Pro session: the Relay is entitled (AccountEntitlements.h).
+        client.credential_.insert(QStringLiteral("entitlements"),
+                                  QJsonArray{QStringLiteral("ketplus.relay")});
     }
 };
 } // namespace ketplus::remote
@@ -441,6 +446,7 @@ void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
     view.show();
     auto* linux = view.linuxMachines_;
     remote::RemoteControlTestAccess::signIn(*linux->client_);
+    linux->syncEntitlement();
     linux->render();
     const auto connectButton = [linux] {
         return linux->findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));
@@ -504,7 +510,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
     section.resize(640, 320);
     section.show();
     remote::RemoteControlTestAccess::signIn(*section.client_);
-    section.model()->setRelayMachines({{QStringLiteral("build-box"), {}}});
+    section.model()->setRelayMachines({{QStringLiteral("build-box"), {}, {}, {}}});
     // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
     const auto iconInk = [&section] {
         auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));
@@ -841,6 +847,82 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                 view.findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"))) {
             captureWindow(view, QStringLiteral("linux-details"));
             details->reject();
+        }
+        // The wired Connections (T-13), as `connections-wired-*.png`: an SSH machine on a fake
+        // daemon behind a fake link, connected through LinuxSshMachines, and a Relay host on a
+        // fake relay link through LinuxRelayMachines, connected but last seen 9 minutes ago.
+        {
+            auto* section = view.linuxMachines_;
+            section->model()->setMachines({});
+            QTemporaryDir store;
+            const auto socket =
+                QStringLiteral("ketplus-capture-%1").arg(QCoreApplication::applicationPid());
+            remote::ssh::testing::FakeDaemon daemon(socket);
+            daemon.fingerprint =
+                QStringLiteral("SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e");
+            const QString known = store.filePath(QStringLiteral("known_hosts"));
+            section->attachSshBackend(
+                store.filePath(QStringLiteral("machines.json")),
+                [socket,
+                 known](const remote::ssh::SshTarget&) -> std::unique_ptr<remote::ssh::SshLink> {
+                    auto link = std::make_unique<remote::ssh::testing::FakeLink>(socket);
+                    link->knownHosts = known;
+                    link->hostKey =
+                        QStringLiteral("SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e");
+                    return link;
+                });
+            section->attachRelayBackend(
+                [](const QString& relayId) -> std::unique_ptr<LinuxRelayLink> {
+                    return std::make_unique<testing::FakeRelayLink>(relayId);
+                });
+            section->syncEntitlement();
+            section->model()->requestSshConnect(QStringLiteral("build-node-01"));
+            QTRY_VERIFY(section->model()->machines().size() == 1 &&
+                        section->model()->machines().first().state ==
+                            LinuxMachine::State::Connected);
+            section->relay_->setListed(
+                {{QStringLiteral("relay-build-node-02"),
+                  QStringLiteral("SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s"),
+                  QStringLiteral("build-node-02"),
+                  QDateTime::currentDateTimeUtc().addSecs(-9 * 60)}});
+            QTest::qWait(50);
+            for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
+                appTheme->previewMode(mode);
+                QTest::qWait(50);
+                view.findChild<QScrollArea*>()->widget()->grab().save(
+                    QDir(dir).filePath(mode == ThemeManager::Mode::Light
+                                           ? QStringLiteral("connections-wired-light.png")
+                                           : QStringLiteral("connections-wired-dark.png")));
+            }
+            appTheme->cancelPreview();
+            // The Details cards over the whole page, as the page capture above.
+            view.resize(1280 - 240, 1300);
+            QTest::qWait(100);
+            const QString relayId =
+                QStringLiteral("SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s");
+            const QString sshId = daemon.fingerprint;
+            for (const auto& [id, name] :
+                 {std::pair{relayId, QStringLiteral("linux-wired-relay-details")},
+                  std::pair{sshId, QStringLiteral("linux-wired-ssh-details")}}) {
+                for (auto* row : view.findChildren<QFrame*>(QStringLiteral("linuxMachineRow")))
+                    if (row->property("machineId").toString() == id)
+                        row->findChild<QAbstractButton*>(QStringLiteral("linuxMachineDetails"))
+                            ->click();
+                if (auto* details =
+                        view.findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"))) {
+                    QTest::qWait(100); // the card settles its height
+                    captureWindow(view, name);
+                    details->reject();
+                    QTRY_VERIFY(
+                        !view.findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+                }
+            }
+            view.resize(1280 - 240, 900);
+            delete section->relay_;
+            section->relay_ = nullptr;
+            delete section->ssh_;
+            section->ssh_ = nullptr;
+            section->model()->setMachines({});
         }
         view.renderDevices({});
         view.activity_->render({});

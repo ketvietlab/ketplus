@@ -51,6 +51,7 @@ ketplus_enable_warnings(ketplus_remote_control)
 
 # SSH route to a Linux host's daemon through the system OpenSSH client (docs/ssh-transport.md).
 add_library(ketplus_remote_ssh STATIC
+    src/ssh/KnownHostsFile.cpp src/ssh/KnownHostsFile.h
     src/ssh/SshHostKeys.cpp src/ssh/SshHostKeys.h
     src/ssh/SshProcess.h src/ssh/SshTunnel.cpp src/ssh/SshTunnel.h
     src/ssh/SshTunnelBridge.cpp src/ssh/SshTunnelHostKey.cpp)

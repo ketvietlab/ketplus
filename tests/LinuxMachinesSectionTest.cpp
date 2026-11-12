@@ -1,5 +1,7 @@
 #include "remote/LinuxMachinesSection.h"
+#include "FakeRelayLink.h"
 #include "control/ControlV2Client.h"
+#include "remote/AccountEntitlements.h"
 #include "remote/LinuxMachineModel.h"
 #include "remote/LinuxMachineRow.h"
 
@@ -11,6 +13,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QFrame>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
@@ -24,6 +27,10 @@ class RemoteControlTestAccess {
         client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
     }
     static void pin(ControlV2Client& client, const QJsonObject& pins) { client.hostPins_ = pins; }
+    static void signOut(ControlV2Client& client) { client.credential_ = {}; }
+    static void entitle(ControlV2Client& client, const QJsonArray& entitlements) {
+        client.credential_.insert(QStringLiteral("entitlements"), entitlements);
+    }
 };
 } // namespace ketplus::remote
 
@@ -50,6 +57,11 @@ class LinuxMachinesSectionTest final : public QObject {
     void signedOutOffersSshWithoutAnAccount();
     void detailsFollowTheModel();
     void enterConnectsAndAHostKeyFocusesReject();
+    void detailsShowAnOfferedKeyAsAMismatchAndOfferRetrust();
+    void anIdentityChangeShowsBothIdentitiesBeforeTrust();
+    void theRelayFollowsTheAccountEntitlement();
+    void theRelayStopsWhenTheSessionIsRevoked();
+    void aForgottenKeyReopensTheCardOnThatHost();
 
   private:
     static LinuxMachine make(const QString& id, const QString& name, const QString& detail,
@@ -138,7 +150,9 @@ void LinuxMachinesSectionTest::rowsShowStateRouteAndErrors() {
     QSignalSpy changed(&section, &LinuxMachinesSection::machinesChanged);
     section.model()->setMachines(fleet());
     QCOMPARE(changed.size(), 1);
-    QCOMPARE(changed.first().at(1).toStringList().first(), QStringLiteral("build-node-01"));
+    // The picker shows the row's route and state.
+    QCOMPARE(changed.first().at(1).toStringList().first(),
+             QStringLiteral("build-node-01 · SSH · Connected"));
     QCOMPARE(section.findChild<QLabel*>(QStringLiteral("linuxMachinesCount"))->text(),
              QStringLiteral("5 trusted"));
 
@@ -378,6 +392,10 @@ void LinuxMachinesSectionTest::relayModeOpensPairingAndRespectsTheEntitlement() 
 
     // Signed in with the entitlement: the existing pairing link flow.
     remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QString::fromLatin1(relayEntitlementName)});
+    section.syncEntitlement();
+    QVERIFY(section.model()->relayEntitled());
     dialog = open();
     relay = dialog->findChild<QWidget*>(QStringLiteral("linuxRelayPage"));
     QVERIFY(!relay->findChild<QLabel*>(QStringLiteral("linuxRelayGate"))->isVisible());
@@ -512,10 +530,10 @@ void LinuxMachinesSectionTest::signedOutOffersSshWithoutAnAccount() {
                 all += label->text();
         return all;
     };
-    // Without backends: the Relay's sign-in only, in ketPlus words.
+    // Without backends: the Relay's sign-in only, with the account term of the page above.
     QVERIFY(!entry());
     QVERIFY(signIn());
-    QVERIFY(!messages().contains(QStringLiteral("KetSuite")));
+    QVERIFY(messages().contains(QStringLiteral("KetSuite account")));
 
     section.model()->setBackendsAttached(true);
     QVERIFY(entry());
@@ -591,6 +609,191 @@ void LinuxMachinesSectionTest::enterConnectsAndAHostKeyFocusesReject() {
     QCOMPARE(requests.size(), 1);
     model->presentHostKey(QStringLiteral("build-node-06"), QStringLiteral("SHA256:abc"));
     QTRY_VERIFY(button(dialog, QStringLiteral("linuxSshRejectKey"))->hasFocus());
+    dialog->reject();
+}
+
+void LinuxMachinesSectionTest::detailsShowAnOfferedKeyAsAMismatchAndOfferRetrust() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    auto changed = make("ssh-4", "old-host", "Linux · old-host", Route::Ssh, State::Offline, {},
+                        Error::HostKeyMismatch);
+    changed.presentedFingerprint = QStringLiteral("SHA256:offeredKeyThatDidNotVerify");
+    changed.canForgetHostKey = true;
+    model->setMachines({changed});
+    QSignalSpy forget(model, &LinuxMachineModel::forgetHostKeyRequested);
+    QSignalSpy removed(model, &LinuxMachineModel::removeRequested);
+    // The row explains the ketPlus re-trust path instead of ssh-keygen -R.
+    QVERIFY(text(row(section, "ssh-4"), QStringLiteral("linuxMachineError"))
+                .contains(QStringLiteral("Forget old key")));
+    button(row(section, "ssh-4"), QStringLiteral("linuxMachineDetails"))->click();
+    auto* details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsFingerprint")),
+             changed.presentedFingerprint);
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsVerified")),
+             QStringLiteral("Does not match the key accepted before"));
+    QVERIFY(!button(details, QStringLiteral("linuxDetailsForgetKey"))->isHidden());
+    QVERIFY(button(details, QStringLiteral("linuxDetailsTrustIdentity"))->isHidden());
+    button(details, QStringLiteral("linuxDetailsForgetKey"))->click();
+    QCOMPARE(forget.size(), 1);
+    QCOMPARE(forget.first().first().toString(), QStringLiteral("ssh-4"));
+
+    QTRY_VERIFY(
+        !section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+
+    // A verified machine reads Verified and offers Remove; no re-trust is offered.
+    model->setMachines(fleet());
+    button(row(section, "ssh-1"), QStringLiteral("linuxMachineDetails"))->click();
+    details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsVerified")), QStringLiteral("Verified"));
+    QVERIFY(button(details, QStringLiteral("linuxDetailsForgetKey"))->isHidden());
+    button(details, QStringLiteral("linuxDetailsRemove"))->click();
+    QCOMPARE(removed.size(), 1);
+    QCOMPARE(removed.first().first().toString(), QStringLiteral("ssh-1"));
+}
+
+void LinuxMachinesSectionTest::theRelayStopsWhenTheSessionIsRevoked() {
+    LinuxMachinesSection section;
+    QPointer<testing::FakeRelayLink> link;
+    section.attachRelayBackend([&link](const QString& relayId) {
+        auto made = std::make_unique<testing::FakeRelayLink>(relayId);
+        link = made.get();
+        return made;
+    });
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QString::fromLatin1(relayEntitlementName)});
+    section.syncEntitlement();
+    section.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"),
+                                QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+    QVERIFY(link);
+    QCOMPARE(link->connects, 1);
+    QCOMPARE(section.model()->machines().first().state, State::Connected);
+    QCOMPARE(section.machineBackend(QStringLiteral("SHA256:pinned")), link->backend());
+    // The relay refused the refresh credential: signed out, so the Relay stops.
+    remote::RemoteControlTestAccess::signOut(*section.client_);
+    emit section.client_->credentialRevoked();
+    QCOMPARE(link->disconnects, 1);
+    QVERIFY(!section.model()->relayEntitled());
+    QVERIFY(!section.model()->machines().first().connectable);
+}
+
+void LinuxMachinesSectionTest::anIdentityChangeShowsBothIdentitiesBeforeTrust() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    auto rotated = make("SHA256:trustedDaemonKey", "build-node-02", "Linux · build-node-02",
+                        Route::Ssh, State::Offline, {}, Error::IdentityChanged);
+    rotated.presentedIdentity = QStringLiteral("SHA256:presentedDaemonKey");
+    model->setMachines({rotated});
+    QSignalSpy trusted(model, &LinuxMachineModel::trustIdentityRequested);
+    button(row(section, "SHA256:trustedDaemonKey"), QStringLiteral("linuxMachineDetails"))->click();
+    auto* details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsTrustedIdentity")),
+             QStringLiteral("SHA256:trustedDaemonKey"));
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsPresentedIdentity")),
+             QStringLiteral("SHA256:presentedDaemonKey"));
+    auto* trust = button(details, QStringLiteral("linuxDetailsTrustIdentity"));
+    QVERIFY(!trust->isHidden() && trust->isEnabled());
+
+    // A daemon that names no identity offers nothing to trust.
+    rotated.presentedIdentity.clear();
+    model->setMachines({rotated});
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsPresentedIdentity")),
+             QStringLiteral("None: the daemon named no identity"));
+    QVERIFY(!trust->isEnabled());
+    rotated.presentedIdentity = QStringLiteral("SHA256:presentedDaemonKey");
+    model->setMachines({rotated});
+    trust->click();
+    QCOMPARE(trusted.size(), 1);
+    QTRY_VERIFY(
+        !section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+
+    // Without a rotation, neither identity row shows.
+    model->setMachines(fleet());
+    button(row(section, "ssh-1"), QStringLiteral("linuxMachineDetails"))->click();
+    details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details);
+    QVERIFY(
+        !details->findChild<QLabel*>(QStringLiteral("linuxDetailsTrustedIdentity"))->isVisible());
+    details->reject();
+}
+
+void LinuxMachinesSectionTest::theRelayFollowsTheAccountEntitlement() {
+    // The policy for a session that names no entitlements: D-4 fails closed; Allow is the switch.
+    QVERIFY(!relayEntitled(std::nullopt));
+    QVERIFY(!relayEntitled(std::nullopt, MissingEntitlements::Deny));
+    QVERIFY(relayEntitled(std::nullopt, MissingEntitlements::Allow));
+    QVERIFY(relayEntitled(QStringList{QString::fromLatin1(relayEntitlementName)},
+                          MissingEntitlements::Deny));
+    QVERIFY(
+        !relayEntitled(QStringList{QStringLiteral("ketrouter.usage")}, MissingEntitlements::Allow));
+
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    // Signed out or signed in without a named entitlement: not entitled (no default-true).
+    QVERIFY(!model->relayEntitled());
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    section.syncEntitlement();
+    QVERIFY(!model->relayEntitled());
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QStringLiteral("ketrouter.usage")});
+    section.syncEntitlement();
+    QVERIFY(!model->relayEntitled());
+
+    // Not Pro: the Relay mode shows the upgrade hint and no pairing; SSH stays offered.
+    section.beginPairing();
+    auto* dialog = connectDialog(section);
+    QVERIFY(dialog);
+    QVERIFY(dialog->findChild<QWidget*>(QStringLiteral("linuxSshPage"))->isVisible());
+    QVERIFY(button(dialog, QStringLiteral("linuxSshConnect"))->isEnabled());
+    auto* modes = dialog->findChild<ket::SegmentedControl*>(QStringLiteral("linuxConnectMode"));
+    modes->setCurrentIndex(1);
+    emit modes->currentChanged(1);
+    auto* relay = dialog->findChild<QWidget*>(QStringLiteral("linuxRelayPage"));
+    auto* gate = relay->findChild<QLabel*>(QStringLiteral("linuxRelayGate"));
+    QVERIFY(gate->isVisible());
+    QVERIFY(gate->text().contains(QStringLiteral("upgrade your KetSuite account")));
+    QVERIFY(!relay->findChild<QLineEdit*>(QStringLiteral("linuxPairingLink"))->isVisible());
+
+    // The account becomes Pro: the open card offers pairing.
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QString::fromLatin1(relayEntitlementName)});
+    section.syncEntitlement();
+    QVERIFY(model->relayEntitled());
+    QVERIFY(!gate->isVisible());
+    QVERIFY(relay->findChild<QLineEdit*>(QStringLiteral("linuxPairingLink"))->isVisible());
+    dialog->reject();
+}
+
+void LinuxMachinesSectionTest::aForgottenKeyReopensTheCardOnThatHost() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    QSignalSpy requests(model, &LinuxMachineModel::sshConnectRequested);
+    model->promptSshConnect(QStringLiteral("dev@old-host:2222"));
+    auto* dialog = connectDialog(section);
+    QVERIFY(dialog);
+    QCOMPARE(dialog->findChild<QLineEdit*>(QStringLiteral("linuxSshHost"))->text(),
+             QStringLiteral("dev@old-host:2222"));
+    QCOMPARE(requests.size(), 1);
+    QCOMPARE(requests.first().first().toString(), QStringLiteral("dev@old-host:2222"));
     dialog->reject();
 }
 

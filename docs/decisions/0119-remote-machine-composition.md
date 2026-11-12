@@ -295,6 +295,37 @@ the host, host keys pinned at pairing (#88,
 ciphertext. The two routes never mix: a Relay machine is never reached over SSH
 by the Relay's identity, and an SSH machine needs no Relay credential.
 
+### Relay entitlement
+
+SSH is free; the Relay route is ketPlus Pro, and the private account service
+decides who has it. Desktop reads it from the user session the account service
+returns. That is the JSON body of `POST /v2/auth/token`, sent when the browser
+sign-in completes, and of `POST /v2/auth/refresh`, which replaces it on every
+credential rotation. Desktop reads one field:
+
+```json
+{
+  "accessToken": "…",
+  "refreshToken": "…",
+  "subject": { "id": "…" },
+  "entitlements": ["ketplus.relay"]
+}
+```
+
+- `entitlements` is an array of strings. `"ketplus.relay"` lets the account
+  pair Linux machines and work on them through the Relay.
+- A session without the field, with the field in another shape, or without
+  `"ketplus.relay"` in it is not entitled. Desktop fails closed (decision
+  D-4): the Relay route is disabled with an upgrade hint, and SSH stays
+  available.
+- Desktop never gates the route on its build edition. The relay still
+  authorizes each request by account and entitlement, and it trusts nothing a
+  client says about itself; the client-side gate only explains the refusal
+  before the user meets it.
+
+The code is `ControlV2Client::entitlements()` and
+`apps/desktop/src/remote/AccountEntitlements.h`.
+
 ## Consequences
 
 - The local adapter (`DaemonMachineBackend`) and its tests
