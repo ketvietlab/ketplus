@@ -1289,7 +1289,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return error(
             QStringLiteral("computer_policy_error"),
             QStringLiteral("KetPlus could not turn off computer use for this remote turn."));
-    (void)worktreeCatalogRoot(*it); // Persist repository identity before a checkout is removed.
+    // Persist repository identity before a checkout is removed; git runs off this thread.
+    rememberRepositoryIdentity(it->stored.worktreePath);
     const bool worktreeMissing = !QFileInfo(it->stored.worktreePath).isDir();
     noteWorktreesBeforeTurn(*it);
     QJsonArray input = payload.value(QStringLiteral("input")).toArray();

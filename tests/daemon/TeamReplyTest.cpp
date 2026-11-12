@@ -7,6 +7,8 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
@@ -22,12 +24,14 @@ struct SlowGit final {
     QByteArray path = qgetenv("PATH");
     bool installed = false;
 
-    explicit SlowGit(const QString& directory) {
+    // Two seconds by default. The session runtime gives up on a git call after two seconds,
+    // so a worktree switch is only carried out with a shorter delay.
+    explicit SlowGit(const QString& directory, const QByteArray& seconds = "2") {
         const QString real = QStandardPaths::findExecutable(QStringLiteral("git"));
         QFile script(directory + QStringLiteral("/git"));
         if (real.isEmpty() || !QDir().mkpath(directory) || !script.open(QIODevice::WriteOnly))
             return;
-        script.write("#!/bin/sh\nsleep 2\nexec '" + real.toUtf8() + "' \"$@\"\n");
+        script.write("#!/bin/sh\nsleep " + seconds + "\nexec '" + real.toUtf8() + "' \"$@\"\n");
         script.close();
         installed = script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("PATH", directory.toUtf8() + ':' + path);
@@ -64,7 +68,7 @@ class TeamReplyTest final : public QObject {
                                                   *elapsed = clock.elapsed();
                                               });
         if (reply.isEmpty())
-            QTest::qWaitFor([&] { return !reply.isEmpty(); }, 60000);
+            (void)QTest::qWaitFor([&] { return !reply.isEmpty(); }, 60000);
         return reply;
     }
 
@@ -219,6 +223,63 @@ class TeamReplyTest final : public QObject {
         QVERIFY(resumed.value("ok").toBool());
         qInfo("team.update (resume): reply after %lld ms", elapsed);
         QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        QTest::qWait(500);
+        QCOMPARE(count("assignment"), 2);
+    }
+
+    // Criteria 5 and 6: once the outbox has started a member's worktree switch, its git runs
+    // off the daemon's thread: the event loop keeps turning, a next command is answered at
+    // once, and the assignments still arrive in their order, each once.
+    void theOutboxGitHoldsUpNothing() {
+        const QString plan = openDecision("first_plan");
+        // Half a second per call: a switch's two calls block a synchronous daemon for a second,
+        // and stay well inside the runtime's two-second git limit on a busy machine.
+        const SlowGit slow(fixture_->directory.filePath("bin"), "0.5");
+        QVERIFY(slow.installed);
+        qint64 elapsed = -1;
+        QVERIFY(timed("team.decision.answer",
+                      {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}, &elapsed)
+                    .value("ok")
+                    .toBool());
+        QElapsedTimer loop;
+        loop.start();
+        QTest::qWait(50); // The outbox starts its first switch here.
+        qInfo("event loop: 50 ms wait took %lld ms while the outbox's git runs", loop.elapsed());
+        QVERIFY2(loop.elapsed() < 400, qPrintable(QString::number(loop.elapsed())));
+        QCOMPARE(count("assignment"), 0);
+        const QJsonObject created =
+            timed("team.task.create", {{"team_id", teamId_}, {"title", "Search"}}, &elapsed);
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        qInfo("team.task.create during the outbox's git: reply after %lld ms", elapsed);
+        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 60000);
+        const auto first = fixture_->journal->agentMessagesOf(developers_.at(0), 1, 50);
+        const auto second = fixture_->journal->agentMessagesOf(developers_.at(1), 1, 50);
+        QString t1;
+        QString t2;
+        for (const auto& message : first)
+            if (message.kind == QStringLiteral("assignment"))
+                t1 = message.createdAt;
+        for (const auto& message : second)
+            if (message.kind == QStringLiteral("assignment"))
+                t2 = message.createdAt;
+        QVERIFY2(!t1.isEmpty() && t1 <= t2, qPrintable(t1 + " " + t2));
+        // Each owner's conversation stands in its task's worktree.
+        const QJsonObject team =
+            command("team.get", {{"team_id", teamId_}}).value("team").toObject();
+        const auto stored = fixture_->journal->readSessions();
+        QVERIFY(stored);
+        int pointed = 0;
+        for (const QJsonValue& value : team.value("tasks").toArray()) {
+            const QJsonObject task = value.toObject();
+            for (const auto& session : *stored)
+                if (session.id == task.value("owner").toString() &&
+                    !task.value("worktree").toString().isEmpty() &&
+                    QFileInfo(session.worktreePath).canonicalFilePath() ==
+                        QFileInfo(task.value("worktree").toString()).canonicalFilePath())
+                    ++pointed;
+        }
+        QVERIFY2(pointed == 2, QJsonDocument(team.value("tasks").toArray()).toJson().constData());
         QTest::qWait(500);
         QCOMPARE(count("assignment"), 2);
     }

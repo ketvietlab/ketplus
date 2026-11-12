@@ -119,21 +119,36 @@ void TeamCoordinator::send(const qint64 teamId, const TeamMessage& message) {
     if (deferSending_)
         (void)settleRelocations(teamId, message.toSession);
     if (!message.pointAt.isEmpty())
-        if (const QString error = host_->pointConversationAt(message.toSession, message.pointAt);
-            !error.isEmpty()) {
-            Team* stored = mutableTeam(teamId);
-            if (stored && stored->task(message.taskId)) {
-                const Team before = *stored;
-                addHistory(*stored->task(message.taskId), QStringLiteral("daemon"),
-                           QStringLiteral("worktree"),
-                           QStringLiteral("The owner's conversation was not moved to %1: %2")
-                               .arg(message.pointAt, error));
-                (void)commit(*stored, before, QStringLiteral("daemon"), {});
-            }
-        }
+        notePointError(teamId, message,
+                       host_->pointConversationAt(message.toSession, message.pointAt));
     if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
+}
+
+void TeamCoordinator::forgetRelocations(const qint64 teamId, const QString& sessionId) {
+    Team* team = mutableTeam(teamId);
+    if (!team)
+        return;
+    const Team before = *team;
+    const qsizetype removed = team->relocations.removeIf(
+        [&sessionId](const Relocation& move) { return move.session == sessionId; });
+    if (removed > 0 && commit(*team, before, QStringLiteral("daemon"), {}))
+        qWarning("Unable to forget a settled move out of a handed-over worktree.");
+}
+
+void TeamCoordinator::notePointError(const qint64 teamId, const TeamMessage& message,
+                                     const QString& error) {
+    if (error.isEmpty())
+        return;
+    Team* stored = mutableTeam(teamId);
+    if (!stored || !stored->task(message.taskId))
+        return;
+    const Team before = *stored;
+    addHistory(*stored->task(message.taskId), QStringLiteral("daemon"), QStringLiteral("worktree"),
+               QStringLiteral("The owner's conversation was not moved to %1: %2")
+                   .arg(message.pointAt, error));
+    (void)commit(*stored, before, QStringLiteral("daemon"), {});
 }
 
 void TeamCoordinator::scheduleOutbox() {
@@ -148,6 +163,8 @@ void TeamCoordinator::scheduleOutbox() {
 // the two finds the message queued and only forgets it.
 void TeamCoordinator::sendFromOutbox() {
     outboxScheduled_ = false;
+    if (outboxSending_)
+        return;
     QList<qint64> ids = teams_.keys();
     std::sort(ids.begin(), ids.end());
     for (const qint64 id : std::as_const(ids)) {
@@ -157,11 +174,49 @@ void TeamCoordinator::sendFromOutbox() {
         const QJsonObject entry = team->outbox.first().toObject();
         const TeamMessage message = heldMessage(*team, entry);
         // A member that left meanwhile receives nothing of the team's.
-        if (team->member(message.toSession) && !host_->teamMessagePosted(message.id))
-            send(id, message);
-        Team* current = mutableTeam(id);
-        if (!current)
-            break;
+        const bool deliver =
+            team->member(message.toSession) && !host_->teamMessagePosted(message.id);
+        if (!deliver || message.pointAt.isEmpty()) {
+            finishOutboxEntry(id, entry, deliver, true);
+            return;
+        }
+        // The worktree switch asks git off this thread; the entry stays stored meanwhile, and
+        // the next entry waits for it. A pending move of the same conversation out of a
+        // handed-over worktree is settled by this switch, once it worked.
+        outboxSending_ = true;
+        host_->askPointConversationAt(
+            message.toSession, message.pointAt,
+            [self = QPointer<TeamCoordinator>(this), id, entry, message](const QString& error) {
+                if (!self)
+                    return;
+                self->outboxSending_ = false;
+                self->notePointError(id, message, error);
+                if (error.isEmpty())
+                    self->forgetRelocations(id, message.toSession);
+                const Team* current = self->team(id);
+                self->finishOutboxEntry(id, entry,
+                                        current && current->member(message.toSession) &&
+                                            !self->host_->teamMessagePosted(message.id),
+                                        !error.isEmpty());
+            });
+        return;
+    }
+}
+
+// Sent first, then forgotten: a stop between the two finds the message queued and only
+// forgets it.
+void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& entry,
+                                        const bool deliver, const bool settle) {
+    if (const Team* team = this->team(teamId); team && deliver) {
+        const TeamMessage message = heldMessage(*team, entry);
+        if (settle)
+            (void)settleRelocations(teamId, message.toSession);
+        if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
+            qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
+                     qUtf8Printable(message.toSession), qUtf8Printable(error));
+    }
+    Team* current = mutableTeam(teamId);
+    if (current) {
         const Team before = *current;
         for (qsizetype index = 0; index < current->outbox.size(); ++index)
             if (current->outbox.at(index).toObject().value(QStringLiteral("id")) ==
@@ -174,9 +229,8 @@ void TeamCoordinator::sendFromOutbox() {
             qWarning("Unable to forget a sent team message.");
             return;
         }
-        break;
     }
-    for (const qint64 id : std::as_const(ids))
+    for (const qint64 id : teams_.keys())
         if (const Team* team = this->team(id); team && !team->outbox.isEmpty()) {
             scheduleOutbox();
             return;

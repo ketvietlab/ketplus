@@ -61,25 +61,88 @@ void SessionHost::askHandoff(const teams::Team& team, const teams::Task& task,
         });
 }
 
+QJsonObject SessionHost::pointRequest(const QString& sessionId, const QString& worktree) const {
+    const auto it = sessions_.constFind(sessionId);
+    return QJsonObject{
+        {QStringLiteral("protocol_version"), protocol::currentVersion},
+        {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("message_type"), QStringLiteral("session.worktree.switch")},
+        {QStringLiteral("sent_at"), protocol::timestamp()},
+        {QStringLiteral("session_id"), sessionId},
+        {QStringLiteral("session_generation"), it->stored.generation},
+        {QStringLiteral("payload"),
+         QJsonObject{{QStringLiteral("worktree_path"), worktree},
+                     {QStringLiteral("expected_context_revision"), it->stored.contextRevision}}}};
+}
+
+namespace {
+
+QString pointError(const QJsonObject& result) {
+    return result.value(QStringLiteral("ok")).toBool()
+               ? QString{}
+               : result.value(QStringLiteral("error_message")).toString();
+}
+
+} // namespace
+
 QString SessionHost::pointConversationAt(const QString& sessionId, const QString& worktree) {
     const auto it = sessions_.constFind(sessionId);
     if (it == sessions_.cend())
         return QStringLiteral("The conversation no longer exists.");
     if (QDir::cleanPath(it->stored.worktreePath) == QDir::cleanPath(worktree))
         return {};
-    const QJsonObject result = switchWorktree(
-        {{QStringLiteral("protocol_version"), protocol::currentVersion},
-         {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
-         {QStringLiteral("message_type"), QStringLiteral("session.worktree.switch")},
-         {QStringLiteral("sent_at"), protocol::timestamp()},
-         {QStringLiteral("session_id"), sessionId},
-         {QStringLiteral("session_generation"), it->stored.generation},
-         {QStringLiteral("payload"),
-          QJsonObject{{QStringLiteral("worktree_path"), worktree},
-                      {QStringLiteral("expected_context_revision"), it->stored.contextRevision}}}});
-    return result.value(QStringLiteral("ok")).toBool()
-               ? QString{}
-               : result.value(QStringLiteral("error_message")).toString();
+    return pointError(switchWorktree(pointRequest(sessionId, worktree)));
+}
+
+// T-28: the checks that need no git run here, git runs on the team's git thread, and the
+// switch is checked again and stored here once git answers: the session may have changed.
+void SessionHost::askPointConversationAt(const QString& sessionId, const QString& worktree,
+                                         teams::PointDone done) {
+    const auto it = sessions_.constFind(sessionId);
+    if (it == sessions_.cend()) {
+        done(QStringLiteral("The conversation no longer exists."));
+        return;
+    }
+    if (QDir::cleanPath(it->stored.worktreePath) == QDir::cleanPath(worktree)) {
+        done({});
+        return;
+    }
+    Session* session = nullptr;
+    QString target;
+    if (const QJsonObject refused =
+            switchRefusal(pointRequest(sessionId, worktree), &session, &target);
+        !refused.isEmpty()) {
+        done(pointError(refused));
+        return;
+    }
+    teamGit_.start([guard = QPointer<SessionHost>(this), sessionId, worktree, target,
+                    done = std::move(done)]() mutable {
+        WorktreeFacts facts = worktreeFacts(target);
+        QMetaObject::invokeMethod(
+            guard,
+            [guard, sessionId, worktree, target, facts = std::move(facts), done = std::move(done)] {
+                if (!guard->sessions_.contains(sessionId)) {
+                    done(QStringLiteral("The conversation no longer exists."));
+                    return;
+                }
+                const QJsonObject request = guard->pointRequest(sessionId, worktree);
+                Session* current = nullptr;
+                QString again;
+                if (const QJsonObject refused = guard->switchRefusal(request, &current, &again);
+                    !refused.isEmpty()) {
+                    done(pointError(refused));
+                    return;
+                }
+                if (again != target) {
+                    done(QStringLiteral("The worktree changed while git was asked."));
+                    return;
+                }
+                done(pointError(
+                    guard->finishSwitch(*current, target, facts,
+                                        request.value(QStringLiteral("message_id")).toString())));
+            },
+            Qt::QueuedConnection);
+    });
 }
 
 std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) const {

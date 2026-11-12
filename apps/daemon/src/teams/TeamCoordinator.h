@@ -102,6 +102,8 @@ struct PullRequestFact final {
     QString error;
 };
 using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
+// The error of pointing a conversation at a worktree; empty when it worked.
+using PointDone = std::function<void(const QString&)>;
 
 class TeamHostPort {
   public:
@@ -173,6 +175,12 @@ class TeamHostPort {
         (void)sessionId;
         (void)worktree;
         return {};
+    }
+    // The same, with git off the caller's thread: `done` runs on it once the switch is
+    // stored, so a slow git holds up no command and no conversation's events (T-28).
+    virtual void askPointConversationAt(const QString& sessionId, const QString& worktree,
+                                        PointDone done) {
+        done(pointConversationAt(sessionId, worktree));
     }
     // Whether the worktree has changes that are not committed; nothing when git failed.
     [[nodiscard]] virtual std::optional<bool> hasUncommittedWork(const QString& worktree) const {
@@ -457,6 +465,11 @@ class TeamCoordinator : public QObject {
     void send(qint64 teamId, const TeamMessage& message);
     void scheduleOutbox();
     void sendFromOutbox();
+    // The rest of one outbox entry once its conversation points at the task's worktree.
+    // `settle` moves the conversation out of a handed-over worktree first, as send() does.
+    void finishOutboxEntry(qint64 teamId, const QJsonObject& entry, bool deliver, bool settle);
+    void forgetRelocations(qint64 teamId, const QString& sessionId);
+    void notePointError(qint64 teamId, const TeamMessage& message, const QString& error);
     // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
     // open tasks changed with its lane and the shared paths.
     void checkLanes(qint64 teamId, const QString& developer);
@@ -549,6 +562,8 @@ class TeamCoordinator : public QObject {
     bool loaded_{false};
     bool deferSending_{false};
     bool outboxScheduled_{false};
+    // An outbox entry waits for git: the next one waits for it, so the order is kept.
+    bool outboxSending_{false};
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
 

@@ -141,14 +141,19 @@ it counts. The message, and for an assignment the worktree its owner is pointed 
 into the team's stored `outbox` in that same commit. The command is answered next. The
 daemon then sends the outbox one entry per event-loop pass, oldest first:
 
-1. It settles the receiver's moves out of handed-over worktrees.
-2. It points the receiver at its worktree.
-3. It queues the message.
-4. It forgets the entry.
+1. It points the receiver at its worktree, when the entry names one. A pending move of the
+   same receiver out of a handed-over worktree is settled by that switch once it worked.
+   An entry without a worktree settles such moves first, as before.
+2. It queues the message.
+3. It forgets the entry.
 
-Pointing a conversation at a worktree asks git on the daemon's thread. With two released
-assignments, that took a first-plan Start 4 s with a git that answers in 2 s, and seconds
-on a busy machine. Each entry carries the id its message gets, and an entry whose message
+Pointing a conversation at a worktree asks git. With two released assignments, that took a
+first-plan Start 4 s with a git that answers in 2 s, and seconds on a busy machine. So
+the checks that need no git run on the daemon's thread, git runs on the team's git
+thread, and the switch is checked again and stored on the daemon's thread when git
+answers. The entry stays stored meanwhile, and the next entry waits for it, so the order
+is kept. A turn start likewise remembers its worktree's repository with git off the
+daemon's thread. Each entry carries the id its message gets, and an entry whose message
 is already queued is only forgotten. So a daemon that stops between a reply and its sends
 sends what is left on its next start, once. A pause answered after a Start does not hold
 what that Start released. Clients never see the `outbox`: the team JSON leaves it out.
