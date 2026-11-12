@@ -14,6 +14,11 @@ in phase 2.
 
 ## Terms
 
+When the relay definitively refuses a machine challenge with HTTP 404 and
+`machine_not_found`, the host signs out, drops peer and Atlas access, and stops
+retrying that enrollment. Local sessions and project files remain. Transient
+failures and unrelated 404 responses keep the enrollment for retry.
+
 - **Host**: the daemon of one machine.
 - **Client**: a paired device (iOS, Android, or Desktop on another machine). Desktop on the same
   machine keeps local IPC and is not a client here.

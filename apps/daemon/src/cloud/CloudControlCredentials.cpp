@@ -35,6 +35,25 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
             if (requestEpoch != accountEpoch_)
                 return;
             const QJsonObject challenge = object(value);
+            if (status == 404 && transportError.isEmpty() &&
+                responseCode(value, {}) == QStringLiteral("machine_not_found")) {
+                // A removed/revoked enrollment cannot acquire another credential. Leave the
+                // account once instead of retrying the same missing machine on every timer tick.
+                // The normal sign-out also closes peer/Atlas access and preserves local work.
+                signOut([this](const QJsonObject&, const QString& error) {
+                    if (error.isEmpty())
+                        return;
+                    // Disk failure must not keep a revoked identity connected in this process.
+                    wakeups_.stop();
+                    machineId_.clear();
+                    workspaceId_.clear();
+                    accountName_.clear();
+                    accountUsername_.clear();
+                    daemonToken_.clear();
+                    finishCredentialWaiters(false, error);
+                });
+                return;
+            }
             if (status != 201 || !transportError.isEmpty()) {
                 finishCredentialWaiters(
                     false, transportError.isEmpty()
