@@ -1,6 +1,7 @@
 #pragma once
 
 #include "teams/TeamAgentDialog.h"
+#include "teams/TeamGoal.h"
 
 #include <QHash>
 #include <QJsonObject>
@@ -18,6 +19,7 @@ class FieldRow;
 class Radio;
 class SegmentedControl;
 class Select;
+class TextArea;
 class TextField;
 } // namespace ket
 
@@ -32,7 +34,7 @@ class NewTeamForm final : public QWidget {
 
   public:
     NewTeamForm(TeamDirectory* teams, const QString& repository, const QVariantList& models,
-                QWidget* parent = nullptr);
+                team_goal::ConversationDirectory conversations = {}, QWidget* parent = nullptr);
 
     [[nodiscard]] QJsonObject payload() const;
     [[nodiscard]] int memberCount() const;
@@ -42,6 +44,7 @@ class NewTeamForm final : public QWidget {
     void submit(std::function<void(const QJsonObject& team)> created);
 
     [[nodiscard]] ket::TextField* nameField() const { return name_; }
+    [[nodiscard]] ket::TextArea* goalField() const { return goal_; }
     [[nodiscard]] ket::TextField* budgetField() const { return budget_; }
     [[nodiscard]] ket::SegmentedControl* developerCount() const { return developers_; }
     [[nodiscard]] TeamAgent agent(const QString& role) const { return agents_.value(role); }
@@ -54,7 +57,8 @@ class NewTeamForm final : public QWidget {
 
     static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QString& repository,
                                 const QVariantList& models,
-                                std::function<void(const QJsonObject& team)> created = {});
+                                std::function<void(const QJsonObject& team)> created = {},
+                                team_goal::ConversationDirectory conversations = {});
 
   signals:
     void memberCountChanged(int count);
@@ -76,7 +80,8 @@ class NewTeamForm final : public QWidget {
     QString repository_;
     QVariantList models_;
     ket::TextField* name_;
-    ket::TextField* goal_;
+    ket::TextArea* goal_;
+    TeamGoalEditor* goalEditor_;
     ket::TextField* branch_;
     ket::Radio* leaderMerges_;
     ket::Radio* userMerges_;

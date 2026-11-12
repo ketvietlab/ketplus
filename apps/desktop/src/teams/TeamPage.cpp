@@ -4,6 +4,7 @@
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetEmptyState.h"
+#include "KetExpandableText.h"
 #include "KetIcon.h"
 #include "KetIcons.h"
 #include "KetStyle.h"
@@ -303,6 +304,11 @@ void TeamPage::addSection(const QString& title, const QString& count, const char
     layout_->addWidget(row);
 }
 
+void TeamPage::setConversationDirectory(team_goal::ConversationDirectory directory) {
+    conversations_ = std::move(directory);
+    rebuild();
+}
+
 void TeamPage::buildHeading(const QJsonObject& team) {
     auto* row = new QWidget(column_);
     auto* line = new QHBoxLayout(row);
@@ -324,13 +330,6 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     title->setType(roomy_ ? 30 : 24, QFont::DemiBold);
     title->setAccessibleName(name);
     titles->addWidget(title);
-    if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
-        auto* purpose = new Text(goal, row);
-        purpose->setObjectName(QStringLiteral("teamPageGoal"));
-        purpose->setTone(QStringLiteral("text-secondary"));
-        purpose->setType(14);
-        titles->addWidget(purpose);
-    }
     line->addLayout(titles, 1);
     auto* add = new ket::Button(tr("Add member"), ket::ButtonVariant::Secondary, row);
     add->setObjectName(QStringLiteral("teamPageAddMember"));
@@ -347,6 +346,16 @@ void TeamPage::buildHeading(const QJsonObject& team) {
             [this, more] { showMenu(more, *teams_->team(teamId_)); });
     line->addWidget(more, 0, Qt::AlignTop);
     layout_->addWidget(row);
+    if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
+        auto* purpose = team_goal::foldedGoal(
+            goal, conversations_ ? conversations_() : QVariantList{}, column_);
+        purpose->setExpanded(goalExpanded_);
+        connect(purpose, &ket::ExpandableText::expandedChanged, this,
+                [this](const bool expanded) { goalExpanded_ = expanded; });
+        connect(purpose, &ket::ExpandableText::mentionActivated, this, &TeamPage::mentionRequested);
+        // The goal whole, under the heading at the column's width (ADR 0114).
+        layout_->addWidget(purpose);
+    }
 
     // Where the team works, who merges, and how far it is.
     const QJsonArray tasks = team.value(QStringLiteral("tasks")).toArray();

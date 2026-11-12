@@ -1,8 +1,10 @@
 // ADR 0114: the team_* tools per role, addressing by role and the role instructions, with
 // the scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"
+#include "agents/AgentBroker.h"
 #include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
+#include "teams/TeamRules.h"
 
 #include <QProcess>
 #include <QStandardPaths>
@@ -34,6 +36,9 @@ class TeamAgentToolsTest final : public QObject {
     Q_OBJECT
 
   private:
+    // The answer of the last create(), for a refusal.
+    QJsonObject lastCreated_;
+
     QJsonObject command(Fixture& fixture, const QString& type, const QJsonObject& payload) {
         return fixture.host->handleCommand(request(type, payload), "desktop-test");
     }
@@ -59,6 +64,7 @@ class TeamAgentToolsTest final : public QObject {
                                {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}},
                                                       QJsonObject{{"paths", QJsonArray{"api"}}}}}}},
                   {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
+        lastCreated_ = created;
         const QJsonArray members = created.value("team").toObject().value("members").toArray();
         if (members.size() != 4)
             return {};
@@ -321,6 +327,40 @@ class TeamAgentToolsTest final : public QObject {
         // Developers and the reviewer wait for work.
         QCOMPARE(fixture.count(team.developer, "user.message"), 0);
         QCOMPARE(fixture.count(team.reviewer, "user.message"), 0);
+    }
+
+    // ADR 0114 §9: the longest goal of multi-byte text reaches the leader through the broker
+    // whole, in one message: nothing is shortened.
+    void aLongNonAsciiGoalReachesTheLeaderThroughTheBrokerWhole() {
+        Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const QString phrase = QStringLiteral("Thuế hoá đơn — giỏ hàng ✓ đồng bộ ✓ 購物 ");
+        QString goal = QStringLiteral("Hỏi @agent/8213 trước.\n");
+        while (goal.toUtf8().size() + phrase.toUtf8().size() <= teams::rules::maximumGoalBytes)
+            goal += phrase;
+        QVERIFY(goal.size() < teams::rules::maximumGoalCharacters);
+        const Team team = create(fixture, goal);
+        QVERIFY(!team.id.isEmpty());
+        QString body;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (const auto& message : fixture.journal->agentMessagesOf(team.leader, 1, 20))
+                    if (message.kind == QStringLiteral("team"))
+                        body = message.body;
+                return !body.isEmpty();
+            }(),
+            8000);
+        QVERIFY(body.contains(QStringLiteral("Goal: ") + goal.trimmed() + QLatin1Char('\n')));
+        QVERIFY(!body.contains(QStringLiteral("(shortened)")));
+        QVERIFY(body.toUtf8().size() <= AgentBroker::maximumBodyBytes);
+
+        // Fewer than 16,000 characters but more than one message holds: refused, not cut.
+        const QString over(12000, QChar(0x8CFC)); // 購, three bytes in UTF-8
+        QVERIFY(over.toUtf8().size() > AgentBroker::maximumBodyBytes);
+        QVERIFY(create(fixture, over).id.isEmpty());
+        const QJsonObject refused = lastCreated_;
+        QCOMPARE(refused.value("error_code").toString(), QStringLiteral("invalid_payload"));
+        QVERIFY(refused.value("error_message").toString().contains("bytes"));
     }
 
     void toolsAreListedOnlyForAMember() {
