@@ -206,6 +206,43 @@ class TeamRemoteTest final : public QObject {
         }
     }
 
+    // ADR 0118: a task the leader closes by hand reaches the phone with its new history
+    // entry, in the contract's shape; nobody but the leader may close one.
+    void aClosedTaskReachesThePhoneInItsHistory() {
+        const QJsonObject fixtureJson = contract();
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(fixture
+                    .agents(team.leader, "agents.team_task_create",
+                            {{"title", "Cart"}, {"lane", "web"}})
+                    .value("ok")
+                    .toBool());
+        const QJsonObject close{{"task_id", "T-1"},
+                                {"evidence", "0123456789abcdef"},
+                                {"note", "Merged together with the api change."}};
+        for (const QString& member : {team.developer, team.reviewer})
+            QCOMPARE(fixture.agents(member, "agents.team_task_close", close)
+                         .value("error_code")
+                         .toString(),
+                     QStringLiteral("role_forbidden"));
+        const QJsonObject closed = fixture.agents(team.leader, "agents.team_task_close", close);
+        QVERIFY2(closed.value("ok").toBool(), qPrintable(agent_test::text(closed)));
+        const QJsonObject detail =
+            phone(fixture, "team.task.get", {{"team_id", team.id}, {"task_id", "T-1"}});
+        sameShape(detail, fixtureJson.value("taskDetail").toObject().value("result"), "taskDetail");
+        const QJsonObject task = detail.value("task").toObject();
+        QCOMPARE(task.value("state").toString(), QStringLiteral("done"));
+        bool found = false;
+        for (const QJsonValue& value : task.value("history").toArray()) {
+            const QJsonObject entry = value.toObject();
+            found = found || (entry.value("kind").toString() == "closed" &&
+                              entry.value("text").toString().contains("0123456789abcdef") &&
+                              entry.value("actor").toObject().value("role") == "leader");
+        }
+        QVERIFY(found);
+    }
+
     // §4: a refusal of the local rules reaches the phone with the same code, and a phone
     // sends only the fields the ADR lists.
     void aPhoneMeetsTheLocalRulesAndOnlyItsFields() {

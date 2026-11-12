@@ -63,7 +63,9 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "Task changes arrive as one digest; read it and act once instead of "
                      "asking for status. Change a lane with team_lane_set and give the reason; "
                      "raise a decision with team_decision_raise only for what changes the "
-                     "product. You are the only member that speaks to the user.")
+                     "product. You are the only member that speaks to the user. A task whose "
+                     "pull request is merged is done by itself; close work merged without one "
+                     "with team_task_close, giving the commit or pull request as evidence.")
               << QStringLiteral(
                      "The team only moves when a turn ends in an action. Before you end a "
                      "turn, every task that is not done must have an owner working on it, be "

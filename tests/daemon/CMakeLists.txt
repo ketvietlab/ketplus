@@ -79,6 +79,8 @@ ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
 # ADR 0114, open point 2: the global automatic-turn budget and each team's own.
 ketplus_add_daemon_test(ketplus_team_budget_tests TeamBudgetTest.cpp)
 ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
+# ADR 0118: done by a merged pull request or by the leader.
+ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
 # ADR 0116: team commands from paired phones, checked against the contract's fixture.
 ketplus_add_daemon_test(ketplus_team_remote_tests TeamRemoteTest.cpp)
 target_compile_definitions(ketplus_team_remote_tests PRIVATE
