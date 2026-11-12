@@ -422,12 +422,35 @@ class TeamRemoteTest final : public QObject {
         QCOMPARE(changed.value("team").toObject().value("turn_budget").toInt(), 50);
         QCOMPARE(phone(fixture, "team.settings.update", {{"turn_budget", 90}}).value("ok").toBool(),
                  false);
+        // Nor through the kind that reads it: team.list takes no field.
+        QCOMPARE(phone(fixture, "team.list", {{"turn_budget", 90}}).value("ok").toBool(), false);
         QCOMPARE(local(fixture, "team.settings.get", {})
                      .value("settings")
                      .toObject()
                      .value("turn_budget")
                      .toInt(),
                  30);
+    }
+
+    // ADR 0116: team.list carries the Mac's global budget and its bounds, as team.settings.get
+    // answers them, so the phone's New team can say what an empty field means.
+    void theDirectoryCarriesTheGlobalBudget() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto settings = [this, &fixture] {
+            return phone(fixture, "team.list", {}).value("settings").toObject();
+        };
+        const auto global = [this, &fixture] {
+            return local(fixture, "team.settings.get", {}).value("settings").toObject();
+        };
+        QCOMPARE(settings(), global());
+        QCOMPARE(settings().value("turn_budget").toInt(), 40);
+        QCOMPARE(settings().value("turn_budget_minimum").toInt(), 5);
+        QCOMPARE(settings().value("turn_budget_maximum").toInt(), 200);
+        QCOMPARE(settings().value("turn_budget_default").toInt(), 40);
+        QVERIFY(local(fixture, "team.settings.update", {{"turn_budget", 70}}).value("ok").toBool());
+        QCOMPARE(settings().value("turn_budget").toInt(), 70);
+        QCOMPARE(settings(), global());
     }
 
     // §3: each member carries {id, revision, role}; a member that leaves and a deleted team
