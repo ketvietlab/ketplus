@@ -465,3 +465,8 @@ old window only when this workspace owns its reservation. Hiding the workspace o
 its composer clears the owned reservation, and teardown disables geometry callbacks
 before unloading QML. The mock and workspace-local QML toast map the composer into
 the toast parent's coordinate space for the equivalent Quick reservation. This changes overlay placement only, not transcript/input layout.
+
+Machine Workspace registers its own QWidget composer using the same toast ownership
+property. Its transcript-only Agent Workspace cannot clear the Machine reservation.
+Composer growth, visibility, ancestor movement and reparenting refresh the measured
+window-space top; teardown and hide clear only a reservation held by that view.

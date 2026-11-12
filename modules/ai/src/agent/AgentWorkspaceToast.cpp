@@ -1,5 +1,6 @@
 #include "KetToast.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/ToastAvoidanceOwner.h"
 
 #include <QQuickItem>
 #include <QQuickView>
@@ -7,9 +8,7 @@
 #include <QtMath>
 
 namespace ketplus {
-namespace {
-constexpr char ownerProperty[] = "_ketplus_toast_composer_owner";
-}
+using toast_avoidance::ownerProperty;
 
 void AgentWorkspaceView::setupToastAvoidance() {
     refreshToastAncestors();

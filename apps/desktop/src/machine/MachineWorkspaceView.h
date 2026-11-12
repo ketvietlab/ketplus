@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QPointer>
 #include <QWidget>
 
@@ -29,6 +30,7 @@ class MachineWorkspaceView final : public QWidget {
 
   public:
     explicit MachineWorkspaceView(MachineCatalog* catalog, QWidget* parent = nullptr);
+    ~MachineWorkspaceView() override;
 
     // Opens a conversation of the selected machine; it stays bound to that machine.
     void openConversation(const QString& sessionId);
@@ -47,7 +49,18 @@ class MachineWorkspaceView final : public QWidget {
     // A conversation was opened or created, for the sidebar's selection.
     void conversationOpened(const QString& machineId, const QString& sessionId);
 
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
   private:
+    void setupToastAvoidance();
+    void refreshToastAncestors();
+    void updateToastAvoidance();
+    void clearToastAvoidance();
+    QList<QPointer<QWidget>> toastAncestors_;
+    QPointer<QWidget> toastHost_;
+    bool toastTeardown_{false};
+
     void catalogChanged();
     void render();
     void renderWorktrees();

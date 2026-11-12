@@ -1013,3 +1013,8 @@ identifier, starts no updater/network operation and restores only its own test d
 It verifies that restored staging and HTTP defaults cannot override the compiled feed.
 Run it with `QT_QPA_PLATFORM=offscreen`; production bundle installation and owner-run
 manual UI acceptance remain separate checks.
+
+`ketplus_machine_toast_tests` renders the production Machine composer in temporary
+INI settings, in light/dark. It checks the exact recipe gap after growth and window
+resize, composer/view hide and restore, and preservation of another composer's
+reservation during hide and destruction. It uses no backend or provider.
