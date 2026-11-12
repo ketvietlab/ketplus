@@ -3,10 +3,13 @@
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
+#include <QBuffer>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -849,9 +852,19 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(chat.open(QIODevice::WriteOnly));
         chat.write("{}");
         chat.close();
-        // The conversation's handoff directory, which KetPlus owns.
+        // The conversation's handoff directory and media, which KetPlus owns.
         const QString handoff = directory.filePath("handoff/" + session.id);
         QVERIFY(QDir().mkpath(handoff));
+        QImage image(16, 16, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG"));
+        McpMediaStore media(McpMediaStore::directoryForJournal(journal.databasePath()));
+        const QString reference =
+            media.storeImage(png, "image/png", session.id).value("media_ref").toString();
+        QVERIFY(!reference.isEmpty());
+        QVERIFY(media.preview(session.id, reference, 16).value("ok").toBool());
         CodexAdapter adapter("/missing-provider");
         SessionHost host(&journal, &adapter);
         QSignalSpy events(&host, &SessionHost::eventReady);
@@ -865,6 +878,8 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY2(result.value("ok").toBool(), qPrintable(result.value("error_message").toString()));
         QVERIFY(journal.sessions().isEmpty());
         QVERIFY(!QFileInfo::exists(handoff));
+        QCOMPARE(media.preview(session.id, reference, 16).value("error_code").toString(),
+                 QString("media_unavailable"));
         QVERIFY(QFileInfo::exists(store));
         QVERIFY(!events.isEmpty());
         QCOMPARE(events.last().first().toJsonObject().value("event_type").toString(),
