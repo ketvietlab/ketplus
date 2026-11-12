@@ -100,12 +100,12 @@ void SettingsUpdatesPage::refresh() {
     const bool checks = configured && updater_.automaticallyChecksForUpdates();
     if (!configured)
         intro_->setText(tr("Updates are not configured for this build. Install new versions "
-                           "manually; KetPlus does not contact an update server."));
+                           "manually; ketPlus does not contact an update server."));
     else if (checks)
-        intro_->setText(tr("KetPlus checks for updates every day and installs them when you "
+        intro_->setText(tr("ketPlus checks for updates every day and installs them when you "
                            "restart."));
     else
-        intro_->setText(tr("KetPlus checks for updates when you ask and installs them when you "
+        intro_->setText(tr("ketPlus checks for updates when you ask and installs them when you "
                            "restart."));
 
     const QString pending = updater_.pendingVersion();
@@ -117,7 +117,7 @@ void SettingsUpdatesPage::refresh() {
         badge_->setText(tr("Ready"));
         badge_->setTone(ket::BadgeTone::Success);
         card_->setDetail(laterVersion_ == pending
-                             ? tr("Downloaded and verified. It installs the next time KetPlus "
+                             ? tr("Downloaded and verified. It installs the next time ketPlus "
                                   "restarts.")
                              : tr("Downloaded and verified. Restart to finish installing; "
                                   "running turns finish first."));
@@ -134,7 +134,7 @@ void SettingsUpdatesPage::refresh() {
         card_->setDetail(checked.isValid() ? tr("Checked %1.")
                                                  .arg(QLocale().toString(checked.toLocalTime(),
                                                                          QLocale::ShortFormat))
-                                           : tr("KetPlus has not checked for updates yet."));
+                                           : tr("ketPlus has not checked for updates yet."));
     }
     // UpdateCard shows its action row once it has an action; hide the row with its buttons.
     restart_->parentWidget()->setVisible(downloaded && laterVersion_ != pending);

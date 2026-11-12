@@ -13,10 +13,13 @@ set -euo pipefail
 usage() {
     cat >&2 <<'EOF'
 usage: publish-update.sh --app KetPlus.app --updates-dir DIR --download-url-prefix URL
-                         --sparkle-bin DIR [--release-notes FILE] [--ed-key-file FILE]
+                         --sparkle-bin DIR --channel staging|production --arch arm64|x86_64 [--release-notes FILE] [--ed-key-file FILE]
 
-  --app                  Installed, signed KetPlus.app (cmake --install output).
-  --updates-dir          Directory holding every published archive and appcast.xml.
+  --channel              Explicit staging or production channel.
+  --arch                 Explicit arm64 or x86_64; one architecture per feed.
+  --mode                 release (default) or local-qa; QA artifacts must never be published.
+  --app                  Installed, signed ketPlus Pro app bundle (cmake --install output).
+  --updates-dir          Scoped directory ending in CHANNEL/ARCH, holding archives and appcast.xml.
   --download-url-prefix  HTTPS URL the archives are served from (ends with /).
   --sparkle-bin          Sparkle's bin directory (build/<preset>/_deps/ketplus_sparkle-src/bin).
   --release-notes        Optional HTML or Markdown release notes for this version.
@@ -32,8 +35,14 @@ download_prefix=""
 sparkle_bin=""
 release_notes=""
 key_file=""
+mode="release"
+channel=""
+architecture=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+    --channel) channel="${2:-}"; shift 2 ;;
+    --arch) architecture="${2:-}"; shift 2 ;;
+    --mode) mode="${2:-}"; shift 2 ;;
     --app) app="${2:-}"; shift 2 ;;
     --updates-dir) updates_dir="${2:-}"; shift 2 ;;
     --download-url-prefix) download_prefix="${2:-}"; shift 2 ;;
@@ -43,12 +52,14 @@ while [[ $# -gt 0 ]]; do
     *) usage ;;
     esac
 done
-[[ -n "$app" && -n "$updates_dir" && -n "$download_prefix" && -n "$sparkle_bin" ]] || usage
+[[ -n "$app" && -n "$updates_dir" && -n "$download_prefix" && -n "$sparkle_bin" && -n "$channel" && -n "$architecture" ]] || usage
 
 fail() {
     echo "publish-update: $*" >&2
     exit 1
 }
+
+[[ "$mode" == release || "$mode" == local-qa ]] || fail "--mode must be release or local-qa"
 
 [[ -d "$app/Contents" ]] || fail "not an application bundle: $app"
 [[ -x "$sparkle_bin/generate_appcast" ]] || fail "generate_appcast not found in $sparkle_bin"
@@ -63,17 +74,35 @@ feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist" 2>/dev/null)" ||
 [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || fail "$app does not embed Sparkle"
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
+policy="$repo_root/packaging/macos/update-release-policy.py"
+identity_arguments=(--channel "$channel" --arch "$architecture" --download-prefix "$download_prefix")
+/usr/bin/python3 "$policy" paths "${identity_arguments[@]}" --updates-dir "$updates_dir" --compiled-feed "$feed" || fail "release identity preflight failed"
+executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" || fail "missing bundle executable"
+[[ "$executable" =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*$ ]] || fail "unsafe bundle executable name"
+actual_arch="$(/usr/bin/lipo -archs "$app/Contents/MacOS/$executable")" || fail "cannot determine app architecture"
+[[ "$actual_arch" == "$architecture" ]] || fail "app architecture does not match --arch"
+if [[ -e "$updates_dir/appcast.xml" || -L "$updates_dir/appcast.xml" ]]; then
+    [[ -f "$updates_dir/appcast.xml" && ! -L "$updates_dir/appcast.xml" ]] || fail "appcast must be a regular file, not a symlink"
+    /usr/bin/python3 "$policy" check-feed "${identity_arguments[@]}" --appcast "$updates_dir/appcast.xml" || fail "existing appcast identity mismatch"
+fi
+
 # "-" reads the key from standard input, which keeps it off the file system entirely.
 if [[ -n "$key_file" && "$key_file" != "-" ]]; then
     [[ -f "$key_file" ]] || fail "key file not found: $key_file"
-    key_real="$(cd "$(dirname "$key_file")" && pwd -P)/$(basename "$key_file")"
+    key_real="$(/usr/bin/python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$key_file" 2>/dev/null)" ||
+        fail "cannot resolve signing-key path"
     [[ "$key_real" != "$repo_root"/* ]] || fail "the EdDSA private key must not live in the repository"
+    key_file="$key_real"
 fi
 
 /usr/bin/codesign --verify --deep --strict "$app" || fail "$app has an invalid code signature"
-if ! /usr/bin/codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Application'; then
-    echo "publish-update: warning: $app is not Developer ID signed; Gatekeeper will reject it" \
-        "for users. Use this archive for testing only." >&2
+if [[ "$mode" == release ]]; then
+    /usr/bin/codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Application' ||
+        fail "release mode requires Developer ID Application signing; use --mode local-qa only for local tests"
+    /usr/bin/xcrun stapler validate "$app" >/dev/null 2>&1 ||
+        fail "release mode requires a valid stapled notarization ticket on the app"
+else
+    echo "publish-update: local QA mode; distribution trust is not checked. Do not publish these artifacts." >&2
 fi
 
 archive="$updates_dir/KetPlus-$version.zip"
@@ -132,13 +161,16 @@ appcast_staging="$(mktemp -d "$updates_parent/.ketplus-appcast.XXXXXX")"
 if [[ -e "$updates_dir/appcast.xml" ]]; then
     cp -p -- "$updates_dir/appcast.xml" "$appcast_staging/appcast.xml"
 fi
+# Seed identity before generation: never rewrite XML after Sparkle may sign it.
+/usr/bin/python3 "$policy" seed-feed "${identity_arguments[@]}" --appcast "$appcast_staging/appcast.xml" || fail "cannot seed scoped appcast"
 "$sparkle_bin/generate_appcast" "${key_arguments[@]+"${key_arguments[@]}"}" \
     --download-url-prefix "$download_prefix" \
     --embed-release-notes \
     -o "$appcast_staging/appcast.xml" \
     "$updates_dir"
+/usr/bin/python3 "$policy" check-feed "${identity_arguments[@]}" --appcast "$appcast_staging/appcast.xml" || fail "generated appcast identity mismatch"
 mv -f -- "$appcast_staging/appcast.xml" "$updates_dir/appcast.xml"
 created=()
 
-echo "Prepared KetPlus $version in $updates_dir"
+echo "Prepared ketPlus Pro $version in $updates_dir"
 echo "The installed app reads $feed; upload appcast.xml and the archive only after approval."

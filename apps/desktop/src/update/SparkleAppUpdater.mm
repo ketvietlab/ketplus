@@ -96,6 +96,13 @@ AppUpdater* createPlatformAppUpdater(QObject* parent) { return new SparkleAppUpd
     return self;
 }
 
+// The immutable build configuration owns channel selection. Sparkle otherwise prefers a
+// restored SUFeedURL user default, which can silently redirect a release to a test feed.
+- (NSString*)feedURLStringForUpdater:(SPUUpdater*)updater {
+    id feed = [updater.hostBundle objectForInfoDictionaryKey:@"SUFeedURL"];
+    return [feed isKindOfClass:[NSString class]] ? feed : @"";
+}
+
 - (void)detach {
     _owner = nullptr;
 }

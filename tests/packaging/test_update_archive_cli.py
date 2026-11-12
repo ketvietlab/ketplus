@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 
 SOURCE = Path(__file__).resolve().parents[2] / "packaging/macos/publish-update.sh"
@@ -17,7 +18,8 @@ class UpdateArchiveCliTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.app = self.root / "staged app/KetPlus.app"
         (self.app / "Contents/Frameworks/Sparkle.framework").mkdir(parents=True)
-        self.updates = self.root / "updates"
+        self.updates = self.root / "updates/production/arm64"
+        self.updates.parent.mkdir(parents=True)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.calls = self.root / "calls.jsonl"
@@ -27,16 +29,28 @@ class UpdateArchiveCliTest(unittest.TestCase):
         self.script = self.root / "repo/packaging/macos/publish-update.sh"
         self.script.parent.mkdir(parents=True)
         source = SOURCE.read_text()
-        for tool in ("/usr/libexec/PlistBuddy", "/usr/bin/codesign", "/usr/bin/ditto"):
+        for tool in ("/usr/libexec/PlistBuddy", "/usr/bin/codesign", "/usr/bin/ditto", "/usr/bin/xcrun", "/usr/bin/lipo"):
             source = source.replace(tool, str(self.bin / Path(tool).name))
         self.script.write_text(source)
+        self.script.with_name("update-release-policy.py").write_text(SOURCE.with_name("update-release-policy.py").read_text())
+        (self.app / "Contents/MacOS").mkdir()
+        (self.app / "Contents/MacOS/ketplus").write_text("synthetic Mach-O")
         self.stub("PlistBuddy", '''import os,sys
-print(os.environ["UPDATE_VERSION"] if "CFBundleShortVersionString" in sys.argv[2]
-      else "https://updates.example.invalid/appcast.xml")
+key = sys.argv[2]
+if "CFBundleShortVersionString" in key: print(os.environ["UPDATE_VERSION"])
+elif "CFBundleExecutable" in key: print("ketplus")
+else: print(os.environ.get("UPDATE_FEED", "https://updates.example.invalid/production/arm64/appcast.xml"))
 ''')
-        self.stub("codesign", '''import sys
-if "-dv" in sys.argv:
+        self.stub("lipo", '''import os
+print(os.environ.get("UPDATE_ARCH", "arm64"))
+''')
+        self.stub("codesign", '''import os,sys
+if "--verify" in sys.argv and os.environ.get("UPDATE_INVALID_SIGNATURE"): sys.exit(1)
+if "-dv" in sys.argv and os.environ.get("UPDATE_DEVELOPER_ID", "1") == "1":
     print("Authority=Developer ID Application: Synthetic fixture", file=sys.stderr)
+''')
+        self.stub("xcrun", '''import os,sys
+if os.environ.get("UPDATE_TICKET", "1") != "1": sys.exit(1)
 ''')
         self.stub("ditto", '''from pathlib import Path
 import json,os,sys
@@ -46,19 +60,26 @@ Path(sys.argv[-1]).write_bytes(b"synthetic archive")
         # Like Sparkle 2.10, an existing -o file is the feed to update and must not be empty;
         # rewriting it in place keeps its mode.
         self.stub("generate_appcast", '''from pathlib import Path
-import json,os,sys
+import json,os,sys,xml.etree.ElementTree as ET
 with open(os.environ["UPDATE_CALLS"], "a") as log: log.write(json.dumps(sys.argv) + "\\n")
 output = Path(sys.argv[sys.argv.index("-o") + 1])
 if output.exists():
-    previous = output.read_text()
-    if not previous:
-        sys.exit("zero length feed")
-    output.write_text(previous + " + synthetic item")
+    root = ET.fromstring(output.read_text())
 else:
-    output.write_text("synthetic appcast")
-if os.environ.get("UPDATE_APPCAST_FAIL"):
-    sys.exit("synthetic signing failure")
+    root = ET.Element("rss"); ET.SubElement(ET.SubElement(root,"channel"),"title").text="synthetic appcast"
+channel = root.find("channel")
+ET.SubElement(channel, "description").text = "synthetic item"
+prefix = sys.argv[sys.argv.index("--download-url-prefix") + 1]
+url = os.environ.get("UPDATE_GENERATED_URL", prefix + "KetPlus-" + os.environ["UPDATE_VERSION"] + ".zip")
+ET.SubElement(ET.SubElement(channel,"item"),"enclosure",url=url)
+output.write_bytes(ET.tostring(root))
+if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
 ''')
+
+    def feed(self, channel="production", architecture="arm64"):
+        return ('<rss xmlns:ketplus="urn:ketplus:release"><channel><title>published appcast</title>'
+                + "<ketplus:releaseChannel>" + channel + "</ketplus:releaseChannel>"
+                + "<ketplus:architecture>" + architecture + "</ketplus:architecture></channel></rss>")
 
     def stub(self, name, body):
         path = self.bin / name
@@ -69,7 +90,7 @@ if os.environ.get("UPDATE_APPCAST_FAIL"):
         return subprocess.run(
             ["/bin/bash", str(self.script), "--app", str(self.app),
              "--updates-dir", str(self.updates), "--download-url-prefix",
-             "https://updates.example.invalid/", "--sparkle-bin", str(self.bin), *extra],
+             "https://updates.example.invalid/production/arm64/", "--sparkle-bin", str(self.bin), "--channel", "production", "--arch", "arm64", *extra],
             env=self.env, capture_output=True, text=True, timeout=10)
 
     def assert_rejected_before_archive(self, result):
@@ -77,16 +98,119 @@ if os.environ.get("UPDATE_APPCAST_FAIL"):
         self.assertFalse(self.calls.exists(), result.stderr)
         self.assertFalse((self.updates / "KetPlus-0.1.50.zip").exists())
 
+    def test_release_requires_developer_id(self):
+        self.env["UPDATE_DEVELOPER_ID"] = "0"
+        result = self.run_update()
+        self.assert_rejected_before_archive(result)
+        self.assertIn("Developer ID", result.stderr)
+
+    def test_release_requires_stapled_ticket(self):
+        self.env["UPDATE_TICKET"] = "0"
+        result = self.run_update()
+        self.assert_rejected_before_archive(result)
+        self.assertIn("notarization ticket", result.stderr)
+
+    def test_local_qa_explicitly_allows_ad_hoc_without_ticket(self):
+        self.env.update(UPDATE_DEVELOPER_ID="0", UPDATE_TICKET="0")
+        result = self.run_update(["--mode", "local-qa"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Do not publish", result.stderr)
+
+    def test_local_qa_still_requires_valid_signature(self):
+        self.env["UPDATE_INVALID_SIGNATURE"] = "1"
+        self.assert_rejected_before_archive(self.run_update(["--mode", "local-qa"]))
+
+    def test_outside_key_symlink_into_checkout_is_rejected(self):
+        inside = self.root / "repo/synthetic-key"
+        inside.write_text("inert fixture, not signing material")
+        alias = self.root / "outside-key"
+        alias.symlink_to(inside)
+        result = self.run_update(["--ed-key-file", str(alias)])
+        self.assert_rejected_before_archive(result)
+        self.assertIn("must not live in the repository", result.stderr)
+
+    def test_external_key_symlink_is_resolved_before_signer(self):
+        target = self.root / "external-key"
+        target.write_text("inert fixture")
+        alias = self.root / "external-alias"
+        alias.symlink_to(target)
+        result = self.run_update(["--ed-key-file", str(alias)])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn(str(target), calls)
+        self.assertNotIn(str(alias), calls)
+
+    def test_mismatched_channel_or_arch_inputs_are_rejected(self):
+        for extra in (["--channel", "staging"], ["--arch", "x86_64"], ["--channel", "unknown"]):
+            with self.subTest(extra=extra):
+                self.assert_rejected_before_archive(self.run_update(extra))
+
+    def test_each_channel_and_architecture_has_a_separate_feed(self):
+        for channel in ("staging", "production"):
+            for arch in ("arm64", "x86_64"):
+                with self.subTest(channel=channel, arch=arch):
+                    self.updates = self.root / "matrix" / channel / arch
+                    self.updates.parent.mkdir(parents=True, exist_ok=True)
+                    prefix = f"https://updates.example.invalid/{channel}/{arch}/"
+                    self.env["UPDATE_FEED"] = prefix + "appcast.xml"
+                    self.env["UPDATE_ARCH"] = arch
+                    result = self.run_update(["--channel", channel, "--arch", arch,
+                                              "--download-url-prefix", prefix])
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    node = ET.parse(self.updates / "appcast.xml").getroot().find("channel")
+                    self.assertEqual(node.find("{urn:ketplus:release}releaseChannel").text, channel)
+                    self.assertEqual(node.find("{urn:ketplus:release}architecture").text, arch)
+                    self.assertTrue(node.find("item/enclosure").get("url").startswith(prefix))
+
+    def test_bundle_architecture_must_match(self):
+        self.env["UPDATE_ARCH"] = "x86_64"
+        self.assert_rejected_before_archive(self.run_update())
+
+    def test_compiled_feed_must_match_identity(self):
+        self.env["UPDATE_FEED"] = "https://updates.example.invalid/staging/arm64/appcast.xml"
+        self.assert_rejected_before_archive(self.run_update())
+
+    def test_output_and_download_prefix_must_match_identity(self):
+        self.assert_rejected_before_archive(self.run_update(["--updates-dir", str(self.root / "production/x86_64")]))
+        self.assert_rejected_before_archive(self.run_update(["--download-url-prefix", "https://updates.example.invalid/staging/arm64/"]))
+
+    def test_existing_appcast_wrong_identity_is_preserved(self):
+        self.updates.mkdir()
+        feed = self.updates / "appcast.xml"
+        feed.write_text(self.feed(channel="staging"))
+        original = feed.read_bytes()
+        self.assert_rejected_before_archive(self.run_update())
+        self.assertEqual(feed.read_bytes(), original)
+
+    def test_generated_appcast_wrong_archive_url_does_not_replace_feed(self):
+        self.updates.mkdir()
+        feed = self.updates / "appcast.xml"
+        feed.write_text(self.feed())
+        original = feed.read_bytes()
+        self.env["UPDATE_GENERATED_URL"] = "https://updates.example.invalid/production/x86_64/wrong.zip"
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(feed.read_bytes(), original)
+        self.assertFalse((self.updates / "KetPlus-0.1.50.zip").exists())
+
+    def test_appcast_records_release_identity(self):
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        node = ET.parse(self.updates / "appcast.xml").getroot().find("channel")
+        self.assertEqual(node.find("{urn:ketplus:release}releaseChannel").text, "production")
+        self.assertEqual(node.find("{urn:ketplus:release}architecture").text, "arm64")
+        self.assertTrue(node.find("item/enclosure").get("url").startswith("https://updates.example.invalid/production/arm64/"))
+
     def test_prepares_valid_archive_without_notes(self):
         result = self.run_update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.updates / "KetPlus-0.1.50.zip").read_bytes(), b"synthetic archive")
-        self.assertEqual((self.updates / "appcast.xml").read_text(), "synthetic appcast")
+        self.assertIn("<title>ketPlus Pro</title>", (self.updates / "appcast.xml").read_text())
         self.assertEqual(len(self.calls.read_text().splitlines()), 2)
 
     def test_failed_signing_removes_the_partial_release(self):
         self.updates.mkdir()
-        (self.updates / "appcast.xml").write_text("published appcast")
+        (self.updates / "appcast.xml").write_text(self.feed())
         notes = self.root / "notes.md"
         notes.write_text("Release notes")
         self.env["UPDATE_APPCAST_FAIL"] = "1"
@@ -94,25 +218,24 @@ if os.environ.get("UPDATE_APPCAST_FAIL"):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertFalse((self.updates / "KetPlus-0.1.50.zip").exists())
         self.assertFalse((self.updates / "KetPlus-0.1.50.md").exists())
-        self.assertEqual((self.updates / "appcast.xml").read_text(), "published appcast")
+        self.assertEqual((self.updates / "appcast.xml").read_text(), self.feed())
         # The same version can be prepared once signing works.
         del self.env["UPDATE_APPCAST_FAIL"]
         result = self.run_update(("--release-notes", str(notes)))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((self.updates / "KetPlus-0.1.50.zip").is_file())
-        self.assertEqual((self.updates / "appcast.xml").read_text(),
-                         "published appcast + synthetic item")
+        self.assertIn("<description>synthetic item</description>", (self.updates / "appcast.xml").read_text())
         self.assertEqual(sorted(path.name for path in self.root.iterdir()
                                 if path.name.startswith(".ketplus-appcast")), [])
 
     def test_updated_appcast_keeps_its_mode(self):
         self.updates.mkdir()
         published = self.updates / "appcast.xml"
-        published.write_text("published appcast")
+        published.write_text(self.feed())
         published.chmod(0o644)
         result = self.run_update()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(published.read_text(), "published appcast + synthetic item")
+        self.assertIn("<description>synthetic item</description>", published.read_text())
         self.assertEqual(published.stat().st_mode & 0o777, 0o644)
 
     def test_output_failure_after_the_appcast_keeps_the_release(self):
@@ -120,11 +243,11 @@ if os.environ.get("UPDATE_APPCAST_FAIL"):
         result = subprocess.run(
             ["/bin/bash", "-c", 'exec 1>&-; exec /bin/bash "$@"', "update", str(self.script),
              "--app", str(self.app), "--updates-dir", str(self.updates),
-             "--download-url-prefix", "https://updates.example.invalid/",
-             "--sparkle-bin", str(self.bin)],
+             "--download-url-prefix", "https://updates.example.invalid/production/arm64/",
+             "--sparkle-bin", str(self.bin), "--channel", "production", "--arch", "arm64"],
             env=self.env, capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.updates / "appcast.xml").read_text(), "synthetic appcast")
+        self.assertIn("<title>ketPlus Pro</title>", (self.updates / "appcast.xml").read_text())
         self.assertTrue((self.updates / "KetPlus-0.1.50.zip").is_file())
 
     def test_accepts_filename_safe_prerelease_version(self):
@@ -143,7 +266,7 @@ if os.environ.get("UPDATE_APPCAST_FAIL"):
     def test_prepares_html_and_markdown_notes(self):
         for suffix in ("html", "md"):
             with self.subTest(suffix=suffix):
-                self.updates = self.root / ("updates-" + suffix)
+                self.updates = self.root / ("updates-" + suffix) / "production/arm64"
                 notes = self.root / ("release notes." + suffix)
                 notes.write_text("Notes content")
                 result = self.run_update(("--release-notes", str(notes)))
