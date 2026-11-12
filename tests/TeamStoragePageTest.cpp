@@ -1,0 +1,278 @@
+// ADR 0114 §10 (T-37): the team page's disk warning at its two levels and the removal of a
+// done task's worktree, confirmed in a dialog, against a fake daemon.
+// Run with QT_QPA_PLATFORM=offscreen.
+#include "KetAppearance.h"
+#include "KetBanner.h"
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "KetStyle.h"
+#include "teams/TeamDirectory.h"
+#include "teams/TeamPage.h"
+#include "teams/TeamWorktreeDialog.h"
+
+#include <QApplication>
+#include <QDir>
+#include <QJsonArray>
+#include <QLabel>
+#include <QStandardPaths>
+#include <QtTest>
+
+#include <functional>
+
+using namespace ketplus;
+
+namespace {
+
+QJsonObject team() {
+    return {
+        {"id", "7"},
+        {"name", "Shop"},
+        {"goal", "Checkout"},
+        {"repository", "/work/shop"},
+        {"integration_branch", "team/shop"},
+        {"merge_policy", "leader"},
+        {"turn_budget", 60},
+        {"automatic_turns", 0},
+        {"members",
+         QJsonArray{QJsonObject{{"session_id", "lead"}, {"role", "leader"}, {"name", "Lead"}},
+                    QJsonObject{{"session_id", "rev"}, {"role", "reviewer"}, {"name", "Review"}}}},
+        {"tasks", QJsonArray{QJsonObject{{"id", "T-2"},
+                                         {"title", "Quick search"},
+                                         {"state", "done"},
+                                         {"worktree", "/work/shop-quick-search"},
+                                         {"criteria", QJsonArray{}},
+                                         {"depends_on", QJsonArray{}},
+                                         {"history", QJsonArray{}}}}},
+        {"decisions", QJsonArray{}},
+        {"revision", 1}};
+}
+
+QJsonObject storage(const qint64 free, const QString& level, const bool worktree = true) {
+    QJsonArray worktrees;
+    if (worktree)
+        worktrees.append(QJsonObject{{"task_id", "T-2"},
+                                     {"title", "Quick search"},
+                                     {"branch", "team/7/T-2"},
+                                     {"path", "/work/shop-quick-search"},
+                                     {"size_bytes", 4'200'000'000LL}});
+    return {{"ok", true},
+            {"storage", QJsonObject{{"free_bytes", free},
+                                    {"level", level},
+                                    {"warn_bytes", 20'000'000'000LL},
+                                    {"stop_bytes", 12'000'000'000LL},
+                                    {"worktrees", worktrees}}}};
+}
+
+struct FakeDaemon {
+    QList<QPair<QString, QJsonObject>> sent;
+    QHash<QString, QJsonObject> answers;
+    TeamDirectory::Transport transport() {
+        return [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
+            sent.append({type, payload});
+            const QJsonObject answer = answers.value(type, {{"ok", true}});
+            reply(answer, answer.value("ok").toBool() ? QString{}
+                                                      : answer.value("error_message").toString());
+        };
+    }
+    int count(const QString& type) const {
+        return static_cast<int>(std::count_if(
+            sent.cbegin(), sent.cend(), [&](const auto& entry) { return entry.first == type; }));
+    }
+};
+
+} // namespace
+
+class TeamStoragePageTest final : public QObject {
+    Q_OBJECT
+
+  private:
+    FakeDaemon daemon_;
+    std::unique_ptr<TeamDirectory> teams_;
+
+    void start(const QJsonObject& answer) {
+        daemon_ = {};
+        daemon_.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team()}}});
+        daemon_.answers.insert("team.get", {{"ok", true}, {"team", team()}});
+        daemon_.answers.insert("team.storage.get", answer);
+        teams_ = std::make_unique<TeamDirectory>();
+        teams_->setTransport(daemon_.transport());
+        teams_->setAvailable(true);
+    }
+
+  private slots:
+    void initTestCase() {
+        QStandardPaths::setTestModeEnabled(true);
+        ket::Style::install(*qApp);
+    }
+
+    void sizesReadInDecimalUnits() {
+        QCOMPARE(team_storage::size(18'400'000'000LL), QStringLiteral("18.4 GB"));
+        QCOMPARE(team_storage::size(640'000'000LL), QStringLiteral("640.0 MB"));
+        QVERIFY(team_storage::warning({}).title.isEmpty());
+    }
+
+    // Criterion 1: each level names the free space; enough space shows no banner.
+    void theDiskBannerHasTwoLevels_data() {
+        QTest::addColumn<qint64>("free");
+        QTest::addColumn<QString>("level");
+        QTest::addColumn<QString>("title");
+        QTest::addColumn<int>("tone");
+        QTest::newRow("low") << 18'400'000'000LL << "low" << "Disk space is low: 18.4 GB free"
+                             << static_cast<int>(ket::BannerTone::Warning);
+        QTest::newRow("stop") << 9'600'000'000LL << "stop" << "Builds should stop: 9.6 GB free"
+                              << static_cast<int>(ket::BannerTone::Danger);
+        QTest::newRow("enough") << 64'200'000'000LL << "" << "" << -1;
+    }
+    void theDiskBannerHasTwoLevels() {
+        QFETCH(qint64, free);
+        QFETCH(QString, level);
+        QFETCH(QString, title);
+        QFETCH(int, tone);
+        start(storage(free, level));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(daemon_.count("team.storage.get") >= 1);
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktrees"));
+        auto* banner = page.findChild<ket::Banner*>("teamDiskBanner");
+        if (title.isEmpty()) {
+            QVERIFY(!banner);
+            return;
+        }
+        QVERIFY(banner);
+        QCOMPARE(static_cast<int>(banner->tone()), tone);
+        QCOMPARE(banner->title(), title);
+        QVERIFY(banner->message().contains(level == "stop" ? "12 GB" : "20 GB"));
+        // Nothing is removed for the user.
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+    }
+
+    // Criteria 2 to 4: the offer names the path and size; only a confirmation sends the
+    // removal; a refusal stays in the dialog and changes nothing; a removal closes it.
+    void aDoneWorktreeIsRemovedOnlyAfterConfirming() {
+        start(storage(18'400'000'000LL, "low"));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-2"));
+        QWidget* row = page.findChild<QWidget*>("teamDoneWorktree_T-2");
+        QCOMPARE(row->findChild<QLabel*>("teamDoneWorktreePath")->text(),
+                 QStringLiteral("/work/shop-quick-search"));
+        QCOMPARE(row->findChild<QLabel*>("teamDoneWorktreeSize")->text(), QStringLiteral("4.2 GB"));
+        QCOMPARE(row->findChild<QLabel*>("teamDoneWorktreeTitle")->text(),
+                 QStringLiteral("Quick search"));
+
+        const auto open = [&] {
+            page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+            auto* dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+            return dialog;
+        };
+        QPointer<ket::Dialog> dialog = open();
+        QVERIFY(dialog);
+        QCOMPARE(dialog->findChild<QLabel*>("teamWorktreePath")->text(),
+                 QStringLiteral("/work/shop-quick-search"));
+        QVERIFY(dialog->findChild<QLabel*>("teamWorktreeConsequence")->text().contains("4.2 GB"));
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+        dialog->findChild<ket::Button*>("teamWorktreeCancel")->click();
+        QTRY_VERIFY(!dialog);
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+
+        daemon_.answers.insert(
+            "team.worktree.remove",
+            {{"ok", false},
+             {"error_code", "worktree_not_removed"},
+             {"error_message", "The worktree has uncommitted or untracked changes (2 files)."}});
+        dialog = open();
+        QVERIFY(dialog);
+        auto* remove = dialog->findChild<ket::Button*>("teamWorktreeRemove");
+        remove->click();
+        QCOMPARE(daemon_.count("team.worktree.remove"), 1);
+        QCOMPARE(daemon_.sent.last().second.value("task_id").toString(), QStringLiteral("T-2"));
+        QCOMPARE(daemon_.sent.last().second.value("team_id").toString(), QStringLiteral("7"));
+        auto* refusal = dialog->findChild<ket::Banner*>("teamWorktreeRefusal");
+        QVERIFY(dialog->isVisible());
+        QVERIFY(!refusal->isHidden());
+        QCOMPARE(refusal->title(), QStringLiteral("Not removed"));
+        QVERIFY(refusal->message().contains("2 files"));
+        QVERIFY(!remove->isEnabled());
+        QVERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-2"));
+        dialog->findChild<ket::Button*>("teamWorktreeCancel")->click();
+        QTRY_VERIFY(!dialog);
+
+        QJsonObject removed = team();
+        QJsonArray tasks = removed.value("tasks").toArray();
+        QJsonObject task = tasks.first().toObject();
+        task.insert("worktree", "");
+        tasks.replace(0, task);
+        removed.insert("tasks", tasks);
+        removed.insert("revision", 2);
+        daemon_.answers.insert("team.worktree.remove", {{"ok", true}, {"team", removed}});
+        daemon_.answers.insert("team.storage.get", storage(22'600'000'000LL, "", false));
+        dialog = open();
+        dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
+        QTRY_VERIFY(!dialog);
+        // The task forgot its worktree, so the page measured again: the offer and the banner
+        // are gone.
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
+        QVERIFY(!page.findChild<ket::Banner*>("teamDiskBanner"));
+    }
+
+    // With KETPLUS_TEAM_STORAGE_CAPTURE set to a folder, saves the page at both levels and the
+    // dialog, plain and refused, in light and dark, as review evidence beside the mock.
+    void captureForReview() {
+        const QString folder = qEnvironmentVariable("KETPLUS_TEAM_STORAGE_CAPTURE");
+        if (folder.isEmpty())
+            QSKIP("KETPLUS_TEAM_STORAGE_CAPTURE is not set.");
+        auto& appearance = ket::Appearance::instance();
+        const auto save = [&](QWidget& page, const QString& name) {
+            for (const auto& [mode, suffix] : {std::pair(ket::Appearance::Mode::Light, "light"),
+                                               std::pair(ket::Appearance::Mode::Dark, "dark")}) {
+                appearance.setMode(mode);
+                QTest::qWait(200);
+                QVERIFY(page.grab().save(QDir(folder).filePath(name + "-" + suffix + ".png")));
+            }
+            appearance.setMode(ket::Appearance::Mode::Light);
+        };
+        for (const auto& [free, level] : {std::pair(18'400'000'000LL, QStringLiteral("low")),
+                                          std::pair(9'600'000'000LL, QStringLiteral("stop"))}) {
+            start(storage(free, level));
+            TeamPage page(teams_.get(), "7", "/work/shop");
+            page.resize(1280, 900);
+            page.show();
+            QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktrees"));
+            save(page, "disk-" + level);
+        }
+        start(storage(18'400'000'000LL, "low"));
+        daemon_.answers.insert(
+            "team.worktree.remove",
+            {{"ok", false},
+             {"error_code", "worktree_not_removed"},
+             {"error_message", "The worktree has uncommitted or untracked changes (2 files). "
+                               "Commit or discard them, then remove it again."}});
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1280, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktrees"));
+        page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+        auto* dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+        QVERIFY(dialog);
+        save(page, "remove-worktree");
+        dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
+        save(page, "remove-worktree-refused");
+    }
+
+    // An older daemon refuses team.storage.get: the page shows neither part.
+    void aDaemonWithoutStorageShowsNothing() {
+        start({{"ok", false}, {"error_code", "unknown_operation"}, {"error_message", "No."}});
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(daemon_.count("team.storage.get") >= 1);
+        QVERIFY(page.findChild<QLabel*>("teamPageName"));
+        QVERIFY(!page.findChild<ket::Banner*>("teamDiskBanner"));
+        QVERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
+    }
+};
+
+QTEST_MAIN(TeamStoragePageTest)
+#include "TeamStoragePageTest.moc"

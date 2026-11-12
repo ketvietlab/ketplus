@@ -4,6 +4,7 @@
 // sends, all in memory (ADR 0114).
 #include "teams/TeamCoordinator.h"
 
+#include <QDir>
 #include <QHash>
 #include <QSet>
 
@@ -27,7 +28,7 @@ class FakeHost final : public TeamHostPort {
         return std::nullopt;
     }
     QString conversationRepository(const QString& sessionId) const override {
-        return conversations.contains(sessionId) ? QStringLiteral("/repo") : QString{};
+        return conversations.contains(sessionId) ? repository : QString{};
     }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
@@ -37,7 +38,7 @@ class FakeHost final : public TeamHostPort {
             return std::nullopt;
         }
         return TaskWorktree{.branch = QStringLiteral("team/%1/%2").arg(team.id).arg(task.id),
-                            .worktree = QStringLiteral("/wt/") + task.id,
+                            .worktree = worktreeRoot + task.id,
                             .baseCommit = QStringLiteral("base")};
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
@@ -139,6 +140,29 @@ class FakeHost final : public TeamHostPort {
         else
             done(facts);
     }
+    // ADR 0114 §10: the disk under the team and a done task's worktree removal. The removal
+    // deletes the folder unless `removalError` says why it failed.
+    void askStorage(const QString& volumePath, const QStringList& worktrees,
+                    StorageDone done) override {
+        storageAsks.append({volumePath, worktrees});
+        done(storageFacts);
+    }
+    void askRemoveWorktree(const QString& repository, const QString& worktree,
+                           RemovalDone done) override {
+        removals.append({repository, worktree});
+        const auto finish = [done, worktree, error = removalError] {
+            if (error.isEmpty())
+                QDir(worktree).removeRecursively();
+            done(error);
+        };
+        if (holdAnswers)
+            held.append(finish);
+        else
+            finish();
+    }
+    QString conversationRunningIn(const QString& path) const override {
+        return runningIn.value(path);
+    }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
@@ -178,6 +202,15 @@ class FakeHost final : public TeamHostPort {
     int made = 0;
     mutable int statusReads = 0;
     QString worktreeError;
+    // Where the worktrees it makes are; a test that needs them on disk points it at a folder.
+    QString worktreeRoot = QStringLiteral("/wt/");
+    // The repository its conversations are in.
+    QString repository = QStringLiteral("/repo");
+    StorageFacts storageFacts;
+    QList<std::pair<QString, QStringList>> storageAsks;
+    QList<std::pair<QString, QString>> removals;
+    QString removalError;
+    QHash<QString, QString> runningIn;
     QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;

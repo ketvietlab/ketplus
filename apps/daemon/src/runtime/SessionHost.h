@@ -339,6 +339,15 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                      teams::WorktreeDone done) override;
     void askHandoff(const teams::Team& team, const teams::Task& task,
                     teams::HandoffDone done) override;
+    // ADR 0114 §10 (SessionHostTeamStorage.cpp): the disk under a team's worktrees and the
+    // removal of a done task's worktree, for the desktop's team.storage.get and
+    // team.worktree.remove.
+    void askStorage(const QString& volumePath, const QStringList& worktrees,
+                    teams::StorageDone done) override;
+    void askRemoveWorktree(const QString& repository, const QString& worktree,
+                           teams::RemovalDone done) override;
+    [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
+    void teamStorageCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,

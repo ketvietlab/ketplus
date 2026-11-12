@@ -73,6 +73,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   team and be woken to check, and a member's message to a conversation outside the team
   that failed or was never answered wakes that member (message kinds `wait` and
   `message_failed`). Waits are in memory only; neither has run on a live team yet.
+  Disk and done worktrees (ADR 0114 §10, `teams.storage/1`): the team page warns below
+  20 GB free and says builds should stop below 12 GB, naming the free space; nothing is
+  paused or removed on its own. It lists each done task's worktree still on disk with its
+  path and size and removes one only after the user confirms, with `git worktree remove`
+  without force and `git worktree prune`; dirty or unpushed worktrees, the main checkout
+  and a running conversation's folder are refused in words. Agents have no way to ask.
   Per-task review (#460): a task entering In review is queued for the team's reviewer,
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go
