@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QJsonObject>
 #include <QPointer>
 #include <QWidget>
 
@@ -46,6 +47,7 @@ class MachineWorkspaceView final : public QWidget {
     void createConversation(const QString& prompt);
     void showSession(MachineConversationSession* session);
     void bind(const QString& sessionId, qint64 generation, bool running);
+    void finishCreate(const QString& machine, const QJsonObject& result, const QString& error);
 
     MachineCatalog* catalog_;
     QPointer<MachineConversationSession> session_;
@@ -53,6 +55,9 @@ class MachineWorkspaceView final : public QWidget {
     QHash<QString, QPointer<MachineConversationSession>> lastByMachine_;
     QString newConversationRepository_;
     bool creating_{false};
+    QString createCommand_; // a createSession the Relay queued
+    QString createError_;
+    QMetaObject::Connection createCompletion_;
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
     QComboBox* worktrees_{nullptr};

@@ -59,6 +59,18 @@ Connections with an empty sidebar; it never shows This Mac's lists.
   `catalogChanged()` lists again and fills them in.
 - **Approvals and questions.** Cards answer through the conversation's machine;
   an answer that fails marks the card expired.
+- **Held and queued writes.** A route may hold a request while it is
+  Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
+  says it waits for the machine instead of looking hung. A Relay write may
+  answer `{"status": "queued", "command_id"}` with no result: the composer
+  shows it as sent and waiting for the host, and the outcome (the new
+  conversation, or an expired card) is applied on
+  `MachineBackend::commandCompleted()`, which moved to the interface so the UI
+  needs no Relay type.
+- **Registration.** Connections calls `MachineSelection::syncBackends()` from
+  its `machinesChanged` slot: each listed id with a backend is registered or
+  replaced (a replacement for the selected machine rebinds every view), and
+  every other remote machine is forgotten before its backend is deleted.
 
 Tests: `tests/MachineCompositionTest.cpp` against `tests/FakeMachineBackend.h`.
 

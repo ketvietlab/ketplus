@@ -1,5 +1,7 @@
 #include "machine/MachineConversationSession.h"
 
+#include "MachineRows.h"
+
 #include <QJsonArray>
 
 #include <memory>
@@ -28,6 +30,8 @@ MachineConversationSession::MachineConversationSession(remote::MachineBackend* b
     lastState_ = backend->connectionState();
     connect(backend, &remote::MachineBackend::eventReceived, this,
             &MachineConversationSession::applyEvent);
+    connect(backend, &remote::MachineBackend::commandCompleted, this,
+            &MachineConversationSession::commandCompleted);
     connect(backend, &remote::MachineBackend::connectionStateChanged, this,
             [this](const State state, const QString&) {
                 const State previous = lastState_;
@@ -168,10 +172,7 @@ void MachineConversationSession::send(const QString& text) {
     if (prompt.isEmpty() || !canAct())
         return;
     const QJsonObject request{{QStringLiteral("prompt"), prompt}};
-    const auto done = guarded([this](const QJsonObject&, const QString& error) {
-        if (!error.isEmpty())
-            fail(error);
-    });
+    const auto done = write({});
     if (running_)
         backend_->steerTurn(sessionId_, generation_, request, done);
     else
@@ -181,11 +182,7 @@ void MachineConversationSession::send(const QString& text) {
 void MachineConversationSession::stop() {
     if (!canAct())
         return;
-    backend_->stopTurn(sessionId_, generation_,
-                       guarded([this](const QJsonObject&, const QString& error) {
-                           if (!error.isEmpty())
-                               fail(error);
-                       }));
+    backend_->stopTurn(sessionId_, generation_, write({}));
 }
 
 void MachineConversationSession::resolveApproval(const QString& approvalId, const bool accept) {
@@ -194,21 +191,63 @@ void MachineConversationSession::resolveApproval(const QString& approvalId, cons
     backend_->resolveApproval(sessionId_, generation_, approvalId,
                               {{QStringLiteral("decision"),
                                 accept ? QStringLiteral("accept") : QStringLiteral("decline")}},
-                              guarded([this, approvalId](const QJsonObject&, const QString& error) {
-                                  if (!error.isEmpty())
-                                      markExpired(approvalId, error);
-                              }));
+                              write(approvalId));
 }
 
 void MachineConversationSession::answerQuestion(const QString& questionId,
                                                 const QJsonObject& resolution) {
     if (!canAct())
         return;
-    backend_->answerQuestion(sessionId_, generation_, questionId, resolution,
-                             guarded([this, questionId](const QJsonObject&, const QString& error) {
-                                 if (!error.isEmpty())
-                                     markExpired(questionId, error);
-                             }));
+    backend_->answerQuestion(sessionId_, generation_, questionId, resolution, write(questionId));
+}
+
+remote::MachineBackend::Callback MachineConversationSession::write(const QString& approvalId) {
+    // A write the route holds (Connecting, Reconnecting: up to 15 minutes on the Relay) is
+    // shown as waiting; one it queued finishes on commandCompleted().
+    ++waiting_;
+    emit changed();
+    return guarded([this, approvalId](const QJsonObject& result, const QString& error) {
+        --waiting_;
+        const QString commandId = remote::queuedCommandId(result);
+        if (error.isEmpty() && !commandId.isEmpty()) {
+            queued_.insert(commandId, approvalId);
+            emit changed();
+            return;
+        }
+        finishWrite(approvalId, error);
+    });
+}
+
+void MachineConversationSession::commandCompleted(const QString& commandId, const QJsonObject&,
+                                                  const QString& error) {
+    const auto it = queued_.constFind(commandId);
+    if (it == queued_.cend())
+        return;
+    const QString approvalId = *it;
+    queued_.erase(it);
+    finishWrite(approvalId, error);
+}
+
+void MachineConversationSession::finishWrite(const QString& approvalId, const QString& error) {
+    if (error.isEmpty()) {
+        lastError_.clear();
+        emit changed();
+    } else if (!approvalId.isEmpty()) {
+        markExpired(approvalId, error);
+    } else {
+        fail(error);
+    }
+}
+
+QString MachineConversationSession::writeStatus() const {
+    if (waiting_ > 0 && !canAct())
+        return tr("Waiting for the machine to reconnect. What you sent goes through when it "
+                  "does (held for up to 15 minutes).");
+    if (waiting_ > 0)
+        return tr("Sending…");
+    if (!queued_.isEmpty())
+        return tr("Sent. Waiting for the machine to confirm…");
+    return {};
 }
 
 void MachineConversationSession::markExpired(const QString& approvalId, const QString& error) {

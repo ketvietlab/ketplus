@@ -4,6 +4,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
+
+#include <functional>
 
 namespace ketplus::remote {
 class MachineBackend;
@@ -30,7 +33,14 @@ class MachineSelection final : public QObject {
     [[nodiscard]] remote::MachineBackend* backendFor(const QString& machineId) const;
     [[nodiscard]] QStringList machineIds() const;
 
+    // Registers or replaces a machine's backend; a replacement for the selected machine emits
+    // selectionChanged() so every view rebinds (for example SSH added for a Relay host).
     void setBackend(const QString& machineId, remote::MachineBackend* backend);
+    // Connections' machine list changed: every listed id with a backend is registered or
+    // replaced, and every other remote machine is forgotten. Call it from the slot that sees
+    // the change, before a removed backend is deleted.
+    void syncBackends(const QStringList& machineIds,
+                      const std::function<remote::MachineBackend*(const QString&)>& backendFor);
     // Forgets a machine; the selection returns to This Mac if it was selected.
     void removeBackend(const QString& machineId);
     // Selects a known machine; an unknown id or the current one changes nothing.

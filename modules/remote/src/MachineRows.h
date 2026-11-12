@@ -59,6 +59,9 @@ struct MachineConversation final {
 [[nodiscard]] QVector<MachineWorktree> worktreesFromPage(const QJsonObject& result);
 // listConversations(): the conversation list.
 [[nodiscard]] QVector<MachineConversation> conversationsFromListing(const QJsonObject& result);
+// A write the route queued ({"status": "queued", "command_id"}): its command id, whose outcome
+// arrives through MachineBackend::commandCompleted(). Empty for any other result.
+[[nodiscard]] QString queuedCommandId(const QJsonObject& result);
 // createSession(): the new conversation's id and generation.
 [[nodiscard]] MachineConversation createdSession(const QJsonObject& result);
 

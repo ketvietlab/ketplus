@@ -131,6 +131,12 @@ QVector<MachineConversation> conversationsFromListing(const QJsonObject& result)
     return conversations;
 }
 
+QString queuedCommandId(const QJsonObject& result) {
+    if (result.value(QLatin1String("status")).toString() != QLatin1String("queued"))
+        return {};
+    return result.value(QLatin1String("command_id")).toString();
+}
+
 MachineConversation createdSession(const QJsonObject& result) {
     MachineConversation conversation;
     conversation.sessionId = text(result, {"session_id", "sessionId"});

@@ -100,6 +100,12 @@ class MachineBackend : public QObject {
     void eventReceived(const QJsonObject& event);
     // The repositories or worktrees the route can verify changed: list them again.
     void catalogChanged();
+    // A write whose callback answered {"status": "queued", "command_id"} finished on the host:
+    // its verified result or error, once. Commands resumed after a restart have no callback, so
+    // this is how their outcome reaches the UI. Routes that answer every write directly (local,
+    // SSH) never emit it.
+    void commandCompleted(const QString& commandId, const QJsonObject& result,
+                          const QString& error);
 };
 
 } // namespace ketplus::remote

@@ -51,6 +51,18 @@ void MachineSelection::setBackend(const QString& machineId, remote::MachineBacke
         emit selectionChanged(selected_, backend);
 }
 
+void MachineSelection::syncBackends(
+    const QStringList& machineIds,
+    const std::function<remote::MachineBackend*(const QString&)>& backendFor) {
+    for (const QString& id : machineIds)
+        if (id != localId)
+            if (auto* backend = backendFor(id); backend != nullptr)
+                setBackend(id, backend);
+    for (const QString& id : this->machineIds())
+        if (id != localId && (!machineIds.contains(id) || backendFor(id) == nullptr))
+            removeBackend(id);
+}
+
 void MachineSelection::removeBackend(const QString& machineId) {
     if (machineId == localId || !backends_.remove(machineId))
         return;

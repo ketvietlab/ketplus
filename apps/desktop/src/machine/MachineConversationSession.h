@@ -3,6 +3,7 @@
 #include "MachineBackend.h"
 #include "machine/MachineTranscript.h"
 
+#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QVector>
@@ -41,6 +42,9 @@ class MachineConversationSession final : public QObject {
     [[nodiscard]] bool canAct() const;
     [[nodiscard]] QString blockedReason() const;
     [[nodiscard]] QString lastError() const { return lastError_; }
+    // What happened to the last writes: held until the machine reconnects, sending, or queued
+    // on the Relay until the host confirms. Empty when nothing is outstanding.
+    [[nodiscard]] QString writeStatus() const;
 
     // Reads the newest transcript window and the pending approvals.
     void load();
@@ -59,6 +63,11 @@ class MachineConversationSession final : public QObject {
                            const std::shared_ptr<QVector<QJsonObject>>& collected, quint64 load);
     void applyEvent(const QJsonObject& event);
     void markExpired(const QString& approvalId, const QString& error);
+    // The callback of one write; `approvalId` names the card it answers, if any.
+    [[nodiscard]] remote::MachineBackend::Callback write(const QString& approvalId);
+    void commandCompleted(const QString& commandId, const QJsonObject& result,
+                          const QString& error);
+    void finishWrite(const QString& approvalId, const QString& error);
     void fail(const QString& error);
     [[nodiscard]] remote::MachineBackend::Callback
     guarded(std::function<void(const QJsonObject&, const QString&)> done);
@@ -71,6 +80,8 @@ class MachineConversationSession final : public QObject {
     QVector<QJsonObject> approvals_;
     QString lastError_;
     quint64 approvalsLoad_{0};
+    int waiting_{0};
+    QHash<QString, QString> queued_; // Relay command id -> the card it answers (or empty)
     bool running_{false};
     State lastState_{State::Connecting};
 };

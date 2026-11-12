@@ -332,6 +332,102 @@ class MachineCompositionTest final : public QObject {
         QVERIFY(view.findChild<QPushButton*>("machineApprove") == nullptr);
     }
 
+    void connectionsSyncRegistersReplacesAndForgets() {
+        FakeMachineBackend local("local", Route::Local);
+        FakeMachineBackend relay("fp-a", Route::Relay);
+        FakeMachineBackend ssh("fp-a", Route::Ssh);
+        FakeMachineBackend other("fp-b", Route::Ssh);
+        MachineSelection selection(&local);
+        QHash<QString, remote::MachineBackend*> section{{"fp-a", &relay}, {"fp-b", &other}};
+        const auto lookup = [&section](const QString& id) { return section.value(id); };
+        selection.syncBackends({"fp-a", "fp-b", "fp-c"}, lookup); // fp-c has no backend yet
+        QCOMPARE(selection.machineIds(), (QStringList{"local", "fp-a", "fp-b"}));
+        selection.select("fp-a");
+        QSignalSpy changed(&selection, &MachineSelection::selectionChanged);
+
+        // SSH added for the Relay host: the selected machine rebinds to the new backend.
+        section.insert("fp-a", &ssh);
+        selection.syncBackends({"fp-a", "fp-b"}, lookup);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(changed.first().at(1).value<remote::MachineBackend*>(), &ssh);
+        QCOMPARE(selection.backend(), &ssh);
+
+        // The selected machine removed: the window returns to This Mac.
+        selection.syncBackends({"fp-b"}, lookup);
+        QCOMPARE(selection.machineId(), QStringLiteral("local"));
+        QCOMPARE(selection.machineIds(), (QStringList{"local", "fp-b"}));
+    }
+
+    void queuedRelayWritesFinishOnCommandCompleted() {
+        bool verified = true;
+        FakeMachineBackend relay("fp-relay", Route::Relay);
+        auto base = relayHost(&verified);
+        relay.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result,
+                           QString* error) {
+            if (call.operation == "createSession" || call.operation == "resolveApproval")
+                *result = {{"status", "queued"}, {"command_id", call.operation + "-cmd"}};
+            else if (call.operation == "pendingApprovals")
+                *result = {{"pending_approvals", QJsonArray{QJsonObject{{"approval_id", "ap-9"},
+                                                                        {"kind", "command"},
+                                                                        {"command", "deploy"}}}}};
+            else
+                base(call, result, error);
+        };
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&relay);
+        QTRY_COMPARE(catalog.repositories().size(), 1);
+        auto* reason = view.findChild<QLabel*>("machineComposerReason");
+        view.startNewConversation();
+        view.findChild<QPlainTextEdit*>("machineComposer")->setPlainText("Ship it");
+        view.findChild<QPushButton*>("machineSend")->click();
+        QCOMPARE(relay.calls("createSession").first().request.value("repository_id").toString(),
+                 QStringLiteral("repo-salted"));
+        QVERIFY(view.openSessionId().isEmpty());
+        QCOMPARE(reason->text(),
+                 QStringLiteral("Sent. Waiting for the machine to start the conversation…"));
+        QVERIFY(!view.findChild<QPushButton*>("machineSend")->isEnabled());
+
+        relay.complete("other-cmd", {{"session_id", "nope"}});
+        QVERIFY(view.openSessionId().isEmpty());
+        relay.complete("createSession-cmd", {{"session_id", "relay-2"}, {"session_generation", 1}});
+        QCOMPARE(view.openSessionId(), QStringLiteral("relay-2"));
+
+        // A queued approval answer that fails on the host marks the card expired.
+        QTRY_COMPARE(view.findChildren<QFrame*>("machineApprovalCard").size(), 1);
+        view.findChild<QPushButton*>("machineApprove")->click();
+        QCOMPARE(reason->text(), QStringLiteral("Sent. Waiting for the machine to confirm…"));
+        relay.complete("resolveApproval-cmd", {}, "approval_expired");
+        QTRY_VERIFY(view.findChild<QFrame*>("machineApprovalCard")->property("expired").toBool());
+        QCOMPARE(reason->text(), QStringLiteral("approval_expired"));
+    }
+
+    void heldWritesSayTheyWaitForTheMachine() {
+        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+        ssh.answer = sshHost();
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        view.openConversation("linux-1");
+        QTRY_COMPARE(transcriptRows(view).size(), 2);
+        auto* reason = view.findChild<QLabel*>("machineComposerReason");
+
+        ssh.hold = true; // the route holds the prompt until the hello
+        view.findChild<QPlainTextEdit*>("machineComposer")->setPlainText("Run the tests");
+        view.findChild<QPushButton*>("machineSend")->click();
+        QCOMPARE(reason->text(), QStringLiteral("Sending…"));
+        ssh.setState(State::Reconnecting, "Connection lost.");
+        QVERIFY(reason->text().startsWith("Waiting for the machine to reconnect."));
+        QVERIFY(reason->text().contains("15 minutes"));
+
+        ssh.hold = false;
+        ssh.setState(State::Connected);
+        ssh.release();
+        QTRY_VERIFY(reason->text().isEmpty());
+        QCOMPARE(ssh.calls("startTurn").size(), 1);
+    }
+
     void transcriptIgnoresOtherSessionsAndRepeats() {
         FakeMachineBackend ssh("fp-ssh", Route::Ssh);
         ssh.answer = sshHost();

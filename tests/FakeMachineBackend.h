@@ -39,6 +39,9 @@ class FakeMachineBackend final : public remote::MachineBackend {
     }
     void announceCatalogChange() { emit catalogChanged(); }
     void deliver(const QJsonObject& event) { emit eventReceived(event); }
+    void complete(const QString& commandId, const QJsonObject& result, const QString& error = {}) {
+        emit commandCompleted(commandId, result, error);
+    }
 
     // Answers every held request in order.
     void release() {

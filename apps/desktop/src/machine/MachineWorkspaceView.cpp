@@ -166,12 +166,23 @@ void MachineWorkspaceView::render() {
     const bool canAct = newConversation
                             ? connected && worktrees_->currentData().isValid() && !creating_
                             : session_->canAct();
+    // A request the route holds or queued is named, so the composer never looks hung.
     QString reason;
-    if (!connected)
+    if (newConversation && creating_)
+        reason = !connected ? tr("Waiting for the machine to reconnect. The conversation "
+                                 "starts when it does (held for up to 15 minutes).")
+                 : createCommand_.isEmpty()
+                     ? tr("Starting the conversation…")
+                     : tr("Sent. Waiting for the machine to start the conversation…");
+    else if (session_ != nullptr && !session_->writeStatus().isEmpty())
+        reason = session_->writeStatus();
+    else if (!connected)
         reason = status;
     else if (newConversation && !worktrees_->currentData().isValid())
         reason = tr("Choose a worktree on this machine.");
-    else if (session_ != nullptr)
+    else if (newConversation)
+        reason = createError_;
+    else
         reason = session_->lastError();
     composer_->setReadOnly(!canAct);
     composer_->setEnabled(canAct);
@@ -242,27 +253,49 @@ void MachineWorkspaceView::createConversation(const QString& prompt) {
         {QStringLiteral("repository_id"), worktrees_->currentData(Qt::UserRole + 1).toString()},
         {QStringLiteral("prompt"), prompt}};
     const QString machine = backend->machineId();
+    createError_.clear();
+    createCommand_.clear();
+    disconnect(createCompletion_);
+    // The Relay may queue the command; its outcome then arrives through commandCompleted().
+    createCompletion_ = connect(
+        backend, &remote::MachineBackend::commandCompleted, this,
+        [this, machine](const QString& commandId, const QJsonObject& result, const QString& error) {
+            if (!createCommand_.isEmpty() && commandId == createCommand_)
+                finishCreate(machine, result, error);
+        });
     backend->createSession(
         request, [self = QPointer(this), machine](const QJsonObject& result, const QString& error) {
             if (self == nullptr)
                 return;
-            self->creating_ = false;
-            const auto created = remote::createdSession(result);
-            // A machine switched away from meanwhile keeps its conversation; it lists on return.
-            if (self->catalog_->machineId() != machine) {
+            const QString commandId = remote::queuedCommandId(result);
+            if (error.isEmpty() && !commandId.isEmpty()) {
+                self->createCommand_ = commandId;
                 self->render();
                 return;
             }
-            if (!error.isEmpty() || created.sessionId.isEmpty()) {
-                self->render();
-                self->composerReason_->setText(
-                    error.isEmpty() ? tr("The machine did not start the conversation.") : error);
-                return;
-            }
-            self->composer_->clear();
-            self->catalog_->refresh();
-            self->bind(created.sessionId, created.generation, true);
+            self->finishCreate(machine, result, error);
         });
+}
+
+void MachineWorkspaceView::finishCreate(const QString& machine, const QJsonObject& result,
+                                        const QString& error) {
+    creating_ = false;
+    createCommand_.clear();
+    disconnect(createCompletion_);
+    const auto created = remote::createdSession(result);
+    // A machine switched away from meanwhile keeps its conversation; it lists on return.
+    if (catalog_->machineId() != machine) {
+        render();
+        return;
+    }
+    if (!error.isEmpty() || created.sessionId.isEmpty()) {
+        createError_ = error.isEmpty() ? tr("The machine did not start the conversation.") : error;
+        render();
+        return;
+    }
+    composer_->clear();
+    catalog_->refresh();
+    bind(created.sessionId, created.generation, true);
 }
 
 } // namespace ketplus
