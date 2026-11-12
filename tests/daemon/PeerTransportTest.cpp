@@ -86,6 +86,10 @@ class PeerTransportTest final : public QObject {
                                  false, at),
                  QString("ice-path local=relay remote=host turn=udp epoch=7 event=open "
                          "at=1970-01-01T00:00:01.000Z"));
+        const auto changed = selectedPathLog(rtc::Candidate::Type::Relayed,
+                                             rtc::Candidate::Type::Host, 7, false, at, true);
+        QVERIFY(changed.contains("event=path-changed"));
+        QVERIFY(!changed.contains("event=open"));
         const auto restarted = selectedPathLog(rtc::Candidate::Type::Host,
                                                static_cast<rtc::Candidate::Type>(999), 8, true, at);
         QVERIFY(

@@ -39,10 +39,11 @@ struct WebRtcPeerLink::Impl {
         } catch (const std::exception&) {
             // Native exceptions can contain private candidate data. Do not log them.
         }
+        const bool changed = pathDecision.logged && completed && !reopened;
         if (!pathDecision.shouldLog(localType, remoteType, reopened, completed))
             return;
         qInfo().noquote() << selectedPathLog(localType, remoteType, owner->diagnosticEpoch(),
-                                             reopened, QDateTime::currentDateTimeUtc());
+                                             reopened, QDateTime::currentDateTimeUtc(), changed);
     }
 
     // Taking the mutex only protects the short enqueue operation against destruction;
