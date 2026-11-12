@@ -10,6 +10,8 @@
 #include "runtime/ResponseGuidance.h"
 
 #include <QCoreApplication>
+#include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -512,6 +514,40 @@ QString CursorAdapter::planLimitMessage() {
         .arg(account, loginCommand());
 }
 
+bool CursorAdapter::looksLikeUsageLimit(const QString& message) {
+    static const QRegularExpression expression(
+        QStringLiteral("reached (?:its|your) usage limit|usage limit (?:reached|exceeded)"),
+        QRegularExpression::CaseInsensitiveOption);
+    return expression.match(message).hasMatch();
+}
+
+qint64 CursorAdapter::usageLimitResetsAt(const QString& message) {
+    static const QRegularExpression expression(
+        QStringLiteral("return on (\\d{1,2})/(\\d{1,2})/(\\d{4})"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = expression.match(message);
+    if (!match.hasMatch())
+        return 0;
+    const QDate date(match.captured(3).toInt(), match.captured(1).toInt(),
+                     match.captured(2).toInt());
+    return date.isValid() ? date.startOfDay().toSecsSinceEpoch() : 0;
+}
+
+QString CursorAdapter::failureMessage(const QString& cursorMessage) {
+    QString said = cursorMessage.trimmed();
+    if (said.startsWith(QStringLiteral("ActionRequiredError:")))
+        said = said.mid(20).trimmed();
+    if (looksLikeAuthError(said))
+        return notAuthenticatedMessage();
+    // Checked before the plan wording: a used-up team can also be told to upgrade, and sending
+    // it to log in again or pick Auto would not help.
+    if (looksLikeUsageLimit(said))
+        return said;
+    if (looksLikePlanLimit(said))
+        return QStringLiteral("%1\n\nCursor said: %2").arg(planLimitMessage(), said);
+    return said;
+}
+
 bool CursorAdapter::looksLikePlanLimit(const QString& message) {
     const QString lower = message.trimmed().toLower();
     return lower.contains(QStringLiteral("upgrade your plan")) ||
@@ -805,6 +841,12 @@ void CursorAdapter::call(const QString& method, const QJsonObject& params, Callb
                 cliModelId(cachedCatalog_, params.value(QStringLiteral("model")).toString(),
                            params.value(QStringLiteral("effort")).toString());
             params.insert(QStringLiteral("model"), cliModel);
+            // A process started with `--model` keeps that model whatever ACP is told later, so
+            // Auto on it still ran the pinned model. Start it again unpinned while it is idle.
+            if (ready_ && !spawnModel_.isEmpty() && pinnedSpawnModel(cliModel).isEmpty() &&
+                turns_.isEmpty() && startingSessions_.isEmpty() && pending_.isEmpty() &&
+                queued_.isEmpty())
+                restartUnpinned();
             if (!ready_ && process_->state() == QProcess::NotRunning &&
                 pendingSpawnModel_.isEmpty())
                 pendingSpawnModel_ = pinnedSpawnModel(cliModel);
@@ -972,6 +1014,19 @@ void CursorAdapter::stop() {
     }
     starting_ = false;
     setReady(false);
+}
+
+void CursorAdapter::restartUnpinned() {
+    stopping_ = true;
+    process_->terminate();
+    if (!process_->waitForFinished(500)) {
+        process_->kill();
+        process_->waitForFinished(500);
+    }
+    // The finished handler settles the state and forgets the ACP sessions; the next turn loads
+    // its session again. A process that would not die keeps running the turn as before.
+    if (process_->state() == QProcess::NotRunning)
+        pendingSpawnModel_.clear();
 }
 
 void CursorAdapter::ensureStarted() {
@@ -1284,14 +1339,11 @@ void CursorAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
         if (it == turns_.end())
             return;
         if (!error.isEmpty()) {
-            finishTurn(sessionId, QStringLiteral("failed"),
-                       looksLikeAuthError(error)   ? notAuthenticatedMessage()
-                       : looksLikePlanLimit(error) ? planLimitMessage()
-                                                   : error);
+            finishTurn(sessionId, QStringLiteral("failed"), failureMessage(error));
             return;
         }
-        if (looksLikePlanLimit(it->assistantText)) {
-            finishTurn(sessionId, QStringLiteral("failed"), planLimitMessage());
+        if (looksLikePlanLimit(it->assistantText) || looksLikeUsageLimit(it->assistantText)) {
+            finishTurn(sessionId, QStringLiteral("failed"), failureMessage(it->assistantText));
             return;
         }
         emitContextUsage(sessionId, result);
@@ -1360,7 +1412,8 @@ void CursorAdapter::finishTurn(const QString& ketplusSessionId, const QString& s
         !signal.isEmpty() && !browser_tools::signalTurnEnd(signal))
         qWarning("Unable to signal the browser server that a turn of %s ended",
                  qUtf8Printable(ketplusSessionId));
-    if (!turn.assistantText.isEmpty() && !looksLikePlanLimit(turn.assistantText)) {
+    if (!turn.assistantText.isEmpty() && !looksLikePlanLimit(turn.assistantText) &&
+        !looksLikeUsageLimit(turn.assistantText)) {
         emit canonicalEvent(
             ketplusSessionId, QStringLiteral("item.completed"),
             {{QStringLiteral("item_id"), turn.itemId},
@@ -1374,8 +1427,12 @@ void CursorAdapter::finishTurn(const QString& ketplusSessionId, const QString& s
                           {QStringLiteral("status"), QStringLiteral("completed")}}}});
     }
     if (!turn.interrupted && !errorMessage.isEmpty()) {
-        emit canonicalEvent(ketplusSessionId, QStringLiteral("runtime.error"),
-                            {{QStringLiteral("message"), errorMessage}});
+        QJsonObject payload{{QStringLiteral("message"), errorMessage}};
+        if (const qint64 resetsAt =
+                looksLikeUsageLimit(errorMessage) ? usageLimitResetsAt(errorMessage) : 0;
+            resetsAt > 0)
+            payload.insert(QStringLiteral("resets_at"), resetsAt);
+        emit canonicalEvent(ketplusSessionId, QStringLiteral("runtime.error"), payload);
     }
     emit canonicalEvent(
         ketplusSessionId, QStringLiteral("turn.completed"),
