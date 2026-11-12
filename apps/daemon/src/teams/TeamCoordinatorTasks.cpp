@@ -184,7 +184,7 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 changes.value(QStringLiteral("pull_request")).toString().trimmed().left(500);
         const QString note = changes.value(QStringLiteral("note")).toString().trimmed();
         if (!note.isEmpty()) {
-            addHistory(*task, actor, QStringLiteral("note"), note.left(4000));
+            addHistory(*task, actor, QStringLiteral("note"), note.left(maximumWholeHistoryText));
             updates.append({.kind = QStringLiteral("note"),
                             .text = QStringLiteral("%1: %2").arg(task->id, note.left(500)),
                             .taskId = task->id});

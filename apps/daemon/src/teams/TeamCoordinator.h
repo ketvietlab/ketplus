@@ -289,6 +289,10 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QJsonObject directoryJson(const Team& team) const;
     [[nodiscard]] QJsonArray updatesJson(qint64 teamId, int limit = defaultPage,
                                          qint64 beforeId = 0) const;
+    // T-36: the whole text of a task's history entry whose text in the document was cut;
+    // nothing when it was not cut or the journal has no copy.
+    [[nodiscard]] std::optional<QString> wholeHistoryText(qint64 teamId, const QString& taskId,
+                                                          qsizetype entry) const;
 
     // `draft` carries the settings and the members with their session ids. Nothing is stored
     // when a rule refuses it.
@@ -472,6 +476,8 @@ class TeamCoordinator : public QObject {
                             const QString& raisedBy);
     static void addHistory(Task& task, const QString& actor, const QString& kind,
                            const QString& text, const QJsonObject& data = {});
+    // T-36: saves the whole texts of the entries cut since the last save, after the document.
+    void saveWholeHistoryTexts(Team& team);
     [[nodiscard]] std::optional<Candidate> candidate(const QString& sessionId) const;
     // Moves a task and records it; no permission check. Adds the actionable updates.
     void applyMove(Team& team, Task& task, const QString& to, const QString& actor,

@@ -115,7 +115,11 @@ QString teamInstructions(const TeamRoleContext& context) {
     }
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
-                            "the team. A team with two reviewers lists both in team_get; "
+                            "the team. team_tasks lists one short row per task (open=true for "
+                            "the tasks not done, mine=true for yours); team_tasks task_id=<id> "
+                            "reads one task with its last 10 history entries, history_start "
+                            "and history_limit page back, and entry=<index> reads a cut entry "
+                            "whole. A team with two reviewers lists both in team_get; "
                             "\"reviewer\" then reaches the one that reviews your task, and "
                             "otherwise you send to its number.")
           << QStringLiteral("[/KetPlus team]");

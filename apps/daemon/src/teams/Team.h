@@ -68,6 +68,9 @@ struct HistoryEntry final {
     QString kind;
     QString text;
     QJsonObject data;
+    // T-36: the text before the cut, when `text` was cut. Never in the document: commit()
+    // saves it to the journal, where team_tasks reads it by entry, and clears it.
+    QString wholeText;
 };
 
 // A team's whole document goes to clients in one daemon frame (1 MiB), so what a task keeps
@@ -76,11 +79,16 @@ struct HistoryEntry final {
 inline constexpr qsizetype maximumOutsidePaths = 200;
 inline constexpr qsizetype maximumHistoryText = 2000;
 inline constexpr qsizetype maximumHistoryListItems = 50;
+// T-36: the most of one entry's text the journal keeps whole beside the document.
+inline constexpr qsizetype maximumWholeHistoryText = 65536;
 
 // The entry within the bounds above. Entries read from older documents are bounded too, and
 // so are the team's Updates (their text and data), when written and when read.
 [[nodiscard]] HistoryEntry bounded(HistoryEntry entry);
 [[nodiscard]] QString boundedText(QString text);
+// `text` within `bound` characters; a cut one ends "… (N more characters; <hint>)", or
+// without the hint when it is empty.
+[[nodiscard]] QString cutText(QString text, qsizetype bound, const QString& hint = {});
 [[nodiscard]] QJsonObject boundedData(QJsonObject data);
 
 struct Task final {
@@ -249,6 +257,7 @@ inline constexpr int maximumPage = 200;
 // (the end when negative), oldest first, with "history_total" and "history_start".
 [[nodiscard]] QJsonObject taskPageJson(const Task& task, int limit = defaultPage,
                                        qsizetype before = -1);
+[[nodiscard]] QJsonObject toJson(const HistoryEntry& entry);
 [[nodiscard]] QJsonObject toJson(const Decision& decision);
 [[nodiscard]] QJsonObject toJson(const Member& member);
 

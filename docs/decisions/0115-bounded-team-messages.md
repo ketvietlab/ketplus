@@ -56,10 +56,29 @@ one frame, because history, Updates and decisions only grow.
    - **History:** `team.task.get {history_limit, history_before}` returns one page of the
      task's history, oldest first. The page holds the newest `history_limit` entries
      (default 50, at most 200) before index `history_before`, plus `history_total` and
-     `history_start`. Answers to task changes and the agents' `team_tasks` tool return
-     the newest page.
+     `history_start`. Answers to task changes return the newest page. The agents'
+     `team_tasks` tool has its own shapes (below, T-36).
    - **Decisions:** `team.decision.list {state, before_id, limit}` is paged the same way.
    - The stored document keeps everything; only what is sent is cut.
+   - **Agents (T-36):** `team_tasks` answers agents in shapes bounded for a model's
+     context; the desktop and paired devices keep the commands above, unchanged.
+     - Without `task_id`: `tasks`, one row per task with `id`, `title`, `state`, `round`,
+       `owner` (`{number, name}` or null), `lane`, `depends_on`, `pull_request`, and
+       `question` for a blocked task. No description, criteria or history: 40 tasks with
+       long descriptions stay under 16 KiB. `open: true` leaves out done tasks;
+       `mine: true` keeps the tasks the caller owns or reviews.
+     - With `task_id`: the task as `team.task.get` sends it, with the newest 10 entries
+       (`history_limit`, 1 to 50) or `history_limit` entries from `history_start`, plus
+       `history_total` and `history_start`. Each entry carries its index as `entry`. A
+       string in an entry's `data` longer than 2,000 characters is cut in the page.
+     - With `task_id` and `entry`: `{id, entry, history_total}`, that one entry uncut.
+       An index outside the history is refused with `entry_not_found`.
+   - **Whole texts (T-36):** a history text longer than 2,000 characters is cut in the
+     document as before. The cut ends `… (N more characters; team_tasks task_id=T-n
+     entry=i reads it whole)`, and the journal keeps the whole text, up to 64 KiB, in
+     `team_history_texts (team_id, task_id, entry)`. It is written after the document is
+     saved and deleted with the team. A note may be as long as that bound. A text the
+     journal could not keep reads as its cut.
 
 3. **The desktop reads the rest when it needs it.**
    - When a directory-form team arrives, `TeamDirectory` keeps the tasks and decisions

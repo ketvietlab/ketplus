@@ -433,6 +433,18 @@ developers), `team_task_create`,
 `team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
 the role that may.
 
+`team_tasks` (T-36) answers in shapes bounded for a model's context:
+
+- No `task_id`: `tasks`, one row per task: `id`, `title`, `state`, `round`, `owner`
+  (`{number, name}` or null), `lane`, `depends_on`, `pull_request`, and `question` when
+  blocked. `open: true` leaves out done tasks; `mine: true` keeps the caller's own and
+  reviewed tasks.
+- `task_id`: the task with its description and criteria and its newest 10 history entries,
+  or `history_limit` (1 to 50) entries from `history_start`, with `history_total` and
+  `history_start`; each entry carries its index as `entry`.
+- `task_id` and `entry`: `{id, entry, history_total}`, that entry uncut, including a text
+  the document keeps cut (ADR 0115, whole texts).
+
 ## Consequences
 
 - The daemon, not the prompt, enforces every role rule; role instructions only explain.
