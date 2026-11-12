@@ -1,24 +1,41 @@
 #include "FakeMachineBackend.h"
+#include "FakeRelayLink.h"
+#include "KetDialog.h"
 #include "KetSidebarTree.h"
 #include "MachineHosts.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/MainWindow.h"
+#include "control/ControlV2Client.h"
 #include "daemon/FakeSshLink.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineComposition.h"
 #include "machine/MachineSelection.h"
 #include "machine/MachineWorkspaceView.h"
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxMachines.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteControlView.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
 #include <QAction>
+#include <QJsonArray>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
+
+namespace ketplus::remote {
+class RemoteControlTestAccess {
+  public:
+    static void signIn(ControlV2Client& client) {
+        client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
+    }
+    static void entitle(ControlV2Client& client, const QJsonArray& entitlements) {
+        client.credential_.insert(QStringLiteral("entitlements"), entitlements);
+    }
+};
+} // namespace ketplus::remote
 
 using namespace ketplus;
 using namespace ketplus::test;
@@ -131,41 +148,90 @@ class MachineWindowTest final : public QObject {
         QTRY_VERIFY(sidebarTitles(window).contains("Fix the build"));
     }
 
-    // At launch main() starts the window's Linux machines: Connections is created hidden, and a
-    // machine it connects is registered and can be picked before Connections is ever opened.
-    void linuxMachinesStartWithTheWindow() {
-        ThemeManager theme(*qApp);
-        MainWindow window(theme);
-        window.openFolder(workspace_.path());
-        window.resize(1100, 760);
-        window.show();
-        window.startLinuxMachines();
-        auto* connections = window.findChild<RemoteControlView*>();
-        QVERIFY(connections != nullptr);
-        QVERIFY(!shown(connections));
-        LinuxMachinesSection* section = connections->linuxMachines();
-        QVERIFY(section->model()->backendsAttached());
+    // The app's one set of Linux machines (ADR 0119): main() attaches and starts it once, and
+    // every window reads from it. Two windows share one backend per machine (one SSH tunnel, one
+    // Relay link and so one outbox writer per host), a prompt opens in one window only, and
+    // closing a window leaves the other connected.
+    void twoWindowsShareOneSetOfLinuxMachines() {
         QTemporaryDir store;
         const QString socket =
-            QStringLiteral("ketplus-machine-launch-%1").arg(QCoreApplication::applicationPid());
+            QStringLiteral("ketplus-machine-shared-%1").arg(QCoreApplication::applicationPid());
         remote::ssh::testing::FakeDaemon daemon(socket);
-        section->attachSshBackend(
-            store.filePath("machines.json"),
-            [socket](const remote::ssh::SshTarget&) -> std::unique_ptr<remote::ssh::SshLink> {
-                return std::make_unique<remote::ssh::testing::FakeLink>(socket);
-            });
-        section->model()->requestSshConnect("build-node-01");
-        MachineSelection* selection = window.machineComposition()->selection();
+        int tunnels = 0;
+        int relayLinks = 0;
+        LinuxMachines shared;
+        shared.attachSshBackend(store.filePath("machines.json"),
+                                [socket, &tunnels](const remote::ssh::SshTarget&)
+                                    -> std::unique_ptr<remote::ssh::SshLink> {
+                                    ++tunnels;
+                                    return std::make_unique<remote::ssh::testing::FakeLink>(socket);
+                                });
+        shared.attachRelayBackend([&relayLinks](const QString& relayId) {
+            ++relayLinks;
+            return std::make_unique<testing::FakeRelayLink>(relayId);
+        });
+        shared.start();
+
+        ThemeManager theme(*qApp);
+        auto first = std::make_unique<MainWindow>(theme);
+        MainWindow second(theme);
+        for (MainWindow* window : {first.get(), &second}) {
+            window->openFolder(workspace_.path());
+            window->resize(1100, 760);
+            window->show();
+            window->useLinuxMachines(&shared);
+            auto* connections = window->findChild<RemoteControlView*>();
+            QVERIFY(connections != nullptr);
+            QVERIFY(!shown(connections)); // the picker lists them before Connections opens
+            QCOMPARE(connections->linuxMachines()->model(), shared.model());
+        }
+
+        // One SSH tunnel, registered in both windows' MachineSelection.
+        shared.model()->requestSshConnect("build-node-01");
         const QString id = daemon.fingerprint;
-        QTRY_VERIFY(selection->backendFor(id) != nullptr);
-        QVERIFY(!shown(connections));
-        auto* bar = window.findChild<ActivityBar*>();
-        emit bar->machineRequested(id);
-        QVERIFY(shown(window.machineComposition()->existingView()));
-        QVERIFY(!shown(connections));
-        QTRY_VERIFY(daemon.requests.contains("workspace.list"));
-        emit bar->machineRequested("local");
-        QCOMPARE(selection->machineId(), QStringLiteral("local"));
+        MachineSelection* firstSelection = first->machineComposition()->selection();
+        MachineSelection* secondSelection = second.machineComposition()->selection();
+        QTRY_VERIFY(firstSelection->backendFor(id) != nullptr &&
+                    secondSelection->backendFor(id) != nullptr);
+        QCOMPARE(firstSelection->backendFor(id), secondSelection->backendFor(id));
+        QCOMPARE(firstSelection->backendFor(id), shared.machineBackend(id));
+        QCOMPARE(tunnels, 1);
+
+        // One Relay link per host once the account is entitled, in both windows too.
+        remote::RemoteControlTestAccess::signIn(*shared.client_);
+        remote::RemoteControlTestAccess::entitle(*shared.client_,
+                                                 QJsonArray{QStringLiteral("ketplus.relay")});
+        shared.loading_ = true; // keeps the Relay list request off the network
+        shared.syncEntitlement();
+        QVERIFY(shared.model()->relayEntitled());
+        shared.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:relayHost"),
+                                   QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+        QTRY_VERIFY(secondSelection->backendFor("SHA256:relayHost") != nullptr);
+        QCOMPARE(firstSelection->backendFor("SHA256:relayHost"),
+                 secondSelection->backendFor("SHA256:relayHost"));
+        QCOMPARE(relayLinks, 1);
+
+        // Connections is shown in the second window: a prompt opens its card there, once.
+        auto* secondBar = second.findChild<ActivityBar*>();
+        emit secondBar->modeRequested(ActivityBar::Mode::Remote);
+        shared.model()->promptSshConnect("build-node-01");
+        const auto cards = [](MainWindow& window) {
+            return window.findChildren<ket::Dialog*>(QStringLiteral("linuxPairingDialog")).size();
+        };
+        QTRY_COMPARE(cards(second), 1);
+        QCOMPARE(cards(*first), 0);
+        delete second.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog"));
+
+        // Closing the first window neither drops nor restarts a connection.
+        first.reset();
+        QCOMPARE(shared.model()->machine(id)->state, LinuxMachine::State::Connected);
+        QCOMPARE(secondSelection->backendFor(id), shared.machineBackend(id));
+        QCOMPARE(tunnels, 1);
+        QCOMPARE(relayLinks, 1);
+        QTest::qWait(50);
+        QCOMPARE(shared.model()->machine(id)->state, LinuxMachine::State::Connected);
+        emit secondBar->machineRequested("local");
+        shared.model()->setMachines({}); // the windows' fakes go before the set
     }
 
     // Connections registers each listed machine's backend (MainWindowRemote's syncBackends call

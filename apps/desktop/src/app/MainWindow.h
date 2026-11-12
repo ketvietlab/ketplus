@@ -22,6 +22,9 @@
 #include <memory>
 
 class QCloseEvent;
+namespace ketplus {
+class LinuxMachines;
+}
 class QEvent;
 class QShortcut;
 class QUrl;
@@ -78,10 +81,11 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 
   public:
-    // Attaches the saved SSH machines and, while the account is entitled, the Relay machines,
-    // and connects them, so the machine picker lists them before Connections is opened. main()
-    // calls it for each window; tests that do not leave the window without remote machines.
-    void startLinuxMachines();
+    // Shows the app's one set of Linux machines (ADR 0119) in this window: its picker,
+    // MachineSelection and Connections read from `machines`, which main() owns, attaches and
+    // starts once, so the picker lists them before Connections is opened. Windows that are not
+    // given a set (tests) make their own when Connections opens.
+    void useLinuxMachines(LinuxMachines* machines);
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
     ~MainWindow() override;
 
@@ -470,6 +474,7 @@ class MainWindow final : public QMainWindow {
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
+    QPointer<LinuxMachines> sharedLinuxMachines_;
     remote::DaemonClient* accountDaemon_{nullptr};
     TeamDirectory* teams_{nullptr};
     QPointer<TeamPage> teamPage_;

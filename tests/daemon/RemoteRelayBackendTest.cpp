@@ -395,6 +395,56 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(relay.submissions.value(id), submitted);
     }
 
+    // Desktop has one backend per Relay host for all its windows (ADR 0119, T-20), so it is the
+    // host's only outbox writer: commands two windows queue while the host is away are all kept
+    // across a restart and each is applied once.
+    void commandsTwoWindowsQueueOnTheSharedBackendSurviveARestart() {
+        QTemporaryDir dir;
+        const auto outbox = dir.filePath("machines/linux-host/outbox.json");
+        FixtureTransport network;
+        auto first = std::make_unique<ControlV2Client>(QUrl{origin});
+        EncryptedFixture fixture(*first, network);
+        RemoteControlTestAccess::persist(*first);
+        SyntheticRelay relay(network, fixture, *first);
+        QStringList ids;
+        {
+            RelayMachineBackend backend(first.get(), "linux-host", fastOptions(outbox));
+            connectAndWait(backend);
+            Answer listing;
+            backend.listConversations({}, listing.callback());
+            QTRY_VERIFY(listing.done);
+            relay.hostPaused = true;
+            // Both windows show the same conversation; each sends its own command.
+            Answer fromFirstWindow;
+            Answer fromSecondWindow;
+            backend.startTurn("opaque-session", 3, {{"prompt", "first"}},
+                              fromFirstWindow.callback());
+            backend.stopTurn("opaque-session", 3, fromSecondWindow.callback());
+            QTRY_COMPARE(backend.pendingCommands().size(), 2);
+            ids = backend.pendingCommands();
+            relay.offline = true;
+            QTRY_VERIFY(backend.connectionState() != ConnectionState::Connected);
+        }
+        first.reset();
+
+        ControlV2Client second{QUrl{origin}};
+        RemoteControlTestAccess::transport(second, network);
+        relay.offline = false;
+        relay.hostPaused = false;
+        RelayMachineBackend backend(&second, "linux-host", fastOptions(outbox));
+        QCOMPARE(backend.pendingCommands(), ids);
+        QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
+        connectAndWait(backend);
+        QTRY_COMPARE(completed.size(), 2);
+        QStringList done{completed.at(0).at(0).toString(), completed.at(1).at(0).toString()};
+        done.sort();
+        ids.sort();
+        QCOMPARE(done, ids);
+        for (const auto& id : std::as_const(ids))
+            QCOMPARE(relay.executions.value(id), 1);
+        QVERIFY(backend.pendingCommands().isEmpty());
+    }
+
     void goingOfflineReconnectsAndARevokedCredentialFencesInFlightResults() {
         QTemporaryDir dir;
         FixtureTransport network;
