@@ -257,11 +257,17 @@ it adds the count by severity:
 - `… round 2 of 2 by Reviewer: no findings. Ready to merge.`
 - `… findings (1 High, …). The round limit is reached: you decide.`
 
-The severities come from the review reply, one finding per id followed by its severity
-(`**L1 — Low — file:4:**`, the reviewers' format). A reply without ids counts each line
-that names a severity before a colon. Nothing counted reads "severity not stated". The
-same line is in the team page's Updates and in the phone's team payload, which both show
-the team's updates. No message from member to member is added. The developer still
+The severities come from the review reply. A finding is a line that starts with its id
+and severity, in the forms the team's reviewers write (`- **H1, High.** …`,
+`- **L1 (Low), file:4:** …`, `**M1 — Medium — …**`), or with its severity alone
+(``- **Low**, `file:4`: …``). An id is counted once, so a finding mentioned again in the
+prose is not counted twice. A finding marked as settled (`L1 — Low — fixed`, `✅ N2 …`),
+as round 2 lists round 1's findings, is not counted. A reply without such lines counts each
+line that names a severity before a colon, but not a summary of counts
+(`High: 0, Medium: 1`). A reply that names no severity reads "severity not stated". At the
+round limit the verdict line is the `round_limit` warning itself, so the leader reads one
+line besides the task's blocked state. The same line is in the team page's Updates and in
+the phone's team payload, which both show the team's updates. No message from member to member is added. The developer still
 receives the findings as the `review` reply, and the leader reads only the line.
 
 **A wait alone sends no digest (decided 2026-11-12).** A `wait` entry is shown on the

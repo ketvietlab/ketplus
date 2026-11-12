@@ -115,6 +115,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamAgentTasks.h
     src/teams/TeamRemoteView.cpp
     src/teams/TeamRemoteView.h
+    src/teams/TeamVerdictLine.cpp
+    src/teams/TeamVerdictLine.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorAssign.cpp
@@ -132,7 +134,6 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
     src/teams/TeamCoordinatorReviews.cpp
-    src/teams/TeamVerdictLine.cpp
     src/teams/TeamCoordinatorReviewTools.cpp
     src/teams/TeamCoordinatorReviewers.cpp
     src/teams/TeamCoordinatorTasks.cpp

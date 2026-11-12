@@ -14,17 +14,21 @@ struct Severities final {
     int medium{0};
     int low{0};
     int nit{0};
+    // The reply named findings by severity, though all of them may be settled.
+    bool stated{false};
 
     [[nodiscard]] bool any() const { return high + medium + low + nit > 0; }
 };
 
-// Counts the findings of a review reply. A finding is counted once by its id followed by its
-// severity (the reviewers' format: "**L1 — Low — file:4:** …"); a reply without them counts
-// the lines that name a severity before a colon ("web/cart.ts:4 high: no total."). Critical
-// counts as High.
+// Counts the open findings of a review reply, one per line that starts with a finding's id and
+// its severity ("- **H1, High.** …", "- **L1 (Low), file:4:** …", "**M1 — Medium — …**") or
+// with its severity alone ("- **Low**, `file:4`: …"). An id is counted once. A finding marked
+// fixed ("L1 — Low — fixed", "✅ L2 …") is not counted. A reply without such lines counts the
+// lines that name a severity before a colon ("web/cart.ts:4 high: no total."), but not a
+// summary of counts ("High: 0, Medium: 1"). Critical counts as High.
 [[nodiscard]] Severities count(const QString& reply);
 
-// "0 High, 0 Medium, 6 Low, 3 Nit", or "severity not stated" when nothing was counted.
+// "0 High, 0 Medium, 6 Low, 3 Nit", or "severity not stated" when the reply named none.
 [[nodiscard]] QString counts(const Severities& severities);
 
 struct Verdict final {

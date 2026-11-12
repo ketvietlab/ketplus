@@ -371,10 +371,11 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
         if (failure.isEmpty() && !noVerdict)
             task->missingVerdicts = 0;
         // T-75 (ADR 0114 §7): every verdict is a line for the leader, so its next digest is
-        // due without waiting for another update that needs it.
+        // due without waiting for another update that needs it. At the round limit the same
+        // line is the `round_limit` warning, so the leader reads it once.
         const auto told = [&](const bool withFindings, const bool atLimit) {
             updates.append(
-                {.kind = QStringLiteral("verdict"),
+                {.kind = atLimit ? QStringLiteral("round_limit") : QStringLiteral("verdict"),
                  .text = verdict_line::text({.taskId = taskId,
                                              .pullRequest = task->pullRequest,
                                              .round = round,
@@ -437,22 +438,17 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
                        QStringLiteral("Round %1: findings.").arg(round) + where(),
                        verdictData(QStringLiteral("findings")));
-            told(true, round >= limit);
             if (round >= limit) {
                 // Past the limit the leader decides (ADR 0114 §2); with one round, after it.
                 task->resumeState = state::inProgress;
                 task->question = roundLimitQuestion(round, shownLimit(limit, round));
                 if (!link.isEmpty())
                     task->question += QStringLiteral(" The findings: %1").arg(link);
+                told(true, true);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
-                updates.append({.kind = QStringLiteral("round_limit"),
-                                .text = QStringLiteral("%1 still has findings after %2 rounds.")
-                                            .arg(taskId)
-                                            .arg(round),
-                                .taskId = taskId,
-                                .actionable = true});
             } else {
+                told(true, false);
                 applyMove(*team, *task, state::inProgress, QStringLiteral("daemon"),
                           QStringLiteral("review round %1 found issues").arg(round), updates);
                 back = TeamMessage{
