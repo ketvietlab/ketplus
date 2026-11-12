@@ -146,7 +146,7 @@ reveal, Source Control, work report, team task) are refused with a reason shown
 under the composer, and remote paths are never checked against this disk.
 Remote routes do not negotiate server-side activity groups, so no group
 expansion is requested over a route that cannot serve it. Images that point at
-files on the other machine do not load on this Mac.
+files on the other machine do not load on this Mac yet (ketplus#637).
 
 ### Machine identity
 

@@ -37,6 +37,8 @@ class MachineRichTranscript final : public QObject {
 
   private:
     void sync(const QString& scope, const QVariantList& rows);
+    // Updates the rows the renderer shows under the same key with other contents.
+    void updateChanged(const QVariantList& rows);
     void publishHistory();
 
     AgentWorkspaceView* view_{nullptr};

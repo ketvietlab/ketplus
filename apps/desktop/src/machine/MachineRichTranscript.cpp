@@ -1,12 +1,12 @@
 #include "machine/MachineRichTranscript.h"
 
+#include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "machine/MachineConversationSession.h"
 
 #include <QJsonObject>
 
-#include <algorithm>
 #include <utility>
 
 namespace ketplus {
@@ -73,9 +73,11 @@ void MachineRichTranscript::sync(const QString& scope, const QVariantList& rows)
         return;
     const QVariantList before = std::exchange(rows_, rows);
     const qsizetype added = rows.size() - before.size();
-    // An older page: what was shown is the tail of the new rows.
-    if (added > 0 && std::equal(before.cbegin(), before.cend(), rows.cbegin() + added)) {
+    // An older page: what was shown keeps its keys at the tail of the new rows. A row the page
+    // completes (an answer streamed across both pages) is updated in place after the prepend.
+    if (added > 0 && sameKeys(before, 0, rows, added, before.size())) {
         view_->prependMessages(rows.mid(0, added));
+        updateChanged(rows);
         return;
     }
     // A live event: the rows shown keep their keys; the last ones changed or new ones follow.
@@ -91,9 +93,22 @@ void MachineRichTranscript::sync(const QString& scope, const QVariantList& rows)
     // stay and replaces the rest.
     if (added > 0 && sameKeys(before, 1, rows, added + 1, before.size() - 1)) {
         view_->replaceMessageWindow(rows);
+        // The renderer keeps the rows that stay as they were; the page may have completed them.
+        updateChanged(rows);
         return;
     }
     view_->resetMessages(rows, scope);
+}
+
+void MachineRichTranscript::updateChanged(const QVariantList& rows) {
+    const AgentMessageModel* model = view_->messageModel();
+    if (model == nullptr || model->sourceCount() != rows.size())
+        return;
+    for (qsizetype index = 0; index < rows.size(); ++index)
+        if (keyOf(rows.at(index)) ==
+                model->source(int(index)).value(QStringLiteral("messageKey")).toString() &&
+            QVariant(model->source(int(index))) != rows.at(index))
+            view_->updateMessage(int(index), rows.at(index).toMap());
 }
 
 void MachineRichTranscript::publishHistory() {

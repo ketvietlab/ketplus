@@ -2,6 +2,7 @@
 #include "MachineHosts.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/TranscriptRowGeometry.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationActions.h"
 #include "machine/MachineConversationSession.h"
@@ -15,8 +16,12 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
+#include <QQuickItem>
+#include <QQuickView>
 #include <QSignalSpy>
 #include <QtTest>
+
+#include <cmath>
 
 using namespace ketplus;
 using namespace ketplus::test;
@@ -250,7 +255,7 @@ class MachineTranscriptPagingTest final : public QObject {
         ssh.answer = pagedHost(sshHost(), "linux-1", 1, false);
         MachineCatalog catalog;
         MachineWorkspaceView view(&catalog);
-        view.resize(640, 480);
+        view.resize(640, 260);
         view.show();
         catalog.setBackend(&ssh);
         QTRY_COMPARE(catalog.conversations().size(), 1);
@@ -264,11 +269,34 @@ class MachineTranscriptPagingTest final : public QObject {
         QTRY_COMPARE(transcriptRows(view).size(), 6);
         requestOlder(view, 2);
         QTRY_COMPARE(transcriptRows(view).size(), 9);
+
+        // A reader in the older rows: a live event below keeps their row where it was.
+        auto* transcript =
+            renderer(view)->quickView()->rootObject()->findChild<QQuickItem*>("agentTranscript");
+        QVERIFY(transcript != nullptr);
+        QTRY_VERIFY(transcript->property("contentHeight").toDouble() > transcript->height());
+        transcript->setProperty("followTail", false);
+        transcript->setProperty("contentY", transcript->property("originY").toDouble() + 20);
+        QTest::qWait(50);
+        QVERIFY(!transcript->property("followTail").toBool());
+        const QString key = transcript->property("readingAnchor").toMap().value("key").toString();
+        QVERIFY(!key.isEmpty());
+        auto* geometry = model->geometry();
+        const auto screenTop = [&] {
+            return geometry->top(geometry->rowForKey(key)) -
+                   transcript->property("contentY").toDouble();
+        };
+        const double before = screenTop();
+
         ssh.deliver(message("linux-1", 1, 10, "live 10"));
         QTRY_COMPARE(transcriptRows(view).size(), 10);
         QCOMPARE(transcriptRows(view).last(), QStringLiteral("live 10"));
         QCOMPARE(renderer(view)->messageModel(), model);
         QCOMPARE(resets.size(), 0);
+        QTest::qWait(50);
+        QVERIFY(!transcript->property("followTail").toBool());
+        QVERIFY2(std::abs(screenTop() - before) <= 1.0,
+                 qPrintable(QStringLiteral("%1 -> %2").arg(before).arg(screenTop())));
     }
 
     // T-18: rename, fork and archive go through MachineBackend where the route carries them;
