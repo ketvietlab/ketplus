@@ -44,10 +44,30 @@ QHash<QString, QString> parseResolvedConfig(const QByteArray& output) {
 
 QStringList knownHostsFiles(const QHash<QString, QString>& config) {
     QStringList files;
-    for (const auto* key : {"userknownhostsfile", "globalknownhostsfile"})
-        for (const auto& path : config.value(QLatin1String(key)).split(' ', Qt::SkipEmptyParts))
+    for (const auto* key : {"userknownhostsfile", "globalknownhostsfile"}) {
+        const auto tokens = config.value(QLatin1String(key)).split(' ', Qt::SkipEmptyParts);
+        for (qsizetype i = 0; i < tokens.size(); ++i) {
+            auto path = tokens.at(i);
+            if (path.startsWith('"')) {
+                // A quoted path, as ssh_config writes one.
+                while (!path.endsWith('"') && i + 1 < tokens.size())
+                    path += ' ' + tokens.at(++i);
+                path = path.mid(1, path.size() - (path.endsWith('"') ? 2 : 1));
+            } else {
+                // The longest run of tokens that names an existing file is one path.
+                for (qsizetype last = tokens.size() - 1; last > i; --last) {
+                    const auto joined = tokens.mid(i, last - i + 1).join(' ');
+                    if (QFileInfo::exists(expandHome(joined))) {
+                        path = joined;
+                        i = last;
+                        break;
+                    }
+                }
+            }
             if (path != "none" && path != "/dev/null")
                 files.append(expandHome(path));
+        }
+    }
     return files;
 }
 
@@ -66,23 +86,53 @@ QList<HostKey> parseCaptured(const QByteArray& output) {
     return keys;
 }
 
-QHash<QString, QStringList> parseKnownEntries(const QByteArray& output) {
-    QHash<QString, QStringList> entries;
+void KnownEntries::merge(const KnownEntries& other) {
+    for (auto it = other.keys.cbegin(); it != other.keys.cend(); ++it)
+        keys[it.key()].append(it.value());
+    revoked.append(other.revoked);
+    certificateAuthority |= other.certificateAuthority;
+}
+
+KnownEntries parseKnownEntries(const QByteArray& output) {
+    KnownEntries entries;
     for (const auto& raw : output.split('\n')) {
         const auto line = QString::fromUtf8(raw).trimmed();
         if (line.isEmpty() || line.startsWith('#'))
             continue;
         auto fields = line.split(' ', Qt::SkipEmptyParts);
-        // A revoked key never verifies a host; a CA line is not a host key.
-        if (!fields.isEmpty() && fields.first().startsWith('@')) {
-            if (fields.first() != "@revoked" && fields.first() != "@cert-authority")
-                continue;
+        if (fields.first().startsWith('@')) {
+            // "@marker hosts type key": a revoked key never verifies a host, a CA line is no
+            // host key but means ssh can verify a certificate the host presents.
+            if (fields.first() == "@revoked" && fields.size() >= 4)
+                entries.revoked.append(fields.at(3));
+            else if (fields.first() == "@cert-authority" && fields.size() >= 4)
+                entries.certificateAuthority = true;
             continue;
         }
         if (fields.size() >= 3)
-            entries[fields.at(1)].append(fields.at(2));
+            entries.keys[fields.at(1)].append(fields.at(2));
     }
     return entries;
+}
+
+SshFailure classifySshError(const QByteArray& err) {
+    static const QRegularExpression changed(
+        "^(@\\s+WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\\s+@|"
+        "Host key verification failed\\.)$");
+    static const QRegularExpression denied("^\\S+: Permission denied \\([A-Za-z0-9,@._-]+\\)\\.$");
+    static const QRegularExpression negotiate(
+        "^Unable to negotiate with \\S+ port \\d+: no matching host key type found\\.");
+    auto failure = SshFailure::Other;
+    for (const auto& raw : err.split('\n')) {
+        const auto line = QString::fromUtf8(raw).trimmed();
+        if (changed.match(line).hasMatch())
+            return SshFailure::HostKeyChanged;
+        if (negotiate.match(line).hasMatch())
+            failure = SshFailure::NoMatchingHostKeyType;
+        else if (denied.match(line).hasMatch() && failure == SshFailure::Other)
+            failure = SshFailure::AuthFailed;
+    }
+    return failure;
 }
 
 QStringList algorithmsFor(const QStringList& keyTypes) {
@@ -136,32 +186,59 @@ bool recordHostKey(const QString& file, const HostKey& key, QString* error) {
 }
 
 QString remoteSocketProbe() {
-    // No single quote anywhere: the caller wraps it in sh -c '...'.
+    // No single quote anywhere: the caller wraps it in sh -c '...'. Each setting comes from the
+    // environment, then the unit's daemon.env, then the unit's default.
     return QStringLiteral(
-        "s=\"${KETPLUS_DAEMON_SOCKET:-}\"; e=\"$HOME/.config/ketplus/daemon.env\"; "
-        "if [ -z \"$s\" ] && [ -r \"$e\" ]; then "
-        "s=$(sed -n \"s/^[[:space:]]*KETPLUS_DAEMON_SOCKET=//p\" \"$e\" | tail -n 1 | "
-        "tr -d \"\\\"\"); fi; "
+        "e=\"$HOME/.config/ketplus/daemon.env\"; "
+        "v() { if [ -r \"$e\" ]; then sed -n \"s/^[[:space:]]*$1=//p\" \"$e\" | tail -n 1 | "
+        "tr -d \"\\\"\"; fi; }; "
+        "s=\"${KETPLUS_DAEMON_SOCKET:-}\"; if [ -z \"$s\" ]; then s=$(v KETPLUS_DAEMON_SOCKET); "
+        "fi; "
+        "d=\"${KETPLUS_DAEMON_DATA_DIR:-}\"; if [ -z \"$d\" ]; then d=$(v "
+        "KETPLUS_DAEMON_DATA_DIR); "
+        "fi; if [ -z \"$d\" ]; then d=\"${XDG_DATA_HOME:-$HOME/.local/share}/Ketsuite/KetPlus\"; "
+        "fi; "
         "if [ -z \"$s\" ]; then r=\"${XDG_RUNTIME_DIR:-}\"; "
         "if [ -z \"$r\" ] && [ -d \"/run/user/$(id -u)\" ]; then r=\"/run/user/$(id -u)\"; fi; "
-        "if [ -z \"$r\" ]; then "
-        "r=\"${KETPLUS_DAEMON_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/Ketsuite/KetPlus}\"; "
-        "fi; s=\"$r/ketplus-daemon-v0\"; fi; "
+        "if [ -z \"$r\" ]; then r=\"$d\"; fi; s=\"$r/ketplus-daemon-v0\"; fi; "
+        "k=\"${KETPLUS_DAEMON_TOKEN_FILE:-}\"; if [ -z \"$k\" ]; then "
+        "k=$(v KETPLUS_DAEMON_TOKEN_FILE); fi; "
+        "if [ -z \"$k\" ]; then k=\"$d/daemon/local.token\"; fi; "
         "if [ -S \"$s\" ]; then t=present; else t=missing; fi; "
-        "printf \"ketplus-socket %s %s\\n\" \"$t\" \"$s\"");
+        "printf \"ketplus-socket %s %s\\n\" \"$t\" \"$s\"; "
+        "if [ \"$t\" = present ]; then "
+        "if [ ! -f \"$k\" ] || [ ! -s \"$k\" ] || [ \"$(wc -c < \"$k\" | tr -d \" \")\" -gt 4096 "
+        "]; then "
+        "echo ketplus-token-missing; else "
+        "m=$(ls -lnL \"$k\" | cut -c2-10); o=$(ls -lnL \"$k\" | awk \"{print \\$3}\"); "
+        "case \"$m\" in ???------) p=yes;; *) p=no;; esac; "
+        "if [ \"$p\" = yes ] && [ \"$o\" = \"$(id -u)\" ]; then "
+        "printf \"ketplus-token %s\\n\" \"$(base64 < \"$k\" | tr -d \"\\n\")\"; "
+        "else echo ketplus-token-permissive; fi; fi; fi");
 }
 
-bool parseSocketProbe(const QByteArray& output, bool* present, QString* path) {
-    static const QRegularExpression line("^ketplus-socket (present|missing) (/[^\\s:]{1,1023})$");
+bool parseDaemonProbe(const QByteArray& output, DaemonProbe* probe) {
+    static const QRegularExpression socket("^ketplus-socket (present|missing) (/[^\\s:]{1,1023})$");
+    static const QRegularExpression token("^ketplus-token ([A-Za-z0-9+/]{1,8192}={0,2})$");
+    bool found = false;
+    DaemonProbe result;
     for (const auto& raw : output.split('\n')) {
-        const auto match = line.match(QString::fromUtf8(raw).trimmed());
-        if (!match.hasMatch())
-            continue;
-        *present = match.captured(1) == "present";
-        *path = match.captured(2);
-        return true;
+        const auto line = QString::fromUtf8(raw).trimmed();
+        if (const auto match = socket.match(line); match.hasMatch() && !found) {
+            found = true;
+            result.present = match.captured(1) == "present";
+            result.socketPath = match.captured(2);
+        } else if (const auto value = token.match(line); value.hasMatch() && found) {
+            result.credential = QByteArray::fromBase64(value.captured(1).toLatin1());
+            result.token = result.credential.isEmpty() ? DaemonProbe::Token::Missing
+                                                       : DaemonProbe::Token::Present;
+        } else if (line == "ketplus-token-permissive" && found) {
+            result.token = DaemonProbe::Token::Permissive;
+        }
     }
-    return false;
+    if (found)
+        *probe = std::move(result);
+    return found;
 }
 
 } // namespace ketplus::remote::ssh

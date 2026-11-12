@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 
+class QLocalServer;
 class QLocalSocket;
 class QProcess;
 class QTemporaryDir;
@@ -13,7 +14,8 @@ class QTimer;
 
 // A route to a Linux host's KetPlus daemon over the system OpenSSH client (docs/ssh-transport.md).
 // SshTunnel verifies the host key before any daemon byte, resolves the daemon socket the way the
-// user unit does, forwards it to a private local socket and exposes that socket as a QIODevice.
+// user unit does, bridges it through `ssh -W` to a private local socket and exposes that socket.
+// It also reads the daemon's local token over the same verified connection.
 namespace ketplus::remote::ssh {
 
 // What KetPlus stores for a host: no secret. The key and the agent stay with OpenSSH.
@@ -57,7 +59,10 @@ class SshTunnel : public QObject {
         HostKeyMismatch,
         // The host key was unknown and the accept callback refused it (or none was set).
         HostKeyRejected,
+        // No daemon socket, or a socket without a local token (not installed or initialised).
         DaemonSocketMissing,
+        // The host's daemon token is readable by other users: refused, never retried.
+        DaemonTokenInsecure,
     };
     Q_ENUM(State)
 
@@ -84,8 +89,12 @@ class SshTunnel : public QObject {
     [[nodiscard]] QString remoteSocketPath() const { return remoteSocket_; }
     // A fixed, secret-free description of the last failure.
     [[nodiscard]] QString lastError() const { return lastError_; }
-    // The daemon connection while Connected; null otherwise.
-    [[nodiscard]] QIODevice* device() const;
+    // The daemon connection while Connected; null otherwise. The caller must send daemon.hello
+    // on it promptly: the daemon drops a connection without a hello after 10 s.
+    [[nodiscard]] QLocalSocket* device() const;
+    // The host daemon's local token while Connected; empty otherwise. It is held in memory
+    // only, cleared on close, teardown and failure, and never logged or persisted.
+    [[nodiscard]] QByteArray daemonCredential() const;
     // Reconnects scheduled since the last Connected state.
     [[nodiscard]] int reconnectAttempts() const { return reconnects_; }
 
@@ -97,19 +106,21 @@ class SshTunnel : public QObject {
                                         const QByteArray& err)>;
     void run(const QString& program, const QStringList& arguments, StepDone done);
     [[nodiscard]] QStringList destinationOptions() const;
-    [[nodiscard]] QStringList verifiedOptions() const;
+    // `stdio`: the call's stdin and stdout carry the daemon connection (`ssh -W`).
+    [[nodiscard]] QStringList verifiedOptions(bool stdio = false) const;
     void resolve();
-    void probe(const QStringList& algorithms);
+    // A second probe restricted to the known key types; `offered` is the key the first one saw.
+    void probe(const QStringList& algorithms, const HostKey& offered = {});
     void lookup(const HostKey& key, bool reprobed);
-    void verified(const HostKey& key);
+    void verified(const HostKey& key, bool certificate);
+    void mismatch(const HostKey& key, const QString& error);
     void locate();
     void forward();
-    void attach(int remaining);
     void fail(State state, const QString& error);
     void lost(const QString& error);
     void teardown();
     void setState(State state);
-    [[nodiscard]] State classify(const QByteArray& err) const;
+    [[nodiscard]] static State classify(const QByteArray& err);
 
     SshTarget target_;
     Options options_;
@@ -117,6 +128,9 @@ class SshTunnel : public QObject {
     State state_{State::Idle};
     HostKeyStatus hostKeyStatus_{HostKeyStatus::None};
     HostKey hostKey_;
+    // Verified through a @cert-authority line: ssh checks the certificate itself.
+    bool certificate_{false};
+    QByteArray credential_;
     QString fingerprint_;
     QString remoteSocket_;
     QString lastError_;
@@ -127,6 +141,9 @@ class SshTunnel : public QObject {
     std::unique_ptr<QTemporaryDir> work_;
     QPointer<QProcess> step_;
     QPointer<QProcess> forwarder_;
+    QPointer<QLocalServer> bridge_;
+    // The bridge's end of the local socket, pumped to and from the forwarder's stdio.
+    QPointer<QLocalSocket> peer_;
     QPointer<QLocalSocket> socket_;
     QTimer* retry_{nullptr};
 };
