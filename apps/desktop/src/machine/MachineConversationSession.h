@@ -67,7 +67,7 @@ class MachineConversationSession final : public QObject {
     void loadApprovals();
     void loadApprovalsPage(const QString& afterId,
                            const std::shared_ptr<QVector<QJsonObject>>& collected, quint64 load);
-    void applyEvent(const QJsonObject& event);
+    void applyEvent(const QJsonObject& delivered);
     void markExpired(const QString& approvalId, const QString& error);
     // The callback of one write; `approvalId` names the card it answers, if any.
     [[nodiscard]] remote::MachineBackend::Callback write(const QString& approvalId);

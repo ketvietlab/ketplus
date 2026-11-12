@@ -131,6 +131,17 @@ QVector<MachineConversation> conversationsFromListing(const QJsonObject& result)
     return conversations;
 }
 
+QJsonObject windowEvent(const QJsonObject& event) {
+    const QJsonObject payload = event.value(QLatin1String("payload")).toObject();
+    if (event.contains(QLatin1String("event_type")) ||
+        !payload.contains(QLatin1String("event_type")))
+        return event;
+    QJsonObject window = event;
+    window.insert(QStringLiteral("event_type"), payload.value(QLatin1String("event_type")));
+    window.insert(QStringLiteral("payload"), payload.value(QLatin1String("data")).toObject());
+    return window;
+}
+
 QString queuedCommandId(const QJsonObject& result) {
     if (result.value(QLatin1String("status")).toString() != QLatin1String("queued"))
         return {};

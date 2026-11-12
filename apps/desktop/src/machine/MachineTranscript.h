@@ -25,7 +25,7 @@ class MachineTranscript final {
     void reset(const QJsonArray& events);
     // Applies one event; an event at or before the last applied cursor is ignored, so a reload
     // that overlaps live delivery adds nothing twice. Returns whether the rows changed.
-    bool apply(const QJsonObject& event);
+    bool apply(const QJsonObject& delivered);
 
     [[nodiscard]] const QVector<Item>& items() const { return items_; }
     [[nodiscard]] qint64 lastCursor() const { return lastCursor_; }

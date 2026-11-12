@@ -17,8 +17,9 @@ using namespace ketplus::test;
 
 namespace {
 
-// An event as RelayMachineBackend delivers it: the local shape (MachineBackend.h), with the
-// Relay's own generation.
+// A Relay conversation's event in a transcript window's shape, with the Relay's generation;
+// FakeMachineBackend::deliver() sends it live in the session.event shape, as
+// RelayMachineBackend does.
 QJsonObject relayEvent(const QString& session, qint64 cursor, const QString& type,
                        const QJsonObject& payload) {
     return {{"session_id", session}, {"session_generation", 4}, {"cursor", cursor},
@@ -68,6 +69,67 @@ class MachineConversationTest final : public QObject {
         QCOMPARE(transcriptRows(view), (QStringList{"Deploy", "Deployed."}));
         relay.deliver(relayEvent("relay-1", 4, "turn.completed", {}));
         QTRY_COMPARE(relay.calls("listConversations").size(), listings + 1);
+    }
+
+    // T-19: live events in the shape DaemonClient and RelayMachineBackend deliver them,
+    // `payload {event_type, data}`, written out here rather than built by the fake.
+    void liveSessionEventsUpdateWithoutAReload() {
+        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+        auto base = sshHost();
+        bool pending = false;
+        QString title = "Fix the build";
+        ssh.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result,
+                         QString* error) {
+            base(call, result, error);
+            if (call.operation == "pendingApprovals" && pending)
+                *result = {
+                    {"pending_approvals", QJsonArray{QJsonObject{{"approval_id", "ap-live"},
+                                                                 {"kind", "command"},
+                                                                 {"command", "make check"}}}}};
+            if (call.operation == "listConversations") {
+                QJsonObject row = result->value("sessions").toArray().first().toObject();
+                row.insert("title", title);
+                *result = {{"sessions", QJsonArray{row}}};
+            }
+        };
+        const auto live = [](qint64 cursor, const QString& type, const QJsonObject& data) {
+            return QJsonObject{{"protocol_version", 0},
+                               {"message_type", "session.event"},
+                               {"session_id", "linux-1"},
+                               {"session_generation", 1},
+                               {"cursor", cursor},
+                               {"turn_sequence", 2},
+                               {"sent_at", QJsonValue::Null},
+                               {"payload", QJsonObject{{"event_type", type}, {"data", data}}}};
+        };
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        view.openConversation("linux-1");
+        QTRY_COMPARE(transcriptRows(view).size(), 2);
+        const auto windows = ssh.calls("transcriptWindow").size();
+
+        // A live delta extends the streamed message.
+        ssh.deliver(live(3, "assistant.delta", {{"item_id", "a"}, {"delta", " Tests pass."}}));
+        QCOMPARE(transcriptRows(view).last(), QStringLiteral("Built on Linux. Tests pass."));
+
+        // A live approval request shows its card.
+        pending = true;
+        ssh.deliver(live(4, "approval.requested", {{"approval_id", "ap-live"}}));
+        QTRY_COMPARE(view.findChildren<QFrame*>("machineApprovalCard").size(), 1);
+
+        // A live list change refreshes the sidebar.
+        title = "Fix the build on Linux";
+        ssh.deliver(live(5, "session.title", {{"title", title}}));
+        QTRY_COMPARE(machineSidebarRepositories(catalog, {})
+                         .first()
+                         .conversations.first()
+                         .toMap()
+                         .value("title")
+                         .toString(),
+                     title);
+        QCOMPARE(ssh.calls("transcriptWindow").size(), windows); // no reload
     }
 
     void questionsAreAnsweredWhole() {

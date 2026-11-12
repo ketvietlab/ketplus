@@ -62,6 +62,11 @@ struct MachineConversation final {
 // A write the route queued ({"status": "queued", "command_id"}): its command id, whose outcome
 // arrives through MachineBackend::commandCompleted(). Empty for any other result.
 [[nodiscard]] QString queuedCommandId(const QJsonObject& result);
+// A session event in a transcript window's shape: `event_type` beside `session_id`,
+// `session_generation`, `cursor` and `turn_sequence`, with the event's data as `payload`.
+// eventReceived() delivers the session.event shape instead, which nests them as
+// `payload {event_type, data}`; this reads either.
+[[nodiscard]] QJsonObject windowEvent(const QJsonObject& event);
 // createSession(): the new conversation's id and generation.
 [[nodiscard]] MachineConversation createdSession(const QJsonObject& result);
 

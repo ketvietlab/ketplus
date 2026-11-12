@@ -39,7 +39,21 @@ class FakeMachineBackend final : public remote::MachineBackend {
         emit connectionStateChanged(state, reason);
     }
     void announceCatalogChange() { emit catalogChanged(); }
-    void deliver(const QJsonObject& event) { emit eventReceived(event); }
+    // Delivers a window-shaped event (`event_type`, `payload`) as every route's eventReceived()
+    // does: the session.event shape, `payload {event_type, data}`.
+    // An event already in the session.event shape is sent as it is.
+    void deliver(const QJsonObject& event) {
+        if (!event.contains("event_type")) {
+            emit eventReceived(event);
+            return;
+        }
+        QJsonObject live = event;
+        live.insert("message_type", "session.event");
+        live.insert("payload", QJsonObject{{"event_type", event.value("event_type")},
+                                           {"data", event.value("payload")}});
+        live.remove("event_type");
+        emit eventReceived(live);
+    }
     void complete(const QString& commandId, const QJsonObject& result, const QString& error = {}) {
         emit commandCompleted(commandId, result, error);
     }
