@@ -8,6 +8,7 @@
 #include "KetSelect.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamTurnBudget.h"
@@ -26,6 +27,16 @@
 
 namespace ketplus {
 namespace {
+
+// The keys of the dialogs' commands (TeamCommands): one new team per repository and one
+// added developer per team at a time.
+QString createKey(const QString& repository) {
+    return TeamCommands::key(QStringLiteral("create"), repository);
+}
+QString addKey(const QJsonObject& team) {
+    return TeamCommands::key(team.value(QStringLiteral("id")).toString(),
+                             QStringLiteral("members/add"));
+}
 
 QString tr(const char* text) { return QCoreApplication::translate("TeamDialogs", text); }
 
@@ -358,10 +369,13 @@ void NewTeamForm::showErrors(const QJsonObject& refusal) {
 void NewTeamForm::submit(std::function<void(const QJsonObject& team)> created) {
     if (!validate())
         return;
+    if (teams_->commands()->isPending(createKey(repository_)))
+        return;
     const QPointer<NewTeamForm> alive(this);
     setEnabled(false);
-    teams_->request(
-        QStringLiteral("team.create"), payload(),
+    // Sent once: Create waits for the daemon (TeamCommands).
+    teams_->commands()->send(
+        createKey(repository_), {}, QStringLiteral("team.create"), payload(),
         [alive, created = std::move(created)](const QJsonObject& result, const QString& error) {
             if (!alive)
                 return;
@@ -438,6 +452,7 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     auto* create = dialog->addButton({}, ket::ButtonVariant::Primary);
     create->setObjectName(QStringLiteral("teamCreateButton"));
+    teams->commands()->bind(create, createKey(repository));
     const auto label = [create](const int count) {
         create->setText(tr("Create with %1 members").arg(count));
     };
@@ -536,20 +551,23 @@ bool AddDeveloperForm::validate() {
 void AddDeveloperForm::submit(std::function<void()> added) {
     if (!validate())
         return;
+    if (teams_->commands()->isPending(addKey(team_)))
+        return;
     const QPointer<AddDeveloperForm> alive(this);
     setEnabled(false);
-    teams_->request(QStringLiteral("team.member.add"), payload(),
-                    [alive, added = std::move(added)](const QJsonObject&, const QString& error) {
-                        if (!alive)
-                            return;
-                        alive->setEnabled(true);
-                        if (!error.isEmpty()) {
-                            showNote(alive->error_, error);
-                            return;
-                        }
-                        if (added)
-                            added();
-                    });
+    teams_->commands()->send(
+        addKey(team_), {}, QStringLiteral("team.member.add"), payload(),
+        [alive, added = std::move(added)](const QJsonObject&, const QString& error) {
+            if (!alive)
+                return;
+            alive->setEnabled(true);
+            if (!error.isEmpty()) {
+                showNote(alive->error_, error);
+                return;
+            }
+            if (added)
+                added();
+        });
 }
 
 ket::Dialog* AddDeveloperForm::present(QWidget* anchor, TeamDirectory* teams,
@@ -566,6 +584,7 @@ ket::Dialog* AddDeveloperForm::present(QWidget* anchor, TeamDirectory* teams,
     auto* add = dialog->addButton(tr("Add developer"), ket::ButtonVariant::Primary);
     add->setObjectName(QStringLiteral("addDeveloperButton"));
     add->setEnabled(!form->isFull());
+    teams->commands()->bind(add, addKey(team));
     QObject::connect(add, &QAbstractButton::clicked, dialog,
                      [dialog, form] { form->submit([dialog] { dialog->accept(); }); });
     dialog->open();

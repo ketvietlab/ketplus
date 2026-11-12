@@ -8,6 +8,7 @@
 #include "KetIcons.h"
 #include "KetStyle.h"
 #include "KetTokens.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
@@ -77,15 +78,13 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
     readUpdates();
 }
 
-void TeamPage::send(const QString& type, QJsonObject payload, QLabel* error) {
+QString TeamPage::commandKey(const QString& what) const { return TeamCommands::key(teamId_, what); }
+
+void TeamPage::send(const QString& what, const QString& source, const QString& type,
+                    QJsonObject payload) {
     payload.insert(QStringLiteral("team_id"), teamId_);
-    const QPointer<QLabel> label(error);
-    teams_->request(type, payload, [label](const QJsonObject&, const QString& failure) {
-        if (label) {
-            label->setText(failure);
-            label->setVisible(!failure.isEmpty());
-        }
-    });
+    // A refusal shows in the key's status label, the one bound when the answer comes.
+    teams_->commands()->send(commandKey(what), source, type, payload);
 }
 
 void TeamPage::readUpdates() {
@@ -204,11 +203,14 @@ void TeamPage::restoreFocus(const FocusPlace& place) {
         return;
     const QWidget* scope =
         place.row.isEmpty() ? content_ : content_->findChild<QWidget*>(place.row);
-    if (!scope)
+    const QList<QWidget*> same =
+        scope ? scope->findChildren<QWidget*>(place.name) : QList<QWidget*>{};
+    if (same.isEmpty()) {
+        // What had the focus is gone, such as the decision just answered: the page keeps it,
+        // where the arrows scroll and Tab goes on into the sections.
+        scroll_->setFocus(Qt::OtherFocusReason);
         return;
-    const QList<QWidget*> same = scope->findChildren<QWidget*>(place.name);
-    if (same.isEmpty())
-        return;
+    }
     QWidget* target = same.at(qMin(place.index, static_cast<int>(same.size()) - 1));
     // The same part of the rebuilt widget, when it still takes the keyboard there: a banner
     // does not act on a key, its button does.
@@ -408,6 +410,15 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
+    merges->setObjectName(QStringLiteral("teamPageMergePolicy"));
+    pause->setObjectName(QStringLiteral("teamPagePause"));
+    remove->setObjectName(QStringLiteral("teamPageDelete"));
+    // A change still on its way to the daemon is not offered again (TeamCommands).
+    TeamCommands* commands = teams_->commands();
+    commands->bind(merges, commandKey(QStringLiteral("merge_policy")));
+    commands->bind(pause, commandKey(QStringLiteral("paused")));
+    commands->bind(budget, commandKey(QStringLiteral("turn_budget")));
+    commands->bind(remove, commandKey(QStringLiteral("delete")));
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
     if (chosen == create)
         afterMenuCloses(this,
@@ -415,11 +426,12 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
                             emit newTeamRequested(repository);
                         });
     else if (chosen == merges)
-        send(QStringLiteral("team.update"),
+        send(QStringLiteral("merge_policy"), {}, QStringLiteral("team.update"),
              {{QStringLiteral("merge_policy"),
                userMerges ? QStringLiteral("leader") : QStringLiteral("user")}});
     else if (chosen == pause)
-        send(QStringLiteral("team.update"), {{QStringLiteral("paused"), !paused}});
+        send(QStringLiteral("paused"), QStringLiteral("menu"), QStringLiteral("team.update"),
+             {{QStringLiteral("paused"), !paused}});
     else if (chosen == budget)
         afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
     else if (chosen == remove)
@@ -434,8 +446,11 @@ void TeamPage::buildBanners(const QJsonObject& team) {
         banner->setObjectName(QStringLiteral("teamPausedBanner"));
         QAbstractButton* resume = banner->setAction(tr("Resume"));
         resume->setObjectName(QStringLiteral("teamPausedResume"));
+        teams_->commands()->bind(resume, commandKey(QStringLiteral("paused")),
+                                 QStringLiteral("banner"));
         connect(resume, &QAbstractButton::clicked, this, [this] {
-            send(QStringLiteral("team.update"), {{QStringLiteral("paused"), false}});
+            send(QStringLiteral("paused"), QStringLiteral("banner"), QStringLiteral("team.update"),
+                 {{QStringLiteral("paused"), false}});
         });
         layout_->addWidget(banner);
     }

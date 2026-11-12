@@ -36,6 +36,8 @@ class TeamTaskDialog final : public QWidget {
     // Opens the handover dialog over this one; null when the task cannot change hands.
     ket::Dialog* openHandover();
     void handOver();
+    // The handover command's key: one handover of this task at a time (TeamCommands).
+    [[nodiscard]] QString handoverKey() const;
 
     // Wider than a form's dialog, for a description to read.
     static constexpr int kCardWidth = 640;
