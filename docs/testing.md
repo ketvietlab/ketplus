@@ -240,7 +240,10 @@ with tampered and unpinned rows, transcript paging across a large event, a tampe
 restore response, a changed host key version and an unpinned host key, against the
 synthetic loopback relay) and `ketplus_remote_ssh_tunnel_tests` (loopback `sshd` with throwaway
 keys: host-key accept, reject and mismatch, auth failure, missing daemon socket
-and reconnect; see [`ssh-transport.md`](ssh-transport.md)). The normal full Desktop suite still covers the shared build/interface
+and reconnect), `ketplus_remote_ssh_backend_tests` (SSH machine backend states,
+identity fail-closed and re-trust, machine store) and
+`ketplus_remote_ssh_daemon_integration_tests` (a real `ketplus_daemon` with
+FakeCodex behind the loopback `sshd`; see [`ssh-transport.md`](ssh-transport.md)). The normal full Desktop suite still covers the shared build/interface
 changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).

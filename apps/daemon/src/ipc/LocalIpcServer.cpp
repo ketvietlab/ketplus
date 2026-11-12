@@ -278,47 +278,48 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         }
         const int minor = protocol::negotiatedMinor(payload);
         it->activityGroups = minor >= 1 && payload.value("transcript_activity_groups").toBool();
-        send(socket,
-             protocol::response(
-                 request,
-                 {{QStringLiteral("ok"), true},
-                  {QStringLiteral("protocol_version"), protocol::currentVersion},
-                  {QStringLiteral("protocol_minor"), minor},
-                  {QStringLiteral("features"), protocol::features(minor)},
-                  {QStringLiteral("daemon_version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
-                  {QStringLiteral("client_id"), it->clientId},
-                  {QStringLiteral("maximum_frame_bytes"),
-                   static_cast<qint64>(protocol::maximumFrameBytes)},
-                  {QStringLiteral("capabilities"),
-                   QJsonArray{QStringLiteral("storage.size.read"),
-                              QStringLiteral("storage.size.apply"),
-                              QStringLiteral("storage.retention.read"),
-                              QStringLiteral("storage.retention.apply"),
-                              QStringLiteral("storage.options.read"),
-                              QStringLiteral("storage.options.apply"),
-                              QStringLiteral("storage.compaction.start"),
-                              QStringLiteral("storage.compaction.read"),
-                              QStringLiteral("storage.breakdown.read"),
-                              QStringLiteral("storage.export.start"),
-                              QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
-                              QStringLiteral("session.control"), QStringLiteral("session.delete"),
-                              QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
-                              QStringLiteral("session.agent_messages.read"),
-                              QStringLiteral("session.agent_messages.release"),
-                              QStringLiteral("session.reviewer.get"),
-                              QStringLiteral("session.reviewer.set"),
-                              QStringLiteral("session.work_report.read"),
-                              QStringLiteral("session.configuration.read"),
-                              QStringLiteral("session.configuration.apply"),
-                              QStringLiteral("session.execution_policy.apply"),
-                              QStringLiteral("session.mode.apply"),
-                              QStringLiteral("attachment.stage.begin"),
-                              QStringLiteral("attachment.stage.chunk"),
-                              QStringLiteral("attachment.stage.commit"),
-                              QStringLiteral("attachment.stage.cancel"),
-                              // MCP media is journaled as media_ref blocks resolved from the
-                              // owner-only <state dir>/media store (same user; no IPC bytes).
-                              QStringLiteral("media.local_store")}}}));
+        // ADR 0119: an SSH client names this machine by its host key (daemon.host_identity/1).
+        QString hostKeyFingerprint;
+        if (minor >= 1 && hostKeyFingerprint_)
+            hostKeyFingerprint = hostKeyFingerprint_();
+        QJsonObject hello{
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("protocol_version"), protocol::currentVersion},
+            {QStringLiteral("protocol_minor"), minor},
+            {QStringLiteral("features"), protocol::features(minor)},
+            {QStringLiteral("daemon_version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
+            {QStringLiteral("client_id"), it->clientId},
+            {QStringLiteral("maximum_frame_bytes"),
+             static_cast<qint64>(protocol::maximumFrameBytes)},
+            {QStringLiteral("capabilities"),
+             QJsonArray{
+                 QStringLiteral("storage.size.read"), QStringLiteral("storage.size.apply"),
+                 QStringLiteral("storage.retention.read"),
+                 QStringLiteral("storage.retention.apply"), QStringLiteral("storage.options.read"),
+                 QStringLiteral("storage.options.apply"),
+                 QStringLiteral("storage.compaction.start"),
+                 QStringLiteral("storage.compaction.read"),
+                 QStringLiteral("storage.breakdown.read"), QStringLiteral("storage.export.start"),
+                 QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
+                 QStringLiteral("session.control"), QStringLiteral("session.delete"),
+                 QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
+                 QStringLiteral("session.agent_messages.read"),
+                 QStringLiteral("session.agent_messages.release"),
+                 QStringLiteral("session.reviewer.get"), QStringLiteral("session.reviewer.set"),
+                 QStringLiteral("session.work_report.read"),
+                 QStringLiteral("session.configuration.read"),
+                 QStringLiteral("session.configuration.apply"),
+                 QStringLiteral("session.execution_policy.apply"),
+                 QStringLiteral("session.mode.apply"), QStringLiteral("attachment.stage.begin"),
+                 QStringLiteral("attachment.stage.chunk"),
+                 QStringLiteral("attachment.stage.commit"),
+                 QStringLiteral("attachment.stage.cancel"),
+                 // MCP media is journaled as media_ref blocks resolved from the
+                 // owner-only <state dir>/media store (same user; no IPC bytes).
+                 QStringLiteral("media.local_store")}}};
+        if (!hostKeyFingerprint.isEmpty())
+            hello.insert(QStringLiteral("host_key_fingerprint"), hostKeyFingerprint);
+        send(socket, protocol::response(request, hello));
         return;
     }
     if (type == QStringLiteral("daemon.hello")) {

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
 #include <memory>
 
 class QLockFile;
@@ -32,6 +33,11 @@ class LocalIpcServer final : public QObject {
     [[nodiscard]] QString fullServerName() const;
     void close();
     void setClaudeCredentials(ClaudeCredentials* credentials) { credentials_ = credentials; }
+    // Answers daemon.hello's host_key_fingerprint (ADR 0119 "Machine identity"); unset, the hello
+    // carries none and an SSH client cannot name the machine.
+    void setHostKeyFingerprint(std::function<QString()> fingerprint) {
+        hostKeyFingerprint_ = std::move(fingerprint);
+    }
 
     static constexpr int defaultHelloTimeoutMs = 10'000;
     static constexpr int defaultMaximumConnections = 64;
@@ -68,6 +74,7 @@ class LocalIpcServer final : public QObject {
     ClaudeCredentials* credentials_{nullptr};
     SessionHost* host_{nullptr};
     CloudControlClient* cloud_{nullptr};
+    std::function<QString()> hostKeyFingerprint_;
     QLocalServer* server_{nullptr};
     std::unique_ptr<QLockFile> lock_;
     QString serverName_;

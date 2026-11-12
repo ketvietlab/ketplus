@@ -2281,6 +2281,7 @@ class DaemonLifecycleTest final : public QObject {
         const QString endpoint = directory.filePath("minor.sock");
         const QByteArray token("local-test-token-with-at-least-32-bytes");
         LocalIpcServer server(&host, endpoint, token);
+        server.setHostKeyFingerprint([] { return QStringLiteral("host-key-fingerprint"); });
         QVERIFY(server.listen());
 
         const auto hello = [&](const QString& id, const QJsonValue& minor) {
@@ -2303,11 +2304,16 @@ class DaemonLifecycleTest final : public QObject {
         QCOMPARE(legacy.value("protocol_version").toInt(-1), 0);
         QCOMPARE(legacy.value("protocol_minor").toInt(-1), 0);
         QVERIFY(legacy.value("features").toArray().isEmpty());
+        // ADR 0119: the machine id is negotiated, so a pre-negotiation client is not given one.
+        QVERIFY(!legacy.contains("host_key_fingerprint"));
         // A newer client is answered with the daemon's own minor.
         const QJsonObject newer = hello("newer", 99);
         QCOMPARE(newer.value("protocol_minor").toInt(-1), protocol::currentMinor);
         QVERIFY(newer.value("features").toArray().contains("provider.runtime_status"));
         QVERIFY(newer.value("features").toArray().contains("transcript.window/1"));
+        QVERIFY(newer.value("features").toArray().contains("daemon.host_identity/1"));
+        QCOMPARE(newer.value("host_key_fingerprint").toString(),
+                 QStringLiteral("host-key-fingerprint"));
     }
 
     void closesConnectionsThatDoNotCompleteHello() {

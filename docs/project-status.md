@@ -694,7 +694,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   remains deferred. ADR 0119 records the remote composition (one
   `MachineBackend` for the local socket, the Relay and SSH; machine binding;
   connection states; the SSH trust decision); its local adapter
-  `DaemonMachineBackend` is in `ketplus_remote`. See `linux-headless-daemon.md`
+  `DaemonMachineBackend` is in `ketplus_remote`, and the SSH backend
+  `SshMachineBackend` with its secret-free machine store is in
+  `ketplus_remote_ssh_backend` (no UI composition yet; `ssh-transport.md`).
+  See `linux-headless-daemon.md`
   for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without
   deleting history or stopping an active turn. The daemon deletes a

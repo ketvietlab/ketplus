@@ -40,6 +40,22 @@ ketplus_enable_warnings(ketplus_remote_ssh_tunnel_tests)
 target_link_libraries(ketplus_remote_ssh_tunnel_tests PRIVATE Qt6::Test ketplus_remote_ssh)
 add_test(NAME ketplus_remote_ssh_tunnel_tests COMMAND ketplus_remote_ssh_tunnel_tests)
 
+qt_add_executable(ketplus_remote_ssh_backend_tests SshMachineBackendTest.cpp)
+ketplus_enable_warnings(ketplus_remote_ssh_backend_tests)
+target_link_libraries(ketplus_remote_ssh_backend_tests PRIVATE Qt6::Test ketplus_remote_ssh_backend)
+add_test(NAME ketplus_remote_ssh_backend_tests COMMAND ketplus_remote_ssh_backend_tests)
+
+# ADR 0119 over SSH with a real ketplus_daemon behind a loopback sshd and FakeCodex.
+qt_add_executable(ketplus_remote_ssh_daemon_integration_tests SshDaemonIntegrationTest.cpp)
+ketplus_enable_warnings(ketplus_remote_ssh_daemon_integration_tests)
+target_link_libraries(ketplus_remote_ssh_daemon_integration_tests PRIVATE
+    Qt6::Test ketplus_remote_ssh_backend)
+target_compile_definitions(ketplus_remote_ssh_daemon_integration_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
+add_dependencies(ketplus_remote_ssh_daemon_integration_tests ketplus_daemon)
+add_test(NAME ketplus_remote_ssh_daemon_integration_tests
+    COMMAND ketplus_remote_ssh_daemon_integration_tests)
+
 ketplus_add_daemon_test(ketplus_atlas_live_runtime_tests AtlasLiveRuntimeTest.cpp)
 ketplus_add_daemon_test(ketplus_atlas_live_tunnel_tests AtlasLiveTunnelTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_catalog_cache_tests ProviderCatalogCacheTest.cpp)
