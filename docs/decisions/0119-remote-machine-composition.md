@@ -237,9 +237,9 @@ Otherwise it is reported in `rejected` with a stable reason:
 `unsigned_index_entry` (beyond the bound or not active), `worktree_not_granted`
 (the relay refused the command as forbidden) or `verification_failed` (no
 answer, a bad signature or a different scope). This needs no relay change and
-no ketviet deploy. **Option A**, a relay-side index whose entries the host
+no relay deploy. **Option A**, a relay-side index whose entries the host
 seals (as it already seals session metadata), would remove the per-entry round
-trip and is future work in ketviet.
+trip and is future work in the private relay service.
 
 **Durable command outbox.** Every write (`startTurn`, `steerTurn`, `stopTurn`,
 `pendingApprovals`, `resolveApproval`, `answerQuestion`, `createSession`) is

@@ -6,7 +6,7 @@
 #include <QUrlQuery>
 
 // ADR 0119 Relay backend against a loopback relay whose replies are shaped like the deployed
-// relay's DTOs (ketplus_control sessionDto, worktreeDto and commandDto), with a synthetic host
+// relay's DTOs (its session, worktree and command objects), with a synthetic host
 // that decrypts each command, executes it once and signs its result.
 namespace {
 using ConnectionState = MachineBackend::ConnectionState;
