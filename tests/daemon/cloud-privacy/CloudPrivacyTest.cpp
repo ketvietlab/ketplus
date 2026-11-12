@@ -2379,6 +2379,69 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(waiting().isEmpty());
     }
 
+    void heartbeatClearsAnsweredAgentReplyInItsSealedSnapshot() {
+        QTemporaryDir directory;
+        Context c(directory.filePath("pending-heartbeat.sqlite"));
+        AgentMessageRecord request;
+        request.id = "heartbeat-request-synthetic";
+        request.chainId = "heartbeat-chain-synthetic";
+        request.fromSession = "session-synthetic";
+        request.fromGeneration = 1;
+        request.fromNumber = "1234";
+        request.toSession = "receiver-synthetic";
+        request.toGeneration = 1;
+        request.toNumber = "5678";
+        request.kind = "request";
+        request.expectReply = true;
+        request.body = "Synthetic request";
+        request.state = "delivered";
+        request.createdAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+        request.expiresAt =
+            QDateTime::currentDateTimeUtc().addSecs(3600).toString(Qt::ISODateWithMs);
+        QVERIFY(c.journal.insertAgentMessage(request));
+        c.start();
+        c.transport.statusForPath.insert("/v2/daemon/heartbeat", 202);
+        c.transport.responseForPath.insert("/v2/daemon/heartbeat",
+                                           R"({"ok":true,"accepted":true})");
+        const auto heartbeats = [&] {
+            QList<QJsonObject> result;
+            for (int i = 0; i < c.transport.requests.size(); ++i)
+                if (c.transport.requests.at(i).url().path() == "/v2/daemon/heartbeat")
+                    result.append(QJsonDocument::fromJson(c.transport.bodies.at(i)).object());
+            return result;
+        };
+        for (const bool pending : {true, false}) {
+            if (!pending) {
+                request.state = "answered";
+                QVERIFY(c.journal.updateAgentMessage(request));
+            }
+            const auto before = heartbeats().size();
+            Access::publishHeartbeat(*c.client);
+            QTRY_VERIFY_WITH_TIMEOUT(
+                heartbeats().size() == before + 1 && Access::heartbeatIdle(*c.client), 5000);
+            const QJsonObject snapshot =
+                heartbeats().last().value("sessions").toArray().first().toObject();
+            QVERIFY(!snapshot.contains("awaitingAgentReply"));
+            const QJsonObject envelope = snapshot.value("encryptedMetadata").toObject();
+            const QJsonObject content = envelope.value("content").toObject();
+            QVERIFY(!content.isEmpty());
+            const QByteArray aad = CloudCrypto::canonical(
+                {"ketplus", 2, "session-metadata", "workspace-synthetic", "machine-synthetic",
+                 snapshot.value("id"), snapshot.value("generation"), envelope.value("cursor"),
+                 envelope.value("turnSequence"), content.value("keyId"), content.value("keyEpoch"),
+                 content.value("senderDeviceId"), content.value("senderKeyVersion")});
+            const auto signing = CloudCrypto::fromBase64Url(
+                Access::crypto(*c.client).publicKeys().value("signingPublicKey").toString());
+            QString error;
+            const auto plaintext = Access::crypto(*c.client).decrypt(
+                content, aad, signing, "session-synthetic", 1, &error);
+            QVERIFY2(!plaintext.isEmpty(), qPrintable(error));
+            const auto metadata = QJsonDocument::fromJson(plaintext).object();
+            QVERIFY(metadata.value("awaitingAgentReply").isBool());
+            QCOMPARE(metadata.value("awaitingAgentReply").toBool(), pending);
+        }
+    }
+
     void awaitingAgentReplyRemainsInsideSealedMetadata() {
         StoredSession session;
         session.id = QStringLiteral("session-synthetic");
