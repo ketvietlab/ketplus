@@ -67,7 +67,18 @@ QJsonArray agentTaskRows(const Team& team, const AgentTaskFilter& filter,
     return rows;
 }
 
-QJsonObject agentTaskPage(const Task& task, const qsizetype start, const int limit) {
+namespace {
+// "… (N more characters)" as the document keeps it, with how to read the whole text.
+QString withReadHint(const QString& text, const QString& hint) {
+    static const QString end = QStringLiteral(" more characters)");
+    if (!text.endsWith(end))
+        return text;
+    return text.left(text.size() - 1) + QStringLiteral("; ") + hint + QLatin1Char(')');
+}
+} // namespace
+
+QJsonObject agentTaskPage(const Task& task, const qsizetype start, const int limit,
+                          const QSet<qsizetype>& whole) {
     QJsonObject json = summaryJson(task);
     const qsizetype total = task.history.size();
     const qsizetype count = std::clamp(limit, 1, agentHistoryMaximum);
@@ -80,6 +91,10 @@ QJsonObject agentTaskPage(const Task& task, const qsizetype start, const int lim
         if (entry.contains(QStringLiteral("data")))
             entry.insert(QStringLiteral("data"),
                          cutValue(entry.value(QStringLiteral("data")), readHint(task, index)));
+        if (whole.contains(index))
+            entry.insert(QStringLiteral("text"),
+                         withReadHint(entry.value(QStringLiteral("text")).toString(),
+                                      readHint(task, index)));
         history.append(entry);
     }
     json.insert(QStringLiteral("history"), history);

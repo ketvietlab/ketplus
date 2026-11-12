@@ -266,10 +266,32 @@ class TeamAgentTasksTest final : public QObject {
         const QJsonObject cut = page.value("history").toArray().last().toObject();
         const int entry = cut.value("entry").toInt();
         const QString shown = cut.value("text").toString();
-        QVERIFY(shown.size() <= ketplus::daemon::teams::maximumHistoryText);
         QVERIFY2(shown.endsWith(
                      QStringLiteral("team_tasks task_id=T-1 entry=%1 reads it whole)").arg(entry)),
                  qPrintable(shown.right(120)));
+
+        // People read the cut as before: the desktop's task read and the document carry no
+        // tool syntax.
+        const QString teamId = fixture.agents(team.leader, "agents.team_get")
+                                   .value("team")
+                                   .toObject()
+                                   .value("id")
+                                   .toString();
+        const QJsonObject desktop = fixture.host->handleCommand(
+            request("team.task.get", {{"team_id", teamId}, {"task_id", "T-1"}}), "desktop-test");
+        const QString desktopText = desktop.value("task")
+                                        .toObject()
+                                        .value("history")
+                                        .toArray()
+                                        .at(entry)
+                                        .toObject()
+                                        .value("text")
+                                        .toString();
+        QVERIFY2(desktopText.endsWith(QStringLiteral(" more characters)")),
+                 qPrintable(desktopText.right(80)));
+        QVERIFY(!desktopText.contains(QStringLiteral("team_tasks")));
+        QVERIFY(desktopText.size() <= ketplus::daemon::teams::maximumHistoryText);
+        QVERIFY(shown.startsWith(desktopText.left(desktopText.size() - 40)));
 
         const QJsonObject whole = fixture.agents(team.developer, "agents.team_tasks",
                                                  {{"task_id", "T-1"}, {"entry", entry}});

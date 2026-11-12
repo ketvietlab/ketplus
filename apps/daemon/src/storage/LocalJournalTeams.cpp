@@ -229,6 +229,21 @@ std::optional<QString> LocalJournal::teamHistoryText(const qint64 teamId, const 
     return query.value(0).toString();
 }
 
+QSet<qsizetype> LocalJournal::teamHistoryTextEntries(const qint64 teamId,
+                                                     const QString& taskId) const {
+    QSet<qsizetype> entries;
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("SELECT entry FROM team_history_texts WHERE team_id = ? AND task_id = ?"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    if (!query.exec())
+        return entries;
+    while (query.next())
+        entries.insert(query.value(0).toLongLong());
+    return entries;
+}
+
 QList<QJsonObject> LocalJournal::teamDocuments(bool* read) const {
     QList<QJsonObject> documents;
     QSqlQuery query(database_);

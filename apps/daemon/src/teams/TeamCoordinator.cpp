@@ -283,17 +283,19 @@ std::optional<QString> TeamCoordinator::wholeHistoryText(const qint64 teamId, co
     return journal_->teamHistoryText(teamId, taskId, entry);
 }
 
+QSet<qsizetype> TeamCoordinator::wholeHistoryEntries(const qint64 teamId,
+                                                     const QString& taskId) const {
+    return journal_->teamHistoryTextEntries(teamId, taskId);
+}
+
 void TeamCoordinator::addHistory(Task& task, const QString& actor, const QString& kind,
                                  const QString& text, const QJsonObject& data) {
     HistoryEntry entry{.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data};
     if (text.size() > maximumHistoryText) {
-        // T-36: the document keeps the cut text, which says how to read the whole one; the
-        // journal keeps the whole text once the change is saved (commit()).
+        // T-36: the document keeps the cut text as people read it; the journal keeps the
+        // whole text once the change is saved (commit()), and only an agent's page says so.
         entry.wholeText = text.left(maximumWholeHistoryText);
-        entry.text = cutText(text, maximumHistoryText,
-                             QStringLiteral("team_tasks task_id=%1 entry=%2 reads it whole")
-                                 .arg(task.id)
-                                 .arg(task.history.size()));
+        entry.text = boundedText(text);
     }
     entry.data = boundedData(std::move(entry.data));
     task.history.append(std::move(entry));

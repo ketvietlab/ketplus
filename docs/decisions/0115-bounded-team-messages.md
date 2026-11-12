@@ -74,9 +74,10 @@ one frame, because history, Updates and decisions only grow.
      - With `task_id` and `entry`: `{id, entry, history_total}`, that one entry uncut.
        An index outside the history is refused with `entry_not_found`.
    - **Whole texts (T-36):** a history text longer than 2,000 characters is cut in the
-     document as before. The cut ends `… (N more characters; team_tasks task_id=T-n
-     entry=i reads it whole)`, and the journal keeps the whole text, up to 64 KiB, in
-     `team_history_texts (team_id, task_id, entry)`. It is written after the document is
+     document exactly as before (`… (N more characters)`), so the desktop and paired
+     devices show what they showed. The journal keeps the whole text, up to 64 KiB, in
+     `team_history_texts (team_id, task_id, entry)`. Only an agent's page adds how to read
+     it: `… (N more characters; team_tasks task_id=T-n entry=i reads it whole)`. It is written after the document is
      saved and deleted with the team. A note may be as long as that bound. A text the
      journal could not keep reads as its cut.
 

@@ -191,12 +191,12 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                      teams::agentTaskEntry(*task, entry,
                                            teams_->wholeHistoryText(teamId, taskId, entry))}};
         }
-        return {
-            {QStringLiteral("ok"), true},
-            {QStringLiteral("task"),
-             teams::agentTaskPage(
-                 *task, payload.value(QStringLiteral("history_start")).toInteger(-1),
-                 payload.value(QStringLiteral("history_limit")).toInt(teams::agentHistoryPage))}};
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("task"),
+                 teams::agentTaskPage(
+                     *task, payload.value(QStringLiteral("history_start")).toInteger(-1),
+                     payload.value(QStringLiteral("history_limit")).toInt(teams::agentHistoryPage),
+                     teams_->wholeHistoryEntries(teamId, taskId))}};
     }
     if (operation == QStringLiteral("team_wait")) {
         if (role == teams::role::reviewer)

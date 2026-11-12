@@ -293,6 +293,8 @@ class TeamCoordinator : public QObject {
     // nothing when it was not cut or the journal has no copy.
     [[nodiscard]] std::optional<QString> wholeHistoryText(qint64 teamId, const QString& taskId,
                                                           qsizetype entry) const;
+    // The entries of the task that have a whole text in the journal.
+    [[nodiscard]] QSet<qsizetype> wholeHistoryEntries(qint64 teamId, const QString& taskId) const;
 
     // `draft` carries the settings and the members with their session ids. Nothing is stored
     // when a rule refuses it.

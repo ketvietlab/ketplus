@@ -8,6 +8,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 
 #include <functional>
 #include <optional>
@@ -42,9 +43,11 @@ using MemberLookup = std::function<AgentMember(const QString& sessionId)>;
                                        const MemberLookup& members);
 // The task with its description, criteria and `limit` history entries from `start`, or the
 // newest ones when `start` is negative; "history_total" and "history_start" say where the
-// page is. Each entry carries its "entry" index.
+// page is. Each entry carries its "entry" index. The cut text of an entry in `whole`, whose
+// whole text the journal keeps, says how to read it.
 [[nodiscard]] QJsonObject agentTaskPage(const Task& task, qsizetype start = -1,
-                                        int limit = agentHistoryPage);
+                                        int limit = agentHistoryPage,
+                                        const QSet<qsizetype>& whole = {});
 // One entry, uncut: `wholeText` is the journal's copy of a text the document keeps cut.
 [[nodiscard]] QJsonObject agentTaskEntry(const Task& task, qsizetype index,
                                          const std::optional<QString>& wholeText);

@@ -499,6 +499,8 @@ class LocalJournal final {
                              const QString& text, QString* error = nullptr);
     [[nodiscard]] std::optional<QString> teamHistoryText(qint64 teamId, const QString& taskId,
                                                          qsizetype entry) const;
+    [[nodiscard]] QSet<qsizetype> teamHistoryTextEntries(qint64 teamId,
+                                                         const QString& taskId) const;
     // `read` is false when the journal could not be read, which is not "no teams".
     [[nodiscard]] QList<QJsonObject> teamDocuments(bool* read = nullptr) const;
     // ADR 0114: the settings every new team starts from (Settings → Teams); empty when none
