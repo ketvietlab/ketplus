@@ -5,6 +5,7 @@
 #include <QWidget>
 
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxSshMachines.h"
 
 class QLabel;
 class QAbstractButton;
@@ -15,7 +16,8 @@ class Dialog;
 
 namespace ketplus::remote {
 class ControlV2Client;
-}
+class MachineBackend;
+} // namespace ketplus::remote
 
 namespace ketplus {
 
@@ -33,9 +35,24 @@ class LinuxMachinesSection final : public QWidget {
     // trusted machines are written into whichever model it has.
     [[nodiscard]] LinuxMachineModel* model() const { return model_; }
     void setModel(LinuxMachineModel* model);
+    // Attaches the SSH backend to the current model: the saved SSH machines, the SSH mode of the
+    // connect card, and Connect, Disconnect and Remove. Production uses the defaults; tests
+    // pass a temporary store and fake links.
+    void attachSshBackend(QString storePath = remote::ssh::SshMachineStore::defaultPath(),
+                          LinuxSshMachines::LinkFactory links = LinuxSshMachines::systemLinks());
+    // The ADR 0119 backend of a machine, for the composition the machine picker hands it to;
+    // null while no backend carries it.
+    [[nodiscard]] remote::MachineBackend* machineBackend(const QString& id) const;
+    // The machine picker chose `id`. The seam T-5's composition binds to: until it does,
+    // choosing a Linux machine only opens Connections.
+    void selectMachine(const QString& id);
 
   signals:
+    // The machines for the activity bar's picker: their ids, and labels with the same route
+    // and state as the rows.
     void machinesChanged(const QStringList& ids, const QStringList& names);
+    // A Linux machine was chosen in the picker, with its backend (null while none carries it).
+    void machineSelected(const QString& id, ketplus::remote::MachineBackend* backend);
 
   private:
     friend class RemoteControlViewTest;
@@ -44,9 +61,12 @@ class LinuxMachinesSection final : public QWidget {
     void signIn();
     void refreshMachines();
     void setNotice(const QString& message, bool error = false);
+    void openConnectCard(const QString& sshHost);
+    void syncEntitlement();
 
     remote::ControlV2Client* client_;
     LinuxMachineModel* model_{nullptr};
+    LinuxSshMachines* ssh_{nullptr};
     // The open connect card is a child of the window, so the section deletes it itself.
     QPointer<ket::Dialog> connectDialog_;
     QLabel* count_;

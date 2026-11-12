@@ -157,14 +157,22 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Details with the verified fingerprint, and Connect / Disconnect. "Connect a
   Linux machine" has an SSH (free) mode (host alias or user@host[:port], a
   first-use host key to accept or reject, no password field) and a ketPlus
-  Relay (Pro) mode (the existing pairing link). The UI emits intents only; the
-  SSH and Relay backends that carry them out are follow-up work (T-6). Until a
-  backend is attached (`LinuxMachineModel::setBackendsAttached`) the SSH mode
-  and Connect / Disconnect stay hidden and a Relay machine reads "Available",
-  as before; every signed-in account may pair through the Relay until the Pro
-  entitlement is fed. Machines are keyed by the ADR 0119 machine id, the host key
-  fingerprint (for the Relay, the one pinned at pairing); the Relay's machine
-  id is a route attribute, so a host on both routes is one row.
+  Relay (Pro) mode (the existing pairing link). The SSH route is wired to
+  `SshMachineBackend` through `LinuxSshMachines` (docs/ssh-transport.md
+  "Connections"): live state, the verified host key, a mismatched key shown as
+  such, Connect / Disconnect / Remove, Forget old key after a mismatch of a
+  key ketPlus accepted, and Trust new identity after an ADR 0119 rotation.
+  Removing a machine deletes its identity and its accepted key from the
+  KetPlus known_hosts file. The Relay route's live state is still follow-up
+  work: a Relay machine reads as listed by the worktree index. The Relay is
+  gated on the signed-in session's `entitlements` (`ketplus.relay`,
+  `AccountEntitlements.h`) and fails closed while the relay names none (D-4).
+  SSH needs no account. Machines are keyed by the ADR 0119 machine id, the
+  daemon's host key fingerprint (for the Relay, the one pinned at pairing); the
+  Relay's machine id is a route attribute, so a host on both routes is one row,
+  reached over SSH. The activity bar's picker shows each machine's route and
+  state, and choosing one emits `LinuxMachinesSection::machineSelected` for the
+  Desktop composition.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores

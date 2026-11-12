@@ -40,6 +40,7 @@ class RemoteControlView final : public QWidget {
     // that has not read the daemon's status yet does it once the status arrives.
     void requestSignOut();
     void applyDesignSystemStyle();
+    [[nodiscard]] LinuxMachinesSection* linuxMachines() const { return linuxMachines_; }
 
   signals:
     void machinesChanged(const QStringList& ids, const QStringList& names);

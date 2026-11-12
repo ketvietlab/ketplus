@@ -6,9 +6,11 @@
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QStringList>
 #include <QUrl>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ketplus::daemon {
 class BrowserSignIn;
@@ -31,6 +33,9 @@ class ControlV2Client final : public QObject {
     [[nodiscard]] QString subjectId() const {
         return credential_.value("subject").toObject().value("id").toString();
     }
+    // The account entitlements the relay named in the signed-in session ("entitlements"), or
+    // nullopt when it named none (signed out, or a relay that does not send them yet).
+    [[nodiscard]] std::optional<QStringList> entitlements() const;
     // Returns the relay-owned authorization URL; the UI opens it in the system browser.
     void startSignIn(Callback done);
     void cancelSignIn();

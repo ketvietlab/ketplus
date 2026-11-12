@@ -22,24 +22,31 @@ const LinuxMachine* LinuxMachineModel::machine(const QString& id) const {
 }
 
 void LinuxMachineModel::setMachines(QList<LinuxMachine> machines) {
-    if (machines_ == machines)
-        return;
-    machines_ = std::move(machines);
-    emit machinesChanged();
+    ssh_.clear();
+    relay_.clear();
+    for (auto& machine : machines)
+        (machine.route == LinuxMachine::Route::Ssh ? ssh_ : relay_).append(std::move(machine));
+    merge();
 }
 
 void LinuxMachineModel::upsert(const LinuxMachine& machine) {
-    for (auto& existing : machines_) {
-        if (existing.id != machine.id)
-            continue;
-        if (existing == machine)
-            return;
-        existing = machine;
-        emit machinesChanged();
-        return;
-    }
-    machines_.append(machine);
-    emit machinesChanged();
+    // Each route keeps its own row: a host on both routes is merged, not overwritten.
+    auto& own = machine.route == LinuxMachine::Route::Ssh ? ssh_ : relay_;
+    const auto same = std::find_if(own.begin(), own.end(), [&machine](const LinuxMachine& known) {
+        return known.id == machine.id;
+    });
+    if (same != own.end())
+        *same = machine;
+    else
+        own.append(machine);
+    merge();
+}
+
+void LinuxMachineModel::setSshMachines(QList<LinuxMachine> machines) {
+    for (auto& machine : machines)
+        machine.route = LinuxMachine::Route::Ssh;
+    ssh_ = std::move(machines);
+    merge();
 }
 
 QString LinuxMachineModel::relayMachineId(const LinuxRelayListing& listing) {
@@ -49,44 +56,64 @@ QString LinuxMachineModel::relayMachineId(const LinuxRelayListing& listing) {
 
 void LinuxMachineModel::setRelayMachines(const QList<LinuxRelayListing>& listed) {
     QList<LinuxMachine> next;
-    for (auto machine : std::as_const(machines_)) {
-        if (machine.route != LinuxMachine::Route::Ssh)
-            continue;
-        machine.relayId.clear(); // set again below while the Relay still lists it
-        next.append(machine);
-    }
     QSet<QString> relayIds;
     for (const auto& listing : listed) {
         if (listing.relayId.isEmpty() || relayIds.contains(listing.relayId))
             continue;
         relayIds.insert(listing.relayId);
         const QString id = relayMachineId(listing);
-        // The same host reached over SSH, or listed twice: one machine, the Relay its attribute.
-        const auto same =
-            std::find_if(next.begin(), next.end(),
-                         [&id](const LinuxMachine& machine) { return machine.id == id; });
-        if (same != next.end()) {
-            if (same->relayId.isEmpty())
-                same->relayId = listing.relayId;
+        // Listed twice under one identity: one machine.
+        if (std::any_of(next.cbegin(), next.cend(),
+                        [&id](const LinuxMachine& machine) { return machine.id == id; }))
             continue;
-        }
-        if (const auto* known = machine(id); known && known->route == LinuxMachine::Route::Relay) {
+        const auto known =
+            std::find_if(relay_.cbegin(), relay_.cend(),
+                         [&id](const LinuxMachine& machine) { return machine.id == id; });
+        if (known != relay_.cend()) {
             next.append(*known);
             next.last().relayId = listing.relayId;
             continue;
         }
-        // Listed by the Relay's worktree index, so the Relay reached it; T-6 reports live state.
+        // Listed by the Relay's worktree index, so the Relay reached it; the backend reports
+        // live state.
         LinuxMachine relay;
         relay.id = id;
         relay.name = listing.relayId;
-        relay.detail = tr("Linux · Trusted");
+        // "Trusted" only beside a pinned identity, never beside "Not verified yet".
+        relay.detail = listing.fingerprint.isEmpty() ? tr("Linux · Paired") : tr("Linux · Trusted");
         relay.route = LinuxMachine::Route::Relay;
         relay.state = LinuxMachine::State::Connected;
         relay.fingerprint = listing.fingerprint;
         relay.relayId = listing.relayId;
         next.append(relay);
     }
-    setMachines(std::move(next));
+    relay_ = std::move(next);
+    merge();
+}
+
+void LinuxMachineModel::merge() {
+    QList<LinuxMachine> next;
+    QSet<QString> sshIds;
+    for (auto machine : std::as_const(ssh_)) {
+        if (sshIds.contains(machine.id))
+            continue;
+        sshIds.insert(machine.id);
+        // The same host over the Relay: one machine, reached over SSH, the Relay its attribute.
+        machine.relayId.clear();
+        for (const auto& relay : std::as_const(relay_))
+            if (relay.id == machine.id && !relay.relayId.isEmpty()) {
+                machine.relayId = relay.relayId;
+                break;
+            }
+        next.append(machine);
+    }
+    for (const auto& relay : std::as_const(relay_))
+        if (!sshIds.contains(relay.id))
+            next.append(relay);
+    if (machines_ == next)
+        return;
+    machines_ = std::move(next);
+    emit machinesChanged();
 }
 
 void LinuxMachineModel::setBackendsAttached(const bool attached) {
@@ -152,10 +179,30 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine::Error error, const Q
         return tr("The ketPlus daemon is not installed on %1. Install it for this user on the "
                   "machine, then connect again.")
             .arg(host);
+    case LinuxMachine::Error::IdentityChanged:
+        return tr("The ketPlus daemon on %1 now names another host identity, so ketPlus did not "
+                  "connect. If the daemon was reinstalled, check its identity on the machine "
+                  "(ketplusctl status), then trust the new identity in Details.")
+            .arg(host);
     case LinuxMachine::Error::Other:
         break;
     }
     return text.isEmpty() ? tr("Could not connect to %1.").arg(host) : text;
+}
+
+QString LinuxMachineModel::errorMessage(const LinuxMachine& machine) {
+    if (machine.error == LinuxMachine::Error::HostKeyMismatch && machine.canForgetHostKey)
+        return tr("The host key of %1 changed since you accepted it in ketPlus, so ketPlus did "
+                  "not connect. If the machine was reinstalled, choose Forget old key in Details "
+                  "and compare the new key with the one on the machine before you accept it.")
+            .arg(machine.name);
+    return errorMessage(machine.error, machine.name, machine.errorText);
+}
+
+QString LinuxMachineModel::pickerLabel(const LinuxMachine& machine) {
+    const QString state = machine.error == LinuxMachine::Error::None ? stateText(machine.state)
+                                                                     : tr("Needs attention");
+    return tr("%1 · %2 · %3").arg(machine.name, routeText(machine.route), state);
 }
 
 QString validateSshHost(const QString& host) {

@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "git/GitChangesPanel.h"
+#include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
 #include "workspace/ActivityBar.h"
@@ -30,6 +31,8 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
     setAtlasWorkspaceVisible(false);
     if (remoteControl_ == nullptr) {
         remoteControl_ = new RemoteControlView(workspaceSplit_);
+        // The saved SSH machines and the SSH route of Connections (ADR 0119).
+        remoteControl_->linuxMachines()->attachSshBackend();
         connect(remoteControl_, &RemoteControlView::machinesChanged, this,
                 [this](const QStringList& ids, const QStringList& names) {
                     remoteMachineIds_ = ids;

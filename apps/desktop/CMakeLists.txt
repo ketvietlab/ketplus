@@ -8,6 +8,7 @@ add_library(ketplus_desktop_support STATIC
     ${ketplus_pairing_qr_source}
     src/remote/RemoteControlView.cpp
     src/remote/RemoteControlView.h
+    src/remote/AccountEntitlements.h
     src/remote/LinuxConnectDialog.cpp
     src/remote/LinuxConnectDialog.h
     src/remote/LinuxMachineModel.cpp
@@ -16,6 +17,8 @@ add_library(ketplus_desktop_support STATIC
     src/remote/LinuxMachineRow.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
+    src/remote/LinuxSshMachines.cpp
+    src/remote/LinuxSshMachines.h
     src/remote/RemoteActivitySection.cpp
     src/remote/RemoteActivitySection.h
     src/remote/RemoteConnectionsIntro.cpp
@@ -70,6 +73,7 @@ target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Widgets
     ketplus_remote
     ketplus_remote_control
+    ketplus_remote_ssh_backend
     ketplus_typography
     KetPlusCM::git
     KetPlusCM::ui

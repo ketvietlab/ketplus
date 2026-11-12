@@ -192,6 +192,14 @@ target_link_libraries(ketplus_linux_machines_tests PRIVATE
     ketplus_desktop_support
 )
 
+# Connections' SSH route against SshMachineBackend with a fake daemon behind a fake link.
+ketplus_add_gui_test(ketplus_linux_ssh_machines_tests LinuxSshMachinesTest.cpp)
+target_include_directories(ketplus_linux_ssh_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ketplus_linux_ssh_machines_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
 add_subdirectory(daemon)
 
 if(APPLE)

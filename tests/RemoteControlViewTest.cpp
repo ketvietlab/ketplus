@@ -47,6 +47,9 @@ class RemoteControlTestAccess {
   public:
     static void signIn(ControlV2Client& client) {
         client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
+        // A ketPlus Pro session: the Relay is entitled (AccountEntitlements.h).
+        client.credential_.insert(QStringLiteral("entitlements"),
+                                  QJsonArray{QStringLiteral("ketplus.relay")});
     }
 };
 } // namespace ketplus::remote
@@ -441,6 +444,7 @@ void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
     view.show();
     auto* linux = view.linuxMachines_;
     remote::RemoteControlTestAccess::signIn(*linux->client_);
+    linux->syncEntitlement();
     linux->render();
     const auto connectButton = [linux] {
         return linux->findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));

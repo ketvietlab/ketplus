@@ -57,9 +57,7 @@ QLabel* badge(const QString& text, const QString& tone, QWidget* parent) {
     return label;
 }
 
-QString errorText(const LinuxMachine& machine) {
-    return LinuxMachineModel::errorMessage(machine.error, machine.name, machine.errorText);
-}
+QString errorText(const LinuxMachine& machine) { return LinuxMachineModel::errorMessage(machine); }
 
 } // namespace
 
@@ -75,6 +73,8 @@ QString linuxMachineBadgeText(const LinuxMachine& machine, const bool backendsAt
         return tr("SSH key refused");
     case LinuxMachine::Error::DaemonNotInstalled:
         return tr("Daemon not installed");
+    case LinuxMachine::Error::IdentityChanged:
+        return tr("Identity changed");
     case LinuxMachine::Error::Other:
         break;
     }
@@ -204,7 +204,6 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     form->addRow(machine.route == LinuxMachine::Route::Ssh ? tr("Host key") : tr("Host identity"),
                  fingerprint);
     auto* verifiedLabel = value("linuxDetailsVerified");
-    verifiedLabel->setText(tr("Verified"));
     form->addRow(QString(), verifiedLabel);
     auto* error = value("linuxDetailsError");
     error->setProperty("remoteTone", QStringLiteral("danger"));
@@ -215,8 +214,32 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     const QPointer<LinuxMachineModel> guard(model);
     ket::Button* disconnect = nullptr;
     ket::Button* connect = nullptr;
-    // Nothing would carry out Connect or Disconnect before the backends are attached.
+    ket::Button* forget = nullptr;
+    ket::Button* trust = nullptr;
+    // Nothing would carry out these before the backends are attached.
     if (model->backendsAttached()) {
+        auto* remove = dialog->addButton(tr("Remove"), ket::ButtonVariant::Ghost);
+        remove->setObjectName(QStringLiteral("linuxDetailsRemove"));
+        QObject::connect(remove, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestRemove(id);
+            dialog->accept();
+        });
+        // The re-trust paths: shown only while their failure is the machine's.
+        forget = dialog->addButton(tr("Forget old key"));
+        forget->setObjectName(QStringLiteral("linuxDetailsForgetKey"));
+        QObject::connect(forget, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestForgetHostKey(id);
+            dialog->accept();
+        });
+        trust = dialog->addButton(tr("Trust new identity"));
+        trust->setObjectName(QStringLiteral("linuxDetailsTrustIdentity"));
+        QObject::connect(trust, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestTrustIdentity(id);
+            dialog->accept();
+        });
         disconnect = dialog->addButton(tr("Disconnect"));
         disconnect->setObjectName(QStringLiteral("linuxDetailsDisconnect"));
         QObject::connect(disconnect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
@@ -234,7 +257,7 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     }
     // What can change while the card is open: the state, the key once verified, the error.
     const auto refresh = [guard, id, dialog, form, state, fingerprint, verifiedLabel, error,
-                          connect, disconnect, plain, mono] {
+                          connect, disconnect, forget, trust, plain, mono] {
         const auto* current = guard ? guard->machine(id) : nullptr;
         if (!current) {
             dialog->reject();
@@ -242,14 +265,21 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         }
         state->setText(linuxMachineBadgeText(*current, guard->backendsAttached()));
         const bool verified = !current->fingerprint.isEmpty();
-        fingerprint->setText(verified ? current->fingerprint : tr("Not verified yet"));
-        fingerprint->setFont(verified ? mono : plain);
+        // A key that did not verify is shown as what it is, never as the machine's key.
+        const bool offered = !verified && !current->presentedFingerprint.isEmpty();
+        const QString key = verified ? current->fingerprint : current->presentedFingerprint;
+        const bool known = verified || offered;
+        fingerprint->setText(known ? key : tr("Not verified yet"));
+        fingerprint->setFont(known ? mono : plain);
         // A key has no spaces to wrap at: let it shrink rather than push the label column.
-        fingerprint->setWordWrap(!verified);
-        fingerprint->setSizePolicy(verified ? QSizePolicy::Ignored : QSizePolicy::Preferred,
+        fingerprint->setWordWrap(!known);
+        fingerprint->setSizePolicy(known ? QSizePolicy::Ignored : QSizePolicy::Preferred,
                                    QSizePolicy::Preferred);
-        fingerprint->setToolTip(verified ? current->fingerprint : QString());
-        form->setRowVisible(verifiedLabel, verified);
+        fingerprint->setToolTip(known ? key : QString());
+        verifiedLabel->setText(verified ? tr("Verified")
+                                        : tr("Does not match the key accepted before"));
+        verifiedLabel->setProperty("remoteTone", offered ? QStringLiteral("danger") : QString());
+        form->setRowVisible(verifiedLabel, known);
         const bool failed = current->error != LinuxMachine::Error::None;
         if (failed)
             error->setText(errorText(*current));
@@ -258,6 +288,10 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
             connect->setEnabled(offersConnect(*current));
         if (disconnect)
             disconnect->setEnabled(!offersConnect(*current));
+        if (forget)
+            forget->setVisible(current->canForgetHostKey);
+        if (trust)
+            trust->setVisible(current->error == LinuxMachine::Error::IdentityChanged);
     };
     refresh();
     QObject::connect(model, &LinuxMachineModel::machinesChanged, dialog, refresh);

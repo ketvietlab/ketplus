@@ -169,7 +169,7 @@ RelayPage makeRelayPage(QWidget* parent) {
 
 ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                                     remote::ControlV2Client* client, LinuxConnectHooks hooks,
-                                    const LinuxConnectMode initialMode) {
+                                    const LinuxConnectMode initialMode, const QString& sshHost) {
     // An in-window card like the other dialogs (#422); it goes once it finishes.
     auto* dialog = new ket::Dialog(tr("Connect a Linux machine"), anchor);
     dialog->setObjectName(QStringLiteral("linuxPairingDialog"));
@@ -208,18 +208,20 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
     auto ticketId = std::make_shared<QString>();
 
     const auto applyRelayGate = [relay, check, approve, modelGuard, clientGuard] {
-        const bool entitled = !modelGuard || modelGuard->relayEntitled();
+        // Signed out, the account cannot be known yet: sign in first, then the plan decides.
         const bool signedIn = clientGuard && clientGuard->signedIn();
-        relay.gate->setVisible(!entitled || !signedIn);
+        const bool entitled = signedIn && modelGuard && modelGuard->relayEntitled();
+        relay.gate->setVisible(!entitled);
         relay.gate->setText(
-            !entitled ? tr("Pairing through the ketPlus Relay is part of ketPlus Pro. Use SSH, "
-                           "or upgrade your account to ketPlus Pro to pair through the Relay.")
-                      : tr("Sign in with the same account used by the Linux daemon to pair "
-                           "through the ketPlus Relay."));
-        relay.signIn->setVisible(entitled && !signedIn);
-        relay.pairing->setVisible(entitled && signedIn);
-        check->setEnabled(entitled && signedIn);
-        if (!entitled || !signedIn)
+            signedIn ? tr("Pairing through the ketPlus Relay is part of ketPlus Pro. Use SSH, "
+                          "or upgrade your KetSuite account to ketPlus Pro to pair through the "
+                          "Relay.")
+                     : tr("Sign in with the KetSuite account the Linux daemon uses to pair "
+                          "through the ketPlus Relay."));
+        relay.signIn->setVisible(!signedIn);
+        relay.pairing->setVisible(entitled);
+        check->setEnabled(entitled);
+        if (!entitled)
             approve->setEnabled(false);
     };
     const auto showMode = [=](const int index) {
@@ -432,6 +434,10 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
     showMode(index);
     dialog->open();
     (index == 0 ? static_cast<QWidget*>(ssh.host) : relay.link)->setFocus();
+    if (index == 0 && !sshHost.isEmpty()) {
+        ssh.host->setText(sshHost);
+        sshConnect->click();
+    }
     return dialog;
 }
 

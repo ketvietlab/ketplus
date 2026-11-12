@@ -7,8 +7,10 @@
 
 #include "KetPlusProductVersion.h"
 #include "control/ControlV2Client.h"
+#include "remote/AccountEntitlements.h"
 #include "remote/LinuxConnectDialog.h"
 #include "remote/LinuxMachineRow.h"
+#include "ssh/SshMachineBackend.h"
 
 #include <QDesktopServices>
 #include <QFrame>
@@ -78,6 +80,7 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     footnoteRow->addWidget(footnote, 1);
     outer->addLayout(footnoteRow);
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
+        syncEntitlement();
         setNotice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,
                   !error.isEmpty());
         render();
@@ -112,20 +115,47 @@ void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
         QStringList names;
         for (const auto& machine : model_->machines()) {
             ids.append(machine.id);
-            names.append(machine.name);
+            names.append(LinuxMachineModel::pickerLabel(machine));
         }
         emit machinesChanged(ids, names);
     });
+    connect(model_, &LinuxMachineModel::sshConnectPrompted, this,
+            &LinuxMachinesSection::openConnectCard);
     connect(model_, &LinuxMachineModel::backendsAttachedChanged, this,
             &LinuxMachinesSection::render);
     connect(model_, &QObject::destroyed, this, [this] {
         model_ = nullptr;
         setModel(new LinuxMachineModel(this));
     });
+    syncEntitlement();
     render();
 }
 
+void LinuxMachinesSection::syncEntitlement() {
+    // The Relay is Pro: entitled only when the signed-in session names it (D-4: fail closed).
+    model_->setRelayEntitled(client_->signedIn() && relayEntitled(client_->entitlements()));
+}
+
+void LinuxMachinesSection::attachSshBackend(QString storePath,
+                                            LinuxSshMachines::LinkFactory links) {
+    delete ssh_;
+    ssh_ = new LinuxSshMachines(model_, std::move(storePath), std::move(links), this);
+    connect(ssh_, &LinuxSshMachines::notice, this, &LinuxMachinesSection::setNotice);
+    render();
+}
+
+remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) const {
+    return ssh_ ? ssh_->backend(id) : nullptr;
+}
+
+void LinuxMachinesSection::selectMachine(const QString& id) {
+    if (model_ && model_->machine(id))
+        emit machineSelected(id, machineBackend(id));
+}
+
 void LinuxMachinesSection::activate() {
+    if (ssh_)
+        ssh_->connectSaved();
     render();
     if (client_->signedIn())
         refreshMachines();
@@ -185,9 +215,10 @@ void LinuxMachinesSection::render() {
         addRows();
         auto* layout = message(
             ssh ? tr("Connect over SSH with your own SSH keys; no account is needed. To pair "
-                     "through the ketPlus Relay, sign in with the account the Linux daemon uses.")
-                : tr("Sign in with the account the Linux daemon uses to pair it through the "
-                     "ketPlus Relay."));
+                     "through the ketPlus Relay, sign in with the KetSuite account the Linux "
+                     "daemon uses.")
+                : tr("Sign in with the KetSuite account the Linux daemon uses to pair it through "
+                     "the ketPlus Relay."));
         auto* actions = new QHBoxLayout;
         actions->setSpacing(8);
         if (ssh && pairingEntryShown_)
@@ -253,7 +284,9 @@ LinuxMachinesSection::~LinuxMachinesSection() {
     delete connectDialog_.data();
 }
 
-void LinuxMachinesSection::beginPairing() {
+void LinuxMachinesSection::beginPairing() { openConnectCard({}); }
+
+void LinuxMachinesSection::openConnectCard(const QString& sshHost) {
     if (connectDialog_)
         return;
     // SSH needs no account, so the card opens signed out too; its Relay mode offers sign-in.
@@ -262,7 +295,8 @@ void LinuxMachinesSection::beginPairing() {
                                              [this](const QString& message) {
                                                  setNotice(message);
                                                  refreshMachines();
-                                             }});
+                                             }},
+                                            LinuxConnectMode::Ssh, sshHost);
 }
 
 void LinuxMachinesSection::refreshMachines() {
