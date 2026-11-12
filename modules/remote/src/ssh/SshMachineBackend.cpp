@@ -90,19 +90,28 @@ QJsonObject SshMachineBackend::connectionDetails() const {
         {QStringLiteral("route"), routeLabel()},
         {QStringLiteral("target"), targetKey()},
         {QStringLiteral("machine_id"), machineId_},
-        {QStringLiteral("ssh_host_key_fingerprint"), link_->fingerprint()},
+        {QStringLiteral("ssh_host_key_fingerprint"), sshHostKeyFingerprint()},
         {QStringLiteral("state"), QString::fromLatin1(states[static_cast<int>(state_)])},
         {QStringLiteral("reason"), reason_}};
     if (identityChanged_)
         details.insert(QStringLiteral("presented_machine_id"), presented_);
+    if (const QString presented = presentedSshHostKeyFingerprint(); !presented.isEmpty())
+        details.insert(QStringLiteral("presented_ssh_host_key_fingerprint"), presented);
     return details;
 }
 
 void SshMachineBackend::connectToHost() {
     // A changed identity stays closed until it is trusted or the machine is removed.
-    if (identityChanged_)
+    if (identityChanged_ && !presented_.isEmpty())
         return;
+    if (identityChanged_) {
+        // The daemon named no identity (too old): the host may have been updated since.
+        identityChanged_ = false;
+        client_->setTrustedHostKeyFingerprint(machineId_);
+    }
     closedByUser_ = false;
+    // A new attempt, not a reconnect of the last session.
+    everConnected_ = false;
     storeError_.clear();
     update();
     link_->open();

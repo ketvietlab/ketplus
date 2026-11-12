@@ -27,7 +27,7 @@ struct SshMachineRecord {
 
 class SshMachineStore final {
   public:
-    // <AppDataLocation>/remote/ssh-machines.json.
+    // <GenericDataLocation>/Ketsuite/KetPlus/ssh/machines.json, beside the KetPlus known_hosts.
     [[nodiscard]] static QString defaultPath();
 
     explicit SshMachineStore(QString path = defaultPath());

@@ -189,7 +189,11 @@ parts and adds no protocol of its own:
 A request made while Offline fails at once with the reason, and so do the
 calls waiting for a hello when the machine becomes Offline.
 `connectionDetails()` gives Connections the route (`SSH`), the target, the
-machine id, the verified SSH host key fingerprint, the state and the reason.
+machine id, the SSH host key fingerprint only once it is verified (a key that
+did not verify is `presented_ssh_host_key_fingerprint`), the state and the
+reason. `connectToHost()` is a first attempt: Connecting, not Reconnecting. It
+stays closed after a changed daemon identity, but retries after a daemon that
+named none, so updating ketPlus on the host is enough.
 
 ### Machine identity and the machine store
 

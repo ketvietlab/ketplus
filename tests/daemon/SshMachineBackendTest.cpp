@@ -132,6 +132,9 @@ class FakeLink final : public SshLink {
     }
     [[nodiscard]] SshTunnel::State state() const override { return state_; }
     [[nodiscard]] QString fingerprint() const override { return QStringLiteral("SHA256:sshkey"); }
+    [[nodiscard]] bool fingerprintVerified() const override {
+        return state_ != SshTunnel::State::HostKeyMismatch;
+    }
     [[nodiscard]] QLocalSocket* connection() const override {
         return state_ == SshTunnel::State::Connected ? socket_.data() : nullptr;
     }
@@ -407,6 +410,51 @@ class SshMachineBackendTest final : public QObject {
         QVERIFY(
             SshMachineStore(fixture.storePath()).machineId(sshTargetKey(fixture.target)).isEmpty());
         QVERIFY(fixture.daemon.requests.isEmpty());
+
+        // The host's daemon is updated: Connect tries again and names the machine.
+        fixture.daemon.fingerprint = QStringLiteral("daemon-key-A");
+        backend->connectToHost();
+        QTRY_COMPARE(backend->connectionState(), State::Connected);
+        QVERIFY(!backend->identityChanged());
+        QCOMPARE(backend->machineId(), QStringLiteral("daemon-key-A"));
+        QCOMPARE(SshMachineStore(fixture.storePath()).machineId(sshTargetKey(fixture.target)),
+                 QStringLiteral("daemon-key-A"));
+    }
+
+    void aManualReconnectIsAFirstAttemptAgain() {
+        Fixture fixture;
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        FakeLink* link = nullptr;
+        auto backend = fixture.backend(store, &link);
+        backend->connectToHost();
+        QTRY_COMPARE(backend->connectionState(), State::Connected);
+        backend->disconnectFromHost();
+        QCOMPARE(backend->connectionState(), State::Offline);
+        link->autoConnect = false;
+        backend->connectToHost();
+        QCOMPARE(backend->connectionState(), State::Connecting);
+        link->setTunnelState(SshTunnel::State::Connecting);
+        QCOMPARE(backend->connectionState(), State::Connecting);
+        // A host never reached in this attempt is Offline, not Reconnecting.
+        link->setTunnelState(SshTunnel::State::Offline);
+        QCOMPARE(backend->connectionState(), State::Offline);
+    }
+
+    void aMismatchedSshKeyIsNotShownAsVerified() {
+        Fixture fixture;
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        FakeLink* link = nullptr;
+        auto backend = fixture.backend(store, &link);
+        link->autoConnect = false;
+        link->setTunnelState(SshTunnel::State::HostKeyMismatch);
+        QVERIFY(backend->sshHostKeyFingerprint().isEmpty());
+        QCOMPARE(backend->presentedSshHostKeyFingerprint(), QStringLiteral("SHA256:sshkey"));
+        const QJsonObject details = backend->connectionDetails();
+        QVERIFY(details.value("ssh_host_key_fingerprint").toString().isEmpty());
+        QCOMPARE(details.value("presented_ssh_host_key_fingerprint").toString(),
+                 QStringLiteral("SHA256:sshkey"));
     }
 
     void addingAndRemovingMachinesIsDurable() {

@@ -29,8 +29,10 @@ class SshLink : public QObject {
     virtual void open() = 0;
     virtual void close() = 0;
     [[nodiscard]] virtual SshTunnel::State state() const = 0;
-    // The verified SSH host key's "SHA256:..." fingerprint, or the offending one for a mismatch.
+    // The SSH host key's "SHA256:..." fingerprint: the verified one, or the offending one for a
+    // mismatch (fingerprintVerified() tells which).
     [[nodiscard]] virtual QString fingerprint() const = 0;
+    [[nodiscard]] virtual bool fingerprintVerified() const = 0;
     // The daemon connection while Connected; null otherwise. It stays owned by the link.
     [[nodiscard]] virtual QLocalSocket* connection() const = 0;
     // The remote daemon's local credential for daemon.hello, held in memory only.
@@ -53,6 +55,9 @@ class SshTunnelLink final : public SshLink {
     void close() override { tunnel_->close(); }
     [[nodiscard]] SshTunnel::State state() const override { return tunnel_->state(); }
     [[nodiscard]] QString fingerprint() const override { return tunnel_->fingerprint(); }
+    [[nodiscard]] bool fingerprintVerified() const override {
+        return tunnel_->hostKeyStatus() == HostKeyStatus::Verified;
+    }
     [[nodiscard]] QLocalSocket* connection() const override { return tunnel_->device(); }
     [[nodiscard]] QByteArray daemonCredential() const override {
         return tunnel_->daemonCredential();
@@ -82,16 +87,25 @@ class SshMachineBackend final : public MachineBackend {
     [[nodiscard]] SshTarget target() const { return target_; }
     [[nodiscard]] QString targetKey() const;
     [[nodiscard]] SshTunnel::State tunnelState() const { return link_->state(); }
-    [[nodiscard]] QString sshHostKeyFingerprint() const { return link_->fingerprint(); }
+    // The verified SSH host key; empty unless the tunnel verified it.
+    [[nodiscard]] QString sshHostKeyFingerprint() const {
+        return link_->fingerprintVerified() ? link_->fingerprint() : QString();
+    }
+    // The key a host offered that did not verify (a mismatch); empty otherwise.
+    [[nodiscard]] QString presentedSshHostKeyFingerprint() const {
+        return link_->fingerprintVerified() ? QString() : link_->fingerprint();
+    }
     // A hello named another daemon host key (or none): the machine is Offline until the user
     // trusts it with trustPresentedIdentity() or removes the machine.
     [[nodiscard]] bool identityChanged() const { return identityChanged_; }
     [[nodiscard]] QString presentedMachineId() const { return presented_; }
-    // {"route", "target", "machine_id", "ssh_host_key_fingerprint", "state", "reason",
+    // {"route", "target", "machine_id", "ssh_host_key_fingerprint" (verified only), "state",
+    //  "reason", "presented_ssh_host_key_fingerprint" (only for a key that did not verify),
     //  "presented_machine_id" (only after a change)}; no secret.
     [[nodiscard]] QJsonObject connectionDetails() const;
 
-    // Opens the route; does nothing while identityChanged().
+    // Opens the route as a first attempt. A changed identity stays closed (trust it or remove the
+    // machine); a daemon that named no identity is tried again, for a host that was updated.
     void connectToHost();
     // Offline with "Disconnected." until connectToHost().
     void disconnectFromHost();
