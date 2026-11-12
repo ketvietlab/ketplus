@@ -1,9 +1,12 @@
 // ADR 0114 §7 and open point 2: what starts a member's turn, the budget of automatic turns,
-// the messages held while a team is paused, and the leader's digest.
+// the messages held while a team is paused, the outbox (T-28) and the leader's digest.
 #include "storage/LocalJournal.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QTimer>
+#include <QUuid>
+
+#include <algorithm>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -15,7 +18,8 @@ QJsonObject heldJson(const TeamMessage& message) {
             {QStringLiteral("task_id"), message.taskId},
             {QStringLiteral("body"), message.body},
             {QStringLiteral("expect_reply"), message.expectReply},
-            {QStringLiteral("id"), message.id}};
+            {QStringLiteral("id"), message.id},
+            {QStringLiteral("point_at"), message.pointAt}};
 }
 
 TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
@@ -27,7 +31,8 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
             .taskId = json.value(QStringLiteral("task_id")).toString(),
             .body = json.value(QStringLiteral("body")).toString(),
             .expectReply = json.value(QStringLiteral("expect_reply")).toBool(),
-            .id = json.value(QStringLiteral("id")).toString()};
+            .id = json.value(QStringLiteral("id")).toString(),
+            .pointAt = json.value(QStringLiteral("point_at")).toString()};
 }
 
 // Every update since the last digest, grouped by task, the actionable ones marked.
@@ -62,8 +67,10 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 
 void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     const qint64 teamId = snapshot.id;
-    // A turn the team starts never runs in a worktree its member was handed out of.
-    (void)settleRelocations(teamId, message.toSession);
+    // A turn the team starts never runs in a worktree its member was handed out of. With the
+    // outbox, that is settled when the message is sent.
+    if (!deferSending_)
+        (void)settleRelocations(teamId, message.toSession);
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
@@ -91,11 +98,89 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
         return;
     }
     ++team->automaticTurns;
+    if (!deferSending_) {
+        if (commit(*team, before, QStringLiteral("daemon"), {}))
+            return;
+        send(teamId, message);
+        return;
+    }
+    // T-28: stored with the turn it counts, sent once the command is answered. The id is
+    // chosen now, so a send the daemon did not get to forget is not sent again.
+    TeamMessage queued = message;
+    if (queued.id.isEmpty())
+        queued.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    team->outbox.append(heldJson(queued));
     if (commit(*team, before, QStringLiteral("daemon"), {}))
         return;
+    scheduleOutbox();
+}
+
+void TeamCoordinator::send(const qint64 teamId, const TeamMessage& message) {
+    if (deferSending_)
+        (void)settleRelocations(teamId, message.toSession);
+    if (!message.pointAt.isEmpty())
+        if (const QString error = host_->pointConversationAt(message.toSession, message.pointAt);
+            !error.isEmpty()) {
+            Team* stored = mutableTeam(teamId);
+            if (stored && stored->task(message.taskId)) {
+                const Team before = *stored;
+                addHistory(*stored->task(message.taskId), QStringLiteral("daemon"),
+                           QStringLiteral("worktree"),
+                           QStringLiteral("The owner's conversation was not moved to %1: %2")
+                               .arg(message.pointAt, error));
+                (void)commit(*stored, before, QStringLiteral("daemon"), {});
+            }
+        }
     if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
+}
+
+void TeamCoordinator::scheduleOutbox() {
+    if (outboxScheduled_)
+        return;
+    outboxScheduled_ = true;
+    QTimer::singleShot(0, this, &TeamCoordinator::sendFromOutbox);
+}
+
+// One entry per pass, oldest first, so the events of running conversations and the next
+// command are not held up behind a long outbox. Sent first, then forgotten: a stop between
+// the two finds the message queued and only forgets it.
+void TeamCoordinator::sendFromOutbox() {
+    outboxScheduled_ = false;
+    QList<qint64> ids = teams_.keys();
+    std::sort(ids.begin(), ids.end());
+    for (const qint64 id : std::as_const(ids)) {
+        const Team* team = this->team(id);
+        if (!team || team->outbox.isEmpty())
+            continue;
+        const QJsonObject entry = team->outbox.first().toObject();
+        const TeamMessage message = heldMessage(*team, entry);
+        // A member that left meanwhile receives nothing of the team's.
+        if (team->member(message.toSession) && !host_->teamMessagePosted(message.id))
+            send(id, message);
+        Team* current = mutableTeam(id);
+        if (!current)
+            break;
+        const Team before = *current;
+        for (qsizetype index = 0; index < current->outbox.size(); ++index)
+            if (current->outbox.at(index).toObject().value(QStringLiteral("id")) ==
+                entry.value(QStringLiteral("id"))) {
+                current->outbox.removeAt(index);
+                break;
+            }
+        // A journal that refuses keeps the entry; the next start sends what is left.
+        if (commit(*current, before, QStringLiteral("daemon"), {})) {
+            qWarning("Unable to forget a sent team message.");
+            return;
+        }
+        break;
+    }
+    for (const qint64 id : std::as_const(ids))
+        if (const Team* team = this->team(id); team && !team->outbox.isEmpty()) {
+            scheduleOutbox();
+            return;
+        }
 }
 
 void TeamCoordinator::releaseHeld(const qint64 teamId) {

@@ -516,13 +516,16 @@ class TeamTaskProtocolTest final : public QObject {
         const QString worktree = task.value("worktree").toString();
         QVERIFY(QFileInfo(worktree).isDir());
         QVERIFY(worktree.endsWith(QStringLiteral("shop-team-%1-t-1").arg(teamId)));
-        // The owner now works in the task's worktree and receives the assignment.
-        const QJsonArray listed = command("session.list", {}).value("sessions").toArray();
-        QString path;
-        for (const auto& value : listed)
-            if (value.toObject().value("session_id").toString() == developer)
-                path = value.toObject().value("worktree_path").toString();
-        QCOMPARE(QFileInfo(path).canonicalFilePath(), QFileInfo(worktree).canonicalFilePath());
+        // The owner now works in the task's worktree and receives the assignment, both after
+        // the reply (T-28).
+        const auto ownerPath = [&] {
+            for (const auto& value : command("session.list", {}).value("sessions").toArray())
+                if (value.toObject().value("session_id").toString() == developer)
+                    return QFileInfo(value.toObject().value("worktree_path").toString())
+                        .canonicalFilePath();
+            return QString{};
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(ownerPath(), QFileInfo(worktree).canonicalFilePath(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.journal->agentMessagesOf(developer, 1, 10).isEmpty(),
                                  5000);
         const auto message = fixture.journal->agentMessagesOf(developer, 1, 10).first();

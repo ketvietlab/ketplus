@@ -331,6 +331,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("decisions"), decisions},
             {QStringLiteral("open_decisions"), team.openDecisions()},
             {QStringLiteral("held"), team.held},
+            {QStringLiteral("outbox"), team.outbox},
             {QStringLiteral("review_queue"), strings(team.reviewQueue)},
             {QStringLiteral("reviewing"), team.reviewing},
             {QStringLiteral("reviewing_message"), team.reviewingMessage},
@@ -371,6 +372,7 @@ Team teamFromJson(const QJsonObject& json) {
     for (const auto& value : json.value(QStringLiteral("decisions")).toArray())
         team.decisions.append(decisionFromJson(value.toObject()));
     team.held = json.value(QStringLiteral("held")).toArray();
+    team.outbox = json.value(QStringLiteral("outbox")).toArray();
     team.reviewQueue = stringList(json.value(QStringLiteral("review_queue")));
     team.reviewing = json.value(QStringLiteral("reviewing")).toString();
     team.reviewingMessage = json.value(QStringLiteral("reviewing_message")).toString();

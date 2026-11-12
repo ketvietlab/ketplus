@@ -135,6 +135,24 @@ question. When the leader's turn ends with actionable updates waiting, or after 
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
 
+**A command is answered before what it sets off (decided 2026-11-12).** A wake is
+decided when its cause is committed: the budget check, a hold while paused and the turn
+it counts. The message, and for an assignment the worktree its owner is pointed at, go
+into the team's stored `outbox` in that same commit. The command is answered next. The
+daemon then sends the outbox one entry per event-loop pass, oldest first:
+
+1. It settles the receiver's moves out of handed-over worktrees.
+2. It points the receiver at its worktree.
+3. It queues the message.
+4. It forgets the entry.
+
+Pointing a conversation at a worktree asks git on the daemon's thread. With two released
+assignments, that took a first-plan Start 4 s with a git that answers in 2 s, and seconds
+on a busy machine. Each entry carries the id its message gets, and an entry whose message
+is already queued is only forgotten. So a daemon that stops between a reply and its sends
+sends what is left on its next start, once. A pause answered after a Start does not hold
+what that Start released. Clients never see the `outbox`: the team JSON leaves it out.
+
 ### 8. A team that stops is moved on (decided 2026-11-11)
 
 The table above is event-driven: a turn that ends with work left and no event to follow

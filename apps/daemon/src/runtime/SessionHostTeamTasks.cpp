@@ -165,6 +165,10 @@ QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
         message.kind, message.body, message.expectReply, nullptr, message.id);
 }
 
+bool SessionHost::teamMessagePosted(const QString& id) const {
+    return !id.isEmpty() && journal_->agentMessage(id).has_value();
+}
+
 void SessionHost::noteInConversation(const QString& sessionId, const QJsonObject& note) {
     const auto it = sessions_.constFind(sessionId);
     if (it != sessions_.cend())
