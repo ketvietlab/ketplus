@@ -55,6 +55,14 @@ class CloudPrivacyTestAccess {
         const auto found = client.eventUploadBackoff_.constFind(key);
         return found == client.eventUploadBackoff_.cend() ? -1 : int(found->gap);
     }
+    // Registers every session's upload cursor, as the first upload pass does.
+    static bool registerCursors(CloudControlClient& client) {
+        return client.registerCloudCursors();
+    }
+    static void setKnownUploadedCursor(CloudControlClient& client, qint64 cursor,
+                                       const QString& key = "session-synthetic:1") {
+        client.knownUploadedCursors_.insert(key, cursor);
+    }
     static qint64 knownUploadedCursor(const CloudControlClient& client,
                                       const QString& key = "session-synthetic:1") {
         return client.knownUploadedCursors_.value(key, -1);

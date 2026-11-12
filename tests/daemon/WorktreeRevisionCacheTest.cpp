@@ -66,6 +66,60 @@ class WorktreeRevisionCacheTest final : public QObject {
         QCOMPARE(computed, 5);
     }
 
+    // A commit with nothing staged moves HEAD through the branch ref, which only the reflog shows.
+    void headMoveWithoutIndexChangeIsNoticed() {
+        QTemporaryDir dir;
+        const QString worktree = dir.path();
+        QVERIFY(QDir(worktree).mkpath(QStringLiteral(".git/logs")));
+        write(QDir(worktree).filePath(QStringLiteral(".git/HEAD")), "ref: refs/heads/main\n");
+        write(QDir(worktree).filePath(QStringLiteral(".git/logs/HEAD")), "one\n");
+        const QList<StoredSession> sessions{session(QStringLiteral("a"), worktree, 1)};
+        const QByteArray before = WorktreeRevisionCache::fingerprint(worktree, sessions);
+        write(QDir(worktree).filePath(QStringLiteral(".git/logs/HEAD")), "one\ntwo\n");
+        QVERIFY(WorktreeRevisionCache::fingerprint(worktree, sessions) != before);
+    }
+
+    // A workspace rooted in a folder of a repository uses that repository's git directory.
+    void subfolderWorkspaceUsesTheEnclosingRepository() {
+        QTemporaryDir dir;
+        const QString folder = QDir(dir.path()).filePath(QStringLiteral("packages/app"));
+        QVERIFY(QDir().mkpath(folder));
+        QVERIFY(QDir(dir.path()).mkpath(QStringLiteral(".git")));
+        write(QDir(dir.path()).filePath(QStringLiteral(".git/index")), "one");
+        const QList<StoredSession> sessions{session(QStringLiteral("a"), folder, 1)};
+        const QByteArray before = WorktreeRevisionCache::fingerprint(folder, sessions);
+        QVERIFY(!before.endsWith("no-git"));
+        write(QDir(dir.path()).filePath(QStringLiteral(".git/index")), "two-longer");
+        QVERIFY(WorktreeRevisionCache::fingerprint(folder, sessions) != before);
+    }
+
+    // A failed git run (an error or a timeout) is tried again on the next heartbeat; outside a
+    // repository an empty revision is the answer and is kept.
+    void failedComputationIsNotKept() {
+        QTemporaryDir dir;
+        const QString repository = QDir(dir.path()).filePath(QStringLiteral("repo"));
+        const QString plain = QDir(dir.path()).filePath(QStringLiteral("plain"));
+        QVERIFY(QDir().mkpath(repository + QStringLiteral("/.git")));
+        QVERIFY(QDir().mkpath(plain));
+        // QTemporaryDir may itself sit inside a repository; skip the plain half then.
+        int computed = 0;
+        const auto fail = [&computed](const QString&) {
+            ++computed;
+            return QString();
+        };
+        WorktreeRevisionCache cache;
+        const QList<StoredSession> inRepository{session(QStringLiteral("a"), repository, 1)};
+        QVERIFY(cache.revision(repository, inRepository, 0, fail).isEmpty());
+        QVERIFY(cache.revision(repository, inRepository, 15'000, fail).isEmpty());
+        QCOMPARE(computed, 2);
+        if (WorktreeRevisionCache::fingerprint(plain, {}).endsWith("no-git")) {
+            computed = 0;
+            cache.revision(plain, {}, 0, fail);
+            cache.revision(plain, {}, 15'000, fail);
+            QCOMPARE(computed, 1);
+        }
+    }
+
     void linkedWorktreeFollowsItsGitFile() {
         QTemporaryDir dir;
         const QString worktree = QDir(dir.path()).filePath(QStringLiteral("wt"));

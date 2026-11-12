@@ -1,6 +1,7 @@
 #include "cloud/CloudControlClient.h"
 #include "storage/LocalJournal.h"
 #include <QJsonDocument>
+#include <QSet>
 
 namespace ketplus::daemon {
 QString CloudControlClient::uploadScope() const {
@@ -35,6 +36,13 @@ void CloudControlClient::uploadEvents() {
             !registerCloudCursor(session))
             return;
     }
+    // Forget cursors of deleted sessions and replaced generations.
+    QSet<QString> current;
+    for (const StoredSession& session : sessions)
+        current.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation));
+    knownUploadedCursors_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
+        return !current.contains(entry.key());
+    });
     for (const StoredSession& session : sessions) {
         if (refusedSessions_.contains(session.id))
             continue;

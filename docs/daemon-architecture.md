@@ -592,9 +592,11 @@ other revision is recomputed with git before and after the read and fails as
 `stale_revision` when it differs. Heartbeats compute revisions on their own
 thread, so they never queue a phone's read. A heartbeat runs git for a worktree
 again only when a conversation on it recorded an event or changed state, git's
-`HEAD` or `index` file changed, or its revision is older than two minutes
+`HEAD`, `logs/HEAD` or `index` file changed (found by walking up from the
+workspace, as for subfolders of a repository), or its revision is older than two minutes
 (edits made outside any conversation); otherwise it publishes the cached
-revision (`WorktreeRevisionCache`).
+revision (`WorktreeRevisionCache`). A failed git run is not kept, so the next
+heartbeat tries again.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the

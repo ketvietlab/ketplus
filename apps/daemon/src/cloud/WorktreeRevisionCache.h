@@ -16,10 +16,10 @@ namespace ketplus::daemon {
 // every heartbeat kept a daemon thread busy without end.
 //
 // A revision is computed again only when something that can change it moved: a conversation on
-// the worktree recorded an event or changed state, git's HEAD or index changed, or the revision is
-// older than maximumAgeMs (edits made outside any conversation). Publishing a slightly older
-// revision is safe: the relay accepts any revision published in the last ten minutes and reads are
-// served from the worktree as it is now.
+// the worktree recorded an event or changed state, git's HEAD, its reflog or the index changed, or
+// the revision is older than maximumAgeMs (edits made outside any conversation). Publishing a
+// slightly older revision is safe: the relay accepts any revision published in the last ten
+// minutes and reads are served from the worktree as it is now.
 class WorktreeRevisionCache final {
   public:
     using Compute = std::function<QString(const QString& worktreePath)>;

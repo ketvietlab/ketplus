@@ -14,22 +14,28 @@ namespace ketplus::daemon {
 namespace {
 
 // The git directory of a worktree: `.git` itself, or the directory a linked worktree's `.git`
-// file names.
+// file names. A workspace may be a folder inside a repository, so this walks up as
+// ReadOnlyWorkspaceFiles does.
 QString gitDirectory(const QString& worktreePath) {
-    const QString dotGit = QDir(worktreePath).filePath(QStringLiteral(".git"));
-    const QFileInfo info(dotGit);
-    if (info.isDir())
-        return dotGit;
-    if (!info.isFile())
+    if (!QFileInfo(worktreePath).isDir())
         return {};
-    QFile file(dotGit);
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    const QByteArray line = file.readLine(4096).trimmed();
-    if (!line.startsWith("gitdir:"))
-        return {};
-    const QString target = QString::fromUtf8(line.mid(7).trimmed());
-    return QDir(worktreePath).absoluteFilePath(target);
+    for (QDir directory(worktreePath);;) {
+        const QString dotGit = directory.filePath(QStringLiteral(".git"));
+        const QFileInfo info(dotGit);
+        if (info.isDir())
+            return dotGit;
+        if (info.isFile()) {
+            QFile file(dotGit);
+            if (!file.open(QIODevice::ReadOnly))
+                return {};
+            const QByteArray line = file.readLine(4096).trimmed();
+            if (!line.startsWith("gitdir:"))
+                return {};
+            return directory.absoluteFilePath(QString::fromUtf8(line.mid(7).trimmed()));
+        }
+        if (!directory.cdUp())
+            return {};
+    }
 }
 
 void addStamp(QByteArray* out, const QString& path) {
@@ -73,7 +79,10 @@ QByteArray WorktreeRevisionCache::fingerprint(const QString& worktreePath,
     if (git.isEmpty()) {
         out.append(QFileInfo(worktreePath).isDir() ? "no-git" : "no-worktree");
     } else {
+        // HEAD changes on checkout; its reflog on every move of HEAD, also one that leaves the
+        // index alone (a commit with nothing staged, reset --soft); the index on staging.
         addStamp(&out, QDir(git).filePath(QStringLiteral("HEAD")));
+        addStamp(&out, QDir(git).filePath(QStringLiteral("logs/HEAD")));
         addStamp(&out, QDir(git).filePath(QStringLiteral("index")));
     }
     return out;
@@ -88,7 +97,12 @@ QString WorktreeRevisionCache::revision(const QString& worktreePath,
         nowMs - found->computedAtMs < maximumAgeMs && nowMs >= found->computedAtMs)
         return found->revision;
     const QString revision = compute(worktreePath);
-    entries_.insert(worktreePath, {current, revision, nowMs});
+    // An empty revision from a repository is a failed git run (an error or a timeout); keep it
+    // for this heartbeat only. Outside a repository empty is the answer.
+    if (revision.isEmpty() && !gitDirectory(worktreePath).isEmpty())
+        entries_.remove(worktreePath);
+    else
+        entries_.insert(worktreePath, {current, revision, nowMs});
     return revision;
 }
 

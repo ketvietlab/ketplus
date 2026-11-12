@@ -1171,12 +1171,22 @@ class CloudPrivacyTest final : public QObject {
                 count += request.url().path() == "/v2/events:append";
             return count;
         };
+        // The journal still holds event 1 unsent. A known cursor at the session's last event
+        // skips it before the journal is read, or the event would go out.
+        QVERIFY(Access::registerCursors(*c.client));
+        Access::setKnownUploadedCursor(*c.client, 1);
+        for (int i = 0; i < 5; ++i)
+            Access::uploadAll(*c.client);
+        QTest::qWait(50);
+        QCOMPARE(appends(), 0);
+
+        // A known cursor behind the session's last event reads the journal and uploads.
+        Access::setKnownUploadedCursor(*c.client, 0);
         Access::uploadAll(*c.client);
         QTRY_COMPARE(appends(), 1);
         QTRY_VERIFY(Access::idle(*c.client));
         QCOMPARE(Access::knownUploadedCursor(*c.client), 1);
-        for (int i = 0; i < 5; ++i)
-            Access::uploadAll(*c.client);
+        Access::uploadAll(*c.client);
         QTest::qWait(50);
         QCOMPARE(appends(), 1);
 
@@ -1189,6 +1199,11 @@ class CloudPrivacyTest final : public QObject {
         Access::uploadAll(*c.client);
         QTRY_COMPARE(appends(), 2);
         QTRY_COMPARE(Access::knownUploadedCursor(*c.client), 2);
+
+        // A session the journal no longer stores drops its cursor.
+        QVERIFY2(c.journal.deleteSession("session-synthetic", 1, &error), qPrintable(error));
+        Access::uploadAll(*c.client);
+        QCOMPARE(Access::knownUploadedCursor(*c.client), -1);
     }
 
     void deletionHeartbeatRetriesUntilTheExactOperationIsAcknowledged() {
