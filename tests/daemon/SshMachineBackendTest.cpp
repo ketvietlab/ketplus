@@ -69,6 +69,7 @@ class FakeDaemon final : public QObject {
                 continue;
             }
             requests.append(type);
+            payloads.append(request.value("payload").toObject());
             if (type == "workspace.list")
                 answer(socket, request,
                        {{"ok", true},
@@ -99,6 +100,7 @@ class FakeDaemon final : public QObject {
     QLocalServer server;
     QString fingerprint{"daemon-key-A"};
     QStringList requests;
+    QList<QJsonObject> payloads;
     int hellos{0};
 };
 
@@ -309,6 +311,30 @@ class SshMachineBackendTest final : public QObject {
         QCOMPARE(backend->machineId(), QStringLiteral("daemon-key-A"));
         backend->connectToHost();
         QTRY_COMPARE(backend->connectionState(), State::Connected);
+    }
+
+    void createSessionStartsTheFirstTurnInTheRemoteWorktree() {
+        Fixture fixture;
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        auto backend = fixture.backend(store);
+        backend->connectToHost();
+        QTRY_COMPARE(backend->connectionState(), State::Connected);
+        bool created = false;
+        backend->createSession({{"repository_id", "/home/dev/app"},
+                                {"worktree_id", "/home/dev/app"},
+                                {"prompt", "hello"},
+                                {"options", QJsonObject{{"model", "fixture"}}}},
+                               [&](const QJsonObject& result, const QString& error) {
+                                   created = error.isEmpty() && result.value("ok").toBool();
+                               });
+        QTRY_VERIFY(created);
+        QCOMPARE(fixture.daemon.requests.last(), QStringLiteral("session.start_turn"));
+        const auto payload = fixture.daemon.payloads.last();
+        QCOMPARE(payload.value("worktree_path").toString(), QStringLiteral("/home/dev/app"));
+        QCOMPARE(payload.value("prompt").toString(), QStringLiteral("hello"));
+        QCOMPARE(payload.value("options").toObject().value("model").toString(),
+                 QStringLiteral("fixture"));
     }
 
     void aDroppedSessionReconnectsAndReplaysReads() {

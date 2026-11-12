@@ -6,6 +6,8 @@
 #include <QJsonObject>
 #include <QString>
 
+#include <functional>
+
 namespace ketplus::daemon {
 
 class CloudCrypto final {
@@ -46,6 +48,16 @@ class CloudCrypto final {
                     const QByteArray& recipientAgreementKey, const QString& requestId,
                     const QString& keyId, const QString& recipientDeviceId, int recipientKeyVersion,
                     const QString& senderDeviceId, int senderKeyVersion, QString* error = nullptr);
+    // The same, for content whose associated data names its own envelope (a command sealed to a
+    // machine binds recipientDeviceId, recipientKeyVersion and ephemeralPublicKey): the callback
+    // receives every envelope field except nonce, ciphertext, tag and signature.
+    using SealedAssociatedData = std::function<QByteArray(const QJsonObject& envelope)>;
+    [[nodiscard]] QJsonObject
+    encryptSealedBound(const QByteArray& plaintext, const SealedAssociatedData& associatedData,
+                       const QByteArray& recipientAgreementKey, const QString& requestId,
+                       const QString& keyId, const QString& recipientDeviceId,
+                       int recipientKeyVersion, const QString& senderDeviceId, int senderKeyVersion,
+                       QString* error = nullptr);
     [[nodiscard]] QJsonObject wrapSessionKey(const QString& sessionId, qint64 generation,
                                              int keyEpoch, const QJsonObject& recipient,
                                              const QString& senderDeviceId, int senderKeyVersion,

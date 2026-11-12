@@ -2754,6 +2754,81 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(quota.reserve("repo-a", hour + 10, 1000).isEmpty());
     }
 
+    // ADR 0119: a paired Desktop verifies a worktree index entry with no conversation by the
+    // catalog scope the host signs inside a worktree.configuration.read result.
+    void aConfigurationReadEchoesTheHostCatalogScopeInsideItsSignedResult() {
+        QTemporaryDir dir;
+        const QString repository = dir.filePath("echo-repo");
+        QVERIFY(QDir().mkpath(repository));
+        QCOMPARE(QProcess::execute("git", {"-C", repository, "init", "-q", "-b", "main"}), 0);
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const auto canonical = QFileInfo(repository).canonicalFilePath();
+        QVERIFY(c.journal.rememberWorktree(canonical));
+        const QByteArray salt(32, 's');
+        Access::pathSalt(*c.client, salt);
+        const auto id = [&](const QByteArray& label) {
+            return QString::fromLatin1(
+                QMessageAuthenticationCode::hash(label + '\n' + canonical.toUtf8(), salt,
+                                                 QCryptographicHash::Sha256)
+                    .toHex());
+        };
+        CredentialStore phoneStore("echo-phone");
+        CloudCrypto phone(&phoneStore);
+        const QByteArray phoneAgreement =
+            CloudCrypto::fromBase64Url(phone.publicKeys().value("agreementPublicKey").toString());
+        const QJsonObject command{
+            {"id", "command-configuration-echo"},
+            {"kind", "worktree.configuration.read"},
+            {"attempt", 1},
+            {"workspaceId", "workspace-synthetic"},
+            {"sessionGeneration", 0},
+            {"expectedCatalogRevision", 0},
+            {"expectedLifecycleRevision", 0},
+            {"repositoryId", id("repository")},
+            {"worktreeId", id("worktree")},
+            {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
+                                    {"recipientKeyVersion", 1},
+                                    {"senderDeviceId", "echo-phone"},
+                                    {"senderKeyVersion", 1}}}};
+        const qsizetype before = c.transport.requests.size();
+        Access::worktreeCommand(*c.client, command, {}, phoneAgreement);
+        const QString ack = "/v2/commands/command-configuration-echo/ack";
+        QTRY_VERIFY_WITH_TIMEOUT(
+            std::any_of(c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                        [&ack](const auto& request) { return request.url().path() == ack; }),
+            30000);
+        QJsonObject body;
+        for (qsizetype i = before; i < c.transport.requests.size(); ++i)
+            if (c.transport.requests.at(i).url().path() == ack)
+                body = QJsonDocument::fromJson(c.transport.bodies.at(i)).object();
+        const auto content = body.value("encryptedResult").toObject();
+        QCOMPARE(content.value("keyId").toString(),
+                 QStringLiteral("session-create:command-configuration-echo"));
+        QString error;
+        const auto plaintext = phone.decryptSealedAs(
+            content,
+            Access::resultAad(*c.client, command, 1, body.value("status").toString(),
+                              body.value("resultCode").toString(), content),
+            CloudCrypto::fromBase64Url(
+                Access::crypto(*c.client).publicKeys().value("signingPublicKey").toString()),
+            "command-configuration-echo", "session-create:command-configuration-echo", &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        // Without providers the result reports provider_capabilities_unavailable; a success and
+        // that failure carry the same echo.
+        const auto worktree =
+            QJsonDocument::fromJson(plaintext).object().value("worktree").toObject();
+        QCOMPARE(worktree.value("repositoryId").toString(), id("repository"));
+        QCOMPARE(worktree.value("worktreeId").toString(), id("worktree"));
+        QVERIFY(!worktree.value("repositoryLabel").toString().isEmpty());
+        QVERIFY(!worktree.value("worktreeLabel").toString().isEmpty());
+        // The host keeps no catalog revision, so it echoes none (ADR 0119).
+        QVERIFY(!worktree.contains("catalogRevision"));
+        QVERIFY(!worktree.contains("lifecycleRevision"));
+        // The host path never leaves the machine.
+        QVERIFY(!plaintext.contains(canonical.toUtf8()));
+    }
+
     void aRedeliveredNewWorktreeAnswersWithItsFirstResultAndCreationIsBounded() {
         QTemporaryDir dir;
         const QString repository = dir.filePath("repo");

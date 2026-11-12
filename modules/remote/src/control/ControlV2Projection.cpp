@@ -1,5 +1,6 @@
 #include "control/ControlV2Client.h"
 #include "control/ControlV2Content.h"
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QSet>
 
@@ -64,6 +65,13 @@ struct ControlV2Client::ProjectionState {
     qsizetype next{0};
     QJsonArray conversations;
     QJsonArray rejected;
+    // Index worktrees no verified conversation covers: at most verifyBound uncached ones are
+    // queued for a host-signed worktree.configuration.read (reported in `pending`), and those
+    // whose cached verdict matched are shown.
+    int verifyBound{0};
+    QJsonArray pending;
+    QList<QJsonObject> hostVerified;
+    quint64 epoch{0};
     Callback done;
 };
 
@@ -81,9 +89,13 @@ bool ControlV2Client::hostPinned(const QString& machineId) const {
     return false;
 }
 
-void ControlV2Client::projection(Callback done) {
+void ControlV2Client::projection(Callback done) { projection({}, std::move(done)); }
+
+void ControlV2Client::projection(const QJsonObject& options, Callback done) {
     auto state = std::make_shared<ProjectionState>();
     state->done = std::move(done);
+    state->verifyBound = qBound(0, options.value("verify_worktrees").toInt(0), 100);
+    state->epoch = epoch_;
     listSessions([this, state](const QJsonValue& sessions, const QString& error) {
         if (!error.isEmpty() || !sessions.isArray()) {
             state->done({}, error.isEmpty() ? "Invalid session index." : error);
@@ -211,8 +223,132 @@ void ControlV2Client::projectNext(const std::shared_ptr<ProjectionState>& state)
 }
 
 void ControlV2Client::finishProjection(const std::shared_ptr<ProjectionState>& state) {
-    // Repositories and worktrees come from the host-sealed scope of verified conversations. The
-    // relay's worktree index is unsigned: it only adds revisions to a worktree verified that way.
+    // The relay's worktree index is unsigned. A worktree is shown when a verified conversation
+    // names it, or when the host signs its scope in a worktree.configuration.read result.
+    QSet<QString> covered;
+    for (const auto& value : std::as_const(state->conversations)) {
+        const auto row = value.toObject();
+        covered.insert(row.value("machineId").toString() + '\n' +
+                       row.value("worktreeId").toString());
+    }
+    if (verdictEpoch_ != epoch_) {
+        worktreeVerdicts_.clear();
+        verifyQueue_.clear();
+        verifying_.clear();
+        verdictEpoch_ = epoch_;
+    }
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    int scheduled = 0;
+    QSet<QString> seen;
+    for (const auto& value : std::as_const(state->worktrees)) {
+        const auto entry = value.toObject();
+        const auto machine = entry.value("machineId").toString();
+        const auto key = machine + '\n' + entry.value("worktreeId").toString();
+        if (seen.contains(key) || covered.contains(key))
+            continue;
+        seen.insert(key);
+        if (!hostPinned(machine)) {
+            state->rejected.append(reject("worktree", entry, "unpinned_host"));
+            continue;
+        }
+        const auto verdict = worktreeVerdicts_.constFind(worktreeVerdictKey(entry));
+        const auto known =
+            verdict != worktreeVerdicts_.cend() && (verdict->until == 0 || verdict->until > now);
+        if (entry.value("status").toString("active") != "active") {
+            state->rejected.append(reject("worktree", entry, "unsigned_index_entry"));
+        } else if (known) {
+            if (verdict->reason.isEmpty())
+                state->hostVerified.append(entry);
+            else
+                state->rejected.append(reject("worktree", entry, verdict->reason, verdict->detail));
+        } else if (scheduled < state->verifyBound) {
+            // Lazy: the listing never waits for the host; worktreesVerified() announces the
+            // verdict, and the next listing shows or rejects the entry.
+            ++scheduled;
+            state->pending.append(reject("worktree", entry, "verification_pending"));
+            queueWorktreeVerification(entry);
+        } else {
+            state->rejected.append(reject("worktree", entry, "unsigned_index_entry"));
+        }
+    }
+    pumpWorktreeVerification();
+    assembleProjection(state);
+}
+
+QString ControlV2Client::worktreeVerdictKey(const QJsonObject& entry) {
+    // Once per catalog scope: any change of ids, labels or revisions is a new verification.
+    QStringList parts;
+    for (const auto* key : {"workspaceId", "machineId", "repositoryId", "worktreeId",
+                            "repositoryLabel", "worktreeLabel"})
+        parts.append(entry.value(QLatin1String(key)).toString());
+    for (const auto* key : {"catalogRevision", "lifecycleRevision"})
+        parts.append(QString::number(entry.value(QLatin1String(key)).toInteger(0)));
+    return parts.join('\n');
+}
+
+void ControlV2Client::queueWorktreeVerification(const QJsonObject& entry) {
+    const auto key = worktreeVerdictKey(entry);
+    if (verifying_.contains(key))
+        return;
+    verifying_.insert(key);
+    verifyQueue_.append(entry);
+}
+
+void ControlV2Client::pumpWorktreeVerification() {
+    while (verifyInFlight_ < verifyConcurrency_ && !verifyQueue_.isEmpty()) {
+        const auto entry = verifyQueue_.takeFirst();
+        const auto key = worktreeVerdictKey(entry);
+        const auto epoch = epoch_;
+        ++verifyInFlight_;
+        QJsonObject intent{{"kind", "worktree.configuration.read"}};
+        for (const auto* field : {"workspaceId", "machineId", "repositoryId", "worktreeId"})
+            intent.insert(QLatin1String(field), entry.value(QLatin1String(field)));
+        intent.insert("expectedCatalogRevision", entry.value("catalogRevision").toInteger(0));
+        intent.insert("expectedLifecycleRevision", entry.value("lifecycleRevision").toInteger(0));
+        awaitWorktreeCommand(
+            intent, {}, verifyTimeoutMilliseconds_,
+            [this, entry, key, epoch](const QJsonValue& value, const QString& error) {
+                --verifyInFlight_;
+                verifying_.remove(key);
+                if (epoch == epoch_) {
+                    WorktreeVerdict verdict;
+                    if (!error.isEmpty()) {
+                        verdict.detail = error;
+                        if (error.contains("forbidden")) {
+                            verdict.reason = QStringLiteral("worktree_not_granted");
+                        } else {
+                            // No answer: tried again in a later listing, not on every one.
+                            verdict.reason = QStringLiteral("verification_failed");
+                            verdict.until =
+                                QDateTime::currentMSecsSinceEpoch() + verifyRetryMilliseconds_;
+                        }
+                    } else {
+                        // The host's own catalog scope for the worktree, inside its signed
+                        // result. The host keeps no catalog revision, so only ids and labels
+                        // are compared (ADR 0119); the revisions are part of the cache key.
+                        const auto echo = value.toObject()
+                                              .value("result")
+                                              .toObject()
+                                              .value("worktree")
+                                              .toObject();
+                        bool same = !echo.isEmpty();
+                        for (const auto* field :
+                             {"repositoryId", "worktreeId", "repositoryLabel", "worktreeLabel"})
+                            same &= echo.value(QLatin1String(field)).toString() ==
+                                        entry.value(QLatin1String(field)).toString() &&
+                                    boundedText(echo.value(QLatin1String(field)), 512);
+                        if (!same)
+                            verdict.reason = QStringLiteral("verification_failed");
+                    }
+                    worktreeVerdicts_.insert(key, verdict);
+                    emit worktreesVerified();
+                }
+                pumpWorktreeVerification();
+            });
+    }
+}
+
+void ControlV2Client::assembleProjection(const std::shared_ptr<ProjectionState>& state) {
     QHash<QString, QJsonObject> indexed;
     for (const auto& value : std::as_const(state->worktrees)) {
         const auto entry = value.toObject();
@@ -224,46 +360,57 @@ void ControlV2Client::finishProjection(const std::shared_ptr<ProjectionState>& s
     QJsonArray repositories;
     QHash<QString, qsizetype> repositoryIndex;
     QSet<QString> shown;
-    for (const auto& value : std::as_const(state->conversations)) {
-        const auto row = value.toObject();
-        const auto machine = row.value("machineId").toString();
-        const auto worktree = row.value("worktreeId").toString();
-        const auto key = machine + '\n' + row.value("repositoryId").toString();
-        if (worktree.isEmpty() || shown.contains(machine + '\n' + worktree))
-            continue;
-        shown.insert(machine + '\n' + worktree);
+    const auto add = [&](const QString& machine, const QJsonValue& repositoryId,
+                         const QJsonValue& repositoryLabel, QJsonObject item) {
+        const auto key = machine + '\n' + repositoryId.toString();
         if (!repositoryIndex.contains(key)) {
             repositoryIndex.insert(key, repositories.size());
             repositories.append(QJsonObject{{"machineId", machine},
-                                            {"repositoryId", row.value("repositoryId")},
-                                            {"label", row.value("repositoryLabel")},
+                                            {"repositoryId", repositoryId},
+                                            {"label", repositoryLabel},
                                             {"worktrees", QJsonArray{}}});
         }
-        QJsonObject item{{"worktreeId", worktree},
-                         {"label", row.value("worktreeLabel")},
-                         {"branch", row.value("branch")},
-                         {"exists", row.value("worktreeExists")}};
-        const auto entry = indexed.value(machine + '\n' + worktree);
-        if (entry.value("repositoryId") == row.value("repositoryId"))
-            for (const auto* revision : {"catalogRevision", "lifecycleRevision"})
-                if (entry.value(QLatin1String(revision)).isDouble())
-                    item.insert(QLatin1String(revision), entry.value(QLatin1String(revision)));
         auto group = repositories.at(repositoryIndex.value(key)).toObject();
         auto worktrees = group.value("worktrees").toArray();
         worktrees.append(item);
         group.insert("worktrees", worktrees);
         repositories.replace(repositoryIndex.value(key), group);
+    };
+    for (const auto& value : std::as_const(state->conversations)) {
+        const auto row = value.toObject();
+        const auto machine = row.value("machineId").toString();
+        const auto worktree = row.value("worktreeId").toString();
+        if (worktree.isEmpty() || shown.contains(machine + '\n' + worktree))
+            continue;
+        shown.insert(machine + '\n' + worktree);
+        QJsonObject item{{"worktreeId", worktree},
+                         {"workspaceId", row.value("workspaceId")},
+                         {"label", row.value("worktreeLabel")},
+                         {"branch", row.value("branch")},
+                         {"exists", row.value("worktreeExists")},
+                         {"verified", "conversation"}};
+        const auto entry = indexed.value(machine + '\n' + worktree);
+        if (entry.value("repositoryId") == row.value("repositoryId"))
+            for (const auto* revision : {"catalogRevision", "lifecycleRevision"})
+                if (entry.value(QLatin1String(revision)).isDouble())
+                    item.insert(QLatin1String(revision), entry.value(QLatin1String(revision)));
+        add(machine, row.value("repositoryId"), row.value("repositoryLabel"), item);
     }
-    for (auto it = indexed.cbegin(); it != indexed.cend(); ++it)
-        if (!shown.contains(it.key()))
-            state->rejected.append(reject("worktree", it.value(),
-                                          hostPinned(it.value().value("machineId").toString())
-                                              ? "unsigned_index_entry"
-                                              : "unpinned_host"));
+    for (const auto& entry : std::as_const(state->hostVerified))
+        add(entry.value("machineId").toString(), entry.value("repositoryId"),
+            entry.value("repositoryLabel"),
+            {{"worktreeId", entry.value("worktreeId")},
+             {"workspaceId", entry.value("workspaceId")},
+             {"label", entry.value("worktreeLabel")},
+             {"exists", true},
+             {"catalogRevision", entry.value("catalogRevision")},
+             {"lifecycleRevision", entry.value("lifecycleRevision")},
+             {"verified", "host_read"}});
     const auto done = std::move(state->done);
     done(QJsonObject{{"repositories", repositories},
                      {"conversations", state->conversations},
-                     {"rejected", state->rejected}},
+                     {"rejected", state->rejected},
+                     {"pending", state->pending}},
          {});
 }
 } // namespace ketplus::remote

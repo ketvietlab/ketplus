@@ -85,6 +85,11 @@ class MachineBackendTest final : public QObject {
         backend.pendingApprovals(QStringLiteral("s1"), 3, QStringLiteral("a7"), count);
         backend.resolveApproval(QStringLiteral("s1"), 3, QStringLiteral("a1"), accept, count);
         backend.answerQuestion(QStringLiteral("s1"), 3, QStringLiteral("q1"), answer, count);
+        const QJsonObject model{{QStringLiteral("model"), QStringLiteral("fixture")}};
+        backend.createSession({{QStringLiteral("worktree_id"), QStringLiteral("/src/app-fix")},
+                               {QStringLiteral("prompt"), QStringLiteral("Start here")},
+                               {QStringLiteral("options"), model}},
+                              count);
 
         const QList<RecordedCall> expected{
             {QStringLiteral("workspace.list"), {}, {}, -1},
@@ -111,6 +116,13 @@ class MachineBackendTest final : public QObject {
               {QStringLiteral("resolution"), answer}},
              "s1",
              3},
+            // A local worktree id is its path; the first turn creates the conversation.
+            {QStringLiteral("session.start_turn"),
+             {{QStringLiteral("prompt"), QStringLiteral("Start here")},
+              {QStringLiteral("worktree_path"), QStringLiteral("/src/app-fix")},
+              {QStringLiteral("options"), model}},
+             {},
+             0},
         };
         QCOMPARE(repositoryAnswers, 1);
         QCOMPARE(answered + repositoryAnswers, expected.size());

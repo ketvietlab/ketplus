@@ -75,6 +75,8 @@ class FixtureTransport final : public QNetworkAccessManager {
     std::function<std::optional<std::pair<int, QJsonObject>>(const QNetworkRequest&,
                                                              const QByteArray&)>
         handler;
+    // Set by the handler for the reply it returns: the transfer fails like a dropped link.
+    QNetworkReply::NetworkError nextFailure{QNetworkReply::NoError};
 
   protected:
     QNetworkReply* createRequest(Operation operation, const QNetworkRequest& request,
@@ -87,8 +89,9 @@ class FixtureTransport final : public QNetworkAccessManager {
             if (auto answer = handler(request, body); answer) {
                 bodies.append(body);
                 paths.append(path);
-                latestReply = new r03::Reply(request, answer->first,
-                                             QJsonDocument(answer->second).toJson(), this);
+                latestReply =
+                    new r03::Reply(request, answer->first, QJsonDocument(answer->second).toJson(),
+                                   this, std::exchange(nextFailure, QNetworkReply::NoError));
                 return latestReply;
             }
             if (!replies.contains(path))

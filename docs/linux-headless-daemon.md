@@ -169,7 +169,7 @@ The scoped results and remaining deployment checks for 0.1.29 are recorded in
 ADR 0119 defines how Desktop composes a remote machine: one machine-neutral
 `MachineBackend` (`modules/remote/src/MachineBackend.h`) implemented by the
 local socket (`DaemonMachineBackend`), a Relay backend over `ControlV2Client`
-and an SSH route that carries the local protocol to the user's own socket; how
+(`RelayMachineBackend`) and an SSH route that carries the local protocol to the user's own socket; how
 the sidebar, Agent Workspace, worktree picker and approvals bind to the selected
 machine; the Connecting / Connected / Reconnecting / Offline states; and the SSH
 trust decision (host key from `known_hosts` or an accepted SHA256 fingerprint,
@@ -247,7 +247,15 @@ relay.
 Any host-signed content naming a signing key version other than the pinned
 one that opened its session key fails closed (events, metadata and restore
 responses) and needs a new pairing; historical-key selection is a future
-extension. Presentation, session creation, attachments and a durable Desktop
-command outbox are future integrations. The current backend supports ordinary
-session controls and workspace-file requests; it is not a complete remote
-Desktop product.
+extension.
+
+`RelayMachineBackend` implements ADR 0119's `MachineBackend` for one paired
+machine. Its writes, including session creation in a verified worktree
+(`session.create` through `session-creates`, the host's existing path), go
+through a durable `CommandOutbox`: the encrypted envelope is written to an
+owner-only file before it is sent, only that ciphertext is retried after a
+restart or reconnect, and a host-signed result is verified and applied once.
+Index worktrees with no conversation are shown only after the host signs their
+catalog scope in a `worktree.configuration.read` result (ADR 0119, decision C).
+Presentation and attachments are future integrations; the backend is not yet
+composed into a complete remote Desktop product.

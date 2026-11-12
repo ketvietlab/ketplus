@@ -41,10 +41,27 @@ QByteArray ControlV2Client::commandAssociatedData(const QJsonObject& command) {
     if (command.value("kind").toString().startsWith("workspace.files."))
         for (const auto* key : {"repositoryId", "worktreeId", "workspaceRevision"})
             fields.append(command.value(QLatin1String(key)).toString());
+    // Sealed to the machine before a conversation exists (CloudControlClient isWorktreeCommand).
+    if (control_v2::worktreeScoped(command.value("kind").toString())) {
+        for (const auto* key : {"ownerSubjectId", "repositoryId", "worktreeId",
+                                "expectedCatalogRevision", "expectedLifecycleRevision"})
+            fields.append(command.value(QLatin1String(key)));
+        for (const auto* key : {"recipientDeviceId", "recipientKeyVersion", "ephemeralPublicKey"})
+            fields.append(content.value(QLatin1String(key)));
+    }
     return daemon::CloudCrypto::canonical(fields);
 }
 void ControlV2Client::senderKey(const QString& id, int version,
                                 std::function<void(const QByteArray&, const QString&)> done) {
+    hostKeys(id, version, [done = std::move(done)](const QJsonObject& keys, const QString& error) {
+        done(error.isEmpty()
+                 ? daemon::CloudCrypto::fromBase64Url(keys.value("signingPublicKey").toString())
+                 : QByteArray{},
+             error);
+    });
+}
+void ControlV2Client::hostKeys(const QString& id, int version,
+                               std::function<void(const QJsonObject&, const QString&)> done) {
     authorized(
         "GET", "/v2/mobile/device-keys/" + segment(id) + "/" + QString::number(version), {},
         [this, id, version, done = std::move(done)](const QJsonValue& value, const QString& error) {
@@ -75,7 +92,7 @@ void ControlV2Client::senderKey(const QString& id, int version,
                 done({}, QString::fromLatin1(control_v2::hostNotPaired));
                 return;
             }
-            done(signing, {});
+            done(keys, {});
         });
 }
 bool ControlV2Client::signedByVerifiedKey(const QString& sessionId, qint64 generation,

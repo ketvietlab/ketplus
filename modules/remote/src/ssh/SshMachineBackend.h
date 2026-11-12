@@ -127,6 +127,8 @@ class SshMachineBackend final : public MachineBackend {
                         Callback callback) override;
     void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                               const QJsonObject& request, Callback callback) override;
+    // As locally: the first turn in the remote worktree (its path) creates the conversation.
+    void createSession(const QJsonObject& request, Callback callback) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
