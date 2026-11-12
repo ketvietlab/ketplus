@@ -174,11 +174,33 @@ std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
     return local;
 }
 
+std::optional<bool> branchExists(const teams::Team& team, const teams::Task& task) {
+    if (task.branch.isEmpty())
+        return false;
+    if (team.repository.isEmpty())
+        return std::nullopt;
+    QProcess process;
+    process.setWorkingDirectory(team.repository);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--no-optional-locks"), QStringLiteral("show-ref"),
+                   QStringLiteral("--verify"), QStringLiteral("--quiet"),
+                   QStringLiteral("refs/heads/%1").arg(task.branch)});
+    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
+        return std::nullopt;
+    // 0: there; 1: git answered and there is no such branch; anything else: git failed.
+    if (process.exitCode() == 0 || process.exitCode() == 1)
+        return process.exitCode() == 0;
+    return std::nullopt;
+}
+
 std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Task& task) {
     const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
     // T-38: a branch still at its base has nothing to show; the review reads the work where
     // the hand to review named it, never another commit the worktree has checked out.
-    if (const QString tip = taskCommit(team, task); !tip.isEmpty() && tip == task.baseCommit)
+    // A deleted branch has nothing to show either.
+    if (const QString tip = taskCommit(team, task);
+        (!tip.isEmpty() && tip == task.baseCommit) ||
+        (tip.isEmpty() && branchExists(team, task) == std::optional<bool>(false)))
         return teams::TaskDiff{.diff = {}, .files = {}, .outsideBranch = true};
     // The branch against the integration branch it was cut from (ADR 0114 §2), up to the
     // commit handed to review (T-38), not whatever the branch points at since.
@@ -239,9 +261,13 @@ std::optional<bool> hasUncommittedWork(const QString& worktree) {
 }
 
 std::optional<QString> ownHead(const teams::Team& team, const teams::Task& task) {
-    if (task.branch.isEmpty())
+    // A deleted or never made branch has no work of its own; only a git that cannot answer
+    // is not known, and the caller says to try again.
+    const auto exists = branchExists(team, task);
+    if (!exists)
+        return std::nullopt;
+    if (!*exists)
         return QString{};
-    // A branch git cannot read is not a branch without work: the caller says to try again.
     const auto tip =
         output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
                                  QStringLiteral("--end-of-options"),

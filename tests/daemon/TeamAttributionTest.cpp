@@ -294,11 +294,19 @@ class TeamAttributionTest final : public QObject {
     void anUnreadableBranchIsNotABranchWithoutCommits() {
         Repository repository;
         QVERIFY(repository.make());
+        // Git cannot answer: the repository is gone.
+        Team gone = repository.team;
+        gone.repository = QDir(repository.root.path()).filePath("not-a-repository");
+        QVERIFY(QDir().mkpath(gone.repository));
+        QVERIFY(!team_git::ownHead(gone, repository.task));
+        QVERIFY(!team_git::handoff(gone, repository.task).headRead);
+        // Git answers that the branch is not there: no head of its own, and read.
         Task task = repository.task;
         task.branch = QStringLiteral("team/1/missing");
-        QVERIFY(!team_git::ownHead(repository.team, task));
-        const auto facts = team_git::handoff(repository.team, task);
-        QVERIFY(!facts.headRead);
+        QCOMPARE(team_git::ownHead(repository.team, task), std::optional<QString>(QString{}));
+        QVERIFY(team_git::handoff(repository.team, task).headRead);
+        const auto diff = team_git::taskDiff(repository.team, task);
+        QVERIFY(diff && diff->outsideBranch);
         // The coordinator refuses the hand to review with what happened.
         const QString id = this->task("Cart");
         start(id);
@@ -307,6 +315,30 @@ class TeamAttributionTest final : public QObject {
         QVERIFY(!refused.ok());
         QCOMPARE(refused.error->code, QStringLiteral("git_unavailable"));
         QCOMPARE(get(id).state, state::inProgress);
+    }
+
+    // Criterion 5 with the branch deleted: the hand to review names the pull request and
+    // its head commit and is accepted; without the pull request it says what is missing.
+    void aDeletedBranchIsHandedInWithItsPullRequest() {
+        Repository repository;
+        QVERIFY(repository.make());
+        git(repository.worktree, {"checkout", "-q", "--detach"});
+        git(repository.path, {"branch", "-D", "team/1/t-1"});
+        const auto facts = team_git::handoff(repository.team, repository.task);
+        QVERIFY(facts.headRead);
+        QVERIFY(facts.head.isEmpty());
+        // The coordinator with that answer.
+        const QString id = task("Cart");
+        start(id);
+        host_.heads.insert(get(id).branch, get(id).baseCommit);
+        QCOMPARE(teams_->moveTask(team_, id, state::inReview, "dev1").error->code,
+                 QStringLiteral("no_commits"));
+        QVERIFY(teams_->updateTask(team_, id, {{"pull_request", pullRequest}}, "dev1").ok());
+        QVERIFY(
+            teams_->moveTask(team_, id, state::inReview, "dev1", {}, QStringLiteral("0123abc4567"))
+                .ok());
+        QCOMPARE(get(id).state, state::inReview);
+        QCOMPARE(get(id).headCommit, QStringLiteral("0123abc4567"));
     }
 
     // Criterion 2: the leader's tool, refused to the other roles.

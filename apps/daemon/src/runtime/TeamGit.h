@@ -19,6 +19,8 @@ namespace ketplus::daemon::team_git {
 // not tell.
 [[nodiscard]] std::optional<bool> isAncestor(const QString& repository, const QString& commit,
                                              const QString& of);
+// Whether the task's branch exists in the team's repository; nothing when git failed.
+[[nodiscard]] std::optional<bool> branchExists(const teams::Team& team, const teams::Task& task);
 // T-38: the commit the task's branch points at when it is the task's own: made on the branch
 // after its base and not yet in the integration branch. Empty otherwise; nothing when git
 // could not read the branch or its ancestry.
