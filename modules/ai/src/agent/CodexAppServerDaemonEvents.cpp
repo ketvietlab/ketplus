@@ -10,6 +10,7 @@
 #include "CodexLaunchReloader.h"
 #include "CodexServerRequests.h"
 #include "DaemonClient.h"
+#include "TranscriptVisibility.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -280,6 +281,11 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     }
     if (found->windowReady && sessionId == daemonRestorePrioritySession_)
         found->windowCursor = cursor;
+    // KetPlus's own agents tools are team plumbing, not transcript rows (TranscriptVisibility.h).
+    // The background task snapshot has its own notification above.
+    if (type.startsWith(QStringLiteral("item.")) &&
+        remote::transcript_visibility::hidden(type, data))
+        return;
     const QJsonObject largeEvent = data.value(QStringLiteral("large_event")).toObject();
     if (!largeEvent.isEmpty()) {
         const quint64 epoch = found->windowEpoch;
@@ -308,6 +314,9 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
                                                  .value(QStringLiteral("payload"))
                                                  .toObject();
                 const QJsonObject item = resolved.value(QStringLiteral("item")).toObject();
+                // A large internal call is known only once its item is whole.
+                if (remote::transcript_visibility::internalTool(item))
+                    return;
                 if (item.isEmpty()) {
                     emit notificationReceived(
                         QStringLiteral("error"),

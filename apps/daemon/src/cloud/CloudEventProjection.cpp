@@ -1,4 +1,5 @@
 #include "cloud/CloudEventProjection.h"
+#include "TranscriptVisibility.h"
 #include "agents/WorkReport.h"
 #include "storage/TranscriptItemSnapshot.h"
 
@@ -114,12 +115,12 @@ constexpr qsizetype maximumMcpContentBlocks = 32;
 bool isSensitiveArgumentKey(const QString& key) {
     const QString marker = normalizedMarker(key);
     static const QSet<QString> freeText{
-        QStringLiteral("text"),     QStringLiteral("value"),   QStringLiteral("values"),
-        QStringLiteral("script"),   QStringLiteral("code"),    QStringLiteral("body"),
-        QStringLiteral("content"),  QStringLiteral("data"),    QStringLiteral("expression"),
-        QStringLiteral("function"), QStringLiteral("html"),    QStringLiteral("input"),
-        QStringLiteral("prompt"),   QStringLiteral("message"), QStringLiteral("source"),
-        QStringLiteral("key"),      QStringLiteral("keys"),    QStringLiteral("id"),
+        QStringLiteral("text"), QStringLiteral("value"), QStringLiteral("values"),
+        QStringLiteral("script"), QStringLiteral("code"), QStringLiteral("body"),
+        QStringLiteral("content"), QStringLiteral("data"), QStringLiteral("expression"),
+        QStringLiteral("function"), QStringLiteral("html"), QStringLiteral("input"),
+        QStringLiteral("prompt"), QStringLiteral("message"), QStringLiteral("source"),
+        QStringLiteral("key"), QStringLiteral("keys"), QStringLiteral("id"),
         // File edits: the replaced and replacement text are file contents, not metadata.
         QStringLiteral("oldstring"), QStringLiteral("newstring"), QStringLiteral("newsource")};
     if (freeText.contains(marker))
@@ -218,8 +219,9 @@ QString cloudArgumentSummary(const QJsonObject& arguments) {
         const QString text =
             value.isString() ? sanitizeCloudText(value.toString()) : value.toVariant().toString();
         parts.append(sanitizeCloudText(field.key()) + QLatin1Char('=') +
-                     (isPathArgumentKey(field.key()) ? capCloudPath(text, maximumMcpArgumentValue)
-                                                     : capCloudText(text, maximumMcpArgumentValue)));
+                     (isPathArgumentKey(field.key())
+                          ? capCloudPath(text, maximumMcpArgumentValue)
+                          : capCloudText(text, maximumMcpArgumentValue)));
     }
     return capCloudText(parts.join(QStringLiteral(" · ")), maximumMcpArgumentSummary);
 }
@@ -247,8 +249,7 @@ QJsonObject mcpToolCallProjection(const QJsonObject& payload) {
         projectedItem.insert(QStringLiteral("arguments_summary"), summary);
     // Preserve explicit paths for daemon-verified resource resolution on the phone.
     const QString path = item.value(QStringLiteral("path")).toString();
-    if (!path.isEmpty() && path.size() <= maximumToolPath &&
-        !path.contains(QLatin1Char('\\')) &&
+    if (!path.isEmpty() && path.size() <= maximumToolPath && !path.contains(QLatin1Char('\\')) &&
         !path.split(QLatin1Char('/')).contains(QStringLiteral("..")))
         projectedItem.insert(QStringLiteral("path"), sanitizeCloudText(path));
     if (item.value(QStringLiteral("outsideWorktree")).toBool())
@@ -301,9 +302,7 @@ QJsonObject mcpToolCallProjection(const QJsonObject& payload) {
     return projected;
 }
 
-} // namespace
-
-QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObject& payload) {
+QJsonObject projectedPayload(const QString& eventType, const QJsonObject& payload) {
     const QJsonObject item = payload.value(QStringLiteral("item")).toObject();
     const QString itemType =
         payload.value(QStringLiteral("item_type"))
@@ -339,6 +338,17 @@ QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObj
         return payload;
     }
     return commandProjection(payload);
+}
+
+} // namespace
+
+QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObject& payload) {
+    QJsonObject projected = projectedPayload(eventType, payload);
+    // The phone leaves these out of its transcript as Desktop does (TranscriptVisibility.h).
+    if (remote::transcript_visibility::hidden(eventType, payload))
+        projected.insert(QLatin1String(remote::transcript_visibility::markerKey),
+                         QLatin1String(remote::transcript_visibility::hiddenMarker));
+    return projected;
 }
 
 QJsonObject cloudItemMetadata(const QString& sessionId, const qint64 generation,

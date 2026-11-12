@@ -1,4 +1,5 @@
 #include "agent/DaemonTranscriptProjection.h"
+#include "TranscriptVisibility.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
@@ -551,6 +552,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             turnReports.insert(sequence, data);
             continue;
         }
+        // Team plumbing and the task snapshot stay in the journal, out of the transcript.
+        if (ketplus::remote::transcript_visibility::hidden(type, data))
+            continue;
         auto notice = daemonEventNotice(
             type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage, turn);
         // The daemon repeats the report on turn.completed, so a page that starts after the

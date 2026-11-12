@@ -261,21 +261,22 @@ class DaemonActivityGroupsTest : public QObject {
         }
         const auto summary =
             journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
-        QCOMPARE(summary.value("count").toInt(), 7);
+        // KetPlus's own agents tools are not steps of the transcript (T-78): never counted.
+        QCOMPARE(summary.value("count").toInt(), 5);
         QStringList families;
         for (const auto& value : summary.value("families").toArray())
             families.append(QStringLiteral("%1=%2")
                                 .arg(value.toObject().value("family").toString())
                                 .arg(value.toObject().value("count").toInt()));
-        QCOMPARE(families, (QStringList{"command=1", "tool:ketplus_agents=2", "browser=1",
-                                        "subagent=1", "subagent.step=1", "wait=1"}));
+        QCOMPARE(families, (QStringList{"command=1", "browser=1", "subagent=1", "subagent.step=1",
+                                        "wait=1"}));
         // Any server's text step joins the open group: "Used screen_tools", as Claude names it.
         const auto joined =
             journal.appendEvent("session", 1, "item.completed",
                                 item("screen", "dynamicToolCall", "mcp__screen_tools__describe"));
         const auto widened =
             journal.activitySummaryEvent(last(journal, joined)).value("payload").toObject();
-        QCOMPARE(widened.value("count").toInt(), 8);
+        QCOMPARE(widened.value("count").toInt(), 6);
         QCOMPARE(widened.value("families").toArray().last().toObject().value("family").toString(),
                  "tool:screen_tools");
         // A tool without a server keeps its own row, as it may carry edits the summary would
@@ -326,6 +327,44 @@ class DaemonActivityGroupsTest : public QObject {
         QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
                  "item.completed");
     }
+    // T-78: KetPlus's own agents tools, in Codex's and Claude's naming, neither open, join nor
+    // end a group, so a turn of only such calls has no group and a read around them stays one.
+    void internalAgentToolsAreNotSteps() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto item = [](const QString& id, const QString& type, const QString& tool,
+                             const QString& server = {}) {
+            QJsonObject body{{"id", id}, {"type", type}, {"tool", tool}, {"status", "completed"}};
+            if (!server.isEmpty())
+                body.insert("server", server);
+            return QJsonObject{{"item", body}};
+        };
+        for (const auto& hidden :
+             {item("send", "dynamicToolCall", "mcp__ketplus_agents__agents_send"),
+              item("tasks", "mcpToolCall", "team_tasks", "ketplus_agents")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", hidden);
+            QVERIFY(cursor > 0);
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+        }
+        const auto read = journal.appendEvent("session", 1, "item.completed",
+                                              item("read-1", "dynamicToolCall", "Read"));
+        QVERIFY(read > 0);
+        QVERIFY(journal.appendEvent(
+                    "session", 1, "item.completed",
+                    item("report", "dynamicToolCall", "mcp__ketplus_agents__work_report")) > 0);
+        const auto second =
+            journal.appendEvent("session", 1, "item.completed", command("build", "completed"));
+        const auto first =
+            journal.activitySummaryEvent(last(journal, read)).value("payload").toObject();
+        const auto widened =
+            journal.activitySummaryEvent(last(journal, second)).value("payload").toObject();
+        QCOMPARE(widened.value("group_id"), first.value("group_id"));
+        QCOMPARE(widened.value("count").toInt(), 2);
+    }
+
     void serverStepsLeaveTheirGroupWhenTheyReturnImages() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite3"));

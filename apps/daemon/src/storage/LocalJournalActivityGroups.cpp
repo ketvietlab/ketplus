@@ -1,5 +1,6 @@
 #include "storage/LocalJournal.h"
 
+#include "TranscriptVisibility.h"
 #include "agent/FileChangeStatistics.h"
 
 #include <QJsonArray>
@@ -284,6 +285,9 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                          : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
+    // A step the transcript leaves out neither joins, opens nor ends a group.
+    if (remote::transcript_visibility::hidden(type, payload))
+        return true;
     // A session still being indexed indexes this event later, after every earlier one.
     if (!activityCatchUp_) {
         bool deferred = false;
