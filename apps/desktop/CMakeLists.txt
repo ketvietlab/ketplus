@@ -8,6 +8,12 @@ add_library(ketplus_desktop_support STATIC
     ${ketplus_pairing_qr_source}
     src/remote/RemoteControlView.cpp
     src/remote/RemoteControlView.h
+    src/remote/LinuxConnectDialog.cpp
+    src/remote/LinuxConnectDialog.h
+    src/remote/LinuxMachineModel.cpp
+    src/remote/LinuxMachineModel.h
+    src/remote/LinuxMachineRow.cpp
+    src/remote/LinuxMachineRow.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
     src/remote/RemoteActivitySection.cpp

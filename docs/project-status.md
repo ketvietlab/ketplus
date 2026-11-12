@@ -140,10 +140,20 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
-  separators and the kit empty state and avatar. Linux machines connect only
-  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
-  details and Disconnect, and its phone pairing dialog now follows the app's
-  scan, compare and approve flow (no typed pairing code).
+  separators and the kit empty state and avatar. Its phone pairing dialog follows
+  the app's scan, compare and approve flow (no typed pairing code). Since #419
+  (ADR 0119) the Linux rows come from `LinuxMachineModel` and show the route
+  (SSH or Relay), the Connecting / Connected / Reconnecting / Offline state or an
+  actionable error (host key changed, SSH key refused, daemon not installed),
+  Details with the verified fingerprint, and Connect / Disconnect. "Connect a
+  Linux machine" has an SSH (free) mode (host alias or user@host[:port], a
+  first-use host key to accept or reject, no password field) and a ketPlus
+  Relay (Pro) mode (the existing pairing link). The UI emits intents only; the
+  SSH and Relay backends that carry them out are follow-up work (T-6). Until a
+  backend is attached (`LinuxMachineModel::setBackendsAttached`) the SSH mode
+  and Connect / Disconnect stay hidden and a Relay machine reads "Available",
+  as before; every signed-in account may pair through the Relay until the Pro
+  entitlement is fed.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
