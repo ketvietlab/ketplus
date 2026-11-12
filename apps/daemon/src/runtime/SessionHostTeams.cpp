@@ -25,6 +25,13 @@ QString ownPath(const QString& worktreePath) {
 // team is filed under the path itself. Such a team was created there, perhaps while git did
 // not answer, and it and its members are found by it whatever git says later.
 bool SessionHost::repositoryKnown(const QString& worktreePath) const {
+    // A team's task worktree is filed under the team's repository without git: a command
+    // that names its owner is answered before any git runs (T-32).
+    if (const QString repository = teams_ && !repositoryByWorktree_.contains(worktreePath)
+                                       ? teams_->taskWorktreeRepository(worktreePath)
+                                       : QString{};
+        !repository.isEmpty())
+        noteRepository(worktreePath, repository);
     return worktreePath.isEmpty() || repositoryByWorktree_.contains(worktreePath) ||
            failedRepositoryLookups_.contains(worktreePath) ||
            (teams_ && !teams_->teams(ownPath(worktreePath)).isEmpty());

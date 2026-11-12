@@ -68,9 +68,10 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
     const qint64 teamId = snapshot.id;
     // A turn the team starts never runs in a worktree its member was handed out of. With the
-    // outbox, that is settled when the message is sent.
+    // outbox, that is settled when the message is sent; without it (the coordinator's own
+    // tests), the host switches at once and this is settled before the lines below.
     if (!deferSending_)
-        (void)settleRelocations(teamId, message.toSession);
+        settleRelocations(teamId, message.toSession, {});
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
@@ -116,8 +117,6 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
 }
 
 void TeamCoordinator::send(const qint64 teamId, const TeamMessage& message) {
-    if (deferSending_)
-        (void)settleRelocations(teamId, message.toSession);
     if (!message.pointAt.isEmpty())
         notePointError(teamId, message,
                        host_->pointConversationAt(message.toSession, message.pointAt));
@@ -174,43 +173,65 @@ void TeamCoordinator::sendFromOutbox() {
         const QJsonObject entry = team->outbox.first().toObject();
         const TeamMessage message = heldMessage(*team, entry);
         // A member that left meanwhile receives nothing of the team's.
-        const bool deliver =
-            team->member(message.toSession) && !host_->teamMessagePosted(message.id);
-        if (!deliver || message.pointAt.isEmpty()) {
-            finishOutboxEntry(id, entry, deliver, true);
+        if (!stillDelivers(id, message)) {
+            finishOutboxEntry(id, entry, false);
             return;
         }
-        // The worktree switch asks git off this thread; the entry stays stored meanwhile, and
-        // the next entry waits for it. A pending move of the same conversation out of a
-        // handed-over worktree is settled by this switch, once it worked.
+        // Git runs off this thread; the entry stays stored meanwhile, and the next entry
+        // waits for it. T-32: without a worktree of its own, the message waits until its
+        // conversation has left a worktree it was handed out of.
         outboxSending_ = true;
-        host_->askPointConversationAt(
-            message.toSession, message.pointAt,
-            [self = QPointer<TeamCoordinator>(this), id, entry, message](const QString& error) {
-                if (!self)
-                    return;
-                self->outboxSending_ = false;
-                self->notePointError(id, message, error);
-                if (error.isEmpty())
-                    self->forgetRelocations(id, message.toSession);
-                const Team* current = self->team(id);
-                self->finishOutboxEntry(id, entry,
-                                        current && current->member(message.toSession) &&
-                                            !self->host_->teamMessagePosted(message.id),
-                                        !error.isEmpty());
-            });
+        const QPointer<TeamCoordinator> self(this);
+        const auto finish = [self, id, entry, message](const QString&) {
+            if (!self)
+                return;
+            self->outboxSending_ = false;
+            self->finishOutboxEntry(id, entry, self->stillDelivers(id, message));
+        };
+        if (message.pointAt.isEmpty()) {
+            settleRelocations(id, message.toSession, finish);
+            return;
+        }
+        // The switch to the task's worktree settles a pending move of the same conversation
+        // once it worked; when it failed, the move is settled before the message is sent.
+        whenConversationFree(message.toSession, [self, id, message, finish] {
+            if (!self)
+                return;
+            self->host_->askPointConversationAt(
+                message.toSession, message.pointAt,
+                [self, id, message, finish](const QString& error) {
+                    if (!self)
+                        return;
+                    self->notePointError(id, message, error);
+                    if (error.isEmpty()) {
+                        self->forgetRelocations(id, message.toSession);
+                        finish({});
+                        self->conversationFree(message.toSession);
+                        return;
+                    }
+                    self->settleStep(id, message.toSession,
+                                     [self, message, finish](const QString& waiting) {
+                                         finish(waiting);
+                                         if (self)
+                                             self->conversationFree(message.toSession);
+                                     });
+                });
+        });
         return;
     }
+}
+
+bool TeamCoordinator::stillDelivers(const qint64 teamId, const TeamMessage& message) const {
+    const Team* current = team(teamId);
+    return current && current->member(message.toSession) && !host_->teamMessagePosted(message.id);
 }
 
 // Sent first, then forgotten: a stop between the two finds the message queued and only
 // forgets it.
 void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& entry,
-                                        const bool deliver, const bool settle) {
+                                        const bool deliver) {
     if (const Team* team = this->team(teamId); team && deliver) {
         const TeamMessage message = heldMessage(*team, entry);
-        if (settle)
-            (void)settleRelocations(teamId, message.toSession);
         if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
             qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                      qUtf8Printable(message.toSession), qUtf8Printable(error));
@@ -335,8 +356,8 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
         stalls_[teamId].stopped.remove(sessionId);
     }
     // The turn is over: a conversation that could not leave a handed-over worktree can now,
-    // before the next message to it starts a turn.
-    (void)settleRelocations(teamId, sessionId);
+    // before the next message to it starts a turn (the outbox waits for this switch).
+    settleRelocations(teamId, sessionId, {});
     watchForStall(teamId);
     checkMerged(teamId);
     if (memberRole == role::developer)

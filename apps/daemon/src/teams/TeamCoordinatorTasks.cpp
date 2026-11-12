@@ -456,56 +456,6 @@ QString TeamCoordinator::assignmentText(const Team& team, const Task& task, cons
     return lines.join(QLatin1Char('\n'));
 }
 
-QString TeamCoordinator::settleRelocations(const qint64 teamId, const QString& sessionId) {
-    Team* team = mutableTeam(teamId);
-    if (!team || team->relocations.isEmpty())
-        return {};
-    QString waiting;
-    QList<Relocation> kept;
-    for (const Relocation& move : std::as_const(team->relocations)) {
-        if (move.session != sessionId) {
-            kept.append(move);
-            continue;
-        }
-        const QString from = QDir::cleanPath(move.from);
-        const auto conversation = host_->teamConversation(sessionId);
-        // Settled without a move: the conversation is gone or stands elsewhere already, or
-        // the task came back to this member.
-        if (!team->member(sessionId) || !conversation ||
-            QDir::cleanPath(conversation->worktree) != from)
-            continue;
-        // It goes to the task it works on, else to another task of its own, else to the
-        // repository.
-        QString home = team->repository;
-        bool mine = false;
-        bool working = false;
-        for (const Task& task : std::as_const(team->tasks)) {
-            if (task.owner != sessionId || task.state == state::done || task.worktree.isEmpty())
-                continue;
-            if (QDir::cleanPath(task.worktree) == from) {
-                mine = true;
-            } else if (!working && (task.state == state::inProgress || home == team->repository)) {
-                home = task.worktree;
-                working = task.state == state::inProgress;
-            }
-        }
-        if (mine)
-            continue;
-        if (const QString error = host_->pointConversationAt(sessionId, home); !error.isEmpty()) {
-            waiting = error;
-            kept.append(move);
-        }
-    }
-    if (kept.size() != team->relocations.size()) {
-        const Team before = *team;
-        team->relocations = kept;
-        // A move that stays stored is tried again and found settled.
-        if (commit(*team, before, QStringLiteral("daemon"), {}))
-            qWarning("Unable to forget a settled move out of a handed-over worktree.");
-    }
-    return waiting;
-}
-
 void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& storedTask,
                                         const QString& from, const bool handover,
                                         const QString& reason) {
