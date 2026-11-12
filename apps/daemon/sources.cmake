@@ -29,6 +29,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSupport.cpp
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
+    src/cloud/WorktreeRevisionCache.cpp
     src/cloud/CloudControlUploadProgress.cpp
     src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
