@@ -279,7 +279,7 @@ Item {
                             x: screen.px(16)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: screen.px(8)
-                            Image { source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark.svg"; width: screen.px(18); height: width; sourceSize: Qt.size(width * 2, height * 2) }
+                            Image { source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-v2.png"; width: screen.px(18); height: width; sourceSize: Qt.size(width * 2, height * 2) }
                             Text { text: "Ready for your next idea."; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
                         }
                         KetBadge { anchors.right: parent.right; anchors.rightMargin: screen.px(16); anchors.verticalCenter: parent.verticalCenter; text: "Completed"; tone: KetTheme.BadgeTone.Success }

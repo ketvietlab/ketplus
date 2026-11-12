@@ -20,7 +20,7 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
+        "changes", "brand", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
@@ -141,6 +141,11 @@ Basic.ApplicationWindow {
     // Run by --smoke after a pointer dragged a conversation onto a team's folder.
     function prepareTeamDrag() { sidebar.foldTeamsExcept("release") }
     function teamDragPoints() { return sidebar.dragCheckPoints("9410", "release") }
+    function brandChecks() {
+        const brand = sidebar.brandLockup
+        if (brand.x < 0 || brand.x + brand.width > sidebar.width || brand.height < brand.implicitHeight)
+            console.warn("QML brand check failed: sidebar lockup clips")
+    }
     function teamChecks() {
         const failures = teams.selfCheck()
         if (sidebar.dragged)
@@ -454,7 +459,7 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: ["workspace", "editor", "changes", "connections", "settings",
-                           "atlas", "mobile-picker", "teams"].indexOf(app.screen)
+                           "atlas", "mobile-picker", "teams", "brand"].indexOf(app.screen)
 
             WorkspaceScreen { id: workspace; window: app }
             EditorScreen { window: app }
@@ -464,6 +469,7 @@ Basic.ApplicationWindow {
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }
             TeamsScreen { id: teams; window: app }
+            BrandScreen { }
         }
     }
 
