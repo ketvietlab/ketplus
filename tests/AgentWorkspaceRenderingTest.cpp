@@ -493,7 +493,7 @@ void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.setAgentAvailable(true);
-    view.setRepositoryName("ketplus-app");
+    view.setRepositoryName("sample-mobile");
     view.setExecutionBranch("develop");
     view.resetMessages({}, "welcome");
     view.resize(1200, 800);
@@ -539,7 +539,7 @@ void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
     auto* place = findVisualItem(root, QStringLiteral("agentEmptyStatePlace"));
     QVERIFY(place);
     QVERIFY(place->property("text").toString().startsWith(
-        QStringLiteral("Your Agent works in ketplus-app on develop.")));
+        QStringLiteral("Your Agent works in sample-mobile on develop.")));
 }
 
 void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter_data() {

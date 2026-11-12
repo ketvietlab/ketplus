@@ -10,7 +10,7 @@ not legal advice.
 | --- | --- | --- |
 | `ketplus` / KetPlus CM | Public | MPL 2.0 |
 | `ketplus-desktop` / KetPlus | Private | Proprietary |
-| `ketplus-app` | Private | Proprietary |
+| the private mobile app | Private | Proprietary |
 | Ketsuite cloud services and daemon | Private | Proprietary |
 
 KetPlus CM contains the native editor, workspace explorer, Git integration,

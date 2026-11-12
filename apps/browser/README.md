@@ -158,7 +158,7 @@ addresses (169.254/16 including cloud metadata, fe80::/10) or reserved ranges.
 Loopback addresses need a loopback name (`localhost`, `127.x`, `::1`), so a
 public name cannot rebind to a local service. A named origin may also reach the
 private network (`https://staging.internal`), and an IP-literal origin
-(`http://10.0.0.5:3000`) reaches exactly that address.
+(`http://192.0.2.5:3000`) reaches exactly that address.
 
 The proxy resolves each hop's host once, keeps only the addresses the policy
 permits and connects to one of them, so a later DNS answer cannot move an

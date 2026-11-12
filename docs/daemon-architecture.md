@@ -665,7 +665,7 @@ Protocol code should be transport-independent. The desktop and daemon may link
 
 ```text
 mobile app
-  -> Ketsuite Gateway
+  -> hosted gateway
      -> KetPlus Control API
      -> KetPlus Relay
         -> outbound daemon connection

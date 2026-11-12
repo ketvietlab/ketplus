@@ -435,7 +435,7 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
     `team.create`, the `full` policy without the acknowledgement, the audit entries,
     and the metadata with a team, without one, and after deletion.
 
-### Relay (ketviet `ketplus_control`)
+### Relay (private service)
 
 1. Offer `teams.remote/1`. Enable it per machine when the host advertises it, show it in
    `Machine.capabilities` and `Compatibility.capabilities`, and accept it on device

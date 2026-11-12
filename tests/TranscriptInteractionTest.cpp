@@ -1171,9 +1171,9 @@ void AgentWorkspaceViewTest::describedCommandsReadAboveTheirCommand() {
     view.show();
     const QList<QPair<QString, QString>> commands{
         {"Inspect the runner volumes",
-         "ssh -o ConnectTimeout=10 -i ~/.ssh/ketviet runner docker inspect runner"},
+         "ssh -o ConnectTimeout=10 -i ~/.ssh/sample-project runner docker inspect runner"},
         {"Copy the new runner config",
-         "scp -q -i ~/.ssh/ketviet /tmp/runner.new runner:/etc/runner.json"},
+         "scp -q -i ~/.ssh/sample-project /tmp/runner.new runner:/etc/runner.json"},
         {"Check the dry-run job logs",
          "kubectl logs job/yolo-care-automation-dryrun-illon | grep -v page"},
     };

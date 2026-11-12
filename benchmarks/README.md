@@ -76,7 +76,7 @@ ctest --test-dir build/webrtc-spike --output-on-failure
 
 Without `KETPLUS_SPIKE_TURN_URL` only the direct path runs. `serve` with
 `interop.html` repeats the exchange against Chromium's libwebrtc, and the iOS
-spike in `ketplus-app` (`apps/ios/Spikes/WebRtcDataChannel`) against Google's
+spike in the private mobile app (a private mobile interoperability client) against Google's
 WebRTC for iOS; `--bind <address>` serves a physical phone on the LAN. Findings
 are in `docs/webrtc-transport-spike.md`.
 

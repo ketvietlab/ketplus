@@ -1824,7 +1824,7 @@ class DaemonLifecycleTest final : public QObject {
                   {"type", "fileChange"},
                   {"status", "completed"},
                   {"changes",
-                   QJsonArray{QJsonObject{{"path", root + "/apps/ios/App.swift"}, {"diff", ""}},
+                   QJsonArray{QJsonObject{{"path", root + "/src/mobile/App.swift"}, {"diff", ""}},
                               QJsonObject{{"path", "docs/README.md"}, {"diff", ""}},
                               QJsonObject{{"path", root + "-other/KETJS.override"}, {"diff", ""}},
                               QJsonObject{{"path", root + "/../escape.txt"}, {"diff", ""}},
@@ -1838,8 +1838,8 @@ class DaemonLifecycleTest final : public QObject {
                 changes = payload.value("item").toObject().value("changes").toArray();
         }
         QCOMPARE(changes.size(), 5);
-        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "apps/ios/App.swift");
-        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/apps/ios/App.swift");
+        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "src/mobile/App.swift");
+        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/src/mobile/App.swift");
         QCOMPARE(changes[1].toObject().value("worktreePath").toString(), "docs/README.md");
         for (qsizetype index = 2; index < changes.size(); ++index) {
             const QJsonObject change = changes[index].toObject();

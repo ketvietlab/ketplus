@@ -183,7 +183,7 @@ They cover addressable states and model/DOM
 interactions; it does not render pixels, run an actual browser, or change native data.
 
 The current browser review and its limitations are recorded in REVIEW-2026-09.md.
-Native acceptance remains separate in `atlas.progress.json` and `tasks/desktop-refactor/`.
+Native acceptance remains separate in `atlas.progress.json` and `docs/testing.md`.
 Passing mock tests never completes a native acceptance check.
 
 
