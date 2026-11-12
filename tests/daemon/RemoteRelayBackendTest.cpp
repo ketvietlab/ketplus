@@ -411,6 +411,24 @@ class RemoteRelayBackendTest final : public QObject {
             QVERIFY(!body.contains("private fixture prompt"));
         QTRY_COMPARE(events.size(), 2);
         QCOMPARE(events.at(1).at(0).toJsonObject().value("cursor").toInt(), 11);
+        // The same keys as the local daemon's session.event (LocalIpcServer::broadcastEvent).
+        const auto live = events.at(1).at(0).toJsonObject();
+        const auto liveKeys = live.keys();
+        QCOMPARE(
+            QSet<QString>(liveKeys.cbegin(), liveKeys.cend()),
+            (QSet<QString>{"protocol_version", "message_id", "message_type", "session_id",
+                           "session_generation", "cursor", "turn_sequence", "sent_at", "payload"}));
+        QCOMPARE(live.value("message_type").toString(), "session.event");
+        QCOMPARE(live.value("session_id").toString(), "opaque-session");
+        QCOMPARE(live.value("session_generation").toInt(), 3);
+        QCOMPARE(live.value("turn_sequence").toInt(), 1);
+        const auto payload = live.value("payload").toObject();
+        const auto payloadKeys = payload.keys();
+        QCOMPARE(QSet<QString>(payloadKeys.cbegin(), payloadKeys.cend()),
+                 (QSet<QString>{"event_type", "data"}));
+        QCOMPARE(payload.value("event_type").toString(), "assistant.delta");
+        QCOMPARE(payload.value("data").toObject().value("delta").toString(),
+                 "private fixture text");
 
         backend.pendingApprovals("opaque-session", 3, {}, answer.callback());
         QTRY_VERIFY(answer.done);

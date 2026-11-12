@@ -93,7 +93,9 @@ class MachineBackend : public QObject {
   signals:
     void connectionStateChanged(ketplus::remote::MachineBackend::ConnectionState state,
                                 const QString& reason);
-    // A session event, already decrypted and authenticated by the route.
+    // A session event, already decrypted and authenticated by the route, in the local daemon's
+    // session.event shape on every route: session_id, session_generation, cursor, turn_sequence,
+    // sent_at and payload {event_type, data}.
     void eventReceived(const QJsonObject& event);
     // The repositories or worktrees the route can verify changed: list them again.
     void catalogChanged();

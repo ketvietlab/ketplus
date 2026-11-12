@@ -10,6 +10,24 @@
 // commands (pendingApprovals) are not stored (RelayMachineBackend.cpp holds the other reads).
 namespace ketplus::remote {
 namespace {
+// A decrypted Relay event in the local daemon's session.event shape (LocalIpcServer::
+// broadcastEvent), so every MachineBackend consumer reads one shape whatever the route.
+QJsonObject localEvent(const QJsonObject& relay) {
+    return {{QStringLiteral("protocol_version"), 0},
+            {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+            {QStringLiteral("message_type"), QStringLiteral("session.event")},
+            {QStringLiteral("session_id"), relay.value("sessionId")},
+            {QStringLiteral("session_generation"), relay.value("sessionGeneration")},
+            {QStringLiteral("cursor"), relay.value("cursor")},
+            {QStringLiteral("turn_sequence"), relay.value("turnSequence")},
+            {QStringLiteral("sent_at"), relay.value("occurredAt").isString()
+                                            ? relay.value("occurredAt")
+                                            : QJsonValue(QJsonValue::Null)},
+            {QStringLiteral("payload"),
+             QJsonObject{{QStringLiteral("event_type"), relay.value("eventType")},
+                         {QStringLiteral("data"), relay.value("payload")}}}};
+}
+
 // Errors that leave a command in the outbox for the next connection. A refusal without a code
 // ("Control refused the request.") belongs to the command, not to the link.
 bool linkFailure(const QString& error) {
@@ -312,7 +330,7 @@ void RelayMachineBackend::pollEvents() {
                             const auto page = value.toObject();
                             // Authenticated and decrypted by ControlV2Client::events.
                             for (const auto& event : page.value("events").toArray())
-                                emit eventReceived(event.toObject());
+                                emit eventReceived(localEvent(event.toObject()));
                             if (watched_.contains(sessionId))
                                 watched_.insert(sessionId, page.value("nextCursor").toInteger());
                             settle();

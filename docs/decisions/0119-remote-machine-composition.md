@@ -84,7 +84,10 @@ Three implementations:
 - **Relay** — `RelayMachineBackend` over `ControlV2Client`, which turns each
   operation into an encrypted Control v2 command and each authenticated,
   decrypted event page into `eventReceived` (scope item 2 of #419, see "Relay
-  backend").
+  backend"). Each event is re-shaped into the local daemon's `session.event`
+  envelope (`session_id`, `session_generation`, `cursor`, `turn_sequence`,
+  `sent_at`, `payload {event_type, data}`), so consumers read one shape on
+  every route.
 
 Existing consumers (`CodexAppServer`, `SessionCatalogReader`, the Connections
 sections) still hold a `DaemonClient` today. They move to a `MachineBackend` one
