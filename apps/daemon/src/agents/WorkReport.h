@@ -19,6 +19,9 @@ inline constexpr qsizetype maximumAction = 300;
 inline constexpr qint64 staleTurns = 20;
 // The open items the answer lists, newest first, so the agent can reconcile the report.
 inline constexpr qsizetype maximumListedOpenItems = 100;
+// The finished items the answer lists, most recently finished first, so the agent does not
+// report finished work again or under a new key.
+inline constexpr qsizetype maximumListedDoneItems = 50;
 inline constexpr qsizetype maximumListedTitle = 120;
 // The encoded ledger. Its event, and the turn.completed that repeats it, stay well under the
 // journal's event limit (protocol::maximumEventPayloadBytes).
@@ -39,7 +42,9 @@ struct Merge final {
 // - an item leaves the open set only as done or cancelled, and closing it drops its next step
 //   and remaining work unless the same call reports them.
 // - `replaces` names keys the item takes over (the same work reported under another key):
-//   those items are cancelled with `replaced_by`, and their next step and remaining work go.
+//   each gets `replaced_by`, and the app hides it and nothing counts it. An open one is also
+//   cancelled, and its next step and remaining work go; a done one keeps its evidence.
+// - an item records `closed_turn` when it becomes done or cancelled and drops it when reopened.
 // Text is redacted and capped before it is stored. A done item needs evidence or a verified
 // check. Over `maximumItems` or `maximumLedgerBytes`, the oldest closed items leave the ledger
 // first (the journal's earlier snapshots keep them); a ledger still over is rejected.
@@ -48,9 +53,9 @@ struct Merge final {
 // The ledger for the cloud: every text field redacted again and capped.
 [[nodiscard]] QJsonObject cloudProjection(const QJsonObject& ledger);
 
-// The tool's answer: the counts the app shows, and every open item by key (newest first,
-// marked stale when unchanged for `staleTurns`), so the agent can reconcile its report with
-// what it no longer remembers.
+// The tool's answer: the counts the app shows, every open item by key (newest first, marked
+// stale when unchanged for `staleTurns`) and the most recently finished items, so the agent can
+// reconcile its report with what it no longer remembers.
 [[nodiscard]] QJsonObject summary(const Merge& merge);
 
 } // namespace ketplus::daemon::work_report

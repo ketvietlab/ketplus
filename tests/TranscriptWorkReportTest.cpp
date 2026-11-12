@@ -203,10 +203,10 @@ void AgentWorkspaceViewTest::forgottenItemsReadStaleAndDoNotNeedYou() {
         {"title", "Team"},
         {"turn", 40},
         {"version", 9},
-        {"items",
-         QJsonArray{reportItem("first-assignments", "Plan", "waiting", 2, 2,
-                               {{"next", QJsonObject{{"action", "Press Start"}, {"owner", "user"}}}}),
-                    reportItem("t-16", "Tasks", "active", 30, 39)}}};
+        {"items", QJsonArray{reportItem("first-assignments", "Plan", "waiting", 2, 2,
+                                        {{"next", QJsonObject{{"action", "Press Start"},
+                                                              {"owner", "user"}}}}),
+                             reportItem("t-16", "Tasks", "active", 30, 39)}}};
     const auto rows = ketplus::agent_message::daemonWindowMessages(
         {{"events", QJsonArray{journalEvent(1, 40, "user.message", {{"text", "Go on"}}),
                                journalEvent(2, 40, "work_report.updated", report),
@@ -242,6 +242,78 @@ void AgentWorkspaceViewTest::forgottenItemsReadStaleAndDoNotNeedYou() {
     })());
     QVERIFY2(badges.contains("No update for 38 turns"), qPrintable(badges.join(", ")));
     QVERIFY2(!badges.contains("No update for 1 turns"), qPrintable(badges.join(", ")));
+}
+
+// A long conversation's card: a duplicate another item replaced is neither shown nor counted,
+// and items finished long ago fold under "Finished earlier" beside the group's recent work. A
+// group with nothing recent shows its history unfolded.
+void AgentWorkspaceViewTest::duplicatesHideAndOldFinishedItemsFold() {
+    const QJsonObject merged{{"evidence", "Merged"}};
+    QJsonObject oldDone = merged, recentDone = merged, replaced = merged;
+    oldDone.insert("closed_turn", 5);
+    recentDone.insert("closed_turn", 35);
+    replaced.insert("replaced_by", "t-20");
+    const QJsonObject report{
+        {"title", "Team"},
+        {"turn", 40},
+        {"version", 12},
+        {"items", QJsonArray{reportItem("old-done", "Tasks", "done", 2, 30, oldDone),
+                             // Closed before closed_turn existed: dates from when it was added.
+                             reportItem("legacy-done", "Tasks", "done", 3, 39, merged),
+                             reportItem("recent-done", "Tasks", "done", 20, 35, recentDone),
+                             reportItem("t-20", "Tasks", "active", 30, 38),
+                             reportItem("t20-runbooks", "Tasks", "done", 4, 39, replaced),
+                             reportItem("history", "History", "done", 1, 2, oldDone)}}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(1, 40, "user.message", {{"text", "Go on"}}),
+                               journalEvent(2, 40, "work_report.updated", report),
+                               journalEvent(3, 40, "turn.completed", {{"status", "completed"}})}}});
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 1200);
+    view.show();
+    view.resetMessages(rows, "work-report-fold");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QCOMPARE(card->property("total").toInt(), 5);
+    QCOMPARE(card->property("finished").toInt(), 4);
+    QVariantList groups = card->property("groups").toList();
+    QCOMPARE(groups.size(), 2);
+    for (const QVariant& group : groups) {
+        QVariant open;
+        QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                          Q_ARG(QVariant, group)));
+        if (!open.toBool())
+            QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, group)));
+    }
+    const auto visibleTexts = [&] {
+        QStringList texts;
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (!item->isVisible())
+                return;
+            if (const QVariant text = item->property("text"); text.isValid())
+                texts << text.toString();
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, card);
+        return texts;
+    };
+    QTRY_VERIFY(visibleTexts().contains("Item history"));
+    QStringList texts = visibleTexts();
+    QVERIFY2(texts.contains("Item t-20") && texts.contains("Item recent-done"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item t20-runbooks"), qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item old-done") && !texts.contains("Item legacy-done"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(texts.count("Finished earlier (2)") == 1, qPrintable(texts.join(", ")));
+    QVERIFY(QMetaObject::invokeMethod(card, "toggleEarlier", Q_ARG(QVariant, groups.at(0))));
+    QTRY_VERIFY(visibleTexts().contains("Item old-done"));
+    texts = visibleTexts();
+    QVERIFY2(texts.contains("Item legacy-done") && texts.contains("Hide earlier finished items"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item t20-runbooks"), qPrintable(texts.join(", ")));
 }
 
 void AgentWorkspaceViewTest::turnEndReportSurvivesAHistoryPageSplit() {

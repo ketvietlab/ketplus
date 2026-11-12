@@ -41,6 +41,9 @@ QString workReportText(const QVariantMap& report) {
         QStringLiteral("| --- | --- | --- | --- |")};
     for (const QVariant& value : items) {
         const QVariantMap item = value.toMap();
+        // A duplicate another item took over is not part of the report.
+        if (item.contains(QStringLiteral("replaced_by")))
+            continue;
         const QString state = item.value(QStringLiteral("status")).toString();
         if (state != QStringLiteral("cancelled")) {
             ++total;

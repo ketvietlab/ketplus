@@ -74,12 +74,12 @@ QJsonObject workReportTool() {
          {QStringLiteral("next"), next},
          {QStringLiteral("replaces"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
-                      {QStringLiteral("items"), QJsonObject{{QStringLiteral("type"),
-                                                            QStringLiteral("string")}}},
+                      {QStringLiteral("items"),
+                       QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}},
                       {QStringLiteral("description"),
                        QStringLiteral("Keys of items that are the same work as this one, reported "
-                                      "earlier under another key. They are cancelled as replaced "
-                                      "by this item.")}}},
+                                      "earlier under another key, open or done. They are hidden "
+                                      "as replaced by this item; open ones are cancelled.")}}},
          {QStringLiteral("verified"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
                       {QStringLiteral("items"),
@@ -98,8 +98,9 @@ QJsonObject workReportTool() {
              "Update this conversation's work report, which KetPlus shows to the user at the "
              "end of the turn. Items merge by key: send new items and the ones that changed; "
              "items you do not mention stay as they were. Never include secrets, credentials, "
-             "tokens or file contents. The answer has the counts the user sees and every open "
-             "item, also ones from earlier turns: reconcile them before the turn ends.")},
+             "tokens or file contents. The answer has the counts the user sees, every open item "
+             "and the recently finished ones, also from earlier turns: reconcile them before "
+             "the turn ends, and do not send finished items again unless they changed.")},
         {QStringLiteral("inputSchema"),
          schema({{QStringLiteral("title"),
                   property(QStringLiteral("string"),
