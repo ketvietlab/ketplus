@@ -6,6 +6,12 @@ named theme. Open `--screen=brand` to inspect interactively.
 
 - [Light shell](light.png)
 - [Dark shell](dark.png)
+- [Lockup before and after the move to the accent blue](lockup-before-after.png), top to
+  bottom: light before, light after, dark before, dark after
+- The team page with the sidebar tree: [light](teams-light.png), [dark](teams-dark.png)
+- The default workspace screen: [light](workspace-light.png), [dark](workspace-dark.png)
+
+The team and workspace screens are rendered the same way at 1600 × 1000.
 
 Validation: standalone CMake/Ninja build passed; `--smoke` passed with 72
 screen/state entries and zero QML problems. Resolved font: `KET Sans / Bold /
