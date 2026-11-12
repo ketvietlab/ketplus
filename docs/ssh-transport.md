@@ -304,9 +304,10 @@ refreshes the listing every minute while it is shown. Relay pairings are not
 removed from Desktop; Remove is offered only for SSH machines.
 
 The activity bar's machine picker labels each machine with the same route and
-state as its row (`build-node-02 · SSH · Connected`). Choosing one emits
-`LinuxMachinesSection::machineSelected(id, backend)`, the seam that the
-Desktop composition binds to.
+state as its row (`build-node-02 · SSH · Connected`). The window's
+`MachineSelection` registers each listed id's backend from
+`LinuxMachinesSection::machineBackend(id)` on `machinesChanged`, so choosing a
+machine binds the Desktop composition to it.
 
 ### Backend tests
 

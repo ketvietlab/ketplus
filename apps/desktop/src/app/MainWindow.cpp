@@ -20,8 +20,6 @@
 #include "git/GitService.h"
 #include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
-#include "remote/LinuxMachinesSection.h"
-#include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
 #include "ui/InterfaceZoom.h"
@@ -163,7 +161,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         } else {
             activityBar_->setRepositories({});
             setRemoteWorkspaceVisible(true);
-            remoteControl_->linuxMachines()->selectMachine(id);
         }
     });
     connect(activityBar_, &ActivityBar::repositoryActivationRequested, this,

@@ -46,19 +46,14 @@ class LinuxMachinesSection final : public QWidget {
     // is entitled to the Relay. Production uses RelayMachineBackend over the section's client;
     // tests pass fake links.
     void attachRelayBackend(LinuxRelayMachines::LinkFactory links = {});
-    // The ADR 0119 backend of a machine, for the composition the machine picker hands it to;
-    // null while no backend carries it.
+    // The ADR 0119 backend of a machine, which the window's MachineSelection registers for each
+    // id in machinesChanged; null while no backend carries it.
     [[nodiscard]] remote::MachineBackend* machineBackend(const QString& id) const;
-    // The machine picker chose `id`. The seam T-5's composition binds to: until it does,
-    // choosing a Linux machine only opens Connections.
-    void selectMachine(const QString& id);
 
   signals:
     // The machines for the activity bar's picker: their ids, and labels with the same route
     // and state as the rows.
     void machinesChanged(const QStringList& ids, const QStringList& names);
-    // A Linux machine was chosen in the picker, with its backend (null while none carries it).
-    void machineSelected(const QString& id, ketplus::remote::MachineBackend* backend);
 
   private:
     friend class RemoteControlViewTest;

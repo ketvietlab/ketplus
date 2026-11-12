@@ -173,8 +173,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   daemon's host key fingerprint (for the Relay, the one pinned at pairing); the
   Relay's machine id is a route attribute, so a host on both routes is one row,
   reached over SSH. The activity bar's picker shows each machine's route and
-  state, and choosing one emits `LinuxMachinesSection::machineSelected` for the
-  Desktop composition.
+  state, and `LinuxMachinesSection::machineBackend(id)` supplies the backend
+  that the window's `MachineSelection` binds to.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores

@@ -263,15 +263,11 @@ class LinuxSshMachinesTest final : public QObject {
         QTRY_VERIFY(!picker.isEmpty() &&
                     picker.last().at(1).toStringList() ==
                         QStringList{QStringLiteral("devbox · SSH · Connected")});
+        // The window's MachineSelection registers each picker id's backend from the section.
         const QString id = picker.last().at(0).toStringList().first();
-        qRegisterMetaType<remote::MachineBackend*>();
-        QSignalSpy selected(&section, &LinuxMachinesSection::machineSelected);
-        section.selectMachine(id);
-        QCOMPARE(selected.size(), 1);
-        QCOMPARE(selected.first().first().toString(), id);
-        QVERIFY(selected.first().at(1).value<remote::MachineBackend*>() ==
-                section.machineBackend(id));
         QVERIFY(section.machineBackend(id));
+        QCOMPARE(section.machineBackend(id)->machineId(), id);
+        QVERIFY(!section.machineBackend(QStringLiteral("unknown")));
     }
 };
 

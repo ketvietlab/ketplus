@@ -177,11 +177,6 @@ remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) 
     return relay_ ? relay_->backend(id) : nullptr;
 }
 
-void LinuxMachinesSection::selectMachine(const QString& id) {
-    if (model_ && model_->machine(id))
-        emit machineSelected(id, machineBackend(id));
-}
-
 void LinuxMachinesSection::activate() {
     if (ssh_)
         ssh_->connectSaved();
