@@ -121,6 +121,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorWaits.cpp
     src/teams/TeamCoordinatorLanes.cpp
     src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorSettings.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
