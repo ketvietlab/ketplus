@@ -74,6 +74,17 @@ bool CommandOutbox::add(Route route, const QJsonObject& envelope, QString* error
     return false;
 }
 
+bool CommandOutbox::withdraw(const QString& id, QString* error) {
+    const auto before = pending_;
+    pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                  [&id](const Entry& entry) { return entry.id() == id; }),
+                   pending_.end());
+    if (pending_.size() == before.size() || save(error))
+        return true;
+    pending_ = before;
+    return false;
+}
+
 bool CommandOutbox::complete(const QString& id, QString* error) {
     const auto before = pending_;
     const auto completedBefore = completed_;

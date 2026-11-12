@@ -23,7 +23,9 @@ bool linkFailure(const QString& error) {
 void RelayMachineBackend::sessionCommand(const QString& kind, const QString& sessionId,
                                          qint64 generation, const QJsonObject& plaintext,
                                          Callback callback) {
-    if (!requireConnected(callback))
+    if (hold(callback, [this, kind, sessionId, generation, plaintext](Callback again) {
+            sessionCommand(kind, sessionId, generation, plaintext, std::move(again));
+        }))
         return;
     const auto row = sessionRow(sessionId, generation);
     if (row.isEmpty()) {
@@ -43,8 +45,10 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
                              {"kind", kind}};
     const auto generationNow = generation_;
     client_->prepareCommand(intent, plaintext,
-                            [this, generationNow, callback = std::move(callback)](
-                                const QJsonValue& value, const QString& error) mutable {
+                            guarded([this, generationNow, callback = std::move(callback)](
+                                        const QJsonValue& value, const QString& error) mutable {
+                                // Nothing is stored or sent yet, so a fence or an error here is a
+                                // plain failure.
                                 if (generationNow != generation_) {
                                     callback({}, reason_);
                                     return;
@@ -55,7 +59,7 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
                                 }
                                 persistAndDeliver(OutboxRoute::Session, value.toObject(),
                                                   std::move(callback));
-                            });
+                            }));
 }
 
 void RelayMachineBackend::persistAndDeliver(OutboxRoute route, const QJsonObject& envelope,
@@ -67,6 +71,7 @@ void RelayMachineBackend::persistAndDeliver(OutboxRoute route, const QJsonObject
         return;
     }
     const auto id = envelope.value("id").toString();
+    unsent_.insert(id);
     callbacks_.insert(id, std::move(callback));
     for (const auto& entry : outbox_.pending())
         if (entry.id() == id)
@@ -88,22 +93,26 @@ void RelayMachineBackend::deliver(const CommandOutbox::Entry& entry) {
         return;
     }
     delivering_.insert(id);
+    // From here the relay may hold it, even when its answer is lost.
+    unsent_.remove(id);
     const auto generation = generation_;
-    const auto submitted = [this, entry, id, generation](const QJsonValue&, const QString& error) {
-        if (generation != generation_)
-            return;
-        if (error.isEmpty()) {
-            poll(entry);
-            return;
-        }
-        delivering_.remove(id);
-        if (linkFailure(error)) {
-            failed(error);
-            return;
-        }
-        // The relay refused this envelope for good (scope, grant, idempotency conflict).
-        finish(id, {}, error);
-    };
+    const auto submitted =
+        guarded([this, entry, id, generation](const QJsonValue&, const QString& error) {
+            if (generation != generation_)
+                return;
+            if (error.isEmpty()) {
+                poll(entry);
+                return;
+            }
+            delivering_.remove(id);
+            // A link failure, or this device signed out: the relay may still hold it.
+            if (linkFailure(error) || fatal(error)) {
+                failed(error);
+                return;
+            }
+            // The relay refused this envelope for good (scope, grant, idempotency conflict).
+            finish(id, {}, error);
+        });
     // The same envelope every time: the relay answers a repeat with the command it already has.
     if (entry.route == OutboxRoute::Worktree)
         client_->submitWorktreeCommand(entry.envelope, submitted);
@@ -114,36 +123,36 @@ void RelayMachineBackend::deliver(const CommandOutbox::Entry& entry) {
 void RelayMachineBackend::poll(const CommandOutbox::Entry& entry) {
     const auto id = entry.id();
     const auto generation = generation_;
-    const auto answered = [this, entry, id, generation](const QJsonValue& value,
-                                                        const QString& error) {
-        if (generation != generation_)
-            return;
-        if (!error.isEmpty()) {
-            delivering_.remove(id);
-            if (linkFailure(error))
-                failed(error);
-            else
-                // A result that fails verification never reaches the UI.
-                finish(id, {}, error);
-            return;
-        }
-        const auto command = value.toObject();
-        if (command.contains("result")) {
-            finish(id, command, {});
-            return;
-        }
-        if (QDateTime::currentMSecsSinceEpoch() - entry.createdAt >
-            options_.commandLifetimeMilliseconds) {
-            finish(id, {}, QStringLiteral("The command expired before the host answered."));
-            return;
-        }
-        QTimer::singleShot(options_.commandPollMilliseconds, this, [this, entry, generation] {
-            if (generation == generation_ && state_ == ConnectionState::Connected)
-                poll(entry);
-            else
-                delivering_.remove(entry.id());
+    const auto answered =
+        guarded([this, entry, id, generation](const QJsonValue& value, const QString& error) {
+            if (generation != generation_)
+                return;
+            if (!error.isEmpty()) {
+                delivering_.remove(id);
+                if (linkFailure(error) || fatal(error))
+                    failed(error);
+                else
+                    // A result that fails verification never reaches the UI.
+                    finish(id, {}, error);
+                return;
+            }
+            const auto command = value.toObject();
+            if (command.contains("result")) {
+                finish(id, command, {});
+                return;
+            }
+            if (QDateTime::currentMSecsSinceEpoch() - entry.createdAt >
+                options_.commandLifetimeMilliseconds) {
+                finish(id, {}, QStringLiteral("The command expired before the host answered."));
+                return;
+            }
+            QTimer::singleShot(options_.commandPollMilliseconds, this, [this, entry, generation] {
+                if (generation == generation_ && state_ == ConnectionState::Connected)
+                    poll(entry);
+                else
+                    delivering_.remove(entry.id());
+            });
         });
-    };
     if (entry.route == OutboxRoute::Worktree)
         client_->worktreeCommand(entry.envelope, answered);
     else
@@ -159,8 +168,13 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
         return;
     }
     QString storage;
-    if (!outbox_.complete(id, &storage))
+    if (!outbox_.complete(id, &storage)) {
+        // Recorded before it is applied: otherwise a restart would apply it again. It stays
+        // pending, with its callback, and is read back on the next connection.
         qWarning("Relay command outbox not updated: %s", qUtf8Printable(storage));
+        return;
+    }
+    unsent_.remove(id);
     const auto result = command.value("result").toObject();
     const auto status = command.value("status").toString();
     const auto failure = !error.isEmpty() ? error
@@ -177,42 +191,47 @@ void RelayMachineBackend::pollEvents() {
         return;
     pollingEvents_ = true;
     const auto generation = generation_;
+    const auto round = eventsRound_;
     auto remaining = std::make_shared<int>(int(watched_.size()));
     for (auto it = watched_.cbegin(); it != watched_.cend(); ++it) {
         const auto sessionId = it.key();
         const auto row = sessions_.value(sessionId);
         const auto after = it.value();
-        const auto settle = [this, remaining, generation] {
-            if (--*remaining == 0 && generation == generation_)
+        // Every request settles its round; a fence starts a new round (fence()).
+        const auto settle = [this, remaining, round] {
+            if (--*remaining == 0 && round == eventsRound_)
                 pollingEvents_ = false;
         };
         if (row.isEmpty()) {
             settle();
             continue;
         }
-        client_->events(
-            row, after,
-            [this, sessionId, generation, settle](const QJsonValue& value, const QString& error) {
-                if (generation != generation_)
-                    return;
-                if (!error.isEmpty()) {
-                    failed(error);
-                    settle();
-                    return;
-                }
-                const auto page = value.toObject();
-                // Authenticated and decrypted by ControlV2Client::events.
-                for (const auto& event : page.value("events").toArray())
-                    emit eventReceived(event.toObject());
-                if (watched_.contains(sessionId))
-                    watched_.insert(sessionId, page.value("nextCursor").toInteger());
-                settle();
-            });
+        client_->events(row, after,
+                        guarded([this, sessionId, generation, settle](const QJsonValue& value,
+                                                                      const QString& error) {
+                            if (generation != generation_) {
+                                settle();
+                                return;
+                            }
+                            if (!error.isEmpty()) {
+                                failed(error);
+                                settle();
+                                return;
+                            }
+                            const auto page = value.toObject();
+                            // Authenticated and decrypted by ControlV2Client::events.
+                            for (const auto& event : page.value("events").toArray())
+                                emit eventReceived(event.toObject());
+                            if (watched_.contains(sessionId))
+                                watched_.insert(sessionId, page.value("nextCursor").toInteger());
+                            settle();
+                        }));
     }
 }
 
 void RelayMachineBackend::createSession(const QJsonObject& request, Callback callback) {
-    if (!requireConnected(callback))
+    if (hold(callback,
+             [this, request](Callback again) { createSession(request, std::move(again)); }))
         return;
     const auto repository = request.value("repository_id").toString();
     const auto worktreeId = request.value("worktree_id").toString();
@@ -241,20 +260,20 @@ void RelayMachineBackend::createSession(const QJsonObject& request, Callback cal
         {"expectedCatalogRevision", worktree.value("catalogRevision").toInteger(0)},
         {"expectedLifecycleRevision", worktree.value("lifecycleRevision").toInteger(0)}};
     const auto generation = generation_;
-    client_->prepareWorktreeCommand(intent, plaintext,
-                                    [this, generation, callback = std::move(callback)](
-                                        const QJsonValue& value, const QString& error) mutable {
-                                        if (generation != generation_) {
-                                            callback({}, reason_);
-                                            return;
-                                        }
-                                        if (!error.isEmpty()) {
-                                            callback({}, error);
-                                            return;
-                                        }
-                                        persistAndDeliver(OutboxRoute::Worktree, value.toObject(),
-                                                          std::move(callback));
-                                    });
+    client_->prepareWorktreeCommand(
+        intent, plaintext,
+        guarded([this, generation, callback = std::move(callback)](const QJsonValue& value,
+                                                                   const QString& error) mutable {
+            if (generation != generation_) {
+                callback({}, reason_);
+                return;
+            }
+            if (!error.isEmpty()) {
+                callback({}, error);
+                return;
+            }
+            persistAndDeliver(OutboxRoute::Worktree, value.toObject(), std::move(callback));
+        }));
 }
 
 void RelayMachineBackend::startTurn(const QString& sessionId, qint64 generation,

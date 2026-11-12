@@ -104,13 +104,12 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
     }
     if (configuring) {
         // The catalog scope this host holds for the worktree, inside the signed result: a paired
-        // Desktop verifies a worktree index entry with no conversation by it (ADR 0119).
+        // Desktop verifies a worktree index entry with no conversation by it (ADR 0119). The
+        // host keeps no catalog or lifecycle revision (it accepts only 0), so none is echoed.
         const QJsonObject scope = sourceContext(worktreePath, salt);
         QJsonObject worktree;
         for (const auto* key : {"repositoryId", "worktreeId", "repositoryLabel", "worktreeLabel"})
             worktree.insert(QLatin1String(key), scope.value(QLatin1String(key)));
-        worktree.insert(QStringLiteral("catalogRevision"), 0);
-        worktree.insert(QStringLiteral("lifecycleRevision"), 0);
         // What the phone can choose before the first message: the models, efforts and
         // permissions a conversation started here would begin with.
         host_->handleProviderQuery(

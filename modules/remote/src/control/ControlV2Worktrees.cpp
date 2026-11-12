@@ -197,25 +197,28 @@ void ControlV2Client::worktreeCommand(const QJsonObject& envelope, Callback done
 }
 
 void ControlV2Client::awaitWorktreeCommand(const QJsonObject& intent, const QJsonObject& plaintext,
-                                           Callback done) {
+                                           int timeoutMilliseconds, Callback done) {
     prepareWorktreeCommand(
         intent, plaintext,
-        [this, done = std::move(done)](const QJsonValue& prepared, const QString& error) mutable {
+        [this, timeoutMilliseconds, done = std::move(done)](const QJsonValue& prepared,
+                                                            const QString& error) mutable {
             if (!error.isEmpty()) {
                 done({}, error);
                 return;
             }
             const auto envelope = prepared.toObject();
-            submitWorktreeCommand(envelope, [this, envelope, done = std::move(done)](
-                                                const QJsonValue&, const QString& failure) mutable {
-                if (!failure.isEmpty()) {
-                    done({}, failure);
-                    return;
-                }
-                // A read the host has not answered within a minute is abandoned.
-                pollWorktreeCommand(envelope, QDateTime::currentMSecsSinceEpoch() + 60000,
-                                    std::move(done));
-            });
+            submitWorktreeCommand(
+                envelope, [this, envelope, timeoutMilliseconds, done = std::move(done)](
+                              const QJsonValue&, const QString& failure) mutable {
+                    if (!failure.isEmpty()) {
+                        done({}, failure);
+                        return;
+                    }
+                    // A read the host has not answered in time is abandoned.
+                    pollWorktreeCommand(envelope,
+                                        QDateTime::currentMSecsSinceEpoch() + timeoutMilliseconds,
+                                        std::move(done));
+                });
         });
 }
 

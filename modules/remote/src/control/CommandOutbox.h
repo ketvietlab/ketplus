@@ -34,6 +34,8 @@ class CommandOutbox final {
     [[nodiscard]] bool isCompleted(const QString& id) const;
     // Persists the envelope before it is sent. Refuses an id that is pending or completed.
     bool add(Route route, const QJsonObject& envelope, QString* error = nullptr);
+    // Removes an entry that was never sent, without remembering it as completed.
+    bool withdraw(const QString& id, QString* error = nullptr);
     // Removes the entry and remembers its id (the most recent 1024 ids are kept).
     bool complete(const QString& id, QString* error = nullptr);
 

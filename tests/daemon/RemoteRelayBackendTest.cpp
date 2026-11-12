@@ -1,6 +1,7 @@
 #include "RemoteControlFixture.h"
 #include "control/ControlV2Content.h"
 #include "control/RelayMachineBackend.h"
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrlQuery>
@@ -63,6 +64,8 @@ class SyntheticRelay {
     QJsonArray worktrees;
     QJsonArray events;
     int commandReads{0};
+    // Runs while an events request is in flight, before its answer is delivered.
+    std::function<void()> onEvents;
 
     SyntheticRelay(FixtureTransport& transport, EncryptedFixture& host, ControlV2Client& client)
         : network(transport), fixture(host) {
@@ -123,6 +126,8 @@ class SyntheticRelay {
         if (path.startsWith("/v2/mobile/commands/"))
             return read(path.mid(QStringLiteral("/v2/mobile/commands/").size()));
         if (path == "/v2/mobile/sessions/opaque-session/events") {
+            if (onEvents)
+                onEvents();
             const auto after = QUrlQuery(request.url()).queryItemValue("afterCursor").toLongLong();
             QJsonArray page;
             qint64 next = after;
@@ -300,6 +305,35 @@ class RemoteRelayBackendTest final : public QObject {
                     return item.toObject();
         return {};
     }
+    // A repository listing once the worktree verifications it queued have landed.
+    static void settledListing(RelayMachineBackend& backend, QJsonObject* listing) {
+        QSignalSpy verified(&backend, &MachineBackend::catalogChanged);
+        Answer answer;
+        backend.listRepositories(answer.callback());
+        QTRY_VERIFY(answer.done);
+        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        const auto pending = answer.result.value("pending").toArray().size();
+        if (pending > 0) {
+            QTRY_VERIFY(verified.size() >= pending);
+            backend.listRepositories(answer.callback());
+            QTRY_VERIFY(answer.done);
+            QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        }
+        QVERIFY(answer.result.value("pending").toArray().isEmpty());
+        *listing = answer.result;
+    }
+    static int readsOf(const SyntheticRelay& relay, const QString& kind) {
+        int count = 0;
+        for (const auto& command : relay.commands)
+            count += command.value("kind").toString() == kind;
+        return count;
+    }
+    static QString commandOf(const SyntheticRelay& relay, const QString& kind) {
+        for (auto it = relay.commands.cbegin(); it != relay.commands.cend(); ++it)
+            if (it.value().value("kind") == kind)
+                return it.key();
+        return {};
+    }
     static QString rejection(const QJsonObject& listing, const QString& id) {
         for (const auto& row : listing.value("rejected").toArray())
             if (row.toObject().value("id") == id)
@@ -321,12 +355,10 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(backend.route(), MachineBackend::Route::Relay);
         QCOMPARE(backend.machineId(), CloudCrypto::keyFingerprint(fixture.hostKeys));
         Answer answer;
-        // A remote route fails a request made before Connected.
+        // A request made while Connecting waits for Connected (ADR 0119).
         backend.listConversations({}, answer.callback());
-        QVERIFY(answer.done);
-        QVERIFY(!answer.error.isEmpty());
+        QVERIFY(!answer.done);
         connectAndWait(backend);
-        backend.listConversations({}, answer.callback());
         QTRY_VERIFY(answer.done);
         QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
         const auto sessions = answer.result.value("sessions").toArray();
@@ -391,9 +423,9 @@ class RemoteRelayBackendTest final : public QObject {
                                     fastOptions(dir.filePath("outbox.json")));
         connectAndWait(backend);
         Answer answer;
-        backend.listRepositories(answer.callback());
-        QTRY_VERIFY(answer.done);
-        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        QJsonObject listing;
+        settledListing(backend, &listing);
+        answer.result = listing;
         const auto empty = worktreeNamed(
             {{"repositories", QJsonArray{answer.result.value("repositories").toArray().first()}}},
             "wt-empty");
@@ -454,6 +486,8 @@ class RemoteRelayBackendTest final : public QObject {
         auto options = fastOptions(dir.filePath("outbox.json"));
         RelayMachineBackend backend(&client, "linux-host", options);
         connectAndWait(backend);
+        QJsonObject listing;
+        settledListing(backend, &listing);
         Answer answer;
         backend.listWorktrees({}, 0, {{"repository_id", "repo-1"}}, answer.callback());
         QTRY_VERIFY(answer.done);
@@ -477,14 +511,17 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY(answer.done);
         QVERIFY(!answer.error.isEmpty());
 
-        // Beyond the bound, an index entry is reported unsigned without asking the host.
+        // Beyond the bound, a new index entry is reported unsigned without asking the host.
+        relay.worktrees.append(worktreeDto("wt-new", "new"));
         options.verifyWorktrees = 0;
         RelayMachineBackend bounded(&client, "linux-host", options);
         connectAndWait(bounded);
         const auto reads = relay.commandReads;
         bounded.listRepositories(answer.callback());
         QTRY_VERIFY(answer.done);
-        QCOMPARE(rejection(answer.result, "wt-empty"), "unsigned_index_entry");
+        QCOMPARE(rejection(answer.result, "wt-new"), "unsigned_index_entry");
+        QVERIFY(answer.result.value("pending").toArray().isEmpty());
+        QTest::qWait(50);
         QCOMPARE(relay.commandReads, reads);
     }
 
@@ -602,14 +639,16 @@ class RemoteRelayBackendTest final : public QObject {
         relay.hostPaused = true;
         QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
         backend.stopTurn("opaque-session", 3, answer.callback());
-        QTRY_VERIFY(relay.commandReads > 0);
+        QTRY_VERIFY(!commandOf(relay, "session.interrupt").isEmpty());
         RemoteControlTestAccess::expireCredential(client);
         const auto refresh = prefix + "/v2/auth/refresh";
         network.replies.insert(refresh, QJsonObject{{"code", "user_session_revoked"}});
         network.statuses.insert(refresh, 401);
         relay.hostPaused = false;
+        // The relay holds the command and may still run it: queued, not failed.
         QTRY_VERIFY(answer.done);
-        QVERIFY(!answer.error.isEmpty());
+        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        QCOMPARE(answer.result.value("status").toString(), "queued");
         QTRY_COMPARE(backend.connectionState(), ConnectionState::Offline);
         QTest::qWait(100);
         QCOMPARE(completed.size(), 0);
@@ -617,6 +656,228 @@ class RemoteRelayBackendTest final : public QObject {
         // No retry until the user signs in again.
         backend.connectToRelay();
         QCOMPARE(backend.connectionState(), ConnectionState::Offline);
+    }
+
+    void worktreeVerificationIsLazyCachedAndBounded() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        RemoteControlTestAccess::restorePoll(client, 10);
+        for (int i = 0; i < 8; ++i)
+            relay.worktrees.append(worktreeDto(QStringLiteral("wt-%1").arg(i), "more"));
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        connectAndWait(backend);
+        // The host is away: a listing still answers at once and never waits for it.
+        relay.hostPaused = true;
+        QSignalSpy verified(&backend, &MachineBackend::catalogChanged);
+        Answer answer;
+        QElapsedTimer clock;
+        clock.start();
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        QVERIFY2(clock.elapsed() < 2000, qPrintable(QString::number(clock.elapsed())));
+        QCOMPARE(answer.result.value("sessions").toArray().size(), 1);
+        backend.listRepositories(answer.callback());
+        QTRY_VERIFY(answer.done);
+        QCOMPARE(answer.result.value("pending").toArray().size(), 9);
+        QVERIFY(worktreeNamed(answer.result, "wt-empty").isEmpty());
+        // At most four checks run at a time.
+        QTest::qWait(200);
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), 4);
+        relay.hostPaused = false;
+        QTRY_VERIFY_WITH_TIMEOUT(verified.size() >= 9, 10000);
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), 9);
+        // Each scope is verified once: later listings use the cached verdict.
+        QJsonObject listing;
+        settledListing(backend, &listing);
+        settledListing(backend, &listing);
+        QCOMPARE(worktreeNamed(listing, "wt-7").value("verified").toString(), "host_read");
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), 9);
+        // A changed label is a new scope, verified again.
+        auto renamed = relay.worktrees.at(1).toObject();
+        renamed.insert("worktreeLabel", "renamed");
+        relay.hostLabels.insert("wt-empty", "renamed");
+        relay.worktrees.replace(1, renamed);
+        settledListing(backend, &listing);
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), 10);
+        QCOMPARE(worktreeNamed(listing, "wt-empty").value("label").toString(), "renamed");
+    }
+
+    void destroyingTheBackendMidRequestDropsItsCallbacks() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        Answer listing;
+        Answer turn;
+        {
+            auto backend = std::make_unique<RelayMachineBackend>(
+                &client, "linux-host", fastOptions(dir.filePath("outbox.json")));
+            connectAndWait(*backend);
+            backend->listConversations({}, listing.callback());
+            QTRY_VERIFY(listing.done);
+            relay.hostPaused = true;
+            backend->listConversations({}, listing.callback());
+            backend->startTurn("opaque-session", 3, {{"prompt", "hi"}}, turn.callback());
+            backend.reset();
+        }
+        relay.hostPaused = false;
+        QTest::qWait(200);
+        // Nothing reached the destroyed backend or its callers.
+        QVERIFY(!listing.done);
+        QVERIFY(!turn.done);
+        // The shared client keeps serving another backend.
+        RelayMachineBackend again(&client, "linux-host", fastOptions(dir.filePath("other.json")));
+        connectAndWait(again);
+        again.listConversations({}, listing.callback());
+        QTRY_VERIFY(listing.done);
+        QVERIFY2(listing.error.isEmpty(), qPrintable(listing.error));
+    }
+
+    void liveEventsResumeAfterAFenceDuringAnEventsPoll() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        connectAndWait(backend);
+        Answer answer;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        // A turn makes the backend follow the conversation's events.
+        QSignalSpy before(&backend, &MachineBackend::eventReceived);
+        backend.startTurn("opaque-session", 3, {{"prompt", "hi"}}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+        QTRY_COMPARE(before.size(), 2);
+        // The link is fenced while an events request is in flight.
+        bool fenced = false;
+        relay.onEvents = [&] {
+            if (fenced)
+                return;
+            fenced = true;
+            QTimer::singleShot(0, &backend, [&backend] { backend.disconnectFromRelay(); });
+        };
+        QTRY_VERIFY(fenced);
+        QTRY_COMPARE(backend.connectionState(), ConnectionState::Offline);
+        QTest::qWait(50);
+        QSignalSpy events(&backend, &MachineBackend::eventReceived);
+        connectAndWait(backend);
+        relay.events.append(fixture.event(12));
+        QTRY_COMPARE(events.size(), 1);
+        QCOMPARE(events.first().at(0).toJsonObject().value("cursor").toInt(), 12);
+    }
+
+    void aReportedFailureIsNeverSentAndAQueuedCommandCompletesOnce() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        connectAndWait(backend);
+        Answer answer;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+
+        // Reconnecting: a request waits, and completes once the link is back.
+        relay.offline = true;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        QTRY_COMPARE(backend.connectionState(), ConnectionState::Reconnecting);
+        backend.listConversations({}, answer.callback());
+        QTest::qWait(100);
+        QVERIFY(!answer.done);
+        relay.offline = false;
+        QTRY_VERIFY(answer.done);
+        QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
+
+        // A command held while Reconnecting that is then failed by going Offline was never
+        // sent, and never will be.
+        relay.offline = true;
+        backend.listConversations({}, answer.callback());
+        QTRY_COMPARE(backend.connectionState(), ConnectionState::Reconnecting);
+        Answer held;
+        backend.startTurn("opaque-session", 3, {{"prompt", "never sent"}}, held.callback());
+        QTest::qWait(50);
+        QVERIFY(!held.done);
+        backend.disconnectFromRelay();
+        QVERIFY(held.done);
+        QVERIFY(!held.error.isEmpty());
+        // Offline fails at once.
+        backend.startTurn("opaque-session", 3, {{"prompt", "never sent"}}, held.callback());
+        QVERIFY(held.done);
+        QVERIFY(!held.error.isEmpty());
+        relay.offline = false;
+        connectAndWait(backend);
+        QTest::qWait(100);
+        QVERIFY(commandOf(relay, "session.start_turn").isEmpty());
+        QVERIFY(backend.pendingCommands().isEmpty());
+
+        // A command the relay holds is queued, not failed, and its outcome arrives once.
+        relay.hostPaused = true;
+        Answer queued;
+        backend.startTurn("opaque-session", 3, {{"prompt", "queued"}}, queued.callback());
+        QTRY_VERIFY(!commandOf(relay, "session.start_turn").isEmpty());
+        const auto id = commandOf(relay, "session.start_turn");
+        QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
+        backend.disconnectFromRelay();
+        QVERIFY(queued.done);
+        QVERIFY2(queued.error.isEmpty(), qPrintable(queued.error));
+        QCOMPARE(queued.result.value("status").toString(), "queued");
+        QCOMPARE(queued.result.value("command_id").toString(), id);
+        relay.hostPaused = false;
+        connectAndWait(backend);
+        QTRY_COMPARE(completed.size(), 1);
+        QCOMPARE(completed.first().at(0).toString(), id);
+        QVERIFY(completed.first().at(2).toString().isEmpty());
+        QCOMPARE(relay.executions.value(id), 1);
+    }
+
+    void aResultIsAppliedOnlyAfterItsCompletionIsRecorded() {
+        QTemporaryDir dir;
+        const auto outbox = dir.filePath("outbox.json");
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        RelayMachineBackend backend(&client, "linux-host", fastOptions(outbox));
+        connectAndWait(backend);
+        Answer answer;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        relay.hostPaused = true;
+        backend.startTurn("opaque-session", 3, {{"prompt", "recorded"}}, answer.callback());
+        QTRY_VERIFY(!commandOf(relay, "session.start_turn").isEmpty());
+        const auto id = commandOf(relay, "session.start_turn");
+        QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
+        // The outbox cannot be written: a directory stands where the file was.
+        QVERIFY(QFile::remove(outbox));
+        QVERIFY(QDir().mkpath(outbox + "/blocked"));
+        relay.hostPaused = false;
+        QTRY_COMPARE(relay.executions.value(id), 1);
+        QTest::qWait(200);
+        QCOMPARE(completed.size(), 0);
+        QVERIFY(!answer.done);
+        QCOMPARE(backend.pendingCommands(), QStringList{id});
+        // Once it can be recorded, the next connection applies it, once.
+        QVERIFY(QDir(outbox).removeRecursively());
+        backend.disconnectFromRelay();
+        QCOMPARE(answer.result.value("status").toString(), "queued");
+        connectAndWait(backend);
+        QTRY_COMPARE(completed.size(), 1);
+        QTest::qWait(100);
+        QCOMPARE(completed.size(), 1);
+        QCOMPARE(relay.executions.value(id), 1);
+        QVERIFY(backend.pendingCommands().isEmpty());
     }
 };
 

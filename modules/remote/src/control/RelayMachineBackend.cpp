@@ -1,6 +1,7 @@
 #include "control/RelayMachineBackend.h"
 #include "control/ControlV2Client.h"
 #include <QTimer>
+#include <climits>
 
 // Connection states and reads of the Relay backend; RelayMachineCommands.cpp holds the writes.
 namespace ketplus::remote {
@@ -37,11 +38,15 @@ RelayMachineBackend::RelayMachineBackend(ControlV2Client* client, QString relayM
     connect(events_, &QTimer::timeout, this, &RelayMachineBackend::pollEvents);
     if (!outbox_.load(&outboxError_))
         qWarning("Relay command outbox unavailable: %s", qUtf8Printable(outboxError_));
-    if (client_)
+    if (client_) {
         connect(client_, &ControlV2Client::credentialRevoked, this,
                 [this] { failed(QStringLiteral("Account changed.")); });
+        connect(client_, &ControlV2Client::worktreesVerified, this,
+                &MachineBackend::catalogChanged);
+    }
 }
 
+// Callbacks still in flight in the shared client are guarded (guarded()) and dropped.
 RelayMachineBackend::~RelayMachineBackend() { ++generation_; }
 
 QString RelayMachineBackend::machineId() const {
@@ -57,6 +62,10 @@ QStringList RelayMachineBackend::pendingCommands() const {
 }
 
 void RelayMachineBackend::setState(ConnectionState state, const QString& reason) {
+    if (state == ConnectionState::Offline)
+        // An Offline route will not answer on its own: held requests fail with the reason.
+        for (auto& waiter : std::exchange(waiters_, {}))
+            waiter.callback({}, reason);
     if (state_ == state && reason_ == reason)
         return;
     state_ = state;
@@ -78,13 +87,33 @@ void RelayMachineBackend::connectToRelay() {
 }
 
 void RelayMachineBackend::disconnectFromRelay() {
+    fence(QStringLiteral("Disconnected from the relay."));
+}
+
+void RelayMachineBackend::fence(const QString& reason) {
     ++generation_;
+    ++eventsRound_;
+    pollingEvents_ = false;
     retry_->stop();
     events_->stop();
     delivering_.clear();
-    for (const auto& callback : std::exchange(callbacks_, {}))
-        callback({}, QStringLiteral("Disconnected from the relay."));
-    setState(ConnectionState::Offline, QStringLiteral("Disconnected from the relay."));
+    const auto callbacks = std::exchange(callbacks_, {});
+    for (auto it = callbacks.cbegin(); it != callbacks.cend(); ++it) {
+        const auto id = it.key();
+        const auto callback = it.value();
+        QString storage;
+        if (outbox_.isPending(id) && unsent_.contains(id) && outbox_.withdraw(id, &storage)) {
+            // It never left this device and now never will: a failure the UI can trust.
+            unsent_.remove(id);
+            callback({}, reason);
+        } else if (outbox_.isPending(id)) {
+            // The relay may hold it and run it later: not a failure.
+            callback({{"status", "queued"}, {"command_id", id}}, {});
+        } else {
+            callback({}, reason);
+        }
+    }
+    setState(ConnectionState::Offline, reason);
 }
 
 void RelayMachineBackend::probe() {
@@ -93,21 +122,23 @@ void RelayMachineBackend::probe() {
         return;
     }
     const auto generation = generation_;
-    client_->listSessions([this, generation](const QJsonValue& value, const QString& error) {
-        if (generation != generation_)
-            return;
-        if (!error.isEmpty() || !value.isArray()) {
-            failed(error.isEmpty() ? QStringLiteral("Control refused the request.") : error);
-            if (state_ != ConnectionState::Offline)
-                scheduleProbe();
-            return;
-        }
-        attempts_ = 0;
-        everConnected_ = true;
-        setState(ConnectionState::Connected, {});
-        events_->start();
-        resume();
-    });
+    client_->listSessions(
+        guarded([this, generation](const QJsonValue& value, const QString& error) {
+            if (generation != generation_)
+                return;
+            if (!error.isEmpty() || !value.isArray()) {
+                failed(error.isEmpty() ? QStringLiteral("Control refused the request.") : error);
+                if (state_ != ConnectionState::Offline)
+                    scheduleProbe();
+                return;
+            }
+            attempts_ = 0;
+            everConnected_ = true;
+            setState(ConnectionState::Connected, {});
+            events_->start();
+            resume();
+            releaseWaiters();
+        }));
 }
 
 void RelayMachineBackend::scheduleProbe() {
@@ -124,17 +155,10 @@ bool RelayMachineBackend::fatal(const QString& error) const {
 
 void RelayMachineBackend::failed(const QString& error) {
     if (fatal(error)) {
-        // Revoked, signed out or another account: nothing in flight may reach the UI.
-        ++generation_;
-        retry_->stop();
-        events_->stop();
-        delivering_.clear();
-        const auto reason = error == QLatin1String("Account changed.")
-                                ? QStringLiteral("The relay sign-in ended; sign in again.")
-                                : error;
-        for (const auto& callback : std::exchange(callbacks_, {}))
-            callback({}, reason);
-        setState(ConnectionState::Offline, reason);
+        // Revoked, signed out or another account: no result in flight may reach the UI.
+        fence(error == QLatin1String("Account changed.")
+                  ? QStringLiteral("The relay sign-in ended; sign in again.")
+                  : error);
         return;
     }
     if (!transient(error))
@@ -146,12 +170,33 @@ void RelayMachineBackend::failed(const QString& error) {
     scheduleProbe();
 }
 
-bool RelayMachineBackend::requireConnected(const Callback& callback) const {
+bool RelayMachineBackend::hold(Callback& callback, std::function<void(Callback)> retry) {
     if (state_ == ConnectionState::Connected && client_)
+        return false;
+    if (state_ == ConnectionState::Offline || !client_) {
+        // ADR 0119: an Offline route fails a request at once with the state's reason.
+        callback({},
+                 reason_.isEmpty() ? QStringLiteral("This machine is not connected.") : reason_);
         return true;
-    // A remote route fails a request made before Connected rather than holding it (ADR 0119).
-    callback({}, reason_.isEmpty() ? QStringLiteral("This machine is not connected.") : reason_);
-    return false;
+    }
+    // Connecting or Reconnecting: held until Connected, bounded by the command lifetime.
+    const auto id = ++nextWaiter_;
+    waiters_.append({id, std::move(callback), std::move(retry)});
+    QTimer::singleShot(
+        qMin<qint64>(options_.commandLifetimeMilliseconds, INT_MAX), this, [this, id] {
+            for (qsizetype i = 0; i < waiters_.size(); ++i)
+                if (waiters_.at(i).id == id) {
+                    const auto callback = waiters_.takeAt(i).callback;
+                    callback({}, QStringLiteral("The machine did not connect in time."));
+                    return;
+                }
+        });
+    return true;
+}
+
+void RelayMachineBackend::releaseWaiters() {
+    for (auto& waiter : std::exchange(waiters_, {}))
+        waiter.retry(std::move(waiter.callback));
 }
 
 MachineBackend::Callback RelayMachineBackend::fenced(Callback callback) {
@@ -172,7 +217,8 @@ void RelayMachineBackend::project(std::function<void(const QJsonObject&, const Q
     const auto generation = generation_;
     client_->projection(
         {{"verify_worktrees", options_.verifyWorktrees}},
-        [this, generation, done = std::move(done)](const QJsonValue& value, const QString& error) {
+        guarded([this, generation, done = std::move(done)](const QJsonValue& value,
+                                                           const QString& error) {
             if (generation != generation_) {
                 done({}, reason_);
                 return;
@@ -197,11 +243,16 @@ void RelayMachineBackend::project(std::function<void(const QJsonObject&, const Q
                 if (row.toObject().value("machineId").toString() == relayMachineId_)
                     rejected.append(row);
             repositories_ = repositories;
+            QJsonArray pending;
+            for (const auto& row : projection.value("pending").toArray())
+                if (row.toObject().value("machineId").toString() == relayMachineId_)
+                    pending.append(row);
             done({{"repositories", repositories},
                   {"conversations", conversations},
-                  {"rejected", rejected}},
+                  {"rejected", rejected},
+                  {"pending", pending}},
                  {});
-        });
+        }));
 }
 
 QJsonObject RelayMachineBackend::sessionRow(const QString& id, qint64 generation) const {
@@ -210,7 +261,7 @@ QJsonObject RelayMachineBackend::sessionRow(const QString& id, qint64 generation
 }
 
 void RelayMachineBackend::listRepositories(Callback callback) {
-    if (!requireConnected(callback))
+    if (hold(callback, [this](Callback again) { listRepositories(std::move(again)); }))
         return;
     project([callback = std::move(callback)](const QJsonObject& projection, const QString& error) {
         if (!error.isEmpty()) {
@@ -226,13 +277,18 @@ void RelayMachineBackend::listRepositories(Callback callback) {
                                             {"available", true},
                                             {"worktrees", group.value("worktrees")}});
         }
-        callback({{"repositories", repositories}, {"rejected", projection.value("rejected")}}, {});
+        callback({{"repositories", repositories},
+                  {"rejected", projection.value("rejected")},
+                  {"pending", projection.value("pending")}},
+                 {});
     });
 }
 
-void RelayMachineBackend::listWorktrees(const QString&, qint64, const QJsonObject& request,
-                                        Callback callback) {
-    if (!requireConnected(callback))
+void RelayMachineBackend::listWorktrees(const QString& sessionId, qint64 generation,
+                                        const QJsonObject& request, Callback callback) {
+    if (hold(callback, [this, sessionId, generation, request](Callback again) {
+            listWorktrees(sessionId, generation, request, std::move(again));
+        }))
         return;
     project([request, callback = std::move(callback)](const QJsonObject& projection,
                                                       const QString& error) {
@@ -266,8 +322,9 @@ void RelayMachineBackend::listWorktrees(const QString&, qint64, const QJsonObjec
     });
 }
 
-void RelayMachineBackend::listConversations(const QJsonObject&, Callback callback) {
-    if (!requireConnected(callback))
+void RelayMachineBackend::listConversations(const QJsonObject& options, Callback callback) {
+    if (hold(callback,
+             [this, options](Callback again) { listConversations(options, std::move(again)); }))
         return;
     project([callback = std::move(callback)](const QJsonObject& projection, const QString& error) {
         callback(error.isEmpty() ? QJsonObject{{"sessions", projection.value("conversations")},
@@ -279,7 +336,9 @@ void RelayMachineBackend::listConversations(const QJsonObject&, Callback callbac
 
 void RelayMachineBackend::transcriptWindow(const QString& sessionId, qint64 generation,
                                            const QJsonObject& request, Callback callback) {
-    if (!requireConnected(callback))
+    if (hold(callback, [this, sessionId, generation, request](Callback again) {
+            transcriptWindow(sessionId, generation, request, std::move(again));
+        }))
         return;
     const auto row = sessionRow(sessionId, generation);
     if (row.isEmpty()) {
@@ -287,15 +346,17 @@ void RelayMachineBackend::transcriptWindow(const QString& sessionId, qint64 gene
         return;
     }
     auto done = fenced(std::move(callback));
-    client_->transcriptWindow(
-        row, request,
-        [this, sessionId, done = std::move(done)](const QJsonValue& value, const QString& error) {
-            const auto page = value.toObject();
-            // Follow the conversation's events from the snapshot the window was read at.
-            if (error.isEmpty() && !watched_.contains(sessionId))
-                watched_.insert(sessionId, page.value("snapshot_cursor").toInteger());
-            done(page, error);
-        });
+    client_->transcriptWindow(row, request,
+                              guarded([this, sessionId, done = std::move(done)](
+                                          const QJsonValue& value, const QString& error) {
+                                  const auto page = value.toObject();
+                                  // Follow the conversation's events from the snapshot the window
+                                  // was read at.
+                                  if (error.isEmpty() && !watched_.contains(sessionId))
+                                      watched_.insert(sessionId,
+                                                      page.value("snapshot_cursor").toInteger());
+                                  done(page, error);
+                              }));
 }
 
 void RelayMachineBackend::transcriptPage(const QString& sessionId, qint64 generation,

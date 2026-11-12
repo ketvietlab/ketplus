@@ -5,6 +5,7 @@
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QUrl>
 #include <functional>
 #include <memory>
@@ -53,10 +54,14 @@ class ControlV2Client final : public QObject {
     // index entry fails authentication is left out and named in `rejected`, never shown.
     void projection(Callback done);
     // The same with options. `verify_worktrees` (0..100, default 0) bounds how many index
-    // worktrees that no verified conversation covers are checked with a host-signed
-    // worktree.configuration.read; an entry is shown only when the host echoes its ids, labels
-    // and revisions, and is otherwise rejected as unsigned_index_entry, worktree_not_granted or
-    // verification_failed. Each shown worktree has `verified` = "conversation" or "host_read".
+    // worktrees that no verified conversation covers, and that have no cached verdict yet, are
+    // queued for a host-signed worktree.configuration.read. The listing never waits for it:
+    // queued entries are reported in `pending` and worktreesVerified() announces each verdict.
+    // An entry is shown only when the host echoes its ids and labels, and is otherwise rejected
+    // as unsigned_index_entry, worktree_not_granted or verification_failed. A verdict is cached
+    // per catalog scope (ids, labels, revisions); one without an answer is retried after
+    // verifyRetryMilliseconds. Each shown worktree has `verified` = "conversation" or
+    // "host_read".
     void projection(const QJsonObject& options, Callback done);
     // One bounded transcript window over Control v2, shaped as the local daemon's
     // session.transcript_window page. `window` takes snapshot_cursor (defaults to the session's
@@ -86,14 +91,36 @@ class ControlV2Client final : public QObject {
     // The relay refused the refresh credential: this client is signed out and every response
     // still in flight is fenced.
     void credentialRevoked();
+    // A worktree.configuration.read verdict landed: a new projection shows or rejects it.
+    void worktreesVerified();
 
   private:
     friend class RemoteControlTestAccess;
     struct ProjectionState;
-    void verifyNextWorktree(const std::shared_ptr<ProjectionState>& state);
-    // A non-durable worktree command (a read): prepare, submit, then poll until it ends.
+    void assembleProjection(const std::shared_ptr<ProjectionState>& state);
+    struct WorktreeVerdict {
+        // Empty when the host signed the same scope.
+        QString reason;
+        QString detail;
+        // Milliseconds since the epoch after which it is asked again; 0 keeps it.
+        qint64 until{0};
+    };
+    [[nodiscard]] static QString worktreeVerdictKey(const QJsonObject& entry);
+    void queueWorktreeVerification(const QJsonObject& entry);
+    // Runs queued verifications, at most verifyConcurrency_ at a time.
+    void pumpWorktreeVerification();
+    QHash<QString, WorktreeVerdict> worktreeVerdicts_;
+    QList<QJsonObject> verifyQueue_;
+    QSet<QString> verifying_;
+    quint64 verdictEpoch_{0};
+    int verifyInFlight_{0};
+    int verifyConcurrency_{4};
+    int verifyTimeoutMilliseconds_{5000};
+    int verifyRetryMilliseconds_{30000};
+    // A non-durable worktree command (a read): prepare, submit, then poll until it ends or the
+    // timeout passes.
     void awaitWorktreeCommand(const QJsonObject& intent, const QJsonObject& plaintext,
-                              Callback done);
+                              int timeoutMilliseconds, Callback done);
     void pollWorktreeCommand(const QJsonObject& envelope, qint64 deadline, Callback done);
     struct RestoreState;
     void projectNext(const std::shared_ptr<ProjectionState>& state);

@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QPointer>
 #include <QSet>
+#include <functional>
 
 class QTimer;
 
@@ -47,7 +48,8 @@ class RelayMachineBackend final : public MachineBackend {
     [[nodiscard]] QStringList pendingCommands() const;
 
     // Starts (or restarts after Offline) the relay link. Pending outbox commands are resumed
-    // once it is Connected.
+    // once it is Connected. Requests made while Connecting or Reconnecting wait for Connected,
+    // up to commandLifetimeMilliseconds; while Offline they fail at once with the reason.
     void connectToRelay();
     void disconnectFromRelay();
 
@@ -88,8 +90,22 @@ class RelayMachineBackend final : public MachineBackend {
     // Classifies a relay failure: a fatal one goes Offline, anything else reconnects.
     void failed(const QString& error);
     [[nodiscard]] bool fatal(const QString& error) const;
-    [[nodiscard]] bool requireConnected(const Callback& callback) const;
+    // Ends every request of this link: callbacks of outbox commands that may still run report
+    // {"status": "queued"} (their outcome arrives through commandCompleted), the rest fail.
+    void fence(const QString& reason);
+    // True when the request may run now. Otherwise it fails (Offline) or is held until
+    // Connected, when `retry` runs it again with the same callback.
+    [[nodiscard]] bool hold(Callback& callback, std::function<void(Callback)> retry);
+    void releaseWaiters();
     [[nodiscard]] Callback fenced(Callback callback);
+    // A ControlV2Client callback that is dropped once this backend is destroyed.
+    template <typename F> auto guarded(F f) {
+        return [self = QPointer<RelayMachineBackend>(this),
+                f = std::move(f)](const QJsonValue& value, const QString& error) mutable {
+            if (self)
+                f(value, error);
+        };
+    }
     void project(std::function<void(const QJsonObject&, const QString&)> done);
     [[nodiscard]] QJsonObject sessionRow(const QString& id, qint64 generation) const;
     void sessionCommand(const QString& kind, const QString& sessionId, qint64 generation,
@@ -116,12 +132,24 @@ class RelayMachineBackend final : public MachineBackend {
     QTimer* events_{nullptr};
     QHash<QString, Callback> callbacks_;
     QSet<QString> delivering_;
+    // Outbox commands added by this process and never handed to the relay: only these can be
+    // withdrawn, because only these provably never reached it.
+    QSet<QString> unsent_;
+    struct Waiter {
+        quint64 id{0};
+        Callback callback;
+        std::function<void(Callback)> retry;
+    };
+    QList<Waiter> waiters_;
+    quint64 nextWaiter_{0};
     // The verified projection rows of this machine, by session id.
     QHash<QString, QJsonObject> sessions_;
     QJsonArray repositories_;
     // Sessions whose events are followed, with the last cursor seen.
     QHash<QString, qint64> watched_;
     bool pollingEvents_{false};
+    // Bumped with each fence: an events poll of an earlier round never settles this one.
+    quint64 eventsRound_{0};
 };
 
 } // namespace ketplus::remote
