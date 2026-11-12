@@ -138,11 +138,18 @@ void ControlV2Client::authorized(const QByteArray& method, const QString& path,
         request(
             method, path, body, token,
             [done = std::move(done)](int status, const QJsonValue& value, const QString& error) {
-                done(value,
-                     !error.isEmpty() ? error
-                     : status >= 200 && status < 300
-                         ? QString{}
-                         : value.toObject().value("code").toString("Control refused the request."));
+                if (!error.isEmpty() || (status >= 200 && status < 300)) {
+                    done(value, error);
+                    return;
+                }
+                // A coded answer is the relay's verdict. Without a code, a server error, a
+                // timeout or a rate limit is the link (kept and retried); anything else refuses
+                // this request.
+                const auto code = value.toObject().value("code").toString();
+                const bool temporary = status >= 500 || status == 408 || status == 429;
+                done(value, !code.isEmpty() ? code
+                            : temporary     ? QStringLiteral("Control transport failed.")
+                                            : QStringLiteral("Control refused the request."));
             });
     });
 }

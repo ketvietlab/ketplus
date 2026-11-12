@@ -2,6 +2,7 @@
 #include "control/ControlV2Content.h"
 #include "control/RelayMachineBackend.h"
 #include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrlQuery>
@@ -61,17 +62,26 @@ class SyntheticRelay {
     QSet<QString> ungranted;
     // Session command kinds the relay refuses with no error code.
     QSet<QString> refusedKinds;
+    // Session command kinds the relay answers with this status and no error code (an outage).
+    QHash<QString, int> unavailableKinds;
     // Worktree label the host signs, when it differs from the relay's index.
     QHash<QString, QString> hostLabels;
     QJsonArray worktrees;
+    // The relay's sessionDto list; the first is "opaque-session", which alone has events.
+    QJsonArray sessions;
     QJsonArray events;
     int commandReads{0};
+    QHash<QString, int> eventPolls;
+    QHash<QString, int> readsOfCommand;
+    QJsonObject metadata_;
+    QJsonObject clientKeys_;
     // Runs while an events request is in flight, before its answer is delivered.
     std::function<void()> onEvents;
 
     SyntheticRelay(FixtureTransport& transport, EncryptedFixture& host, ControlV2Client& client)
         : network(transport), fixture(host) {
         const auto keys = client.identity().value("keys").toObject();
+        clientKeys_ = keys;
         clientSigning = CloudCrypto::fromBase64Url(keys.value("signingPublicKey").toString());
         clientAgreement = CloudCrypto::fromBase64Url(keys.value("agreementPublicKey").toString());
         const QJsonObject metadata{{"branch", "feature/relay"},
@@ -85,27 +95,40 @@ class SyntheticRelay {
                                    {"repositoryLabel", "ketplus"},
                                    {"worktreeId", "wt-a"},
                                    {"worktreeLabel", "ketplus"}};
+        metadata_ = metadata;
         // As the relay's sessionDto.
-        network.replies.insert(
-            prefix + "/v2/mobile/sessions",
-            QJsonArray{
-                QJsonObject{{"id", "opaque-session"},
-                            {"generation", 3},
-                            {"workspaceId", "workspace"},
-                            {"machineId", "linux-host"},
-                            {"adapter", "codex"},
-                            {"title", "Relay title"},
-                            {"state", "ready"},
-                            {"lastEventCursor", 9},
-                            {"currentTurnSequence", 1},
-                            {"repositoryId", "repo-1"},
-                            {"worktreeId", "wt-a"},
-                            {"encryptedMetadata",
-                             sealedMetadata(fixture.host, "opaque-session", 3, 9, metadata)}}});
+        sessions = QJsonArray{QJsonObject{
+            {"id", "opaque-session"},
+            {"generation", 3},
+            {"workspaceId", "workspace"},
+            {"machineId", "linux-host"},
+            {"adapter", "codex"},
+            {"title", "Relay title"},
+            {"state", "ready"},
+            {"lastEventCursor", 9},
+            {"currentTurnSequence", 1},
+            {"repositoryId", "repo-1"},
+            {"worktreeId", "wt-a"},
+            {"encryptedMetadata", sealedMetadata(fixture.host, "opaque-session", 3, 9, metadata)}}};
+        network.replies.insert(prefix + "/v2/mobile/sessions", sessions);
         worktrees = {worktreeDto("wt-a", "ketplus"), worktreeDto("wt-empty", "empty")};
         network.handler = [this](const QNetworkRequest& request, const QByteArray& body) {
             return handle(request, body);
         };
+    }
+
+    // Another conversation in the same verified worktree, listed from the next read on.
+    void addSession(const QString& id) {
+        auto row = sessions.first().toObject();
+        row.insert("id", id);
+        row.insert("encryptedMetadata", sealedMetadata(fixture.host, id, 3, 9, metadata_));
+        sessions.append(row);
+        network.replies.insert(prefix + "/v2/mobile/sessions", sessions);
+        network.replies.insert(
+            prefix + "/v2/mobile/sessions/" + id + "/keys",
+            QJsonArray{fixture.host.wrapSessionKey(
+                id, 3, 1, {{"id", "remote-client"}, {"keyVersion", 1}, {"keys", clientKeys_}},
+                "linux-host", 1)});
     }
 
     std::optional<std::pair<int, QJsonObject>> handle(const QNetworkRequest& request,
@@ -123,22 +146,29 @@ class SyntheticRelay {
         const auto body = QJsonDocument::fromJson(bytes).object();
         if (method == "POST" && path == "/v2/mobile/workspaces/workspace/session-creates")
             return accept(body, bytes, true);
-        if (method == "POST" && path == "/v2/mobile/sessions/opaque-session/commands")
+        const auto sessionPath = QStringLiteral("/v2/mobile/sessions/");
+        const auto session =
+            path.startsWith(sessionPath) ? path.mid(sessionPath.size()).section('/', 0, 0) : "";
+        if (method == "POST" && !session.isEmpty() && path.endsWith("/commands"))
             return accept(body, bytes, false);
         if (path.startsWith("/v2/mobile/commands/"))
             return read(path.mid(QStringLiteral("/v2/mobile/commands/").size()));
-        if (path == "/v2/mobile/sessions/opaque-session/events") {
+        if (!session.isEmpty() && path.endsWith("/events")) {
+            ++eventPolls[session];
             if (onEvents)
                 onEvents();
             const auto after = QUrlQuery(request.url()).queryItemValue("afterCursor").toLongLong();
             QJsonArray page;
             qint64 next = after;
             for (const auto& event : std::as_const(events))
-                if (event.toObject().value("cursor").toInteger() > after) {
-                    page.append(event);
+                if (session == "opaque-session" &&
+                    event.toObject().value("cursor").toInteger() > after) {
+                    auto relayed = event.toObject();
+                    relayed.insert("occurredAt", "2026-11-12T09:00:02.000Z");
+                    page.append(relayed);
                     next = event.toObject().value("cursor").toInteger();
                 }
-            return std::pair{200, QJsonObject{{"sessionId", "opaque-session"},
+            return std::pair{200, QJsonObject{{"sessionId", session},
                                               {"sessionGeneration", 3},
                                               {"afterCursor", after},
                                               {"nextCursor", next},
@@ -155,6 +185,8 @@ class SyntheticRelay {
         ++submissions[id];
         if (refusedKinds.contains(body.value("kind").toString()))
             return std::pair{400, QJsonObject{}};
+        if (unavailableKinds.contains(body.value("kind").toString()))
+            return std::pair{unavailableKinds.value(body.value("kind").toString()), QJsonObject{}};
         if (worktree && ungranted.contains(body.value("worktreeId").toString()))
             return std::pair{403, QJsonObject{{"code", "session_create_forbidden"},
                                               {"message", "The worktree is not granted."}}};
@@ -191,6 +223,7 @@ class SyntheticRelay {
 
     std::optional<std::pair<int, QJsonObject>> read(const QString& id) {
         ++commandReads;
+        ++readsOfCommand[id];
         if (!commands.contains(id))
             return std::pair{404, QJsonObject{{"code", "command_not_found"}, {"message", ""}}};
         auto dto = commands.value(id);
@@ -261,11 +294,12 @@ class SyntheticRelay {
                                                     "session-create:" + id, "remote-client", 1,
                                                     "linux-host", 1));
         } else {
+            const auto session = dto.value("sessionId").toString();
             const auto aad = CloudCrypto::canonical(
-                {"ketplus", 2, "command-result", id, "workspace", "linux-host", "opaque-session", 3,
-                 1, "completed", "ok", "opaque-session:3:1", 1, "linux-host", 1});
+                {"ketplus", 2, "command-result", id, "workspace", "linux-host", session, 3, 1,
+                 "completed", "ok", session + ":3:1", 1, "linux-host", 1});
             dto.insert("encryptedResult",
-                       fixture.host.encrypt(bytes, aad, "opaque-session", 3, 1, "linux-host", 1));
+                       fixture.host.encrypt(bytes, aad, session, 3, 1, "linux-host", 1));
         }
     }
 };
@@ -382,6 +416,25 @@ class RemoteRelayBackendTest final : public QObject {
             QVERIFY(!body.contains("private fixture prompt"));
         QTRY_COMPARE(events.size(), 2);
         QCOMPARE(events.at(1).at(0).toJsonObject().value("cursor").toInt(), 11);
+        // The same keys as the local daemon's session.event (LocalIpcServer::broadcastEvent).
+        const auto live = events.at(1).at(0).toJsonObject();
+        const auto liveKeys = live.keys();
+        QCOMPARE(
+            QSet<QString>(liveKeys.cbegin(), liveKeys.cend()),
+            (QSet<QString>{"protocol_version", "message_id", "message_type", "session_id",
+                           "session_generation", "cursor", "turn_sequence", "sent_at", "payload"}));
+        QCOMPARE(live.value("message_type").toString(), "session.event");
+        QCOMPARE(live.value("session_id").toString(), "opaque-session");
+        QCOMPARE(live.value("session_generation").toInt(), 3);
+        QCOMPARE(live.value("turn_sequence").toInt(), 1);
+        QCOMPARE(live.value("sent_at").toString(), "2026-11-12T09:00:02.000Z");
+        const auto payload = live.value("payload").toObject();
+        const auto payloadKeys = payload.keys();
+        QCOMPARE(QSet<QString>(payloadKeys.cbegin(), payloadKeys.cend()),
+                 (QSet<QString>{"event_type", "data"}));
+        QCOMPARE(payload.value("event_type").toString(), "assistant.delta");
+        QCOMPARE(payload.value("data").toObject().value("delta").toString(),
+                 "private fixture text");
 
         backend.pendingApprovals("opaque-session", 3, {}, answer.callback());
         QTRY_VERIFY(answer.done);
@@ -868,9 +921,16 @@ class RemoteRelayBackendTest final : public QObject {
         // The outbox cannot be written: a directory stands where the file was.
         QVERIFY(QFile::remove(outbox));
         QVERIFY(QDir().mkpath(outbox + "/blocked"));
+        // One warning however long the file stays unwritable.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Relay command outbox not updated"));
+        QTest::failOnWarning(QRegularExpression("^Relay command outbox not updated"));
         relay.hostPaused = false;
         QTRY_COMPARE(relay.executions.value(id), 1);
-        QTest::qWait(200);
+        const auto readsBefore = relay.readsOfCommand.value(id);
+        QTest::qWait(300);
+        // Backed off (20, 40, 80, 160 ms ...): a few read-backs, not one per 20 ms.
+        const auto readBacks = relay.readsOfCommand.value(id) - readsBefore;
+        QVERIFY2(readBacks >= 1 && readBacks <= 6, qPrintable(QString::number(readBacks)));
         QCOMPARE(completed.size(), 0);
         QVERIFY(!answer.done);
         QCOMPARE(backend.pendingCommands(), QStringList{id});
@@ -960,7 +1020,15 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(sentSoFar() - before, 1);
     }
 
-    void eventsArePolledOnlyForOpenConversations() {
+    void aServerErrorWithoutACodeKeepsTheCommandForTheLink_data() {
+        QTest::addColumn<int>("status");
+        QTest::newRow("503") << 503;
+        QTest::newRow("408") << 408;
+        QTest::newRow("429") << 429;
+    }
+
+    void aServerErrorWithoutACodeKeepsTheCommandForTheLink() {
+        QFETCH(int, status);
         QTemporaryDir dir;
         FixtureTransport network;
         ControlV2Client client(QUrl{origin});
@@ -969,32 +1037,80 @@ class RemoteRelayBackendTest final : public QObject {
         RelayMachineBackend backend(&client, "linux-host",
                                     fastOptions(dir.filePath("outbox.json")));
         connectAndWait(backend);
+        Answer listed;
+        backend.listConversations({}, listed.callback());
+        QTRY_VERIFY(listed.done);
+        QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
+        relay.unavailableKinds.insert("session.start_turn", status);
         Answer answer;
-        backend.listConversations({}, answer.callback());
-        QTRY_VERIFY(answer.done);
-        const auto polls = [&network] {
+        backend.startTurn("opaque-session", 3, {{"prompt", "later"}}, answer.callback());
+        // A server error, timeout or rate limit without a code is the link: the command stays
+        // stored and is sent again.
+        QTRY_COMPARE(backend.pendingCommands().size(), 1);
+        const auto id = backend.pendingCommands().first();
+        QTRY_VERIFY(relay.submissions.value(id) >= 2);
+        relay.unavailableKinds.clear();
+        QTRY_COMPARE(completed.size(), 1);
+        QCOMPARE(relay.executions.value(id), 1);
+        QVERIFY(backend.pendingCommands().isEmpty());
+    }
+
+    void eventsArePolledOnlyForOpenConversations() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        QStringList ids{"opaque-session"};
+        for (int i = 1; i < 20; ++i) {
+            ids.append(QStringLiteral("session-%1").arg(i));
+            relay.addSession(ids.last());
+        }
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        connectAndWait(backend);
+        Answer listed;
+        backend.listConversations({}, listed.callback());
+        QTRY_VERIFY(listed.done);
+        QCOMPARE(listed.result.value("sessions").toArray().size(), ids.size());
+        const auto polls = [&relay] {
             int count = 0;
-            for (const auto& path : std::as_const(network.paths))
-                count += path.endsWith("/events");
+            for (auto it = relay.eventPolls.cbegin(); it != relay.eventPolls.cend(); ++it)
+                count += it.value();
             return count;
         };
-        // Opened and closed many times: no events are polled once it is closed.
-        for (int i = 0; i < 25; ++i) {
-            backend.pendingApprovals("opaque-session", 3, {}, answer.callback());
-            QTRY_VERIFY(answer.done);
-            backend.conversationClosed("opaque-session");
-        }
+        // Twenty distinct conversations, each opened (a write follows its events) and closed,
+        // twice over: once all are closed, no events are polled at all.
+        for (int round = 0; round < 2; ++round)
+            for (const auto& id : std::as_const(ids)) {
+                Answer stopped;
+                backend.stopTurn(id, 3, stopped.callback());
+                QTRY_VERIFY(stopped.done);
+                QVERIFY2(stopped.error.isEmpty(), qPrintable(stopped.error));
+                QTRY_VERIFY(relay.eventPolls.value(id) > 0);
+                backend.conversationClosed(id);
+            }
         QTest::qWait(60);
         const auto closed = polls();
         QTest::qWait(300);
         QCOMPARE(polls(), closed);
-        // Open again: one request per poll interval (20 ms), not one per past opening.
-        backend.pendingApprovals("opaque-session", 3, {}, answer.callback());
-        QTRY_VERIFY(answer.done);
+        // A read on a closed conversation does not start polling it again.
+        Answer read;
+        backend.pendingApprovals("session-3", 3, {}, read.callback());
+        QTRY_VERIFY(read.done);
+        QVERIFY2(read.error.isEmpty(), qPrintable(read.error));
+        QTest::qWait(200);
+        QCOMPARE(polls(), closed);
+        // One open conversation: about one request per poll interval (20 ms), for it alone.
+        Answer stopped;
+        backend.stopTurn("session-7", 3, stopped.callback());
+        QTRY_VERIFY(stopped.done);
         const auto open = polls();
+        const auto others = open - relay.eventPolls.value("session-7");
         QTest::qWait(400);
         const auto rate = polls() - open;
         QVERIFY2(rate >= 1 && rate <= 25, qPrintable(QString::number(rate)));
+        QCOMPARE(polls() - relay.eventPolls.value("session-7"), others);
     }
 
     void aWorktreeGrantedLaterAppearsWithoutANewSignIn() {

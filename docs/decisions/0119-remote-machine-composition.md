@@ -84,7 +84,10 @@ Three implementations:
 - **Relay** — `RelayMachineBackend` over `ControlV2Client`, which turns each
   operation into an encrypted Control v2 command and each authenticated,
   decrypted event page into `eventReceived` (scope item 2 of #419, see "Relay
-  backend").
+  backend"). Each event is re-shaped into the local daemon's `session.event`
+  envelope (`session_id`, `session_generation`, `cursor`, `turn_sequence`,
+  `sent_at`, `payload {event_type, data}`), so consumers read one shape on
+  every route.
 
 Existing consumers (`CodexAppServer`, `SessionCatalogReader`, the Connections
 sections) still hold a `DaemonClient` today. They move to a `MachineBackend` one
@@ -263,17 +266,21 @@ once. A result is verified (host signature, original scope) before a callback
 or `commandCompleted` sees it, and each command id is applied at most once,
 including after a restart: its completion is written to the outbox before the
 result is applied, and a result that cannot be recorded stays pending and is
-read back again every second while the link stays up (and on a later
-connection). `pendingApprovals` is a read the relay carries as a command: it is
+read back again while the link stays up, after 1 s doubling to 30 s with one
+warning (and on a later connection). `pendingApprovals` is a read the relay carries as a command: it is
 submitted and polled for its signed result without touching the outbox, so it
 writes nothing to disk, is never replayed and does not count toward the
 outbox's 256-entry cap; a lost one is asked again by its caller. A refusal
 without an error code (`Control refused the request.`) fails that command and
-leaves the link `Connected`; only transport failures and invalid responses
-keep a command for the next connection. Events are polled only for
-conversations the UI has open: `MachineBackend::conversationClosed` removes a
-conversation that is closed or deselected, so the poll load does not grow with
-every conversation ever opened. Plaintext never reaches the file. An entry older than the
+leaves the link `Connected`; a server error, timeout or rate limit without a
+code (HTTP 5xx, 408, 429) is a transport failure, so it keeps the command and
+retries it. Only transport failures and invalid responses keep a command for
+the next connection. Events are polled only for conversations the UI has open:
+a transcript read or a write starts following a conversation (a read such as
+`pendingApprovals` does not), and `MachineBackend::conversationClosed` removes
+one that is closed or deselected, so the poll load does not grow with every
+conversation ever opened. No UI consumer uses the Relay backend yet; the one
+that moves onto it calls `conversationClosed`. Plaintext never reaches the file. An entry older than the
 relay's 15-minute command lifetime is given up. A reported failure means the
 command will never be sent: on `disconnectFromRelay()` or a fatal answer, a
 command that never left this device is withdrawn from the outbox and fails,
