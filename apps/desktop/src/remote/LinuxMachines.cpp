@@ -20,7 +20,12 @@ LinuxMachines::LinuxMachines(QObject* parent)
     : QObject(parent),
       client_(new remote::ControlV2Client(QUrl(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL)), this)),
       model_(new LinuxMachineModel(this)), presence_(new QTimer(this)) {
-    connectModel();
+    connect(model_, &LinuxMachineModel::machinesChanged, this, &LinuxMachines::publishMachines);
+    // After Forget old key the card opens again on that host, once, in one window.
+    connect(model_, &LinuxMachineModel::sshConnectPrompted, this, [this](const QString& host) {
+        if (auto* section = promptSection())
+            section->openConnectCard(host);
+    });
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
         syncEntitlement();
         emit notice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,
@@ -42,34 +47,6 @@ LinuxMachines::LinuxMachines(QObject* parent)
             emit changed(); // "last seen" ages even without a new listing
     });
     syncEntitlement();
-}
-
-void LinuxMachines::connectModel() {
-    connect(model_, &LinuxMachineModel::machinesChanged, this, &LinuxMachines::publishMachines);
-    // After Forget old key the card opens again on that host, once, in one window.
-    connect(model_, &LinuxMachineModel::sshConnectPrompted, this, [this](const QString& host) {
-        if (auto* section = promptSection())
-            section->openConnectCard(host);
-    });
-}
-
-void LinuxMachines::setModel(LinuxMachineModel* model) {
-    if (!model || model == model_)
-        return;
-    disconnect(model_, nullptr, this, nullptr);
-    if (model_->parent() == this)
-        model_->deleteLater();
-    model_ = model;
-    connectModel();
-    // A model that goes first leaves the set with a model of its own again.
-    connect(model_, &QObject::destroyed, this, [this] {
-        model_ = new LinuxMachineModel(this);
-        connectModel();
-        emit modelReplaced();
-    });
-    syncEntitlement();
-    emit modelReplaced();
-    publishMachines();
 }
 
 LinuxMachines::~LinuxMachines() {

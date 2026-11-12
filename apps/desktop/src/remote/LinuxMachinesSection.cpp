@@ -105,8 +105,7 @@ void LinuxMachinesSection::setMachines(LinuxMachines* machines) {
     if (machines_) {
         machines_->removeSection(this);
         disconnect(machines_, nullptr, this, nullptr);
-        if (shownModel_)
-            disconnect(shownModel_, nullptr, this, nullptr);
+        disconnect(machines_->model(), nullptr, this, nullptr);
         if (ownsMachines_)
             delete machines_.data();
     }
@@ -121,24 +120,13 @@ void LinuxMachinesSection::connectMachines() {
     machines_->addSection(this);
     connect(machines_, &LinuxMachines::machinesChanged, this,
             &LinuxMachinesSection::machinesChanged);
-    connectModel();
-    connect(machines_, &LinuxMachines::modelReplaced, this, [this] {
-        connectModel();
-        render();
-    });
+    connect(machines_->model(), &LinuxMachineModel::machinesChanged, this,
+            &LinuxMachinesSection::render);
+    connect(machines_->model(), &LinuxMachineModel::backendsAttachedChanged, this,
+            &LinuxMachinesSection::render);
     connect(machines_, &LinuxMachines::changed, this, &LinuxMachinesSection::render);
     connect(machines_, &LinuxMachines::notice, this, &LinuxMachinesSection::setNotice);
     render();
-}
-
-void LinuxMachinesSection::connectModel() {
-    // Only one model is followed: the set's current one.
-    if (shownModel_)
-        disconnect(shownModel_, nullptr, this, nullptr);
-    shownModel_ = machines_->model();
-    connect(shownModel_, &LinuxMachineModel::machinesChanged, this, &LinuxMachinesSection::render);
-    connect(shownModel_, &LinuxMachineModel::backendsAttachedChanged, this,
-            &LinuxMachinesSection::render);
 }
 
 LinuxMachineModel* LinuxMachinesSection::model() const {
@@ -148,11 +136,6 @@ LinuxMachineModel* LinuxMachinesSection::model() const {
         const_cast<LinuxMachinesSection*>(this)->emptyModel_ =
             new LinuxMachineModel(const_cast<LinuxMachinesSection*>(this));
     return emptyModel_;
-}
-
-void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
-    if (auto* set = machines())
-        set->setModel(model);
 }
 
 void LinuxMachinesSection::attachRelayBackend(LinuxRelayMachines::LinkFactory links) {
@@ -288,8 +271,7 @@ LinuxMachinesSection::~LinuxMachinesSection() {
     if (machines_) {
         machines_->removeSection(this);
         disconnect(machines_, nullptr, this, nullptr);
-        if (shownModel_)
-            disconnect(shownModel_, nullptr, this, nullptr);
+        disconnect(machines_->model(), nullptr, this, nullptr);
     }
     delete connectDialog_.data();
 }
