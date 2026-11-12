@@ -1094,6 +1094,14 @@ streams (diagram above, below and at the tail) and asserts per-presented-frame d
 1.5 px and a bounded GUI gap. `realMmdcSmoke` and `realLargeMmdcSmoke` run the real `mmdc`
 when `KETPLUS_REAL_CHAT_MERMAID=1` (`KETPLUS_CHAT_MERMAID_CAPTURE=<png>` saves a capture).
 
+
+The full-size image and diagram viewer (`imagePreview`, the Két lightbox) opens in its own
+frameless window (`imageWindow`) over the desktop's whole window. The workspace is a Quick
+window inside a widget container, and a popup cannot leave it, so before this the viewer
+covered only the transcript. The window follows the desktop window's geometry
+(`AgentWorkspaceView::hostWindowGeometry`) while it is open, also through full screen, and
+carries its own toast for Copy and Download.
+
 ## Pending conversation settings and file actions
 
 Model/provider/effort and compact-window changes remain available while a turn or

@@ -502,6 +502,9 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title);
     // The viewer's Fullscreen tool turns the top-level window, not the embedded Quick one.
     Q_INVOKABLE void toggleWindowFullScreen();
+    // The top-level window's area in screen coordinates. The workspace is a Quick window
+    // inside it, so the image viewer opens its own window over this area to cover all of it.
+    Q_INVOKABLE QRect hostWindowGeometry() const;
     Q_INVOKABLE void copySelectedText(QString text);
     Q_INVOKABLE QString composerDraft(const QString& scope) const;
     Q_INVOKABLE void saveComposerDraft(const QString& scope, const QString& text) const;
