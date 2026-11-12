@@ -44,21 +44,22 @@ class SshTunnelLink final : public SshLink {
     Q_OBJECT
 
   public:
-    // `credential` reads the remote daemon's token over the verified route.
-    SshTunnelLink(SshTarget target, SshTunnelOptions options,
-                  DaemonClient::CredentialSource credential, QObject* parent = nullptr);
+    // The daemon token comes from SshTunnel::daemonCredential(): read over the verified route,
+    // only while Connected.
+    SshTunnelLink(SshTarget target, SshTunnelOptions options, QObject* parent = nullptr);
 
     [[nodiscard]] SshTunnel* tunnel() const { return tunnel_; }
     void open() override { tunnel_->open(); }
     void close() override { tunnel_->close(); }
     [[nodiscard]] SshTunnel::State state() const override { return tunnel_->state(); }
     [[nodiscard]] QString fingerprint() const override { return tunnel_->fingerprint(); }
-    [[nodiscard]] QLocalSocket* connection() const override;
-    [[nodiscard]] QByteArray daemonCredential() const override;
+    [[nodiscard]] QLocalSocket* connection() const override { return tunnel_->device(); }
+    [[nodiscard]] QByteArray daemonCredential() const override {
+        return tunnel_->daemonCredential();
+    }
 
   private:
     SshTunnel* tunnel_;
-    DaemonClient::CredentialSource credential_;
 };
 
 class SshMachineBackend final : public MachineBackend {

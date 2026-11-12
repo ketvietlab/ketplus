@@ -171,7 +171,7 @@ parts and adds no protocol of its own:
   `Connected`, sends `daemon.hello` with the host daemon's local token, and
   queues and replays requests exactly as for This Mac. It never starts,
   replaces or reconnects a daemon: the tunnel owns reconnects. The token is
-  supplied by the link and kept in memory only.
+  `daemonCredential()`, read when the hello is sent and never stored.
 - `DaemonMachineBackend` maps the operations to the local request types.
 
 | Tunnel state | Machine state | Reason |
@@ -180,6 +180,7 @@ parts and adds no protocol of its own:
 | `Connected` | Connecting until the hello, then Connected | |
 | `Offline` | Reconnecting after a session; Offline for a host never reached | "The host cannot be reached over SSH." |
 | `DaemonSocketMissing` | Offline (the tunnel keeps retrying) | "ketPlus daemon not installed or not running on this host." |
+| `DaemonTokenInsecure` | Offline | "The ketPlus daemon token on this host is readable by other users…" |
 | `AuthFailed` | Offline | "SSH refused the sign-in…" |
 | `HostKeyMismatch` | Offline | "The host's SSH key changed…" |
 | `HostKeyRejected` | Offline | "The host's SSH key was not trusted." |

@@ -233,6 +233,7 @@ class SshMachineBackendTest final : public QObject {
             {SshTunnel::State::HostKeyMismatch, State::Offline, "SSH key changed"},
             {SshTunnel::State::HostKeyRejected, State::Offline, "not trusted"},
             {SshTunnel::State::DaemonSocketMissing, State::Offline, "daemon not installed"},
+            {SshTunnel::State::DaemonTokenInsecure, State::Offline, "readable by other users"},
             // Forwarded but no hello yet: still connecting.
             {SshTunnel::State::Connected, State::Connecting, ""},
         };

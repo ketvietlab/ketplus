@@ -52,7 +52,9 @@ class SshDaemonIntegrationTest : public QObject {
         QVERIFY(QDir().mkpath(worktree));
         const QString codex = fixture.path("fake-codex");
         QVERIFY(writeFakeCodex(codex, fixture.path("provider.log")));
-        const QString tokenFile = QDir(data).filePath("daemon/local.token");
+        // sshd names this file in KETPLUS_DAEMON_TOKEN_FILE; the real daemon creates it.
+        const QString tokenFile = fixture.path("local.token");
+        QVERIFY(QFile::remove(tokenFile));
 
         QProcess daemon;
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
@@ -75,9 +77,8 @@ class SshDaemonIntegrationTest : public QObject {
         SshMachineStore store(fixture.path("machines.json"));
         const SshTarget target{"fixture", {}, 0};
         QVERIFY(store.add(target));
-        // The credential is read on the host itself (loopback here) and kept in memory only.
-        auto link = std::make_unique<SshTunnelLink>(target, fixture.options(),
-                                                    [tokenFile] { return readToken(tokenFile); });
+        // The tunnel reads the token over the verified SSH route and keeps it in memory only.
+        auto link = std::make_unique<SshTunnelLink>(target, fixture.options());
         SshTunnel* tunnel = link->tunnel();
         SshMachineBackend backend(target, &store, std::move(link));
         backend.connectToHost();
@@ -184,12 +185,12 @@ class SshDaemonIntegrationTest : public QObject {
         // A restart of Desktop: the same daemon key is the same machine, and it reconnects.
         SshMachineStore reloaded(fixture.path("machines.json"));
         QCOMPARE(reloaded.machineId("fixture"), backend.machineId());
+        QVERIFY(!tunnel->daemonCredential().isEmpty());
         backend.disconnectFromHost();
         QCOMPARE(backend.connectionState(), State::Offline);
-        SshMachineBackend again(
-            target, &reloaded,
-            std::make_unique<SshTunnelLink>(target, fixture.options(),
-                                            [tokenFile] { return readToken(tokenFile); }));
+        QVERIFY(tunnel->daemonCredential().isEmpty());
+        SshMachineBackend again(target, &reloaded,
+                                std::make_unique<SshTunnelLink>(target, fixture.options()));
         again.connectToHost();
         QTRY_COMPARE_WITH_TIMEOUT(again.connectionState(), State::Connected, patience);
         QCOMPARE(again.machineId(), backend.machineId());
@@ -205,8 +206,7 @@ class SshDaemonIntegrationTest : public QObject {
         const SshTarget target{"fixture", {}, 0};
         QVERIFY(store.add(target));
         SshMachineBackend backend(target, &store,
-                                  std::make_unique<SshTunnelLink>(target, fixture.options(),
-                                                                  [] { return QByteArray{}; }));
+                                  std::make_unique<SshTunnelLink>(target, fixture.options()));
         backend.connectToHost();
         QTRY_COMPARE_WITH_TIMEOUT(backend.tunnelState(), SshTunnel::State::DaemonSocketMissing,
                                   patience);

@@ -71,8 +71,8 @@ Three implementations:
 - **SSH** — `SshMachineBackend` (`ketplus_remote_ssh_backend`): the same
   `DaemonMachineBackend` operations with the host's machine id and
   `Route::Ssh`, over a remote-mode `DaemonClient` that adopts `SshTunnel`'s
-  connection to an SSH-forwarded private local socket, itself forwarded to the
-  Linux user's own daemon socket (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`).
+  connection, which `ssh -W` bridges to the Linux user's own daemon socket
+  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`).
   The remote-mode client never starts, replaces or reconnects a daemon;
   `SshTunnel` owns reconnects. The wire protocol is the local one;
   only the transport differs (see "SSH trust"). Connection reasons are
@@ -176,15 +176,17 @@ a drop (the existing `DaemonClient` rule).
 ### SSH trust
 
 SSH carries the daemon's **local** protocol, unchanged, to the Linux user's own
-daemon socket. Desktop runs the system `ssh` with the user's configuration and OpenSSH
-stream-local forwarding,
-`ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -L <local socket>:<remote socket> <host>`,
-where the local socket lives in a directory only the Mac user can open and is
-removed when the connection ends. `SshTunnel` opens the one connection to that
-local socket and a `DaemonClient` in its remote mode adopts it, so the daemon's
-10-second hello deadline never races a second connect. `ssh -W` is not used: it forwards to a TCP host and
-port, not to a Unix socket. Desktop never opens an inbound port on the host and
-never talks to another user's socket.
+daemon socket. Desktop runs the system `ssh` with the user's configuration and
+bridges the socket with `ssh -W <remote socket> <host>` in batch mode
+(docs/ssh-transport.md). Current OpenSSH connects `-W` to a Unix socket path as
+well as to a TCP host and port. The forward travels on ssh's stdin and stdout,
+so ssh binds no listener on either side. On the Mac, a one-connection
+`QLocalServer` in a directory only the Mac user can open bridges that stdio to
+the one `QLocalSocket` that `SshTunnel::device()` returns, and it is removed
+when the connection ends. A `DaemonClient` in its remote mode adopts that
+socket and sends `daemon.hello` on it at once, within the daemon's 10-second
+hello deadline. Desktop never opens an inbound port on the host and never talks
+to another user's socket.
 
 - **Confidentiality and integrity** come from SSH. The local protocol adds no
   encryption of its own on this route, and none is needed: the stream ends at a
@@ -199,8 +201,10 @@ never talks to another user's socket.
   never stores, prompts for or forwards an SSH password, and runs `ssh` in batch
   mode so a password or keyboard-interactive prompt fails instead of appearing.
 - **Daemon authentication**: the hello still needs the daemon's local token.
-  Desktop reads it from the user's own token file over the same SSH connection,
-  keeps it in memory for that connection only and never writes it to This Mac.
+  Desktop reads it from the user's own token file over the verified SSH route
+  (the locate step, `SshTunnel::daemonCredential()`), keeps it in memory while
+  that connection is up and never writes it to This Mac. A token readable by
+  other users is refused (`DaemonTokenInsecure`).
 - The SSH route is the user's own access to their own account, so it needs no
   KetPlus account, pairing or Relay. Approvals on that host are answered by
   whoever holds that SSH access, exactly as `ketplusctl` on the host would.

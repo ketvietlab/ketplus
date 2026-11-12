@@ -15,19 +15,9 @@ QString missingIdentity() {
 
 } // namespace
 
-SshTunnelLink::SshTunnelLink(SshTarget target, SshTunnelOptions options,
-                             DaemonClient::CredentialSource credential, QObject* parent)
-    : SshLink(parent), tunnel_(new SshTunnel(std::move(target), std::move(options), this)),
-      credential_(std::move(credential)) {
+SshTunnelLink::SshTunnelLink(SshTarget target, SshTunnelOptions options, QObject* parent)
+    : SshLink(parent), tunnel_(new SshTunnel(std::move(target), std::move(options), this)) {
     connect(tunnel_, &SshTunnel::stateChanged, this, &SshLink::stateChanged);
-}
-
-QLocalSocket* SshTunnelLink::connection() const {
-    return qobject_cast<QLocalSocket*>(tunnel_->device());
-}
-
-QByteArray SshTunnelLink::daemonCredential() const {
-    return credential_ ? credential_() : QByteArray{};
 }
 
 QString SshMachineBackend::reasonFor(const SshTunnel::State state) {
@@ -49,6 +39,9 @@ QString SshMachineBackend::reasonFor(const SshTunnel::State state) {
         return QStringLiteral("The host's SSH key was not trusted.");
     case SshTunnel::State::DaemonSocketMissing:
         return QStringLiteral("ketPlus daemon not installed or not running on this host.");
+    case SshTunnel::State::DaemonTokenInsecure:
+        return QStringLiteral("The ketPlus daemon token on this host is readable by other users. "
+                              "Make it owner-only (chmod 600), then connect again.");
     }
     return {};
 }
