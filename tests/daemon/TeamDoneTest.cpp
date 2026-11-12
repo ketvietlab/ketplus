@@ -7,12 +7,14 @@
 #include "storage/LocalJournal.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <atomic>
 #include <memory>
 
 using namespace ketplus::daemon;
@@ -193,6 +195,22 @@ class TeamDoneTest final : public QObject {
         QVERIFY(history(id, "merged").isEmpty());
     }
 
+    // A branch that took in the integration branch is contained in it with commits that are
+    // not its own; with a pull request recorded, only the pull request decides.
+    void anOpenPullRequestStaysReadyWhenGitSaysTheBranchIsContained() {
+        const QString id = task("Cart");
+        recordPullRequest(id);
+        bringTo(id, state::ready);
+        QVERIFY(get(id).headCommit != get(id).baseCommit);
+        host_.merged.insert(id);
+        teams_->checkMerged(team_);
+        QCOMPARE(get(id).state, state::ready);
+        merge();
+        teams_->checkMerged(team_);
+        QCOMPARE(get(id).state, state::done);
+        QVERIFY(!history(id, "merged").first().text.contains("contains it"));
+    }
+
     void aTaskWithoutAPullRequestIsStillDoneWhenItsOwnCommitsAreMerged() {
         const QString id = task("Cart");
         bringTo(id, state::ready);
@@ -353,6 +371,43 @@ class TeamDoneTest final : public QObject {
         const auto missing = team_pull_requests::ask(bin.path(), {one}, bin.filePath("none"));
         QVERIFY(missing.value(one).state.isEmpty());
         QVERIFY(!missing.value(one).error.isEmpty());
+    }
+
+    // A request that does not answer ends the batch: the rest waits for the next check, and
+    // a daemon that stops asks nothing more.
+    void aSilentRemoteEndsTheBatchAndAStopAsksNothing() {
+        QTemporaryDir bin;
+        const QString tool = bin.filePath("gh");
+        QFile script(tool);
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("#!/bin/sh\n"
+                     "echo \"$3\" >> \"$(dirname \"$0\")/calls\"\n"
+                     "case \"$3\" in\n"
+                     "  */pull/2) exec sleep 30 ;;\n"
+                     "  *) echo '{\"state\":\"OPEN\"}' ;;\n"
+                     "esac\n");
+        script.close();
+        QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        const QStringList urls{QStringLiteral("https://example.invalid/shop/pull/1"),
+                               QStringLiteral("https://example.invalid/shop/pull/2"),
+                               QStringLiteral("https://example.invalid/shop/pull/3")};
+        QElapsedTimer clock;
+        clock.start();
+        const auto facts =
+            team_pull_requests::ask(bin.path(), urls, tool, {.requestMs = 3000, .batchMs = 20000});
+        QVERIFY2(clock.elapsed() < 15000, "the silent request was not cut short");
+        QCOMPARE(facts.value(urls[0]).state, QStringLiteral("open"));
+        QVERIFY(facts.value(urls[1]).state.isEmpty());
+        QVERIFY(facts.value(urls[1]).error.contains("in time"));
+        // Not asked, so not an error to show: asked again by the next check.
+        QVERIFY(!facts.contains(urls[2]));
+
+        std::atomic_bool stopping{true};
+        const auto none = team_pull_requests::ask(bin.path(), urls, tool, {}, &stopping);
+        QVERIFY(none.isEmpty());
+        QFile calls(bin.filePath("calls"));
+        QVERIFY(calls.open(QIODevice::ReadOnly));
+        QCOMPARE(calls.readAll().count('\n'), 2);
     }
 
     // Criterion 4: merged on the remote, with the local integration branch and the checkout

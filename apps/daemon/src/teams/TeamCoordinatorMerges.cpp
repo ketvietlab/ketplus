@@ -108,7 +108,10 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         const QString head = fact->head.isEmpty() ? task->headCommit : fact->head;
         const bool ownCommits =
             !head.isEmpty() && (task->baseCommit.isEmpty() || head != task->baseCommit);
-        if (fact->merged && *fact->merged && ownCommits)
+        // A task that records a pull request is the pull request's to finish (ADR 0118): its
+        // branch can be contained without its work being merged, as after it took in the
+        // integration branch, or when the work is in another repository.
+        if (fact->merged && *fact->merged && ownCommits && !recordsPullRequest(*task))
             merged.append(task->id);
     }
     if (merged.isEmpty() && moved.isEmpty())

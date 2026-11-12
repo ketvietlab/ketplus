@@ -33,6 +33,10 @@ QString lastPullRequestNote(const Task& task) {
 
 } // namespace
 
+bool TeamCoordinator::recordsPullRequest(const Task& task) {
+    return isPullRequestUrl(task.pullRequest);
+}
+
 void TeamCoordinator::setPullRequestPeriod(const int periodMs, const int minimumGapMs) {
     pullRequestPeriod_ = periodMs;
     pullRequestGap_ = minimumGapMs;

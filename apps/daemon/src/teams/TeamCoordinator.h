@@ -359,6 +359,8 @@ class TeamCoordinator : public QObject {
     static constexpr int defaultPullRequestGapMs = 60 * 1000;
     static constexpr int maxPullRequestsPerCheck = 20;
     void checkPullRequests(qint64 teamId);
+    // Whether the task records a pull request URL: then only the pull request says it is done.
+    [[nodiscard]] static bool recordsPullRequest(const Task& task);
     void setPullRequestPeriod(int periodMs, int minimumGapMs);
     // The leader closes a task by hand: `evidence` is a pull request URL or a commit.
     TeamResult closeTask(qint64 teamId, const QString& taskId, const QString& evidence,

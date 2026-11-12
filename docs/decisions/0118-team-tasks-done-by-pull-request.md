@@ -28,9 +28,12 @@ The leader had no way to close a task either.
    merge decisions are withdrawn, it leaves the review queue, and a review of it in flight is
    forgotten, so the reviewer's late answer changes nothing.
 2. **The probe.** The daemon asks with the GitHub command line tool, `gh pr view <url> --json
-   state,mergeCommit`, the tool the app's agents already sign in with. It runs on the team's
-   git worker with a 20 s timeout, prompts disabled, in the team repository's directory, and
-   never touches a checkout. It sits behind `TeamHostPort::askPullRequests`, which the tests
+   state,mergeCommit`, the tool the app's agents already sign in with. It runs on a worker of
+   its own, apart from git's, so a slow network holds no merge check, review diff or
+   worktree. Each request has 15 s and a batch 45 s; the first request that does not answer
+   ends the batch, and the pull requests not asked wait for the next check (they are not
+   errors). A daemon that stops ends the batch at once. Prompts are disabled, it runs in the
+   team repository's directory and never touches a checkout. It sits behind `TeamHostPort::askPullRequests`, which the tests
    fake. **Without it** (no `gh`, signed out, offline, an unknown URL) every pull request is
    unknown: no task moves, the task's history and Updates say why once, and say it again only
    when the reason changes. The leader then closes the task by hand (point 5). A closed,
@@ -41,10 +44,14 @@ The leader had no way to close a task either.
    team), every 2 minutes on a timer, and once after the daemon loads, so work merged while
    the board lagged or the daemon was stopped is reconciled.
 4. **Git's rule is narrowed.** The ancestor check of ADR 0114 still makes a Ready task done,
-   now only when the task's branch has commits of its own (its head is not its base). Before
+   now only for a task that records no pull request, and only when the task's branch has
+   commits of its own (its head is not its base). A task with a pull request is the pull
+   request's alone: its branch can be contained without its work being merged, after it took
+   in the integration branch or when the work is in another repository. Before
    asking, the daemon fetches the integration branch from `origin` into
-   `refs/remotes/origin/<integration>` (at most once a minute per repository, prompts off,
-   no tags, no `FETCH_HEAD`), and accepts the local or the remote-tracking branch. The fetch
+   `refs/remotes/origin/<integration>` (at most once a minute per repository, no tags, no
+   `FETCH_HEAD`, prompts off and ssh in batch mode unless `GIT_SSH_COMMAND` is set), and
+   accepts the local or the remote-tracking branch. The fetch
    changes no local branch, no checkout and no file.
 5. **The leader closes a task by hand.** `team_task_close` takes the task, the evidence (a
    pull request URL or a commit of 7 to 40 hexadecimal characters) and a note. Every other

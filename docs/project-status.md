@@ -81,9 +81,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
   a task that records a pull request is done once `gh` says it is merged, from any open
   state, checked at load, every 2 minutes and with the merge check (at most 20 pull
-  requests a check, once a minute a team); errors move nothing and are said once. The
-  ancestor check needs the branch's own commits and accepts `origin/<integration>` after
-  a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
+  requests a check, once a minute a team, on a worker of its own that stops a batch at the
+  first request without an answer); errors move nothing and are said once. The ancestor
+  check skips tasks with a pull request, needs the branch's own commits and accepts
+  `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
   live team.
   Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
   repository's tree before the other conversations, leader, developers, reviewer; a

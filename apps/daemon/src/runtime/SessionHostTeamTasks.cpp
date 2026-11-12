@@ -129,12 +129,14 @@ void SessionHost::askTasks(const teams::Team& team, const QList<teams::Task>& ta
     });
 }
 
-// ADR 0118: the remote is asked on the same worker as git, so a slow network holds nothing.
+// ADR 0118: the remote is asked on its own worker, bounded per request and per batch, so a
+// slow network holds no question to git and no client.
 void SessionHost::askPullRequests(const teams::Team& team, const QStringList& urls,
                                   teams::PullRequestsDone done) {
-    teamGit_.start([guard = QPointer<SessionHost>(this), directory = team.repository, urls,
-                    done = std::move(done)]() mutable {
-        QHash<QString, teams::PullRequestFact> facts = team_pull_requests::ask(directory, urls);
+    teamRemote_.start([guard = QPointer<SessionHost>(this), directory = team.repository, urls,
+                       stopping = teamRemoteStopping_, done = std::move(done)]() mutable {
+        QHash<QString, teams::PullRequestFact> facts =
+            team_pull_requests::ask(directory, urls, {}, {}, stopping.get());
         QMetaObject::invokeMethod(
             guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
             Qt::QueuedConnection);

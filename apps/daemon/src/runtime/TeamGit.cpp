@@ -127,6 +127,10 @@ void fetchIntegration(const teams::Team& team) {
     process.setWorkingDirectory(team.repository);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    // An ssh remote asks for no passphrase and no host key: it fails at once instead.
+    if (!environment.contains(QStringLiteral("GIT_SSH_COMMAND")))
+        environment.insert(QStringLiteral("GIT_SSH_COMMAND"),
+                           QStringLiteral("ssh -o BatchMode=yes"));
     process.setProcessEnvironment(environment);
     process.start(
         QStringLiteral("git"),
