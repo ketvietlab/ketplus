@@ -1,10 +1,40 @@
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QProcess>
 namespace ketplus::daemon {
+namespace {
+// The repository a registered checkout belongs to, read from its `.git` without running Git: a
+// linked worktree's `.git` file names its gitdir, whose `commondir` leads to the main checkout's
+// `.git`. ADR 0119: Desktop groups checkouts by this on every route, so a repository with linked
+// worktrees is one sidebar row. A checkout whose links cannot be read is its own repository.
+QString repositoryPathOf(const QString& checkout) {
+    const QFileInfo dotGit(QDir(checkout).filePath(QStringLiteral(".git")));
+    if (!dotGit.isFile())
+        return checkout;
+    QFile link(dotGit.filePath());
+    if (!link.open(QIODevice::ReadOnly) || link.size() > 4096)
+        return checkout;
+    const QString line = QString::fromUtf8(link.readLine()).trimmed();
+    if (!line.startsWith(QLatin1String("gitdir:")))
+        return checkout;
+    const QString gitDir = QDir(checkout).absoluteFilePath(line.mid(7).trimmed());
+    QFile common(QDir(gitDir).filePath(QStringLiteral("commondir")));
+    if (!common.open(QIODevice::ReadOnly) || common.size() > 4096)
+        return checkout;
+    const QFileInfo commonDir(
+        QDir(gitDir).absoluteFilePath(QString::fromUtf8(common.readLine()).trimmed()));
+    const QString canonical = commonDir.canonicalFilePath();
+    if (canonical.isEmpty())
+        return checkout;
+    // A bare repository's common dir is the repository itself; otherwise it is `<root>/.git`.
+    return QFileInfo(canonical).fileName() == QLatin1String(".git") ? QFileInfo(canonical).path()
+                                                                    : canonical;
+}
+} // namespace
 QJsonObject SessionHost::workspaceCatalog(const QString& type, const QJsonObject& payload) {
     const auto fail = [](const char* code, const char* message) {
         return QJsonObject{{"ok", false}, {"error_code", code}, {"error_message", message}};
@@ -12,7 +42,9 @@ QJsonObject SessionHost::workspaceCatalog(const QString& type, const QJsonObject
     if (type == "workspace.list") {
         QJsonArray entries;
         for (const auto& path : journal_->worktreePaths())
-            entries.append(QJsonObject{{"path", path}, {"available", QFileInfo(path).isDir()}});
+            entries.append(QJsonObject{{"path", path},
+                                       {"available", QFileInfo(path).isDir()},
+                                       {"repository_path", repositoryPathOf(path)}});
         return {{"ok", true}, {"workspaces", entries}};
     }
     if (type != "workspace.register" && type != "workspace.unregister")

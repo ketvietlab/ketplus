@@ -496,6 +496,7 @@ void MainWindow::setAtlasWorkspaceVisible(const bool visible) {
         return;
     }
     setRemoteWorkspaceVisible(false);
+    setMachineWorkspaceVisible(false);
     setAgentWorkspaceVisible(false);
     if (!atlasTabs_) {
         auto* atlasHost = new AtlasTabWidget(workspaceSplit_);

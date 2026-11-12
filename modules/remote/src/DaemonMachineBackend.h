@@ -65,6 +65,10 @@ class DaemonMachineBackend final : public MachineBackend {
     void answerQuestion(const QString& sessionId, qint64 generation, const QString& questionId,
                         const QJsonObject& resolution, Callback callback) override;
 
+    // workspace.list grouped into the neutral repository shape, linked worktrees under their
+    // repository (ADR 0119 "Repository grain").
+    [[nodiscard]] static QJsonObject groupWorkspacesByRepository(const QJsonObject& workspaceList);
+
   private:
     void request(const QString& type, const QJsonObject& payload, const QString& sessionId,
                  qint64 generation, Callback callback);

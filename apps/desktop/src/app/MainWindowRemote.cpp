@@ -1,6 +1,8 @@
 #include "app/MainWindow.h"
 
 #include "git/GitChangesPanel.h"
+#include "machine/MachineComposition.h"
+#include "machine/MachineSelection.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
@@ -27,6 +29,7 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
         return;
     }
 
+    setMachineWorkspaceVisible(false);
     setAgentWorkspaceVisible(false);
     setAtlasWorkspaceVisible(false);
     if (remoteControl_ == nullptr) {
@@ -42,8 +45,10 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
                     QStringList labels{tr("This Mac")};
                     labels.append(names);
                     if (selectedMachineId_ != QStringLiteral("local") &&
-                        !ids.contains(selectedMachineId_))
+                        !ids.contains(selectedMachineId_)) {
                         selectedMachineId_ = QStringLiteral("local");
+                        machineComposition()->selection()->select(selectedMachineId_);
+                    }
                     activityBar_->setMachines(choices, labels, selectedMachineId_);
                     activityBar_->setRemoteMachineSelected(selectedMachineId_ !=
                                                            QStringLiteral("local"));

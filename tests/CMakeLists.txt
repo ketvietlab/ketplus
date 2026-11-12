@@ -187,6 +187,13 @@ target_link_libraries(ketplus_remote_workspace_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_machine_composition_tests MachineCompositionTest.cpp
+    FakeMachineBackend.h)
+target_link_libraries(ketplus_machine_composition_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
 ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
 target_link_libraries(ketplus_linux_machines_tests PRIVATE
     Qt6::Test

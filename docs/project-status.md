@@ -699,14 +699,20 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   older daemons retain compatibility compact replay.
 - Independent Linux headless daemon build and versioned runtime packaging
   (0.1.29), systemd user unit, authenticated `ketplusctl`, browser-approved
-  device authorization and a durable zero-session workspace catalog. A Qt
-  Control v2 client backend is available, but remote Desktop UI/composition
-  remains deferred. ADR 0119 records the remote composition (one
-  `MachineBackend` for the local socket, the Relay and SSH; machine binding;
-  connection states; the SSH trust decision); its local adapter
-  `DaemonMachineBackend` is in `ketplus_remote`, and the SSH backend
-  `SshMachineBackend` with its secret-free machine store is in
-  `ketplus_remote_ssh_backend` (no UI composition yet; `ssh-transport.md`).
+  device authorization and a durable zero-session workspace catalog. ADR 0119
+  records the remote composition (one `MachineBackend` for the local socket,
+  the Relay and SSH; machine binding; connection states; the SSH trust
+  decision); its local adapter `DaemonMachineBackend` is in `ketplus_remote`,
+  and the SSH backend `SshMachineBackend` with its secret-free machine store is
+  in `ketplus_remote_ssh_backend` (`ssh-transport.md`). Desktop composes a
+  selected Linux machine through its backend (`apps/desktop/src/machine`,
+  `MachineSelection`, `MachineCatalog`, `MachineWorkspaceView`): the sidebar,
+  worktree picker, transcript, composer and approval/question cards follow the
+  picker, Offline/Reconnecting render as ADR 0119 specifies, and a new remote
+  conversation starts through `createSession` (agent-workspace.md, "Remote
+  machines"). Not yet on remote machines: transcript paging beyond the newest
+  window, large-event reads, attachments, fork/rename/archive and the rich
+  transcript renderer; the remote view uses a plain transcript list.
   See `linux-headless-daemon.md`
   for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without

@@ -7,6 +7,8 @@
 #include "atlas/AtlasTab.h"
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
+#include "machine/MachineComposition.h"
+#include "machine/MachineWorkspaceView.h"
 #include "workspace/AtlasIndex.h"
 
 #include "agent/AgentSessionManager.h"
@@ -150,19 +152,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(activityBar_, &ActivityBar::quickSearchRequested, this, &MainWindow::showSpotlight);
     connect(activityBar_, &ActivityBar::repositoryRequested, this, &MainWindow::chooseFolder);
-    connect(activityBar_, &ActivityBar::machineRequested, this, [this](const QString& id) {
-        if (id == selectedMachineId_)
-            return;
-        selectedMachineId_ = id;
-        activityBar_->setRemoteMachineSelected(id != QStringLiteral("local"));
-        if (id == QStringLiteral("local")) {
-            refreshSidebarRepositories();
-            setAgentWorkspaceVisible(true);
-        } else {
-            activityBar_->setRepositories({});
-            setRemoteWorkspaceVisible(true);
-        }
-    });
+    connect(activityBar_, &ActivityBar::machineRequested, this, &MainWindow::selectMachine);
     connect(activityBar_, &ActivityBar::repositoryActivationRequested, this,
             [this](const QString& path) {
                 // Open in this window; the sidebar spans repositories.
@@ -171,6 +161,12 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             });
     connect(activityBar_, &ActivityBar::newConversationRequested, this,
             [this](const QString& repositoryPath) {
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    setMachineWorkspaceVisible(true);
+                    if (machineWorkspaceMode_)
+                        machines_->existingView()->startNewConversation(repositoryPath);
+                    return;
+                }
                 // The action is offered on every repository; open another one in this window.
                 if (!repositoryPath.isEmpty() &&
                     normalizedPath(repositoryPath) != activeSidebarRepository())
@@ -182,11 +178,15 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             &MainWindow::openSidebarConversation);
     connect(activityBar_, &ActivityBar::conversationContextMenuRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
+                if (selectedMachineId_ != QStringLiteral("local"))
+                    return; // remote conversations have no local menu or rename yet
                 ensureAgentWorkspace();
                 showAgentConversationContextMenu(normalizedPath(worktreePath), conversationId);
             });
     connect(activityBar_, &ActivityBar::conversationRenameRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
+                if (selectedMachineId_ != QStringLiteral("local"))
+                    return; // remote conversations have no local menu or rename yet
                 ensureAgentWorkspace();
                 // Leave the double-click event before running the modal dialog.
                 QMetaObject::invokeMethod(
@@ -232,7 +232,11 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             setSourceControlVisible(true);
             break;
         case ActivityBar::Mode::AgentWorkspace:
-            setAgentWorkspaceVisible(true);
+            // A remote machine's Agent Workspace is composed from its backend (ADR 0119).
+            if (selectedMachineId_ != QStringLiteral("local"))
+                setMachineWorkspaceVisible(true);
+            else
+                setAgentWorkspaceVisible(true);
             break;
         case ActivityBar::Mode::Atlas:
             setAtlasWorkspaceVisible(true);

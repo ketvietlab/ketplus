@@ -36,6 +36,7 @@
 
 namespace ketplus {
 void MainWindow::hideUtilityWorkspaces() {
+    setMachineWorkspaceVisible(false);
     if (teamPage_ != nullptr) {
         teamPage_->hide();
         teamPage_->deleteLater();

@@ -48,9 +48,16 @@ Requests and results are the daemon's local protocol objects on every route, so
 a consumer parses one shape, with two exceptions where the routes differ:
 
 - **Repositories** use a neutral shape no route has to fake:
-  `{"repositories": [{"id", "label", "path", "available"}]}`. The local and
-  SSH routes map `workspace.list` (`workspaces[{path, available}]`) to
-  `id` = `path` and `label` = the last path component. The Relay sends the
+  `{"repositories": [{"id", "label", "path", "available", "worktrees"}]}`,
+  one row per repository with its checkouts under `worktrees`
+  (`[{"id", "label", "path", "available"}]`). The local and SSH routes group
+  `workspace.list` (`workspaces[{path, available, repository_path}]`) by
+  `repository_path`, so a repository with linked worktrees is one row, the same
+  grain as the Relay's repository id: `id` = `repository_path`, `label` = its
+  last path component. The daemon reads `repository_path` from a linked
+  worktree's `.git` file and the gitdir's `commondir` without running Git; a
+  checkout it cannot read, or a daemon that does not send the field, is its own
+  repository. The Relay sends the
   salted repository id and label it already uses and no `path`, so a consumer
   shows a path only where one is present and keys everything else by `id`.
   `workspace.list` joins `DaemonClient`'s read set that is replayed after a
@@ -336,8 +343,12 @@ The code is `ControlV2Client::entitlements()` and
 ## Consequences
 
 - The local adapter (`DaemonMachineBackend`) and its tests
-  (`tests/daemon/MachineBackendTest.cpp`) land with this ADR; no consumer moves
-  yet.
+  (`tests/daemon/MachineBackendTest.cpp`) land with this ADR.
+- Desktop composition (T-14): `MachineSelection`, `MachineCatalog` and
+  `MachineWorkspaceView` (`apps/desktop/src/machine`) bind the sidebar,
+  worktree picker, transcript, composer and approvals of a selected remote
+  machine to its backend (agent-workspace.md, "Remote machines"). This Mac keeps
+  its existing composition, so its behaviour does not change.
 - Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
   against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).

@@ -22,6 +22,46 @@ changes; formatting-only notifications must not restart the zero-delay timer.
 Font changes still reformat the document, and formatting joins the text edit's
 undo step. The idle composer regression verifies that document notifications settle.
 
+## Remote machines
+
+ADR 0119 "Binding to the selected machine". The window keeps one
+`MachineSelection` (`apps/desktop/src/machine`): This Mac's
+`DaemonMachineBackend` under `local`, and the backend Connections registers for
+each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
+Choosing another machine in the picker binds `MachineCatalog` to its backend and
+shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
+routes share every line of UI code. A picked machine with no backend yet opens
+Connections with an empty sidebar; it never shows This Mac's lists.
+
+- **Sidebar.** `listRepositories` and `listConversations` are read together and
+  replace the lists at once. Rows are keyed by repository id and session id;
+  a row's `path` is the worktree id, never resolved on This Mac. Context menu
+  and rename are not offered for remote rows yet.
+- **Repository grain.** The daemon's `workspace.list` names each checkout's
+  `repository_path` (read from a linked worktree's `.git` file and `commondir`,
+  without running Git), and the local and SSH adapter groups checkouts under it
+  with their `worktrees`, as the Relay groups by repository id. A repository
+  therefore appears once on every route.
+- **Conversation binding.** A `MachineConversationSession` keeps the backend it
+  was opened with; turns, steer, stop and approval answers go to that machine
+  even after the picker changes. Each machine keeps the conversation it last
+  showed, so switching back restores it. Answers from a machine that is no
+  longer bound are dropped.
+- **Connection states.** Connecting and Offline show no list and the banner
+  shows the reason. Reconnecting keeps the last lists read-only, the
+  transcript stays readable from its cache, and the composer and approval
+  buttons are disabled with "Reconnecting…" and the reason. The return to
+  Connected lists again and reloads the transcript window and pending
+  approvals on its own.
+- **Worktree picker.** A new conversation picks a worktree of the selected
+  machine and starts with `MachineBackend::createSession`. Worktrees the Relay
+  still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
+  `catalogChanged()` lists again and fills them in.
+- **Approvals and questions.** Cards answer through the conversation's machine;
+  an answer that fails marks the card expired.
+
+Tests: `tests/MachineCompositionTest.cpp` against `tests/FakeMachineBackend.h`.
+
 ## Context compaction
 
 `contextCompaction` item start/completion events update one lifecycle row and the

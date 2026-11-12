@@ -149,8 +149,16 @@ class MachineBackendTest final : public QObject {
                     {{QStringLiteral("workspaces"),
                       QJsonArray{
                           QJsonObject{{QStringLiteral("path"), QStringLiteral("/Users/me/dev/app")},
-                                      {QStringLiteral("available"), true}},
+                                      {QStringLiteral("available"), true},
+                                      {QStringLiteral("repository_path"),
+                                       QStringLiteral("/Users/me/dev/app")}},
                           QJsonObject{{QStringLiteral("path"), QString()}},
+                          // A linked worktree joins its repository's row.
+                          QJsonObject{
+                              {QStringLiteral("path"), QStringLiteral("/Users/me/dev/app-review")},
+                              {QStringLiteral("available"), true},
+                              {QStringLiteral("repository_path"),
+                               QStringLiteral("/Users/me/dev/app")}},
                           QJsonObject{{QStringLiteral("path"), QStringLiteral("/Volumes/old/site")},
                                       {QStringLiteral("available"), false}}}}},
                     {});
@@ -158,15 +166,30 @@ class MachineBackendTest final : public QObject {
         QJsonObject result;
         backend.listRepositories(
             [&result](const QJsonObject& reply, const QString&) { result = reply; });
+        const auto checkout = [](const QString& path, const QString& label, bool available) {
+            return QJsonObject{{QStringLiteral("id"), path},
+                               {QStringLiteral("label"), label},
+                               {QStringLiteral("path"), path},
+                               {QStringLiteral("available"), available}};
+        };
+        // A daemon without repository_path (the old site) makes the checkout its own row.
         const QJsonArray expected{
             QJsonObject{{QStringLiteral("id"), QStringLiteral("/Users/me/dev/app")},
                         {QStringLiteral("label"), QStringLiteral("app")},
                         {QStringLiteral("path"), QStringLiteral("/Users/me/dev/app")},
-                        {QStringLiteral("available"), true}},
+                        {QStringLiteral("available"), true},
+                        {QStringLiteral("worktrees"),
+                         QJsonArray{checkout(QStringLiteral("/Users/me/dev/app"),
+                                             QStringLiteral("app"), true),
+                                    checkout(QStringLiteral("/Users/me/dev/app-review"),
+                                             QStringLiteral("app-review"), true)}}},
             QJsonObject{{QStringLiteral("id"), QStringLiteral("/Volumes/old/site")},
                         {QStringLiteral("label"), QStringLiteral("site")},
                         {QStringLiteral("path"), QStringLiteral("/Volumes/old/site")},
-                        {QStringLiteral("available"), false}}};
+                        {QStringLiteral("available"), false},
+                        {QStringLiteral("worktrees"),
+                         QJsonArray{checkout(QStringLiteral("/Volumes/old/site"),
+                                             QStringLiteral("site"), false)}}}};
         QCOMPARE(result, (QJsonObject{{QStringLiteral("repositories"), expected}}));
 
         failure = QStringLiteral("Daemon busy.");

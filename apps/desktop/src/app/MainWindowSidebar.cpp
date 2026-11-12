@@ -1,6 +1,9 @@
 #include "app/ConversationRepository.h"
 #include "app/MainWindow.h"
 
+#include "machine/MachineComposition.h"
+#include "machine/MachineWorkspaceView.h"
+
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/RepositoryRouter.h"
@@ -120,7 +123,9 @@ QString MainWindow::sidebarRepositoryForPath(const QString& path) {
 
 void MainWindow::refreshSidebarRepositories() {
     if (selectedMachineId_ != QStringLiteral("local")) {
-        activityBar_->setRepositories({});
+        // ADR 0119: the selected machine's lists, never This Mac's.
+        activityBar_->setRepositories(machines_ != nullptr ? machines_->sidebarRepositories()
+                                                           : QVector<SidebarRepository>{});
         return;
     }
     const QString activeRepository = activeSidebarRepository();
@@ -201,6 +206,13 @@ void MainWindow::refreshSidebarRepositories() {
 
 void MainWindow::openSidebarConversation(const QString& worktreePath,
                                          const QString& conversationId) {
+    if (selectedMachineId_ != QStringLiteral("local")) {
+        // A remote row names a host path or a Relay id; it is never resolved on This Mac.
+        setMachineWorkspaceVisible(true);
+        if (machineWorkspaceMode_ && !conversationId.isEmpty())
+            machines_->existingView()->openConversation(conversationId);
+        return;
+    }
     const QString path = normalizedPath(worktreePath);
     if (path.isEmpty() || conversationId.isEmpty())
         return;
