@@ -46,7 +46,7 @@ struct SshTunnelOptions {
     int maximumBackoffMilliseconds{30000};
     // The forwarder must stay up this long (or carry daemon bytes) before the tunnel reports
     // Connected; a bridge that fails at once never flaps through Connected.
-    int settleMilliseconds{1500};
+    int settleMilliseconds{500};
 };
 
 class SshTunnel : public QObject {
