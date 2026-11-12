@@ -191,7 +191,7 @@ acceptance because they did not download the fixture.
 - Archive-preflight fixtures: 15/15 passed; signing-CLI fixtures: 8/8 passed.
 - Native offscreen daemon upgrade/client-policy tests: 2/2 passed (2.68 seconds).
 - CMake feed/key policy fixtures: 6/6 passed.
-- Public-tree hygiene and diff checks are required again on the final rebased PR.
+- Public-tree hygiene after rebase: 4/4 passed; git diff --check passed.
 - No interrupted-download, actual disk-full, read-only, translocation, production
   TLS, Developer ID/notarization, downgrade or cross-architecture acceptance is
   claimed. Shipping native-settings behavior is not certified by the INI hook.
