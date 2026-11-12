@@ -225,6 +225,11 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     while (!taking->queue.isEmpty() && taking->queue.takeFirst() != taskId) {
     }
     Task* task = team->task(taskId);
+    // The limit was lowered while it waited: the leader decides, not another pass.
+    if (QList<Update> limited; blockAtLoweredLimit(*team, *task, limited)) {
+        commit(*team, before, QStringLiteral("daemon"), limited);
+        return;
+    }
     ++task->round;
     task->reviewer = reviewerSession;
     // T-40: the team's settings as the task enters this round; a change applies afterwards.

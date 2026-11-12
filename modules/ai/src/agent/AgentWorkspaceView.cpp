@@ -113,6 +113,11 @@ QString configuredMonoFontFamily() {
 // focus on whichever widget had it (an open file, the sidebar). Selected transcript text
 // then looked selected while Cmd+C and Cmd+A went to that widget.
 bool AgentWorkspaceView::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ParentChange)
+        refreshToastAncestors();
+    if (event->type() == QEvent::Move || event->type() == QEvent::Resize ||
+        event->type() == QEvent::Show || event->type() == QEvent::Hide)
+        updateToastAvoidance();
     if (watched == view_ && event->type() == QEvent::MouseButtonPress && container_ != nullptr &&
         !container_->hasFocus())
         container_->setFocus(Qt::MouseFocusReason);
@@ -199,6 +204,7 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(container_);
+    setupToastAvoidance();
 }
 
 bool AgentWorkspaceView::layoutTraceEnabled() const { return transcript_trace::enabled(); }
@@ -215,6 +221,7 @@ AgentWorkspaceView::~AgentWorkspaceView() {
     removeRenderTranscripts(this);
     // Unload while the context object is still alive; otherwise bindings may run
     // once more against a destroyed agentHost during native-window teardown.
+    stopToastAvoidance();
     transcriptPolish_ = nullptr;
     view_->setSource(QUrl());
     if (mermaidInstaller_ && mermaidInstaller_->state() != QProcess::NotRunning) {

@@ -3,14 +3,15 @@ import QtQuick
 import Ket
 import KetPlusMock
 
-// T-40: how a team reviews, in New team and in the team's Review settings. The rounds a task
-// gets before the leader decides on findings left (one or two: the user's rule is at most two
-// review passes), and where the review is written: on the board, or as a review comment on the
-// task's pull request with the board keeping the verdict and the comment's link.
+// T-40: how a team reviews, in New team and in the team's Review settings. The review passes
+// a pull request gets before the leader decides on findings left (one to five, two by default:
+// the count is per PR and counts every reviewer's pass), and where the review is written: on
+// the board, or as a review comment on the task's pull request with the board keeping the
+// verdict and the comment's link.
 Column {
     id: fields
 
-    // 1 or 2.
+    // 1 to 5.
     property int rounds: 2
     // "board" or "pull_request".
     property string place: "board"
@@ -23,29 +24,17 @@ Column {
 
     KetFieldRow {
         width: parent.width
-        label: "Review rounds"
+        label: "Max review passes per PR"
         help: fields.rounds === 1
-              ? "Findings in the only round go to the leader, who decides."
-              : "Findings in the first round go back to the developer; findings in the second go to the leader."
-        Row {
+              ? "Findings in the only pass go to the leader, who decides."
+              : "Findings go back to the developer until pass " + fields.rounds
+                + "; findings in pass " + fields.rounds + " go to the leader, who decides."
+        KetSelect {
+            objectName: "teamReviewRounds"
             width: parent.width
-            spacing: fields.px(6)
-            KetChoice {
-                objectName: "teamReviewRoundsOne"
-                width: (parent.width - parent.spacing) / 2
-                kind: KetTheme.ToggleKind.Radio
-                checked: fields.rounds === 1
-                text: "One"
-                onToggled: if (checked) fields.rounds = 1
-            }
-            KetChoice {
-                objectName: "teamReviewRoundsTwo"
-                width: (parent.width - parent.spacing) / 2
-                kind: KetTheme.ToggleKind.Radio
-                checked: fields.rounds === 2
-                text: "Two"
-                onToggled: if (checked) fields.rounds = 2
-            }
+            model: ["1", "2", "3", "4", "5"]
+            currentIndex: Math.max(0, Math.min(4, fields.rounds - 1))
+            onActivated: index => fields.rounds = index + 1
         }
     }
     KetFieldRow {

@@ -4,6 +4,10 @@ if(APPLE)
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_signing_cli.py")
 endif()
 
+if(APPLE AND KETPLUS_UPDATES_ENABLED)
+    add_subdirectory(updates)
+endif()
+
 function(ketplus_add_gui_test target)
     qt_add_executable(${target} ${ARGN})
     ketplus_enable_warnings(${target})

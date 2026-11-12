@@ -370,7 +370,7 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths, max_rounds (1 or 2), review_place ("board" or "pull_request") and
+    // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request") and
     // turn_budget; other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
@@ -587,6 +587,8 @@ class TeamCoordinator : public QObject {
     // Moves a task and records it; no permission check. Adds the actionable updates.
     void applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                    const QString& reason, QList<Update>& updates);
+    // T-53: blocks a task that already had the passes a lowered limit allows; true if it did.
+    bool blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates);
     // The leader's first turn, once the team has a goal (ADR 0114, #456/#458).
     void startLeader(qint64 teamId);
     // Starts a turn of `toSession` after the commit that caused it, counted against the

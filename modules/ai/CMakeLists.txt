@@ -91,6 +91,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceTranscriptOnly.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
+    src/agent/AgentWorkspaceToast.cpp
     src/agent/AgentWorkspaceViewTeams.cpp
     src/agent/AgentWorkspaceHeldMessages.cpp
     src/agent/AgentWorkspaceReviewers.cpp

@@ -66,6 +66,7 @@ version for the same reason. No job in the matrix uses provider quota.
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior; complete selected-port readiness, malformed/truncated banners, stop-time suppression and repair/restart with a synthetic CLI |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
+| Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
@@ -978,3 +979,32 @@ translucent 900×1200 PNG (one decoding item per pass, 512 px references after t
 1024×768 PNG. It expects one preview after the first pass (one decode per pass) and a
 512 px JPEG media reference on each eligible turn after the sweep. No
 installed journal or live provider is used.
+
+## Desktop update QA isolation
+
+A desktop QA launch must isolate native settings before any application code reads
+or writes them. On macOS, changing `HOME` and `CFFIXED_USER_HOME` alone is insufficient:
+QSettings NativeFormat can still use the logged-in user's preferences via cfprefsd.
+Use a separate OS user, or an external, uncommitted QA-only hook that selects
+QSettings IniFormat and an explicit disposable settings directory. Gate such a hook
+to a unique QA bundle identifier; never enable it in a shipping app.
+
+Before launch, a probe using the same setup must prove that `QSettings().fileName()`
+is inside the QA home and `contains("workspace/lastRoot")` is false. Sparkle defaults
+must also belong only to the unique QA bundle domain. Never write, delete or migrate
+preferences in the normal application domain during QA. Record only key namespaces
+and counts in public evidence; do not commit values, path-derived key suffixes or
+digests. Keep any necessary comparison evidence outside the repository.
+
+Use a throwaway EdDSA key, loopback-only feed and fake providers. Verify the complete
+bundle's destination before install/relaunch; it must be disposable and outside the
+normal installed app. Check the QA settings file for expected key names after each
+session, and stop if evidence indicates writes outside isolation. A running real app
+can change its own preferences, so timestamps alone cannot attribute a write to QA.
+Do not open real workspaces or consume provider quota for update tests.
+
+The compiled-feed delegate harness in `tests/updates` uses a unique test bundle
+identifier, starts no updater/network operation and restores only its own test domain.
+It verifies that restored staging and HTTP defaults cannot override the compiled feed.
+Run it with `QT_QPA_PLATFORM=offscreen`; production bundle installation and owner-run
+manual UI acceptance remain separate checks.
