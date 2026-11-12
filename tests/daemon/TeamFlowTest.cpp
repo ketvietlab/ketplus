@@ -4,6 +4,7 @@
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
+#include "teams/TeamVerdictLine.h"
 
 #include <QDir>
 #include <QProcess>
@@ -12,6 +13,7 @@
 #include <QTest>
 
 using namespace ketplus::daemon;
+using namespace ketplus::daemon::teams;
 using namespace team_test;
 
 class TeamFlowTest final : public QObject {
@@ -127,6 +129,112 @@ class TeamFlowTest final : public QObject {
         teams_->memberTurnEnded("lead");
         settle();
         QCOMPARE(host_.messages.size(), 1);
+    }
+
+    // T-75: a task of dev1 with a pull request, in review, and the leader's inbox empty.
+    QString reviewed(const QString& title) {
+        const QString id = task(title);
+        if (!teams_->assignTask(team_, id, "dev1", "lead").ok() ||
+            !teams_
+                 ->updateTask(team_, id, {{"pull_request", "https://example.test/pull/12"}}, "lead")
+                 .ok() ||
+            !teams_->moveTask(team_, id, state::inProgress, "dev1").ok() ||
+            !teams_->moveTask(team_, id, state::inReview, "dev1").ok())
+            return {};
+        settle();
+        host_.messages.clear();
+        return id;
+    }
+    QString verdictUpdate(const QString& id) {
+        for (const auto& update : journal_->teamUpdates(team_, false, 100))
+            if (update.kind == "verdict" && update.taskId == id)
+                return update.actionable ? update.text : QStringLiteral("not actionable");
+        return {};
+    }
+
+    // T-75: a findings verdict sends the task back to its developer, and the leader reads it
+    // in its next digest, with the round, the reviewer and the findings by severity.
+    void aFindingsVerdictMakesTheLeadersDigestDue() {
+        start();
+        const QString id = reviewed("Cart");
+        QVERIFY(!id.isEmpty());
+        QVERIFY(host_.of("digest").isEmpty());
+        finishReview(*teams_, "rev",
+                     "## Findings\n- **L1 — Low — `web/cart.ts:4`:** no total.\n"
+                     "- **L2 — Low — `web/cart.ts:9`:** rounding.\n"
+                     "- **N1 — Nit — `web/cart.ts:2`:** a name.\nL1 again: see above.\n"
+                     "Verdict: findings",
+                     false);
+        QCOMPARE(team().task(id)->state, state::inProgress);
+        const QString line = verdictUpdate(id);
+        QCOMPARE(line,
+                 QStringLiteral("Verdict on %1 (PR https://example.test/pull/12), round 1 of 2 by "
+                                "Reviewer: findings (0 High, 0 Medium, 2 Low, 1 Nit). Back to its "
+                                "developer; decide on any finding outside the task's scope.")
+                     .arg(id));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        const TeamMessage digest = host_.of("digest").first();
+        QCOMPARE(digest.toSession, QStringLiteral("lead"));
+        QVERIFY(digest.body.contains(QStringLiteral("- [needs you] ") + line));
+        // The developer gets the findings; nothing goes from member to member besides.
+        QCOMPARE(host_.of("review").size(), 1);
+        QCOMPARE(host_.of("review").first().toSession, QStringLiteral("dev1"));
+    }
+
+    void aPassVerdictMakesTheLeadersDigestDue() {
+        start();
+        const QString id = reviewed("Cart");
+        finishReview(*teams_, "rev", "Nothing to fix.\nVerdict: no findings", true);
+        QCOMPARE(team().task(id)->state, state::ready);
+        const QString line = verdictUpdate(id);
+        QCOMPARE(line, QStringLiteral("Verdict on %1 (PR https://example.test/pull/12), round 1 "
+                                      "of 2 by Reviewer: no findings. Ready to merge.")
+                           .arg(id));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(line));
+    }
+
+    void aRoundLimitVerdictMakesTheLeadersDigestDue() {
+        start();
+        QVERIFY(teams_->update(team_, {{"max_rounds", 1}}, "user").ok());
+        const QString id = reviewed("Cart");
+        host_.messages.clear();
+        finishReview(*teams_, "rev", "web/cart.ts:4 high: no total.\nVerdict: findings", false);
+        QCOMPARE(team().task(id)->state, state::blocked);
+        const QString line = verdictUpdate(id);
+        QVERIFY2(line.endsWith("round 1 of 1 by Reviewer: findings (1 High, 0 Medium, 0 Low, "
+                               "0 Nit). The round limit is reached: you decide."),
+                 qPrintable(line));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(line));
+        QVERIFY(host_.of("review").isEmpty());
+    }
+
+    // A busy leader reads the verdict when its turn ends, not before.
+    void aBusyLeaderReadsTheVerdictWhenItsTurnEnds() {
+        start();
+        const QString id = reviewed("Cart");
+        host_.setIdle("lead", false);
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        settle();
+        QVERIFY(host_.of("digest").isEmpty());
+        host_.setIdle("lead", true);
+        teams_->memberTurnEnded("lead");
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(QStringLiteral("Verdict on %1").arg(id)));
+        QVERIFY(host_.of("digest").first().body.contains("severity not stated"));
+    }
+
+    void severitiesAreCountedOncePerFinding() {
+        using verdict_line::count;
+        using verdict_line::counts;
+        QCOMPARE(counts(count("**M1 — Medium — a.cpp:1:** x\n**M1** again\n- L3 - low: y\n"
+                              "F2: Critical z\nVerdict: findings")),
+                 QStringLiteral("1 High, 1 Medium, 1 Low, 0 Nit"));
+        QCOMPARE(counts(count("a.cpp:4 medium: x\nb.cpp:2 nit: y\nVerdict: findings")),
+                 QStringLiteral("0 High, 1 Medium, 0 Low, 1 Nit"));
+        QCOMPARE(counts(count("Some issues.\nVerdict: findings")),
+                 QStringLiteral("severity not stated"));
     }
 
     void anIdleLeaderReadsABurstAsOneDigestAfterTheQuietPeriod() {
