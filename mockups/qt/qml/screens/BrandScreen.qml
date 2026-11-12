@@ -69,11 +69,6 @@ Basic.ScrollView {
                         }
                         Text { text: "iOS · 60 pt"; color: panel.modelData ? "#F5F5F7" : "#202024"; font.pixelSize: 13 }
                     }
-                    RowLayout {
-                        spacing: 32
-                        BrandLockup { stem: "Két"; size: 32; dark: panel.modelData; textColor: panel.modelData ? "#F5F5F7" : "#202024" }
-                        BrandLockup { stem: "Két"; edition: "pro"; size: 32; dark: panel.modelData; textColor: panel.modelData ? "#F5F5F7" : "#202024" }
-                    }
                 }
             }
         }

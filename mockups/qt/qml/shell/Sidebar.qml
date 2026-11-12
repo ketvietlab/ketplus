@@ -164,7 +164,7 @@ Rectangle {
                     { id: "editor", text: "Files & Editor", icon: "folder" },
                     { id: "changes", text: "Source Control", icon: "branch", count: 3 },
                     { id: "connections", text: "Connections", icon: "network" },
-                    // Approval-only destination; remove after brand approval.
+                    // Approved brand reference specimens.
                     { id: "brand", text: "Brand", icon: "palette" }
                 ]
 
