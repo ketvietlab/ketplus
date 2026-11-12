@@ -277,16 +277,17 @@ void LinuxMachinesSection::refreshMachines() {
             render();
             return;
         }
-        QStringList ids;
+        // ADR 0119: each host is named by the fingerprint pinned when it was paired.
+        QList<LinuxRelayListing> listed;
         QSet<QString> seen;
         for (const auto& item : value.toArray()) {
             const auto id = item.toObject().value(QStringLiteral("machineId")).toString();
             if (!id.isEmpty() && !seen.contains(id)) {
                 seen.insert(id);
-                ids.append(id);
+                listed.append({id, client_->pinnedFingerprint(id)});
             }
         }
-        model_->setRelayMachines(ids);
+        model_->setRelayMachines(listed);
         render();
     });
 }

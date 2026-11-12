@@ -15,6 +15,9 @@ struct LinuxMachine final {
     // A failure the user can act on; Other carries the backend's own message.
     enum class Error { None, HostKeyMismatch, AuthenticationFailed, DaemonNotInstalled, Other };
 
+    // The ADR 0119 machine id: the daemon's host key fingerprint, the same over SSH and the
+    // Relay, so a host on both routes is one machine. A Relay host paired before host pins has
+    // no fingerprint yet and is "relay:<relay id>" until it has one.
     QString id;
     QString name;
     QString detail;
@@ -24,8 +27,17 @@ struct LinuxMachine final {
     QString fingerprint;
     Error error{Error::None};
     QString errorText;
+    // The Relay's machine id while the Relay lists this host: a route attribute, never the
+    // identity.
+    QString relayId;
 
     bool operator==(const LinuxMachine&) const = default;
+};
+
+// One host the Relay's worktree index lists, with the fingerprint this client pinned for it.
+struct LinuxRelayListing final {
+    QString relayId;
+    QString fingerprint;
 };
 
 class LinuxMachineModel : public QObject {
@@ -39,8 +51,11 @@ class LinuxMachineModel : public QObject {
     void setMachines(QList<LinuxMachine> machines);
     // Adds the machine or replaces the one with its id.
     void upsert(const LinuxMachine& machine);
-    // The Relay's trusted machine ids, from the worktree index. SSH machines are kept.
-    void setRelayMachines(const QStringList& ids);
+    // The hosts the Relay lists, from the worktree index. SSH machines are kept; a listed host
+    // that is already an SSH machine (same fingerprint) stays that one machine.
+    void setRelayMachines(const QList<LinuxRelayListing>& listed);
+    // The ADR 0119 machine id for a Relay listing.
+    [[nodiscard]] static QString relayMachineId(const LinuxRelayListing& listing);
 
     // T-6 attaches the SSH and Relay backends that carry out the intents below. Until then
     // nothing receives them, so the UI offers no SSH mode and no Connect or Disconnect, and a
