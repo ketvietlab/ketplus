@@ -75,6 +75,12 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
             [this] { rebuild(); });
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             [this] { rebuild(); });
+    // The free space changes without the team: it is read again every minute. The daemon
+    // walks a worktree only the first time it lists it, so this reads the volume alone.
+    auto* storageTimer = new QTimer(this);
+    storageTimer->setInterval(60 * 1000);
+    connect(storageTimer, &QTimer::timeout, this, [this] { readStorage(); });
+    storageTimer->start();
     rebuild();
     readUpdates();
 }
@@ -89,6 +95,12 @@ void TeamPage::send(const QString& what, const QString& source, const QString& t
 }
 
 void TeamPage::readUpdates() {
+    // Measuring walks the worktrees: with the team, only when its done tasks changed.
+    if (const QString done = TeamPage::doneTasks(teams_->team(teamId_).value_or(QJsonObject{}));
+        done != storageTasks_) {
+        storageTasks_ = done;
+        readStorage();
+    }
     if (readPending_ || !teams_->team(teamId_))
         return;
     readPending_ = true;
@@ -259,6 +271,7 @@ void TeamPage::rebuild() {
         buildBanners(*team);
         buildDecisions(*team);
         buildTasks(*team);
+        buildDoneWorktrees(*team);
         buildMembers(*team);
         buildUpdates();
     }
@@ -489,6 +502,7 @@ void TeamPage::buildBanners(const QJsonObject& team) {
                 [this] { emit addReviewerRequested(teamId_); });
         layout_->addWidget(banner);
     }
+    buildDiskBanner();
 }
 
 void TeamPage::buildEmpty() {

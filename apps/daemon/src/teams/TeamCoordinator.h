@@ -2,6 +2,7 @@
 
 #include "teams/Team.h"
 #include "teams/TeamRules.h"
+#include "teams/TeamStorage.h"
 
 #include <QHash>
 #include <QObject>
@@ -252,6 +253,36 @@ class TeamHostPort {
         (void)sessionId;
         (void)note;
     }
+    // ADR 0114 §10: the free space of the volume that holds `volumePath` and the size on disk
+    // of each worktree, answered on the caller's thread. Without a way to measure, nothing is
+    // known.
+    virtual void askStorage(const QString& volumePath, const QStringList& worktrees,
+                            StorageDone done) {
+        (void)volumePath;
+        (void)worktrees;
+        done({});
+    }
+    // Removes the worktree the way `git worktree remove` without force and then `git worktree
+    // prune` do, from the main checkout `repository`, after refusing a worktree with
+    // uncommitted or untracked changes, with commits on no remote branch, or that is the main
+    // checkout. Answers the error in words, empty when it was removed.
+    virtual void askRemoveWorktree(const QString& repository, const QString& worktree,
+                                   RemovalDone done) {
+        (void)repository;
+        (void)worktree;
+        done(QStringLiteral("Worktrees cannot be removed here."));
+    }
+    // A conversation in `path` or a folder under it that is not idle, as "“title” is running a
+    // turn" (storage::busy); empty when there is none.
+    [[nodiscard]] virtual QString conversationRunningIn(const QString& path) const {
+        (void)path;
+        return {};
+    }
+    // The conversations whose folder is `path` or a folder under it, idle or not.
+    [[nodiscard]] virtual QList<FolderConversation> conversationsIn(const QString& path) const {
+        (void)path;
+        return {};
+    }
 };
 
 // A new task as the leader or the user writes it.
@@ -469,6 +500,20 @@ class TeamCoordinator : public QObject {
     static constexpr int defaultQuietPeriodMs = 20000;
     void setQuietPeriod(int milliseconds) { quietPeriod_ = milliseconds; }
 
+    // ADR 0114 §10 (TeamCoordinatorStorage.cpp), the user's only, from the desktop: the disk
+    // under the team's worktrees with the done tasks whose worktree is still on it, and the
+    // removal of one of those worktrees. Both answer `done` once the host measured or removed;
+    // a refusal answers at once and changes nothing.
+    using StorageAnswer = std::function<void(const std::optional<TeamError>&, const QJsonObject&)>;
+    // With the removal, `note` names in words each conversation that could not be moved out
+    // of the folder; empty when there was none.
+    using RemovalAnswer = std::function<void(const TeamResult&, const QString& note)>;
+    void storage(qint64 teamId, StorageAnswer done);
+    void removeWorktree(qint64 teamId, const QString& taskId, const QString& actor,
+                        RemovalAnswer done);
+    // The done tasks whose worktree is a folder on disk other than the main checkout.
+    [[nodiscard]] static QList<const Task*> doneWorktrees(const Team& team);
+
     // A deleted conversation leaves its team (ADR 0114, open point 4).
     void conversationDeleted(const QString& sessionId);
     // Archiving a member is refused; a reason, or nothing when it may be archived.
@@ -645,6 +690,13 @@ class TeamCoordinator : public QObject {
     // Prepared commands, by "<team>/<task>": those waiting for the task's worktree, and the
     // answers that are there while the commands they were asked for run.
     QHash<QString, QList<std::function<void()>>> worktreeWaits_;
+    // ADR 0114 §10: the worktrees the host is removing now, so one is removed once.
+    QSet<QString> worktreeRemovals_;
+    void worktreeRemoved(qint64 teamId, const QString& taskId, const QString& path,
+                         RemovalAnswer done);
+    // ADR 0114 §10: the size of each done worktree, measured once when it is first listed, so
+    // reading the free space again walks no folder.
+    QHash<QString, qint64> worktreeSizes_;
     QHash<QString, WorktreeAnswer> worktrees_;
     QHash<QString, HandoffFacts> handoffs_;
     int handoffsAsked_{0};

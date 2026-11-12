@@ -610,6 +610,12 @@ QtObject {
               + "This fixture demonstrates layout only and contains no live project data."
     })
 
+    // T-37 (ADR 0114 §10): the free space, in GB, under which the team page warns, and under
+    // which it says builds should stop.
+    readonly property int diskWarnGb: 20
+    readonly property int diskStopGb: 12
+    readonly property string unmovedConversationNote: "“Quick search” (Wait for startup or shutdown to finish, or answer the pending request before switching.) could not be moved to the main checkout and still points at the removed folder. Open it on another folder before its next turn."
+    readonly property string dirtyWorktreeRefusal: "The worktree has uncommitted or untracked changes (2 files). Commit or discard them, then remove it again."
     readonly property var teams: [
         {
             id: "release", name: "Release 1.4",
@@ -621,6 +627,10 @@ QtObject {
                   + "Out of scope: the account flow and pricing.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
             turnBudget: 60, automaticTurns: 23,
+            // T-37: the disk that holds the team's worktrees, in GB, and the done tasks whose
+            // worktree is still on it, as the daemon measures them.
+            storage: { free: 64.2, worktrees: [
+                { id: "T-2", path: "/workspace/ketplus-desktop-quick-search", size: "4.2 GB" }] },
             members: [
                 { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
                   lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
@@ -645,7 +655,7 @@ QtObject {
                       { when: "Today, 11:42", text: "@agent/2035 opened #412 and moved the task to In review" },
                       { when: "Today, 11:43", text: "@agent/4583 started the review" }] },
                 { id: "T-2", title: "Quick search opens with ⌘K", owner: "2035", lane: "Navigation", state: "done",
-                  pr: "#405", branch: "feat/quick-search-shortcut", worktree: "", dependsOn: "",
+                  pr: "#405", branch: "feat/quick-search-shortcut", worktree: "ketplus-desktop-quick-search", dependsOn: "",
                   criteria: [
                       { text: "⌘K opens Quick search from every screen", done: true },
                       { text: "Escape returns focus to where it was", done: true }],

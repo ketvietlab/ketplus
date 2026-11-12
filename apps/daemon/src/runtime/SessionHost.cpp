@@ -1804,6 +1804,16 @@ void SessionHost::handleCommandDeferred(const QJsonObject& request, const QStrin
         backgroundTaskCommand(request, std::move(done));
         return;
     }
+    // ADR 0114 §10: the disk warning and a done worktree's removal answer once measured or
+    // removed. Only for the local client: handleCommand refuses team.* from any other.
+    if (localClient(clientId)) {
+        const QString type = request.value(QStringLiteral("message_type")).toString();
+        if (type == QStringLiteral("team.storage.get") ||
+            type == QStringLiteral("team.worktree.remove")) {
+            teamStorageCommand(request, std::move(done));
+            return;
+        }
+    }
     // ADR 0114 §1: what a team command asks git is read off the event loop first: the
     // repositories it names, then a task's worktree or its hand to review. Only for the
     // local client: handleCommand refuses any other before it asks anything.

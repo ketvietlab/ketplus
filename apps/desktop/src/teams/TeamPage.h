@@ -84,6 +84,13 @@ class TeamPage final : public QWidget {
     void buildDecisions(const QJsonObject& team);
     void buildTasks(const QJsonObject& team);
     void buildMembers(const QJsonObject& team);
+    // ADR 0114 §10 (TeamPageStorage.cpp): the disk under the team's worktrees and the worktrees
+    // of its done tasks, read again with the team and every minute.
+    void readStorage();
+    // The done tasks and their worktrees, as one string to compare.
+    [[nodiscard]] static QString doneTasks(const QJsonObject& team);
+    void buildDiskBanner();
+    void buildDoneWorktrees(const QJsonObject& team);
     void buildUpdates();
     void buildEmpty();
     void fillTasks();
@@ -130,6 +137,10 @@ class TeamPage final : public QWidget {
     bool segmented_{true};
     int segmentedWidth_{0};
     bool readPending_{false};
+    // team.storage.get's last answer; empty when the daemon has none.
+    QJsonObject storage_;
+    bool storagePending_{false};
+    QString storageTasks_{QStringLiteral("-")};
 };
 
 } // namespace ketplus

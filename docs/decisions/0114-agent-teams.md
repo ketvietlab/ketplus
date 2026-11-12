@@ -315,6 +315,48 @@ The goal is the leader's main input, so it is written like a brief, not a title.
   has no place to change a goal after the team exists. A place added later uses the
   same field.
 
+### 10. Disk space and the worktrees of done tasks (decided 2026-11-12)
+
+Every task has its own worktree, and a done task's worktree stays on disk until someone
+removes it. A team of a few developers fills a disk quickly, so the team page says how much
+space is left and offers the worktrees of done tasks for removal. It only offers: nothing
+is paused, stopped or removed on its own at any level.
+
+- **The disk.** The daemon measures the free space of the volume that holds the team's
+  repository (where its worktrees are made, open point 1) with `QStorageInfo`, off the
+  event loop. Two levels, constants in `teams::storage` (`TeamStorage.h`), in decimal
+  gigabytes as the Finder counts them:
+  - below `warnBytes`, 20 GB: *low*. A warning banner names the free space and suggests
+    removing the worktrees of done tasks.
+  - below `stopBytes`, 12 GB: *stop*. A danger banner names the free space and says
+    builds should stop until space is freed.
+  When the space cannot be read, the page shows no banner.
+- **The offer.** Each done task whose worktree is still a folder on disk, and is not the
+  repository's main checkout, is listed under "Worktrees of done tasks" with its path and
+  its size on disk (blocks used, links not followed). The page reads it when it opens,
+  when the team's done tasks or their worktrees change, and every minute. A worktree is
+  walked only the first time it is listed; the daemon keeps its size, so the reading every
+  minute asks the volume alone.
+- **Removal.** Only after the user confirms it in a dialog. The daemon refuses, in words
+  and changing nothing, a task that is not done, a worktree that is not on disk, the main
+  checkout (by its canonical path, or a folder with a `.git` directory), the worktree of a
+  conversation that is running a turn or waits for an answer or an approval, a worktree with uncommitted or untracked changes
+  (`git status --porcelain --untracked-files=all`), and one with commits on no remote
+  branch (`git rev-list HEAD --not --remotes`). Otherwise it runs `git worktree remove
+  <path>` without `--force`, then `git worktree prune`, both in the main checkout, in
+  the order of the team's other git work. A failure is shown in git's words and the task
+  keeps its worktree entry; a removal clears the entry and adds `worktree_removed` to
+  the task's history. The task's branch and its commits stay. An idle conversation still
+  in the folder (the developer of the team's last task stays in its worktree) is moved to
+  the main checkout, so its next turn does not start in a folder that is gone. The history
+  entry is written once every move has answered and names what happened to each one; a
+  conversation that could not be moved is named with the reason, in the history and in
+  the answer's `note`, which the dialog shows instead of closing.
+- **Only the user.** There is no agent tool for either request. Agent connections reach
+  only `agents.*` operations, the requests are `team.*` and served to trusted local
+  clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
+  refuses any actor but the user (`role_forbidden`).
+
 ## Open points, fixed here
 
 1. **A developer's working directory.** *Chosen*: a task owns its worktree. When a task
@@ -426,7 +468,8 @@ The goal is the leader's main input, so it is written like a brief, not a title.
 
 ## Protocol
 
-Features `teams/1`, `teams.tasks/1` and `teams.settings/1` in `daemon.hello`. Requests, for
+Features `teams/1`, `teams.tasks/1`, `teams.settings/1` and `teams.storage/1` in
+`daemon.hello`. Requests, for
 trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `team.settings.get`, `team.settings.update` (`{turn_budget}`; both answer
 `{settings: {turn_budget, turn_budget_minimum, turn_budget_maximum, turn_budget_default}}`),
@@ -434,7 +477,11 @@ trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `team.member.add`, `team.member.join`, `team.member.update`, `team.member.remove`,
 `team.task.list`, `team.task.get`, `team.task.create`, `team.task.update`,
 `team.task.assign`, `team.task.handover`, `team.task.move`, `team.task.criteria.set`,
-`team.decision.list`, `team.decision.answer`. Events `team.changed` (the team and its
+`team.decision.list`, `team.decision.answer`, `team.storage.get` (`{team_id}`; answers
+`{storage: {free_bytes, level, warn_bytes, stop_bytes, worktrees: [{task_id, title, branch,
+path, size_bytes}]}}`, `free_bytes` and `size_bytes` null when unknown, `level` `low`,
+`stop` or empty) and `team.worktree.remove` (`{team_id, task_id}`; answers `{team, note}`), §10.
+The two are on the desktop wire only, not on the remote team path. Events `team.changed` (the team and its
 revision) and `team.removed` go to every local client.
 
 `team.create` takes `execution_policy` (`read-only`, `ask` or `full`; `ask` when absent):
@@ -450,7 +497,8 @@ Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 team request is served; ask again), `task_not_found`, `invalid_transition`,
 `not_owner`, `role_forbidden`, `dependencies_open`, `dependency_cycle`,
 `uncommitted_work`,
-`decision_closed`, `invalid_payload`.
+`decision_closed`, `invalid_payload`, `worktree_not_removed` (§10, with the reason in
+words).
 A team's integration branch is a name git accepts (`git check-ref-format --branch`) and
 never one that reads as an option; a team that has one changes it, not drops it
 (`invalid_payload`). Every branch the daemon hands to git follows `--end-of-options`, and
