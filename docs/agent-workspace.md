@@ -1206,5 +1206,6 @@ one **reviewer** (a Claude conversation). A conversation is on at most one team.
   daemon's reason. The state is held per command and not per widget, so a page rebuilt
   meanwhile is still pending.
 - **Limits.** 40 automatic turns per team since the user last acted on it, then the team
-  pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
+  pauses and asks. Turns that members' messages to each other start count against
+  the same budget; ADR 0027's loop guard applies only to messages leaving the team. **Pause** holds every team
   message until Resume.

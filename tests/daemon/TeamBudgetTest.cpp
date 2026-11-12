@@ -4,6 +4,8 @@
 // scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
+#include "agents/AgentBroker.h"
+#include "storage/LocalJournal.h"
 #include "protocol/DaemonProtocol.h"
 
 #include <QStandardPaths>
@@ -123,6 +125,131 @@ class TeamBudgetTest final : public QObject {
         QCOMPARE(team().decisions.last().question,
                  QStringLiteral("The team used its 5 automatic turns. Continue?"));
         QVERIFY(team().decisions.last().choices.contains("Continue (5 more turns)"));
+    }
+
+    // ADR 0114 §2: a turn a teammate's message starts counts against the budget like a turn
+    // the team starts. Once the budget is used up the team pauses and asks once; continuing
+    // it releases the messages that waited for every member.
+    void teammatesTurnsCountAgainstTheBudget() {
+        start(5);
+        for (int turn = 0; turn < 5; ++turn)
+            QCOMPARE(teams_->takeMemberTurn(turn % 2 ? "lead" : "dev1"), QString{});
+        QCOMPARE(team().automaticTurns, 5);
+        QVERIFY(!team().paused);
+        QCOMPARE(teams_->takeMemberTurn("lead"), QStringLiteral("team_budget"));
+        QVERIFY(team().paused);
+        QCOMPARE(team().pausedReason, QStringLiteral("budget"));
+        QCOMPARE(teams_->takeMemberTurn("dev2"), QStringLiteral("team_budget"));
+        QCOMPARE(openBudgetDecisions(), 1);
+        QCOMPARE(team().automaticTurns, 5);
+        // A conversation on no team is not the team's to count.
+        QCOMPARE(teams_->takeMemberTurn("outsider"), QString{});
+        QVERIFY(host_.released.isEmpty());
+
+        QVERIFY(teams_->answerDecision(team_, team().decisions.last().id,
+                                       "Continue (5 more turns)", "user")
+                    .ok());
+        QVERIFY(!team().paused);
+        QVERIFY(team().automaticTurns < 5);
+        QStringList members;
+        for (const Member& member : team().members)
+            members << member.sessionId;
+        QCOMPARE(host_.released, members);
+
+        // A pause by the user holds them as well, with its own reason.
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QCOMPARE(teams_->takeMemberTurn("dev1"), QStringLiteral("team_paused"));
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        QCOMPARE(host_.released.size(), 2 * members.size());
+        QCOMPARE(teams_->takeMemberTurn("dev1"), QString{});
+    }
+
+    // End to end with the scripted providers: inside a team no loop guard holds a message,
+    // however deep its exchange. The team's budget does, and continuing the team delivers it.
+    void insideATeamOnlyTheBudgetHoldsMessages() {
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QJsonObject created = command("team.create", {{"repository", fixture.directory.path()},
+                                                            {"name", "Budget"},
+                                                            {"integration_branch", "integration"},
+                                                            {"turn_budget", 5},
+                                                            {"plan", plan()}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonValue teamId = created.value("team").toObject().value("id");
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString leader = members.at(0).toObject().value("session_id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        const auto team = [&] {
+            return command("team.get", {{"team_id", teamId}}).value("team").toObject();
+        };
+
+        // A message deep in an exchange, as a long talk between teammates leaves it.
+        AgentMessageRecord deep;
+        deep.id = "deep-team-message";
+        deep.chainId = "long-talk";
+        deep.hop = AgentBroker::maximumAutomaticHop + 4;
+        deep.fromSession = developer;
+        deep.fromGeneration = 1;
+        deep.fromNumber = fixture.number(developer);
+        deep.fromTitle = "Developer 1";
+        deep.toSession = leader;
+        deep.toGeneration = 1;
+        deep.toNumber = fixture.number(leader);
+        deep.kind = "notice";
+        deep.body = "T-1 is done.";
+        deep.state = "queued";
+        deep.createdAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+        QVERIFY(fixture.journal->insertAgentMessage(deep));
+        fixture.restart();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage(deep.id)->state,
+                                  QStringLiteral("delivered"), 5000);
+        QCOMPARE(fixture.journal->agentMessage(deep.id)->delivery, QStringLiteral("auto"));
+        QVERIFY(team().value("automatic_turns").toInt() >= 1);
+        // What the leader sends from that turn starts a new exchange.
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") >= 1, 5000);
+
+        // Teammates talk until the budget is used up; the next message waits for the team.
+        QString held;
+        for (int sent = 0; sent < 10 && held.isEmpty(); ++sent) {
+            const int turns = fixture.count(leader, "turn.completed");
+            const QJsonObject reply = fixture.agents(
+                developer, "agents.send",
+                {{"to", "leader"}, {"text", QStringLiteral("Update %1").arg(sent)}});
+            QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
+            const QString id = reply.value("message_id").toString();
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.journal->agentMessage(id)->state != "queued", 5000);
+            if (fixture.journal->agentMessage(id)->state == "held") {
+                held = id;
+                break;
+            }
+            QCOMPARE(fixture.journal->agentMessage(id)->state, QStringLiteral("delivered"));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") > turns, 5000);
+        }
+        QVERIFY(!held.isEmpty());
+        QCOMPARE(fixture.journal->agentMessage(held)->error, QStringLiteral("team_budget"));
+        QVERIFY(team().value("paused").toBool());
+        QString question;
+        for (const QJsonValue& value : team().value("decisions").toArray())
+            if (value.toObject().value("kind") == "budget" &&
+                value.toObject().value("state") == "open")
+                question = value.toObject().value("id").toString();
+        QVERIFY(!question.isEmpty());
+
+        const QJsonObject answered =
+            command("team.decision.answer", {{"team_id", teamId},
+                                             {"decision_id", question},
+                                             {"choice", "Continue (5 more turns)"}});
+        QVERIFY2(answered.value("ok").toBool(), qPrintable(agent_test::text(answered)));
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage(held)->state,
+                                  QStringLiteral("delivered"), 5000);
+        bool released = false;
+        for (const QJsonObject& notice : fixture.payloads(leader, "agent_message.state"))
+            released = released || (notice.value("message_id") == held &&
+                                     notice.value("state") == "released");
+        QVERIFY(released);
     }
 
     // A team the user pauses in the same change stays paused: nothing held goes out.

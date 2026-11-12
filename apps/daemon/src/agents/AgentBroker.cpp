@@ -74,6 +74,14 @@ bool reviewRequest(const AgentMessageRecord& message) {
     return message.kind == QStringLiteral("review") && message.expectReply;
 }
 
+// What a conversation sends with agents_send, or a turn's answer to a request: anything else
+// was posted by a team (an assignment, a digest, a review round...), and its turn was counted
+// against the team's budget when the team sent it (ADR 0114 §2).
+bool sentByAgent(const AgentMessageRecord& message) {
+    return message.kind == QStringLiteral("request") || message.kind == QStringLiteral("notice") ||
+           message.kind == QStringLiteral("reply");
+}
+
 // A team's review round (ADR 0114 §2): sent by the team itself, which has no conversation.
 // Conversations always send with their own session id, so none can ask for this profile.
 bool teamReviewRequest(const AgentMessageRecord& message) {
@@ -578,6 +586,11 @@ void AgentBroker::deliverTo(const QString& sessionId) {
                 deliverable.append(message);
             continue;
         }
+        // ADR 0114 §2: inside a team, its budget limits the turns, not the loop guard.
+        if (host_->teamLimitsMessage(message)) {
+            deliverable.append(message);
+            continue;
+        }
         const QString reason =
             message.hop > maximumAutomaticHop ? QStringLiteral("hop_limit")
             : journal_->automaticAgentTurnsInChain(message.chainId) >= maximumChainTurns
@@ -596,6 +609,34 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     keepOneTurn(deliverable);
     if (deliverable.isEmpty())
         return;
+    const auto teammate = [this](const AgentMessageRecord& message) {
+        return sentByAgent(message) && host_->teamLimitsMessage(message);
+    };
+    const bool teamTurn =
+        authorizedBatch.isEmpty() &&
+        std::all_of(deliverable.cbegin(), deliverable.cend(),
+                    [this](const AgentMessageRecord& message) {
+                        return host_->teamLimitsMessage(message);
+                    });
+    // One turn that teammates' messages start counts once against the team's budget. A
+    // paused team, or one whose budget is used up, keeps them until it continues.
+    if (authorizedBatch.isEmpty() &&
+        std::any_of(deliverable.cbegin(), deliverable.cend(), teammate)) {
+        if (const QString wait = host_->takeTeamTurn(sessionId); !wait.isEmpty()) {
+            QList<AgentMessageRecord> kept;
+            for (AgentMessageRecord& message : deliverable) {
+                if (!teammate(message)) {
+                    kept.append(message);
+                    continue;
+                }
+                markState(message, QStringLiteral("held"), wait);
+                notice(message, QStringLiteral("held"), wait);
+            }
+            deliverable = std::move(kept);
+            if (deliverable.isEmpty())
+                return;
+        }
+    }
     if (!authorizedBatch.isEmpty()) {
         const qint64 turn = host_->agentTurnSequence(sessionId) + 1;
         QString claimError;
@@ -629,6 +670,12 @@ void AgentBroker::deliverTo(const QString& sessionId) {
             origin.expectReply.append(message.id);
         if (reviewRequest(message))
             origin.review = true;
+    }
+    // A turn only its team started begins a new exchange: what it sends outside the team is
+    // guarded from hop 1, not from how long the team has been talking.
+    if (teamTurn) {
+        origin.hop = 0;
+        origin.chainId = newId();
     }
     origin.turn = host_->agentTurnSequence(sessionId) + 1;
     turns_.insert(sessionId, origin);
@@ -949,7 +996,8 @@ void AgentBroker::notice(const AgentMessageRecord& message, const QString& state
     if ((state == QStringLiteral("failed") || state == QStringLiteral("expired")) &&
         !message.fromSession.isEmpty())
         host_->agentMessageFailed(message, reason);
-    if (state != QStringLiteral("held") && !message.delivery.startsWith("user_authorized:"))
+    if (state != QStringLiteral("held") && state != QStringLiteral("released") &&
+        !message.delivery.startsWith("user_authorized:"))
         return;
     QJsonObject incoming = common;
     incoming.insert(QStringLiteral("direction"), QStringLiteral("incoming"));

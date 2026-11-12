@@ -52,4 +52,27 @@ QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& 
     return post(message);
 }
 
+void AgentBroker::releaseTeamHeldMessages(const QStringList& sessionIds) {
+    // What waited for the team, and what an earlier build's loop guard held inside it.
+    static const QStringList waitedForTeam{
+        QStringLiteral("team_paused"), QStringLiteral("team_budget"), QStringLiteral("hop_limit"),
+        QStringLiteral("chain_limit"), QStringLiteral("hourly_limit")};
+    for (const QString& sessionId : sessionIds) {
+        const auto receiver = host_->agentConversation(sessionId);
+        if (!receiver)
+            continue;
+        bool released = false;
+        for (AgentMessageRecord message :
+             journal_->agentMessagesTo(sessionId, receiver->generation, {QStringLiteral("held")})) {
+            if (!waitedForTeam.contains(message.error) || !host_->teamLimitsMessage(message))
+                continue;
+            markState(message, QStringLiteral("queued"), {});
+            notice(message, QStringLiteral("released"), QStringLiteral("team_continued"));
+            released = true;
+        }
+        if (released)
+            scheduleDelivery(sessionId);
+    }
+}
+
 } // namespace ketplus::daemon

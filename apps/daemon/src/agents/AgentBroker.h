@@ -99,6 +99,20 @@ class AgentHostPort {
         (void)sessionId;
         return false;
     }
+    // ADR 0114 §2: whether the receiver's team limits the turns this message starts, in place
+    // of the loop guard of ADR 0027: it comes from the team itself or from a member of the
+    // same team.
+    [[nodiscard]] virtual bool teamLimitsMessage(const AgentMessageRecord& message) const {
+        (void)message;
+        return false;
+    }
+    // Counts one automatic turn of a team member that its teammates' messages start against
+    // the team's budget. Empty when the turn may start; otherwise why the messages wait:
+    // "team_paused", or "team_budget" when the budget is used up.
+    virtual QString takeTeamTurn(const QString& sessionId) {
+        (void)sessionId;
+        return {};
+    }
     // #125: the turn's answer asks the user to approve or decide, so it ends as
     // "Waiting for you". Returns the tool's answer.
     virtual QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
@@ -159,6 +173,9 @@ class AgentBroker final : public QObject {
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
     // ADR 0114: a message of the team (assignment, digest, review, decision) to a member. It
     // starts its own chain at hop 1, so the loop guard still applies. Returns an error.
+    // ADR 0114 §2: the team continued. Messages to these members that its pause, its budget
+    // or an earlier build's loop guard held are delivered again, in order.
+    void releaseTeamHeldMessages(const QStringList& sessionIds);
     QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
                             const QString& toSession, const QString& kind, const QString& body,
                             bool expectReply, QString* messageId = nullptr, const QString& id = {});

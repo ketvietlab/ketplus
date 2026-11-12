@@ -248,6 +248,20 @@ QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
         message.kind, message.body, message.expectReply, nullptr, message.id);
 }
 
+bool SessionHost::teamLimitsMessage(const AgentMessageRecord& message) const {
+    const teams::Team* team = teams_ ? teams_->teamOf(message.toSession) : nullptr;
+    // An empty sender is the team itself; a conversation always sends with its session id.
+    return team && (message.fromSession.isEmpty() || team->member(message.fromSession));
+}
+
+QString SessionHost::takeTeamTurn(const QString& sessionId) {
+    return teams_ ? teams_->takeMemberTurn(sessionId) : QString{};
+}
+
+void SessionHost::releaseTeamHeldMessages(const QStringList& sessionIds) {
+    agents_->releaseTeamHeldMessages(sessionIds);
+}
+
 bool SessionHost::teamMessagePosted(const QString& id) const {
     return !id.isEmpty() && journal_->agentMessage(id).has_value();
 }
