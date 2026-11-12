@@ -4,13 +4,12 @@ Audit date: 2026-11-12. Scope: macOS Pro Sparkle, release preparation,
 daemon continuity, failure handling, channels, and Linux/Lite boundaries.
 This change contains findings only; no product fixes, feed publication or uploads.
 
-The compiled public-code baseline is `d2c6c479`. QA artifacts report revision
-`e2036db44269-dirty` because the audit document was edited and external QA hooks
-were included. Compared with integration `b5621483033e`, the updater, feed
+The compiled public-code baseline is `d2c6c479`. QA artifacts were built from that public baseline with documentation edits
+and external QA hooks; their local build revision is not a retrievable public
+commit and is intentionally not used as a source reference. Compared with integration `b5621483033e`, the updater, feed
 validation, release-preparation script, bundle verification and daemon upgrade
-code inspected here are unchanged. Later branding changes fix the old spelling
-in Settings Updates and bundle metadata; QA screenshots/text from the older
-baseline do not establish a current naming defect.
+code inspected here are unchanged. Later branding changes fix the Settings card titles and bundle metadata,
+but explanatory Settings copy still uses the old spelling (L1 below).
 
 ## Coverage and verification
 
@@ -20,15 +19,15 @@ baseline do not establish a current naming defect.
 | Dependency pin | verified-by-test | Downloaded SDK SHA-256 matched cmake/Sparkle.cmake:14–16,56–61. |
 | Private key custody | verified-by-reading | CMake accepts a public key; signing tools use an external key file or Keychain. Production key storage/history were not inspected. M2 shows the location guard is incomplete. |
 | HTTPS feed | verified-by-test | Six CMake fixtures: HTTPS accepted; HTTP, query URL, missing key and bad key rejected; empty pair disables updater. Real QA uses an explicit HTTP loopback-only exception, not production TLS. |
-| Downgrade/rollback | verified-by-reading | LocalIpcServer.cpp:356–367 rejects non-newer daemon replacement. Application downgrade, rollback after failed launch and older signed appcasts were not exercised. |
+| Downgrade/rollback | verified-by-reading | apps/daemon/src/ipc/LocalIpcServer.cpp:356–367 rejects non-newer daemon replacement. Application downgrade, rollback after failed launch and older signed appcasts were not exercised. |
 | Signing/notarization | verified-by-test | Staged bundles and updated bundle passed strict deep codesign. QA is ad-hoc signed, not Developer ID/notarization acceptance. M1 remains. |
 | Active daemon turn | verified-by-test | A real N daemon ran the fake provider's hanging turn; it remained alive and returned daemon_busy before and after actual bundle replacement. No provider quota consumed. |
 | Idle daemon rollover | verified-by-test | Two offscreen upgrade/client-policy executables passed, including idle allowance and busy deferral. Full real idle process rollover was not separately exercised. |
 | Interrupted/corrupt download | partly verified-by-test | Tampered ZIP was refused before extraction. Interrupted/resumed network download was not exercised. |
 | Disk-full/read-only/translocation | not verified | Disk guards stayed above 15 GiB; that is not an actual ENOSPC test. Read-only and App Translocation cases remain untested. |
 | Staging/production and architecture | verified-by-reading | Operator conventions only; M3/M4. No deployed feed or cross-architecture client was contacted. |
-| UI/naming/release notes | verified-by-reading | Current integration fixes Settings/bundle product names. UI binding failed; API hook stands in for the click. Real generated release notes/appcast naming needs the owner's manual check. |
-| Linux | verified-by-reading | AppUpdater.cpp:20–37 supplies DisabledAppUpdater without Sparkle; ADR 0019 leaves Linux manual. AppImage/package-manager installation was not tested; no in-app Linux updater is established here. |
+| UI/naming/release notes | verified-by-reading | Integration fixes card titles/bundle names, but explanatory Settings copy still uses KetPlus (L1). UI binding failed; API hook stands in for the click. Real generated release notes/appcast naming needs the owner's manual check. |
+| Linux | verified-by-reading | apps/desktop/src/update/AppUpdater.cpp:20–37 supplies DisabledAppUpdater without Sparkle; ADR 0019 leaves Linux manual. AppImage/package-manager installation was not tested; no in-app Linux updater is established here. |
 | Lite versus Pro | verified-by-reading | Root CMakeLists.txt:19–33 returns after core for Lite. The audited shell updater is macOS Pro; this does not certify a Lite update channel. |
 
 ## Findings
@@ -97,12 +96,21 @@ plist modified at 09:46:39 UTC, with scratch references in these keys:
 
 - `workspace.recentFolders`
 - `spotlight.repositories`
-- `agent.sessions.7786bf6330696f68a26158a31e3e47e80074daec89054ef7087f19a7c39529f3`
+- `agent.sessions (one key; suffix withheld)`
 
 No before-launch snapshot existed, so other changes cannot be attributed. The
 QA app/daemon were stopped before an updater action. The owner elected to leave
 the entries and clear stale recent repositories manually inside the app. This
 audit did not edit or clean the real preference domain.
+
+### L1 — Low: explanatory update copy still uses the old product spelling
+
+Reference: apps/desktop/src/app/SettingsUpdatesPage.cpp:103,105,108,120,137
+at integration `b5621483033e`. The card titles and bundle metadata use ketPlus Pro,
+but descriptions still say KetPlus. A user can see inconsistent product names
+on the same Updates page. Verification: source reading; no code fix in this
+change. Include these descriptions in the existing branding follow-up and the
+release owner's manual naming check.
 
 ## QA fixture and instrumentation
 
@@ -162,7 +170,8 @@ mtime and one existing session digest, with no key-name changes. Final
 comparisons therefore require identical strict workspace/update/Sparkle/SU-key
 digests and prohibit churn outside agent.sessions and agent.composerDrafts.
 Allowed agent churn must not hash to a QA identifier. Hashing follows UTF-8
-SHA-256 in AgentMessageFormatter.cpp:167–170 and AgentWorkspaceView.cpp:66–70,
+SHA-256 in modules/ai/src/agent/AgentMessageFormatter.cpp:167–170 and
+modules/ai/src/agent/AgentWorkspaceView.cpp:66–70,
 including path:conversation composer scopes.
 
 The final comparison set contains 440 QA identifiers: scratch/workspace/home/
@@ -176,11 +185,13 @@ Key churn, attributed to the concurrently active normal app after the control:
 
 | Key | Change and case | QA exclusion |
 | --- | --- | --- |
-| `agent.composerDrafts.50794f819bab320c4bf2be6091c0bcc9a57e9428f14f141770cdc449f41b77f9` | Added during tampered case. | Does not match any of 440 QA identifiers. |
-| `agent.sessions.67820c7c2a714655bc7ffcce97af4a5ea9ba58ddcc917d4afe7edbdfd7bdd753` | Changed in control and all four cases, plus controlled N+1 startup. | Does not match any of 440 QA identifiers. |
+| `agent.composerDrafts (one key; suffix withheld)` | Added during tampered case. | Does not match any of 440 QA identifiers. |
+| `agent.sessions (one key; suffix withheld)` | Changed in control and all four cases, plus controlled N+1 startup. | Does not match any of 440 QA identifiers. |
 
-No preference values were printed or stored; snapshots retain names, hashes and
-metadata only. The initial 345-key baseline temporarily reached 346 during the
+Private local snapshots retain key names, digests and metadata only, without
+preference values. Path-derived key suffixes and digest values are deliberately
+withheld from this public report: unsalted path hashes are guessable and do not
+anonymize a workspace. Public descriptions identify namespaces and counts only. The initial 345-key baseline temporarily reached 346 during the
 normal-app draft churn; subsequent cases began with 345. No forbidden namespace
 change, strict digest change or QA-identifier match was accepted. Early attempts
 with an ineffective defaults-suite setting were excluded from archive-test
