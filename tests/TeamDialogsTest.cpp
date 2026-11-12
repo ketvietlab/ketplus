@@ -15,10 +15,12 @@
 #include "KetToggle.h"
 #include "teams/TeamAgentDialog.h"
 #include "teams/TeamDirectory.h"
+#include "teams/TeamMenus.h"
 #include "teams/TeamTurnBudget.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QJsonArray>
 #include <QLabel>
 #include <QScrollArea>
@@ -587,6 +589,57 @@ class TeamDialogsTest final : public QObject {
         form5->setRole(QStringLiteral("developer"));
         QVERIFY(!dialog->findChild<ket::Button*>("addMemberButton")->isEnabled());
         QVERIFY(form5->hint().contains("five"));
+        dialog->reject();
+    }
+
+    void deletingATeamCanDeleteItsConversations() {
+        const QJsonObject team{
+            {"id", "7"},
+            {"name", "Ads"},
+            {"members", QJsonArray{QJsonObject{{"session_id", "lead"}, {"role", "leader"}},
+                                   QJsonObject{{"session_id", "dev"}, {"role", "developer"}}}}};
+        QHash<QString, QVariantList> listed{
+            {"/repo",
+             {QVariantMap{{"id", "c-lead"}, {"sessionId", "lead"}},
+              QVariantMap{{"id", "c-other"}, {"sessionId", "other"}}}},
+            {"/repo-wt", {QVariantMap{{"id", "c-dev"}, {"sessionId", "dev"}}}}};
+        TeamMemberConversations members = teamMemberConversations(team, listed);
+        QCOMPARE(members.conversations.size(), 2);
+        QVERIFY(members.conversations.contains(
+            qMakePair(QStringLiteral("/repo"), QStringLiteral("c-lead"))));
+        QVERIFY(members.conversations.contains(
+            qMakePair(QStringLiteral("/repo-wt"), QStringLiteral("c-dev"))));
+        QCOMPARE(members.running, 0);
+
+        QWidget window;
+        window.resize(1024, 640);
+        window.show();
+        auto* dialog = teamDeleteConfirmation(&window, team, members);
+        auto* option = dialog->findChild<QCheckBox*>("teamDeleteConversations");
+        QVERIFY(option != nullptr);
+        QVERIFY(option->isEnabled());
+        QVERIFY(!option->isChecked());
+        QVERIFY(option->text().contains("2 conversations"));
+        QVERIFY(!deletesTeamConversations(dialog));
+        option->setChecked(true);
+        QVERIFY(deletesTeamConversations(dialog));
+        dialog->reject();
+
+        // A running member keeps every conversation: the box is unavailable.
+        listed["/repo-wt"] = {
+            QVariantMap{{"id", "c-dev"}, {"sessionId", "dev"}, {"running", true}}};
+        members = teamMemberConversations(team, listed);
+        QCOMPARE(members.running, 1);
+        dialog = teamDeleteConfirmation(&window, team, members);
+        option = dialog->findChild<QCheckBox*>("teamDeleteConversations");
+        option->setChecked(true);
+        QVERIFY(!option->isEnabled());
+        QVERIFY(!deletesTeamConversations(dialog));
+        dialog->reject();
+
+        // No listed conversation: no box.
+        dialog = teamDeleteConfirmation(&window, team, {});
+        QVERIFY(dialog->findChild<QCheckBox*>("teamDeleteConversations") == nullptr);
         dialog->reject();
     }
 };

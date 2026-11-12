@@ -7,9 +7,12 @@
 #include "teams/TeamDirectory.h"
 
 #include <QAction>
+#include <QCheckBox>
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QLabel>
 #include <QMenu>
+#include <QSet>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -33,7 +36,8 @@ void refuse(QAction* action, const QString& reason) {
 QString name(const QJsonObject& team) { return team.value(QStringLiteral("name")).toString(); }
 
 ket::Dialog* confirmation(QWidget* anchor, const QString& title, const QString& text,
-                          const QString& confirm, const char* objectName) {
+                          const QString& confirm, const char* objectName,
+                          QWidget* option = nullptr) {
     auto* dialog = new ket::Dialog(title, anchor);
     dialog->setObjectName(QLatin1String(objectName));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -44,6 +48,10 @@ ket::Dialog* confirmation(QWidget* anchor, const QString& title, const QString& 
     label->setObjectName(QStringLiteral("teamConfirmationText"));
     label->setWordWrap(true);
     layout->addWidget(label);
+    if (option != nullptr) {
+        option->setParent(body);
+        layout->addWidget(option);
+    }
     dialog->setBody(body);
     dialog->setCardWidth(420);
     auto* cancel = dialog->addButton(tr("Cancel"));
@@ -175,12 +183,57 @@ ConversationTeamActions addConversationTeamActions(QMenu& menu, const QList<QJso
     return actions;
 }
 
-ket::Dialog* teamDeleteConfirmation(QWidget* anchor, const QJsonObject& team) {
+TeamMemberConversations
+teamMemberConversations(const QJsonObject& team,
+                        const QHash<QString, QVariantList>& conversationsByPath) {
+    QSet<QString> members;
+    for (const QJsonValue& member : team.value(QStringLiteral("members")).toArray())
+        members.insert(member.toObject().value(QStringLiteral("session_id")).toString());
+    members.remove(QString());
+    TeamMemberConversations found;
+    for (auto it = conversationsByPath.cbegin(); it != conversationsByPath.cend(); ++it)
+        for (const QVariant& value : it.value()) {
+            const QVariantMap conversation = value.toMap();
+            if (!members.contains(conversation.value(QStringLiteral("sessionId")).toString()))
+                continue;
+            found.conversations.append(
+                {it.key(), conversation.value(QStringLiteral("id")).toString()});
+            if (conversation.value(QStringLiteral("running")).toBool())
+                ++found.running;
+        }
+    return found;
+}
+
+ket::Dialog* teamDeleteConfirmation(QWidget* anchor, const QJsonObject& team,
+                                    const TeamMemberConversations& members) {
+    QCheckBox* option = nullptr;
+    if (!members.conversations.isEmpty()) {
+        const int count = static_cast<int>(members.conversations.size());
+        option = new QCheckBox(
+            count == 1 ? tr("Also delete its conversation and its history")
+                       : tr("Also delete its %1 conversations and their history").arg(count));
+        option->setObjectName(QStringLiteral("teamDeleteConversations"));
+        if (members.running > 0) {
+            // A running conversation cannot be deleted; deleting the others would leave the
+            // team half gone.
+            option->setEnabled(false);
+            option->setToolTip(tr("Stop its running conversations first."));
+            option->setText(option->text() + tr(" · stop its running conversations first"));
+        }
+    }
     return confirmation(anchor, tr("Delete %1?").arg(name(team)),
-                        tr("The team, its tasks and its decisions are deleted. Its "
-                           "conversations, their history and their worktrees stay, back among "
-                           "the repository's conversations."),
-                        tr("Delete team"), "teamDeleteDialog");
+                        tr("The team, its tasks and its decisions are deleted. Unless you tick "
+                           "the box, its conversations and their history stay, back among the "
+                           "repository's conversations. Their worktrees stay either way."),
+                        tr("Delete team"), "teamDeleteDialog", option);
+}
+
+bool deletesTeamConversations(const ket::Dialog* dialog) {
+    const auto* option =
+        dialog == nullptr
+            ? nullptr
+            : dialog->findChild<QCheckBox*>(QStringLiteral("teamDeleteConversations"));
+    return option != nullptr && option->isEnabled() && option->isChecked();
 }
 
 ket::Dialog* teamLeaveConfirmation(QWidget* anchor, const QJsonObject& team,

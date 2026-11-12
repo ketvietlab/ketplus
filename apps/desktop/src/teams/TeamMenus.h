@@ -1,9 +1,12 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
 #include <QJsonObject>
 #include <QList>
+#include <QPair>
 #include <QString>
+#include <QVariant>
 
 #include <functional>
 
@@ -71,9 +74,26 @@ ConversationTeamActions addConversationTeamActions(QMenu& menu, const QList<QJso
 // Why `sessionId` cannot leave `team` from the menu, or empty when it can.
 [[nodiscard]] QString leaveRefusal(const QJsonObject& team, const QString& sessionId);
 
+// The conversations of a team's members this window lists: where each is and its id, and how
+// many of them are running a turn (a running conversation cannot be deleted).
+struct TeamMemberConversations {
+    QList<QPair<QString, QString>> conversations; // worktree path, conversation id
+    int running = 0;
+};
+// `conversationsByPath` maps a worktree path to its conversations as the sidebar lists them
+// ("id", "sessionId", "running").
+[[nodiscard]] TeamMemberConversations
+teamMemberConversations(const QJsonObject& team,
+                        const QHash<QString, QVariantList>& conversationsByPath);
+
 // Delete team… and Remove from team… ask first and say what stays. The caller connects
-// accepted() and opens it.
-ket::Dialog* teamDeleteConfirmation(QWidget* anchor, const QJsonObject& team);
+// accepted() and opens it. Delete team… offers to delete the members' conversations too
+// (the "teamDeleteConversations" check box, off by default); it is unavailable while any of
+// them runs. Their worktrees stay either way.
+ket::Dialog* teamDeleteConfirmation(QWidget* anchor, const QJsonObject& team,
+                                    const TeamMemberConversations& members = {});
+// Whether the user ticked "Also delete its conversations" in a Delete team… dialog.
+[[nodiscard]] bool deletesTeamConversations(const ket::Dialog* dialog);
 ket::Dialog* teamLeaveConfirmation(QWidget* anchor, const QJsonObject& team,
                                    const QString& memberName);
 
