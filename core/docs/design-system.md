@@ -10,7 +10,7 @@ copying web-specific implementation details.
 - Dense, operational layout with restrained decoration
 - Neutral canvas and panel surfaces with quiet borders
 - Két Blue for active and focused states. The palette follows Két Design System
-  0.1.44 (ketviet `e8adee2d`): accent `#1746FF` (hover `#1238DB`, active
+  0.1.44 (the published package): accent `#1746FF` (hover `#1238DB`, active
   `#102EB3`) for indicators, borders and focus; `accentText` (`#1238DB` light,
   `#9EB5FF` dark) for accent-coloured text and icons; and the softer
   `actionPrimary` `#365FD6` (hover `#3151C6`, pressed `#2B46B7`) for filled

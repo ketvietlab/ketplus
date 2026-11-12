@@ -251,16 +251,16 @@ class TeamPageTest final : public QObject {
                                    "Không tự mở"});
         decision.insert("recommended", longest);
         team.insert("decisions", QJsonArray{decision});
-        team.insert("name", "Kingfruit Pilot: thuế, nhập hàng loạt, bán tại quầy và báo cáo");
-        team.insert("goal",
-                    QString("Đưa Kingfruit vào chạy thử với thuế theo người mua. ").repeated(4));
+        team.insert("name", "Sample release: thuế, nhập hàng loạt, bán tại quầy và báo cáo");
+        team.insert(
+            "goal",
+            QString("Đưa Sample project vào chạy thử với thuế theo người mua. ").repeated(4));
         QJsonArray members = team.value("members").toArray();
         QJsonObject developer = members.at(1).toObject();
         developer.insert("name", "Developer 1 with a conversation title that goes on and on");
         developer.insert("provider", "Claude · Opus 5.5 · a provider label that is long");
         developer.insert("lane", "Thuế, Kế toán & Bán hàng, và mọi thứ quanh hoá đơn");
-        developer.insert("paths", QJsonArray{"ketsuite/packages/ketsuite/src/modules/account/",
-                                             "ketsuite/packages/ketsuite/src/modules/product/"});
+        developer.insert("paths", QJsonArray{"src/sample/", "src/sample/"});
         members.replace(1, developer);
         team.insert("members", members);
         QJsonArray tasks = team.value("tasks").toArray();
@@ -287,7 +287,7 @@ class TeamPageTest final : public QObject {
                               {"at", "2026-11-10T10:01:00.000Z"},
                               {"actor", "daemon"},
                               {"kind", "outside_lane"},
-                              {"text", QString("ketsuite/packages/").repeated(20)}}}}});
+                              {"text", QString("src/sample/").repeated(20)}}}}});
         TeamPage page(teams_.get(), "7", "/work/shop");
         page.show();
         const QString grabs = qEnvironmentVariable("KETPLUS_TEAM_PAGE_GRABS");
@@ -554,11 +554,10 @@ class TeamPageTest final : public QObject {
         QJsonObject team = fixture(2);
         QJsonArray tasks = team.value("tasks").toArray();
         QJsonObject long1 = tasks.at(0).toObject();
-        long1.insert(
-            "description",
-            QString("## Scope\n\nMove `ketsuite/packages/import` to the new pipeline.\n\n") +
-                QString("- Keep the public API of `ImportJob` as it is\n").repeated(14) +
-                "\n```\nnpm run test -- import\n```\n");
+        long1.insert("description",
+                     QString("## Scope\n\nMove `src/sample/` to the new pipeline.\n\n") +
+                         QString("- Keep the public API of `ImportJob` as it is\n").repeated(14) +
+                         "\n```\nnpm run test -- import\n```\n");
         long1.insert("worktree", QString("/work/shop/.worktrees/") + QString("deep/").repeated(30));
         tasks.replace(0, long1);
         team.insert("tasks", tasks);

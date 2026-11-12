@@ -88,7 +88,7 @@
           "id": "selected",
           "screen": "repository-picker-desktop",
           "title": "Repository and conversation switch together",
-          "url": "./screens/repository-picker.html?theme=dark&repo=ketviet&search=pilot&step=worktrees",
+          "url": "./screens/repository-picker.html?theme=dark&repo=sample-project&search=pilot&step=worktrees",
           "column": 1,
           "row": 0
         },
@@ -96,7 +96,7 @@
           "id": "workspace",
           "screen": "repository-picker-desktop",
           "title": "Header and sidebar follow the conversation",
-          "url": "./screens/repository-picker.html?theme=dark&repo=ketviet&picker=closed",
+          "url": "./screens/repository-picker.html?theme=dark&repo=sample-project&picker=closed",
           "column": 2,
           "row": 0
         },
@@ -145,7 +145,7 @@
         {
           "from": "choose",
           "to": "selected",
-          "label": "Select ketviet; keep the pilot search",
+          "label": "Select sample-project; keep the pilot search",
           "kind": "primary"
         },
         {
@@ -236,7 +236,7 @@
           "id": "selected",
           "screen": "repository-picker-mobile",
           "title": "Repository and conversation switch together",
-          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=ketviet&search=pilot&step=worktrees",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=sample-project&search=pilot&step=worktrees",
           "column": 1,
           "row": 0
         },
@@ -244,7 +244,7 @@
           "id": "workspace",
           "screen": "repository-picker-mobile",
           "title": "Header and sidebar follow the conversation",
-          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=ketviet&picker=closed",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=sample-project&picker=closed",
           "column": 2,
           "row": 0
         },
@@ -293,7 +293,7 @@
         {
           "from": "choose",
           "to": "selected",
-          "label": "Select ketviet; keep the pilot search",
+          "label": "Select sample-project; keep the pilot search",
           "kind": "primary"
         },
         {
@@ -4509,7 +4509,7 @@
           "id": "rows",
           "screen": "workspace",
           "title": "Two-line rows with tags",
-          "url": "./screens/workspace.html?repo=ketviet",
+          "url": "./screens/workspace.html?repo=sample-project",
           "column": 0,
           "row": 0
         },
@@ -4517,7 +4517,7 @@
           "id": "menu",
           "screen": "workspace",
           "title": "Right-click · Tags…",
-          "url": "./screens/workspace.html?repo=ketviet&context=conversation",
+          "url": "./screens/workspace.html?repo=sample-project&context=conversation",
           "column": 1,
           "row": 0
         },
@@ -4525,7 +4525,7 @@
           "id": "editor",
           "screen": "workspace",
           "title": "Tag editor",
-          "url": "./screens/workspace.html?repo=ketviet&tags=edit",
+          "url": "./screens/workspace.html?repo=sample-project&tags=edit",
           "column": 2,
           "row": 0
         },
@@ -4533,7 +4533,7 @@
           "id": "create",
           "screen": "workspace",
           "title": "Create a tag while typing",
-          "url": "./screens/workspace.html?repo=ketviet&tags=edit&tagQuery=Release",
+          "url": "./screens/workspace.html?repo=sample-project&tags=edit&tagQuery=Release",
           "column": 3,
           "row": 0
         },
@@ -4549,7 +4549,7 @@
           "id": "filtered",
           "screen": "workspace",
           "title": "Filtered by tag",
-          "url": "./screens/workspace.html?repo=ketviet&tagFilter=account",
+          "url": "./screens/workspace.html?repo=sample-project&tagFilter=account",
           "column": 1,
           "row": 1
         },
@@ -4557,7 +4557,7 @@
           "id": "managed",
           "screen": "workspace",
           "title": "Manage tags",
-          "url": "./screens/workspace.html?repo=ketviet&tags=manage",
+          "url": "./screens/workspace.html?repo=sample-project&tags=manage",
           "column": 2,
           "row": 1
         },
@@ -4565,7 +4565,7 @@
           "id": "header",
           "screen": "workspace",
           "title": "Tags in the header",
-          "url": "./screens/workspace.html?repo=ketviet&tags=header",
+          "url": "./screens/workspace.html?repo=sample-project&tags=header",
           "column": 0,
           "row": 1
         }

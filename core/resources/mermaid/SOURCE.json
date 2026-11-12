@@ -1,11 +1,9 @@
 {
-  "source_commit": "e8adee2da3bfeea66c01f46f110fdc5243fb23c0",
-  "theme_path": "ketsuite/packages/design-system/src/runtime/mermaid-theme.js",
-  "tokens_path": "ketsuite/packages/design-system/src/foundations/tokens.css",
   "package": "@ketvietlab/design-system",
   "version": "0.1.44",
   "license": "MIT",
   "theme_source_sha256": "8edf02b461a4186b7f2a3fbccce3be0f6aff121721460f04b69389b0f3b29bed",
   "tokens_source_sha256": "f920ee68488887e67430b0c71690e608068e0a691b7978f2a8b67cbe92c41d7f",
-  "localAdaptation": "Semantic colour placeholders resolve through the pinned ket-qt tokens at render time; diagram geometry and security policy are retained."
+  "localAdaptation": "Semantic colour placeholders resolve through the pinned ket-qt tokens at render time; diagram geometry and security policy are retained.",
+  "provenance": "Published package version and preserved source-content hashes; package-relative source paths are not asserted."
 }

@@ -43,7 +43,7 @@ QLabel* textLabel(const QString& text, const QString& objectName, QWidget* paren
     return value;
 }
 
-// "@agent/1022 · ketviet · archived 28 Oct", leaving out what is not known.
+// "@agent/1022 · sample-project · archived 28 Oct", leaving out what is not known.
 QString details(const QVariantMap& item) {
     QStringList parts;
     const QString number = item.value(QStringLiteral("number")).toString();
