@@ -138,7 +138,16 @@ class TeamPage final : public QWidget {
     // The goal stays open across rebuilds once the user opened it.
     bool goalExpanded_{false};
     // T-55: the written answers being typed, by decision id, and the one to focus once built.
-    QHash<QString, QString> decisionDrafts_;
+    // The cursor and the selection are kept with the text: a rebuild makes a new field.
+    struct DecisionDraft {
+        QString text;
+        int anchor{-1};
+        int position{-1};
+    };
+    QHash<QString, DecisionDraft> decisionDrafts_;
+    // A rebuild waits while a written answer is mid-composition in an input method.
+    bool rebuildDeferred_{false};
+    [[nodiscard]] bool composingDraft() const;
     QString focusDraft_;
     // The written answer just opened: it takes the keyboard when the rebuild ends.
     QPointer<QWidget> draftFocus_;

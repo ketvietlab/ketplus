@@ -1,8 +1,9 @@
 // T-55: a decision's "Other" answer, written on the card. The daemon takes free text as an
 // answer (TeamCoordinator::answerDecision trims it to 4000 characters and refuses it empty), so
 // the card offers a field after its choices instead of sending the user to the conversation.
-// The text is kept on the page, not in the widgets: the page rebuilds with every team change,
-// and a refusal leaves the text as it was typed.
+// The text, its cursor and its selection are kept on the page, not in the widgets: the page
+// rebuilds with every team change, and a refusal leaves the text as it was typed. A rebuild waits
+// while the input method is still composing a word in the field (TeamPage::rebuild).
 #include "KetButton.h"
 #include "KetTextArea.h"
 #include "teams/TeamCommands.h"
@@ -95,8 +96,29 @@ QWidget* TeamPage::decisionDraft(QWidget* card, const QString& id, const QString
     field->setMinimumLines(2);
     field->setMaximumLines(8);
     field->setMaxLength(kAnswerCharacters);
-    field->setText(decisionDrafts_.value(id));
-    field->editor()->moveCursor(QTextCursor::End);
+    // Read before setText, which reports the change and would record the cursor it leaves.
+    const DecisionDraft draft = decisionDrafts_.value(id);
+    field->setText(draft.text);
+    if (draft.position < 0) {
+        field->editor()->moveCursor(QTextCursor::End);
+    } else {
+        const int end = static_cast<int>(field->text().size());
+        QTextCursor cursor = field->editor()->textCursor();
+        cursor.setPosition(qBound(0, draft.anchor, end));
+        cursor.setPosition(qBound(0, draft.position, end), QTextCursor::KeepAnchor);
+        field->editor()->setTextCursor(cursor);
+    }
+    // Where the user is in the text, for the next rebuild.
+    const auto remember = [this, editor = QPointer<QTextEdit>(field->editor()), id] {
+        if (!editor || !decisionDrafts_.contains(id))
+            return;
+        const QTextCursor cursor = editor->textCursor();
+        DecisionDraft& kept = decisionDrafts_[id];
+        kept.anchor = cursor.anchor();
+        kept.position = cursor.position();
+    };
+    connect(field->editor(), &QTextEdit::cursorPositionChanged, this, remember);
+    connect(field->editor(), &QTextEdit::selectionChanged, this, remember);
     column->addWidget(field);
 
     auto* foot = new QHBoxLayout;
@@ -129,7 +151,7 @@ QWidget* TeamPage::decisionDraft(QWidget* card, const QString& id, const QString
     teams_->commands()->bind(cancel, key);
     connect(field, &ket::TextArea::textChanged, this, [this, alive, id, ready] {
         if (alive)
-            decisionDrafts_.insert(id, alive->text());
+            decisionDrafts_[id].text = alive->text();
         ready();
     });
     connect(teams_->commands(), &TeamCommands::pendingChanged, send,

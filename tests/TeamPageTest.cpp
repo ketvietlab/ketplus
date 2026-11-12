@@ -22,6 +22,7 @@
 
 #include <QApplication>
 #include <QHeaderView>
+#include <QInputMethodEvent>
 #include <QJsonArray>
 #include <QLabel>
 #include <QScrollArea>
@@ -550,12 +551,93 @@ class TeamPageTest final : public QObject {
         QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
         QVERIFY(button("teamDecisionOtherSend")->isEnabled());
 
-        // Sent again and taken: the decision leaves Waiting for you.
-        daemon_.answers.insert("team.decision.answer",
-                               {{"ok", true}, {"team", fixture(2, 2, false, false)}});
+        // A refused payload takes the same way: the reason on the card, the text kept.
+        const QString invalid = "The answer is too long.";
+        daemon_.answers.insert(
+            "team.decision.answer",
+            {{"ok", false}, {"error_code", "invalid_payload"}, {"error_message", invalid}});
         button("teamDecisionOtherSend")->click();
         QCOMPARE(daemon_.count("team.decision.answer"), 2);
+        QTRY_VERIFY(card()->findChild<QLabel*>("teamDecisionError")->text().contains(invalid));
+        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
+
+        // Sent again and taken: the decision leaves Waiting for you, and the answer is in Updates.
+        const QJsonObject answered = fixture(2, 2, false, false);
+        daemon_.answers.insert("team.decision.answer", {{"ok", true}, {"team", answered}});
+        daemon_.answers.insert(
+            "team.get",
+            {{"ok", true},
+             {"team", answered},
+             {"updates", QJsonArray{QJsonObject{{"id", 3},
+                                                {"at", "2026-11-10T10:02:00.000Z"},
+                                                {"text", "D-1 answered: Neither: use Adyen"}}}}});
+        button("teamDecisionOtherSend")->click();
+        QCOMPARE(daemon_.count("team.decision.answer"), 3);
         QTRY_VERIFY(!card());
+        QTRY_VERIFY(labels(&page, "teamUpdate").join('\n').contains("D-1 answered: Neither"));
+    }
+
+    // T-55 review M1: the team changes while the answer is being written. The page rebuilds, and
+    // the new field has the text, the cursor, the selection and the keyboard where they were. A
+    // word the input method is still composing holds the rebuild until it is committed.
+    void aTeamChangeKeepsTheAnswerBeingWritten() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1100, 900);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        const auto field = [&] {
+            auto* card = page.findChild<QFrame*>("teamDecision_D-1");
+            return card ? card->findChild<ket::TextArea*>("teamDecisionOtherText") : nullptr;
+        };
+        page.findChild<QFrame*>("teamDecision_D-1")
+            ->findChild<QAbstractButton*>("teamDecisionOther")
+            ->click();
+        QTRY_VERIFY(field());
+        QTRY_COMPARE(page.focusWidget(), static_cast<QWidget*>(field()->editor()));
+        QTest::keyClicks(field()->editor(), "Neither: use Adyen");
+        // Back in the middle: "use" selected, from its end to its start.
+        QTextCursor cursor = field()->editor()->textCursor();
+        cursor.setPosition(12);
+        cursor.setPosition(9, QTextCursor::KeepAnchor);
+        field()->editor()->setTextCursor(cursor);
+
+        int revision = 5;
+        const auto change = [&] {
+            QJsonObject next = fixture(revision++);
+            next.insert("name", QStringLiteral("Shop %1").arg(revision));
+            teams_->applyEvent("team.changed", {{"team", next}});
+            QApplication::processEvents();
+        };
+        QPointer<ket::TextArea> before(field());
+        change();
+        QVERIFY(!before); // the content was rebuilt
+        QVERIFY(field());
+        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen"));
+        QCOMPARE(field()->editor()->textCursor().anchor(), 12);
+        QCOMPARE(field()->editor()->textCursor().position(), 9);
+        QCOMPARE(field()->editor()->textCursor().selectedText(), QStringLiteral("use"));
+        QCOMPARE(page.focusWidget(), static_cast<QWidget*>(field()->editor()));
+        // The next keys replace the selection, not land at the end.
+        QTest::keyClicks(field()->editor(), "pay with");
+        QCOMPARE(field()->text(), QStringLiteral("Neither: pay with Adyen"));
+        QCOMPARE(field()->editor()->textCursor().position(), 17);
+
+        // Mid-composition the field stays as it is; the rebuild comes once the word is in.
+        QInputMethodEvent composing(QStringLiteral("Vi"), {});
+        QCoreApplication::sendEvent(field()->editor(), &composing);
+        before = field();
+        change();
+        QVERIFY(before);
+        QTest::qWait(300);
+        QVERIFY(before); // still composing: the rebuild waits again
+        QInputMethodEvent commit;
+        commit.setCommitString(QStringLiteral(" Việt"));
+        QCoreApplication::sendEvent(field()->editor(), &commit);
+        QTRY_VERIFY(!before);
+        QCOMPARE(field()->text(), QStringLiteral("Neither: pay with Việt Adyen"));
+        QCOMPARE(field()->editor()->textCursor().position(), 22);
+        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 7"));
     }
 
     void theTaskDialogShowsHistoryAndHandsOver() {

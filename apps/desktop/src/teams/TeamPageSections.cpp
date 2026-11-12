@@ -65,9 +65,6 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
     for (const auto& value : team.value(QStringLiteral("decisions")).toArray())
         if (value.toObject().value(QStringLiteral("state")).toString() == QStringLiteral("open"))
             open.append(value.toObject());
-    // Absent when nothing waits.
-    if (open.isEmpty())
-        return;
     // A written answer is kept only while its decision is open.
     for (auto it = decisionDrafts_.begin(); it != decisionDrafts_.end();)
         it = std::any_of(open.cbegin(), open.cend(),
@@ -76,6 +73,9 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
                          })
                  ? std::next(it)
                  : decisionDrafts_.erase(it);
+    // Absent when nothing waits.
+    if (open.isEmpty())
+        return;
     addSection(tr("Waiting for you"),
                open.size() == 1 ? tr("1 decision") : tr("%1 decisions").arg(open.size()),
                "teamWaitingHeading");
