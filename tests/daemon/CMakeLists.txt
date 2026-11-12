@@ -77,6 +77,8 @@ ketplus_add_daemon_test(ketplus_team_lane_tests TeamLaneTest.cpp)
 ketplus_add_daemon_test(ketplus_team_payload_tests TeamPayloadTest.cpp)
 ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
 ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
+# ADR 0118: done by a merged pull request or by the leader.
+ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
 # ADR 0116: team commands from paired phones, checked against the contract's fixture.
 ketplus_add_daemon_test(ketplus_team_remote_tests TeamRemoteTest.cpp)
 target_compile_definitions(ketplus_team_remote_tests PRIVATE

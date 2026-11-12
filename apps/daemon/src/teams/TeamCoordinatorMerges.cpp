@@ -48,6 +48,8 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
 }
 
 void TeamCoordinator::checkMerged(const qint64 teamId) {
+    // A merge through a pull request is the remote's to tell (ADR 0118).
+    checkPullRequests(teamId);
     const Team* team = this->team(teamId);
     if (!team)
         return;
@@ -101,7 +103,12 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
             continue;
         if (!fact->head.isEmpty() && !task->headCommit.isEmpty() && fact->head != task->headCommit)
             moved.insert(task->id, fact->head);
-        if (fact->merged && *fact->merged)
+        // A branch with no commit of its own is contained in any branch it was cut from: its
+        // work is elsewhere, as in another repository's pull request (ADR 0118).
+        const QString head = fact->head.isEmpty() ? task->headCommit : fact->head;
+        const bool ownCommits =
+            !head.isEmpty() && (task->baseCommit.isEmpty() || head != task->baseCommit);
+        if (fact->merged && *fact->merged && ownCommits)
             merged.append(task->id);
     }
     if (merged.isEmpty() && moved.isEmpty())
@@ -123,9 +130,13 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
     for (const QString& id : merged) {
         Task* task = team->task(id);
         const QString head = moved.take(id);
-        applyMove(*team, *task, state::done, QStringLiteral("daemon"),
-                  QStringLiteral("%1 contains it").arg(team->integrationBranch), updates);
-        withdrawMerge(id, QStringLiteral("%1 is merged.").arg(id));
+        finishTask(*team, *task, QStringLiteral("daemon"),
+                   QStringLiteral("%1 contains it").arg(team->integrationBranch),
+                   QStringLiteral("merged"),
+                   {{QStringLiteral("branch"), task->branch},
+                    {QStringLiteral("integration_branch"), team->integrationBranch},
+                    {QStringLiteral("commit"), head.isEmpty() ? task->headCommit : head}},
+                   updates);
         if (head.isEmpty())
             continue;
         // Too late to stop it; the leader is told what went in without a review.
@@ -151,15 +162,8 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         withdrawMerge(task->id, QStringLiteral("%1 changed after its review.").arg(task->id));
     }
     offerMerges(*team, updates);
-    const bool allDone = !team->tasks.isEmpty() &&
-                         std::all_of(team->tasks.cbegin(), team->tasks.cend(),
-                                     [](const Task& task) { return task.state == state::done; });
-    if (allDone)
-        updates.append({.kind = QStringLiteral("goal_reached"),
-                        .text = QStringLiteral("Every task is done. Report to the user once what "
-                                               "%1 contains; merging it onward is the user's.")
-                                    .arg(team->integrationBranch),
-                        .actionable = true});
+    if (!merged.isEmpty())
+        noteGoalReached(*team, updates);
     if (commit(*team, before, QStringLiteral("daemon"), updates))
         qWarning("Unable to record the merged tasks of team %lld.", static_cast<long long>(teamId));
 }

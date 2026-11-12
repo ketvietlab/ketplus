@@ -1,9 +1,13 @@
 // ADR 0114: the questions a team asks git. Nothing here reads the session runtime.
 #include "runtime/TeamGit.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
+#include <QMutex>
 #include <QProcess>
+#include <QProcessEnvironment>
 
 namespace ketplus::daemon::team_git {
 
@@ -80,21 +84,77 @@ std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Ta
     return paths;
 }
 
-std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
-    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
-        return std::nullopt;
-    // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
+namespace {
+
+// Exit 0: an ancestor; 1: not one; anything else: git could not tell.
+std::optional<bool> isAncestor(const QString& repository, const QString& commit,
+                               const QString& of) {
     QProcess process;
-    process.setWorkingDirectory(team.repository);
+    process.setWorkingDirectory(repository);
     process.start(QStringLiteral("git"),
                   {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
-                   QStringLiteral("--is-ancestor"), QStringLiteral("--end-of-options"), task.branch,
-                   team.integrationBranch});
+                   QStringLiteral("--is-ancestor"), QStringLiteral("--end-of-options"), commit,
+                   of});
     if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
         return std::nullopt;
     if (process.exitCode() == 0 || process.exitCode() == 1)
         return process.exitCode() == 0;
     return std::nullopt;
+}
+
+QString remoteIntegration(const teams::Team& team) {
+    return QStringLiteral("refs/remotes/origin/%1").arg(team.integrationBranch);
+}
+
+// ADR 0118: the integration branch as the remote has it, for a merge made there. Updates only
+// the remote-tracking branch: the checkout, its branch and its files stay as they are. At most
+// once a minute for a repository; offline it fails quietly and the last fetch counts.
+void fetchIntegration(const teams::Team& team) {
+    static QMutex mutex;
+    static QHash<QString, QDateTime> fetched;
+    const QString key = team.repository + u'\n' + team.integrationBranch;
+    {
+        const QMutexLocker lock(&mutex);
+        const auto last = fetched.constFind(key);
+        if (last != fetched.cend() && last->secsTo(QDateTime::currentDateTimeUtc()) < 60)
+            return;
+        fetched.insert(key, QDateTime::currentDateTimeUtc());
+    }
+    if (!output(team.repository,
+                {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")}))
+        return;
+    QProcess process;
+    process.setWorkingDirectory(team.repository);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    process.setProcessEnvironment(environment);
+    process.start(
+        QStringLiteral("git"),
+        {QStringLiteral("fetch"), QStringLiteral("--quiet"), QStringLiteral("--no-tags"),
+         QStringLiteral("--no-write-fetch-head"), QStringLiteral("origin"),
+         QStringLiteral("+refs/heads/%1:%2").arg(team.integrationBranch, remoteIntegration(team))});
+    if (!process.waitForFinished(20000)) {
+        process.kill();
+        process.waitForFinished(1000);
+    }
+}
+
+} // namespace
+
+std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
+    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
+        return std::nullopt;
+    const auto local = isAncestor(team.repository, task.branch, team.integrationBranch);
+    if (local && *local)
+        return true;
+    // Merged on the remote while the local branch lags (ADR 0118).
+    if (output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                                 QStringLiteral("--quiet"), remoteIntegration(team)})) {
+        const auto remote = isAncestor(team.repository, task.branch, remoteIntegration(team));
+        if (remote)
+            return *remote;
+    }
+    return local;
 }
 
 std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Task& task) {
@@ -163,6 +223,9 @@ teams::HandoffFacts handoff(const teams::Team& team, const teams::Task& task) {
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,
                                        const teams::TaskQuestion question) {
     QHash<QString, teams::TaskFacts> answers;
+    if (question == teams::TaskQuestion::Merge && !team.integrationBranch.isEmpty() &&
+        !tasks.isEmpty())
+        fetchIntegration(team);
     for (const teams::Task& task : tasks)
         answers.insert(task.id, question == teams::TaskQuestion::Merge
                                     ? teams::TaskFacts{.head = taskCommit(team, task),

@@ -78,6 +78,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
+  Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
+  a task that records a pull request is done once `gh` says it is merged, from any open
+  state, checked at load, every 2 minutes and with the merge check (at most 20 pull
+  requests a check, once a minute a team); errors move nothing and are said once. The
+  ancestor check needs the branch's own commits and accepts `origin/<integration>` after
+  a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
+  live team.
   Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
   repository's tree before the other conversations, leader, developers, reviewer; a
   member's role is in its hint and accessible description. The branch's name opens the

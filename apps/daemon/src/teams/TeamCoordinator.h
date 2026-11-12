@@ -92,6 +92,14 @@ struct HandoffFacts final {
 using WorktreeDone = std::function<void(const WorktreeAnswer&)>;
 using HandoffDone = std::function<void(const HandoffFacts&)>;
 using TaskDiffDone = std::function<void(const std::optional<TaskDiff>&)>;
+// ADR 0118: what the remote says about one pull request. `state` is "open", "merged" or
+// "closed"; empty with `error` set when the remote could not tell.
+struct PullRequestFact final {
+    QString state;
+    QString mergeCommit;
+    QString error;
+};
+using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
 
 class TeamHostPort {
   public:
@@ -131,6 +139,18 @@ class TeamHostPort {
               .branch = task.branch,
               .dirty = hasUncommittedWork(task.worktree),
               .head = taskCommit(team, task)});
+    }
+    // ADR 0118: asks the remote about the pull requests, by URL, and answers `done` on the
+    // caller's thread. Without a way to ask, every one is unknown and the leader closes the
+    // task by hand.
+    virtual void askPullRequests(const Team& team, const QStringList& urls, PullRequestsDone done) {
+        (void)team;
+        QHash<QString, PullRequestFact> facts;
+        for (const QString& url : urls)
+            facts.insert(url, {.state = {},
+                               .mergeCommit = {},
+                               .error = QStringLiteral("Pull requests cannot be checked here.")});
+        done(facts);
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
@@ -331,11 +351,23 @@ class TeamCoordinator : public QObject {
     // is asked through the host, which may answer later; one question is open for a team at a
     // time, and a check asked for meanwhile runs when it is answered.
     void checkMerged(qint64 teamId);
+    // ADR 0118 (TeamCoordinatorDone.cpp): every task that records a pull request and is not
+    // done is done once the remote says it is merged. Asked when a team is checked for merges,
+    // at load and on a timer, at most once per `minimumGap` for a team and for at most
+    // maxPullRequestsPerCheck pull requests; an error never moves a task.
+    static constexpr int defaultPullRequestPeriodMs = 2 * 60 * 1000;
+    static constexpr int defaultPullRequestGapMs = 60 * 1000;
+    static constexpr int maxPullRequestsPerCheck = 20;
+    void checkPullRequests(qint64 teamId);
+    void setPullRequestPeriod(int periodMs, int minimumGapMs);
+    // The leader closes a task by hand: `evidence` is a pull request URL or a commit.
+    TeamResult closeTask(qint64 teamId, const QString& taskId, const QString& evidence,
+                         const QString& note, const QString& actor);
     // Whether a merge check, a lane check, a review's diff or a prepared command is still
     // with git.
     [[nodiscard]] bool checksOpen() const {
-        return !mergeChecks_.isEmpty() || !laneChecks_.isEmpty() || !reviewDiffs_.isEmpty() ||
-               !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
+        return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() || !laneChecks_.isEmpty() ||
+               !reviewDiffs_.isEmpty() || !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
@@ -404,6 +436,13 @@ class TeamCoordinator : public QObject {
                         const QHash<QString, TaskFacts>& facts);
     void applyMergeFacts(qint64 teamId, const QList<Task>& asked,
                          const QHash<QString, TaskFacts>& facts);
+    void applyPullRequestFacts(qint64 teamId, const QHash<QString, PullRequestFact>& facts);
+    // Moves a task that is not done to done (ADR 0118): withdraws its merge decisions and its
+    // place with the reviewer, and records `kind` with `data` in its history.
+    void finishTask(Team& team, Task& task, const QString& actor, const QString& reason,
+                    const QString& kind, const QJsonObject& data, QList<Update>& updates);
+    // The goal_reached update, when every task is done.
+    static void noteGoalReached(const Team& team, QList<Update>& updates);
     // After a lane or the shared paths changed: clears the flagged paths they now cover.
     void recheckLanes(Team& team, QList<Update>& updates);
     // Sets a task's outside paths and records the change; false when nothing changed.
@@ -462,6 +501,12 @@ class TeamCoordinator : public QObject {
     QSet<qint64> reviewDiffs_;
     QSet<qint64> mergeChecks_;
     QSet<qint64> mergeChecksAgain_;
+    QSet<qint64> pullRequestChecks_;
+    QHash<qint64, qint64> pullRequestCheckedAt_;
+    QHash<qint64, int> pullRequestCursor_;
+    QTimer* pullRequestTimer_{nullptr};
+    int pullRequestPeriod_{defaultPullRequestPeriodMs};
+    int pullRequestGap_{defaultPullRequestGapMs};
     QSet<QString> laneChecks_;
     QSet<QString> laneChecksAgain_;
     // Prepared commands, by "<team>/<task>": those waiting for the task's worktree, and the
