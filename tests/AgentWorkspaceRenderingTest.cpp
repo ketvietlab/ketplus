@@ -2425,6 +2425,14 @@ void AgentWorkspaceViewTest::imageViewerOpensTheRowsImages() {
     QCOMPARE(viewer->property("item").toMap().value("caption").toString(), QString("second.png"));
     // The mock's tools: zoom, rotate, copy, download, print and fullscreen.
     QCOMPARE(viewer->property("tools").toInt(), 0xff);
+    // The workspace is a Quick window inside the desktop's window; the viewer covers all of
+    // the desktop's window, not only the transcript.
+    QWindow* over = imageWindow(root);
+    QVERIFY(over);
+    QTRY_VERIFY(over->isVisible());
+    QCOMPARE(over->geometry(), view.window()->geometry());
+    QVERIFY(over != view.quickView());
+    QCOMPARE(viewer->property("width").toReal(), qreal(over->width()));
     // Copy puts the picture on the clipboard and says so.
     QGuiApplication::clipboard()->clear();
     QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x10))); // Copy

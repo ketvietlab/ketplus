@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QQuickItem>
+#include <QWindow>
 
 class AgentWorkspaceViewTest final : public QObject {
     Q_OBJECT
@@ -158,6 +159,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void transcriptNoticesUseRuntimeState();
     void turnEndListsTheTurnsChangedFiles();
     void turnEndShowsTheTurnsWorkReport();
+    void forgottenItemsReadStaleAndDoNotNeedYou();
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
@@ -235,6 +237,11 @@ class AgentWorkspaceViewTest final : public QObject {
 namespace agent_workspace_test {
 
 inline ketplus::ThemePalette testPalette() { return ketplus::currentThemePalette(); }
+
+// The image viewer's own window, over the desktop's window (it is not the Quick window).
+inline QWindow* imageWindow(QObject* root) {
+    return qobject_cast<QWindow*>(root->findChild<QObject*>(QStringLiteral("imageWindow")));
+}
 
 inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
     if (item->objectName() == name) {

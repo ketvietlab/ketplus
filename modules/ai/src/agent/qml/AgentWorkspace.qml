@@ -619,52 +619,91 @@ Item {
     }
 
     // The image viewer over the whole window, as the mock opens a capture or an image file.
-    Kit.KetLightbox {
-        id: imagePreview
-        objectName: "imagePreview"
-        tools: Kit.KetTheme.LightboxTool.ZoomOut | Kit.KetTheme.LightboxTool.ZoomLevel
-               | Kit.KetTheme.LightboxTool.ZoomIn | Kit.KetTheme.LightboxTool.Rotate
-               | Kit.KetTheme.LightboxTool.Copy | Kit.KetTheme.LightboxTool.Download
-               | Kit.KetTheme.LightboxTool.Print | Kit.KetTheme.LightboxTool.Fullscreen
-        readonly property url imageSource: item ? item.source : ""
-        // Opens image URLs at `index`; each is captioned with its file name.
-        function showImages(sources, index) {
-            items = (sources || []).map(source => ({
-                source: source.toString(),
-                caption: agentHost.imageCaption(source)
-            }));
-            openAt(index || 0);
+    // The workspace is a Quick window inside the desktop's window, and a popup cannot leave
+    // it, so the viewer has a frameless window of its own over the top-level window.
+    Window {
+        id: imageWindow
+        objectName: "imageWindow"
+        flags: Qt.Tool | Qt.FramelessWindowHint
+        color: "transparent"
+        transientParent: null
+        visible: false
+        function follow() {
+            const area = agentHost.hostWindowGeometry()
+            if (area.width <= 0 || area.height <= 0)
+                return
+            x = area.x
+            y = area.y
+            width = area.width
+            height = area.height
         }
-        // Opens items that carry their own caption: [{ source, caption }].
-        function showItems(list, index) {
-            items = list || [];
-            openAt(index || 0);
+        function present() {
+            follow()
+            show()
+            raise()
+            requestActivate()
         }
-        // A Mermaid diagram opened before its dark rendering was ready takes it once drawn,
-        // while the viewer still shows that diagram.
-        function refreshMermaid() {
-            const shown = item;
-            if (!opened || !shown || !shown.diagram)
-                return;
-            const next = agentHost.mermaidViewerImage(shown.diagram);
-            if (!next.source || String(next.source) === String(shown.source))
-                return;
-            const list = items.slice();
-            list[currentIndex] = next;
-            items = list;
+        // The desktop's window can move, resize or turn full screen while the viewer is open.
+        Timer {
+            interval: 250
+            repeat: true
+            running: imageWindow.visible
+            onTriggered: imageWindow.follow()
         }
-        onToolTriggered: tool => {
-            if (!item)
-                return;
-            if (tool === Kit.KetTheme.LightboxTool.Copy)
-                imageToast.show(agentHost.copyImage(item.source, rotationAngle) ? "Copied the image" : "The image could not be copied");
-            else if (tool === Kit.KetTheme.LightboxTool.Download) {
-                const saved = agentHost.saveImageToDownloads(item.source);
-                imageToast.show(saved ? "Saved " + saved.split("/").pop() + " to Downloads" : "The image could not be saved");
-            } else if (tool === Kit.KetTheme.LightboxTool.Print)
-                agentHost.printImage(item.source, rotationAngle, item.caption);
-            else if (tool === Kit.KetTheme.LightboxTool.Fullscreen)
-                agentHost.toggleWindowFullScreen();
+        Kit.KetLightbox {
+            id: imagePreview
+            objectName: "imagePreview"
+            tools: Kit.KetTheme.LightboxTool.ZoomOut | Kit.KetTheme.LightboxTool.ZoomLevel
+                   | Kit.KetTheme.LightboxTool.ZoomIn | Kit.KetTheme.LightboxTool.Rotate
+                   | Kit.KetTheme.LightboxTool.Copy | Kit.KetTheme.LightboxTool.Download
+                   | Kit.KetTheme.LightboxTool.Print | Kit.KetTheme.LightboxTool.Fullscreen
+            readonly property url imageSource: item ? item.source : ""
+            // Opens image URLs at `index`; each is captioned with its file name.
+            function showImages(sources, index) {
+                items = (sources || []).map(source => ({
+                    source: source.toString(),
+                    caption: agentHost.imageCaption(source)
+                }));
+                imageWindow.present();
+                openAt(index || 0);
+            }
+            // Opens items that carry their own caption: [{ source, caption }].
+            function showItems(list, index) {
+                items = list || [];
+                imageWindow.present();
+                openAt(index || 0);
+            }
+            // A Mermaid diagram opened before its dark rendering was ready takes it once drawn,
+            // while the viewer still shows that diagram.
+            function refreshMermaid() {
+                const shown = item;
+                if (!opened || !shown || !shown.diagram)
+                    return;
+                const next = agentHost.mermaidViewerImage(shown.diagram);
+                if (!next.source || String(next.source) === String(shown.source))
+                    return;
+                const list = items.slice();
+                list[currentIndex] = next;
+                items = list;
+            }
+            onClosed: imageWindow.hide()
+            onToolTriggered: tool => {
+                if (!item)
+                    return;
+                if (tool === Kit.KetTheme.LightboxTool.Copy)
+                    imageToast.show(agentHost.copyImage(item.source, rotationAngle) ? "Copied the image" : "The image could not be copied");
+                else if (tool === Kit.KetTheme.LightboxTool.Download) {
+                    const saved = agentHost.saveImageToDownloads(item.source);
+                    imageToast.show(saved ? "Saved " + saved.split("/").pop() + " to Downloads" : "The image could not be saved");
+                } else if (tool === Kit.KetTheme.LightboxTool.Print)
+                    agentHost.printImage(item.source, rotationAngle, item.caption);
+                else if (tool === Kit.KetTheme.LightboxTool.Fullscreen)
+                    agentHost.toggleWindowFullScreen();
+            }
+        }
+        Kit.KetToast {
+            id: imageToast
+            objectName: "imageToast"
         }
     }
     Connections {
@@ -672,8 +711,8 @@ Item {
         function onMermaidChanged() { imagePreview.refreshMermaid() }
     }
     Kit.KetToast {
-        id: imageToast
-        objectName: "imageToast"
+        id: workspaceToast
+        objectName: "workspaceToast"
     }
 
     function openTranscriptFind() {
@@ -1317,7 +1356,7 @@ Item {
             // The draft stays in the composer and sends once the provider is set up.
             root.heldMessage = {provider: root.selectedProvider, scope: root.draftScope, text: prompt.text}
             root.showProviderSetup()
-            imageToast.show("Set up " + root.providerTitle(root.selectedProvider) + " first. Your message is kept.")
+            workspaceToast.show("Set up " + root.providerTitle(root.selectedProvider) + " first. Your message is kept.")
             return
         }
         agentHost.submitConfiguredPrompt(value, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
@@ -1606,7 +1645,7 @@ Item {
                             const hidden = Object.assign({}, root.hiddenSetups)
                             hidden[root.selectedProvider] = true
                             root.hiddenSetups = hidden
-                            imageToast.show("Setup steps hidden. Open them again from the model button below, or Settings › Providers.")
+                            workspaceToast.show("Setup steps hidden. Open them again from the model button below, or Settings › Providers.")
                         }
                     }
                 }

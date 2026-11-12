@@ -123,7 +123,7 @@ void AgentWorkspaceViewTest::browserEvidenceStaysVisible() {
     auto* preview = root->findChild<QObject*>("imagePreview");
     QVERIFY(preview);
     QTRY_VERIFY(preview->property("visible").toBool());
-    QTest::keyClick(view.quickView(), Qt::Key_Escape);
+    QTest::keyClick(imageWindow(root), Qt::Key_Escape);
     // Replayed history keeps screenshots outside collapsed activity groups too.
     view.resetMessages({before, completed, after}, "browser-replay");
     QTRY_COMPARE(view.messageModel()->rowCount(), 1);
@@ -1158,7 +1158,7 @@ void AgentWorkspaceViewTest::activityGalleryLoadsInBatches() {
     QVERIFY(popup);
     QTRY_VERIFY(popup->property("visible").toBool());
     QCOMPARE(popup->property("imageSource").toUrl().toLocalFile(), path);
-    QTest::keyClick(view.quickView(), Qt::Key_Escape);
+    QTest::keyClick(imageWindow(root), Qt::Key_Escape);
     QTRY_VERIFY(!popup->property("visible").toBool());
 }
 

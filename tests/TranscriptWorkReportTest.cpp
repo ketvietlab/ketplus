@@ -196,6 +196,54 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
 
 // ADR 0106: turn.completed repeats the report, so a page that begins after the turn's
 // work_report.updated events still shows the card and copies the table.
+// An open item no call changed for work_report::staleTurns was likely forgotten by the agent:
+// it reads muted with how long it waited, and does not make the report need you.
+void AgentWorkspaceViewTest::forgottenItemsReadStaleAndDoNotNeedYou() {
+    const QJsonObject report{
+        {"title", "Team"},
+        {"turn", 40},
+        {"version", 9},
+        {"items",
+         QJsonArray{reportItem("first-assignments", "Plan", "waiting", 2, 2,
+                               {{"next", QJsonObject{{"action", "Press Start"}, {"owner", "user"}}}}),
+                    reportItem("t-16", "Tasks", "active", 30, 39)}}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(1, 40, "user.message", {{"text", "Go on"}}),
+                               journalEvent(2, 40, "work_report.updated", report),
+                               journalEvent(3, 40, "turn.completed", {{"status", "completed"}})}}});
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages(rows, "work-report-stale");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QVERIFY(!card->property("needsYou").toBool());
+    // A group of waiting items starts collapsed; open each to read its rows.
+    for (const QVariant& group : card->property("groups").toList()) {
+        QVariant open;
+        QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                          Q_ARG(QVariant, group)));
+        if (!open.toBool())
+            QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, group)));
+    }
+    QStringList badges;
+    QTRY_VERIFY(([&] {
+        badges.clear();
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (item->objectName() == "workReportItemBadge" && item->isVisible())
+                badges << item->property("text").toString();
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, card);
+        return !badges.isEmpty();
+    })());
+    QVERIFY2(badges.contains("No update for 38 turns"), qPrintable(badges.join(", ")));
+    QVERIFY2(!badges.contains("No update for 1 turns"), qPrintable(badges.join(", ")));
+}
+
 void AgentWorkspaceViewTest::turnEndReportSurvivesAHistoryPageSplit() {
     const QJsonObject report{
         {"title", "Picker"},

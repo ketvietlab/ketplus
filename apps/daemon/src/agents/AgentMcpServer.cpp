@@ -72,6 +72,14 @@ QJsonObject workReportTool() {
                    QStringLiteral("What is left, or the blocker. Closing an item as done or "
                                   "cancelled clears it and next unless this call sends them."))},
          {QStringLiteral("next"), next},
+         {QStringLiteral("replaces"),
+          QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                      {QStringLiteral("items"), QJsonObject{{QStringLiteral("type"),
+                                                            QStringLiteral("string")}}},
+                      {QStringLiteral("description"),
+                       QStringLiteral("Keys of items that are the same work as this one, reported "
+                                      "earlier under another key. They are cancelled as replaced "
+                                      "by this item.")}}},
          {QStringLiteral("verified"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
                       {QStringLiteral("items"),
@@ -90,7 +98,8 @@ QJsonObject workReportTool() {
              "Update this conversation's work report, which KetPlus shows to the user at the "
              "end of the turn. Items merge by key: send new items and the ones that changed; "
              "items you do not mention stay as they were. Never include secrets, credentials, "
-             "tokens or file contents. The answer has the counts the user sees.")},
+             "tokens or file contents. The answer has the counts the user sees and every open "
+             "item, also ones from earlier turns: reconcile them before the turn ends.")},
         {QStringLiteral("inputSchema"),
          schema({{QStringLiteral("title"),
                   property(QStringLiteral("string"),

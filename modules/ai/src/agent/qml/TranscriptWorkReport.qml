@@ -43,10 +43,14 @@ Rectangle {
     property var closedGroups: Object.create(null)
     readonly property int total: counted(items).length
     readonly property int finished: done(items)
-    readonly property bool needsYou: items.some(item => !closed(item) && item.next && item.next.owner === "user")
+    // An open item no call changed for this many turns (work_report::staleTurns): likely
+    // forgotten by the agent, so it reads muted and does not make the report need you.
+    readonly property int staleTurns: 20
+    readonly property bool needsYou: items.some(item => !closed(item) && !stale(item) && item.next && item.next.owner === "user")
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function closed(item) { return item.status === "done" || item.status === "cancelled" }
+    function stale(item) { return !closed(item) && turn - (item.updated_turn || 0) >= staleTurns }
     function counted(list) { return list.filter(item => item.status !== "cancelled") }
     function done(list) { return counted(list).filter(item => item.status === "done").length }
     function change(item) {
@@ -273,6 +277,7 @@ Rectangle {
                         readonly property bool expanded: card.openItem === modelData.key
                         readonly property string change: card.change(modelData)
                         readonly property var next: modelData.next || null
+                        readonly property bool stale: card.stale(modelData)
                         width: parent.width
                         spacing: 0
 
@@ -309,17 +314,19 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: entry.modelData.title
                                     elide: Text.ElideRight
-                                    color: entry.modelData.status === "cancelled" ? KetTheme.t.textMuted : KetTheme.t.textMain
+                                    color: entry.modelData.status === "cancelled" || entry.stale ? KetTheme.t.textMuted : KetTheme.t.textMain
                                     font.strikeout: entry.modelData.status === "cancelled"
                                     font.family: KetTheme.fontFamily
                                     font.pixelSize: card.px(13)
                                 }
                                 Kit.KetBadge {
                                     id: changeBadge
-                                    visible: entry.change !== ""
+                                    objectName: "workReportItemBadge"
+                                    visible: entry.change !== "" || entry.stale
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: entry.change === "new" ? qsTr("New") : qsTr("Updated")
-                                    tone: KetTheme.BadgeTone.Info
+                                    text: entry.change === "new" ? qsTr("New") : entry.change !== "" ? qsTr("Updated")
+                                        : qsTr("No update for %1 turns").arg(card.turn - (entry.modelData.updated_turn || 0))
+                                    tone: entry.change !== "" ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral
                                 }
                             }
                             Text {
@@ -329,7 +336,7 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: card.closed(entry.modelData) || !entry.next
                                       ? card.statusLabel(entry.modelData.status) : card.owner(entry.next.owner)
-                                color: !card.closed(entry.modelData) && entry.next && entry.next.owner === "user"
+                                color: !card.closed(entry.modelData) && !entry.stale && entry.next && entry.next.owner === "user"
                                        ? KetTheme.t.warning : KetTheme.t.textMuted
                                 font.family: KetTheme.fontFamily
                                 font.pixelSize: card.px(12)

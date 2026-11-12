@@ -101,6 +101,21 @@ cannot count it, filter it or show it anywhere else.
     the turn ends, when the end-of-turn card takes over. The desktop marks a
     `work_report.updated` of the running turn as current; a new turn or another
     conversation starts without it.
+- **Reconciling a long conversation.** The agent cannot read the stored ledger, so after
+  many turns and compactions it forgot keys: it reported the same work again under new
+  keys and never closed items from early turns (a team leader had 41 open items of 74 at
+  turn 156, eight of them untouched since turn 2). Therefore:
+  - The tool's answer lists every open item (key, status, title capped at 120 characters,
+    `updated_turn`), newest first, at most 100, with a `reconcile` instruction. An open
+    item no call changed for 20 turns (`staleTurns`) is marked `stale`, and `stale` counts
+    them. The response guidance asks the agent to close finished or obsolete items, confirm
+    or close stale ones and never add a new key for listed work; a team task's key is its
+    task id.
+  - An item may carry `replaces: [keys]`: the same work reported earlier under another key.
+    Those open items become `cancelled` with `replaced_by`; done items stay done. A key the
+    report does not have, or one the same call also reports, is refused in words.
+  - The card shows a stale item muted with "No update for N turns", and a stale item whose
+    next step is the user's does not make the report "Needs you".
 
 ## Consequences
 
