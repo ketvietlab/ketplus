@@ -15,6 +15,14 @@ Windows, macOS, and Linux. One source tree builds two editions:
 Both editions are open source under MPL 2.0. The KétPlus mobile apps and the
 hosted relay, gateway and account services are separate proprietary products.
 
+<p align="center">
+  <img src="docs/images/ketplus-pro-team.png" alt="A team page in KétPlus Pro: the decisions waiting for the user, the tasks with their owners, lanes and states, and the sidebar tree of repositories, teams and conversations" width="900">
+</p>
+
+A team in KétPlus Pro: a leader plans the tasks, developers work on them and a
+reviewer checks each one, while decisions wait for the user. The picture is the
+design mock in [`mockups/qt`](mockups/qt/README.md) with fixture data.
+
 The first milestone deliberately stays small: reliable file editing, tabs,
 UTF-8, syntax lexing, and a native desktop experience. Optional Atlas tabs use
 the platform WebView (WebKit on macOS).

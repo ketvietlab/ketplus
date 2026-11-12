@@ -4,6 +4,7 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
 #include <utility>
 
 namespace ketplus {
@@ -41,28 +42,49 @@ void LinuxMachineModel::upsert(const LinuxMachine& machine) {
     emit machinesChanged();
 }
 
-void LinuxMachineModel::setRelayMachines(const QStringList& ids) {
+QString LinuxMachineModel::relayMachineId(const LinuxRelayListing& listing) {
+    return listing.fingerprint.isEmpty() ? QStringLiteral("relay:") + listing.relayId
+                                         : listing.fingerprint;
+}
+
+void LinuxMachineModel::setRelayMachines(const QList<LinuxRelayListing>& listed) {
     QList<LinuxMachine> next;
-    QSet<QString> relay;
-    for (const auto& machine : std::as_const(machines_))
-        if (machine.route == LinuxMachine::Route::Ssh)
-            next.append(machine);
-    for (const auto& id : ids) {
-        if (id.isEmpty() || relay.contains(id))
+    for (auto machine : std::as_const(machines_)) {
+        if (machine.route != LinuxMachine::Route::Ssh)
             continue;
-        relay.insert(id);
+        machine.relayId.clear(); // set again below while the Relay still lists it
+        next.append(machine);
+    }
+    QSet<QString> relayIds;
+    for (const auto& listing : listed) {
+        if (listing.relayId.isEmpty() || relayIds.contains(listing.relayId))
+            continue;
+        relayIds.insert(listing.relayId);
+        const QString id = relayMachineId(listing);
+        // The same host reached over SSH, or listed twice: one machine, the Relay its attribute.
+        const auto same =
+            std::find_if(next.begin(), next.end(),
+                         [&id](const LinuxMachine& machine) { return machine.id == id; });
+        if (same != next.end()) {
+            if (same->relayId.isEmpty())
+                same->relayId = listing.relayId;
+            continue;
+        }
         if (const auto* known = machine(id); known && known->route == LinuxMachine::Route::Relay) {
             next.append(*known);
+            next.last().relayId = listing.relayId;
             continue;
         }
         // Listed by the Relay's worktree index, so the Relay reached it; T-6 reports live state.
-        LinuxMachine listed;
-        listed.id = id;
-        listed.name = id;
-        listed.detail = tr("Linux · Trusted");
-        listed.route = LinuxMachine::Route::Relay;
-        listed.state = LinuxMachine::State::Connected;
-        next.append(listed);
+        LinuxMachine relay;
+        relay.id = id;
+        relay.name = listing.relayId;
+        relay.detail = tr("Linux · Trusted");
+        relay.route = LinuxMachine::Route::Relay;
+        relay.state = LinuxMachine::State::Connected;
+        relay.fingerprint = listing.fingerprint;
+        relay.relayId = listing.relayId;
+        next.append(relay);
     }
     setMachines(std::move(next));
 }

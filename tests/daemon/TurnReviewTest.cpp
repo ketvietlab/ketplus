@@ -188,6 +188,8 @@ class TurnReviewTest final : public QObject {
         const QJsonObject delivered = fixture.payloads(reviewer, "user.message").last();
         QCOMPARE(delivered.value("origin").toString(), "agent");
         QVERIFY(delivered.value("review_guard").toBool());
+        // ADR 0067's turn review keeps the read profile (ADR 0114 §2 has the verify one).
+        QCOMPARE(delivered.value("review_profile").toString(), "read");
         const QJsonObject review = delivered.value("agent_messages").toArray().first().toObject();
         QCOMPARE(review.value("kind").toString(), "review");
         QVERIFY(review.value("expect_reply").toBool());
@@ -201,6 +203,8 @@ class TurnReviewTest final : public QObject {
         // The review turn ran read-only and could not ask for more.
         const QByteArray log = logText(fixture.claudeLog);
         QVERIFY(log.contains("\"reviewGuard\": true"));
+        QVERIFY(log.contains("\"reviewProfile\": \"read\""));
+        QVERIFY(!log.contains("scratchDirectory"));
         QVERIFY(log.contains("\"permission\": \"read-only\""));
 
         // "finished" has no verdict, so it counts as findings: the working agent fixes them.
@@ -277,6 +281,18 @@ class TurnReviewTest final : public QObject {
         QVERIFY(!QJsonDocument(own).toJson().contains("held diff"));
         QVERIFY(!logText(fixture.claudeLog).contains("held diff"));
         QCOMPARE(fixture.journal->agentMessage("held-review")->state, "held");
+        // Nor can an unguarded turn read it from the inbox and review outside the guard.
+        const QJsonObject inbox = fixture.agents(reviewer, "agents.inbox");
+        QVERIFY2(inbox.value("ok").toBool(), qPrintable(text(inbox)));
+        QVERIFY(!QJsonDocument(inbox).toJson().contains("held diff"));
+        const QJsonObject one =
+            fixture.agents(reviewer, "agents.inbox", {{"message_id", "held-review"}});
+        QVERIFY(one.value("ok").toBool());
+        QVERIFY(one.value("message").toObject().value("body").toString().contains(
+            "review turn of its own"));
+        // The sender still sees what it sent.
+        QVERIFY(
+            QJsonDocument(fixture.agents(working, "agents.inbox")).toJson().contains("held diff"));
     }
 
     void aReplySentWithAgentsSendFollowsTheVerdictPolicy() {
@@ -447,14 +463,17 @@ class TurnReviewTest final : public QObject {
                      {"prompt", "plain"},
                      {"options", QJsonObject{{"provider", "claude"},
                                              {"permission", "danger-full-access"},
-                                             {"review_guard", true}}}}),
+                                             {"review_guard", true},
+                                             {"review_profile", "verify"}}}}),
             "desktop-test");
         QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
         const QString sessionId = result.value("session_id").toString();
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sessionId, "turn.completed"), 1, 5000);
         const QByteArray log = logText(fixture.claudeLog);
         QVERIFY(!log.contains("\"reviewGuard\""));
+        QVERIFY(!log.contains("reviewProfile"));
         QVERIFY(!fixture.payloads(sessionId, "user.message").last().contains("review_guard"));
+        QVERIFY(!fixture.payloads(sessionId, "user.message").last().contains("review_profile"));
     }
 };
 

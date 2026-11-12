@@ -36,6 +36,9 @@ class ControlV2Client final : public QObject {
     void pairingStatus(const QString& ticketId, Callback done);
     void cancelPairing();
     bool acceptPairing(const QJsonObject& approvedTicket, QString* error = nullptr);
+    // The host key fingerprint pinned for the Relay's `machineId` when this client paired with
+    // it (#88), for its newest key version; empty when none is. ADR 0119 names the machine by it.
+    [[nodiscard]] QString pinnedFingerprint(const QString& machineId) const;
     void listSessions(Callback done);
     void listWorktrees(Callback done);
     void events(const QJsonObject& session, qint64 afterCursor, Callback done);

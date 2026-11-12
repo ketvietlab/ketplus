@@ -6,6 +6,7 @@
 #include "runtime/ApprovalBroker.h"
 #include "runtime/CompactWindowPolicy.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -192,8 +193,20 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                        // reaches the agent as its prompt-free mode, not only Codex's sandbox.
                        {QStringLiteral("permission"), sandboxName(options)},
                        {QStringLiteral("images"), imagePaths(input)}};
-    if (reviewGuard(options))
+    if (reviewGuard(options)) {
         params.insert(QStringLiteral("reviewGuard"), true);
+        // ADR 0114 §2: a team's review round verifies; anything else stays read-only.
+        const QString scratch = reviewScratchDirectory(sessionId);
+        if (options.value(QStringLiteral("review_profile")).toString() ==
+                QStringLiteral("verify") &&
+            QDir().mkpath(scratch)) {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("verify"));
+            params.insert(QStringLiteral("scratchDirectory"),
+                          QFileInfo(scratch).canonicalFilePath());
+        } else {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("read"));
+        }
+    }
     params.insert(QStringLiteral("freshContext"), it->stored.threadId.isEmpty());
     // The handoff transcript lives outside the worktree; Claude may read it without asking.
     const QString handoff = handoffDirectory(sessionId);
@@ -468,6 +481,12 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     session.lastAnswerText.clear();
     session.decisionRequested = false;
     return completed;
+}
+
+QString SessionHost::reviewScratchDirectory(const QString& sessionId) const {
+    return QFileInfo(journal_->databasePath())
+        .dir()
+        .filePath(QStringLiteral("review-scratch/%1").arg(sessionId));
 }
 
 } // namespace ketplus::daemon

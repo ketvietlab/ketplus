@@ -9,7 +9,11 @@ Item {
     property real size: 17
     property bool dark: KetTheme.dark
     property color textColor: KetTheme.t.textMain
-    readonly property color brandColor: dark ? "#AD97FA" : "#4332C8"
+    // "Plus", the Pro frame and its text are the interface's accent: the kit's accent-text
+    // token. A specimen drawn in the other theme (the Brand screen) uses that theme's value of
+    // the same token, which KetTheme does not expose for the theme it is not in.
+    readonly property color brandColor: dark === KetTheme.dark ? KetTheme.t.accentText
+                                        : dark ? "#9EB5FF" : "#1238DB"
     readonly property real markSize: size * 1.45
     implicitWidth: markSize + markSize * 0.12 + word.implicitWidth
                    + (edition === "pro" ? size * 0.3 + badge.width : 0)

@@ -58,7 +58,71 @@ the request is skipped or fails with `reviewer_unsupported`.
 The guard applies only to review requests, and a review request runs only in such
 a turn. A queued review waits for the reviewer's next own turn rather than joining
 a turn the user starts there, and a held one waits for an explicit release. The
-reviewer's user-started turns keep its mode.
+reviewer's user-started turns keep its mode. While a review request is queued or
+held, `agents_inbox` shows the reviewer its row but not its body, so a turn under
+another mode cannot read the request and carry it out unguarded.
+
+### Two review profiles
+
+The guard has two profiles. The broker chooses one for each turn from the messages
+that start it (`review_profile` next to `review_guard` in the turn's origin), and
+clients can set neither:
+
+- **read**: a review request from another conversation, the review of one finished
+  turn described above. This is a reading job: plan mode, the local reading and search
+  tools (Read, Glob, Grep, LS, NotebookRead, ToolSearch), the agents server, and every
+  other tool (Bash, WebFetch and WebSearch included) refused without a prompt.
+  The refusal is a `PreToolUse` hook, as for the verify profile: plan mode alone only
+  tells the model not to act, and an allow rule in a user or project settings file
+  lets a tool call past `canUseTool`, which is how Bash ran in guarded reviews before.
+  A batch that holds such a request runs entirely under this profile.
+- **verify**: a review request the team itself sends for a task in `in_review`
+  (ADR 0114 §2). It has no sending conversation, which no conversation can imitate.
+  The reviewer checks acceptance criteria that need builds, tests and screenshots.
+  Claude runs in `permissionMode: default` and decides every tool call without a
+  prompt. It may read and search, run commands, use `ketplus_agents` and
+  `ketplus_browser`, and edit files only inside its scratch directory
+  (`review-scratch/<session id>` next to the journal, removed with the session). It
+  is refused, with a message that a review cannot do it, edits outside the scratch
+  directory; git commands that commit, push, merge, rebase, reset, switch or check
+  out, stash, clean, tag, or remove or move a worktree or branch; `gh` pull-request
+  merge, review, close, edit or comment, and `gh api` writes; any other MCP server;
+  sub-agents; `ExitPlanMode`, `EnterPlanMode` and `AskUserQuestion`.
+
+How the verify profile is enforced:
+
+- **Writes by commands** are bounded by the provider's command sandbox, not by
+  reading commands: `sandbox.enabled` with `failIfUnavailable`,
+  `allowUnsandboxedCommands: false` and a write allow-list of the scratch and
+  temporary directories, with the reviewed worktree on the deny list even when it
+  lies under a temporary directory. A platform without the sandbox (Linux without
+  bubblewrap) fails the review turn instead of running it unbounded.
+- **Tool calls** pass a `PreToolUse` hook that blocks on failure. It runs before
+  permission rules, so an allow rule in a user or project settings file cannot widen
+  the profile. `canUseTool` takes the same decision for whatever still asks.
+- **Command text** is checked as a second layer only: each simple command of a line,
+  through pipes, chains, subshells and `env` or `sudo` prefixes, is matched against
+  the git and `gh` lists above.
+
+Residual risk, in plain words: the command list is best effort. A command that hides
+`git push` or `gh pr merge` behind a script, an alias or another program is not
+recognised by the text check, and the sandbox does not stop network requests, so such
+a command can still publish to a remote with the user's credentials. It cannot change
+the files of the reviewed checkout or its `.git` directory, because the sandbox
+refuses those writes. A build that writes outside the scratch and temporary
+directories (a cache in the home directory, a build tree inside the worktree) fails,
+so the verify turn sets the common cache variables (`XDG_CACHE_HOME`, `npm_config_cache`,
+`CCACHE_DIR`, `PIP_CACHE_DIR`, `GOCACHE`, `CARGO_HOME`) into the scratch directory and
+tells the reviewer, in its system prompt, its scratch path and where builds go: a CMake
+tree with `-B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
+-clonedSourcePackagesDirPath <scratch>/SourcePackages`, and a copy of the checkout in the
+scratch directory for a script that writes into its own tree.
+
+Each turn's profile depends only on that turn's launch. The sidecar reuses a live
+query only for a launch with the same profile and scratch directory, and starts a
+fresh query, resuming the same provider thread, when the profile changes. A new
+session, a resumed one, one already loaded under another mode and one after a daemon
+restart therefore get the same profile for the same review request.
 
 ### Trigger and request
 

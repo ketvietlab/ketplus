@@ -6,6 +6,7 @@ import { ClaudeTranscript } from "./transcript.mjs";
 import { TurnInput, userMessage } from "./input.mjs";
 import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
+import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
 import { open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -391,7 +392,8 @@ function launchKey(params) {
     params.readableDirectories || [],
     params.compactWindow || 0,
     params.authentication?.revision || "",
-    params.reviewGuard === true,
+    reviewProfile(params),
+    params.scratchDirectory || "",
   ]);
 }
 
@@ -527,7 +529,8 @@ async function continueRun(run, messageId, params, prompt, images) {
   }
   const q = run.query;
   const effort = typeof params.effort === "string" ? params.effort : "";
-  run.permissionMode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
+  run.permissionMode = reviewProfile(params) === "read" ? "plan"
+    : reviewProfile(params) === "verify" ? "default" : permissionMode(params.permission);
   for (const change of [
     () => q.applyFlagSettings
       ? q.applyFlagSettings({ model: params.model || "sonnet", effortLevel: effort || null })
@@ -552,7 +555,9 @@ async function continueRun(run, messageId, params, prompt, images) {
 
 async function startRun(messageId, params, prompt, images) {
   const sessionId = params.sessionId;
-  const mode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
+  // ADR 0067 and ADR 0114 §2: a review turn's profile, decided by this launch alone.
+  const profile = reviewProfile(params);
+  const mode = profile === "read" ? "plan" : profile === "verify" ? "default" : permissionMode(params.permission);
   const abortController = new AbortController();
   const stop = {};
   let release;
@@ -586,13 +591,15 @@ async function startRun(messageId, params, prompt, images) {
   const agentsInjected = Object.hasOwn(mcpServers, "ketplus_agents");
   // KetPlus Computer enforces per-app grants itself, so its tools need no prompt.
   const computerInjected = Object.hasOwn(mcpServers, "ketplus_computer");
-  // ADR 0067: a review of another conversation's turn may read and reply, nothing else.
-  const reviewGuard = params.reviewGuard === true;
-  const hostTools = reviewGuard ? (agentsInjected ? ["mcp__ketplus_agents__*"] : []) : [
+  const reviewContext = { scratch: params.scratchDirectory || "", cwd: run.cwd, agentsInjected, browserInjected };
+  const review = profile ? reviewOptions(profile, reviewContext) : null;
+  const hostTools = review ? review.allowedTools : [
     ...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
     ...(agentsInjected ? ["mcp__ketplus_agents__*"] : []),
     ...(computerInjected ? ["mcp__ketplus_computer__*"] : []),
   ];
+  const readable = [...(Array.isArray(params.readableDirectories) ? params.readableDirectories : []),
+    ...(review?.additionalDirectories || [])];
   const effort = typeof params.effort === "string" ? params.effort : "";
   try {
     run.authenticationRevision = params.authentication?.revision || "";
@@ -601,17 +608,20 @@ async function startRun(messageId, params, prompt, images) {
     emitUsageEvent(sessionId, "usage.session", sessionUsage(run.authentication));
     run.input = new TurnInput(await promptMessage(prompt, images));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
+    const authentication = authenticationOptions(params.authentication);
+    const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
+      review?.instructions || ""].filter(Boolean).join("\n\n");
     const q = queryFn({
       prompt: run.input,
       options: {
-        ...authenticationOptions(params.authentication),
+        ...authentication,
+        // A verify review's caches live in its scratch directory (ADR 0067).
+        ...(review?.env ? { env: { ...(authentication.env || process.env), ...review.env } } : {}),
         cwd: run.cwd,
         mcpServers,
         // The daemon derives this from the same launch as mcpServers on every query,
         // including resume. Preserve Claude Code's system prompt and the user's input.
-        ...(typeof params.browserInstructions === "string" && params.browserInstructions
-          ? { systemPrompt: { type: "preset", preset: "claude_code", append: params.browserInstructions } }
-          : {}),
+        ...(appended ? { systemPrompt: { type: "preset", preset: "claude_code", append: appended } } : {}),
         allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.
@@ -619,11 +629,11 @@ async function startRun(messageId, params, prompt, images) {
         ...(effort ? { effort } : {}),
         ...(effort in thinkingTokens ? { maxThinkingTokens: thinkingTokens[effort] } : {}),
         // A handoff transcript from another provider, readable without a permission prompt.
-        ...(Array.isArray(params.readableDirectories) && params.readableDirectories.length > 0
-          ? { additionalDirectories: params.readableDirectories }
-          : {}),
-        permissionMode: reviewGuard ? "plan" : mode,
-        allowDangerouslySkipPermissions: !reviewGuard && mode === "bypassPermissions",
+        ...(readable.length > 0 ? { additionalDirectories: readable } : {}),
+        ...(review?.sandbox ? { sandbox: review.sandbox } : {}),
+        ...(review?.hooks ? { hooks: review.hooks } : {}),
+        permissionMode: mode,
+        allowDangerouslySkipPermissions: !profile && mode === "bypassPermissions",
         includePartialMessages: true,
         persistSession: true,
         resume: params.resume || undefined,
@@ -631,12 +641,8 @@ async function startRun(messageId, params, prompt, images) {
         canUseTool: async (tool, toolInput) => {
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
-          if (reviewGuard) {
-            // Refused without a prompt, so the user cannot grant a reviewer write access.
-            return agentsInjected && tool.startsWith("mcp__ketplus_agents__")
-              ? { behavior: "allow", updatedInput: input }
-              : { behavior: "deny", message: "A review is read-only: reply with your findings instead." };
-          }
+          // Decided without a prompt, so nobody can grant a reviewer more than its profile.
+          if (profile) return reviewDecision(profile, tool, input, reviewContext);
           if ((browserInjected && tool.startsWith("mcp__ketplus_browser__")) ||
               (computerInjected && tool.startsWith("mcp__ketplus_computer__")))
             return { behavior: "allow", updatedInput: input };

@@ -5,6 +5,7 @@
 #include "TeamFakeHost.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -423,6 +424,23 @@ class TeamReviewTest final : public QObject {
         QVERIFY(requests.first().body.contains("web/cart.txt"));
         QVERIFY(requests.first().body.contains("+cart"));
         QVERIFY(agent_test::logText(fixture.claudeLog).contains("Adds an item"));
+        // ADR 0114 §2: a team's review round verifies, with a scratch directory of its own.
+        QJsonObject round;
+        for (const QJsonObject& message : fixture.payloads(reviewer, "user.message"))
+            if (message.value("review_guard").toBool())
+                round = message;
+        QVERIFY(round.value("review_guard").toBool());
+        QCOMPARE(round.value("review_profile").toString(), QStringLiteral("verify"));
+        const QByteArray log = agent_test::logText(fixture.claudeLog);
+        QVERIFY(log.contains("\"reviewProfile\": \"verify\""));
+        const QString scratch =
+            QFileInfo(QFileInfo(fixture.journal->databasePath())
+                          .dir()
+                          .filePath(QStringLiteral("review-scratch/") + reviewer))
+                .canonicalFilePath();
+        QVERIFY2(!scratch.isEmpty() && QFileInfo(scratch).isDir(), qPrintable(scratch));
+        QVERIFY2(log.contains(("\"scratchDirectory\": \"" + scratch + "\"").toUtf8()),
+                 log.constData());
         if (verdict == QStringLiteral("in_progress")) {
             // The findings start an ordinary turn of the owner, whatever its provider: they
             // are not a review request, so they are neither refused nor read-only.

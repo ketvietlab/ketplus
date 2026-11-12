@@ -323,17 +323,19 @@ wordmark pixel size so the icon has more presence.
 The supplied KetPlusMark PNG is cropped to artwork bounds (alpha ≥ 8/255 ignores
 near-transparent isolated noise), centred in a square with a 4% margin on each
 side of the final square (rounded to whole pixels), and resampled to 1024, 128
-and 64 px. The original is unchanged. Sampled
-colours are mid indigo `#4332C8` and lilac `#AD97FA`; the latter is used on dark
-surfaces for contrast.
+and 64 px. The artwork's hue is shifted from
+its original hue to the interface accent blue (hue 228.7°, the kit's `accent-text`); only
+hue changes, saturation, value and alpha are kept, and all three sizes come from
+the one 1024 px master.
 
 `BrandLockup` owns mark geometry and wordmark spacing. KÉT Sans Bold (700,
 registered by Qt as `KET Sans`) is embedded; smoke checks the resolved family,
-Bold face and weight. `ket` follows the main text colour, `Plus` the brand
-indigo, with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
+Bold face and weight. `ket` follows the main text colour, `Plus` the kit's
+`accent-text` token (`#1238DB` light, 7.4:1 on the sidebar `#F7F5F5`; `#9EB5FF`
+dark, 8.65:1 on `#171B20`), with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
 a transparent rounded frame with a 1.5 px stroke scaled with interface zoom,
 0.35 em horizontal / 0.12 em vertical padding, and a 0.3 em wordmark gap.
-The brand colours are scoped specimen values, not global theme replacements.
+The frame and Pro text use the same token; there is no separate brand colour.
 
 The Brand navigation entry retains the approved lockup specimens.
 The badge is centred on the wordmark’s x-height; its fractional
