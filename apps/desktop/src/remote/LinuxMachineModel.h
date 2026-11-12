@@ -46,6 +46,12 @@ struct LinuxMachine final {
     QString relayId;
     // The SSH destination ("user@alias:port") while SSH reaches this host.
     QString sshTarget;
+    // The name ssh files this machine's host key under (sshKnownHostsName of its target), for
+    // the `ssh-keygen -R` hint.
+    QString knownHostsName;
+    // While the Relay stands in for SSH (ADR 0119 fallback): why SSH could not reach the host.
+    // The row says it and offers Use SSH.
+    QString sshFailure;
     // A key mismatch whose old key ketPlus accepted itself: Details offers to forget it.
     bool canForgetHostKey{false};
     // Relay: when the Linux host last reached the Relay. Connected means the Relay answers;
@@ -129,6 +135,8 @@ class LinuxMachineModel : public QObject {
     void requestForgetHostKey(const QString& id) { emit forgetHostKeyRequested(id); }
     // After an identity change: trust the identity the daemon now names (ADR 0119 rotation).
     void requestTrustIdentity(const QString& id) { emit trustIdentityRequested(id); }
+    // On a row the Relay stands in for: try SSH again (the row returns to SSH while it connects).
+    void requestSshRoute(const QString& id) { emit sshRouteRequested(id); }
     // The backend asks the UI to run the SSH connect flow for `host` again (after a forgotten
     // key), so the new key is shown for acceptance.
     void promptSshConnect(const QString& host) { emit sshConnectPrompted(host); }
@@ -141,11 +149,11 @@ class LinuxMachineModel : public QObject {
     [[nodiscard]] static QString errorMessage(LinuxMachine::Error error, const QString& host,
                                               const QString& text = {},
                                               const QString& knownHostsName = {});
-    // The known_hosts name of an SSH destination ("[user@]host[:port]"): the host, or
-    // "[host]:port" for a port other than 22, as ssh files it.
-    [[nodiscard]] static QString knownHostsName(const QString& sshTarget);
-    // knownHostsName(), quoted for a shell when it is bracketed.
-    [[nodiscard]] static QString knownHostsCommandWord(const QString& sshTarget);
+    // The known_hosts name of a destination as the connect card takes it ("[user@]host[:port]",
+    // "[v6]:port" or a bare v6 address): the host, or "[host]:port" for a port other than 22.
+    [[nodiscard]] static QString knownHostsName(const QString& destination);
+    // A known_hosts name as one shell word, quoted when it is bracketed.
+    [[nodiscard]] static QString knownHostsCommandWord(const QString& knownHostsName);
     // The message for the machine's error, with the path ketPlus offers to fix it.
     [[nodiscard]] static QString errorMessage(const LinuxMachine& machine);
     // A Relay host that has not refreshed its listing for this long is shown as away. The host
@@ -175,6 +183,7 @@ class LinuxMachineModel : public QObject {
     void removeRequested(const QString& id);
     void forgetHostKeyRequested(const QString& id);
     void trustIdentityRequested(const QString& id);
+    void sshRouteRequested(const QString& id);
     void sshConnectPrompted(const QString& host);
 
   private:

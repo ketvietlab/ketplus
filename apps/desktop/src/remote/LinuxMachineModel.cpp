@@ -1,5 +1,7 @@
 #include "remote/LinuxMachineModel.h"
 
+#include "ssh/SshMachineStore.h"
+
 #include <QCoreApplication>
 #include <QLocale>
 #include <QRegularExpression>
@@ -127,15 +129,18 @@ void LinuxMachineModel::merge() {
                 break;
             }
         // ADR 0119: SSH is preferred, and the Relay is the fallback while SSH cannot reach the
-        // host. A key mismatch or a changed identity is never hidden behind the Relay.
+        // host: Offline with a connection failure. A Disconnect the user chose is not a failure,
+        // and a key mismatch or a changed identity is never hidden behind the Relay. The row
+        // stays on the Relay while the Relay has no failure of its own, also after the user
+        // disconnects it, so its Connect reaches the Relay again.
         const bool sshDown = machine.state == LinuxMachine::State::Offline &&
-                             (machine.error == LinuxMachine::Error::None ||
-                              machine.error == LinuxMachine::Error::Other);
-        if (relay && sshDown && relay->connectable &&
-            relay->state != LinuxMachine::State::Offline) {
+                             machine.error == LinuxMachine::Error::Other;
+        if (relay && sshDown && relay->connectable && relay->error == LinuxMachine::Error::None) {
             LinuxMachine fallback = *relay;
             fallback.name = machine.name;
             fallback.sshTarget = machine.sshTarget;
+            fallback.knownHostsName = machine.knownHostsName;
+            fallback.sshFailure = errorMessage(machine);
             next.append(fallback);
             continue;
         }
@@ -200,26 +205,14 @@ QString shellWord(const QString& name) {
 }
 } // namespace
 
-QString LinuxMachineModel::knownHostsName(const QString& sshTarget) {
-    QString host = sshTarget.mid(sshTarget.lastIndexOf(QLatin1Char('@')) + 1);
-    QString port;
-    if (host.startsWith(QLatin1Char('['))) {
-        // A bracketed IPv6 address, with or without :port after it.
-        const auto close = host.indexOf(QLatin1Char(']'));
-        if (close > 0 && host.mid(close + 1).startsWith(QLatin1Char(':')))
-            port = host.mid(close + 2);
-        host = host.mid(1, close > 0 ? close - 1 : -1);
-    } else if (const auto colon = host.lastIndexOf(QLatin1Char(':')); colon > 0) {
-        port = host.mid(colon + 1);
-        host.truncate(colon);
-    }
-    if (port.isEmpty() || port == QLatin1String("22"))
-        return host;
-    return QStringLiteral("[%1]:%2").arg(host, port);
+QString LinuxMachineModel::knownHostsName(const QString& destination) {
+    // Parsed as the connect card parses it, so "[v6]:port" and a bare v6 address both work.
+    const auto target = remote::ssh::parseSshDestination(destination);
+    return target.isValid() ? remote::ssh::sshKnownHostsName(target) : destination;
 }
 
-QString LinuxMachineModel::knownHostsCommandWord(const QString& sshTarget) {
-    return shellWord(knownHostsName(sshTarget));
+QString LinuxMachineModel::knownHostsCommandWord(const QString& knownHostsName) {
+    return shellWord(knownHostsName);
 }
 
 QString LinuxMachineModel::errorMessage(const LinuxMachine::Error error, const QString& host,
@@ -259,9 +252,7 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine& machine) {
                   "not connect. If the machine was reinstalled, choose Forget old key in Details "
                   "and compare the new key with the one on the machine before you accept it.")
             .arg(machine.name);
-    return errorMessage(machine.error, machine.name, machine.errorText,
-                        machine.sshTarget.isEmpty() ? QString()
-                                                    : knownHostsName(machine.sshTarget));
+    return errorMessage(machine.error, machine.name, machine.errorText, machine.knownHostsName);
 }
 
 bool LinuxMachineModel::hostAway(const LinuxMachine& machine, const QDateTime& now) {

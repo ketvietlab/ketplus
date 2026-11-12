@@ -60,6 +60,8 @@ int main(int argc, char* argv[]) {
                          &ketplus::RepositoryRouter::openFile);
         QObject::connect(window, &ketplus::MainWindow::repositoryFileDiffRequested, &repositories,
                          &ketplus::RepositoryRouter::openFileDiff);
+        // The saved Linux machines connect at launch, so the machine picker lists them at once.
+        window->startLinuxMachines();
         return window;
     };
     QObject::connect(&repositories, &ketplus::RepositoryRouter::worktreeRequested, &app,

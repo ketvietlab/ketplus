@@ -74,6 +74,7 @@ class RemoteControlView final : public QWidget {
 
   protected:
     void changeEvent(QEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
     remote::DaemonClient* daemon_{nullptr};
     QTimer* refreshTimer_{nullptr};

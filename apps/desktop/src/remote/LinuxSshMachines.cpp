@@ -71,13 +71,25 @@ LinuxSshMachines::LinuxSshMachines(LinuxMachineModel* model, QString storePath, 
         connect(model_, &LinuxMachineModel::hostKeyDecided, this, &LinuxSshMachines::decideHostKey);
         connect(model_, &LinuxMachineModel::sshConnectCancelled, this,
                 &LinuxSshMachines::cancelConnect);
+        // Connect and Disconnect act on the route the row shows: a row the Relay stands in for
+        // is the Relay's, and Use SSH tries SSH again.
         connect(model_, &LinuxMachineModel::connectRequested, this, [this](const QString& id) {
-            if (auto* machine = backend(id))
+            if (auto* machine = shownBackend(id)) {
+                closedByUser_.remove(id);
                 machine->connectToHost();
+            }
         });
         connect(model_, &LinuxMachineModel::disconnectRequested, this, [this](const QString& id) {
-            if (auto* machine = backend(id))
+            if (auto* machine = shownBackend(id)) {
+                closedByUser_.insert(id);
                 machine->disconnectFromHost();
+            }
+        });
+        connect(model_, &LinuxMachineModel::sshRouteRequested, this, [this](const QString& id) {
+            if (auto* machine = backend(id)) {
+                closedByUser_.remove(id);
+                machine->connectToHost();
+            }
         });
         connect(model_, &LinuxMachineModel::removeRequested, this, &LinuxSshMachines::remove);
         connect(model_, &LinuxMachineModel::forgetHostKeyRequested, this,
@@ -99,9 +111,15 @@ void LinuxSshMachines::connectSaved() {
         auto* machine = backends_.value(key);
         // A machine without an identity yet was never connected; the user starts it.
         if (machine && !machine->machineId().isEmpty() && !pending_.contains(key) &&
+            !closedByUser_.contains(machine->machineId()) &&
             machine->tunnelState() == SshTunnel::State::Idle)
             machine->connectToHost();
     }
+}
+
+SshMachineBackend* LinuxSshMachines::shownBackend(const QString& machineId) const {
+    const auto* machine = model_ ? model_->machine(machineId) : nullptr;
+    return machine && machine->route == LinuxMachine::Route::Ssh ? backend(machineId) : nullptr;
 }
 
 SshMachineBackend* LinuxSshMachines::backend(const QString& machineId) const {
@@ -178,6 +196,7 @@ LinuxMachine LinuxSshMachines::machineFor(const SshMachineBackend& backend) cons
     if (machine.error != LinuxMachine::Error::None)
         machine.errorText = backend.connectionReason();
     machine.sshTarget = key;
+    machine.knownHostsName = remote::ssh::sshKnownHostsName(backend.target());
     machine.canForgetHostKey =
         machine.error == LinuxMachine::Error::HostKeyMismatch && backend.holdsAcceptedHostKey();
     return machine;
@@ -316,14 +335,15 @@ void LinuxSshMachines::forgetHostKey(const QString& machineId) {
         return;
     QString error;
     if (!machine->forgetAcceptedHostKeys(&error)) {
-        emit notice(
-            error.isEmpty()
-                ? tr("The old key of %1 is in your own known_hosts, which ketPlus does "
-                     "not change. Check the new key on the machine, then remove the old "
-                     "entry and connect again:\nssh-keygen -R %2")
-                      .arg(machine->target().alias, LinuxMachineModel::knownHostsCommandWord(key))
-                : error,
-            true);
+        emit notice(error.isEmpty()
+                        ? tr("The old key of %1 is in your own known_hosts, which ketPlus does "
+                             "not change. Check the new key on the machine, then remove the old "
+                             "entry and connect again:\nssh-keygen -R %2")
+                              .arg(machine->target().alias,
+                                   LinuxMachineModel::knownHostsCommandWord(
+                                       remote::ssh::sshKnownHostsName(machine->target())))
+                        : error,
+                    true);
         return;
     }
     publish();

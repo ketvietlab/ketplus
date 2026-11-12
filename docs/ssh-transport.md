@@ -278,18 +278,30 @@ yet is `ssh:<target>`). The model shows its live state, the verified SSH host
 key, a presented key that did not verify (as a mismatch, never as verified),
 and an error the user can act on. A host that the Relay lists under the same
 machine id is one row reached over SSH, and the Relay's id is a route
-attribute. While SSH cannot reach that host (Offline, with no error or a
-connection failure) and the Relay is connected, the row falls back to the
-Relay: its state, Connect / Disconnect and `machineBackend(id)` are the
-Relay's. A key mismatch or a changed identity is never hidden behind the
-Relay. After an identity change, Details shows the trusted and the presented
+attribute. While SSH cannot reach that host (Offline with a connection
+failure) and the Relay can be used for it (entitled, with no error of its
+own), the row falls back to the Relay: its state, Connect / Disconnect and
+`machineBackend(id)` are the Relay's, and it stays the Relay's after a
+Disconnect, so Connect reaches the Relay again. Connect and Disconnect act
+only on the route the row shows. The row says why SSH failed ("Using the Relay
+because SSH failed. …") and offers Use SSH, which tries SSH again; once SSH
+answers, the row is SSH's. A user Disconnect of a connected SSH machine is not
+a failure, so the Relay does not take that row. A key mismatch or a changed
+identity is never hidden behind the Relay. After an identity change, Details shows the trusted and the presented
 daemon identity before Trust new identity, which is disabled when the daemon
 named none. The `ssh-keygen -R` hint names the entry as ssh files it
-(`'[host]:port'` for a port other than 22). The connect card adds the target when Connect is pressed. An
+(`'[host]:port'` for a port other than 22, an IPv6 address without brackets on
+port 22). The connect card adds the target when Connect is pressed. An
 attempt that fails or is cancelled before the first connection removes the
 target and any key accepted for it. Connect, Disconnect, Remove, Forget old
 key and Trust new identity act on the backend. Saved machines with a trusted
-identity connect when Connections opens.
+identity connect when the app starts: `main()` calls
+`MainWindow::startLinuxMachines()` for each window, which creates Connections
+hidden, attaches both routes and activates its machines, so the picker lists
+them before Connections is opened. The Relay machines attach only while the
+account is entitled. A machine the user disconnected stays closed until they
+connect it. The hidden page polls nothing: its daemon status refresh runs
+only while Connections is shown.
 
 `LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
 `RelayMachineBackend` for each host that the Relay's worktree index lists,
@@ -326,11 +338,16 @@ rotation fail-closed and re-trust with binding moves, a daemon that names no
 identity, durable add and remove, accepted host keys removed with their machine
 and forgotten for re-trust, an unreadable store, and destination parsing.
 `ketplus_remote_known_hosts_tests` covers `removeKnownHost()` and
-`hasKnownHost()`. `ketplus_linux_ssh_machines_tests` (offscreen) drives
+`hasKnownHost()`, including a key ssh appends while the file is rewritten (it
+is kept) and a file that keeps changing (left as it is). `ketplus_linux_ssh_machines_tests` (offscreen) drives
 Connections' SSH route through the same fake link and daemon
 (`tests/daemon/FakeSshLink.h`). `ketplus_linux_relay_machines_tests` (offscreen) drives the Relay route
 with fake links: live state, the entitlement gate, fingerprint keying with SSH
-preferred, host presence, pending outcomes and the Pro hint.
+preferred, the Relay fallback (Disconnect and Connect again, a user Disconnect
+that keeps SSH), host presence, pending outcomes and the Pro hint.
+`ketplus_linux_machines_tests` covers the launch start (saved SSH machines and,
+only while entitled, the Relay machines connect with Connections hidden) and
+the fallback row's SSH failure and Use SSH.
 `ketplus_remote_ssh_daemon_integration_tests` runs a real
 `ketplus_daemon` with FakeCodex (no provider quota) behind the loopback `sshd`
 fixture (`tests/daemon/SshFixture.h`). It lists repositories and

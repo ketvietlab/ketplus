@@ -209,6 +209,7 @@ target_link_libraries(ketplus_machine_window_tests PRIVATE
 )
 
 ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
+target_include_directories(ketplus_linux_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ketplus_linux_machines_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support

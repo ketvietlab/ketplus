@@ -1,6 +1,7 @@
 #include "remote/LinuxMachinesSection.h"
 #include "FakeRelayLink.h"
 #include "control/ControlV2Client.h"
+#include "daemon/FakeSshLink.h"
 #include "remote/AccountEntitlements.h"
 #include "remote/LinuxMachineModel.h"
 #include "remote/LinuxMachineRow.h"
@@ -18,6 +19,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 namespace ketplus::remote {
@@ -62,6 +64,8 @@ class LinuxMachinesSectionTest final : public QObject {
     void theRelayFollowsTheAccountEntitlement();
     void theRelayStopsWhenTheSessionIsRevoked();
     void aForgottenKeyReopensTheCardOnThatHost();
+    void savedMachinesConnectAtLaunchBeforeTheCardIsShown();
+    void aRelayFallbackRowSaysWhySshFailedAndOffersSsh();
 
   private:
     static LinuxMachine make(const QString& id, const QString& name, const QString& detail,
@@ -795,6 +799,90 @@ void LinuxMachinesSectionTest::aForgottenKeyReopensTheCardOnThatHost() {
     QCOMPARE(requests.size(), 1);
     QCOMPARE(requests.first().first().toString(), QStringLiteral("dev@old-host:2222"));
     dialog->reject();
+}
+
+void LinuxMachinesSectionTest::savedMachinesConnectAtLaunchBeforeTheCardIsShown() {
+    QTemporaryDir directory;
+    const QString daemonName =
+        QStringLiteral("ketplus-launch-%1").arg(QCoreApplication::applicationPid());
+    remote::ssh::testing::FakeDaemon daemon(daemonName);
+    const QString store = directory.filePath(QStringLiteral("machines.json"));
+    const QString known = directory.filePath(QStringLiteral("known_hosts"));
+    const auto sshLinks =
+        [daemonName,
+         known](const remote::ssh::SshTarget&) -> std::unique_ptr<remote::ssh::SshLink> {
+        auto link = std::make_unique<remote::ssh::testing::FakeLink>(daemonName);
+        link->knownHosts = known;
+        return link;
+    };
+    {
+        // A machine connected in an earlier run is saved.
+        LinuxMachinesSection earlier;
+        earlier.attachSshBackend(store, sshLinks);
+        earlier.model()->requestSshConnect(QStringLiteral("build-node-01"));
+        QTRY_VERIFY(earlier.model()->machines().size() == 1 &&
+                    earlier.model()->machines().first().state == State::Connected);
+    }
+
+    // The next launch: the window starts the section without showing Connections.
+    LinuxMachinesSection section;
+    QSignalSpy picker(&section, &LinuxMachinesSection::machinesChanged);
+    QPointer<testing::FakeRelayLink> relayLink;
+    section.attachSshBackend(store, sshLinks);
+    section.attachRelayBackend([&relayLink](const QString& relayId) {
+        auto made = std::make_unique<testing::FakeRelayLink>(relayId);
+        relayLink = made.get();
+        return made;
+    });
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    section.loading_ = true; // keeps the Relay list request off the network
+    section.activate();
+    QVERIFY(!section.isVisible());
+    QTRY_VERIFY(!picker.isEmpty() &&
+                picker.last().at(1).toStringList() ==
+                    QStringList{QStringLiteral("build-node-01 · SSH · Connected")});
+
+    // Without ketPlus Pro the Relay hosts are listed but not attached.
+    section.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"),
+                                QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+    QVERIFY(!relayLink || relayLink->connects == 0);
+    // Entitled, the launch attaches and connects them too.
+    remote::RemoteControlTestAccess::entitle(*section.client_,
+                                             QJsonArray{QString::fromLatin1(relayEntitlementName)});
+    section.activate();
+    QTRY_VERIFY(relayLink && relayLink->connects == 1);
+    QTRY_VERIFY(
+        picker.last().at(1).toStringList().contains(QStringLiteral("builder · Relay · Connected")));
+    QVERIFY(!section.isVisible());
+}
+
+void LinuxMachinesSectionTest::aRelayFallbackRowSaysWhySshFailedAndOffersSsh() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    auto fallback = make("SHA256:pinned", "build-node-02", "Linux · build-node-02", Route::Relay,
+                         State::Connected);
+    fallback.sshTarget = QStringLiteral("build-node-02");
+    fallback.connectable = true;
+    fallback.sshFailure = QStringLiteral("Connection timed out.");
+    model->setMachines({fallback});
+    QSignalSpy useSsh(model, &LinuxMachineModel::sshRouteRequested);
+    auto* fallbackRow = row(section, "SHA256:pinned");
+    QVERIFY(fallbackRow);
+    QCOMPARE(text(fallbackRow, QStringLiteral("linuxMachineSshFailure")),
+             QStringLiteral("Using the Relay because SSH failed. Connection timed out."));
+    button(fallbackRow, QStringLiteral("linuxMachineUseSsh"))->click();
+    QCOMPARE(useSsh.size(), 1);
+    QCOMPARE(useSsh.first().first().toString(), QStringLiteral("SHA256:pinned"));
+
+    // A Relay row that is not standing in for SSH offers neither.
+    fallback.sshFailure.clear();
+    model->setMachines({fallback});
+    fallbackRow = row(section, "SHA256:pinned");
+    QVERIFY(!fallbackRow->findChild<QLabel*>(QStringLiteral("linuxMachineSshFailure")));
+    QVERIFY(!button(fallbackRow, QStringLiteral("linuxMachineUseSsh")));
 }
 
 } // namespace ketplus

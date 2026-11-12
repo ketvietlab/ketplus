@@ -88,6 +88,15 @@ bool hasKnownHost(const QString& file, const QString& knownHostsName) {
     return false;
 }
 
+namespace {
+std::function<void()>& rewriteHook() {
+    static std::function<void()> hook;
+    return hook;
+}
+} // namespace
+
+void testing::setRewriteHook(std::function<void()> hook) { rewriteHook() = std::move(hook); }
+
 int removeKnownHost(const QString& file, const QString& knownHostsName, QString* error) {
     const auto fail = [error](const QString& message) {
         if (error)
@@ -136,6 +145,8 @@ int removeKnownHost(const QString& file, const QString& knownHostsName, QString*
             !out.setPermissions(QFile::ReadOwner | QFile::WriteOwner) ||
             out.write(contents) != contents.size())
             return fail(QStringLiteral("Unable to write the KetPlus known_hosts file."));
+        if (rewriteHook())
+            rewriteHook()();
         const QFileInfo after(file);
         if (std::pair{after.size(), after.lastModified(QTimeZone::UTC)} != stamp) {
             out.cancelWriting();

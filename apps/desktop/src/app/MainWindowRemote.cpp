@@ -31,32 +31,7 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
 
     setAgentWorkspaceVisible(false);
     setAtlasWorkspaceVisible(false);
-    if (remoteControl_ == nullptr) {
-        remoteControl_ = new RemoteControlView(workspaceSplit_);
-        // The saved SSH machines and the SSH route of Connections (ADR 0119).
-        remoteControl_->linuxMachines()->attachSshBackend();
-        remoteControl_->linuxMachines()->attachRelayBackend();
-        connect(remoteControl_, &RemoteControlView::machinesChanged, this,
-                [this](const QStringList& ids, const QStringList& names) {
-                    remoteMachineIds_ = ids;
-                    QStringList choices{QStringLiteral("local")};
-                    choices.append(ids);
-                    QStringList labels{tr("This Mac")};
-                    labels.append(names);
-                    // ADR 0119: every listed machine's backend, SSH or the Relay fallback. A
-                    // machine no longer listed is forgotten (MainWindowMachine follows it).
-                    auto* section = remoteControl_->linuxMachines();
-                    machineComposition()->selection()->syncBackends(
-                        ids, [section](const QString& id) { return section->machineBackend(id); });
-                    activityBar_->setMachines(choices, labels, selectedMachineId_);
-                    activityBar_->setRemoteMachineSelected(selectedMachineId_ !=
-                                                           QStringLiteral("local"));
-                    refreshSidebarRepositories();
-                });
-        connect(remoteControl_, &RemoteControlView::accountChanged, activityBar_,
-                &ActivityBar::setAccount); // sign-in and sign-out happen here
-        workspaceSplit_->addWidget(remoteControl_);
-    }
+    ensureRemoteControl();
     if (explorer_ != nullptr)
         explorer_->hide();
     if (gitChanges_ != nullptr)
@@ -81,6 +56,41 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
     QList<int> sizes(workspaceSplit_->count(), 0);
     sizes[workspaceSplit_->indexOf(remoteControl_)] = qMax(800, workspaceSplit_->width());
     workspaceSplit_->setSizes(sizes);
+}
+
+void MainWindow::ensureRemoteControl() {
+    if (remoteControl_ != nullptr)
+        return;
+    remoteControl_ = new RemoteControlView(workspaceSplit_);
+    remoteControl_->hide(); // shown only by setRemoteWorkspaceVisible
+    // The saved SSH machines and the SSH route of Connections (ADR 0119).
+    remoteControl_->linuxMachines()->attachSshBackend();
+    remoteControl_->linuxMachines()->attachRelayBackend();
+    connect(remoteControl_, &RemoteControlView::machinesChanged, this,
+            [this](const QStringList& ids, const QStringList& names) {
+                remoteMachineIds_ = ids;
+                QStringList choices{QStringLiteral("local")};
+                choices.append(ids);
+                QStringList labels{tr("This Mac")};
+                labels.append(names);
+                // ADR 0119: every listed machine's backend, SSH or the Relay fallback. A
+                // machine no longer listed is forgotten (MainWindowMachine follows it).
+                auto* section = remoteControl_->linuxMachines();
+                machineComposition()->selection()->syncBackends(
+                    ids, [section](const QString& id) { return section->machineBackend(id); });
+                activityBar_->setMachines(choices, labels, selectedMachineId_);
+                activityBar_->setRemoteMachineSelected(selectedMachineId_ !=
+                                                       QStringLiteral("local"));
+                refreshSidebarRepositories();
+            });
+    connect(remoteControl_, &RemoteControlView::accountChanged, activityBar_,
+            &ActivityBar::setAccount); // sign-in and sign-out happen here
+    workspaceSplit_->addWidget(remoteControl_);
+}
+
+void MainWindow::startLinuxMachines() {
+    ensureRemoteControl();
+    remoteControl_->linuxMachines()->activate();
 }
 
 } // namespace ketplus
