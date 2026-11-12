@@ -83,12 +83,6 @@ class RelayMachineBackend final : public MachineBackend {
     void answerQuestion(const QString& sessionId, qint64 generation, const QString& questionId,
                         const QJsonObject& resolution, Callback callback) override;
 
-  signals:
-    // A command's verified host result, once. Commands resumed after a restart have no
-    // callback, so this is how their outcome reaches the UI.
-    void commandCompleted(const QString& commandId, const QJsonObject& result,
-                          const QString& error);
-
   private:
     using OutboxRoute = CommandOutbox::Route;
     void setState(ConnectionState state, const QString& reason);

@@ -22,6 +22,74 @@ changes; formatting-only notifications must not restart the zero-delay timer.
 Font changes still reformat the document, and formatting joins the text edit's
 undo step. The idle composer regression verifies that document notifications settle.
 
+## Remote machines
+
+ADR 0119 "Binding to the selected machine". The window keeps one
+`MachineSelection` (`apps/desktop/src/machine`): This Mac's
+`DaemonMachineBackend` under `local`, and the backend Connections registers for
+each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
+Choosing another machine in the picker binds `MachineCatalog` to its backend and
+shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
+routes share every line of UI code. Every way into the Agent Workspace (the
+activity bar, View > Agent Workspace, the compact window) shows the selected
+machine's. A picked machine with no backend yet opens Connections with an empty
+sidebar, never This Mac's lists, and its workspace shows once Connections
+registers the backend. Backends deliver events in the local protocol's shape
+(`session_id`, `event_type`), so the UI reads one shape on every route.
+
+- **Sidebar.** `listRepositories` and `listConversations` are read together and
+  replace the lists at once. Rows are keyed by repository id and session id;
+  a row's `path` is the worktree id, never resolved on This Mac. Context menu
+  and rename are not offered for remote rows yet.
+- **Repository grain.** The daemon's `workspace.list` names each checkout's
+  `repository_path` (read from a linked worktree's `.git` file and `commondir`,
+  without running Git), and the local and SSH adapter groups checkouts under it
+  with their `worktrees`, as the Relay groups by repository id. A repository
+  therefore appears once on every route.
+- **Conversation binding.** A `MachineConversationSession` keeps the backend it
+  was opened with; turns, steer, stop and approval answers go to that machine
+  even after the picker changes. Each machine keeps the conversation it last
+  showed, so switching back restores it. Answers from a machine that is no
+  longer bound are dropped.
+- **Connection states.** Connecting and Offline show no list and the banner
+  shows the reason. Reconnecting keeps the last lists read-only, the
+  transcript stays readable from its cache, and the composer and approval
+  buttons are disabled with "Reconnecting…" and the reason. The return to
+  Connected lists again and reloads the transcript window and pending
+  approvals on its own.
+- **Worktree picker.** A new conversation picks a worktree of the selected
+  machine and starts with `MachineBackend::createSession`. Worktrees the Relay
+  still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
+  `catalogChanged()` lists again and fills them in.
+- **Approvals and questions.** Cards answer through the conversation's machine;
+  an answer that fails marks the card expired. A question card answers every
+  question of the request at once (single or multiple options, a custom or
+  secret answer), as the daemon refuses a partial answer.
+- **Following a conversation.** Deselecting a conversation, switching machines
+  or closing the view calls `MachineBackend::conversationClosed()`. After a
+  reconnect the listing says whether its turn still runs. A conversation outside
+  every listed repository is listed under its own worktree.
+- **Held and queued writes.** A route may hold a request while it is
+  Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
+  says it waits for the machine instead of looking hung. A Relay write may
+  answer `{"status": "queued", "command_id"}` with no result: the composer
+  shows it as sent and waiting for the host, and the outcome (the new
+  conversation, or an expired card) is applied on
+  `MachineBackend::commandCompleted()`, which moved to the interface so the UI
+  needs no Relay type.
+- **Registration.** The window's slot for `RemoteControlView::machinesChanged`
+  (`MainWindowRemote.cpp`) calls `MachineSelection::syncBackends()` with
+  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the Relay's
+  while it is the row's route. Each listed id with a backend is registered or
+  replaced (a replacement for the selected machine rebinds every view); a listed
+  machine without one stays selectable and shows as not connected; a machine no
+  longer listed is forgotten, and if it was selected the window returns to This
+  Mac.
+
+Tests: `tests/MachineCompositionTest.cpp` and `tests/MachineConversationTest.cpp`
+against `tests/FakeMachineBackend.h`; `tests/MachineWindowTest.cpp` on
+`MainWindow`, with Connections over a fake SSH daemon.
+
 ## Context compaction
 
 `contextCompaction` item start/completion events update one lifecycle row and the

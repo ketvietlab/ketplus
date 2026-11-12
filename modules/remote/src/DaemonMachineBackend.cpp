@@ -3,6 +3,7 @@
 #include "DaemonClient.h"
 
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QPointer>
 
@@ -89,28 +90,56 @@ void DaemonMachineBackend::request(const QString& type, const QJsonObject& paylo
 }
 
 void DaemonMachineBackend::listRepositories(Callback callback) {
-    // workspace.list names registered checkouts by path; the neutral shape adds an id and label.
     request(QStringLiteral("workspace.list"), {}, {}, -1,
             [callback = std::move(callback)](const QJsonObject& result, const QString& error) {
                 if (!error.isEmpty()) {
                     callback({}, error);
                     return;
                 }
-                QJsonArray repositories;
-                for (const auto& value : result.value(QStringLiteral("workspaces")).toArray()) {
-                    const auto workspace = value.toObject();
-                    const QString path = workspace.value(QStringLiteral("path")).toString();
-                    if (path.isEmpty())
-                        continue;
-                    repositories.append(
-                        QJsonObject{{QStringLiteral("id"), path},
-                                    {QStringLiteral("label"), QFileInfo(path).fileName()},
-                                    {QStringLiteral("path"), path},
-                                    {QStringLiteral("available"),
-                                     workspace.value(QStringLiteral("available")).toBool()}});
-                }
-                callback({{QStringLiteral("repositories"), repositories}}, {});
+                callback(groupWorkspacesByRepository(result), {});
             });
+}
+
+QJsonObject DaemonMachineBackend::groupWorkspacesByRepository(const QJsonObject& workspaceList) {
+    // ADR 0119 "Repository grain": workspace.list names registered checkouts by path, linked
+    // worktrees included. The neutral shape is one row per repository with its checkouts under
+    // `worktrees`, as the Relay groups by repository id. A daemon that does not name a
+    // checkout's repository (`repository_path`) makes that checkout its own repository.
+    QJsonArray repositories;
+    QHash<QString, qsizetype> indexByRepository;
+    for (const auto& value : workspaceList.value(QStringLiteral("workspaces")).toArray()) {
+        const auto workspace = value.toObject();
+        const QString path = workspace.value(QStringLiteral("path")).toString();
+        if (path.isEmpty())
+            continue;
+        QString repositoryPath = workspace.value(QStringLiteral("repository_path")).toString();
+        if (repositoryPath.isEmpty())
+            repositoryPath = path;
+        const bool available = workspace.value(QStringLiteral("available")).toBool();
+        const QJsonObject worktree{{QStringLiteral("id"), path},
+                                   {QStringLiteral("label"), QFileInfo(path).fileName()},
+                                   {QStringLiteral("path"), path},
+                                   {QStringLiteral("available"), available}};
+        if (!indexByRepository.contains(repositoryPath)) {
+            indexByRepository.insert(repositoryPath, repositories.size());
+            repositories.append(
+                QJsonObject{{QStringLiteral("id"), repositoryPath},
+                            {QStringLiteral("label"), QFileInfo(repositoryPath).fileName()},
+                            {QStringLiteral("path"), repositoryPath},
+                            {QStringLiteral("available"), false},
+                            {QStringLiteral("worktrees"), QJsonArray{}}});
+        }
+        const qsizetype index = indexByRepository.value(repositoryPath);
+        auto repository = repositories.at(index).toObject();
+        auto worktrees = repository.value(QStringLiteral("worktrees")).toArray();
+        worktrees.append(worktree);
+        repository.insert(QStringLiteral("worktrees"), worktrees);
+        // A repository is available while any of its checkouts is.
+        if (available)
+            repository.insert(QStringLiteral("available"), true);
+        repositories.replace(index, repository);
+    }
+    return {{QStringLiteral("repositories"), repositories}};
 }
 
 void DaemonMachineBackend::listWorktrees(const QString& sessionId, const qint64 generation,

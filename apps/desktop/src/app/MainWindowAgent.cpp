@@ -744,6 +744,14 @@ void MainWindow::startNewAgentConversation() {
 }
 
 void MainWindow::setAgentWorkspaceVisible(const bool visible) {
+    // ADR 0119: under a remote machine every way in shows that machine's workspace, and every
+    // other workspace hides it through here.
+    if (visible && selectedMachineId_ != QStringLiteral("local")) {
+        setMachineWorkspaceVisible(true);
+        return;
+    }
+    if (!visible)
+        setMachineWorkspaceVisible(false);
     if (!visible && compactConversationWindow_)
         setCompactConversationWindow(false);
     // Sidebar navigation selects its target after showing the workspace. When

@@ -4,6 +4,22 @@ if(APPLE)
 endif()
 
 add_library(ketplus_desktop_support STATIC
+    src/machine/MachineApprovalCards.cpp
+    src/machine/MachineApprovalCards.h
+    src/machine/MachineCatalog.cpp
+    src/machine/MachineCatalog.h
+    src/machine/MachineComposition.cpp
+    src/machine/MachineComposition.h
+    src/machine/MachineConversationSession.cpp
+    src/machine/MachineConversationSession.h
+    src/machine/MachineSelection.cpp
+    src/machine/MachineSelection.h
+    src/machine/MachineSidebar.cpp
+    src/machine/MachineSidebar.h
+    src/machine/MachineTranscript.cpp
+    src/machine/MachineTranscript.h
+    src/machine/MachineWorkspaceView.cpp
+    src/machine/MachineWorkspaceView.h
     src/remote/PairingQrCode.h
     ${ketplus_pairing_qr_source}
     src/remote/RemoteControlView.cpp
@@ -157,6 +173,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowPanels.cpp
     src/app/MainWindowDetailActions.cpp
     src/app/MainWindowWorkReport.cpp
+    src/app/MainWindowMachine.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
     src/app/MainWindowSearch.cpp

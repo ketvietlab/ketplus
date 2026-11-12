@@ -56,6 +56,7 @@ class AgentWorktreeCreator;
 class AgentSessionManager;
 class AgentWorkspaceView;
 class FindReplaceBar;
+class MachineComposition;
 class ExplorerPanel;
 class GitChangesPanel;
 class GitService;
@@ -87,6 +88,8 @@ class MainWindow final : public QMainWindow {
     void switchToWorktree(const QString& path);
     void setFileContextWorktree(const QString& path);
     void followConversationCheckout();
+    // ADR 0119: the machines Connections registered and the one the picker selected.
+    MachineComposition* machineComposition();
 
   signals:
     void newWindowRequested();
@@ -138,6 +141,9 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
+    // ADR 0119: a remote machine is composed through its MachineBackend (MainWindowMachine).
+    void selectMachine(const QString& machineId);
+    void setMachineWorkspaceVisible(bool visible);
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
     void setShellMode(ActivityBar::Mode mode);
@@ -463,6 +469,7 @@ class MainWindow final : public QMainWindow {
     QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
+    MachineComposition* machines_{nullptr};
     // The Create worktree card asked to open Agent Workspace on what it creates.
     bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};

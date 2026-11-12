@@ -237,6 +237,47 @@ class HeadlessDaemonTest final : public QObject {
                     .toBool());
         QVERIFY(journal.worktreePaths().isEmpty());
     }
+    void workspaceListNamesTheRepositoryOfALinkedWorktree() {
+        // ADR 0119 "Repository grain": a linked worktree names its main checkout, read from its
+        // `.git` file and the gitdir's `commondir`, so Desktop groups both under one repository.
+        QTemporaryDir directory;
+        QVERIFY(QDir(directory.path()).mkpath("app/.git/worktrees/fix"));
+        QVERIFY(QDir(directory.path()).mkpath("app-fix"));
+        QVERIFY(QDir(directory.path()).mkpath("broken"));
+        const auto write = [&](const QString& relative, const QByteArray& content) {
+            QFile file(directory.filePath(relative));
+            return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
+        };
+        const auto main = QFileInfo(directory.filePath("app")).canonicalFilePath();
+        QVERIFY(write("app-fix/.git", "gitdir: " + main.toUtf8() + "/.git/worktrees/fix\n"));
+        QVERIFY(write("app/.git/worktrees/fix/commondir", "../..\n"));
+        QVERIFY(write("broken/.git", "not a gitdir line\n"));
+        const auto linked = QFileInfo(directory.filePath("app-fix")).canonicalFilePath();
+        const auto broken = QFileInfo(directory.filePath("broken")).canonicalFilePath();
+        LocalJournal journal(directory.filePath("journal.db"));
+        QVERIFY(journal.rememberWorktree(main));
+        QVERIFY(journal.rememberWorktree(linked));
+        QVERIFY(journal.rememberWorktree(broken));
+        CodexAdapter adapter("/nonexistent/ketplus-test-codex");
+        SessionHost host(&journal, &adapter);
+        QHash<QString, QString> repositoryOf;
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            repositoryOf.insert(value.toObject().value("path").toString(),
+                                value.toObject().value("repository_path").toString());
+        QCOMPARE(repositoryOf.value(main), main);
+        QCOMPARE(repositoryOf.value(linked), main);
+        QCOMPARE(repositoryOf.value(broken), broken);
+
+        // A main checkout remembered through a symlink names its canonical repository too.
+        QVERIFY(QFile::link(main, directory.filePath("app-link")));
+        const auto linkPath = QDir(directory.path()).filePath("app-link");
+        QVERIFY(journal.rememberWorktree(linkPath));
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            if (value.toObject().value("path").toString() == linkPath)
+                QCOMPARE(value.toObject().value("repository_path").toString(), main);
+    }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.db"));
