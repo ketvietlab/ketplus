@@ -119,11 +119,26 @@ void LinuxMachineModel::merge() {
         sshIds.insert(machine.id);
         // The same host over the Relay: one machine, reached over SSH, the Relay its attribute.
         machine.relayId.clear();
-        for (const auto& relay : std::as_const(relay_))
-            if (relay.id == machine.id && !relay.relayId.isEmpty()) {
-                machine.relayId = relay.relayId;
+        const LinuxMachine* relay = nullptr;
+        for (const auto& listed : std::as_const(relay_))
+            if (listed.id == machine.id && !listed.relayId.isEmpty()) {
+                relay = &listed;
+                machine.relayId = listed.relayId;
                 break;
             }
+        // ADR 0119: SSH is preferred, and the Relay is the fallback while SSH cannot reach the
+        // host. A key mismatch or a changed identity is never hidden behind the Relay.
+        const bool sshDown = machine.state == LinuxMachine::State::Offline &&
+                             (machine.error == LinuxMachine::Error::None ||
+                              machine.error == LinuxMachine::Error::Other);
+        if (relay && sshDown && relay->connectable &&
+            relay->state != LinuxMachine::State::Offline) {
+            LinuxMachine fallback = *relay;
+            fallback.name = machine.name;
+            fallback.sshTarget = machine.sshTarget;
+            next.append(fallback);
+            continue;
+        }
         next.append(machine);
     }
     for (const auto& relay : std::as_const(relay_))
@@ -178,8 +193,37 @@ QString LinuxMachineModel::routeText(const LinuxMachine::Route route) {
     return route == LinuxMachine::Route::Ssh ? tr("SSH") : tr("Relay");
 }
 
+namespace {
+// "[host]:port" would be a shell glob: quote it so the hint copies and runs as shown.
+QString shellWord(const QString& name) {
+    return name.startsWith(QLatin1Char('[')) ? QLatin1Char('\'') + name + QLatin1Char('\'') : name;
+}
+} // namespace
+
+QString LinuxMachineModel::knownHostsName(const QString& sshTarget) {
+    QString host = sshTarget.mid(sshTarget.lastIndexOf(QLatin1Char('@')) + 1);
+    QString port;
+    if (host.startsWith(QLatin1Char('['))) {
+        // A bracketed IPv6 address, with or without :port after it.
+        const auto close = host.indexOf(QLatin1Char(']'));
+        if (close > 0 && host.mid(close + 1).startsWith(QLatin1Char(':')))
+            port = host.mid(close + 2);
+        host = host.mid(1, close > 0 ? close - 1 : -1);
+    } else if (const auto colon = host.lastIndexOf(QLatin1Char(':')); colon > 0) {
+        port = host.mid(colon + 1);
+        host.truncate(colon);
+    }
+    if (port.isEmpty() || port == QLatin1String("22"))
+        return host;
+    return QStringLiteral("[%1]:%2").arg(host, port);
+}
+
+QString LinuxMachineModel::knownHostsCommandWord(const QString& sshTarget) {
+    return shellWord(knownHostsName(sshTarget));
+}
+
 QString LinuxMachineModel::errorMessage(const LinuxMachine::Error error, const QString& host,
-                                        const QString& text) {
+                                        const QString& text, const QString& knownHostsName) {
     switch (error) {
     case LinuxMachine::Error::None:
         return {};
@@ -187,8 +231,8 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine::Error error, const Q
         // Each command sits on a line of its own: it never wraps at its hyphen and copies whole.
         return tr("The host key of %1 does not match the one in known_hosts, so ketPlus did not "
                   "connect. If the machine was reinstalled, check its new key on the machine, "
-                  "remove the old entry and connect again:\nssh-keygen -R %1")
-            .arg(host);
+                  "remove the old entry and connect again:\nssh-keygen -R %2")
+            .arg(host, shellWord(knownHostsName.isEmpty() ? host : knownHostsName));
     case LinuxMachine::Error::AuthenticationFailed:
         return tr("%1 did not accept your SSH keys. ketPlus does not use SSH passwords. Name "
                   "your key for this host in ~/.ssh/config, or add it to the SSH agent and "
@@ -215,7 +259,9 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine& machine) {
                   "not connect. If the machine was reinstalled, choose Forget old key in Details "
                   "and compare the new key with the one on the machine before you accept it.")
             .arg(machine.name);
-    return errorMessage(machine.error, machine.name, machine.errorText);
+    return errorMessage(machine.error, machine.name, machine.errorText,
+                        machine.sshTarget.isEmpty() ? QString()
+                                                    : knownHostsName(machine.sshTarget));
 }
 
 bool LinuxMachineModel::hostAway(const LinuxMachine& machine, const QDateTime& now) {

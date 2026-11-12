@@ -292,16 +292,18 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                 // Focus the safe choice: Enter must never trust a key unread.
                 ssh.reject->setFocus();
             });
-        QObject::connect(model, &LinuxMachineModel::sshFailed, dialog,
-                         [ssh, pendingHost, resetSsh](const QString& host,
-                                                      const LinuxMachine::Error error,
-                                                      const QString& text) {
-                             if (host != *pendingHost)
-                                 return;
-                             resetSsh();
-                             showFeedback(ssh.feedback,
-                                          LinuxMachineModel::errorMessage(error, host, text), true);
-                         });
+        QObject::connect(
+            model, &LinuxMachineModel::sshFailed, dialog,
+            [ssh, pendingHost, resetSsh](const QString& host, const LinuxMachine::Error error,
+                                         const QString& text) {
+                if (host != *pendingHost)
+                    return;
+                resetSsh();
+                showFeedback(ssh.feedback,
+                             LinuxMachineModel::errorMessage(
+                                 error, host, text, LinuxMachineModel::knownHostsName(host)),
+                             true);
+            });
         QObject::connect(model, &LinuxMachineModel::sshConnected, dialog,
                          [dialog, pendingHost, shared](const QString& host) {
                              if (host != *pendingHost)

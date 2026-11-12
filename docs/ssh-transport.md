@@ -278,7 +278,14 @@ yet is `ssh:<target>`). The model shows its live state, the verified SSH host
 key, a presented key that did not verify (as a mismatch, never as verified),
 and an error the user can act on. A host that the Relay lists under the same
 machine id is one row reached over SSH, and the Relay's id is a route
-attribute. The connect card adds the target when Connect is pressed. An
+attribute. While SSH cannot reach that host (Offline, with no error or a
+connection failure) and the Relay is connected, the row falls back to the
+Relay: its state, Connect / Disconnect and `machineBackend(id)` are the
+Relay's. A key mismatch or a changed identity is never hidden behind the
+Relay. After an identity change, Details shows the trusted and the presented
+daemon identity before Trust new identity, which is disabled when the daemon
+named none. The `ssh-keygen -R` hint names the entry as ssh files it
+(`'[host]:port'` for a port other than 22). The connect card adds the target when Connect is pressed. An
 attempt that fails or is cancelled before the first connection removes the
 target and any key accepted for it. Connect, Disconnect, Remove, Forget old
 key and Trust new identity act on the backend. Saved machines with a trusted

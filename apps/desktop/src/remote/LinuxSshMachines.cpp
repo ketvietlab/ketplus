@@ -172,6 +172,8 @@ LinuxMachine LinuxSshMachines::machineFor(const SshMachineBackend& backend) cons
     machine.state = stateOf(backend.connectionState());
     machine.fingerprint = backend.sshHostKeyFingerprint();
     machine.presentedFingerprint = backend.presentedSshHostKeyFingerprint();
+    if (backend.identityChanged())
+        machine.presentedIdentity = backend.presentedMachineId();
     machine.error = errorOf(backend);
     if (machine.error != LinuxMachine::Error::None)
         machine.errorText = backend.connectionReason();
@@ -314,13 +316,14 @@ void LinuxSshMachines::forgetHostKey(const QString& machineId) {
         return;
     QString error;
     if (!machine->forgetAcceptedHostKeys(&error)) {
-        emit notice(error.isEmpty()
-                        ? tr("The old key of %1 is in your own known_hosts, which ketPlus does "
-                             "not change. Check the new key on the machine, then remove the old "
-                             "entry and connect again:\nssh-keygen -R %1")
-                              .arg(machine->target().alias)
-                        : error,
-                    true);
+        emit notice(
+            error.isEmpty()
+                ? tr("The old key of %1 is in your own known_hosts, which ketPlus does "
+                     "not change. Check the new key on the machine, then remove the old "
+                     "entry and connect again:\nssh-keygen -R %2")
+                      .arg(machine->target().alias, LinuxMachineModel::knownHostsCommandWord(key))
+                : error,
+            true);
         return;
     }
     publish();

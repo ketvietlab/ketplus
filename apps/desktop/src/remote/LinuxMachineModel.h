@@ -36,6 +36,9 @@ struct LinuxMachine final {
     QString fingerprint;
     // An SSH host key the host offered that did not verify (a mismatch): never shown as verified.
     QString presentedFingerprint;
+    // After an identity change (Error::IdentityChanged): the daemon identity the host now names,
+    // shown beside the trusted one (`id`) before the user trusts it; empty when it named none.
+    QString presentedIdentity;
     Error error{Error::None};
     QString errorText;
     // The Relay's machine id while the Relay lists this host: a route attribute, never the
@@ -133,8 +136,16 @@ class LinuxMachineModel : public QObject {
     // What the UI says for a state, a route and an error.
     [[nodiscard]] static QString stateText(LinuxMachine::State state);
     [[nodiscard]] static QString routeText(LinuxMachine::Route route);
+    // `knownHostsName` is the name the host's key is filed under, for the ssh-keygen -R hint;
+    // `host` when empty.
     [[nodiscard]] static QString errorMessage(LinuxMachine::Error error, const QString& host,
-                                              const QString& text = {});
+                                              const QString& text = {},
+                                              const QString& knownHostsName = {});
+    // The known_hosts name of an SSH destination ("[user@]host[:port]"): the host, or
+    // "[host]:port" for a port other than 22, as ssh files it.
+    [[nodiscard]] static QString knownHostsName(const QString& sshTarget);
+    // knownHostsName(), quoted for a shell when it is bracketed.
+    [[nodiscard]] static QString knownHostsCommandWord(const QString& sshTarget);
     // The message for the machine's error, with the path ketPlus offers to fix it.
     [[nodiscard]] static QString errorMessage(const LinuxMachine& machine);
     // A Relay host that has not refreshed its listing for this long is shown as away. The host

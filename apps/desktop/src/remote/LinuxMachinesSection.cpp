@@ -172,9 +172,14 @@ void LinuxMachinesSection::attachSshBackend(QString storePath,
 }
 
 remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) const {
+    // The route the row shows: SSH, or the Relay while it is the fallback (ADR 0119).
+    const auto* machine = model_ ? model_->machine(id) : nullptr;
+    auto* relay = relay_ ? relay_->backend(id) : nullptr;
+    if (machine && machine->route == LinuxMachine::Route::Relay && relay)
+        return relay;
     if (auto* backend = ssh_ ? ssh_->backend(id) : nullptr)
         return backend;
-    return relay_ ? relay_->backend(id) : nullptr;
+    return relay;
 }
 
 void LinuxMachinesSection::activate() {

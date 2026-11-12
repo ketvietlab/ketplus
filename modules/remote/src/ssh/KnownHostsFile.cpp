@@ -3,8 +3,12 @@
 #include <QByteArrayList>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageAuthenticationCode>
 #include <QSaveFile>
+#include <QTimeZone>
+
+#include <utility>
 
 namespace ketplus::remote::ssh {
 namespace {
@@ -92,41 +96,56 @@ int removeKnownHost(const QString& file, const QString& knownHostsName, QString*
     };
     if (knownHostsName.isEmpty())
         return 0;
-    QByteArrayList lines;
-    bool exists = false;
-    if (!readLines(file, &lines, &exists))
-        return fail(QStringLiteral("Unable to read the KetPlus known_hosts file."));
-    if (!exists)
-        return 0;
     const QByteArray name = knownHostsName.toUtf8();
-    QByteArrayList next;
-    int changed = 0;
-    for (const QByteArray& line : std::as_const(lines)) {
-        QByteArray kept;
-        switch (matchLine(line, name, &kept)) {
-        case LineMatch::None:
-            next.append(line);
-            break;
-        case LineMatch::Partial:
-            next.append(kept);
-            ++changed;
-            break;
-        case LineMatch::Whole:
-            ++changed;
-            break;
+    // ssh appends a key it accepts for another host to this file. A file that changed while it
+    // was being rewritten is read again, so such a key is not lost; the window left is the
+    // rename itself.
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const QFileInfo before(file);
+        const auto stamp = std::pair{before.size(), before.lastModified(QTimeZone::UTC)};
+        QByteArrayList lines;
+        bool exists = false;
+        if (!readLines(file, &lines, &exists))
+            return fail(QStringLiteral("Unable to read the KetPlus known_hosts file."));
+        if (!exists)
+            return 0;
+        QByteArrayList next;
+        int changed = 0;
+        for (const QByteArray& line : std::as_const(lines)) {
+            QByteArray kept;
+            switch (matchLine(line, name, &kept)) {
+            case LineMatch::None:
+                next.append(line);
+                break;
+            case LineMatch::Partial:
+                next.append(kept);
+                ++changed;
+                break;
+            case LineMatch::Whole:
+                ++changed;
+                break;
+            }
         }
+        if (changed == 0)
+            return 0;
+        QByteArray contents = next.join('\n');
+        if (!contents.isEmpty())
+            contents.append('\n');
+        QSaveFile out(file);
+        if (!out.open(QIODevice::WriteOnly) ||
+            !out.setPermissions(QFile::ReadOwner | QFile::WriteOwner) ||
+            out.write(contents) != contents.size())
+            return fail(QStringLiteral("Unable to write the KetPlus known_hosts file."));
+        const QFileInfo after(file);
+        if (std::pair{after.size(), after.lastModified(QTimeZone::UTC)} != stamp) {
+            out.cancelWriting();
+            continue;
+        }
+        if (!out.commit())
+            return fail(QStringLiteral("Unable to write the KetPlus known_hosts file."));
+        return changed;
     }
-    if (changed == 0)
-        return 0;
-    QByteArray contents = next.join('\n');
-    if (!contents.isEmpty())
-        contents.append('\n');
-    QSaveFile out(file);
-    if (!out.open(QIODevice::WriteOnly) ||
-        !out.setPermissions(QFile::ReadOwner | QFile::WriteOwner) ||
-        out.write(contents) != contents.size() || !out.commit())
-        return fail(QStringLiteral("Unable to write the KetPlus known_hosts file."));
-    return changed;
+    return fail(QStringLiteral("The KetPlus known_hosts file kept changing; try again."));
 }
 
 } // namespace ketplus::remote::ssh

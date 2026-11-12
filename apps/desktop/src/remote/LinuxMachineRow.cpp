@@ -235,7 +235,7 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     auto* dialog = new ket::Dialog(machine.name, anchor);
     dialog->setObjectName(QStringLiteral("linuxMachineDetailsDialog"));
     // Wider than the mock's 500 px: the whole SHA256 key must show to be compared.
-    dialog->setCardWidth(540);
+    dialog->setCardWidth(580);
     QObject::connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
     auto* body = new QWidget;
     auto* form = new QFormLayout(body);
@@ -274,10 +274,17 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         mono.setFamily(family);
     mono.setStyleHint(QFont::Monospace);
     mono.setPixelSize(13); // the mock's 13 px, so a SHA256 key fits the card on one line
-    // The daemon's host key on either route (ADR 0119): the SSH key, or the one pinned at pairing.
-    form->addRow(tr("Host key"), fingerprint);
+    // Over SSH, the SSH server's host key; over the Relay, the daemon identity pinned at pairing.
+    // They are different keys, so they are named apart.
+    form->addRow(machine.route == LinuxMachine::Route::Ssh ? tr("Host key") : tr("Host identity"),
+                 fingerprint);
     auto* verifiedLabel = value("linuxDetailsVerified");
     form->addRow(QString(), verifiedLabel);
+    // ADR 0119 "Host key rotation": both daemon identities are shown before the user trusts one.
+    auto* trustedIdentity = value("linuxDetailsTrustedIdentity");
+    form->addRow(tr("Trusted identity"), trustedIdentity);
+    auto* presentedIdentity = value("linuxDetailsPresentedIdentity");
+    form->addRow(tr("Presented identity"), presentedIdentity);
     auto* unavailable = value("linuxDetailsUnavailable");
     form->addRow(unavailable);
     auto* error = value("linuxDetailsError");
@@ -294,7 +301,7 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     // Nothing would carry out these before the backends are attached.
     if (model->backendsAttached()) {
         // Only an SSH machine is ketPlus's own to remove; a Relay pairing is ended on the host.
-        if (machine.route == LinuxMachine::Route::Ssh) {
+        if (machine.route == LinuxMachine::Route::Ssh || !machine.sshTarget.isEmpty()) {
             auto* remove = dialog->addButton(tr("Remove"), ket::ButtonVariant::Ghost);
             remove->setObjectName(QStringLiteral("linuxDetailsRemove"));
             QObject::connect(remove, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
@@ -335,7 +342,8 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     }
     // What can change while the card is open: the state, the key once verified, the error.
     const auto refresh = [guard, id, dialog, form, state, host, wait, unavailable, fingerprint,
-                          verifiedLabel, error, connect, disconnect, forget, trust, plain, mono] {
+                          verifiedLabel, trustedIdentity, presentedIdentity, error, connect,
+                          disconnect, forget, trust, plain, mono] {
         const auto* current = guard ? guard->machine(id) : nullptr;
         if (!current) {
             dialog->reject();
@@ -383,6 +391,19 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
             forget->setVisible(current->canForgetHostKey);
         if (trust)
             trust->setVisible(current->error == LinuxMachine::Error::IdentityChanged);
+        const bool rotated = current->error == LinuxMachine::Error::IdentityChanged;
+        trustedIdentity->setText(current->id);
+        trustedIdentity->setFont(mono);
+        presentedIdentity->setText(current->presentedIdentity.isEmpty()
+                                       ? tr("None: the daemon named no identity")
+                                       : current->presentedIdentity);
+        presentedIdentity->setFont(current->presentedIdentity.isEmpty() ? plain : mono);
+        presentedIdentity->setProperty("remoteTone", QStringLiteral("danger"));
+        form->setRowVisible(trustedIdentity, rotated);
+        form->setRowVisible(presentedIdentity, rotated);
+        // Nothing to trust when the daemon named no identity.
+        if (trust)
+            trust->setEnabled(rotated && !current->presentedIdentity.isEmpty());
     };
     refresh();
     QObject::connect(model, &LinuxMachineModel::machinesChanged, dialog, refresh);

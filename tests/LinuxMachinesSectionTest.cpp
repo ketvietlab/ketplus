@@ -58,6 +58,7 @@ class LinuxMachinesSectionTest final : public QObject {
     void detailsFollowTheModel();
     void enterConnectsAndAHostKeyFocusesReject();
     void detailsShowAnOfferedKeyAsAMismatchAndOfferRetrust();
+    void anIdentityChangeShowsBothIdentitiesBeforeTrust();
     void theRelayFollowsTheAccountEntitlement();
     void theRelayStopsWhenTheSessionIsRevoked();
     void aForgottenKeyReopensTheCardOnThatHost();
@@ -681,6 +682,52 @@ void LinuxMachinesSectionTest::theRelayStopsWhenTheSessionIsRevoked() {
     QCOMPARE(link->disconnects, 1);
     QVERIFY(!section.model()->relayEntitled());
     QVERIFY(!section.model()->machines().first().connectable);
+}
+
+void LinuxMachinesSectionTest::anIdentityChangeShowsBothIdentitiesBeforeTrust() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    auto rotated = make("SHA256:trustedDaemonKey", "build-node-02", "Linux · build-node-02",
+                        Route::Ssh, State::Offline, {}, Error::IdentityChanged);
+    rotated.presentedIdentity = QStringLiteral("SHA256:presentedDaemonKey");
+    model->setMachines({rotated});
+    QSignalSpy trusted(model, &LinuxMachineModel::trustIdentityRequested);
+    button(row(section, "SHA256:trustedDaemonKey"), QStringLiteral("linuxMachineDetails"))->click();
+    auto* details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsTrustedIdentity")),
+             QStringLiteral("SHA256:trustedDaemonKey"));
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsPresentedIdentity")),
+             QStringLiteral("SHA256:presentedDaemonKey"));
+    auto* trust = button(details, QStringLiteral("linuxDetailsTrustIdentity"));
+    QVERIFY(!trust->isHidden() && trust->isEnabled());
+
+    // A daemon that names no identity offers nothing to trust.
+    rotated.presentedIdentity.clear();
+    model->setMachines({rotated});
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsPresentedIdentity")),
+             QStringLiteral("None: the daemon named no identity"));
+    QVERIFY(!trust->isEnabled());
+    rotated.presentedIdentity = QStringLiteral("SHA256:presentedDaemonKey");
+    model->setMachines({rotated});
+    trust->click();
+    QCOMPARE(trusted.size(), 1);
+    QTRY_VERIFY(
+        !section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+
+    // Without a rotation, neither identity row shows.
+    model->setMachines(fleet());
+    button(row(section, "ssh-1"), QStringLiteral("linuxMachineDetails"))->click();
+    details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details);
+    QVERIFY(
+        !details->findChild<QLabel*>(QStringLiteral("linuxDetailsTrustedIdentity"))->isVisible());
+    details->reject();
 }
 
 void LinuxMachinesSectionTest::theRelayFollowsTheAccountEntitlement() {

@@ -140,6 +140,50 @@ class LinuxRelayMachinesTest : public QObject {
         QVERIFY(!model.machine(QStringLiteral("relay:relay-2")));
     }
 
+    void theRelayIsTheFallbackWhileSshCannotReachTheHost() {
+        LinuxMachineModel model;
+        LinuxMachine ssh;
+        ssh.id = pinned;
+        ssh.name = QStringLiteral("build-node-02");
+        ssh.route = Route::Ssh;
+        ssh.state = State::Offline;
+        ssh.error = Error::Other;
+        ssh.errorText = QStringLiteral("Connection timed out.");
+        ssh.sshTarget = QStringLiteral("build-node-02");
+        model.setSshMachines({ssh});
+        LinuxRelayMachines relay(&model, factory());
+        relay.setEnabled(true);
+        relay.setListed({{QStringLiteral("relay-1"), pinned, QStringLiteral("builder"), {}}});
+        // SSH is down and the Relay answers: the one machine is reached over the Relay.
+        QCOMPARE(model.machines().size(), 1);
+        auto machine = model.machines().first();
+        QCOMPARE(machine.route, Route::Relay);
+        QCOMPARE(machine.state, State::Connected);
+        QCOMPARE(machine.name, QStringLiteral("build-node-02"));
+        QCOMPARE(machine.sshTarget, QStringLiteral("build-node-02"));
+        QCOMPARE(machine.error, Error::None);
+        // Its Disconnect is the Relay's.
+        model.requestDisconnect(pinned);
+        QCOMPARE(links_.value(QStringLiteral("relay-1"))->disconnects, 1);
+        QCOMPARE(model.machines().first().route, Route::Ssh);
+        model.requestConnect(pinned); // SSH's to carry out: the Relay link stays stopped
+        QCOMPARE(links_.value(QStringLiteral("relay-1"))->connects, 1);
+
+        // A key mismatch is never hidden behind the Relay.
+        relay.setEnabled(false);
+        relay.setEnabled(true);
+        ssh.error = Error::HostKeyMismatch;
+        model.setSshMachines({ssh});
+        links_.value(QStringLiteral("relay-1"))->connectToRelay();
+        QCOMPARE(model.machines().first().route, Route::Ssh);
+        QCOMPARE(model.machines().first().error, Error::HostKeyMismatch);
+        // Nor is the Relay used without ketPlus Pro.
+        ssh.error = Error::Other;
+        model.setSshMachines({ssh});
+        relay.setEnabled(false);
+        QCOMPARE(model.machines().first().route, Route::Ssh);
+    }
+
     void hostPresenceIsShownApartFromTheRelayLink() {
         const auto now = QDateTime::currentDateTimeUtc();
         LinuxMachineModel model;

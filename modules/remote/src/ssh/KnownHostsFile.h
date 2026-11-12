@@ -14,7 +14,8 @@ namespace ketplus::remote::ssh {
 // Removes `knownHostsName` from every host key line of the file, as `ssh-keygen -R` does: a line
 // that lists only that name goes, a line that lists other names too keeps them, and a hashed line
 // for that name goes. Comments, other hosts and @revoked / @cert-authority lines stay. The file
-// is rewritten atomically and owner-only. Returns the number of lines changed (0 when the file
+// is rewritten atomically and owner-only; a file that changes during the rewrite (ssh appending a
+// key it accepted) is read again. Returns the number of lines changed (0 when the file
 // does not exist or names no such host), or -1 with `error` set when it cannot be rewritten.
 int removeKnownHost(const QString& file, const QString& knownHostsName, QString* error = nullptr);
 

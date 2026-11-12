@@ -47,6 +47,9 @@ Differences from the mock:
 - A Relay host that has not been seen for more than two minutes reads "Host
   offline" with "last seen …" under its detail line, and its Details says that
   requests wait for the host for up to 15 minutes. The mock has no presence.
-- Details names the daemon's key "Host key" on both routes. On the Relay it is
-  the key pinned at pairing, shown as Verified.
-- Remove appears only for SSH machines.
+- Details names the SSH server key "Host key" and the Relay's pinned daemon
+  identity "Host identity", since they are different keys. The card is 580 px
+  wide so the whole key shows under the longer label. After an ADR 0119
+  identity change, it also shows the trusted and the presented identity before
+  "Trust new identity".
+- Remove appears only for machines saved over SSH.

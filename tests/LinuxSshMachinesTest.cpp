@@ -227,7 +227,8 @@ class LinuxSshMachinesTest final : public QObject {
         QSignalSpy notices(&machines, &LinuxSshMachines::notice);
         model.requestForgetHostKey(id);
         QCOMPARE(notices.size(), 1);
-        QVERIFY(notices.first().first().toString().contains("ssh-keygen -R devbox"));
+        // ssh files a key for port 2222 as "[devbox]:2222", quoted so the shell keeps it whole.
+        QVERIFY(notices.first().first().toString().contains("ssh-keygen -R '[devbox]:2222'"));
     }
 
     void removingDeletesTheIdentityAndTheAcceptedKey() {
@@ -252,6 +253,25 @@ class LinuxSshMachinesTest final : public QObject {
         QVERIFY(saved.machines().isEmpty());
         QVERIFY(!remote::ssh::hasKnownHost(fixture.knownHosts(), devboxKey.knownHostsName));
         QVERIFY(remote::ssh::hasKnownHost(fixture.knownHosts(), QStringLiteral("other")));
+    }
+
+    void knownHostsNamesAreTheOnesSshFilesKeysUnder() {
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("build-node-02")),
+                 QStringLiteral("build-node-02"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("dev@build-node-02:22")),
+                 QStringLiteral("build-node-02"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("dev@build-node-02:2222")),
+                 QStringLiteral("[build-node-02]:2222"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("[2001:db8::1]:2222")),
+                 QStringLiteral("[2001:db8::1]:2222"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("[2001:db8::1]")),
+                 QStringLiteral("2001:db8::1"));
+        LinuxMachine machine;
+        machine.name = QStringLiteral("build-node-02");
+        machine.sshTarget = QStringLiteral("dev@build-node-02:2222");
+        machine.error = LinuxMachine::Error::HostKeyMismatch;
+        QVERIFY(LinuxMachineModel::errorMessage(machine).endsWith(
+            QStringLiteral("ssh-keygen -R '[build-node-02]:2222'")));
     }
 
     void thePickerAndTheSelectionSeamFollowTheMachines() {
