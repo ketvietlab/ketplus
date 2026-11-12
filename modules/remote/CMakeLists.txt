@@ -33,7 +33,9 @@ ketplus_enable_warnings(ketplus_control_crypto)
 # Independent backend for a Desktop acting as a paired remote client; no UI composition yet.
 add_library(ketplus_remote_control STATIC
     src/control/ControlV2Client.h src/control/ControlV2Client.cpp
-    src/control/ControlV2Authentication.cpp src/control/ControlV2Sessions.cpp)
+    src/control/ControlV2Authentication.cpp src/control/ControlV2Sessions.cpp
+    src/control/ControlV2Content.h src/control/ControlV2Projection.cpp
+    src/control/ControlV2Transcript.cpp)
 target_link_libraries(ketplus_remote_control PUBLIC ketplus_control_crypto Qt6::Network)
 target_include_directories(ketplus_remote_control PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_remote_control)

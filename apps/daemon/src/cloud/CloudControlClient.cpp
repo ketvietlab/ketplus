@@ -803,7 +803,10 @@ QJsonArray CloudControlClient::sessionSnapshots(
                  {QStringLiteral("lastTurnStartedAt"), session.lastTurnStartedAt},
                  // "state" says whether the conversation takes a new turn; this says how the
                  // last one ended, which "ready" after a failure no longer shows.
-                 {QStringLiteral("lastTurnOutcome"), lastTurnOutcome(session)}});
+                 {QStringLiteral("lastTurnOutcome"), lastTurnOutcome(session)},
+                 // A paired Desktop shows these from the host-signed copy, not the relay's.
+                 {QStringLiteral("title"), snapshot.value(QStringLiteral("title"))},
+                 {QStringLiteral("state"), snapshot.value(QStringLiteral("state"))}});
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.

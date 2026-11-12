@@ -192,10 +192,35 @@ reads once. The claim digest is base64url, as the relay computes it.
 Desktop now uses a loopback PKCE browser handoff to obtain a UserSession for the
 backend's installation ID, and Connections can claim and approve a Linux pairing
 link after an explicit identity comparison. The sidebar lists the local machine
-and any remote machine IDs visible in the worktree index. Session/worktree index
-metadata remains sealed; presentation,
-sealed metadata projection, large-event assembly, session creation/restore,
-attachments and a durable Desktop command outbox are future integrations. The
-current backend supports ordinary session controls and workspace-file requests;
-it is not a complete remote Desktop product. A changed host signing key version
-in an event page fails closed; historical-key selection is also a future extension.
+and any remote machine IDs visible in the worktree index.
+
+`ControlV2Client::projection` opens the sealed session metadata and returns
+`{repositories, conversations, rejected}`. A conversation's title, state,
+updated time (`lastTurnStartedAt`) and branch come from the host-signed
+metadata (the host now also seals `title` and `state`; older hosts fall back to
+the relay's routing copy). Rows and worktrees from a host without a pin are
+left out, and so is a row whose metadata fails authentication or names
+another cursor; each is listed in `rejected` with a reason and never shown. A
+row whose session key is not granted yet is listed as `metadata: "pending"`
+without sealed fields. The worktree index carries no signature: it is limited
+to pinned hosts, and a worktree's branch is shown only from a verified
+conversation in it.
+
+`ControlV2Client::transcriptWindow` pages a transcript over Control v2 with a
+sealed `transcript.restore_window` request and returns the local
+`session.transcript_window` page shape: the newest turns first
+(`before_cursor` 0), then older pages by the previous page's `before_cursor`
+at the same `snapshot_cursor`, bounded by `event_limit` (128), `turn_limit`
+(3) and `byte_cap` (4 KiB to 512 KiB). Each response fragment is decrypted
+with the host's pinned signing key and the page digest is checked before use.
+A large event in the page is fetched through a continuation chain (each
+request bound to the previous response digest) and reassembled with
+`LargeEventReassembler` before the page is delivered.
+
+Any host-signed content naming a signing key version other than the pinned
+one that opened its session key fails closed (events, metadata and restore
+responses) and needs a new pairing; historical-key selection is a future
+extension. Presentation, session creation, attachments and a durable Desktop
+command outbox are future integrations. The current backend supports ordinary
+session controls and workspace-file requests; it is not a complete remote
+Desktop product.
