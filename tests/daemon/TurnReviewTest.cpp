@@ -207,18 +207,14 @@ class TurnReviewTest final : public QObject {
         QVERIFY(!log.contains("scratchDirectory"));
         QVERIFY(log.contains("\"permission\": \"read-only\""));
 
-        // "finished" has no verdict, so it counts as findings: the working agent fixes them.
-        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 3, 10000);
-        const QJsonObject fix = fixture.payloads(working, "user.message").last();
-        QCOMPARE(fix.value("origin").toString(), "agent");
-        QCOMPARE(fix.value("agent_messages").toArray().first().toObject().value("kind").toString(),
-                 "reply");
-        QVERIFY(!fix.value("review_guard").toBool());
-        // The fix turn changed nothing, so no second review is asked for.
+        // T-19: "finished" has no verdict line. It is recorded as "no verdict" and is not
+        // findings: no fix turn starts, and nothing asks for another round.
         QTRY_VERIFY_WITH_TIMEOUT(
-            lastNotice(fixture, working, "review_skipped").value("reason").toString() ==
-                "no_changes",
-            5000);
+            lastNotice(fixture, working, "review_recorded").value("verdict").toString() ==
+                "no_verdict",
+            10000);
+        QTest::qWait(500);
+        QCOMPARE(fixture.count(working, "turn.completed"), 2);
         QCOMPARE(reviewsFrom(fixture, working).size(), 1);
         QCOMPARE(reviewsFrom(fixture, reviewer).size(), 0);
         QCOMPARE(lastNotice(fixture, working, "sent").value("kind").toString(), "review");
@@ -407,8 +403,9 @@ class TurnReviewTest final : public QObject {
                         .value("ok")
                         .toBool());
             QTest::qWait(300);
-            // The fake reviewer answers "Verdict: no findings" when the diff says so.
-            QVERIFY(write(worktree + "/README.md", clean ? "no-findings\n" : "Needs work\n"));
+            // The fake reviewer answers "Verdict: no findings" or "Verdict: findings" when the
+            // diff says so.
+            QVERIFY(write(worktree + "/README.md", clean ? "no-findings\n" : "with-findings\n"));
             QVERIFY(!fixture.start("claude", "Change it", working, worktree).isEmpty());
             QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 10000);
             QTRY_VERIFY_WITH_TIMEOUT(!lastNotice(fixture, working, "review_recorded").isEmpty(),

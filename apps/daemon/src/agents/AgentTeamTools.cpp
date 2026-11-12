@@ -40,6 +40,8 @@ const QStringList& names() {
                                    QStringLiteral("team_task_handover"),
                                    QStringLiteral("team_task_criteria"),
                                    QStringLiteral("team_task_close"),
+                                   QStringLiteral("team_review_void"),
+                                   QStringLiteral("team_review_accept"),
                                    QStringLiteral("team_lane_set"),
                                    QStringLiteral("team_decision_raise"),
                                    QStringLiteral("team_decision_withdraw")};
@@ -139,6 +141,23 @@ QJsonArray teamTools() {
                text(QStringLiteral("A pull request URL or the commit that contains the work."))},
               {QStringLiteral("note"), text(QStringLiteral("Why the task is done."))}},
              {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("note")}),
+        tool(QStringLiteral("team_review_void"),
+             QStringLiteral("Leader: void the last recorded review verdict of a task that should "
+                            "not have counted. The round counter goes back by one and the task "
+                            "returns to in review; the history keeps the verdict and the reason."),
+             {{QStringLiteral("task_id"), taskId},
+              {QStringLiteral("reason"), text(QStringLiteral("Why the verdict does not count."))}},
+             {QStringLiteral("task_id"), QStringLiteral("reason")}),
+        tool(QStringLiteral("team_review_accept"),
+             QStringLiteral("Leader: accept a review made outside the board, for example on the "
+                            "pull request. A task in review, or blocked by its review, becomes "
+                            "ready."),
+             {{QStringLiteral("task_id"), taskId},
+              {QStringLiteral("evidence"),
+               text(QStringLiteral("Where the review is: a pull request review or comment URL, "
+                                   "or what was checked."))},
+              {QStringLiteral("reason"), text(QStringLiteral("Why it is accepted."))}},
+             {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
         tool(QStringLiteral("team_lane_set"),
              QStringLiteral("Leader: change a developer's lane and path prefixes. Logged in "
                             "Updates and in the history of the tasks it affects."),

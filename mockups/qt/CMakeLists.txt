@@ -13,13 +13,14 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
 
-# The kit, pinned to a merged develop commit. FETCHCONTENT_SOURCE_DIR_KETQT points at a
+# The kit, pinned to the commit the app pins (until ket-qt #55 is merged, a merge of it
+# onto #53). FETCHCONTENT_SOURCE_DIR_KETQT points at a
 # local checkout instead. KetQt::Widgets is only for ket::printImage(), the image viewer's
 # Print: the system print dialog is a widget, as in the app.
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 90ed71f4d7d9e58d89b17f4dd734837cf7c0a1f5 # ket-qt PR #51 (a dark window dims behind a dialog)
+    GIT_TAG 7a1ef101e09017488194b78f701790e533025945 # ket-qt #55 (multi-line text field) on #53/#54
 )
 FetchContent_MakeAvailable(ketqt)
 

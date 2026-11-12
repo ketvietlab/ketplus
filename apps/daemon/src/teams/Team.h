@@ -99,6 +99,8 @@ struct Task final {
     QString headCommit;
     QString pullRequest;
     int round{0};
+    // T-19: replies in a row without a verdict line for the round in review.
+    int missingVerdicts{0};
     QStringList outsideLane;
     // ADR 0114, open point 5: an assignment made before the first plan is approved.
     bool assignmentHeld{false};

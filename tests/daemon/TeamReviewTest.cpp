@@ -247,7 +247,7 @@ class TeamReviewTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
         QCOMPARE(reviewsTo("rev").size(), 2);
         QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 2)"));
-        finishReview(*teams_, "rev", "Still wrong.", false);
+        finishReview(*teams_, "rev", "Still wrong.\nVerdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
         QVERIFY(task(id).question.contains("round limit"));
         QCOMPARE(reviewsTo("dev1").size(), 1);
@@ -255,13 +255,6 @@ class TeamReviewTest final : public QObject {
         for (const auto& update : journal_->teamUpdates(team_, true, 100))
             limit = limit || (update.kind == "round_limit" && update.actionable);
         QVERIFY(limit);
-    }
-
-    void aReplyWithoutAVerdictCountsAsFindingsWithANote() {
-        const QString id = inReview("Cart", "dev1");
-        finishReview(*teams_, "rev", "Looks mostly fine.", false);
-        QCOMPARE(task(id).state, state::inProgress);
-        QVERIFY(reviewsTo("dev1").first().body.contains("no verdict line"));
     }
 
     void aReviewThatDoesNotFinishBlocksTheTask() {
@@ -351,10 +344,12 @@ class TeamReviewTest final : public QObject {
     void theReviewerReviewsATaskEndToEnd_data() {
         QTest::addColumn<QString>("title");
         QTest::addColumn<QString>("verdict");
-        // The fake reviewer answers "Verdict: no findings" to a prompt naming no-findings,
-        // and without a verdict line, which counts as findings, to any other.
+        // The fake reviewer answers "Verdict: no findings" to a prompt naming no-findings and
+        // "Verdict: findings" to one naming with-findings. Without a verdict line (T-19) the
+        // reviewer is asked once more, then the task waits for the leader.
         QTest::newRow("no findings") << "Cart no-findings" << "ready";
-        QTest::newRow("findings") << "Cart" << "in_progress";
+        QTest::newRow("findings") << "Cart with-findings" << "in_progress";
+        QTest::newRow("no verdict") << "Cart" << "blocked";
     }
 
     void theReviewerReviewsATaskEndToEnd() {
@@ -441,6 +436,12 @@ class TeamReviewTest final : public QObject {
         QVERIFY2(!scratch.isEmpty() && QFileInfo(scratch).isDir(), qPrintable(scratch));
         QVERIFY2(log.contains(("\"scratchDirectory\": \"" + scratch + "\"").toUtf8()),
                  log.constData());
+        if (verdict == QStringLiteral("blocked")) {
+            // Asked twice, never as findings: the owner received nothing of the review.
+            QCOMPARE(fixture.journal->agentMessagesOf(reviewer, 1, 10).size(), 2);
+            for (const auto& message : fixture.journal->agentMessagesOf(developer, 1, 10))
+                QVERIFY(message.kind != QStringLiteral("review"));
+        }
         if (verdict == QStringLiteral("in_progress")) {
             // The findings start an ordinary turn of the owner, whatever its provider: they
             // are not a review request, so they are neither refused nor read-only.

@@ -63,6 +63,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
+    task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
     if (task.outsideLane.size() > maximumOutsidePaths)
         task.outsideLane.resize(maximumOutsidePaths);
@@ -261,6 +262,7 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("head_commit"), task.headCommit},
                      {QStringLiteral("pull_request"), task.pullRequest},
                      {QStringLiteral("round"), task.round},
+                     {QStringLiteral("missing_verdicts"), task.missingVerdicts},
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},

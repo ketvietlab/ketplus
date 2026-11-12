@@ -348,7 +348,10 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
     teams::Team draft;
     draft.repository = repository;
     draft.name = teamName;
-    draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed().left(4000);
+    // Refused before any member's conversation starts; never cut.
+    draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed();
+    if (const auto invalid = teams::rules::validGoal(draft.goal))
+        return failure(invalid->code, invalid->message);
     draft.integrationBranch =
         payload.value(QStringLiteral("integration_branch")).toString().trimmed();
     if (const auto invalid = teams::rules::validBranch(draft.integrationBranch))

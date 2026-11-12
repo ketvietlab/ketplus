@@ -317,9 +317,10 @@ QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
             QStringLiteral("Review from @agent/") + data.value("peer_number").toString();
         if (const QString title = data.value("peer_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
-        label += data.value("verdict").toString() == QStringLiteral("no_findings")
-                     ? QStringLiteral(" · No findings")
-                     : QStringLiteral(" · Findings");
+        const QString verdict = data.value("verdict").toString();
+        label += verdict == QStringLiteral("no_findings")  ? QStringLiteral(" · No findings")
+                 : verdict == QStringLiteral("no_verdict") ? QStringLiteral(" · No verdict")
+                                                           : QStringLiteral(" · Findings");
         auto entry =
             message(QStringLiteral("user"), data.value("body").toString(), label, {}, itemId);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("agentMessage"));
