@@ -28,6 +28,16 @@ available under MPL 2.0.
 
 Reference: https://www.mozilla.org/en-US/MPL/2.0/FAQ/
 
+## Trademarks
+
+The ketPlus and ketPlus Pro names, the ketPlus mark
+(`mockups/qt/assets/ketplus-mark-v2.png` and every derivative: app icons, lockups,
+installer artwork) and the wordmark lockups are trademarks, all rights reserved.
+They are visible in the public tree but not licensed: not by MPL 2.0, and not by the
+CC BY 4.0 or OFL texts that cover the Két Symbol and the KÉT fonts.
+[TRADEMARKS.md](../TRADEMARKS.md) lists the covered files and the permitted uses. A
+distribution of a fork must replace them with its own name and icon.
+
 ## Direct dependencies
 
 The following components are compiled, linked, or embedded into the current

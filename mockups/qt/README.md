@@ -305,11 +305,11 @@ without its "Teams (n)" level: a team is a branch of its repository, directly.
 The supplied KetPlusMark PNG is the approved mark in the sidebar,
 Settings and transcript (`assets/ketplus-mark-v2.png`). Its 64/128 px derivatives
 use explicit `-64` / `-128` names so Qt cannot select a small `@2x` image for the
-1024 px source on Retina displays. No separate asset licence was supplied with
-the new PNG; this mock does not assert a reuse licence or grant trademark rights.
-The product owner must settle the asset licence before release distribution.
+1024 px source on Retina displays. The mark, its derivatives and the ketPlus / ketPlus
+Pro lockups are trademarks, all rights reserved; no licence is granted, and the CC BY
+4.0 text in `assets/` covers the Két Symbol only (see [TRADEMARKS.md](../../TRADEMARKS.md)).
 
-The name KétPlus is a trademark and is not licensed. The Mermaid renderings use
+The names ketPlus and ketPlus Pro are trademarks and are not licensed. The Mermaid renderings use
 the Két Mermaid theme from Két Design System (MIT,
 `core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
 
