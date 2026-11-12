@@ -268,6 +268,39 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
+## Sidebar tree (concept)
+
+The repository list is a tree, drawn by mock-local parts until the design is approved; they
+then move into ket-qt (both layers) as a tree row beside `KetGroupHeader` and
+`KetConversationRow`. Two earlier concepts were dropped: second lines with tag chips (#535),
+and a flat list of labels without icons or guide lines. The tree follows Jay's design idea,
+without its "Teams (n)" level: a team is a branch of its repository, directly.
+
+- **A repository is the root** (`qml/shell/SidebarRepoHeader.qml`): a chevron that folds it,
+  a folder, the name in small capitals, and the count of its conversations, which stays.
+  Folded, one dot says that something inside waits for the user. `+` shows on hover or focus,
+  left of the count, and offers a new conversation or a new team.
+- **A team is a branch** (`qml/shell/TeamFolder.qml`): the chevron folds it, the name opens
+  the team's page, the count is its members. A warning mark before the count and a semibold
+  name say that a decision waits for the user. The highlight of a selected team starts right
+  of the chevron.
+- **"Conversations (n)"** (`qml/shell/SidebarSection.qml`) labels the conversations that
+  belong to no team, with `+` for a new one. It shows only where the repository also has
+  teams; a repository without a team lists its conversations directly.
+- **Every conversation is one line** (`qml/shell/SidebarRow.qml`): the state's own mark and
+  colour, the title, `#number`. Finished and unread is a dot and a semibold title. Role,
+  state in words, what started the turn and worktree are in the hint of a resting
+  pointer and in the accessible description.
+- **Guide lines** run under a chevron's centre for as long as what it holds: one for the
+  repository, one for each team. A row's highlight starts right of its guide line.
+- **Two text edges.** The repository's name, the "Conversations" label and the titles of its
+  own conversations start together; a team's name and its members' titles start together,
+  one level in, and a team's icon stands over its members' marks. `--smoke` checks these
+  edges and that every conversation is one line high (`Sidebar.layoutProblems`).
+- "Show N more" says how many it adds.
+
+`--open=repo-folded` folds every repository for a capture of the labels alone.
+
 The supplied KetPlusMark PNG is the approved mark in the sidebar,
 Settings and transcript (`assets/ketplus-mark-v2.png`). Its 64/128 px derivatives
 use explicit `-64` / `-128` names so Qt cannot select a small `@2x` image for the
