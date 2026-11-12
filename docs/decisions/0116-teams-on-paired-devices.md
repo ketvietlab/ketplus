@@ -504,6 +504,8 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
    merge" with the success tone, and add it to the mock.
 2. **A written answer.** The protocol accepts `text` as well as a choice, but the mock
    offers only the choices. *Recommended*: choices only in the first version.
+   *Follow-up (T-55)*: the desktop card has "Other…" with a written answer; the phone
+   follows as its own change.
 3. **The reason of a handover from the phone.** The daemon requires a reason, and the
    mock's handover sheet has no field for it. *Recommended*: add an optional field that
    defaults to "Handed over from <device name>".

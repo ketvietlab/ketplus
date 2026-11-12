@@ -10,6 +10,7 @@
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
+#include "KetTextArea.h"
 #include "KetTextField.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
@@ -27,6 +28,7 @@
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTableWidget>
+#include <QTextEdit>
 #include <QtTest>
 #include <functional>
 
@@ -477,6 +479,83 @@ class TeamPageTest final : public QObject {
         QCOMPARE(sent.value("choice").toString(), QStringLiteral("Stripe"));
         QTRY_VERIFY(!page.findChild<QFrame*>("teamDecision_D-1"));
         QCOMPARE(teams_->team("7")->value("open_decisions").toInt(), 0);
+    }
+
+    // T-55: the last choice is "Other…", a field on the card. Enter sends, Shift+Enter adds a
+    // line, Esc and Cancel put the card back; a refusal shows on the card and keeps the text.
+    void otherWritesTheAnswerOnTheCard() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1100, 900);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        const auto card = [&] { return page.findChild<QFrame*>("teamDecision_D-1"); };
+        const auto field = [&] {
+            return card() ? card()->findChild<ket::TextArea*>("teamDecisionOtherText") : nullptr;
+        };
+        const auto button = [&](const char* name) {
+            return card()->findChild<QAbstractButton*>(QLatin1String(name));
+        };
+        // The conversation is not where the card is answered any more.
+        QVERIFY(!card()->findChild<QWidget*>("teamDecisionInConversation"));
+        for (auto* any : card()->findChildren<QAbstractButton*>())
+            QVERIFY(!any->text().contains("conversation"));
+        QVERIFY(!field());
+        const auto open = [&] {
+            QAbstractButton* other = button("teamDecisionOther");
+            QVERIFY(other && other->isEnabled());
+            QVERIFY(other->text().startsWith("Other"));
+            other->click();
+            QTRY_VERIFY(field());
+            // The window's focus child: offscreen, the page need not be the active window.
+            QTRY_COMPARE(page.focusWidget(), static_cast<QWidget*>(field()->editor()));
+            QVERIFY(!button("teamDecisionOther"));
+        };
+        open();
+        // Nothing to send while empty or blank: Send waits and Enter sends nothing.
+        QVERIFY(!button("teamDecisionOtherSend")->isEnabled());
+        field()->setText("   ");
+        QVERIFY(!button("teamDecisionOtherSend")->isEnabled());
+        QTest::keyClick(field()->editor(), Qt::Key_Return);
+        QCOMPARE(daemon_.count("team.decision.answer"), 0);
+        // Esc puts the card back, with its choices and Other.
+        QTest::keyClick(field()->editor(), Qt::Key_Escape);
+        QTRY_VERIFY(!field());
+        QCOMPARE(card()->findChildren<ket::Button*>("teamDecisionChoice").size(), 2);
+        open();
+        button("teamDecisionOtherCancel")->click();
+        QTRY_VERIFY(!field());
+        QVERIFY(button("teamDecisionOther"));
+
+        open();
+        QTest::keyClicks(field()->editor(), "Neither: use Adyen");
+        QTest::keyClick(field()->editor(), Qt::Key_Return, Qt::ShiftModifier);
+        QTest::keyClicks(field()->editor(), "for the fees");
+        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
+        QVERIFY(button("teamDecisionOtherSend")->isEnabled());
+        const QString closed = "The decision D-1 was already answered.";
+        daemon_.answers.insert(
+            "team.decision.answer",
+            {{"ok", false}, {"error_code", "decision_closed"}, {"error_message", closed}});
+        QTest::keyClick(field()->editor(), Qt::Key_Return);
+        QCOMPARE(daemon_.count("team.decision.answer"), 1);
+        QJsonObject sent = daemon_.last("team.decision.answer");
+        QCOMPARE(sent.value("decision_id").toString(), QStringLiteral("D-1"));
+        QCOMPARE(sent.value("choice").toString(),
+                 QStringLiteral("Neither: use Adyen\nfor the fees"));
+        // Refused: the reason on the card, the text as it was typed.
+        auto* error = card()->findChild<QLabel*>("teamDecisionError");
+        QTRY_VERIFY(error->isVisible());
+        QVERIFY(error->text().contains(closed));
+        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
+        QVERIFY(button("teamDecisionOtherSend")->isEnabled());
+
+        // Sent again and taken: the decision leaves Waiting for you.
+        daemon_.answers.insert("team.decision.answer",
+                               {{"ok", true}, {"team", fixture(2, 2, false, false)}});
+        button("teamDecisionOtherSend")->click();
+        QCOMPARE(daemon_.count("team.decision.answer"), 2);
+        QTRY_VERIFY(!card());
     }
 
     void theTaskDialogShowsHistoryAndHandsOver() {

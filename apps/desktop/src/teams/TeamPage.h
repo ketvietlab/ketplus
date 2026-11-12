@@ -2,6 +2,7 @@
 
 #include "teams/TeamGoal.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
@@ -82,6 +83,10 @@ class TeamPage final : public QWidget {
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
+    // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
+    [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
+                                         bool sentences);
+    [[nodiscard]] QWidget* decisionDraft(QWidget* card, const QString& id, const QString& what);
     void buildTasks(const QJsonObject& team);
     void buildMembers(const QJsonObject& team);
     // ADR 0114 §10 (TeamPageStorage.cpp): the disk under the team's worktrees and the worktrees
@@ -132,6 +137,11 @@ class TeamPage final : public QWidget {
     bool roomy_{false};
     // The goal stays open across rebuilds once the user opened it.
     bool goalExpanded_{false};
+    // T-55: the written answers being typed, by decision id, and the one to focus once built.
+    QHash<QString, QString> decisionDrafts_;
+    QString focusDraft_;
+    // The written answer just opened: it takes the keyboard when the rebuild ends.
+    QPointer<QWidget> draftFocus_;
     team_goal::ConversationDirectory conversations_;
     bool compact_{false};
     bool segmented_{true};

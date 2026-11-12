@@ -288,7 +288,13 @@ void TeamPage::rebuild() {
                 tasks_->setCurrentCell(row, 0);
                 break;
             }
-    restoreFocus(focus);
+    // A written answer just opened takes the keyboard from Other, which is gone.
+    if (draftFocus_) {
+        draftFocus_->setFocus(Qt::OtherFocusReason);
+        draftFocus_.clear();
+    } else {
+        restoreFocus(focus);
+    }
 }
 
 // A section's title, what it counts, and at the right what acts on the whole section.
