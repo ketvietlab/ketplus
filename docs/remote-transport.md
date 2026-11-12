@@ -6,6 +6,8 @@ and [0025](decisions/0025-remote-transport-protocol.md) define the target protoc
 The daemon advertises `transport.webrtc/1` and `teams.remote/1` in this phase, so it continues
 legacy encrypted event uploads and mailbox processing for existing clients.
 Same-machine Desktop keeps IPC. No current iPhone release is claimed to use P2P.
+A Desktop that can already reach a Linux host over OpenSSH can instead use the
+SSH route in [`ssh-transport.md`](ssh-transport.md), which bypasses the relay.
 
 This document specifies how a paired remote client and the daemon agree on the transport, set up a
 WebRTC connection through the relay, authenticate it, and exchange frames, and how both ends
