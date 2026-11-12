@@ -46,7 +46,9 @@ transcript windows carry `event_type` and the data as `payload`.
   `MachineConversationActions`: Rename…, Fork and Archive through the
   machine's backend, each disabled with `MachineBackend::unsupportedReason()`
   as its tooltip where the route does not carry it (ADR 0119, "Parity of
-  conversation operations"). A fork opens once the machine lists it. A failure
+  conversation operations"). A fork opens once the machine lists it. A command
+  the Relay queued shows "Fork sent. Waiting for the machine…" (or Rename,
+  Archive) in the status line until the host answers. A failure
   shows in the composer's status line.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,

@@ -43,12 +43,17 @@ bool MachineConversationActions::start(const Feature feature, const QString& ses
 }
 
 remote::MachineBackend::Callback
-MachineConversationActions::done(std::function<void(const QJsonObject&)> succeeded) {
+MachineConversationActions::done(const QString& sent,
+                                 std::function<void(const QJsonObject&)> succeeded) {
     // A command the Relay queued finishes on commandCompleted(); the others answer at once.
+    // Until it does, pendingStatus() says it was sent and waits for the machine.
     auto finish = [self = QPointer(this), succeeded = std::move(succeeded)](
-                      const QJsonObject& result, const QString& error) {
+                      const QJsonObject& result, const QString& error,
+                      const QString& commandId = {}) {
         if (self == nullptr)
             return;
+        if (!commandId.isEmpty())
+            self->pending_.remove(commandId);
         if (!error.isEmpty()) {
             self->lastError_ = error;
             emit self->failed(error);
@@ -60,13 +65,15 @@ MachineConversationActions::done(std::function<void(const QJsonObject&)> succeed
         }
         emit self->finished();
     };
-    return [self = QPointer(this), backend = QPointer(catalog_->backend()),
-            finish](const QJsonObject& result, const QString& error) mutable {
+    return [self = QPointer(this), backend = QPointer(catalog_->backend()), finish,
+            sent](const QJsonObject& result, const QString& error) mutable {
         const QString commandId = remote::queuedCommandId(result);
         if (!error.isEmpty() || commandId.isEmpty() || backend == nullptr || self == nullptr) {
             finish(result, error);
             return;
         }
+        self->pending_.insert(commandId, sent);
+        emit self->pendingChanged();
         auto connection = std::make_shared<QMetaObject::Connection>();
         *connection =
             connect(backend, &remote::MachineBackend::commandCompleted, self,
@@ -75,8 +82,14 @@ MachineConversationActions::done(std::function<void(const QJsonObject&)> succeed
                         if (id != commandId)
                             return;
                         disconnect(*connection);
-                        finish(completed, failure);
+                        finish(completed, failure, commandId);
                     });
+        // A machine that goes away answers nothing more: its command is not left waiting.
+        connect(backend, &QObject::destroyed, self, [self, commandId, connection] {
+            disconnect(*connection);
+            if (self != nullptr && self->pending_.remove(commandId) > 0)
+                emit self->pendingChanged();
+        });
     };
 }
 
@@ -85,7 +98,8 @@ void MachineConversationActions::rename(const QString& sessionId, const QString&
     qint64 generation = 0;
     if (trimmed.isEmpty() || !start(Feature::Rename, sessionId, &generation))
         return;
-    catalog_->backend()->renameConversation(sessionId, generation, trimmed, done({}));
+    catalog_->backend()->renameConversation(sessionId, generation, trimmed,
+                                            done(tr("Rename sent. Waiting for the machine…")));
 }
 
 void MachineConversationActions::fork(const QString& sessionId) {
@@ -96,18 +110,21 @@ void MachineConversationActions::fork(const QString& sessionId) {
     const QString forkId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString machine = catalog_->machineId();
     catalog_->backend()->forkConversation(
-        sessionId, generation, forkId, done([this, machine, forkId](const QJsonObject& result) {
-            const QString id = result.value(QLatin1String("session_id")).toString(forkId);
-            emit forked(machine, id,
-                        result.value(QLatin1String("session_generation")).toInteger(1));
-        }));
+        sessionId, generation, forkId,
+        done(tr("Fork sent. Waiting for the machine…"),
+             [this, machine, forkId](const QJsonObject& result) {
+                 const QString id = result.value(QLatin1String("session_id")).toString(forkId);
+                 emit forked(machine, id,
+                             result.value(QLatin1String("session_generation")).toInteger(1));
+             }));
 }
 
 void MachineConversationActions::archive(const QString& sessionId) {
     qint64 generation = 0;
     if (!start(Feature::Archive, sessionId, &generation))
         return;
-    catalog_->backend()->setConversationArchived(sessionId, generation, true, done({}));
+    catalog_->backend()->setConversationArchived(
+        sessionId, generation, true, done(tr("Archive sent. Waiting for the machine…")));
 }
 
 QMenu* MachineConversationActions::menu(const QString& sessionId, QWidget* parent) {

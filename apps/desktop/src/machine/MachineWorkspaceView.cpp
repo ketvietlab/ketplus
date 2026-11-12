@@ -128,6 +128,8 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
         actionError_ = error;
         render();
     });
+    connect(actions_, &MachineConversationActions::pendingChanged, this,
+            &MachineWorkspaceView::render);
     connect(actions_, &MachineConversationActions::finished, this, [this] {
         actionError_ = actions_->lastError();
         render();
@@ -256,6 +258,8 @@ void MachineWorkspaceView::render() {
         reason = tr("Choose a worktree on this machine.");
     else if (newConversation)
         reason = createError_;
+    else if (!actions_->pendingStatus().isEmpty())
+        reason = actions_->pendingStatus();
     else if (!actionError_.isEmpty())
         reason = actionError_;
     else

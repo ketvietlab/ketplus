@@ -363,9 +363,42 @@ class MachineTranscriptPagingTest final : public QObject {
         actions.rename("relay-1", "Deploy notes");
         QCOMPARE(relay.calls("renameConversation").first().generation, 4);
         QCOMPARE(finished.size(), 0); // queued: nothing is final yet
+        QCOMPARE(actions.pendingStatus(), QStringLiteral("Rename sent. Waiting for the machine…"));
         relay.complete("cmd-1", {}, "The host refused the title.");
         QTRY_VERIFY(!finished.isEmpty());
         QCOMPARE(actions.lastError(), QStringLiteral("The host refused the title."));
+        QVERIFY(actions.pendingStatus().isEmpty());
+    }
+
+    // A fork the Relay queued is never silent: the status line says it waits for the machine
+    // until the host answers, then shows the host's error.
+    void aQueuedRelayForkSaysItWaitsThenWhyItFailed() {
+        FakeMachineBackend relay("fp-relay", Route::Relay);
+        relay.features = {Feature::Fork};
+        bool verified = true;
+        auto base = relayHost(&verified);
+        relay.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result,
+                           QString* error) {
+            base(call, result, error);
+            if (call.operation == "forkConversation")
+                *result = {{"command_id", "cmd-fork"}, {"status", "queued"}};
+        };
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&relay);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        view.openConversation("relay-1");
+        auto* reason = view.findChild<QLabel*>("machineComposerReason");
+
+        view.actions()->fork("relay-1");
+        QCOMPARE(relay.calls("forkConversation").size(), 1);
+        QCOMPARE(reason->text(), QStringLiteral("Fork sent. Waiting for the machine…"));
+        QCOMPARE(view.openSessionId(), QStringLiteral("relay-1"));
+
+        relay.complete("cmd-fork", {}, "The host could not fork this conversation.");
+        QTRY_COMPARE(reason->text(), QStringLiteral("The host could not fork this conversation."));
+        QVERIFY(view.actions()->pendingStatus().isEmpty());
+        QCOMPARE(view.openSessionId(), QStringLiteral("relay-1"));
     }
 };
 
