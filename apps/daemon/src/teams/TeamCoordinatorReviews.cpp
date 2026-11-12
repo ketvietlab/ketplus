@@ -5,6 +5,8 @@
 
 #include "agents/ReviewVerdict.h"
 
+#include <QJsonObject>
+#include <QPointer>
 #include <QUuid>
 
 namespace ketplus::daemon::teams {
@@ -13,6 +15,8 @@ namespace {
 // Below the broker's 32 KiB message limit, leaving room for the criteria and the closing line.
 constexpr qsizetype diffBytes = 24 * 1024;
 constexpr qsizetype findingsBytes = 6 * 1024;
+// Below GitHub's 65,536 characters for one comment.
+constexpr qsizetype commentBytes = 60 * 1024;
 
 QString utf8Prefix(const QString& text, const qsizetype maximumBytes) {
     const QByteArray bytes = text.toUtf8();
@@ -37,7 +41,13 @@ QString diffKey(const qint64 teamId, const QString& reviewer) {
     return QStringLiteral("%1/%2").arg(teamId).arg(reviewer);
 }
 
+bool onPullRequest(const Task& task) { return task.reviewPlace == place::pullRequest; }
+
 } // namespace
+
+int TeamCoordinator::roundLimit(const Team& team, const Task& task) {
+    return task.roundLimit > 0 ? task.roundLimit : team.maxRounds;
+}
 
 QString TeamCoordinator::noVerdictQuestion(const int round, const int replies) {
     return QStringLiteral("The review of round %1 has no verdict after %2 replies. Accept it "
@@ -58,7 +68,7 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
         QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
             .arg(team.name, task.id, task.title)
             .arg(task.round)
-            .arg(team.maxRounds),
+            .arg(roundLimit(team, task)),
         QStringLiteral("Branch: %1, against %2").arg(task.branch, team.integrationBranch),
         QStringLiteral("Worktree: %1").arg(task.worktree)};
     if (TeamCoordinator::recordsPullRequest(task))
@@ -102,6 +112,19 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
                             "is met, then each finding with file, line, severity and a one-line "
                             "summary. End with exactly one line: \"Verdict: findings\" or "
                             "\"Verdict: no findings\".");
+    // T-40: the place of this round, chosen when the task entered review.
+    if (onPullRequest(task))
+        lines << QString{}
+              << QStringLiteral("This team reviews on the pull request: your reply, as you write "
+                                "it, is posted as a review comment on %1, and the board keeps "
+                                "only the verdict and the comment's link. Do not post it "
+                                "yourself; the review stays read-only.")
+                     .arg(task.pullRequest);
+    else if (team.reviewPlace == place::pullRequest)
+        lines << QString{}
+              << QStringLiteral("This team reviews on the pull request, but this task has no pull "
+                                "request recorded, so this round is reviewed on the board: your "
+                                "reply is the record.");
     return lines.join(QLatin1Char('\n'));
 }
 
@@ -177,21 +200,33 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     Task* task = team->task(taskId);
     ++task->round;
     task->reviewer = reviewerSession;
+    // T-40: the team's settings as the task enters this round; a change applies afterwards.
+    task->roundLimit = team->maxRounds;
+    task->reviewPlace = team->reviewPlace == place::pullRequest && recordsPullRequest(*task)
+                            ? place::pullRequest
+                            : place::board;
+    const bool noPullRequest = team->reviewPlace == place::pullRequest && !onPullRequest(*task);
+    task->reviewComment.clear();
     taking->reviewing = taskId;
     // Bound before it is sent: a review held while the team is paused, or one whose
     // message is still on its way, cannot be answered by another request.
     const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     taking->message = requestId;
-    addHistory(
-        *task, QStringLiteral("daemon"), QStringLiteral("review"),
-        (task->missingVerdicts > 0
-             ? QStringLiteral("Review round %1 of %2 sent to %3 again: the last reply had "
-                              "no verdict.")
-             : QStringLiteral("Review round %1 of %2 sent to %3."))
-            .arg(task->round)
-            .arg(team->maxRounds)
-            .arg(reviewerName),
-        {{QStringLiteral("round"), task->round}, {QStringLiteral("reviewer"), reviewerName}});
+    QString sent = (task->missingVerdicts > 0
+                        ? QStringLiteral("Review round %1 of %2 sent to %3 again: the last reply "
+                                         "had no verdict.")
+                        : QStringLiteral("Review round %1 of %2 sent to %3."))
+                       .arg(task->round)
+                       .arg(task->roundLimit)
+                       .arg(reviewerName);
+    if (onPullRequest(*task))
+        sent += QStringLiteral(" Its findings go to the pull request.");
+    else if (noPullRequest)
+        sent += QStringLiteral(" Reviewed on the board: the task has no pull request.");
+    addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"), sent,
+               {{QStringLiteral("round"), task->round},
+                {QStringLiteral("reviewer"), reviewerName},
+                {QStringLiteral("place"), task->reviewPlace}});
     const QString body = reviewText(*team, *task, diff);
     if (commit(*team, before, QStringLiteral("daemon"),
                {{.kind = QStringLiteral("review_requested"),
@@ -211,6 +246,44 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
 void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QString& messageId,
                                      const QString& text, const bool noFindings,
                                      const QString& failure) {
+    // T-40: a verdict of a round on the pull request is posted there first, with the review
+    // still bound, so a stale answer meanwhile is ignored as before.
+    const Team* team = teamOf(reviewerSession);
+    const ReviewSlot* slot = team ? team->reviewSlot(reviewerSession) : nullptr;
+    const Task* task = slot && !slot->reviewing.isEmpty() ? team->task(slot->reviewing) : nullptr;
+    const bool verdict = noFindings || reviewVerdict(text) != ReviewVerdict::none;
+    if (!task || task->state != state::inReview || !onPullRequest(*task) || !failure.isEmpty() ||
+        !verdict || slot->message.isEmpty() || messageId != slot->message) {
+        recordReview(reviewerSession, messageId, text, noFindings, failure, std::nullopt);
+        return;
+    }
+    if (reviewComments_.contains(messageId))
+        return;
+    reviewComments_.insert(messageId);
+    const Member* reviewer = team->member(reviewerSession);
+    const QString body =
+        QStringList{QStringLiteral("**Team review of %1 \"%2\", round %3 of %4**%5")
+                        .arg(task->id, task->title)
+                        .arg(task->round)
+                        .arg(roundLimit(*team, *task))
+                        .arg(reviewer ? QStringLiteral(" by %1").arg(reviewer->name) : QString{}),
+                    QString{}, utf8Prefix(text.trimmed(), commentBytes)}
+            .join(QLatin1Char('\n'));
+    host_->askPostReviewComment(*team, *task, body,
+                                [self = QPointer<TeamCoordinator>(this), reviewerSession, messageId,
+                                 text, noFindings, failure](const ReviewComment& comment) {
+                                    if (!self)
+                                        return;
+                                    self->reviewComments_.remove(messageId);
+                                    self->recordReview(reviewerSession, messageId, text, noFindings,
+                                                       failure, comment);
+                                });
+}
+
+void TeamCoordinator::recordReview(const QString& reviewerSession, const QString& messageId,
+                                   const QString& text, const bool noFindings,
+                                   const QString& failure,
+                                   const std::optional<ReviewComment>& comment) {
     Team* team = mutableTeamOf(reviewerSession);
     const ReviewSlot* slot = team ? team->reviewSlot(reviewerSession) : nullptr;
     if (!slot || slot->reviewing.isEmpty())
@@ -240,6 +313,34 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
     if (task && task->state == state::inReview) {
         const QString findings = utf8Prefix(text.trimmed(), findingsBytes);
         const int round = task->round;
+        const int limit = roundLimit(*team, *task);
+        // T-40: on the pull request the board keeps the verdict and the comment's link; a
+        // comment that could not be posted leaves the findings on the board, with why.
+        const QString link = comment ? comment->url : QString{};
+        if (comment)
+            task->reviewComment = link;
+        const auto verdictData = [&](const QString& verdict) {
+            QJsonObject data{
+                {QStringLiteral("verdict"), verdict},
+                {QStringLiteral("round"), round},
+                {QStringLiteral("place"), link.isEmpty() ? place::board : place::pullRequest}};
+            if (!link.isEmpty())
+                data.insert(QStringLiteral("comment_url"), link);
+            else
+                data.insert(QStringLiteral("text"), findings);
+            if (comment && link.isEmpty())
+                data.insert(QStringLiteral("comment_error"), comment->error);
+            return data;
+        };
+        const auto where = [&] {
+            if (!comment)
+                return QString{};
+            return link.isEmpty()
+                       ? QStringLiteral(" The comment could not be posted on the pull request "
+                                        "(%1), so the findings are kept on the board.")
+                             .arg(comment->error)
+                       : QStringLiteral(" On the pull request: %1").arg(link);
+        };
         if (failure.isEmpty() && !noVerdict)
             task->missingVerdicts = 0;
         if (!failure.isEmpty()) {
@@ -279,23 +380,21 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
             }
         } else if (noFindings) {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       QStringLiteral("Round %1: no findings.").arg(round),
-                       {{QStringLiteral("verdict"), QStringLiteral("no_findings")},
-                        {QStringLiteral("round"), round},
-                        {QStringLiteral("text"), findings}});
+                       QStringLiteral("Round %1: no findings.").arg(round) + where(),
+                       verdictData(QStringLiteral("no_findings")));
             applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
                       QStringLiteral("reviewed, no findings"), updates);
             offerMerges(*team, updates);
         } else {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       QStringLiteral("Round %1: findings.").arg(round),
-                       {{QStringLiteral("verdict"), QStringLiteral("findings")},
-                        {QStringLiteral("round"), round},
-                        {QStringLiteral("text"), findings}});
-            if (round >= team->maxRounds) {
-                // Past the limit the leader decides (ADR 0114 §2).
+                       QStringLiteral("Round %1: findings.").arg(round) + where(),
+                       verdictData(QStringLiteral("findings")));
+            if (round >= limit) {
+                // Past the limit the leader decides (ADR 0114 §2); with one round, after it.
                 task->resumeState = state::inProgress;
-                task->question = roundLimitQuestion(round, team->maxRounds);
+                task->question = roundLimitQuestion(round, limit);
+                if (!link.isEmpty())
+                    task->question += QStringLiteral(" The findings: %1").arg(link);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
                 updates.append({.kind = QStringLiteral("round_limit"),
@@ -319,8 +418,13 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                                            "found issues.")
                                 .arg(team->name, taskId, task->title)
                                 .arg(round)
-                                .arg(team->maxRounds),
-                            QString{}, findings, QString{},
+                                .arg(limit),
+                            QString{},
+                            link.isEmpty()
+                                ? findings
+                                : QStringLiteral("The findings are in the review comment %1:\n\n%2")
+                                      .arg(link, findings),
+                            QString{},
                             QStringLiteral("Fix them, commit, and move the task to in_review again "
                                            "with team_task_update.")}
                             .join(QLatin1Char('\n'))};

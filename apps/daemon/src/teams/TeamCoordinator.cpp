@@ -27,8 +27,9 @@ int roleOrder(const QString& role) {
 // revision, so a phone's change is refused only when the part it acts on moved.
 void stampChanges(Team& team, const Team& before) {
     const auto settings = [](const Team& one) {
-        return QJsonArray{one.name,   one.goal,         one.integrationBranch, one.mergePolicy,
-                          one.paused, one.pausedReason, one.turnBudget};
+        return QJsonArray{one.name,        one.goal,      one.integrationBranch,
+                          one.mergePolicy, one.paused,    one.pausedReason,
+                          one.turnBudget,  one.maxRounds, one.reviewPlace};
     };
     team.settingsRevision =
         settings(team) == settings(before) ? before.settingsRevision : team.revision;
@@ -442,14 +443,43 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     if (changes.contains(QStringLiteral("leader_writes_requirements")))
         team->leaderWritesRequirements =
             changes.value(QStringLiteral("leader_writes_requirements")).toBool(true);
+    // T-40: both apply to tasks that enter review afterwards; a review in flight keeps the
+    // rounds and the place it started with.
     if (changes.contains(QStringLiteral("max_rounds"))) {
-        const int rounds = changes.value(QStringLiteral("max_rounds")).toInt();
-        if (rounds < 1 || rounds > 3) {
+        int rounds = 0;
+        if (auto invalid =
+                rules::validReviewRounds(changes.value(QStringLiteral("max_rounds")), &rounds)) {
             *team = before;
-            return {.error = TeamError{QStringLiteral("invalid_payload"),
-                                       QStringLiteral("Review rounds are 1 to 3.")}};
+            return {.error = invalid};
         }
+        if (rounds != team->maxRounds)
+            updates.append({.kind = QStringLiteral("review_rounds"),
+                            .text = rounds == 1
+                                        ? QStringLiteral("Tasks get one review round before the "
+                                                         "leader decides.")
+                                        : QStringLiteral("Tasks get %1 review rounds before the "
+                                                         "leader decides.")
+                                              .arg(rounds),
+                            .data = {{QStringLiteral("from"), team->maxRounds},
+                                     {QStringLiteral("to"), rounds}}});
         team->maxRounds = rounds;
+    }
+    if (changes.contains(QStringLiteral("review_place"))) {
+        QString place;
+        if (auto invalid =
+                rules::validReviewPlace(changes.value(QStringLiteral("review_place")), &place)) {
+            *team = before;
+            return {.error = invalid};
+        }
+        if (place != team->reviewPlace)
+            updates.append({.kind = QStringLiteral("review_place"),
+                            .text = place == place::pullRequest
+                                        ? QStringLiteral("Reviews are written on the task's pull "
+                                                         "request.")
+                                        : QStringLiteral("Reviews are written on the board."),
+                            .data = {{QStringLiteral("from"), team->reviewPlace},
+                                     {QStringLiteral("to"), place}}});
+        team->reviewPlace = place;
     }
     if (changes.contains(QStringLiteral("shared_paths"))) {
         QStringList paths;

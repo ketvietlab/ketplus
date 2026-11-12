@@ -133,13 +133,23 @@ TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& tas
     task->missingVerdicts = 0;
     task->question.clear();
     task->resumeState.clear();
+    // T-40: a task reviewed on its pull request names the comment of its last round, so the
+    // acceptance says which findings it set aside.
+    const QString link = task->reviewPlace == place::pullRequest ? task->reviewComment : QString{};
+    QJsonObject data{{QStringLiteral("by"), by},
+                     {QStringLiteral("evidence"), proof},
+                     {QStringLiteral("reason"), why},
+                     {QStringLiteral("round"), task->round}};
+    if (!link.isEmpty())
+        data.insert(QStringLiteral("comment_url"), link);
     addHistory(*task, actor, QStringLiteral("review_accepted"),
-               QStringLiteral("Review accepted by %1, made outside the board (%2): %3")
-                   .arg(by, proof, why),
-               {{QStringLiteral("by"), by},
-                {QStringLiteral("evidence"), proof},
-                {QStringLiteral("reason"), why},
-                {QStringLiteral("round"), task->round}});
+               (link.isEmpty()
+                    ? QStringLiteral("Review accepted by %1, made outside the board (%2): %3")
+                          .arg(by, proof, why)
+                    : QStringLiteral("Review accepted by %1 with the review on the pull request "
+                                     "(%2; last comment %3): %4")
+                          .arg(by, proof, link, why)),
+               data);
     QList<Update> updates;
     applyMove(*team, *task, state::ready, actor, QStringLiteral("review accepted by %1").arg(by),
               updates);

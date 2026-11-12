@@ -23,4 +23,14 @@ struct Limits final {
 ask(const QString& directory, const QStringList& urls, const QString& program = {},
     Limits limits = {}, const std::atomic_bool* cancelled = nullptr);
 
+// T-40: the comment's link in what `gh pr comment` printed, or nothing.
+[[nodiscard]] QString commentUrl(const QByteArray& output);
+// Posts `body` as a comment on the pull request at `url` through `gh pr comment`, reading
+// the body from standard input; the comment's link, or the error in words. Never touches a
+// checkout.
+[[nodiscard]] teams::ReviewComment comment(const QString& directory, const QString& url,
+                                           const QString& body, const QString& program = {},
+                                           int timeoutMs = 30000,
+                                           const std::atomic_bool* cancelled = nullptr);
+
 } // namespace ketplus::daemon::team_pull_requests

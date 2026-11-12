@@ -211,6 +211,21 @@ void SessionHost::askPullRequests(const teams::Team& team, const QStringList& ur
     });
 }
 
+// T-40: on the same worker as the pull request probe, bounded, so a slow network holds no
+// question to git and no client.
+void SessionHost::askPostReviewComment(const teams::Team& team, const teams::Task& task,
+                                       const QString& body, teams::ReviewCommentDone done) {
+    teamRemote_.start([guard = QPointer<SessionHost>(this), directory = team.repository,
+                       url = task.pullRequest, body, stopping = teamRemoteStopping_,
+                       done = std::move(done)]() mutable {
+        teams::ReviewComment posted =
+            team_pull_requests::comment(directory, url, body, {}, 30000, stopping.get());
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), posted = std::move(posted)] { done(posted); },
+            Qt::QueuedConnection);
+    });
+}
+
 void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                                       const QString& text, const QString& failure) {
     if (teams_ && request.kind == QStringLiteral("review"))
