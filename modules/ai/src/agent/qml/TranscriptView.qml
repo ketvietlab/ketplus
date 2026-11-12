@@ -2149,7 +2149,7 @@ Flickable {
         parent: transcript
         anchors.fill: parent
         workspace: shell
-        visible: transcript.messageModel.count === 0 && !transcript.messageModel.materializing && !host.historyState.loading && !host.historyState.error
+        visible: !host.transcriptOnly && transcript.messageModel.count === 0 && !transcript.messageModel.materializing && !host.historyState.loading && !host.historyState.error
         z: 2
     }
 

@@ -14,6 +14,8 @@ add_library(ketplus_desktop_support STATIC
     src/machine/MachineConversationActions.h
     src/machine/MachineConversationSession.cpp
     src/machine/MachineConversationSession.h
+    src/machine/MachineRichTranscript.cpp
+    src/machine/MachineRichTranscript.h
     src/machine/MachineSelection.cpp
     src/machine/MachineSelection.h
     src/machine/MachineSidebar.cpp
@@ -98,6 +100,7 @@ target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Sql
     Qt6::Svg
     Qt6::Widgets
+    ketplus_ai
     ketplus_remote
     ketplus_remote_control
     ketplus_remote_ssh_backend

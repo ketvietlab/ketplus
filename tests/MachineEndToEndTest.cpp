@@ -1,5 +1,6 @@
 #include "FakeCodex.h"
 #include "KetSidebarTree.h"
+#include "MachineTranscriptRows.h"
 #include "SshFixture.h"
 #include "SyntheticRelay.h"
 #include "agent/AgentWorkspaceView.h"
@@ -18,9 +19,9 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
+#include <QAbstractItemView>
 #include <QComboBox>
 #include <QLabel>
-#include <QListWidget>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -37,6 +38,7 @@
 // SshTunnel; the provider is FakeCodex, so no provider quota is used. Over the Relay it is the
 // loopback relay of SyntheticRelay.h with its synthetic host, so no real relay or host is used.
 using namespace ketplus;
+using ketplus::test::transcriptRows;
 using namespace ketplus::remote::ssh;
 using namespace ketplus::remote::ssh::testing;
 using State = ketplus::remote::MachineBackend::ConnectionState;
@@ -52,14 +54,6 @@ QStringList sidebarTitles(const MainWindow& window) {
 }
 
 bool shown(const QWidget* widget) { return widget != nullptr && !widget->isHidden(); }
-
-QStringList transcriptRows(const MachineWorkspaceView& view) {
-    QStringList rows;
-    auto* list = view.findChild<QListWidget*>("machineTranscript");
-    for (int i = 0; list != nullptr && i < list->count(); ++i)
-        rows.append(list->item(i)->text());
-    return rows;
-}
 
 QByteArray readToken(const QString& path) {
     QFile file(path);
@@ -297,7 +291,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(pick(bar, machineId));
         MachineWorkspaceView* view = window.machineComposition()->existingView();
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         QTRY_VERIFY_WITH_TIMEOUT(
             [&] {
                 for (const auto& repository : window.machineComposition()->sidebarRepositories())
@@ -381,7 +375,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(!reason->text().isEmpty());
         QCOMPARE(selection->machineId(), machineId);
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
 
         // The daemon returns: the route recovers by itself and the composer is usable again.
         QVERIFY(daemon.start());
@@ -395,7 +389,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(pick(bar, "local"));
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
         QVERIFY(!shown(view));
-        QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         QVERIFY(window.machineComposition()->sidebarRepositories().isEmpty());
         QTRY_VERIFY(!sidebarTitles(window).join('\n').contains("approve"));
     }
@@ -445,7 +439,10 @@ class MachineEndToEndTest final : public QObject {
                 return {{"accepted", kind}};
             }
             if (kind == "session.start_turn") {
-                relay.events.append(fixture.event(++cursor));
+                // A streamed answer names its item, as the daemon's deltas do.
+                relay.events.append(fixture.event(
+                    ++cursor, "assistant.delta",
+                    {{"item_id", "relay-answer"}, {"delta", "private fixture text"}}));
                 return {{"turn_sequence", 2}};
             }
             if (kind == "session.create")
@@ -512,7 +509,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(pick(bar, machineId));
         MachineWorkspaceView* view = window.machineComposition()->existingView();
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         view->startNewConversation();
         auto* picker = view->findChild<QComboBox*>("machineWorktreePicker");
         QVERIFY(picker != nullptr);
@@ -612,7 +609,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(!reason->text().isEmpty());
         QCOMPARE(selection->machineId(), machineId);
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
 
         // The relay and the host return: the route recovers by itself, and the queued create
         // completes through commandCompleted and opens the new conversation.
@@ -632,7 +629,7 @@ class MachineEndToEndTest final : public QObject {
         QVERIFY(pick(bar, "local"));
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
         QVERIFY(!shown(view));
-        QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         QVERIFY(window.machineComposition()->sidebarRepositories().isEmpty());
     }
 };

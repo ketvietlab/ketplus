@@ -7,7 +7,6 @@
 
 class QComboBox;
 class QLabel;
-class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QToolButton;
@@ -18,6 +17,7 @@ class MachineApprovalCards;
 class MachineCatalog;
 class MachineConversationActions;
 class MachineConversationSession;
+class MachineRichTranscript;
 
 // ADR 0119: the Agent Workspace for a machine other than This Mac. It reads the selected
 // machine through MachineCatalog and a MachineConversationSession, never a transport: the
@@ -40,6 +40,8 @@ class MachineWorkspaceView final : public QWidget {
     [[nodiscard]] MachineConversationActions* actions() const { return actions_; }
     // A fork the machine confirmed, opened once it is listed; empty when none waits.
     [[nodiscard]] QString pendingFork() const { return pendingFork_; }
+    // The transcript renderer (This Mac's, in transcript-only mode), for its theme and tests.
+    [[nodiscard]] MachineRichTranscript* transcript() const { return transcript_; }
 
   signals:
     // A conversation was opened or created, for the sidebar's selection.
@@ -79,13 +81,8 @@ class MachineWorkspaceView final : public QWidget {
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
     QToolButton* more_{nullptr};
-    QLabel* transcriptNote_{nullptr};
-    QPushButton* older_{nullptr};
-    QString renderedSession_;
-    qint64 renderedFirstCursor_{0};
-    int renderedRows_{0};
     QComboBox* worktrees_{nullptr};
-    QListWidget* transcript_{nullptr};
+    MachineRichTranscript* transcript_{nullptr};
     MachineApprovalCards* approvals_{nullptr};
     QPlainTextEdit* composer_{nullptr};
     QLabel* composerReason_{nullptr};

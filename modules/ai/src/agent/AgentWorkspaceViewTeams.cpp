@@ -4,6 +4,8 @@
 namespace ketplus {
 
 void AgentWorkspaceView::requestTeamTask(const QString& teamName, const QString& taskId) {
+    if (localActionRefused())
+        return;
     QString teamId;
     for (const QVariant& value : conversations_) {
         const QVariantMap conversation = value.toMap();

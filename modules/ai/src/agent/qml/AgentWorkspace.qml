@@ -379,7 +379,7 @@ Item {
     }
 
     function focusPrompt() {
-        if (agentHost.agentAvailable)
+        if (agentHost.agentAvailable && !agentHost.transcriptOnly)
             prompt.forceActiveFocus()
     }
 
@@ -1397,7 +1397,7 @@ Item {
             id: sidebarHandle
             objectName: "sidebarResizeHandle"
             // One pixel of layout, as the mock's divider; the grab area is wider.
-            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? 1 : 0
+            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode && !agentHost.transcriptOnly ? 1 : 0
             containmentMask: Item {
                 objectName: "sidebarResizeGrabArea"
                 width: sidebarHandle.implicitWidth > 0 ? KetTheme.px(6, KetTheme.zoom) : 0
@@ -1423,7 +1423,7 @@ Item {
         AgentSidebar {
             id: sidebar
             workspace: root
-            visible: agentHost.productSidebarVisible && !agentHost.compactMode
+            visible: agentHost.productSidebarVisible && !agentHost.compactMode && !agentHost.transcriptOnly
             // Recipe widths follow interface zoom, as the mock's 240 px sidebar does.
             property real unscaledWidth: 240
             function applyWidth() {
@@ -1455,12 +1455,15 @@ Item {
 
                 AgentWorkspaceHeader {
                     workspace: root
+                    // ketplus#598: a remote conversation's host shows its own title bar.
+                    visible: !agentHost.transcriptOnly
                     Layout.fillWidth: true
                     Layout.preferredHeight: implicitHeight
                 }
 
                 AgentScopeNotice {
                     workspace: root
+                    visible: shown && !agentHost.transcriptOnly
                 }
 
                 WarmTranscriptHost {
@@ -1623,6 +1626,7 @@ Item {
 
                 BackgroundTaskBar {
                     workspace: root
+                    visible: tasks.length > 0 && !agentHost.transcriptOnly
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
                     Layout.preferredHeight: implicitHeight
@@ -1631,7 +1635,7 @@ Item {
 
                 Loader {
                     objectName: "composerProviderSetup"
-                    active: root.providerSetupShown
+                    active: root.providerSetupShown && !agentHost.transcriptOnly
                     visible: active
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
@@ -1653,6 +1657,8 @@ Item {
                 AgentComposer {
                     id: composerArea
                     workspace: root
+                    // ketplus#598: a remote conversation keeps the machine view's own composer.
+                    visible: !agentHost.transcriptOnly
                     modelPopup: root.modelPicker
                     imagePreview: root.imageViewer
                     usageLimitsPopover: root.limitsPopover

@@ -110,9 +110,9 @@ class MachineConversationTest final : public QObject {
         QTRY_COMPARE(transcriptRows(view).size(), 2);
         const auto windows = ssh.calls("transcriptWindow").size();
 
-        // A live delta extends the streamed message.
+        // A live delta extends the streamed message (the renderer coalesces streaming frames).
         ssh.deliver(live(3, "assistant.delta", {{"item_id", "a"}, {"delta", " Tests pass."}}));
-        QCOMPARE(transcriptRows(view).last(), QStringLiteral("Built on Linux. Tests pass."));
+        QTRY_COMPARE(transcriptRows(view).last(), QStringLiteral("Built on Linux. Tests pass."));
 
         // A live approval request shows its card.
         pending = true;

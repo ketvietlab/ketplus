@@ -92,7 +92,7 @@ class MachineWindowTest final : public QObject {
         auto* view = window.machineComposition()->existingView();
         QVERIFY(shown(view));
         QTRY_VERIFY(sidebarTitles(window).contains("Fix the build"));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
 
         // A sidebar row opens on the machine; its transcript is the machine's.
         emit bar->conversationRequested("/home/dev/app-fix", "linux-1");
@@ -106,10 +106,10 @@ class MachineWindowTest final : public QObject {
                 action->setChecked(true);
             }
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         emit bar->modeRequested(ActivityBar::Mode::AgentWorkspace);
         QVERIFY(shown(view));
-        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(!shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
 
         // The backend going away keeps the machine picked, Offline, with no local lists.
         ssh.setState(State::Offline, "Host unreachable.");
@@ -122,7 +122,7 @@ class MachineWindowTest final : public QObject {
         emit bar->machineRequested("local");
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
         QVERIFY(!shown(view));
-        QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         QTRY_VERIFY(!sidebarTitles(window).contains("Fix the build"));
         QCOMPARE(ssh.closed, (QStringList{"linux-1"}));
     }
@@ -326,7 +326,7 @@ class MachineWindowTest final : public QObject {
 
         emit bar->machineRequested("local");
         QCOMPARE(selection->machineId(), QStringLiteral("local"));
-        QVERIFY(shown(window.findChild<AgentWorkspaceView*>()));
+        QVERIFY(shown(window.findChild<AgentWorkspaceView*>("agentWorkspaceView")));
         QVERIFY(!shown(view));
         section->model()->setMachines({}); // no machinesChanged reaches a destroyed fake
     }

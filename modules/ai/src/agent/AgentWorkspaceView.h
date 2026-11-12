@@ -120,6 +120,8 @@ class AgentWorkspaceView final : public QWidget {
     // Unscaled pixels; 0 lets the conversation fill the pane.
     Q_PROPERTY(int conversationWidth READ conversationWidth WRITE setConversationWidth NOTIFY
                    conversationWidthChanged)
+    // ketplus#598: only the transcript is shown (a conversation on another machine).
+    Q_PROPERTY(bool transcriptOnly READ transcriptOnly NOTIFY transcriptOnlyChanged)
   public:
     static constexpr int defaultConversationWidth = 760;
 
@@ -366,6 +368,12 @@ class AgentWorkspaceView final : public QWidget {
     void setRestoring(bool restoring);
     void setCompactMode(bool compact);
     void setProductSidebarVisible(bool visible);
+    // ketplus#598: shows only the transcript, without the sidebar, header, composer or local
+    // panes, for a conversation that lives on another machine. Actions that need this Mac's
+    // files or panes (open, diff, reveal, report, team task) report `localActionReason`
+    // through composerErrorOccurred() instead of acting on a local path.
+    void setTranscriptOnly(const QString& localActionReason);
+    [[nodiscard]] bool transcriptOnly() const { return !localActionReason_.isEmpty(); }
     void setCompactWindow(bool compact);
     [[nodiscard]] bool compactWindow() const { return compactWindow_; }
     [[nodiscard]] bool detailsOpen() const { return detailsOpen_; }
@@ -442,7 +450,10 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
     // ADR 0106: opens the details pane's Report tab for the active conversation.
-    Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
+    Q_INVOKABLE void requestWorkReport() {
+        if (!localActionRefused())
+            emit workReportRequested();
+    }
     [[nodiscard]] QVariantMap turnWorkReport() const { return turnWorkReport_; }
     // Set while the active conversation's turn runs; a new turn or conversation clears it.
     void setTurnWorkReport(const QVariantMap& report) {
@@ -472,7 +483,7 @@ class AgentWorkspaceView final : public QWidget {
     // the member team named in the block.
     Q_INVOKABLE void requestTeamTask(const QString& teamName, const QString& taskId);
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
-        if (!destination.isEmpty())
+        if (!destination.isEmpty() && !localActionRefused())
             emit productNavigationRequested(destination);
     }
     Q_INVOKABLE void requestAddWorktree();
@@ -487,7 +498,7 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE QString displayFilePath(const QString& path) const;
     Q_INVOKABLE QString revealFileActionText() const;
     Q_INVOKABLE QString revealableFilePath(const QString& path) const;
-    Q_INVOKABLE void revealFile(const QString& path) const;
+    Q_INVOKABLE void revealFile(const QString& path);
     // True once a background check found no file or directory at `path`. Never blocks: an
     // unchecked or stale path is queued for a batched off-thread check and reads as present
     // until that check lands; pathStateRevision changes only when an answer flips.
@@ -590,6 +601,7 @@ class AgentWorkspaceView final : public QWidget {
     void steeringPromptSubmitted(const QString& prompt, const QVariantList& attachments,
                                  const QString& displayText);
     void composerErrorOccurred(const QString& message);
+    void transcriptOnlyChanged();
     void fileMentionsChanged();
     // The worktree file list that inline-code links resolve against arrived or changed.
     void fileLinksChanged();
@@ -677,6 +689,9 @@ class AgentWorkspaceView final : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
+    // Emits the transcript-only reason and returns true when local actions are unavailable.
+    bool localActionRefused();
+    QString localActionReason_;
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};

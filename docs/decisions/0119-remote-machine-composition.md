@@ -128,17 +128,25 @@ fork opens once the machine lists it (the Relay verifies it first), unless the
 reader has moved on since asking. A queued
 Relay rename or fork finishes when the host confirms the command.
 
-**Rich renderer (deferred, leader decision A).** A remote conversation uses a
-simplified widget transcript, with a visible note above it: "Simplified
-transcript: rich rendering of conversations on Linux machines is not available
-yet." This Mac's renderer is `AgentWorkspaceView`, which is the whole Agent
-Workspace: its QML composer is bound to the local provider and model
-configuration, file and conversation mentions read from the local disk,
-attachments, worktree activation, terminal, details and changes panes, the
-reviewer, background tasks and Atlas results (about 80 signals). Hosting it
-for a remote machine needs either each of those routed through
-`MachineBackend` or a read-only transcript mode in `modules/ai`. Either is
-tracked separately and is not part of this decision.
+**Rich renderer (ketplus#598).** A remote conversation renders through This
+Mac's renderer, `AgentWorkspaceView`, in transcript-only mode
+(`setTranscriptOnly`), hosted by `MachineRichTranscript`
+(`apps/desktop/src/machine`). The rows are projected from the session's cached
+journal events, in the shape `remote::windowEvent()` delivers, by the same
+`agent_message::daemonWindowMessages()` This Mac uses, so Markdown, tool calls,
+diffs and changed files read the same on SSH and on the Relay. An older page is
+prepended and a live event appends or updates its row, so the renderer keeps
+the reader's place; its own top edge asks `MachineConversationSession::loadOlder`
+for the page before the oldest cached event (large events are reassembled
+first, as before). The QML sidebar, header, scope notice, background tasks,
+provider setup and composer are hidden: the machine view keeps its widget
+composer, approval and question cards, which already go through
+`MachineBackend`. Actions that need this Mac's files or panes (open, diff,
+reveal, Source Control, work report, team task) are refused with a reason shown
+under the composer, and remote paths are never checked against this disk.
+Remote routes do not negotiate server-side activity groups, so no group
+expansion is requested over a route that cannot serve it. Images that point at
+files on the other machine do not load on this Mac.
 
 ### Machine identity
 
@@ -389,8 +397,9 @@ The code is `ControlV2Client::entitlements()` and
 - Remote parity (T-18): older pages and large events through `MachineBackend`
   (`MachineConversationSession::loadOlder`, `remote::resolveLargeEvents`),
   rename, fork and archive through `MachineConversationActions` with the
-  reasons above, and the visible note for the simplified transcript
-  (`tests/MachineTranscriptPagingTest.cpp`).
+  reasons above (`tests/MachineTranscriptPagingTest.cpp`). The rich renderer for
+  remote transcripts (ketplus#598) is covered by
+  `tests/MachineRichTranscriptTest.cpp`.
 - Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
   against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).

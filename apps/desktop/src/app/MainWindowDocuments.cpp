@@ -23,6 +23,9 @@
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
 #include "index/SymbolIndex.h"
+#include "machine/MachineComposition.h"
+#include "machine/MachineRichTranscript.h"
+#include "machine/MachineWorkspaceView.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "remote/RemoteControlView.h"
 #include "teams/TeamDirectory.h"
@@ -1112,6 +1115,9 @@ void MainWindow::applyThemeToEditors() {
     if (agentWorkspace_ != nullptr) {
         agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     }
+    if (MachineWorkspaceView* machine = machines_ != nullptr ? machines_->existingView() : nullptr)
+        machine->transcript()->view()->applyTheme(theme_.palette(),
+                                                  appearanceSettings_.interfaceZoomPercent);
     if (conversationAtlasPanel_ != nullptr)
         conversationAtlasPanel_->applyPalette(QApplication::palette());
     if (atlasTabs_ != nullptr) {

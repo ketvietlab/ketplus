@@ -213,6 +213,14 @@ target_link_libraries(ketplus_machine_paging_tests PRIVATE
     ketplus_desktop_support
 )
 
+# ketplus#598: remote transcripts through This Mac's rich renderer.
+ketplus_add_gui_test(ketplus_machine_rich_transcript_tests MachineRichTranscriptTest.cpp
+    FakeMachineBackend.h MachineHosts.h MachineTranscriptRows.h)
+target_link_libraries(ketplus_machine_rich_transcript_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
 ketplus_add_gui_test(ketplus_machine_queued_actions_tests MachineQueuedActionsTest.cpp
     FakeMachineBackend.h MachineHosts.h)
 target_link_libraries(ketplus_machine_queued_actions_tests PRIVATE

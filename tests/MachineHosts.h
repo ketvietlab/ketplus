@@ -1,10 +1,10 @@
 #pragma once
 
 #include "FakeMachineBackend.h"
+#include "MachineTranscriptRows.h"
 #include "machine/MachineWorkspaceView.h"
 
 #include <QJsonArray>
-#include <QListWidget>
 
 // The two hosts the machine composition tests talk to: a Linux host over SSH (the local
 // protocol's spelling) and one through the Relay (salted ids, the Relay's spelling).
@@ -47,11 +47,14 @@ inline FakeMachineBackend::Answer sshHost() {
                                                            {"title", "Fix the build"},
                                                            {"state", "ready"}}}}};
         } else if (call.operation == "transcriptWindow") {
-            *result = {
-                {"events",
-                 QJsonArray{journalEvent(call.sessionId, 1, "user.message", {{"text", "Build it"}}),
-                            journalEvent(call.sessionId, 2, "assistant.delta",
-                                         {{"item_id", "a"}, {"delta", "Built on Linux."}})}}};
+            // One turn (2), as the daemon numbers it: its live events carry the same sequence.
+            QJsonObject prompt =
+                journalEvent(call.sessionId, 1, "user.message", {{"text", "Build it"}});
+            QJsonObject answer = journalEvent(call.sessionId, 2, "assistant.delta",
+                                              {{"item_id", "a"}, {"delta", "Built on Linux."}});
+            prompt.insert("turn_sequence", 2);
+            answer.insert("turn_sequence", 2);
+            *result = {{"events", QJsonArray{prompt, answer}}};
         } else if (call.operation == "pendingApprovals") {
             *result = {{"pending_approvals", QJsonArray{}}};
         } else if (call.operation == "createSession") {
@@ -88,14 +91,6 @@ inline FakeMachineBackend::Answer relayHost(bool* verified) {
             *result = {{"pending_approvals", QJsonArray{}}};
         }
     };
-}
-
-inline QStringList transcriptRows(const MachineWorkspaceView& view) {
-    QStringList rows;
-    auto* list = view.findChild<QListWidget*>("machineTranscript");
-    for (int i = 0; i < list->count(); ++i)
-        rows.append(list->item(i)->text());
-    return rows;
 }
 
 } // namespace ketplus::test

@@ -88,6 +88,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceRenderCache.cpp
     src/agent/AgentWorkspaceSkills.cpp
     src/agent/AgentWorkspaceStreaming.cpp
+    src/agent/AgentWorkspaceTranscriptOnly.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
     src/agent/AgentWorkspaceViewTeams.cpp
