@@ -437,9 +437,9 @@ Team teamFromJson(const QJsonObject& json) {
     team.paused = json.value(QStringLiteral("paused")).toBool();
     team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
     team.sharedPaths = stringList(json.value(QStringLiteral("shared_paths")));
-    // A team saved when three rounds were allowed keeps the most there are now.
-    team.maxRounds = std::clamp(json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds),
-                                1, maximumReviewRounds);
+    // A saved value outside one to five is not a team's choice; it reads as the default.
+    const int rounds = json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds);
+    team.maxRounds = rounds >= 1 && rounds <= maximumReviewRounds ? rounds : defaultReviewRounds;
     team.reviewPlace = json.value(QStringLiteral("review_place")).toString() == place::pullRequest
                            ? place::pullRequest
                            : place::board;

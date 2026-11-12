@@ -454,12 +454,7 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         }
         if (rounds != team->maxRounds)
             updates.append({.kind = QStringLiteral("review_rounds"),
-                            .text = rounds == 1
-                                        ? QStringLiteral("Tasks get one review round before the "
-                                                         "leader decides.")
-                                        : QStringLiteral("Tasks get %1 review rounds before the "
-                                                         "leader decides.")
-                                              .arg(rounds),
+                            .text = QStringLiteral("Max review passes: %1").arg(rounds),
                             .data = {{QStringLiteral("from"), team->maxRounds},
                                      {QStringLiteral("to"), rounds}}});
         team->maxRounds = rounds;

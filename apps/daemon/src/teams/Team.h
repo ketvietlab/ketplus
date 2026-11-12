@@ -45,10 +45,10 @@ inline constexpr int maximumDevelopers = 5;
 // T-23: a team has one or two reviewers.
 inline constexpr int maximumReviewers = 2;
 inline constexpr int maximumCriteria = 20;
-// T-40: the review rounds a team gives a task before the leader decides. The user's rule is
-// at most two review passes, so a team chooses one or two.
+// T-40, T-53: the review passes a team gives a task before the leader decides, one to five
+// (Max review passes per PR). The default stays at the user's rule of two.
 inline constexpr int defaultReviewRounds = 2;
-inline constexpr int maximumReviewRounds = 2;
+inline constexpr int maximumReviewRounds = 5;
 // Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
 // the daemon's global value until the user changes it (Settings → Teams), and the range a
 // team's own value and the global one keep.

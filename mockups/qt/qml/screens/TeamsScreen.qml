@@ -156,20 +156,23 @@ Item {
         question: "The team used its " + turnBudget + " automatic turns. Continue?",
         detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
         askedBy: "", task: "", when: "Just now", options: ["Continue (" + turnBudget + " more turns)", "Stop"], recommended: 0 })
-    // T-40: how the team reviews. Rounds are one or two (the user's rule is at most two passes);
-    // the place is the board or the task's pull request. A change applies to tasks that enter
-    // review afterwards.
+    // T-40: how the team reviews. The review passes per PR are one to five (two by default),
+    // counting every reviewer's pass; the place is the board or the task's pull request. A
+    // change applies from the next review request: a task already past a lowered limit is
+    // blocked for the leader then, not at once.
     readonly property int reviewRounds: team && team.reviewRounds ? team.reviewRounds : 2
     readonly property string reviewPlace: team && team.reviewPlace ? team.reviewPlace : "board"
     function reviewText(rounds, place) {
-        return (rounds === 1 ? "One review round" : "Two review rounds")
+        return (rounds === 1 ? "1 review pass" : rounds + " review passes")
             + (place === "pull_request" ? " on the pull request" : " on the board")
     }
     function changeReview(rounds, place) {
         if (rounds === reviewRounds && place === reviewPlace)
             return
         change({ reviewRounds: rounds, reviewPlace: place,
-            updates: [{ icon: "eye", text: reviewText(rounds, place) + ", for tasks that enter review from now",
+            updates: [{ icon: "eye", text: "Max review passes: " + rounds
+                            + (place === "pull_request" ? ", on the pull request" : ", on the board")
+                            + ", from the next review request",
                         detail: "You · the team", when: "Just now" }].concat(team.updates) })
         window.notify(team.name + ": " + reviewText(rounds, place).toLowerCase())
     }
@@ -437,7 +440,7 @@ Item {
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
     // `budget` is the team's own automatic turns; without one it takes Settings → Teams.
-    // `review` is { rounds, place }; without one, two rounds on the board.
+    // `review` is { rounds, place }; without one, two passes on the board.
     function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission, budget, review) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
@@ -455,7 +458,7 @@ Item {
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
             paused: false, merges: merges || "leader", permission: permission || "Workspace",
             turnBudget: budget || Fixtures.turnBudget, automaticTurns: 0,
-            reviewRounds: review && review.rounds === 1 ? 1 : 2,
+            reviewRounds: review && review.rounds >= 1 && review.rounds <= 5 ? review.rounds : 2,
             reviewPlace: review && review.place === "pull_request" ? "pull_request" : "board",
             leaderWrites: leaderWrites, members: members,
             tasks: [], decisions: [], updates: [] }])
@@ -596,10 +599,13 @@ Item {
               "automatic turns are a whole number from 5 to 200")
         const own = createTeam(repository, "Check E", "", "develop", true, plan, "leader", "", 12)
         check(turnBudget === 12, "a team created with its own budget keeps it")
-        check(reviewRounds === 2 && reviewPlace === "board", "a new team reviews in two rounds on the board")
+        check(reviewRounds === 2 && reviewPlace === "board", "a new team reviews in two passes on the board")
         changeReview(1, "pull_request")
         check(reviewRounds === 1 && reviewPlace === "pull_request"
-              && team.updates[0].text.indexOf("enter review from now") > 0, "the team's review is a setting it changes")
+              && team.updates[0].text.indexOf("Max review passes: 1") === 0, "the team's review is a setting it changes")
+        changeReview(5, "board")
+        check(reviewRounds === 5 && team.updates[0].text.indexOf("Max review passes: 5") === 0,
+              "a team allows up to five review passes per PR")
         Fixtures.turnBudget = 70
         const taken = createTeam(repository, "Check F", "", "develop", true, plan)
         check(turnBudget === 70, "a team created without a budget takes Settings › Teams")
@@ -614,8 +620,8 @@ Item {
         check(!team.paused && !decisions.some(d => d.kind === "budget") && automaticTurns === 12
               && turnBudget === 20, "a budget that leaves turns resumes the team and keeps the turns used")
         const reviewed = createTeam(repository, "Check G", "", "develop", true, plan, "leader", "", 0,
-                                    { rounds: 1, place: "pull_request" })
-        check(reviewRounds === 1 && reviewPlace === "pull_request", "New team chooses the rounds and the place")
+                                    { rounds: 4, place: "pull_request" })
+        check(reviewRounds === 4 && reviewPlace === "pull_request", "New team chooses the passes and the place")
         for (const id of [b, c, far, own, taken, reviewed]) {
             showTeam(id)
             deleteTeam()

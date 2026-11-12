@@ -291,6 +291,8 @@ refusal.
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.
   - The automatic-turn budget: `turn_budget`, `automatic_turns` and `turns_left`.
     `turns_left` is computed by the daemon, so the phone infers nothing.
+  - `max_rounds` (T-53): the review passes a pull request gets before the leader decides,
+    1 to 5. The phone shows it and does not change it.
   - The review queue: `review: {reviewing, queued, reviewers}`, task ids. T-23 adds
     `reviewers`: one `{session_id, reviewing, queued}` per reviewer, in the order they
     joined. `reviewing` and `queued` keep their meaning for a reader from before (the
