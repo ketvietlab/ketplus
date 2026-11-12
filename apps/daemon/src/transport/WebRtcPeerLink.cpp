@@ -1,5 +1,7 @@
 #include "transport/WebRtcPeerLink.h"
+#include "transport/SelectedPath.h"
 
+#include <QDebug>
 #include <QJsonObject>
 #include <algorithm>
 #include <array>
@@ -22,6 +24,23 @@ struct WebRtcPeerLink::Impl {
     std::array<std::shared_ptr<rtc::DataChannel>, 3> channels;
     bool open{false};
     bool stopped{false};
+    bool iceConnected{false};
+
+    void reportPath(WebRtcPeerLink* owner, bool reopened) {
+        rtc::Candidate local, remote;
+        auto localType = rtc::Candidate::Type::Unknown;
+        auto remoteType = rtc::Candidate::Type::Unknown;
+        try {
+            if (peer && peer->getSelectedCandidatePair(&local, &remote)) {
+                localType = local.type();
+                remoteType = remote.type();
+            }
+        } catch (const std::exception&) {
+            // Native exceptions can contain private candidate data. Do not log them.
+        }
+        qInfo().noquote() << selectedPathLog(localType, remoteType, owner->diagnosticEpoch(),
+                                             reopened, QDateTime::currentDateTimeUtc());
+    }
 
     // Taking the mutex only protects the short enqueue operation against destruction;
     // no native callback waits for the Qt event loop. Queued callbacks are cancelled by Qt.
@@ -57,6 +76,7 @@ struct WebRtcPeerLink::Impl {
                 if (!impl.open && std::all_of(impl.channels.begin(), impl.channels.end(),
                                               [](const auto& ch) { return ch && ch->isOpen(); })) {
                     impl.open = true;
+                    impl.reportPath(target, false);
                     emit target->opened();
                 }
             });
@@ -155,6 +175,16 @@ bool WebRtcPeerLink::answer(const QString& offer, const QJsonArray& iceServers) 
             if (value == rtc::PeerConnection::State::Failed ||
                 value == rtc::PeerConnection::State::Closed)
                 Impl::post(state, [](auto* target) { target->close(); });
+        });
+        impl_->peer->onIceStateChange([state](rtc::PeerConnection::IceState value) {
+            Impl::post(state, [value](auto* target) {
+                auto& impl = *target->impl_;
+                const bool connected = value == rtc::PeerConnection::IceState::Connected ||
+                                       value == rtc::PeerConnection::IceState::Completed;
+                if (connected && !impl.iceConnected && impl.open)
+                    impl.reportPath(target, true);
+                impl.iceConnected = connected;
+            });
         });
         impl_->peer->onDataChannel([state](std::shared_ptr<rtc::DataChannel> channel) {
             if (state->channels.fetch_add(1) >= 3) {
