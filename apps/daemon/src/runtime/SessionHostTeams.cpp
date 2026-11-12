@@ -21,9 +21,10 @@ QString ownPath(const QString& worktreePath) {
 
 } // namespace
 
-// Whether the path's repository is known without git: nothing to ask, or asked before, or a
-// team is filed under the path itself. Such a team was created there, perhaps while git did
-// not answer, and it and its members are found by it whatever git says later.
+// Whether the path's repository is known without git: nothing to ask, asked before, a task
+// worktree of a team, or a team is filed under the path itself. Such a team was created
+// there, perhaps while git did not answer, and it and its members are found by it whatever
+// git says later. A task worktree's answer, which comes from its team, is cached here.
 bool SessionHost::repositoryKnown(const QString& worktreePath) const {
     // A team's task worktree is filed under the team's repository without git: a command
     // that names its owner is answered before any git runs (T-32).
@@ -37,9 +38,10 @@ bool SessionHost::repositoryKnown(const QString& worktreePath) const {
            (teams_ && !teams_->teams(ownPath(worktreePath)).isEmpty());
 }
 
-// Only git's own answer is kept. A path that is no repository yet, or a git that did not
-// answer in time, is asked again, but not before the event loop turns: a command names a
-// path more than once, and each failed call can take the whole timeout.
+// Only an answer is kept: git's, or the team's for a task worktree. A path that is no
+// repository yet, or a git that did not answer in time, is asked again, but not before the event
+// loop turns: a command names a path more than once, and each failed call can take the whole
+// timeout.
 void SessionHost::noteRepository(const QString& worktreePath, const QString& repository) const {
     if (!repository.isEmpty()) {
         repositoryByWorktree_.insert(worktreePath, repository);
