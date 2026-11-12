@@ -35,9 +35,6 @@ class LinuxMachines final : public QObject {
 
     [[nodiscard]] remote::ControlV2Client* client() const { return client_; }
     [[nodiscard]] LinuxMachineModel* model() const { return model_; }
-    // Shows another model, before any backend is attached (tests that drive a model of their
-    // own). The set owns a model until then.
-    void setModel(LinuxMachineModel* model);
     // Attaches the SSH backend: the saved SSH machines, the SSH mode of the connect card, and
     // Connect, Disconnect and Remove. Production uses the defaults; tests pass a temporary store
     // and fake links.
@@ -76,8 +73,6 @@ class LinuxMachines final : public QObject {
     // The account, the entitlement or the loading state changed: sections render again.
     void changed();
     void notice(const QString& message, bool error);
-    // model() is another model now: sections follow it.
-    void modelReplaced();
 
   private:
     friend class RemoteControlViewTest;
@@ -85,7 +80,6 @@ class LinuxMachines final : public QObject {
     friend class ::MachineEndToEndTest;
     friend class ::MachineWindowTest;
     void syncEntitlement();
-    void connectModel();
     [[nodiscard]] LinuxMachinesSection* promptSection() const;
     [[nodiscard]] bool shown() const;
 

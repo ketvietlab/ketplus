@@ -40,9 +40,6 @@ class LinuxMachinesSection final : public QWidget {
     void setMachines(LinuxMachines* machines);
     // The set's model; an empty one once the app's set is gone (quitting).
     [[nodiscard]] LinuxMachineModel* model() const;
-    // Shows `model` instead of the set's own (LinuxMachines::setModel), for tests that drive a
-    // model and its controllers themselves.
-    void setModel(LinuxMachineModel* model);
     // The set's backends (LinuxMachines); a shared set is attached once, by main().
     void attachSshBackend(QString storePath = remote::ssh::SshMachineStore::defaultPath(),
                           LinuxSshMachines::LinkFactory links = LinuxSshMachines::systemLinks());
@@ -64,11 +61,9 @@ class LinuxMachinesSection final : public QWidget {
     void setNotice(const QString& message, bool error = false);
     void openConnectCard(const QString& sshHost);
     void connectMachines();
-    void connectModel();
     void showEvent(QShowEvent* event) override;
 
     QPointer<LinuxMachines> machines_;
-    QPointer<LinuxMachineModel> shownModel_;
     // What model() returns after the shared set is gone.
     LinuxMachineModel* emptyModel_{nullptr};
     // The set the section made for itself, deleted when a shared one replaces it.
