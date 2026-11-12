@@ -640,5 +640,8 @@ Basic.ApplicationWindow {
         }
     }
 
-    KetToast { id: toast }
+    KetToast {
+        id: toast
+        bottomAvoidance: app.screen === "workspace" ? workspace.toastBottomAvoidance : 0
+    }
 }

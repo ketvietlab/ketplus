@@ -692,6 +692,8 @@ class AgentWorkspaceView final : public QWidget {
     // Emits the transcript-only reason and returns true when local actions are unavailable.
     bool localActionRefused();
     QString localActionReason_;
+    void setupToastAvoidance();
+    void updateToastAvoidance();
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};

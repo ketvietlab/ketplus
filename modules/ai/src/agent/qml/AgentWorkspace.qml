@@ -713,6 +713,7 @@ Item {
     Kit.KetToast {
         id: workspaceToast
         objectName: "workspaceToast"
+        bottomAvoidance: composerArea.visible ? composerArea.parent.height - composerArea.y : 0
     }
 
     function openTranscriptFind() {
@@ -1656,6 +1657,7 @@ Item {
 
                 AgentComposer {
                     id: composerArea
+                    objectName: "agentBottomComposer"
                     workspace: root
                     // ketplus#598: a remote conversation keeps the machine view's own composer.
                     visible: !agentHost.transcriptOnly

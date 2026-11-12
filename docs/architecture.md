@@ -454,3 +454,12 @@ status badges and palette/profile values. The execution picker retains its
 paginated QListWidget model and paints visible rows from treeItemRecipe; search,
 revision fencing and acknowledgment-driven context changes retain their existing
 ownership. Pairing confirmation and changed-claim rejection remain daemon-backed.
+
+## App-wide toast and embedded input placement
+
+Agent Workspace maps its QML composer's upper edge through the embedded view into
+window coordinates and registers the reserved bottom height with the kit's generic
+Toast API. Composer and ancestor geometry/visibility notifications refresh the
+reservation; hiding the owning workspace clears it so non-composer views retain
+the default position. The mock and workspace-local QML toast use the equivalent
+Quick reservation. This changes overlay placement only, not transcript/input layout.

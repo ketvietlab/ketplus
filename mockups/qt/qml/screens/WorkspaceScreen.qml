@@ -11,6 +11,8 @@ import KetPlusMock.Native
 Item {
     id: screen
 
+    readonly property real toastBottomAvoidance: composerBar.visible
+        ? composerBar.parent.height - composerBar.y : 0
     required property var window
     property bool detailsOpen: false
     property var contentSession: null
