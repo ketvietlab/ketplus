@@ -280,40 +280,15 @@ class MachineEndToEndTest final : public QObject {
 
         // The approval card answers through the machine's backend; the transcript updates.
         QPushButton* approve = nullptr;
+        // On a timeout: the live events of the new conversation and what the view shows.
         const auto approvalState = [&] {
-            QString pending = "pending";
-            qint64 generation = -1;
             QStringList seen;
-            for (const auto& event : std::as_const(liveEvents)) {
-                if (event.value("session_id").toString() != created)
-                    continue;
-                generation = event.value("session_generation").toInteger();
-                seen.append(event.value("payload").toObject().value("event_type").toString() + "@" +
-                            QString::number(generation));
-            }
-            backend->pendingApprovals(created, generation, {},
-                                      [&pending](const QJsonObject& result, const QString& error) {
-                                          pending =
-                                              error.isEmpty()
-                                                  ? QString::fromUtf8(QJsonDocument(result).toJson(
-                                                        QJsonDocument::Compact))
-                                                  : error;
-                                      });
-            QTest::qWaitFor([&pending] { return pending != "pending"; }, 5000);
-            QStringList buttons;
-            for (auto* button : view->findChildren<QPushButton*>())
-                buttons.append(button->objectName() + (button->isVisibleTo(view) ? "+" : "-") +
-                               (button->isEnabled() ? "e" : "d"));
+            for (const auto& event : std::as_const(liveEvents))
+                if (event.value("session_id").toString() == created)
+                    seen.append(event.value("payload").toObject().value("event_type").toString());
             auto* cards = view->findChild<QWidget*>("machineApprovals");
-            QStringList labels;
-            for (auto* label : view->findChildren<QLabel*>())
-                if (label->isVisibleTo(view) && !label->text().isEmpty())
-                    labels.append(label->objectName() + ":" + label->text());
-            buttons.append(QString("cards=") +
-                           (cards && cards->isVisibleTo(view) ? "shown" : "hidden"));
-            buttons.append("labels=" + labels.join(';'));
-            return buttons.join(',') + " transcript=" + transcriptRows(*view).join('|') +
-                   " events=" + seen.join(',') + " approvals=" + pending;
+            return "events=" + seen.join(',') + " transcript=" + transcriptRows(*view).join('|') +
+                   " cards=" + (cards && cards->isVisibleTo(view) ? "shown" : "hidden");
         };
         QTRY_VERIFY2_WITH_TIMEOUT((approve = view->findChild<QPushButton*>("machineApprove")) !=
                                           nullptr &&
@@ -390,7 +365,9 @@ class MachineEndToEndTest final : public QObject {
         };
         relay.restore = &restore;
         bool approved = false;
-        relay.results = [&approved](const QString& kind, const QJsonObject&) -> QJsonObject {
+        // The host's events for opaque-session follow the restored window (cursor 9).
+        int cursor = 9;
+        relay.results = [&](const QString& kind, const QJsonObject&) -> QJsonObject {
             if (kind == "session.pending_approvals")
                 return {{"pending_approvals",
                          approved ? QJsonArray{}
@@ -400,7 +377,13 @@ class MachineEndToEndTest final : public QObject {
                                                            {"command", "make test"}}}}};
             if (kind == "approval.resolve") {
                 approved = true;
+                relay.events.append(
+                    fixture.event(++cursor, "approval.resolved", {{"approval_id", "approval-1"}}));
                 return {{"accepted", kind}};
+            }
+            if (kind == "session.start_turn") {
+                relay.events.append(fixture.event(++cursor));
+                return {{"turn_sequence", 2}};
             }
             if (kind == "session.create")
                 return {{"session_id", "created-session"}, {"generation", 3}, {"turn_sequence", 1}};

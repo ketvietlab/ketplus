@@ -722,6 +722,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   conversation operations"): archive through the Relay, attachments on every
   route, and the rich transcript
   renderer; the remote view uses a simplified transcript with a visible note.
+  `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
+  against a real daemon behind a loopback sshd with FakeCodex, and over the Relay
+  against the loopback relay of `tests/daemon/SyntheticRelay.h`, including a
+  worktree that turns from pending to verified, a create queued while the host
+  is away that completes through `commandCompleted`, and an outage on each route
+  that shows Reconnecting/Offline and recovers without falling back to This Mac.
   See `linux-headless-daemon.md`
   for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without
@@ -776,6 +782,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   controls, based on actual runtime retention and occupancy rather than a shared
   timeout. Native boundary-only compaction needs provider capability verification.
 
+- Linux machine follow-ups to #419: the Relay entitlement (`ketplus.relay`) issued by
+  the private auth service (Desktop fails closed until a session names it, D-4), and
+  installing or updating the daemon on a remote host over SSH (today Connections
+  shows such a host as "Daemon not installed"; see `linux-headless-daemon.md`).
 - Deployment and production operation of the versioned cloud Control API.
 - Entitlements and organization-aware session policy beyond personal workspaces.
 - KétRouter client integration and cloud services.

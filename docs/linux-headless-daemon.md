@@ -164,16 +164,34 @@ tests, stages and archives the headless target independently of Desktop.
 The scoped results and remaining deployment checks for 0.1.29 are recorded in
 [`linux-headless-verification.md`](linux-headless-verification.md).
 
-## Qt backend prepared for Desktop
+## Desktop on a Linux machine (SSH and Relay)
 
-ADR 0119 defines how Desktop composes a remote machine: one machine-neutral
+Desktop works on a Linux machine over SSH or over the Relay (#419). ADR 0119
+defines how Desktop composes a remote machine: one machine-neutral
 `MachineBackend` (`modules/remote/src/MachineBackend.h`) implemented by the
 local socket (`DaemonMachineBackend`), a Relay backend over `ControlV2Client`
 (`RelayMachineBackend`) and an SSH route that carries the local protocol to the user's own socket; how
 the sidebar, Agent Workspace, worktree picker and approvals bind to the selected
 machine; the Connecting / Connected / Reconnecting / Offline states; and the SSH
 trust decision (host key from `known_hosts` or an accepted SHA256 fingerprint,
-SSH keys or agent only, no stored passwords).
+SSH keys or agent only, no stored passwords). Connections adds and connects the
+machine on either route, the activity bar's picker selects it, and the window's
+sidebar, Agent Workspace, worktree picker, composer and approval cards then
+follow that machine's `MachineBackend` until the picker returns to This Mac
+(`docs/agent-workspace.md`, "Remote machines"). The SSH route reaches the
+user's own daemon socket through `SshTunnel` (`docs/ssh-transport.md`); the
+Relay route is `RelayMachineBackend` below.
+
+Remaining follow-ups:
+
+- **Relay entitlement.** The Relay is gated on the signed-in session's
+  `ketplus.relay` entitlement and fails closed while the relay names none
+  (D-4). Granting it is work in the private auth service; until then the Relay
+  route is available only where that service grants it, and SSH needs no
+  account.
+- **Remote daemon install over SSH.** A host without `ketplus_daemon` is
+  reported as "daemon not installed"; installing or upgrading the daemon over
+  the SSH route is not implemented. Install it on the host as described above.
 
 `modules/remote/src/control/ControlV2Client` provides origin-scoped credentials,
 refresh recovery, key-bound pairing/cancellation, session/worktree indexes,
@@ -257,5 +275,7 @@ owner-only file before it is sent, only that ciphertext is retried after a
 restart or reconnect, and a host-signed result is verified and applied once.
 Index worktrees with no conversation are shown only after the host signs their
 catalog scope in a `worktree.configuration.read` result (ADR 0119, decision C).
-Presentation and attachments are future integrations; the backend is not yet
-composed into a complete remote Desktop product.
+Desktop composes it through ADR 0119's `MachineBackend` like the other routes;
+`tests/MachineEndToEndTest.cpp` drives that composition end to end against the
+loopback relay of `tests/daemon/SyntheticRelay.h`, and over SSH through a
+loopback sshd to a real `ketplus_daemon` with a fake provider.
