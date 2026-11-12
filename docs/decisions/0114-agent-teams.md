@@ -428,7 +428,9 @@ is paused, stopped or removed on its own at any level.
   worktree listed with its reason in the daemon's or git's words, and the others are still
   removed. The dialog and the page show a summary (removed N, kept M with their reasons),
   each removal adds `worktree_removed` to its task's history as before, and "Remove all…"
-  and every Remove… are disabled while the run lasts.
+  and every Remove… are disabled while the run lasts. The page's summary stays when the
+  run removed every worktree (the section then says none is left on disk), and goes once
+  a worktree it names as kept is no longer listed, such as after removing it by hand.
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator

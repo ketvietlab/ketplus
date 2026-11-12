@@ -94,6 +94,8 @@ class TeamPage final : public QWidget {
     [[nodiscard]] static QString doneTasks(const QJsonObject& team);
     void buildDiskBanner();
     void buildDoneWorktrees(const QJsonObject& team);
+    void buildRemovalSummary();
+    void forgetStaleRemoval();
     void buildUpdates();
     void buildEmpty();
     void fillTasks();

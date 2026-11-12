@@ -112,11 +112,14 @@ ket::Dialog* teamWorktreeRemovalAll(QWidget* anchor, TeamDirectory* teams, const
             finished(run->outcome);
         if (!alive)
             return;
+        // In the order they were removed, not by task id ("T-10" sorts before "T-2").
         QStringList lines;
-        for (auto it = run->outcome.kept.cbegin(); it != run->outcome.kept.cend(); ++it)
-            lines.append(QStringLiteral("%1: %2").arg(it.key(), it.value()));
-        for (auto it = run->outcome.notes.cbegin(); it != run->outcome.notes.cend(); ++it)
-            lines.append(QStringLiteral("%1: %2").arg(it.key(), it.value()));
+        for (const auto& value : run->entries) {
+            const QString taskId = value.toObject().value(QStringLiteral("task_id")).toString();
+            for (const auto* reasons : {&run->outcome.kept, &run->outcome.notes})
+                if (reasons->contains(taskId))
+                    lines.append(QStringLiteral("%1: %2").arg(taskId, reasons->value(taskId)));
+        }
         result->setTone(run->outcome.kept.isEmpty() ? ket::BannerTone::Info
                                                     : ket::BannerTone::Warning);
         result->setTitle(team_storage::summary(run->outcome));

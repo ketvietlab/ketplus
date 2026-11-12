@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QtTest>
 
 #include <functional>
@@ -297,8 +298,12 @@ class TeamStoragePageTest final : public QObject {
         QVERIFY(!result->isHidden());
         QCOMPARE(result->title(), QStringLiteral("Removed 2 worktrees."));
         QCOMPARE(static_cast<int>(result->tone()), static_cast<int>(ket::BannerTone::Info));
-        // Measured again: nothing left to offer.
+        // Measured again: nothing left to offer, and the page still sums the run up.
         QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
+        QVERIFY(!page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll"));
+        auto* summary = page.findChild<ket::Banner*>("teamDoneWorktreesSummary");
+        QVERIFY(summary);
+        QCOMPARE(summary->title(), QStringLiteral("Removed 2 worktrees."));
         dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->click();
         QTRY_VERIFY(!dialog);
     }
@@ -348,6 +353,15 @@ class TeamStoragePageTest final : public QObject {
         QVERIFY(page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->isEnabled());
         dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->click();
         QTRY_VERIFY(!dialog);
+
+        // T-2 was removed since, by hand: "Kept 1" is not true any more, so the summary goes.
+        daemon_.answers.insert("team.storage.get", storage(25'000'000'000LL, "", false, false));
+        for (auto* timer : page.findChildren<QTimer*>())
+            if (timer->interval() == 60 * 1000)
+                timer->setInterval(1);
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktree_T-2"));
+        QTRY_VERIFY(!page.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktreesHeading"));
     }
 
     // With KETPLUS_TEAM_STORAGE_CAPTURE set to a folder, saves the page at both levels and the

@@ -322,6 +322,9 @@ Item {
             return false
         change({ storage: Object.assign({}, storage, { worktrees: doneWorktrees.filter(w => w.id !== id) }) })
         changeTask(id, { worktree: "" }, "You removed the worktree " + entry.path)
+        // A summary that still says this one was kept is not true any more.
+        if (!removingAll && removalOutcome && removalOutcome.kept[id] !== undefined)
+            removalOutcome = null
         return true
     }
 
@@ -638,6 +641,12 @@ Item {
         const mixed = removeAllWorktrees({ "T-2": Fixtures.dirtyWorktreeRefusal })
         check(mixed.kept["T-2"] === Fixtures.dirtyWorktreeRefusal && doneWorktrees.some(w => w.id === "T-2"),
               "a refused worktree stays listed with its reason")
+        removeWorktree("T-2")
+        check(removalOutcome === null, "removing a kept worktree by hand drops the old summary")
+        change(before)
+        removeAllWorktrees({})
+        check(removalOutcome !== null && doneWorktrees.length === 0,
+              "the summary stays after every worktree was removed")
         removalOutcome = null
         change(before)
         return failures
@@ -1114,16 +1123,20 @@ Item {
                 }
             }
 
-            Item { width: 1; height: screen.px(4); visible: screen.doneWorktrees.length > 0 }
+            Item { width: 1; height: screen.px(4); visible: screen.doneWorktrees.length > 0 || screen.removalOutcome !== null }
 
             // T-37: done tasks whose worktree is still on disk, each offered to the user.
+            // T-62: it stays for the summary after "Remove all…" removed every one.
             SectionTitle {
-                visible: screen.doneWorktrees.length > 0
+                visible: screen.doneWorktrees.length > 0 || screen.removalOutcome !== null
                 title: "Worktrees of done tasks"
-                count: screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+                count: screen.doneWorktrees.length > 0
+                       ? screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+                       : "None left on disk"
                 // T-62: one confirmation for every listed worktree.
                 KetButton {
                     objectName: "teamDoneWorktreesRemoveAll"
+                    visible: screen.doneWorktrees.length > 0
                     text: "Remove all…"
                     iconName: "trash"
                     variant: KetTheme.ButtonVariant.Ghost

@@ -48,6 +48,7 @@ void TeamPage::readStorage() {
                         if (storage == alive->storage_)
                             return;
                         alive->storage_ = storage;
+                        alive->forgetStaleRemoval();
                         alive->rebuild();
                     });
 }
@@ -63,10 +64,42 @@ void TeamPage::buildDiskBanner() {
     layout_->addWidget(banner);
 }
 
+// T-62: a summary of "Remove all…" that names a kept worktree no longer listed (removed
+// since, one by one) is not true any more, so it goes.
+void TeamPage::forgetStaleRemoval() {
+    if (!removalOutcome_ || removingAll_)
+        return;
+    QStringList listed;
+    for (const auto& value : storage_.value(QStringLiteral("worktrees")).toArray())
+        listed.append(value.toObject().value(QStringLiteral("task_id")).toString());
+    for (auto it = removalOutcome_->kept.cbegin(); it != removalOutcome_->kept.cend(); ++it)
+        if (!listed.contains(it.key())) {
+            removalOutcome_.reset();
+            return;
+        }
+}
+
+void TeamPage::buildRemovalSummary() {
+    if (!removalOutcome_)
+        return;
+    auto* summary = new ket::Banner(removalOutcome_->kept.isEmpty() ? ket::BannerTone::Info
+                                                                    : ket::BannerTone::Warning,
+                                    team_storage::summary(*removalOutcome_), {}, column_);
+    summary->setObjectName(QStringLiteral("teamDoneWorktreesSummary"));
+    layout_->addWidget(summary);
+}
+
 void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
     const QJsonArray worktrees = storage_.value(QStringLiteral("worktrees")).toArray();
-    if (worktrees.isEmpty())
+    if (worktrees.isEmpty()) {
+        // Everything was removed: the section stays for the summary of the run.
+        if (removalOutcome_) {
+            addSection(tr("Worktrees of done tasks"), tr("None left on disk"),
+                       "teamDoneWorktreesHeading");
+            buildRemovalSummary();
+        }
         return;
+    }
     // T-62: every listed worktree through the same removal, after one confirmation.
     auto* removeAll = new ket::Button(tr("Remove all…"), ket::ButtonVariant::Ghost);
     removeAll->setObjectName(QStringLiteral("teamDoneWorktreesRemoveAll"));
@@ -101,13 +134,7 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
                worktrees.size() == 1 ? tr("1 worktree on disk")
                                      : tr("%1 worktrees on disk").arg(worktrees.size()),
                "teamDoneWorktreesHeading", removeAll);
-    if (removalOutcome_) {
-        auto* summary = new ket::Banner(removalOutcome_->kept.isEmpty() ? ket::BannerTone::Info
-                                                                        : ket::BannerTone::Warning,
-                                        team_storage::summary(*removalOutcome_), {}, column_);
-        summary->setObjectName(QStringLiteral("teamDoneWorktreesSummary"));
-        layout_->addWidget(summary);
-    }
+    buildRemovalSummary();
     auto* panel = new team_page::Panel(column_);
     panel->setObjectName(QStringLiteral("teamDoneWorktrees"));
     auto* rows = new QVBoxLayout(panel);
