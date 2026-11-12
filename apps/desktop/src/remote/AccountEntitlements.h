@@ -12,15 +12,10 @@ namespace ketplus {
 // The entitlement that lets an account pair and use Linux machines through the ketPlus Relay.
 inline constexpr auto relayEntitlementName = "ketplus.relay";
 
-// What a session that names no entitlements means.
-enum class MissingEntitlements {
-    // Not entitled: fail closed (D-4). Relay stays off until the relay names the entitlement.
-    Deny,
-    // Entitled: for a relay that does not send entitlements, and for tests.
-    Allow,
-};
+// What a session that names no entitlements means. Production always uses Deny (D-4, ADR 0119
+// "Relay entitlement"); Allow exists for tests only.
+enum class MissingEntitlements { Deny, Allow };
 
-// D-4: fail closed. The relay names entitlements in its session in a follow-up.
 inline constexpr MissingEntitlements missingEntitlements = MissingEntitlements::Deny;
 
 // True when the session's entitlements name the Relay; `entitlements` is nullopt when the
