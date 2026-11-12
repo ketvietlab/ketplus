@@ -689,6 +689,8 @@ void AgentWorkspaceView::openRelativeFile(const QString& path) {
         QDesktopServices::openUrl(url);
         return;
     }
+    if (localActionRefused())
+        return;
     if (executionContextSwitched_ && QDir::isRelativePath(path) && !url.isLocalFile()) {
         emit composerErrorOccurred(
             tr("This link has no verified worktree source. Open the file from Files instead."));
@@ -708,6 +710,8 @@ void AgentWorkspaceView::requestClearSession() { emit clearSessionRequested(); }
 void AgentWorkspaceView::requestCurrentFileDiff() { emit currentFileDiffRequested(); }
 
 void AgentWorkspaceView::requestFileDiff(const QString& path) {
+    if (localActionRefused())
+        return;
     if (executionContextSwitched_ && QDir::isRelativePath(path) && !QUrl(path).isLocalFile()) {
         emit composerErrorOccurred(
             tr("This link has no verified worktree source. Open the file from Files instead."));
@@ -772,7 +776,7 @@ QString AgentWorkspaceView::revealFileActionText() const {
 }
 
 QString AgentWorkspaceView::revealableFilePath(const QString& path) const {
-    if (path.isEmpty())
+    if (path.isEmpty() || transcriptOnly())
         return {};
     const QUrl url(path);
     if ((!url.scheme().isEmpty() && !url.isLocalFile() && !QDir::isAbsolutePath(path)) ||
@@ -785,7 +789,9 @@ QString AgentWorkspaceView::revealableFilePath(const QString& path) const {
                                            : QString{};
 }
 
-void AgentWorkspaceView::revealFile(const QString& path) const {
+void AgentWorkspaceView::revealFile(const QString& path) {
+    if (localActionRefused())
+        return;
     const QString absolutePath = revealableFilePath(path);
     if (!absolutePath.isEmpty())
         file_reveal::reveal(absolutePath);
@@ -799,7 +805,8 @@ constexpr int kPathStateLimit = 4096;
 } // namespace
 
 bool AgentWorkspaceView::pathMissing(const QString& path) {
-    if (path.isEmpty())
+    // Another machine's paths are not on this disk; they are not missing there.
+    if (path.isEmpty() || transcriptOnly())
         return false;
     const QUrl url(path);
     if (!url.scheme().isEmpty() && !url.isLocalFile() && !QDir::isAbsolutePath(path))

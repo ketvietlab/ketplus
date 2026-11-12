@@ -92,8 +92,11 @@ transcript windows carry `event_type` and the data as `payload`.
   read the same way before the events after it apply. A reader looking at
   older rows keeps their place; one at the newest row follows new rows. The
   rows are rebuilt from every kept
-  event, so a turn split across pages reads as one. The view is a simplified
-  transcript with a visible note: the rich renderer is deferred (ADR 0119).
+  event, so a turn split across pages reads as one. They render through This
+  Mac's `AgentWorkspaceView` in transcript-only mode (`MachineRichTranscript`,
+  ketplus#598): the same Markdown, tool, diff and changed-file rows, with the
+  machine view's own composer and cards; file actions that need this Mac's disk
+  say why they are unavailable (ADR 0119, "Rich renderer").
   Attach is shown disabled with its reason.
 - **Held and queued writes.** A route may hold a request while it is
   Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then

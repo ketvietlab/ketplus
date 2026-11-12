@@ -1,7 +1,10 @@
 #include "app/MainWindow.h"
 
+#include "agent/AgentWorkspaceView.h"
+
 #include "git/GitChangesPanel.h"
 #include "machine/MachineComposition.h"
+#include "machine/MachineRichTranscript.h"
 #include "machine/MachineSelection.h"
 #include "machine/MachineWorkspaceView.h"
 #include "remote/RemoteControlView.h"
@@ -99,6 +102,8 @@ void MainWindow::setMachineWorkspaceVisible(const bool visible) {
     setRemoteWorkspaceVisible(false);
     hideUtilityWorkspaces();
     MachineWorkspaceView* view = machineComposition()->view(workspaceSplit_);
+    view->transcript()->view()->applyTheme(theme_.palette(),
+                                           appearanceSettings_.interfaceZoomPercent);
     if (workspaceSplit_->indexOf(view) < 0)
         workspaceSplit_->addWidget(view);
     if (explorer_ != nullptr)

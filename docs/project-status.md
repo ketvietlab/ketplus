@@ -728,8 +728,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Relay, and archive where it offers `session.archive/1`. Not yet on remote
   machines, each shown disabled with its reason (ADR 0119, "Parity of
   conversation operations"): archive through the Relay, attachments on every
-  route, and the rich transcript
-  renderer; the remote view uses a simplified transcript with a visible note.
+  route. Remote transcripts render through This Mac's rich renderer in
+  transcript-only mode (ketplus#598); file actions that need this Mac's disk
+  say why they are unavailable.
   `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
   against a real daemon behind a loopback sshd with FakeCodex, and over the Relay
   against the loopback relay of `tests/daemon/SyntheticRelay.h`, including a

@@ -1,8 +1,12 @@
 #include "FakeMachineBackend.h"
 #include "MachineHosts.h"
+#include "agent/AgentMessageModel.h"
+#include "agent/AgentWorkspaceView.h"
+#include "agent/TranscriptRowGeometry.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationActions.h"
 #include "machine/MachineConversationSession.h"
+#include "machine/MachineRichTranscript.h"
 #include "machine/MachineWorkspaceView.h"
 
 #include <QAction>
@@ -12,8 +16,12 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
-#include <QScrollBar>
+#include <QQuickItem>
+#include <QQuickView>
+#include <QSignalSpy>
 #include <QtTest>
+
+#include <cmath>
 
 using namespace ketplus;
 using namespace ketplus::test;
@@ -116,6 +124,19 @@ QStringList expectedRows() {
     return rows;
 }
 
+AgentWorkspaceView* renderer(const MachineWorkspaceView& view) { return view.transcript()->view(); }
+
+// The renderer asks for the page before its oldest row, as its top edge does when the reader
+// scrolls up; `token` is echoed back once the page landed or was declined.
+void requestOlder(const MachineWorkspaceView& view, double token) {
+    renderer(view)->loadOlderMessages(0, 0, token);
+}
+
+bool requestCompleted(const MachineWorkspaceView& view, qint64 token) {
+    const QVariantMap state = renderer(view)->historyState();
+    return state.value("requestToken").toLongLong() == token && !state.value("loading").toBool();
+}
+
 void scrollThroughHistory(FakeMachineBackend& backend, const QString& session) {
     MachineCatalog catalog;
     MachineWorkspaceView view(&catalog);
@@ -123,26 +144,30 @@ void scrollThroughHistory(FakeMachineBackend& backend, const QString& session) {
     QTRY_COMPARE(catalog.conversations().size(), 1);
     view.openConversation(session);
     QTRY_COMPARE(transcriptRows(view), expectedRows().mid(6));
-    auto* older = view.findChild<QPushButton*>("machineLoadOlder");
-    QVERIFY(older->isVisibleTo(&view));
+    QVERIFY(renderer(view)->historyState().value("hasOlder").toBool());
     // Rendering alone never pages.
     QCoreApplication::processEvents();
     QVERIFY(backend.calls("transcriptPage").isEmpty());
 
-    // The reader scrolls to the top: the page before it is read.
-    view.findChild<QListWidget*>("machineTranscript")
-        ->verticalScrollBar()
-        ->triggerAction(QAbstractSlider::SliderToMinimum);
+    // The reader scrolls to the top: the page before it is read and prepended.
+    requestOlder(view, 1);
     QTRY_COMPARE(transcriptRows(view), expectedRows().mid(3));
-    older->click();
+    QTRY_VERIFY(requestCompleted(view, 1));
+    requestOlder(view, 2);
     QTRY_COMPARE(transcriptRows(view), expectedRows());
+    QTRY_VERIFY(requestCompleted(view, 2));
     // The last page said there is nothing before it.
-    QVERIFY(!older->isVisibleTo(&view));
+    QVERIFY(!renderer(view)->historyState().value("hasOlder").toBool());
     QVERIFY(!view.session()->hasOlder());
     const auto pages = backend.calls("transcriptPage");
     QCOMPARE(pages.last().request.value("before_cursor").toInteger(), 4);
-    // The fallback renderer says what it is.
-    QVERIFY(view.findChild<QLabel*>("machineTranscriptNote")->isVisibleTo(&view));
+    // Nothing older: a request still completes and reads nothing.
+    requestOlder(view, 3);
+    QVERIFY(requestCompleted(view, 3));
+    QCOMPARE(backend.calls("transcriptPage").size(), pages.size());
+    // ketplus#598: the rich renderer, with no "simplified transcript" note.
+    QVERIFY(renderer(view)->transcriptOnly());
+    QVERIFY(view.findChild<QLabel*>("machineTranscriptNote") == nullptr);
 }
 
 } // namespace
@@ -185,7 +210,7 @@ class MachineTranscriptPagingTest final : public QObject {
         QTRY_COMPARE(catalog.conversations().size(), 1);
         view.openConversation("linux-1");
         QTRY_COMPARE(transcriptRows(view).size(), 3);
-        view.findChild<QPushButton*>("machineLoadOlder")->click();
+        requestOlder(view, 1);
         QTRY_VERIFY(!view.session()->lastError().isEmpty());
         QCOMPARE(transcriptRows(view), expectedRows().mid(6));
         QVERIFY(!view.findChild<QLabel*>("machineComposerReason")->text().isEmpty());
@@ -223,38 +248,55 @@ class MachineTranscriptPagingTest final : public QObject {
         QVERIFY(view.session()->lastError().isEmpty());
     }
 
-    // A reader looking at older rows is not pulled to the newest one by a live event; one at
-    // the newest row follows it.
-    void aReaderInOlderRowsKeepsTheirPlace() {
+    // ketplus#598: an older page is prepended and a live event appended in place, so the
+    // renderer keeps the reader's place (it anchors their row) instead of rebuilding the rows.
+    void pagesAndLiveEventsKeepTheRenderedRows() {
         FakeMachineBackend ssh("fp-ssh", Route::Ssh);
         ssh.answer = pagedHost(sshHost(), "linux-1", 1, false);
         MachineCatalog catalog;
         MachineWorkspaceView view(&catalog);
-        view.resize(320, 260);
+        view.resize(640, 260);
         view.show();
         catalog.setBackend(&ssh);
         QTRY_COMPARE(catalog.conversations().size(), 1);
         view.openConversation("linux-1");
         QTRY_COMPARE(transcriptRows(view).size(), 3);
-        auto* older = view.findChild<QPushButton*>("machineLoadOlder");
-        older->click();
-        QTRY_COMPARE(transcriptRows(view).size(), 6);
-        older->click();
-        QTRY_COMPARE(transcriptRows(view).size(), 9);
-        auto* list = view.findChild<QListWidget*>("machineTranscript");
-        QScrollBar* bar = list->verticalScrollBar();
-        QTRY_VERIFY(bar->maximum() > 0);
+        AgentMessageModel* model = renderer(view)->messageModel();
+        QVERIFY(model != nullptr);
+        QSignalSpy resets(model, &QAbstractItemModel::modelReset);
 
-        bar->setValue(0);
+        requestOlder(view, 1);
+        QTRY_COMPARE(transcriptRows(view).size(), 6);
+        requestOlder(view, 2);
+        QTRY_COMPARE(transcriptRows(view).size(), 9);
+
+        // A reader in the older rows: a live event below keeps their row where it was.
+        auto* transcript =
+            renderer(view)->quickView()->rootObject()->findChild<QQuickItem*>("agentTranscript");
+        QVERIFY(transcript != nullptr);
+        QTRY_VERIFY(transcript->property("contentHeight").toDouble() > transcript->height());
+        transcript->setProperty("followTail", false);
+        transcript->setProperty("contentY", transcript->property("originY").toDouble() + 20);
+        QTest::qWait(50);
+        QVERIFY(!transcript->property("followTail").toBool());
+        const QString key = transcript->property("readingAnchor").toMap().value("key").toString();
+        QVERIFY(!key.isEmpty());
+        auto* geometry = model->geometry();
+        const auto screenTop = [&] {
+            return geometry->top(geometry->rowForKey(key)) -
+                   transcript->property("contentY").toDouble();
+        };
+        const double before = screenTop();
+
         ssh.deliver(message("linux-1", 1, 10, "live 10"));
         QTRY_COMPARE(transcriptRows(view).size(), 10);
-        QCoreApplication::processEvents();
-        QCOMPARE(bar->value(), 0);
-
-        bar->setValue(bar->maximum());
-        ssh.deliver(message("linux-1", 1, 11, "live 11"));
-        QTRY_COMPARE(transcriptRows(view).size(), 11);
-        QTRY_COMPARE(bar->value(), bar->maximum());
+        QCOMPARE(transcriptRows(view).last(), QStringLiteral("live 10"));
+        QCOMPARE(renderer(view)->messageModel(), model);
+        QCOMPARE(resets.size(), 0);
+        QTest::qWait(50);
+        QVERIFY(!transcript->property("followTail").toBool());
+        QVERIFY2(std::abs(screenTop() - before) <= 1.0,
+                 qPrintable(QStringLiteral("%1 -> %2").arg(before).arg(screenTop())));
     }
 
     // T-18: rename, fork and archive go through MachineBackend where the route carries them;

@@ -1,18 +1,18 @@
 #include "machine/MachineWorkspaceView.h"
 
+#include "agent/AgentWorkspaceView.h"
 #include "machine/MachineApprovalCards.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationActions.h"
 #include "machine/MachineConversationSession.h"
+#include "machine/MachineRichTranscript.h"
 
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QListWidget>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QScrollBar>
 #include <QStandardItemModel>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -59,21 +59,10 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     auto* heading = new QHBoxLayout;
     heading->addWidget(title_, 1);
     heading->addWidget(more_);
-    // ADR 0119: remote conversations keep this simplified transcript until the rich renderer
-    // reads MachineBackend; the note says so instead of passing it off as the full view.
-    transcriptNote_ = new QLabel(tr("Simplified transcript: rich rendering of conversations on "
-                                    "Linux machines is not available yet."),
-                                 this);
-    transcriptNote_->setObjectName(QStringLiteral("machineTranscriptNote"));
-    transcriptNote_->setWordWrap(true);
-    older_ = new QPushButton(tr("Show earlier messages"), this);
-    older_->setObjectName(QStringLiteral("machineLoadOlder"));
     worktrees_ = new QComboBox(this);
     worktrees_->setObjectName(QStringLiteral("machineWorktreePicker"));
-    transcript_ = new QListWidget(this);
-    transcript_->setObjectName(QStringLiteral("machineTranscript"));
-    transcript_->setWordWrap(true);
-    transcript_->setSelectionMode(QAbstractItemView::NoSelection);
+    // ketplus#598: This Mac's rich renderer, fed from the session's cached events.
+    transcript_ = new MachineRichTranscript(this);
     approvals_ = new MachineApprovalCards(this);
     approvals_->setObjectName(QStringLiteral("machineApprovals"));
     composer_ = new QPlainTextEdit(this);
@@ -95,9 +84,7 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     layout->addWidget(banner_);
     layout->addLayout(heading);
     layout->addWidget(worktrees_);
-    layout->addWidget(transcriptNote_);
-    layout->addWidget(older_);
-    layout->addWidget(transcript_, 1);
+    layout->addWidget(transcript_->view(), 1);
     layout->addWidget(approvals_);
     layout->addWidget(composer_);
     layout->addLayout(actions);
@@ -106,16 +93,10 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
         if (session_ != nullptr)
             session_->stop();
     });
-    connect(older_, &QPushButton::clicked, this, [this] {
-        if (session_ != nullptr)
-            session_->loadOlder();
-    });
-    // The reader scrolling to the top reads the page before it, as This Mac's transcript does.
-    // Only a user action counts: re-rendering the rows resets the bar and must not page.
-    auto* bar = transcript_->verticalScrollBar();
-    connect(bar, &QScrollBar::actionTriggered, this, [this, bar] {
-        if (bar->sliderPosition() == bar->minimum() && session_ != nullptr && session_->hasOlder())
-            session_->loadOlder();
+    // A transcript action that needs this Mac's files says why instead of doing nothing.
+    connect(transcript_, &MachineRichTranscript::actionRefused, this, [this](const QString& why) {
+        actionError_ = why;
+        render();
     });
     connect(more_, &QToolButton::clicked, this, [this] {
         if (session_ == nullptr)
@@ -306,39 +287,9 @@ void MachineWorkspaceView::render() {
 }
 
 void MachineWorkspaceView::renderTranscript() {
-    const QString sessionId = session_ != nullptr ? session_->sessionId() : QString{};
-    const qint64 firstCursor = session_ != nullptr ? session_->transcript().firstCursor() : 0;
-    // An older page keeps the reader where they were; anything else follows the newest row.
-    const bool sameSession = sessionId == renderedSession_;
-    const bool olderAdded = sameSession && renderedFirstCursor_ > 0 && firstCursor > 0 &&
-                            firstCursor < renderedFirstCursor_;
-    // Only a reader at the newest row follows new rows; one reading older rows stays there.
-    QScrollBar* bar = transcript_->verticalScrollBar();
-    const int position = bar->value();
-    const bool following = !sameSession || bar->maximum() == 0 || position >= bar->maximum() - 2;
-    transcript_->clear();
-    if (session_ != nullptr)
-        for (const auto& item : session_->transcript().items()) {
-            auto* row = new QListWidgetItem(item.text, transcript_);
-            row->setData(Qt::UserRole, static_cast<int>(item.kind));
-        }
-    const int added = transcript_->count() - renderedRows_;
-    if (olderAdded && added > 0 && added < transcript_->count()) {
-        transcript_->scrollToItem(transcript_->item(added), QAbstractItemView::PositionAtTop);
-    } else if (following) {
-        transcript_->scrollToBottom();
-    } else {
-        transcript_->doItemsLayout();
-        bar->setValue(position);
-    }
-    renderedSession_ = sessionId;
-    renderedFirstCursor_ = firstCursor;
-    renderedRows_ = transcript_->count();
-    transcriptNote_->setVisible(session_ != nullptr);
-    older_->setVisible(session_ != nullptr && session_->hasOlder());
-    older_->setEnabled(session_ != nullptr && !session_->loadingOlder());
-    older_->setText(session_ != nullptr && session_->loadingOlder() ? tr("Loading…")
-                                                                    : tr("Show earlier messages"));
+    // The renderer keeps the reader's place: an older page is prepended above them, and only
+    // a reader at the newest row follows live rows (as This Mac's transcript does).
+    transcript_->show(session_);
 }
 
 void MachineWorkspaceView::renderActions(const bool newConversation) {
