@@ -365,10 +365,12 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
         if (auto origin = turns_.find(caller.sessionId); origin != turns_.end())
             origin->expectReply.removeAll(replied->id);
     }
-    const QString delivery = recorded                                ? QStringLiteral("recorded")
-                             : receiver->idle                        ? QStringLiteral("starting")
-                             : message.urgent && receiver->steerable ? QStringLiteral("steering")
-                                                                     : QStringLiteral("queued");
+    // T-39: an urgent message that cannot steer now says so, and what the receiver waits on.
+    const QString delivery = recorded              ? QStringLiteral("recorded")
+                             : receiver->idle      ? QStringLiteral("starting")
+                             : !message.urgent     ? QStringLiteral("queued")
+                             : receiver->steerable ? QStringLiteral("steering")
+                                                   : QStringLiteral("urgent_waiting");
     // The sender's transcript names the receiver in words; its tool row is provider-specific.
     // The note shows the start of what was sent, as the mock's.
     constexpr qsizetype noteCharacters = 500;
@@ -386,10 +388,34 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
                               {QStringLiteral("peer_number"), receiver->number},
                               {QStringLiteral("peer_title"), receiver->title},
                               {QStringLiteral("peer_provider"), receiver->provider}});
-    return ok({{QStringLiteral("message_id"), message.id},
-               {QStringLiteral("kind"), message.kind},
-               {QStringLiteral("delivery"), delivery},
-               {QStringLiteral("to"), conversationJson(*receiver)}});
+    QJsonObject receipt{{QStringLiteral("message_id"), message.id},
+                        {QStringLiteral("kind"), message.kind},
+                        {QStringLiteral("delivery"), delivery},
+                        {QStringLiteral("to"), conversationJson(*receiver)}};
+    const QHash<QString, QString> calls = toolCalls_.value(receiver->sessionId);
+    if (delivery == QStringLiteral("steering") && !calls.isEmpty()) {
+        // Handed to the running turn, but its provider reads it only when the call ends.
+        const QString waitingOn = *calls.cbegin();
+        receipt.insert(QStringLiteral("waiting_on"), waitingOn);
+        receipt.insert(
+            QStringLiteral("note"),
+            QStringLiteral("Handed to the running turn, but conversation %1 is waiting on %2: "
+                           "its provider reads the message when that call ends, before the turn "
+                           "ends. Do not send it again.")
+                .arg(receiver->number, waitingOn));
+    } else if (delivery == QStringLiteral("urgent_waiting")) {
+        const QString waitingOn = receiver->waitingOn.isEmpty()
+                                      ? QStringLiteral("something that cannot be interrupted")
+                                      : receiver->waitingOn;
+        receipt.insert(QStringLiteral("waiting_on"), waitingOn);
+        receipt.insert(
+            QStringLiteral("note"),
+            QStringLiteral("Could not steer yet: conversation %1 is waiting on %2. The message "
+                           "steers its turn at the first point its provider allows, or starts a "
+                           "turn when it is idle; do not send it again.")
+                .arg(receiver->number, waitingOn));
+    }
+    return ok(receipt);
 }
 
 namespace {
@@ -481,14 +507,23 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     }
     QList<AgentMessageRecord> queued =
         journal_->agentMessagesTo(sessionId, receiver->generation, {QStringLiteral("queued")});
-    if (queued.isEmpty())
+    if (queued.isEmpty()) {
+        urgentWaiting_.remove(sessionId);
         return;
+    }
     if (!receiver->idle) {
         QList<AgentMessageRecord> urgent;
         for (const AgentMessageRecord& message : std::as_const(queued))
             if (message.urgent && !message.delivery.startsWith("user_authorized:"))
                 urgent.append(message);
-        if (urgent.isEmpty() || !receiver->steerable)
+        if (urgent.isEmpty()) {
+            urgentWaiting_.remove(sessionId);
+            return;
+        }
+        // Not steerable now (a tool call, an approval, a background task): the receiver's
+        // next event tries again (noteEvent), and its turn's end delivers it in any case.
+        urgentWaiting_.insert(sessionId);
+        if (!receiver->steerable)
             return;
         keepOneTurn(urgent);
         if (urgent.isEmpty())
@@ -497,7 +532,8 @@ void AgentBroker::deliverTo(const QString& sessionId) {
                  ->steerAgentTurn(sessionId, receiver->generation,
                                   agent_messaging::deliveryText(urgent), originJson(urgent))
                  .isEmpty())
-            return; // Not handed over: the messages wait for the turn to end.
+            return; // Not handed over: the messages wait for the next try or the turn's end.
+        urgentWaiting_.remove(sessionId);
         const qint64 turn = host_->agentTurnSequence(sessionId);
         for (AgentMessageRecord& message : urgent) {
             message.state = QStringLiteral("delivered");
@@ -508,6 +544,8 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         }
         return;
     }
+    // Idle: what was waiting is delivered in the turn this starts.
+    urgentWaiting_.remove(sessionId);
     QString authorizedBatch;
     for (const auto& message : std::as_const(queued)) {
         if (message.delivery.startsWith("user_authorized:")) {
@@ -674,8 +712,50 @@ QString AgentBroker::referenceBlock(const QString& sessionId, const QString& tex
     return agent_messaging::referenceText(conversations);
 }
 
+void AgentBroker::noteToolCall(const QString& sessionId, const QString& type,
+                               const QJsonObject& payload) {
+    if (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped") ||
+        type == QStringLiteral("user.message")) {
+        toolCalls_.remove(sessionId);
+        return;
+    }
+    if (type != QStringLiteral("item.started") && type != QStringLiteral("item.completed"))
+        return;
+    const QString itemId = payload.value(QStringLiteral("item_id")).toString();
+    if (itemId.isEmpty())
+        return;
+    if (type == QStringLiteral("item.completed")) {
+        if (auto calls = toolCalls_.find(sessionId); calls != toolCalls_.end()) {
+            calls->remove(itemId);
+            if (calls->isEmpty())
+                toolCalls_.erase(calls);
+        }
+        return;
+    }
+    const QString itemType = payload.value(QStringLiteral("item_type")).toString();
+    if (itemType != QStringLiteral("commandExecution") &&
+        itemType != QStringLiteral("mcpToolCall") && itemType != QStringLiteral("webSearch"))
+        return;
+    const QString tool = payload.value(QStringLiteral("item"))
+                             .toObject()
+                             .value(QStringLiteral("tool"))
+                             .toString()
+                             .simplified();
+    const QString what = itemType == QStringLiteral("commandExecution")
+                             ? QStringLiteral("a command")
+                             : QStringLiteral("a tool call");
+    toolCalls_[sessionId].insert(itemId, tool.isEmpty() || tool.size() > 60
+                                             ? what
+                                             : QStringLiteral("%1 (%2)").arg(what, tool));
+}
+
 void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, const QString& type,
                             const QJsonObject& payload) {
+    // T-39: a waiting urgent message tries again when the receiver's state may have changed
+    // (a tool call or an approval finished, a turn started); streamed text changes nothing.
+    if (urgentWaiting_.contains(sessionId) && !type.endsWith(QStringLiteral(".delta")))
+        scheduleDelivery(sessionId);
+    noteToolCall(sessionId, type, payload);
     if (type == QStringLiteral("assistant.delta") || type == QStringLiteral("item.completed")) {
         auto origin = turns_.find(sessionId);
         if (origin == turns_.end() || !origin->automatic)
@@ -883,6 +963,8 @@ void AgentBroker::forget(const QString& sessionId) {
     }
     turns_.remove(sessionId);
     pendingDeliveries_.remove(sessionId);
+    urgentWaiting_.remove(sessionId);
+    toolCalls_.remove(sessionId);
     reviewSnapshots_.remove(sessionId);
     snapshotEpochs_.remove(sessionId);
     userRequests_.remove(sessionId);

@@ -31,6 +31,9 @@ struct AgentConversation final {
     bool idle{false};
     // A running turn that accepts steering.
     bool steerable{false};
+    // T-39: for a busy conversation that cannot be steered now, what it waits on, in words
+    // ("a background task", "an approval from the user"); empty otherwise.
+    QString waitingOn;
 };
 
 class AgentHostPort {
@@ -196,6 +199,8 @@ class AgentBroker final : public QObject {
     void scheduleDelivery(const QString& sessionId);
     void processDeliveries();
     void deliverTo(const QString& sessionId);
+    // Tracks the tool calls of a running turn from its item events.
+    void noteToolCall(const QString& sessionId, const QString& type, const QJsonObject& payload);
     void finishTurn(const QString& sessionId, qint64 generation, const QString& status);
     void expireOverdue();
     // Keeps the oldest messages that fit one turn; one that never fits is marked failed.
@@ -221,6 +226,12 @@ class AgentBroker final : public QObject {
     QHash<QString, QString> tokenBySession_;
     QHash<QString, TurnOrigin> turns_;
     QSet<QString> pendingDeliveries_;
+    // T-39: receivers with an urgent message that could not steer yet; each of their events
+    // tries again, so it steers at the first point the provider allows.
+    QSet<QString> urgentWaiting_;
+    // T-39: the tool calls each conversation's running turn is in (item id → what it is), so
+    // a receipt can say that a steer is read only when the call ends.
+    QHash<QString, QHash<QString, QString>> toolCalls_;
     // The tree each conversation's next finished turn is compared with, and the latest
     // snapshot started for it, so an older one finishing later cannot replace it.
     QHash<QString, QString> reviewSnapshots_;

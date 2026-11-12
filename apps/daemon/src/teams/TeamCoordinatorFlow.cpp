@@ -37,9 +37,17 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
 
 // Every update since the last digest, grouped by task, the actionable ones marked.
 QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
+    // T-39: a member's wait replaces its earlier one, so only the latest wait of each member is
+    // listed; the earlier ones would only repeat it.
+    QHash<QString, qint64> latestWait;
+    for (const TeamUpdateRecord& update : updates)
+        if (update.kind == QStringLiteral("wait"))
+            latestWait.insert(update.actor, update.id);
     QStringList order;
     QHash<QString, QStringList> lines;
     for (const TeamUpdateRecord& update : updates) {
+        if (update.kind == QStringLiteral("wait") && latestWait.value(update.actor) != update.id)
+            continue;
         const QString key = update.taskId;
         if (!lines.contains(key))
             order.append(key);
@@ -311,9 +319,13 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
     if (!leader || team->paused)
         return;
     const QList<TeamUpdateRecord> updates = updateRecords(teamId, true, 500);
+    // A wait is shown, but it is never the reason for a digest (T-39): a digest that would only
+    // repeat waits, the leader's own or a developer's, is not sent and starts no turn. The
+    // waits stay undigested and ride along with the next digest that has something to act on.
     const bool actionable =
-        std::any_of(updates.cbegin(), updates.cend(),
-                    [](const TeamUpdateRecord& update) { return update.actionable; });
+        std::any_of(updates.cbegin(), updates.cend(), [](const TeamUpdateRecord& update) {
+            return update.actionable && update.kind != QStringLiteral("wait");
+        });
     if (!actionable)
         return;
     if (QTimer* timer = digestTimers_.value(teamId))
