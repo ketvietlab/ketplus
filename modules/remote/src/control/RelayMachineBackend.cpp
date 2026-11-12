@@ -96,6 +96,8 @@ void RelayMachineBackend::fence(const QString& reason) {
     retry_->stop();
     events_->stop();
     delivering_.clear();
+    // A new connection reads unrecorded results back at the first retry step again.
+    recordAttempts_.clear();
     const auto callbacks = std::exchange(callbacks_, {});
     for (auto it = callbacks.cbegin(); it != callbacks.cend(); ++it) {
         const auto id = it.key();

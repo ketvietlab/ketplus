@@ -11,7 +11,9 @@
 namespace ketplus::remote {
 namespace {
 // A decrypted Relay event in the local daemon's session.event shape (LocalIpcServer::
-// broadcastEvent), so every MachineBackend consumer reads one shape whatever the route.
+// broadcastEvent), so every MachineBackend consumer reads one shape whatever the route. The
+// payload and its routing fields are host-signed; sent_at is the relay's occurredAt, which the
+// host does not sign, so it is only a display hint.
 QJsonObject localEvent(const QJsonObject& relay) {
     return {{QStringLiteral("protocol_version"), 0},
             {QStringLiteral("message_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
@@ -255,6 +257,7 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
     // A command's result is applied once, however many times it is read back.
     if (outbox_.isCompleted(id) || !outbox_.isPending(id)) {
         callbacks_.remove(id);
+        recordAttempts_.remove(id);
         return;
     }
     QString storage;

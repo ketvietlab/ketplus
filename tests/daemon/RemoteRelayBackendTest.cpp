@@ -2,6 +2,7 @@
 #include "control/ControlV2Content.h"
 #include "control/RelayMachineBackend.h"
 #include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrlQuery>
@@ -61,8 +62,8 @@ class SyntheticRelay {
     QSet<QString> ungranted;
     // Session command kinds the relay refuses with no error code.
     QSet<QString> refusedKinds;
-    // Session command kinds the relay answers 503 with no error code (a temporary outage).
-    QSet<QString> unavailableKinds;
+    // Session command kinds the relay answers with this status and no error code (an outage).
+    QHash<QString, int> unavailableKinds;
     // Worktree label the host signs, when it differs from the relay's index.
     QHash<QString, QString> hostLabels;
     QJsonArray worktrees;
@@ -71,6 +72,7 @@ class SyntheticRelay {
     QJsonArray events;
     int commandReads{0};
     QHash<QString, int> eventPolls;
+    QHash<QString, int> readsOfCommand;
     QJsonObject metadata_;
     QJsonObject clientKeys_;
     // Runs while an events request is in flight, before its answer is delivered.
@@ -161,7 +163,9 @@ class SyntheticRelay {
             for (const auto& event : std::as_const(events))
                 if (session == "opaque-session" &&
                     event.toObject().value("cursor").toInteger() > after) {
-                    page.append(event);
+                    auto relayed = event.toObject();
+                    relayed.insert("occurredAt", "2026-11-12T09:00:02.000Z");
+                    page.append(relayed);
                     next = event.toObject().value("cursor").toInteger();
                 }
             return std::pair{200, QJsonObject{{"sessionId", session},
@@ -182,7 +186,7 @@ class SyntheticRelay {
         if (refusedKinds.contains(body.value("kind").toString()))
             return std::pair{400, QJsonObject{}};
         if (unavailableKinds.contains(body.value("kind").toString()))
-            return std::pair{503, QJsonObject{}};
+            return std::pair{unavailableKinds.value(body.value("kind").toString()), QJsonObject{}};
         if (worktree && ungranted.contains(body.value("worktreeId").toString()))
             return std::pair{403, QJsonObject{{"code", "session_create_forbidden"},
                                               {"message", "The worktree is not granted."}}};
@@ -219,6 +223,7 @@ class SyntheticRelay {
 
     std::optional<std::pair<int, QJsonObject>> read(const QString& id) {
         ++commandReads;
+        ++readsOfCommand[id];
         if (!commands.contains(id))
             return std::pair{404, QJsonObject{{"code", "command_not_found"}, {"message", ""}}};
         auto dto = commands.value(id);
@@ -422,6 +427,7 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(live.value("session_id").toString(), "opaque-session");
         QCOMPARE(live.value("session_generation").toInt(), 3);
         QCOMPARE(live.value("turn_sequence").toInt(), 1);
+        QCOMPARE(live.value("sent_at").toString(), "2026-11-12T09:00:02.000Z");
         const auto payload = live.value("payload").toObject();
         const auto payloadKeys = payload.keys();
         QCOMPARE(QSet<QString>(payloadKeys.cbegin(), payloadKeys.cend()),
@@ -915,9 +921,16 @@ class RemoteRelayBackendTest final : public QObject {
         // The outbox cannot be written: a directory stands where the file was.
         QVERIFY(QFile::remove(outbox));
         QVERIFY(QDir().mkpath(outbox + "/blocked"));
+        // One warning however long the file stays unwritable.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Relay command outbox not updated"));
+        QTest::failOnWarning(QRegularExpression("^Relay command outbox not updated"));
         relay.hostPaused = false;
         QTRY_COMPARE(relay.executions.value(id), 1);
-        QTest::qWait(200);
+        const auto readsBefore = relay.readsOfCommand.value(id);
+        QTest::qWait(300);
+        // Backed off (20, 40, 80, 160 ms ...): a few read-backs, not one per 20 ms.
+        const auto readBacks = relay.readsOfCommand.value(id) - readsBefore;
+        QVERIFY2(readBacks >= 1 && readBacks <= 6, qPrintable(QString::number(readBacks)));
         QCOMPARE(completed.size(), 0);
         QVERIFY(!answer.done);
         QCOMPARE(backend.pendingCommands(), QStringList{id});
@@ -1007,7 +1020,15 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(sentSoFar() - before, 1);
     }
 
+    void aServerErrorWithoutACodeKeepsTheCommandForTheLink_data() {
+        QTest::addColumn<int>("status");
+        QTest::newRow("503") << 503;
+        QTest::newRow("408") << 408;
+        QTest::newRow("429") << 429;
+    }
+
     void aServerErrorWithoutACodeKeepsTheCommandForTheLink() {
+        QFETCH(int, status);
         QTemporaryDir dir;
         FixtureTransport network;
         ControlV2Client client(QUrl{origin});
@@ -1020,10 +1041,11 @@ class RemoteRelayBackendTest final : public QObject {
         backend.listConversations({}, listed.callback());
         QTRY_VERIFY(listed.done);
         QSignalSpy completed(&backend, &RelayMachineBackend::commandCompleted);
-        relay.unavailableKinds.insert("session.start_turn");
+        relay.unavailableKinds.insert("session.start_turn", status);
         Answer answer;
         backend.startTurn("opaque-session", 3, {{"prompt", "later"}}, answer.callback());
-        // A 503 without a code is the link: the command stays stored and is sent again.
+        // A server error, timeout or rate limit without a code is the link: the command stays
+        // stored and is sent again.
         QTRY_COMPARE(backend.pendingCommands().size(), 1);
         const auto id = backend.pendingCommands().first();
         QTRY_VERIFY(relay.submissions.value(id) >= 2);
