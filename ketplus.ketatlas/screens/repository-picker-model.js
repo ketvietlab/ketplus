@@ -5,19 +5,19 @@
         { id: "sample-project", path: "/workspace/sample-project", preferred: "sample-project-pilot", conversations: ["Product Handoff", "Phone integration"] },
         { id: "sample-mobile", path: "/workspace/sample-mobile", preferred: "mobile-main", conversations: ["Question sheet", "iPhone connection"] },
         { id: "ketplus", path: "/workspace/ketplus", preferred: "cm-main", conversations: ["Mermaid theme"] },
-        { id: "ketchat-desktop", path: "/workspace/ketchat-desktop", preferred: "chat-main", conversations: ["Mac PP", "iOS PP"] },
+        { id: "sample-chat", path: "/workspace/sample-chat", preferred: "chat-main", conversations: ["Mac PP", "iOS PP"] },
         { id: "fusetter", path: "/workspace/fusetter", preferred: "fusetter-main", conversations: ["114", "116"] },
     ];
     const worktrees = [
         { id: "desktop-main", repo: "ketplus-desktop", branch: "develop", path: "/workspace/ketplus-desktop", main: true },
         { id: "desktop-status", repo: "ketplus-desktop", branch: "fix/compaction-status", path: "/workspace/ketplus-desktop-compaction" },
         { id: "sample-project-main", repo: "sample-project", branch: "integration", path: "/workspace/sample-project", main: true },
-        { id: "sample-project-pilot", repo: "sample-project", branch: "feat/ketview-production-pilot", path: "/workspace/sample-project-ketview-pilot", used: true },
-        { id: "sample-project-phone", repo: "sample-project", branch: "feat/ketphone-recording", path: "/workspace/sample-project-ketphone-g1" },
+        { id: "sample-project-pilot", repo: "sample-project", branch: "feat/sample-preview-pilot", path: "/workspace/sample-project-ketview-pilot", used: true },
+        { id: "sample-project-phone", repo: "sample-project", branch: "feat/sample-recording", path: "/workspace/sample-project-sample-phone-g1" },
         { id: "mobile-main", repo: "sample-mobile", branch: "develop", path: "/workspace/sample-mobile", main: true },
         { id: "mobile-questions", repo: "sample-mobile", branch: "fix/question-sheet", path: "/workspace/sample-mobile-questions" },
         { id: "cm-main", repo: "ketplus", branch: "develop", path: "/workspace/ketplus", main: true },
-        { id: "chat-main", repo: "ketchat-desktop", branch: "develop", path: "/workspace/ketchat-desktop", main: true },
+        { id: "chat-main", repo: "sample-chat", branch: "develop", path: "/workspace/sample-chat", main: true },
         { id: "fusetter-main", repo: "fusetter", branch: "develop", path: "/workspace/fusetter", main: true },
     ];
     const getRepo = id => repositories.find(repo => repo.id === id);
@@ -26,7 +26,7 @@
         const repo = getRepo(params.get("repo")) || repositories[0];
         const requestedTree = getTree(params.get("worktree"));
         return {
-            conversationId: "conversation-ketviewer-core", title: "KétViewer Core",
+            conversationId: "conversation-sample-core", title: "KétViewer Core",
             repo: repo.id, tree: requestedTree?.repo === repo.id ? requestedTree.id : repo.preferred,
             agentTree: "sample-project-pilot", running: params.get("turn") !== "idle",
             draft: "Check the pilot deployment and keep the current changes.",

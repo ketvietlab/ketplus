@@ -22,6 +22,7 @@ Product, identity, gateway, Router, and monetization decisions live in
 - This repository is public under MPL 2.0. The mobile apps and hosted services
   are proprietary and live in private repositories. Do not publish their repository
   links, source revisions, file paths, service/schema names or infrastructure details.
+  Do not copy their implementation, endpoints or internal hostnames here.
   Describe external ownership generically; preserve public library API names and licenses.
 - Security must not depend on the source or protocol staying private. Paid
   features are enforced by the hosted services, never by a build flag.

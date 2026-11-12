@@ -78,7 +78,7 @@ for (const platform of ["repository-picker", "repository-picker-mobile"]) {
         assert.equal(s.document.querySelector("[data-tree-choice]").dataset.treeChoice, "sample-project-pilot");
         const files = new URL(s.document.querySelector('.rp-navigation a[href^="editor"]').href);
         assert.equal(files.searchParams.get("repo"), "sample-project");
-        assert.equal(files.searchParams.get("tree"), "feat/ketview-production-pilot");
+        assert.equal(files.searchParams.get("tree"), "feat/sample-preview-pilot");
         assert.equal(s.w.RepositoryPickerPrototype.state.step, "worktrees");
         assert.equal(s.errors.length, 0);
     });

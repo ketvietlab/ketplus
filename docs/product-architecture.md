@@ -42,10 +42,10 @@ The branch policy is `develop` for integration and `main` for production.
 
 ## Identity and organizations
 
-This phase authenticates native clients with the existing Ketsuite username and
-password flow and exchanges them for short-lived KetPlus credentials. Zitadel
+This phase authenticates native clients with the existing hosted username and
+password flow and exchanges them for short-lived KetPlus credentials. An external identity provider
 is not a dependency of this phase. First use creates or attaches a personal
-workspace; future organization membership adds roles to the same Ketsuite
+workspace; future organization membership adds roles to the same account
 subject rather than creating a parallel KetPlus identity.
 
 Remote sessions record `owner_subject_id`, `workspace_id`, and an optional

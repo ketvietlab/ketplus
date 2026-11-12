@@ -10,11 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 ADDRESS_KIND_FILES = {"apps/browser/src/network-address.mjs", "apps/browser/src/origin-policy.mjs"}
 ALLOWLIST = {"tests/hygiene/test_public_tree.py"}
 RULES = {
-    "private repository": re.compile(r"(?<![\w.])(?:ketviet|ketplus-app|ket-turn|ketviet-marketing)(?![\w.]|-icon)", re.I),
+    "private repository": re.compile(r"(?<![\w.])(?:ketviet|ketplus-app|ket-turn|ketviet-marketing|ketchat-desktop)(?![\w]|-icon|\.vn\b)", re.I),
     "private module": re.compile(r"\b(?:ketplus_control|ketviewer_control)\b", re.I),
-    "private source path": re.compile(r"(?:apps/ketsuite/|ketsuite/packages/|apps/ios/(?:Sources/KetPlusRemote|KetPlusRemote))", re.I),
-    "private infrastructure": re.compile(r"(?:\bkvv2-[\w.-]+|[\w.-]+\.svc\.cluster\.local)"),
-    "private revision": re.compile(r"private (?:mobile|relay|service|repository)[^\n]{0,80}\b[0-9a-f]{7,40}\b", re.I),
+    "private source path": re.compile(r"(?:infra/k8s/environments/production/|apps/ketsuite/|ketsuite/packages/|apps/ios/(?:Sources/KetPlusRemote|KetPlusRemote))", re.I),
+    "private infrastructure": re.compile(r"(?:\bkvv2[-_][\w.-]+|[\w.-]+\.svc\.cluster\.local)"),
+    "private revision": re.compile(r"(?:private (?:mobile|relay|service|repository)[^\n]{0,80}\b[0-9a-f]{7,40}\b|PR #\d+[^\n]{0,80}\b[0-9a-f]{7,40}\b[^\n]{0,80}backend monorepo)", re.I),
 }
 IP = re.compile(r"(?<![\w.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![\w.])")
 
@@ -23,7 +23,7 @@ def violations(name, text):
         return []
     # Publisher attribution and public asset/API names are not repository references.
     text = re.sub(r"KETVIET JSC", "publisher", text, flags=re.I)
-    found = [rule for rule, pattern in RULES.items() if pattern.search(text)]
+    found = [rule for rule, pattern in RULES.items() if pattern.search(name + "\n" + text)]
     # Synthetic network tests exercise address classification, not deployment hosts.
     fixture = name.startswith(("tests/", "core/tests/", "apps/browser/test/")) or name in ADDRESS_KIND_FILES
     for match in IP.finditer(text):
@@ -43,12 +43,19 @@ class PublicTreeTest(unittest.TestCase):
     def test_guard_rejects_leaks_without_printing_source(self):
         for payload in (
             "https://github.com/ketvietlab/ketviet/blob/abcdef1/secret.ts",
+            "https://github.com/ketvietlab/ketplus-app.git",
+            "git@github.com:ketvietlab/ketviet.git", "It lives in ketviet.",
+            "kvv2_production", "infra/k8s/environments/production/values.yaml",
+            "PR #2177 at e8adee2d in the backend monorepo",
             "ketplus-app at abcdef1", "ket-turn PR #123",
             "private mobile revision abcdef1", "apps/ketsuite/modules/ketplus_control/model.ts",
             "ketplus_control.SessionEvent", "ketviewer_control", "kvv2-production",
             "relay.internal.svc.cluster.local", "host=10.33.44.55",
         ):
             self.assertTrue(violations("docs/example.md", payload))
+
+    def test_private_filename(self):
+        self.assertTrue(violations("docs/ketplus-app.md", "neutral text"))
 
     def test_narrow_public_exceptions(self):
         for payload in ("KETVIET JSC", "https://ketviet.vn", "@ketvietlab/design-system",

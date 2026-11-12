@@ -320,15 +320,15 @@ QtObject {
             { branch: "fix/compaction-status", path: "/workspace/ketplus-desktop-compaction" }] },
         { name: "sample-project", count: 3, agent: true, worktrees: [
             { branch: "main", main: true, path: "/workspace/sample-project" },
-            { branch: "feat/ketview-production-pilot", path: "/workspace/sample-project-pilot" },
+            { branch: "feat/sample-preview-pilot", path: "/workspace/sample-project-pilot" },
             { branch: "fix/relay-timeout", path: "/workspace/sample-project-relay" }] },
         { name: "sample-mobile", count: 2, worktrees: [
             { branch: "develop", main: true, path: "/workspace/sample-mobile" },
             { branch: "feat/question-sheet", path: "/workspace/sample-mobile-questions" }] },
         { name: "ketplus", count: 1, worktrees: [
             { branch: "integration", main: true, path: "/workspace/ketplus" }] },
-        { name: "ketchat-desktop", count: 1, worktrees: [
-            { branch: "develop", main: true, path: "/workspace/ketchat-desktop" }] },
+        { name: "sample-chat", count: 1, worktrees: [
+            { branch: "develop", main: true, path: "/workspace/sample-chat" }] },
         { name: "fusetter", count: 1, worktrees: [
             { branch: "main", main: true, path: "/workspace/fusetter" }] }
     ]

@@ -122,6 +122,7 @@ recorded digest was refreshed. Existing license/copyright notices are unchanged.
 - `mockups/qt/qml/Main.qml`
 - `tasks/2026-09-12-pr16-design-review.md`
 - `tasks/backend-hardening/closure-ledger.md`
+- `tests/ChatMarkdownTest.cpp`
 - `tests/AgentWorkspaceRenderingTest.cpp`
 - `tests/AgentWorkspaceShellTest.cpp`
 - `tests/ExplorerPanelTest.cpp`
@@ -159,3 +160,14 @@ not a secret scanner or a replacement for reviewing publication provenance.
 A lightweight pull-request workflow also runs the same guard for documentation-only
 changes (including integration), which the existing build workflow skips. This does
 not enable native builds on integration.
+
+## Review hardening
+
+The guard checks both tracked paths and contents, including clone URL suffixes,
+sentence-final repository names, underscore infrastructure prefixes and production
+configuration paths. Its regression corpus exercises those forms. Remaining sample
+chat/mobile repository and branch names are neutral examples. Mermaid provenance
+keeps package version and content hashes without asserting unverified package paths.
+The archival removal retires a mixed cross-repository workflow as one unit; keeping
+its validators or partial evidence would imply an acceptance trail that is no longer
+available publicly. Runtime tests and public validation instructions remain.
