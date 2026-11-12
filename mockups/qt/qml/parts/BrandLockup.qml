@@ -12,9 +12,10 @@ Item {
     property color textColor: KetTheme.t.textMain
     readonly property color brandColor: dark ? "#AD97FA" : "#4332C8"
     readonly property real markSize: size * 1.45
-    implicitWidth: markSize + markSize * 0.35 + word.implicitWidth
+    implicitWidth: markSize + markSize * 0.12 + word.implicitWidth
                    + (edition === "pro" ? size * 0.3 + badge.width : 0)
     implicitHeight: Math.max(markSize, word.implicitHeight, badge.height)
+    FontMetrics { id: wordMetrics; font: word.font }
     Image {
         width: lockup.markSize; height: width
         anchors.verticalCenter: parent.verticalCenter
@@ -23,7 +24,7 @@ Item {
     }
     Text {
         id: word
-        x: lockup.markSize * 1.35
+        x: lockup.markSize * 1.12
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.StyledText
         text: lockup.stem + "<font color='" + lockup.brandColor + "'>Plus</font>"
@@ -37,13 +38,15 @@ Item {
         id: badge
         visible: lockup.edition === "pro"
         x: word.x + word.implicitWidth + lockup.size * 0.3
-        anchors.verticalCenter: word.verticalCenter
+        y: word.y + word.baselineOffset - wordMetrics.tightBoundingRect("x").height / 2 - height / 2
         width: label.implicitWidth + label.font.pixelSize * 0.7
         height: label.implicitHeight + label.font.pixelSize * 0.24
         radius: height * 0.25
         color: "transparent"
         border.color: lockup.brandColor
         border.width: 1.5 * KetTheme.zoom
+        border.pixelAligned: false
+        antialiasing: true
         Text {
             id: label
             anchors.centerIn: parent

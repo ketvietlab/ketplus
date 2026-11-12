@@ -19,9 +19,16 @@ size hints and the pre-existing Sans Serif alias are not QML warnings.
 
 Source processing detail: alpha values below 8/255 outside the artwork were
 ignored for crop bounds, avoiding isolated near-invisible noise in the supplied
-PNG. Artwork bounds: (207, 239)–(1049, 998), then square canvas plus 4% margin
-per side, resampled to 1024/128/64. The supplied original was not changed.
+PNG. Artwork bounds: (207, 239)–(1049, 998), then a square canvas with a 4% margin
+per side measured against the final canvas, resampled to 1024/128/64. The supplied original was not changed.
 After Jay’s review, the wordmark is Bold 700 and the mark height is 1.45×
 the wordmark pixel size, giving the mark more presence than the initial draft.
-The iOS tiles are 60 pt squircle previews corresponding to a 1024 pt design
+The iOS tiles are 60 pt squircle previews corresponding to a 1024 px design
 canvas; these are approval specimens, not release app-icon assets.
+
+Review follow-up: explicit `-64` and `-128` derivative names prevent automatic
+Qt @2x substitution of the 1024 px source. A separate offscreen render using
+`QT_SCALE_FACTOR=2`, 1200×1100 logical pixels (2400×2200 output), was inspected
+for the large marks; the master source remains sharp. Badge placement now uses
+the wordmark’s x-height and preserves a fractional stroke. The icon-to-wordmark
+gap is 0.12× mark height following Jay’s further feedback.

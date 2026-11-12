@@ -268,22 +268,30 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
-The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
-the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
-(`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
-trademark and is not licensed. The Mermaid renderings use the Két Mermaid theme from the Két
-Design System (MIT, `core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
+The supplied KetPlusMark PNG is the current approval-only mark in the sidebar,
+Settings and transcript (`assets/ketplus-mark-v2.png`). Its 64/128 px derivatives
+use explicit `-64` / `-128` names so Qt cannot select a small `@2x` image for the
+1024 px source on Retina displays. No separate asset licence was supplied with
+the new PNG; this mock does not assert a reuse licence or grant trademark rights.
+The product owner must settle the asset licence before release distribution.
+
+The superseded Két Symbol SVGs remain under CC BY 4.0
+(`assets/LICENSE-CC-BY-4.0.txt`): “Két Symbol © 2026 Két Việt, CC BY 4.0”.
+The name KétPlus is a trademark and is not licensed. The Mermaid renderings use
+the Két Mermaid theme from Két Design System (MIT,
+`core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
 
 ## Brand approval specimen
 
 Open **Brand** in the sidebar (`--screen=brand`). It compares Lite/iOS and Pro at
 17, 32 and 64 px on light and dark backgrounds, the mark at 16–128 px, 60 pt iOS
-icon tiles, and the alternate `KétPlus` casing. The default wordmark is `ketPlus`. After review, the wordmark uses Bold 700
+icon tiles, and the alternate `KétPlus` casing. The default wordmark is `ketPlus`.
+After review, the wordmark uses Bold 700
 and the mark is 1.45× the wordmark pixel size so the icon has more presence.
 
 The supplied KetPlusMark PNG is cropped to artwork bounds (alpha ≥ 8/255 ignores
 near-transparent isolated noise), centred in a square with a 4% margin on each
-side, and resampled to 1024, 128 and 64 px. The original is unchanged. Sampled
+side of the final square (rounded to whole pixels), and resampled to 1024, 128 and 64 px. The original is unchanged. Sampled
 colours are mid indigo `#4332C8` and lilac `#AD97FA`; the latter is used on dark
 surfaces for contrast. The previous Két Symbol SVGs are superseded pending
 approval and retained with their attribution.
@@ -295,3 +303,10 @@ indigo, with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
 a transparent rounded frame with a 1.5 px stroke scaled with interface zoom,
 0.35 em horizontal / 0.12 em vertical padding, and a 0.3 em wordmark gap.
 The brand colours are scoped specimen values, not global theme replacements.
+
+The Brand navigation entry is temporary approval tooling and should be removed
+after approval. The badge is centred on the wordmark’s x-height; its fractional
+stroke disables pixel alignment to preserve 1.5 px at 100% zoom. Jay’s direct
+review changed the original Black 900 requirement to Bold 700 and increased the
+mark relative to the wordmark. A further review tightened the icon-to-wordmark
+gap from 0.35× to 0.12× mark height. The unused Black face is no longer embedded.

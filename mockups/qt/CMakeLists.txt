@@ -53,7 +53,7 @@ qt_add_qml_module(ketplus_qt_mock
     URI KetPlusMock
     VERSION 1.0
     QML_FILES ${mock_qml}
-    RESOURCES assets/ketplus-mark-v2.png assets/ketplus-mark-v2@1x.png assets/ketplus-mark-v2@2x.png
+    RESOURCES assets/ketplus-mark-v2.png assets/ketplus-mark-v2-64.png assets/ketplus-mark-v2-128.png
               assets/ketplus-mark.svg assets/ketplus-mark-bare-dark.svg
               assets/ketplus-mark-bare-light.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
               assets/screenshot-settings.png
@@ -71,7 +71,6 @@ qt_add_resources(ketplus_qt_mock mock_fonts
         "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Regular.ttf"
         "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Medium.ttf"
         "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Bold.ttf"
-        "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Black.ttf"
 )
 qt_add_resources(ketplus_qt_mock mock_mono
     PREFIX "/fonts"

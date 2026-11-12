@@ -13,14 +13,14 @@ Basic.ApplicationWindow {
 
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
-        "brand", "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
+        "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
         "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/report",
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
+        "changes", "brand", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
