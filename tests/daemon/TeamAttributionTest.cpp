@@ -259,14 +259,14 @@ class TeamAttributionTest final : public QObject {
         QVERIFY(repository.make());
         const Team& team = repository.team;
         Task& task = repository.task;
-        QVERIFY(team_git::ownHead(team, task).isEmpty());
+        QCOMPARE(team_git::ownHead(team, task), std::optional<QString>(QString{}));
         QVERIFY(team_git::isMerged(team, task).value_or(false));
         // The integration branch moves on and the worktree is checked out there.
         write(QDir(repository.path).filePath("api/routes.txt"));
         git(repository.path, {"add", "-A"});
         git(repository.path, {"commit", "-q", "-m", "someone else"});
         git(repository.worktree, {"checkout", "-q", "--detach", "integration"});
-        QVERIFY(team_git::ownHead(team, task).isEmpty());
+        QCOMPARE(team_git::ownHead(team, task), std::optional<QString>(QString{}));
         const auto none = team_git::taskDiff(team, task);
         QVERIFY(none && none->outsideBranch && none->files.isEmpty());
         // A commit of its own branch is its head, and its diff is the task's alone.
@@ -275,19 +275,38 @@ class TeamAttributionTest final : public QObject {
         git(repository.worktree, {"add", "-A"});
         git(repository.worktree, {"commit", "-q", "-m", "Cart"});
         const QString head = git(repository.worktree, {"rev-parse", "HEAD"});
-        QCOMPARE(team_git::ownHead(team, task), head);
+        QCOMPARE(team_git::ownHead(team, task), std::optional<QString>(head));
         task.headCommit = head;
         const auto diff = team_git::taskDiff(team, task);
         QVERIFY(diff && !diff->outsideBranch);
         QCOMPARE(diff->files, QStringList{"web/cart.txt"});
         // Once the integration branch has it, nothing on it is left to hand in.
         git(repository.path, {"merge", "-q", "--no-ff", "-m", "Merge", "team/1/t-1"});
-        QVERIFY(team_git::ownHead(team, task).isEmpty());
+        QCOMPARE(team_git::ownHead(team, task), std::optional<QString>(QString{}));
         // Moved to a commit that does not come after its base.
         task.baseCommit = head;
         git(repository.worktree, {"checkout", "-q", "--detach"});
         git(repository.path, {"branch", "-f", "team/1/t-1", "integration~1"});
-        QVERIFY(team_git::ownHead(team, task).isEmpty());
+        QCOMPARE(team_git::ownHead(team, task), std::optional<QString>(QString{}));
+    }
+
+    // A branch git cannot read is said as such, not as a branch without commits.
+    void anUnreadableBranchIsNotABranchWithoutCommits() {
+        Repository repository;
+        QVERIFY(repository.make());
+        Task task = repository.task;
+        task.branch = QStringLiteral("team/1/missing");
+        QVERIFY(!team_git::ownHead(repository.team, task));
+        const auto facts = team_git::handoff(repository.team, task);
+        QVERIFY(!facts.headRead);
+        // The coordinator refuses the hand to review with what happened.
+        const QString id = this->task("Cart");
+        start(id);
+        host_.unreadableHeads.insert(get(id).branch);
+        const TeamResult refused = teams_->moveTask(team_, id, state::inReview, "dev1");
+        QVERIFY(!refused.ok());
+        QCOMPARE(refused.error->code, QStringLiteral("git_unavailable"));
+        QCOMPARE(get(id).state, state::inProgress);
     }
 
     // Criterion 2: the leader's tool, refused to the other roles.

@@ -92,6 +92,9 @@ struct HandoffFacts final {
     QString branch;
     std::optional<bool> dirty;
     QString head;
+    // T-38: false when git could not tell which commit is the task's own; then `head` says
+    // nothing and the hand to review is refused with git_unavailable.
+    bool headRead{true};
 };
 using WorktreeDone = std::function<void(const WorktreeAnswer&)>;
 using HandoffDone = std::function<void(const HandoffFacts&)>;
@@ -141,10 +144,12 @@ class TeamHostPort {
         done(answer);
     }
     virtual void askHandoff(const Team& team, const Task& task, HandoffDone done) {
+        const auto head = ownHead(team, task);
         done({.worktree = task.worktree,
               .branch = task.branch,
               .dirty = hasUncommittedWork(task.worktree),
-              .head = taskCommit(team, task)});
+              .head = head.value_or(QString{}),
+              .headRead = head.has_value()});
     }
     // ADR 0118: asks the remote about the pull requests, by URL, and answers `done` on the
     // caller's thread. Without a way to ask, every one is unknown and the leader closes the
@@ -201,6 +206,14 @@ class TeamHostPort {
         (void)team;
         (void)task;
         return {};
+    }
+    // T-38: the commit of the task's branch when it is the task's own (team_git::ownHead);
+    // empty when it is not, nothing when git could not tell.
+    [[nodiscard]] virtual std::optional<QString> ownHead(const Team& team, const Task& task) const {
+        const QString tip = taskCommit(team, task);
+        if (tip.isEmpty())
+            return std::nullopt;
+        return tip == task.baseCommit ? QString{} : tip;
     }
     // Queues the message; it starts a turn when the receiver is idle. Returns an error.
     // The task's branch against its base on the integration branch; nothing when git failed.

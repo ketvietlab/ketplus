@@ -170,6 +170,11 @@ QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task
     return team_git::taskCommit(team, task);
 }
 
+std::optional<QString> SessionHost::ownHead(const teams::Team& team,
+                                            const teams::Task& task) const {
+    return team_git::ownHead(team, task);
+}
+
 std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
                                                      const teams::Task& task) const {
     return team_git::changedPaths(team, task);

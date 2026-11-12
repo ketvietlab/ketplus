@@ -238,27 +238,46 @@ std::optional<bool> hasUncommittedWork(const QString& worktree) {
     return !status->trimmed().isEmpty();
 }
 
-QString ownHead(const teams::Team& team, const teams::Task& task) {
-    const QString tip = taskCommit(team, task);
+std::optional<QString> ownHead(const teams::Team& team, const teams::Task& task) {
+    if (task.branch.isEmpty())
+        return QString{};
+    // A branch git cannot read is not a branch without work: the caller says to try again.
+    const auto tip =
+        output(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                                 QStringLiteral("--end-of-options"),
+                                 QStringLiteral("refs/heads/%1^{commit}").arg(task.branch)});
+    if (!tip || tip->trimmed().isEmpty())
+        return std::nullopt;
+    const QString head = tip->trimmed();
     // T-38: a branch still at its base has no work of its own.
-    if (tip.isEmpty() || tip == task.baseCommit)
-        return {};
+    if (head == task.baseCommit)
+        return QString{};
     // Moved to a commit that does not come after its base, as another task's.
-    if (!task.baseCommit.isEmpty() &&
-        isAncestor(team.repository, task.baseCommit, tip).value_or(false) == false)
-        return {};
+    if (!task.baseCommit.isEmpty()) {
+        const auto after = isAncestor(team.repository, task.baseCommit, head);
+        if (!after)
+            return std::nullopt;
+        if (!*after)
+            return QString{};
+    }
     // Already in the integration branch: nothing on it is the task's to hand in.
-    if (!team.integrationBranch.isEmpty() &&
-        isAncestor(team.repository, tip, team.integrationBranch).value_or(true))
-        return {};
-    return tip;
+    if (!team.integrationBranch.isEmpty()) {
+        const auto contained = isAncestor(team.repository, head, team.integrationBranch);
+        if (!contained)
+            return std::nullopt;
+        if (*contained)
+            return QString{};
+    }
+    return head;
 }
 
 teams::HandoffFacts handoff(const teams::Team& team, const teams::Task& task) {
+    const auto head = ownHead(team, task);
     return {.worktree = task.worktree,
             .branch = task.branch,
             .dirty = hasUncommittedWork(task.worktree),
-            .head = ownHead(team, task)};
+            .head = head.value_or(QString{}),
+            .headRead = head.has_value()};
 }
 
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,

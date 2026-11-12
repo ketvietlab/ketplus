@@ -388,7 +388,9 @@ The goal is the leader's main input, so it is written like a brief, not a title.
    checked out at its base, at the integration branch or at another task's commit therefore
    gives the task no head, and its review gets no diff of another task: the diff runs from
    the integration branch to the commit handed in, and a branch still at its base sends
-   none. Without a head of its own the hand to review is refused with `no_commits`, unless
+   none. When git cannot read the branch or its ancestry the hand to review is refused with
+   `git_unavailable`, to be tried again. Without a head of its own it is refused with
+   `no_commits`, unless
    the task records its pull request: work done in another worktree or repository is
    handed in with `team_task_update {state: in_review, pull_request, head_commit}`. The
    daemon records `head_commit` (7 to 40 hexadecimal characters, optional) as the task's
