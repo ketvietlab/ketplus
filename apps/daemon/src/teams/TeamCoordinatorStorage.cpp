@@ -189,12 +189,16 @@ void TeamCoordinator::worktreeRemoved(const qint64 teamId, const QString& taskId
         }
         const Team before = *now;
         removed->worktree.clear();
-        QString text = QStringLiteral("You removed the worktree %1.").arg(path);
+        QString text =
+            say(now->language, QT_TRANSLATE_NOOP("Team", "You removed the worktree %1.")).arg(path);
         if (!moves->moved.isEmpty())
-            text += QStringLiteral(" %1 now %2 in the main checkout.")
-                        .arg(moves->moved.join(QStringLiteral(", ")), moves->moved.size() == 1
-                                                                          ? QStringLiteral("works")
-                                                                          : QStringLiteral("work"));
+            text += QLatin1Char(' ') +
+                    (moves->moved.size() == 1
+                         ? say(now->language,
+                               QT_TRANSLATE_NOOP("Team", "%1 now works in the main checkout."))
+                         : say(now->language,
+                               QT_TRANSLATE_NOOP("Team", "%1 now work in the main checkout.")))
+                        .arg(moves->moved.join(QStringLiteral(", ")));
         if (!note.isEmpty())
             text += QLatin1Char(' ') + note;
         const QJsonObject data{

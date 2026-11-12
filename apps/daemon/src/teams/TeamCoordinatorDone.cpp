@@ -223,7 +223,8 @@ void TeamCoordinator::finishTask(Team& team, Task& task, const QString& actor,
         if (decision.kind == QStringLiteral("merge") && decision.taskId == task.id &&
             decision.state == QStringLiteral("open")) {
             decision.state = QStringLiteral("withdrawn");
-            decision.reason = QStringLiteral("%1 is done.").arg(task.id);
+            decision.reason =
+                say(team.language, QT_TRANSLATE_NOOP("Team", "%1 is done.")).arg(task.id);
             decision.answeredAt = nowIso();
         }
     dropReview(team, task.id);
@@ -238,8 +239,10 @@ void TeamCoordinator::noteGoalReached(const Team& team, QList<Update>& updates) 
                                      [](const Task& task) { return task.state == state::done; });
     if (allDone)
         updates.append({.kind = QStringLiteral("goal_reached"),
-                        .text = QStringLiteral("Every task is done. Report to the user once what "
-                                               "%1 contains; merging it onward is the user's.")
+                        .text = say(team.language,
+                                    QT_TRANSLATE_NOOP(
+                                        "Team", "Every task is done. Report to the user once what "
+                                                "%1 contains; merging it onward is the user's."))
                                     .arg(team.integrationBranch),
                         .actionable = true});
 }

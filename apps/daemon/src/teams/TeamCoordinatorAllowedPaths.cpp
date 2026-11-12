@@ -40,10 +40,12 @@ TeamResult TeamCoordinator::allowPaths(const qint64 teamId, const QString& taskI
     target = *normalised;
     const QString why = reason.trimmed().left(1000);
     const QString text =
-        (task ? QStringLiteral("Allowed paths of %1: %2 → %3.")
+        (task ? say(team->language, QT_TRANSLATE_NOOP("Team", "Allowed paths of %1: %2 → %3."))
                     .arg(task->id, listed(old), listed(*normalised))
-              : QStringLiteral("Shared paths: %1 → %2.").arg(listed(old), listed(*normalised))) +
-        (why.isEmpty() ? QString{} : QStringLiteral(" Reason: ") + why);
+              : say(team->language, QT_TRANSLATE_NOOP("Team", "Shared paths: %1 → %2."))
+                    .arg(listed(old), listed(*normalised))) +
+        (why.isEmpty() ? QString{}
+                       : say(team->language, QT_TRANSLATE_NOOP("Team", " Reason: ")) + why);
     const QJsonObject data{{QStringLiteral("from"), QJsonArray::fromStringList(old)},
                            {QStringLiteral("to"), QJsonArray::fromStringList(*normalised)},
                            {QStringLiteral("reason"), why}};

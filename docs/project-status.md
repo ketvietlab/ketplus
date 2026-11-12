@@ -105,6 +105,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   check skips tasks with a pull request, needs the branch's own commits and accepts
   `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
   live team.
+  Team language ([ADR 0120](decisions/0120-team-language.md), T-56): a team works in
+  English or Vietnamese, set in New Team (from the system or the goal's letters) and in the
+  team menu. The team page, its dialogs, the daemon's Updates, history, its own decisions
+  and the leader's digest follow it through Qt Linguist (`ketplus_teams_vi.ts`), and the
+  leader's instructions name it. The phone's team screen is not translated yet.
   Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
   repository's tree before the other conversations, leader, developers, reviewer; a
   member's role is in its hint and accessible description. The branch's name opens the

@@ -62,24 +62,30 @@ bool TeamCoordinator::flagOutside(Team& team, Task& task, const QStringList& out
     const Member* owner = team.member(task.owner);
     const QString name = owner ? owner->name : task.owner;
     if (outside.isEmpty()) {
-        addHistory(task, QStringLiteral("daemon"), QStringLiteral("outside_lane"),
-                   QStringLiteral("Back inside its lane: %1.").arg(why), data);
-        updates.append(
-            {.kind = QStringLiteral("outside_lane_cleared"),
-             .text = QStringLiteral("%1 is back inside %2's lane (%3).").arg(task.id, name, why),
-             .taskId = task.id,
-             .data = data});
+        addHistory(
+            task, QStringLiteral("daemon"), QStringLiteral("outside_lane"),
+            say(team.language, QT_TRANSLATE_NOOP("Team", "Back inside its lane: %1.")).arg(why),
+            data);
+        updates.append({.kind = QStringLiteral("outside_lane_cleared"),
+                        .text = say(team.language,
+                                    QT_TRANSLATE_NOOP("Team", "%1 is back inside %2's lane (%3)."))
+                                    .arg(task.id, name, why),
+                        .taskId = task.id,
+                        .data = data});
         return true;
     }
-    const QString text = QStringLiteral("Outside its lane: %1").arg(listed(outside));
+    const QString text =
+        say(team.language, QT_TRANSLATE_NOOP("Team", "Outside its lane: %1")).arg(listed(outside));
     addHistory(task, QStringLiteral("daemon"), QStringLiteral("outside_lane"), text, data);
     // Only a path that was not flagged before needs the leader.
-    updates.append({.kind = QStringLiteral("outside_lane"),
-                    .text = QStringLiteral("%1 by %2 changes files outside its lane: %3")
-                                .arg(task.id, name, listed(outside)),
-                    .taskId = task.id,
-                    .actionable = !added.isEmpty(),
-                    .data = data});
+    updates.append(
+        {.kind = QStringLiteral("outside_lane"),
+         .text = say(team.language,
+                     QT_TRANSLATE_NOOP("Team", "%1 by %2 changes files outside its lane: %3"))
+                     .arg(task.id, name, listed(outside)),
+         .taskId = task.id,
+         .actionable = !added.isEmpty(),
+         .data = data});
     return true;
 }
 

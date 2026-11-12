@@ -388,6 +388,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("integration_branch"), team.integrationBranch},
             {QStringLiteral("merge_policy"), team.mergePolicy},
             {QStringLiteral("execution_policy"), team.executionPolicy},
+            {QStringLiteral("language"), team.language},
             {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
             {QStringLiteral("paused"), team.paused},
             {QStringLiteral("paused_reason"), team.pausedReason},
@@ -432,6 +433,9 @@ Team teamFromJson(const QJsonObject& json) {
     team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
     team.executionPolicy =
         json.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
+    // A team saved before T-56 is English.
+    team.language = ::ketplus::remote::team_language::orEnglish(
+        json.value(QStringLiteral("language")).toString());
     team.leaderWritesRequirements =
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();

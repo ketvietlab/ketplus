@@ -373,13 +373,14 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     for (const Member& member : draft.members)
         teamBySession_.insert(member.sessionId, draft.id);
     teams_.insert(draft.id, draft);
-    (void)journal_->appendTeamUpdate({.teamId = draft.id,
-                                      .at = now,
-                                      .actor = actor,
-                                      .kind = QStringLiteral("team_created"),
-                                      .text = QStringLiteral("Team %1 created with %2 members.")
-                                                  .arg(draft.name)
-                                                  .arg(draft.members.size())});
+    (void)journal_->appendTeamUpdate(
+        {.teamId = draft.id,
+         .at = now,
+         .actor = actor,
+         .kind = QStringLiteral("team_created"),
+         .text = say(draft.language, QT_TRANSLATE_NOOP("Team", "Team %1 created with %2 members."))
+                     .arg(draft.name)
+                     .arg(draft.members.size())});
     emit teamChanged(directoryJson(draft));
     startLeader(draft.id);
     return {.teamId = draft.id};
@@ -423,6 +424,21 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         }
         team->integrationBranch = branch;
     }
+    if (changes.contains(QStringLiteral("language"))) {
+        const QString language = changes.value(QStringLiteral("language")).toString();
+        if (auto invalid = rules::validLanguage(language)) {
+            *team = before;
+            return {.error = invalid};
+        }
+        if (language != team->language)
+            updates.append(
+                {.kind = QStringLiteral("language"),
+                 .text = say(language, QT_TRANSLATE_NOOP("Team", "The team now works in %1."))
+                             .arg(::ketplus::remote::team_language::nativeName(language)),
+                 .data = {{QStringLiteral("from"), team->language},
+                          {QStringLiteral("to"), language}}});
+        team->language = language;
+    }
     if (changes.contains(QStringLiteral("merge_policy"))) {
         const QString policy = changes.value(QStringLiteral("merge_policy")).toString();
         if (policy != role::leader && policy != QStringLiteral("user")) {
@@ -432,12 +448,15 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                                   QStringLiteral("Who merges tasks is \"leader\" or \"user\".")}};
         }
         if (policy != team->mergePolicy)
-            updates.append({.kind = QStringLiteral("merge_policy"),
-                            .text = policy == role::leader
-                                        ? QStringLiteral("The leader merges reviewed tasks.")
-                                        : QStringLiteral("The user merges reviewed tasks."),
-                            .data = {{QStringLiteral("from"), team->mergePolicy},
-                                     {QStringLiteral("to"), policy}}});
+            updates.append(
+                {.kind = QStringLiteral("merge_policy"),
+                 .text = policy == role::leader
+                             ? say(team->language,
+                                   QT_TRANSLATE_NOOP("Team", "The leader merges reviewed tasks."))
+                             : say(team->language,
+                                   QT_TRANSLATE_NOOP("Team", "The user merges reviewed tasks.")),
+                 .data = {{QStringLiteral("from"), team->mergePolicy},
+                          {QStringLiteral("to"), policy}}});
         team->mergePolicy = policy;
     }
     if (changes.contains(QStringLiteral("leader_writes_requirements")))
@@ -453,15 +472,19 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             return {.error = invalid};
         }
         if (rounds != team->maxRounds)
-            updates.append({.kind = QStringLiteral("review_rounds"),
-                            .text = rounds == 1
-                                        ? QStringLiteral("Tasks get one review round before the "
-                                                         "leader decides.")
-                                        : QStringLiteral("Tasks get %1 review rounds before the "
-                                                         "leader decides.")
-                                              .arg(rounds),
-                            .data = {{QStringLiteral("from"), team->maxRounds},
-                                     {QStringLiteral("to"), rounds}}});
+            updates.append(
+                {.kind = QStringLiteral("review_rounds"),
+                 .text =
+                     rounds == 1
+                         ? say(team->language,
+                               QT_TRANSLATE_NOOP("Team", "Tasks get one review round before the "
+                                                         "leader decides."))
+                         : say(team->language,
+                               QT_TRANSLATE_NOOP("Team", "Tasks get %1 review rounds before the "
+                                                         "leader decides."))
+                               .arg(rounds),
+                 .data = {{QStringLiteral("from"), team->maxRounds},
+                          {QStringLiteral("to"), rounds}}});
         team->maxRounds = rounds;
     }
     if (changes.contains(QStringLiteral("review_place"))) {
@@ -472,13 +495,17 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             return {.error = invalid};
         }
         if (place != team->reviewPlace)
-            updates.append({.kind = QStringLiteral("review_place"),
-                            .text = place == place::pullRequest
-                                        ? QStringLiteral("Reviews are written on the task's pull "
-                                                         "request.")
-                                        : QStringLiteral("Reviews are written on the board."),
-                            .data = {{QStringLiteral("from"), team->reviewPlace},
-                                     {QStringLiteral("to"), place}}});
+            updates.append(
+                {.kind = QStringLiteral("review_place"),
+                 .text =
+                     place == place::pullRequest
+                         ? say(team->language,
+                               QT_TRANSLATE_NOOP("Team", "Reviews are written on the task's pull "
+                                                         "request."))
+                         : say(team->language,
+                               QT_TRANSLATE_NOOP("Team", "Reviews are written on the board.")),
+                 .data = {{QStringLiteral("from"), team->reviewPlace},
+                          {QStringLiteral("to"), place}}});
         team->reviewPlace = place;
     }
     if (changes.contains(QStringLiteral("shared_paths"))) {
@@ -495,9 +522,10 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         if (*normalised != team->sharedPaths)
             updates.append(
                 {.kind = QStringLiteral("shared_paths"),
-                 .text = QStringLiteral("Shared paths: %1.")
-                             .arg(normalised->isEmpty() ? QStringLiteral("none")
-                                                        : normalised->join(QStringLiteral(", ")))});
+                 .text = say(team->language, QT_TRANSLATE_NOOP("Team", "Shared paths: %1."))
+                             .arg(normalised->isEmpty()
+                                      ? say(team->language, QT_TRANSLATE_NOOP("Team", "none"))
+                                      : normalised->join(QStringLiteral(", ")))});
         team->sharedPaths = *normalised;
         recheckLanes(*team, updates);
     }
@@ -519,13 +547,17 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                     if (decision.kind == QStringLiteral("budget") &&
                         decision.state == QStringLiteral("open")) {
                         decision.state = QStringLiteral("withdrawn");
-                        decision.reason = QStringLiteral("The team was resumed.");
+                        decision.reason =
+                            say(team->language, QT_TRANSLATE_NOOP("Team", "The team was resumed."));
                         decision.answeredAt = nowIso();
                     }
             }
-            updates.append({.kind = paused ? QStringLiteral("paused") : QStringLiteral("resumed"),
-                            .text = paused ? QStringLiteral("Automatic turns paused.")
-                                           : QStringLiteral("Automatic turns resumed.")});
+            updates.append(
+                {.kind = paused ? QStringLiteral("paused") : QStringLiteral("resumed"),
+                 .text = paused ? say(team->language,
+                                      QT_TRANSLATE_NOOP("Team", "Automatic turns paused."))
+                                : say(team->language,
+                                      QT_TRANSLATE_NOOP("Team", "Automatic turns resumed."))});
         }
     }
     const bool resumed = before.paused && !team->paused;
@@ -660,13 +692,15 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
             if (decision.kind == QStringLiteral("empty_role") &&
                 decision.state == QStringLiteral("open")) {
                 decision.state = QStringLiteral("withdrawn");
-                decision.reason = QStringLiteral("The role was filled.");
+                decision.reason =
+                    say(team->language, QT_TRANSLATE_NOOP("Team", "The role was filled."));
             }
     }
     if (auto failed =
             commit(*team, before, actor,
                    {{.kind = QStringLiteral("member_added"),
-                     .text = QStringLiteral("%1 joined as %2.").arg(member.name, member.role),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 joined as %2."))
+                                 .arg(member.name, roleName(team->language, member.role)),
                      .data = {{QStringLiteral("session_id"), member.sessionId}}}}))
         return {.error = failed};
     return {.teamId = teamId};
@@ -696,13 +730,15 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
     member->lane = lane.trimmed().isEmpty() ? oldLane : lane.trimmed();
     member->paths = *normalised;
     const QString text =
-        QStringLiteral("Lane %1 of %2: %3 → %4.%5")
+        say(team->language, QT_TRANSLATE_NOOP("Team", "Lane %1 of %2: %3 → %4.%5"))
             .arg(member->lane, member->name,
-                 oldPaths.isEmpty() ? QStringLiteral("(none)")
+                 oldPaths.isEmpty() ? say(team->language, QT_TRANSLATE_NOOP("Team", "(none)"))
                                     : oldPaths.join(QStringLiteral(", ")),
-                 normalised->isEmpty() ? QStringLiteral("(none)")
+                 normalised->isEmpty() ? say(team->language, QT_TRANSLATE_NOOP("Team", "(none)"))
                                        : normalised->join(QStringLiteral(", ")),
-                 reason.isEmpty() ? QString{} : QStringLiteral(" Reason: ") + reason);
+                 reason.isEmpty()
+                     ? QString{}
+                     : say(team->language, QT_TRANSLATE_NOOP("Team", " Reason: ")) + reason);
     const QJsonObject data{{QStringLiteral("session_id"), sessionId},
                            {QStringLiteral("lane"), member->lane},
                            {QStringLiteral("old_lane"), oldLane},
@@ -732,17 +768,21 @@ void TeamCoordinator::unassignTasksOf(Team& team, const QString& sessionId, cons
         task.assignmentHeld = false;
         if (task.state != state::todo) {
             addHistory(task, actor, QStringLiteral("state"),
-                       QStringLiteral("%1 → todo: %2").arg(task.state, reason),
+                       QStringLiteral("%1 → %2: %3")
+                           .arg(stateName(team.language, task.state),
+                                stateName(team.language, state::todo), reason),
                        {{QStringLiteral("from"), task.state}, {QStringLiteral("to"), state::todo}});
             task.state = state::todo;
         }
         addHistory(task, actor, QStringLiteral("owner"),
-                   QStringLiteral("Unassigned: %1").arg(reason),
+                   say(team.language, QT_TRANSLATE_NOOP("Team", "Unassigned: %1")).arg(reason),
                    {{QStringLiteral("from"), sessionId}, {QStringLiteral("to"), QString{}}});
-        updates.append({.kind = QStringLiteral("task_unassigned"),
-                        .text = QStringLiteral("%1 is unassigned: %2").arg(task.id, reason),
-                        .taskId = task.id,
-                        .actionable = true});
+        updates.append(
+            {.kind = QStringLiteral("task_unassigned"),
+             .text = say(team.language, QT_TRANSLATE_NOOP("Team", "%1 is unassigned: %2"))
+                         .arg(task.id, reason),
+             .taskId = task.id,
+             .actionable = true});
     }
 }
 
@@ -762,9 +802,10 @@ TeamResult TeamCoordinator::removeMember(const qint64 teamId, const QString& ses
     // T-23: a reviewer leaves while another stays; its reviews go to that one.
     reviewerLeft(*team, sessionId);
     team->members.removeIf([&](const Member& member) { return member.sessionId == sessionId; });
-    updates.prepend({.kind = QStringLiteral("member_removed"),
-                     .text = QStringLiteral("%1 left the team.").arg(name),
-                     .data = {{QStringLiteral("session_id"), sessionId}}});
+    updates.prepend(
+        {.kind = QStringLiteral("member_removed"),
+         .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 left the team.")).arg(name),
+         .data = {{QStringLiteral("session_id"), sessionId}}});
     if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};
@@ -783,25 +824,36 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
     unassignTasksOf(*team, sessionId, QStringLiteral("daemon"),
                     QStringLiteral("%1 was deleted").arg(name), updates);
     team->members.removeIf([&](const Member& entry) { return entry.sessionId == sessionId; });
-    updates.prepend({.kind = QStringLiteral("member_removed"),
-                     .text = QStringLiteral("%1 was deleted and left the team.").arg(name),
-                     .data = {{QStringLiteral("session_id"), sessionId}}});
+    updates.prepend(
+        {.kind = QStringLiteral("member_removed"),
+         .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 was deleted and left the team."))
+                     .arg(name),
+         .data = {{QStringLiteral("session_id"), sessionId}}});
     // The reviews it had go to the other reviewer, or wait for the next one, the review in
     // flight first.
     reviewerLeft(*team, sessionId);
     if (team->count(role) == 0) {
-        const QString empty = role == role::developer ? QStringLiteral("developer") : role;
+        const QString empty = roleName(team->language, role);
         team->paused = true;
         team->pausedReason = QStringLiteral("empty_role");
-        raiseDecision(*team, QStringLiteral("empty_role"),
-                      QStringLiteral("The team has no %1. Add one or delete the team?").arg(empty),
-                      QStringLiteral("%1 was deleted. The team is paused until the role is filled.")
-                          .arg(name),
-                      {QStringLiteral("Add a %1").arg(empty), QStringLiteral("Delete the team")},
-                      QStringLiteral("Add a %1").arg(empty), {}, QStringLiteral("daemon"));
-        updates.append({.kind = QStringLiteral("paused"),
-                        .text = QStringLiteral("Paused: the team has no %1.").arg(empty),
-                        .actionable = false});
+        raiseDecision(
+            *team, QStringLiteral("empty_role"),
+            say(team->language,
+                QT_TRANSLATE_NOOP("Team", "The team has no %1. Add one or delete the team?"))
+                .arg(empty),
+            say(team->language,
+                QT_TRANSLATE_NOOP("Team",
+                                  "%1 was deleted. The team is paused until the role is filled."))
+                .arg(name),
+            {say(team->language, QT_TRANSLATE_NOOP("Team", "Add a %1")).arg(empty),
+             say(team->language, QT_TRANSLATE_NOOP("Team", "Delete the team"))},
+            say(team->language, QT_TRANSLATE_NOOP("Team", "Add a %1")).arg(empty), {},
+            QStringLiteral("daemon"));
+        updates.append(
+            {.kind = QStringLiteral("paused"),
+             .text = say(team->language, QT_TRANSLATE_NOOP("Team", "Paused: the team has no %1."))
+                         .arg(empty),
+             .actionable = false});
     }
     if (commit(*team, before, QStringLiteral("daemon"), updates))
         qWarning("Unable to record that %s left its team.", qUtf8Printable(sessionId));

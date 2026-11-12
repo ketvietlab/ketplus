@@ -104,6 +104,7 @@ target_link_libraries(ketplus_desktop_support PUBLIC
     ketplus_ai
     ketplus_remote
     ketplus_remote_control
+    ketplus_team_language
     ketplus_remote_ssh_backend
     ketplus_typography
     KetPlusCM::git

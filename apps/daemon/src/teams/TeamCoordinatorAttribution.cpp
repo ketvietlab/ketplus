@@ -59,14 +59,18 @@ std::optional<TeamError> TeamCoordinator::attributeHead(const Team& team, Task& 
     // Work outside the branch: the board reviews the pull request at the commit it names, and
     // only the pull request makes the task done (ADR 0118).
     task.headCommit = reported;
-    addHistory(task, QStringLiteral("daemon"), QStringLiteral("handoff"),
-               reported.isEmpty()
-                   ? QStringLiteral("Handed to review with work outside its branch: %1.")
-                         .arg(task.pullRequest)
-                   : QStringLiteral("Handed to review with work outside its branch: %1 at %2.")
-                         .arg(task.pullRequest, reported.left(12)),
-               {{QStringLiteral("pull_request"), task.pullRequest},
-                {QStringLiteral("head_commit"), reported}});
+    addHistory(
+        task, QStringLiteral("daemon"), QStringLiteral("handoff"),
+        reported.isEmpty()
+            ? say(team.language,
+                  QT_TRANSLATE_NOOP("Team", "Handed to review with work outside its branch: %1."))
+                  .arg(task.pullRequest)
+            : say(team.language,
+                  QT_TRANSLATE_NOOP("Team",
+                                    "Handed to review with work outside its branch: %1 at %2."))
+                  .arg(task.pullRequest, reported.left(12)),
+        {{QStringLiteral("pull_request"), task.pullRequest},
+         {QStringLiteral("head_commit"), reported}});
     return std::nullopt;
 }
 

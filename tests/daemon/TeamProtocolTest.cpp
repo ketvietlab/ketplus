@@ -129,6 +129,37 @@ class TeamProtocolTest final : public QObject {
         QCOMPARE(sessions(fixture), 0);
     }
 
+    // T-56 (ADR 0120): the team's language comes with team.create; another one is refused
+    // before any member starts, and a client that sends none gets English.
+    void theLanguageComesWithTheTeam() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto createIn = [&](const QJsonValue& language) {
+            QJsonObject payload{{"repository", fixture.directory.path()},
+                                {"name", "Checkout"},
+                                {"merge_policy", "leader"},
+                                {"plan", plan()}};
+            if (!language.isUndefined())
+                payload.insert("language", language);
+            return command(fixture, "team.create", payload);
+        };
+        for (const QJsonValue& bad :
+             {QJsonValue("fr"), QJsonValue("VI"), QJsonValue(""), QJsonValue(7)})
+            QCOMPARE(createIn(bad).value("error_code").toString(),
+                     QStringLiteral("invalid_payload"));
+        QCOMPARE(sessions(fixture), 0);
+        const QJsonObject made = createIn("vi");
+        QVERIFY2(made.value("ok").toBool(), qPrintable(made.value("error_message").toString()));
+        QCOMPARE(made.value("team").toObject().value("language").toString(), QStringLiteral("vi"));
+        const QJsonValue id = made.value("team").toObject().value("id");
+        QCOMPARE(command(fixture, "team.update", {{"team_id", id}, {"language", "en"}})
+                     .value("team")
+                     .toObject()
+                     .value("language")
+                     .toString(),
+                 QStringLiteral("en"));
+    }
+
     void everyPageOfUpdatesSaysWhetherAnOlderOneFollows() {
         Fixture fixture;
         QVERIFY(fixture.open());

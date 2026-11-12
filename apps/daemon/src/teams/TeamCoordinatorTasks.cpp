@@ -93,12 +93,14 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
     for (const QString& criterion : draft.criteria)
         task.criteria.append({.text = criterion.trimmed()});
     addHistory(task, actor, QStringLiteral("created"),
-               QStringLiteral("Created by %1.").arg(actorName(*team, actor)));
+               say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1."))
+                   .arg(actorName(*team, actor)));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
                    {{.kind = QStringLiteral("task_created"),
-                     .text = QStringLiteral("%1 \"%2\" created.").arg(task.id, task.title),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 \"%2\" created."))
+                                 .arg(task.id, task.title),
                      .taskId = task.id}}))
         return {.error = failed};
     if (taskId)
@@ -144,7 +146,8 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         const QString lane = changes.value(QStringLiteral("lane")).toString().trimmed();
         if (lane != task->lane)
             addHistory(*task, actor, QStringLiteral("lane"),
-                       QStringLiteral("Lane %1 → %2.").arg(task->lane, lane));
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "Lane %1 → %2."))
+                           .arg(task->lane, lane));
         task->lane = lane;
     }
     if (changes.contains(QStringLiteral("depends_on"))) {
@@ -206,17 +209,19 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 continue;
             task->criteria[index].met = met;
             addHistory(*task, actor, QStringLiteral("met"),
-                       QStringLiteral("%1 criterion %2: %3")
-                           .arg(met ? QStringLiteral("Met") : QStringLiteral("Not met"))
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criterion %2: %3"))
+                           .arg(met ? say(team->language, QT_TRANSLATE_NOOP("Team", "Met"))
+                                    : say(team->language, QT_TRANSLATE_NOOP("Team", "Not met")))
                            .arg(index + 1)
                            .arg(task->criteria[index].text.left(200)),
                        {{QStringLiteral("index"), index}, {QStringLiteral("met"), met}});
             updates.append(
                 {.kind = QStringLiteral("met"),
-                 .text = QStringLiteral("%1 criterion %2 %3.")
+                 .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criterion %2 %3."))
                              .arg(task->id)
                              .arg(index + 1)
-                             .arg(met ? QStringLiteral("met") : QStringLiteral("not met")),
+                             .arg(met ? say(team->language, QT_TRANSLATE_NOOP("Team", "met"))
+                                      : say(team->language, QT_TRANSLATE_NOOP("Team", "not met"))),
                  .taskId = task->id});
         }
     }
@@ -266,13 +271,16 @@ TeamResult TeamCoordinator::setCriteria(const qint64 teamId, const QString& task
     for (const Criterion& criterion : criteria)
         now.append(criterion.text);
     addHistory(*task, actor, QStringLiteral("criteria"),
-               QStringLiteral("Criteria changed by %1.").arg(actorName(*team, actor)),
+               say(team->language, QT_TRANSLATE_NOOP("Team", "Criteria changed by %1."))
+                   .arg(actorName(*team, actor)),
                {{QStringLiteral("from"), QJsonArray::fromStringList(old)},
                 {QStringLiteral("to"), QJsonArray::fromStringList(now)}});
-    if (auto failed = commit(*team, before, actor,
-                             {{.kind = QStringLiteral("criteria"),
-                               .text = QStringLiteral("%1 criteria changed.").arg(task->id),
-                               .taskId = task->id}}))
+    if (auto failed =
+            commit(*team, before, actor,
+                   {{.kind = QStringLiteral("criteria"),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criteria changed."))
+                                 .arg(task->id),
+                     .taskId = task->id}}))
         return {.error = failed};
     return {.teamId = teamId};
 }
@@ -283,16 +291,18 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
     task.state = to;
     addHistory(task, actor, QStringLiteral("state"),
                QStringLiteral("%1 → %2%3")
-                   .arg(from, to, reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
+                   .arg(stateName(team.language, from), stateName(team.language, to),
+                        reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
                {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}});
     const bool actionable = to == state::ready || to == state::blocked || to == state::done;
-    updates.append({.kind = QStringLiteral("state"),
-                    .text = QStringLiteral("%1 %2 → %3%4")
-                                .arg(task.id, from, to,
-                                     reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
-                    .taskId = task.id,
-                    .actionable = actionable,
-                    .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
+    updates.append(
+        {.kind = QStringLiteral("state"),
+         .text = QStringLiteral("%1 %2 → %3%4")
+                     .arg(task.id, stateName(team.language, from), stateName(team.language, to),
+                          reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
+         .taskId = task.id,
+         .actionable = actionable,
+         .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
     // T-19: a task handed to review again starts its replies without a verdict from zero.
     if (to == state::inReview)
         task.missingVerdicts = 0;
@@ -309,7 +319,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
         if (!busy)
             updates.append(
                 {.kind = QStringLiteral("idle_developer"),
-                 .text = QStringLiteral("%1 has no task left.").arg(actorName(team, task.owner)),
+                 .text = say(team.language, QT_TRANSLATE_NOOP("Team", "%1 has no task left."))
+                             .arg(actorName(team, task.owner)),
                  .taskId = task.id,
                  .actionable = true,
                  .data = {{QStringLiteral("session_id"), task.owner}}});
@@ -408,7 +419,8 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
             return invalid(QStringLiteral("a done task stays done."));
         if (!task->owner.isEmpty()) {
             addHistory(*task, actor, QStringLiteral("owner"),
-                       QStringLiteral("Unassigned by %1.").arg(actorName(*team, actor)),
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "Unassigned by %1."))
+                           .arg(actorName(*team, actor)),
                        {{QStringLiteral("from"), task->owner}, {QStringLiteral("to"), QString{}}});
             task->owner.clear();
         }
@@ -494,9 +506,11 @@ void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& stor
         Team* stored = mutableTeam(team.id);
         if (stored && stored->task(task.id)) {
             const Team before = *stored;
-            addHistory(*stored->task(task.id), QStringLiteral("daemon"), QStringLiteral("worktree"),
-                       QStringLiteral("The owner's conversation was not moved to %1: %2")
-                           .arg(task.worktree, error));
+            addHistory(
+                *stored->task(task.id), QStringLiteral("daemon"), QStringLiteral("worktree"),
+                say(stored->language,
+                    QT_TRANSLATE_NOOP("Team", "The owner's conversation was not moved to %1: %2"))
+                    .arg(task.worktree, error));
             (void)commit(*stored, before, QStringLiteral("daemon"), {});
         }
     }

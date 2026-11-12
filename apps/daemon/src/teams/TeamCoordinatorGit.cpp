@@ -95,10 +95,12 @@ void TeamCoordinator::worktreeAnswered(const qint64 teamId, const QString& taskI
     task->branch = answer.worktree->branch;
     task->worktree = answer.worktree->worktree;
     task->baseCommit = answer.worktree->baseCommit;
-    addHistory(*task, QStringLiteral("daemon"), QStringLiteral("worktree"),
-               QStringLiteral("The worktree %1 was made for an assignment that was refused "
-                              "meanwhile; the task keeps it.")
-                   .arg(task->worktree));
+    addHistory(
+        *task, QStringLiteral("daemon"), QStringLiteral("worktree"),
+        say(team->language,
+            QT_TRANSLATE_NOOP("Team", "The worktree %1 was made for an assignment that was refused "
+                                      "meanwhile; the task keeps it."))
+            .arg(task->worktree));
     (void)commit(*team, before, QStringLiteral("daemon"), {});
 }
 

@@ -24,6 +24,8 @@ struct TeamRoleContext final {
     QString mergePolicy;
     QString integrationBranch;
     bool leaderWritesRequirements{true};
+    // T-56: the team's language ("en", "vi"); the team page and the daemon's texts use it.
+    QString language;
 };
 [[nodiscard]] QString teamInstructions(const TeamRoleContext& context);
 // Provider input for delivered messages: each is framed as a peer's message, not user text.

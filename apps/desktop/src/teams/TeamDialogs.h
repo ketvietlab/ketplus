@@ -49,6 +49,7 @@ class NewTeamForm final : public QWidget {
     [[nodiscard]] ket::TextArea* goalField() const { return goal_; }
     [[nodiscard]] ket::TextField* budgetField() const { return budget_; }
     [[nodiscard]] ket::SegmentedControl* developerCount() const { return developers_; }
+    [[nodiscard]] ket::Select* languageField() const { return language_; }
     [[nodiscard]] TeamAgent agent(const QString& role) const { return agents_.value(role); }
     void setAgent(const QString& role, const TeamAgent& agent);
     [[nodiscard]] ket::Button* agentButton(const QString& role) const {
@@ -88,6 +89,9 @@ class NewTeamForm final : public QWidget {
     ket::Radio* leaderMerges_;
     ket::Radio* userMerges_;
     ket::Select* permissions_;
+    // T-56: the team's language; a choice the user made is kept over the goal's letters.
+    ket::Select* language_{nullptr};
+    bool languageChosen_{false};
     ket::FieldRow* permissionsRow_{nullptr};
     // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
     ket::TextField* budget_{nullptr};

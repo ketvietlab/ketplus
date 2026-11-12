@@ -116,16 +116,23 @@ void TeamCoordinator::pauseIfBudgetUsed(Team& team, QList<Update>& updates) {
     // The budget is used up: pause once and ask (ADR 0114, open point 2).
     team.paused = true;
     team.pausedReason = QStringLiteral("budget");
-    const QString more = QStringLiteral("Continue (%1 more turns)").arg(team.turnBudget);
-    raiseDecision(team, QStringLiteral("budget"),
-                  QStringLiteral("The team used its %1 automatic turns. Continue?")
-                      .arg(team.turnBudget),
-                  QStringLiteral("Automatic turns are paused until you answer. Held messages "
-                                 "are delivered in order when the team continues."),
-                  {more, QStringLiteral("Stop")}, more, {}, QStringLiteral("daemon"));
-    updates.append({.kind = QStringLiteral("paused"),
-                    .text = QStringLiteral("Paused: the team used its %1 automatic turns.")
-                                .arg(team.turnBudget)});
+    const QString more = say(team.language, QT_TRANSLATE_NOOP("Team", "Continue (%1 more turns)"))
+                             .arg(team.turnBudget);
+    raiseDecision(
+        team, QStringLiteral("budget"),
+        say(team.language,
+            QT_TRANSLATE_NOOP("Team", "The team used its %1 automatic turns. Continue?"))
+            .arg(team.turnBudget),
+        say(team.language, QT_TRANSLATE_NOOP("Team", "Automatic turns are paused until you answer. "
+                                                     "Held messages are delivered in order when "
+                                                     "the team continues.")),
+        {more, say(team.language, QT_TRANSLATE_NOOP("Team", "Stop"))}, more, {},
+        QStringLiteral("daemon"));
+    updates.append(
+        {.kind = QStringLiteral("paused"),
+         .text = say(team.language,
+                     QT_TRANSLATE_NOOP("Team", "Paused: the team used its %1 automatic turns."))
+                     .arg(team.turnBudget)});
 }
 
 QString TeamCoordinator::takeMemberTurn(const QString& sessionId) {
@@ -137,7 +144,8 @@ QString TeamCoordinator::takeMemberTurn(const QString& sessionId) {
     pauseIfBudgetUsed(*team, updates);
     if (team->paused) {
         if (!updates.isEmpty() && commit(*team, before, QStringLiteral("daemon"), updates))
-            qWarning("Unable to pause team %lld for its budget.", static_cast<long long>(before.id));
+            qWarning("Unable to pause team %lld for its budget.",
+                     static_cast<long long>(before.id));
         return team->pausedReason == QStringLiteral("budget") ? QStringLiteral("team_budget")
                                                               : QStringLiteral("team_paused");
     }
@@ -178,7 +186,8 @@ void TeamCoordinator::notePointError(const qint64 teamId, const TeamMessage& mes
         return;
     const Team before = *stored;
     addHistory(*stored->task(message.taskId), QStringLiteral("daemon"), QStringLiteral("worktree"),
-               QStringLiteral("The owner's conversation was not moved to %1: %2")
+               say(stored->language,
+                   QT_TRANSLATE_NOOP("Team", "The owner's conversation was not moved to %1: %2"))
                    .arg(message.pointAt, error));
     (void)commit(*stored, before, QStringLiteral("daemon"), {});
 }

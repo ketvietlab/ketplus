@@ -181,8 +181,9 @@ describes them.
 | Pause / Resume | `team.update` | `team_id`, `paused`, `expected_revision` | settings | none; pausing a paused team succeeds and changes nothing |
 | Who merges | `team.update` | `team_id`, `merge_policy` (`leader` or `user`), `expected_revision` | settings | none |
 | Automatic turns | `team.update` | `team_id`, `turn_budget` (a whole number from 5 to 200, ADR 0114 open point 2), `expected_revision` | settings | `invalid_payload` |
+| Language | `team.update` | `team_id`, `language` (`en` or `vi`, ADR 0120), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
-| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?` (without it, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
+| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`en` or `vi`, ADR 0120; without it the team is English) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
@@ -287,7 +288,10 @@ refusal.
     as the same string field, so the contract and its version do not change and an older
     phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
-    `leader_writes_requirements` (who writes requirements), `execution_policy`.
+    `leader_writes_requirements` (who writes requirements), `execution_policy`,
+    `language` (ADR 0120: `en` or `vi`; the texts the daemon writes for the team, its Updates
+    and its own decisions, are in it, and a phone that shows its own fixed text should follow
+    it; an older phone ignores the field).
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.
   - The automatic-turn budget: `turn_budget`, `automatic_turns` and `turns_left`.
     `turns_left` is computed by the daemon, so the phone infers nothing.

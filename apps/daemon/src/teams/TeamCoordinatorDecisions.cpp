@@ -9,7 +9,7 @@ namespace {
 constexpr int minimumChoices = 2;
 constexpr int maximumChoices = 4;
 const QString firstPlan = QStringLiteral("first_plan");
-const QString startPlan = QStringLiteral("Start");
+constexpr const char* startPlan = QT_TRANSLATE_NOOP("Team", "Start");
 
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
@@ -63,12 +63,13 @@ TeamResult TeamCoordinator::raiseQuestion(const qint64 teamId, const QJsonObject
                       draft.value(QStringLiteral("context")).toString().trimmed().left(4000),
                       choices, recommended, taskId, actor);
     const QString id = decision.id;
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("decision_raised"),
-                     .text = QStringLiteral("%1 waits for the user: %2").arg(id, question),
-                     .taskId = taskId,
-                     .data = {{QStringLiteral("decision_id"), id}}}}))
+    if (auto failed = commit(
+            *team, before, actor,
+            {{.kind = QStringLiteral("decision_raised"),
+              .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 waits for the user: %2"))
+                          .arg(id, question),
+              .taskId = taskId,
+              .data = {{QStringLiteral("decision_id"), id}}}}))
         return {.error = failed};
     if (decisionId)
         *decisionId = id;
@@ -105,7 +106,8 @@ TeamResult TeamCoordinator::withdrawDecision(const qint64 teamId, const QString&
     if (auto failed =
             commit(*team, before, actor,
                    {{.kind = QStringLiteral("decision_withdrawn"),
-                     .text = QStringLiteral("%1 withdrawn: %2").arg(decisionId, decision->reason),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 withdrawn: %2"))
+                                 .arg(decisionId, decision->reason),
                      .taskId = decision->taskId}}))
         return {.error = failed};
     return {.teamId = teamId};
@@ -141,15 +143,23 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
     const QString kind = decision->kind;
     const QString question = decision->question;
     const QString taskId = decision->taskId;
+    // T-56: a fixed choice is known by its place, in whichever language it was raised.
+    const QStringList choices = decision->choices;
+    const QString language = team->language;
+    const auto chose = [&](const qsizetype index) {
+        return index < choices.size() && text == choices.at(index);
+    };
     QList<Update> updates{{.kind = QStringLiteral("decision_answered"),
-                           .text = QStringLiteral("%1 answered: %2").arg(decisionId, text),
+                           .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 answered: %2"))
+                                       .arg(decisionId, text),
                            .taskId = taskId,
                            .data = {{QStringLiteral("decision_id"), decisionId}}}};
     QStringList released;
     bool resume = false;
     if (kind == QStringLiteral("budget")) {
-        // "Continue (N more turns)" resumes; anything else leaves the team paused by the user.
-        resume = text.startsWith(QStringLiteral("Continue"));
+        // "Continue (N more turns)", the first choice, resumes; anything else leaves the team
+        // paused by the user.
+        resume = chose(0);
         if (!resume)
             team->pausedReason = QStringLiteral("user");
     } else if (kind == QStringLiteral("stalled")) {
@@ -159,7 +169,7 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         stall.signature.clear();
         stall.wakes = 0;
         stall.nudged.clear();
-        if (text == pauseTeamChoice) {
+        if (chose(1)) {
             team->paused = true;
             team->pausedReason = QStringLiteral("user");
         } else if (const Member* woken = team->memberWithRole(role::leader)) {
@@ -167,9 +177,9 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         }
     } else if (kind == QStringLiteral("merge")) {
         // ADR 0114 §5: the user allows exactly this merge.
-        if (Task* ready = team->task(taskId); ready && text == leaderMergesChoice)
+        if (Task* ready = team->task(taskId); ready && chose(1))
             ready->leaderMayMerge = true;
-    } else if (kind == firstPlan && text == startPlan) {
+    } else if (kind == firstPlan && chose(0)) {
         team->planApproved = true;
         for (Task& task : team->tasks)
             if (task.assignmentHeld) {
@@ -184,7 +194,8 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
         const QString back = task->resumeState.isEmpty() ? state::inProgress : task->resumeState;
         task->question.clear();
         applyMove(*team, *task, back, QStringLiteral("user"),
-                  QStringLiteral("%1 answered").arg(decisionId), updates);
+                  say(team->language, QT_TRANSLATE_NOOP("Team", "%1 answered")).arg(decisionId),
+                  updates);
     }
     const QString owner = task ? task->owner : QString{};
     const Member* leader = team->memberWithRole(role::leader);
@@ -194,11 +205,14 @@ TeamResult TeamCoordinator::answerDecision(const qint64 teamId, const QString& d
     if (resume)
         (void)update(teamId, {{QStringLiteral("paused"), false}}, actor);
     const QString body =
-        QStringList{QStringLiteral("Team %1: the user answered %2.")
-                        .arg(this->team(teamId)->name, decisionId),
-                    QStringLiteral("Question: %1").arg(question),
-                    QStringLiteral("Answer: %1").arg(text),
-                    taskId.isEmpty() ? QString{} : QStringLiteral("Task %1 can go on.").arg(taskId)}
+        QStringList{
+            say(language, QT_TRANSLATE_NOOP("Team", "Team %1: the user answered %2."))
+                .arg(this->team(teamId)->name, decisionId),
+            say(language, QT_TRANSLATE_NOOP("Team", "Question: %1")).arg(question),
+            say(language, QT_TRANSLATE_NOOP("Team", "Answer: %1")).arg(text),
+            taskId.isEmpty()
+                ? QString{}
+                : say(language, QT_TRANSLATE_NOOP("Team", "Task %1 can go on.")).arg(taskId)}
             .join(QLatin1Char('\n'))
             .trimmed();
     // Once to the leader and once to the blocked task's owner.
@@ -231,15 +245,17 @@ void TeamCoordinator::askFirstPlan(Team& team) {
             plan << QStringLiteral("%1 \"%2\" → %3")
                         .arg(entry.id, entry.title, owner ? owner->name : entry.owner);
         }
-    const QString question = QStringLiteral("Start these %1 tasks?").arg(plan.size());
+    const QString question =
+        say(team.language, QT_TRANSLATE_NOOP("Team", "Start these %1 tasks?")).arg(plan.size());
     const QString context = plan.join(QLatin1Char('\n'));
     if (Decision* open = openDecision(team, firstPlan)) {
         open->question = question;
         open->context = context;
     } else {
         raiseDecision(team, firstPlan, question, context,
-                      {startPlan, QStringLiteral("Change the plan first")}, startPlan, {},
-                      QStringLiteral("daemon"));
+                      {say(team.language, startPlan),
+                       say(team.language, QT_TRANSLATE_NOOP("Team", "Change the plan first"))},
+                      say(team.language, startPlan), {}, QStringLiteral("daemon"));
     }
 }
 
@@ -273,10 +289,13 @@ bool TeamCoordinator::holdForFirstPlan(const qint64 teamId, const QString& taskI
         return false;
     task->assignmentHeld = true;
     askFirstPlan(*team);
-    if (commit(*team, before, QStringLiteral("daemon"),
-               {{.kind = QStringLiteral("assignment_held"),
-                 .text = QStringLiteral("%1 waits for the first plan to be approved.").arg(taskId),
-                 .taskId = taskId}}))
+    if (commit(
+            *team, before, QStringLiteral("daemon"),
+            {{.kind = QStringLiteral("assignment_held"),
+              .text = say(team->language,
+                          QT_TRANSLATE_NOOP("Team", "%1 waits for the first plan to be approved."))
+                          .arg(taskId),
+              .taskId = taskId}}))
         return false;
     return true;
 }

@@ -16,6 +16,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Sql
     OpenSSL::Crypto
     ketplus_remote
+    ketplus_team_language
     ketplus_control_crypto
     ketplus_browser_tools
     ketplus_computer_tools

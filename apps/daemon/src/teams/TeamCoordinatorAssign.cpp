@@ -74,14 +74,17 @@ TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskI
     }
     task->owner = owner;
     addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Assigned to %1 by %2.").arg(member->name, actorName(*team, actor)),
+               say(team->language, QT_TRANSLATE_NOOP("Team", "Assigned to %1 by %2."))
+                   .arg(member->name, actorName(*team, actor)),
                {{QStringLiteral("from"), QString{}}, {QStringLiteral("to"), owner}});
     const QString name = member->name;
-    if (auto failed = commit(*team, before, actor,
-                             {{.kind = QStringLiteral("task_assigned"),
-                               .text = QStringLiteral("%1 assigned to %2.").arg(taskId, name),
-                               .taskId = taskId,
-                               .data = {{QStringLiteral("owner"), owner}}}}))
+    if (auto failed =
+            commit(*team, before, actor,
+                   {{.kind = QStringLiteral("task_assigned"),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 assigned to %2."))
+                                 .arg(taskId, name),
+                     .taskId = taskId,
+                     .data = {{QStringLiteral("owner"), owner}}}}))
         return {.error = failed};
     if (!holdForFirstPlan(teamId, taskId, actor))
         deliverAssignment(*team, *team->task(taskId), actor, false);
@@ -154,19 +157,21 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
     // One assignment: the owner changes in the same commit, so a failure leaves the old one.
     task->owner = owner;
     addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Handed over from %1 to %2: %3")
-                   .arg(previous.isEmpty() ? QStringLiteral("nobody") : actorName(*team, previous),
+               say(team->language, QT_TRANSLATE_NOOP("Team", "Handed over from %1 to %2: %3"))
+                   .arg(previous.isEmpty()
+                            ? say(team->language, QT_TRANSLATE_NOOP("Team", "nobody"))
+                            : actorName(*team, previous),
                         member->name, reason.trimmed()),
                {{QStringLiteral("from"), previous},
                 {QStringLiteral("to"), owner},
                 {QStringLiteral("reason"), reason.trimmed()}});
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("task_handover"),
-                     .text = QStringLiteral("%1 handed over to %2: %3")
-                                 .arg(taskId, member->name, reason.trimmed()),
-                     .taskId = taskId,
-                     .data = {{QStringLiteral("from"), previous}, {QStringLiteral("to"), owner}}}}))
+    if (auto failed = commit(
+            *team, before, actor,
+            {{.kind = QStringLiteral("task_handover"),
+              .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 handed over to %2: %3"))
+                          .arg(taskId, member->name, reason.trimmed()),
+              .taskId = taskId,
+              .data = {{QStringLiteral("from"), previous}, {QStringLiteral("to"), owner}}}}))
         return {.error = failed};
     if (!previous.isEmpty())
         host_->noteInConversation(previous,
@@ -189,8 +194,9 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                     return;
                 const Team unmoved = *stored;
                 addHistory(*task, QStringLiteral("daemon"), QStringLiteral("worktree"),
-                           QStringLiteral("The previous owner's conversation leaves "
-                                          "%1 when its turn ends: %2")
+                           say(stored->language,
+                               QT_TRANSLATE_NOOP("Team", "The previous owner's conversation leaves "
+                                                         "%1 when its turn ends: %2"))
                                .arg(task->worktree, waiting));
                 (void)self->commit(*stored, unmoved, QStringLiteral("daemon"), {});
             });

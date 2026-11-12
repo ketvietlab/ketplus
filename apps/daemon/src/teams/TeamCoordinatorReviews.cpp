@@ -79,8 +79,10 @@ QString TeamCoordinator::noVerdictQuestion(const int round, const int replies) {
         .arg(replies);
 }
 
-QString TeamCoordinator::roundLimitQuestion(const int round, const int maxRounds) {
-    return QStringLiteral("Review round limit reached (%1 of %2) with findings.")
+QString TeamCoordinator::roundLimitQuestion(const QString& language, const int round,
+                                            const int maxRounds) {
+    return say(language,
+               QT_TRANSLATE_NOOP("Team", "Review round limit reached (%1 of %2) with findings."))
         .arg(round)
         .arg(maxRounds);
 }
@@ -254,10 +256,13 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
                 {QStringLiteral("reviewer"), reviewerName},
                 {QStringLiteral("place"), task->reviewPlace}});
     const QString body = reviewText(*team, *task, diff);
-    if (commit(*team, before, QStringLiteral("daemon"),
-               {{.kind = QStringLiteral("review_requested"),
-                 .text = QStringLiteral("%1 is in review (round %2).").arg(taskId).arg(task->round),
-                 .taskId = taskId}}))
+    if (commit(
+            *team, before, QStringLiteral("daemon"),
+            {{.kind = QStringLiteral("review_requested"),
+              .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 is in review (round %2)."))
+                          .arg(taskId)
+                          .arg(task->round),
+              .taskId = taskId}}))
         return;
     wake(*team, {.teamId = team->id,
                  .teamName = team->name,
@@ -370,10 +375,12 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             task->missingVerdicts = 0;
         if (!failure.isEmpty()) {
             task->resumeState = state::inProgress;
-            task->question = QStringLiteral("The review of round %1 did not finish (%2). Hand "
-                                            "the task to review again, or hand it over.")
-                                 .arg(round)
-                                 .arg(failure);
+            task->question =
+                say(team->language,
+                    QT_TRANSLATE_NOOP("Team", "The review of round %1 did not finish (%2). Hand "
+                                              "the task to review again, or hand it over."))
+                    .arg(round)
+                    .arg(failure);
             applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                       updates);
         } else if (noVerdict) {
@@ -382,16 +389,21 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             --task->round;
             ++task->missingVerdicts;
             askAgain = task->missingVerdicts <= verdictRetries;
-            addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       (askAgain ? QStringLiteral("Round %1: no verdict. The reply had no verdict "
-                                                  "line; the round is not counted and the "
-                                                  "reviewer is asked again.")
-                                 : QStringLiteral("Round %1: no verdict again. The round is not "
-                                                  "counted; the leader decides."))
-                           .arg(round),
-                       {{QStringLiteral("verdict"), verdictName(ReviewVerdict::none)},
-                        {QStringLiteral("round"), round},
-                        {QStringLiteral("text"), findings}});
+            addHistory(
+                *task, reviewerSession, QStringLiteral("verdict"),
+                (askAgain
+                     ? say(team->language,
+                           QT_TRANSLATE_NOOP("Team",
+                                             "Round %1: no verdict. The reply had no verdict "
+                                             "line; the round is not counted and the "
+                                             "reviewer is asked again."))
+                     : say(team->language,
+                           QT_TRANSLATE_NOOP("Team", "Round %1: no verdict again. The round is not "
+                                                     "counted; the leader decides.")))
+                    .arg(round),
+                {{QStringLiteral("verdict"), verdictName(ReviewVerdict::none)},
+                 {QStringLiteral("round"), round},
+                 {QStringLiteral("text"), findings}});
             if (askAgain) {
                 // The same reviewer is asked again, first.
                 answered->queue.removeAll(taskId);
@@ -405,32 +417,45 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             }
         } else if (noFindings) {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       QStringLiteral("Round %1: no findings.").arg(round) + where(),
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1: no findings."))
+                               .arg(round) +
+                           where(),
                        verdictData(QStringLiteral("no_findings")));
             applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
-                      QStringLiteral("reviewed, no findings"), updates);
+                      say(team->language, QT_TRANSLATE_NOOP("Team", "reviewed, no findings")),
+                      updates);
             offerMerges(*team, updates);
         } else {
-            addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       QStringLiteral("Round %1: findings.").arg(round) + where(),
-                       verdictData(QStringLiteral("findings")));
+            addHistory(
+                *task, reviewerSession, QStringLiteral("verdict"),
+                say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1: findings.")).arg(round) +
+                    where(),
+                verdictData(QStringLiteral("findings")));
             if (round >= limit) {
                 // Past the limit the leader decides (ADR 0114 §2); with one round, after it.
                 task->resumeState = state::inProgress;
-                task->question = roundLimitQuestion(round, shownLimit(limit, round));
+                task->question =
+                    roundLimitQuestion(team->language, round, shownLimit(limit, round));
                 if (!link.isEmpty())
-                    task->question += QStringLiteral(" The findings: %1").arg(link);
+                    task->question +=
+                        say(team->language, QT_TRANSLATE_NOOP("Team", " The findings: %1"))
+                            .arg(link);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
                 updates.append({.kind = QStringLiteral("round_limit"),
-                                .text = QStringLiteral("%1 still has findings after %2 rounds.")
+                                .text = say(team->language,
+                                            QT_TRANSLATE_NOOP(
+                                                "Team", "%1 still has findings after %2 rounds."))
                                             .arg(taskId)
                                             .arg(round),
                                 .taskId = taskId,
                                 .actionable = true});
             } else {
-                applyMove(*team, *task, state::inProgress, QStringLiteral("daemon"),
-                          QStringLiteral("review round %1 found issues").arg(round), updates);
+                applyMove(
+                    *team, *task, state::inProgress, QStringLiteral("daemon"),
+                    say(team->language, QT_TRANSLATE_NOOP("Team", "review round %1 found issues"))
+                        .arg(round),
+                    updates);
                 back = TeamMessage{
                     .teamId = team->id,
                     .teamName = team->name,

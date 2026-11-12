@@ -140,6 +140,11 @@ target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_des
 ketplus_add_gui_test(ketplus_team_commands_tests TeamCommandsTest.cpp)
 target_link_libraries(ketplus_team_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 target_link_libraries(ketplus_team_commands_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-56: the team page in its team's language, checked against the Vietnamese catalog.
+ketplus_add_gui_test(ketplus_team_page_language_tests TeamPageLanguageTest.cpp)
+target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+target_compile_definitions(ketplus_team_page_language_tests PRIVATE
+    KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)

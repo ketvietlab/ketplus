@@ -80,20 +80,23 @@ TeamResult TeamCoordinator::voidReview(const qint64 teamId, const QString& taskI
     task->missingVerdicts = 0;
     task->question.clear();
     task->resumeState.clear();
-    addHistory(*task, actor, QStringLiteral("verdict_voided"),
-               QStringLiteral("Round %1's verdict (%2) voided by %3: %4")
-                   .arg(round)
-                   .arg(was == QStringLiteral("no_findings") ? QStringLiteral("no findings")
-                                                             : QStringLiteral("findings"),
-                        by, why),
-               {{QStringLiteral("round"), round},
-                {QStringLiteral("verdict"), was},
-                {QStringLiteral("by"), by},
-                {QStringLiteral("reason"), why}});
+    addHistory(
+        *task, actor, QStringLiteral("verdict_voided"),
+        say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1's verdict (%2) voided by %3: %4"))
+            .arg(round)
+            .arg(was == QStringLiteral("no_findings")
+                     ? say(team->language, QT_TRANSLATE_NOOP("Team", "no findings"))
+                     : say(team->language, QT_TRANSLATE_NOOP("Team", "findings")),
+                 by, why),
+        {{QStringLiteral("round"), round},
+         {QStringLiteral("verdict"), was},
+         {QStringLiteral("by"), by},
+         {QStringLiteral("reason"), why}});
     withdrawMerges(*team, taskId, QStringLiteral("The review of %1 was voided.").arg(taskId));
     QList<Update> updates;
     // Back to the state it had before the verdict; the review queue takes it again.
-    applyMove(*team, *task, state::inReview, actor, QStringLiteral("round %1 voided").arg(round),
+    applyMove(*team, *task, state::inReview, actor,
+              say(team->language, QT_TRANSLATE_NOOP("Team", "round %1 voided")).arg(round),
               updates);
     if (auto error = commit(*team, before, actor, updates))
         return {.error = error, .teamId = teamId};
@@ -144,14 +147,19 @@ TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& tas
         data.insert(QStringLiteral("comment_url"), link);
     addHistory(*task, actor, QStringLiteral("review_accepted"),
                (link.isEmpty()
-                    ? QStringLiteral("Review accepted by %1, made outside the board (%2): %3")
+                    ? say(team->language,
+                          QT_TRANSLATE_NOOP(
+                              "Team", "Review accepted by %1, made outside the board (%2): %3"))
                           .arg(by, proof, why)
-                    : QStringLiteral("Review accepted by %1 with the review on the pull request "
-                                     "(%2; last comment %3): %4")
+                    : say(team->language,
+                          QT_TRANSLATE_NOOP(
+                              "Team", "Review accepted by %1 with the review on the pull request "
+                                      "(%2; last comment %3): %4"))
                           .arg(by, proof, link, why)),
                data);
     QList<Update> updates;
-    applyMove(*team, *task, state::ready, actor, QStringLiteral("review accepted by %1").arg(by),
+    applyMove(*team, *task, state::ready, actor,
+              say(team->language, QT_TRANSLATE_NOOP("Team", "review accepted by %1")).arg(by),
               updates);
     offerMerges(*team, updates);
     // commit() sends the next review of a reviewer this one freed.

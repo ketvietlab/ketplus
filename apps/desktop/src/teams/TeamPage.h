@@ -64,6 +64,8 @@ class TeamPage final : public QWidget {
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
   private:
     void rebuild();
@@ -80,6 +82,8 @@ class TeamPage final : public QWidget {
     };
     [[nodiscard]] FocusPlace focusPlace() const;
     void restoreFocus(const FocusPlace& place);
+    // T-56: the team's language ("en", "vi"), or empty before the team is known.
+    [[nodiscard]] QString teamLanguage() const;
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);

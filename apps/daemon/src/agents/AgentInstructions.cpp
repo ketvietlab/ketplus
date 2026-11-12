@@ -124,6 +124,20 @@ QString teamInstructions(const TeamRoleContext& context) {
             "finding give the file, line, severity and a one-line summary. End with exactly "
             "one line: \"Verdict: findings\" or \"Verdict: no findings\".");
     }
+    // T-56: what people read on the team page is in the team's language; code is not.
+    if (context.language == QStringLiteral("vi")) {
+        lines << (context.role == QStringLiteral("leader")
+                      ? QStringLiteral(
+                            "The team works in Vietnamese: the user reads its page in "
+                            "Vietnamese. Write task titles, acceptance criteria, notes, lanes, "
+                            "decisions (question, context and choices) and what you tell the "
+                            "user in Vietnamese. Code, commit messages and public pull request "
+                            "bodies stay English.")
+                      : QStringLiteral(
+                            "The team works in Vietnamese: write your task notes and "
+                            "questions in Vietnamese. Code, commit messages, public pull "
+                            "request bodies and the exact verdict line stay English."));
+    }
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
                             "the team. team_tasks lists one short row per task (open=true for "
