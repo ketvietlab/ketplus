@@ -31,6 +31,9 @@ class DaemonMachineBackend final : public MachineBackend {
     // setTransportReady() and setTransportUnavailable().
     DaemonMachineBackend(QString machineId, Route route, DaemonCall call,
                          QObject* parent = nullptr);
+    // The client whose daemon.hello says which conversation operations the daemon offers, for
+    // a backend built from a DaemonCall (the SSH route). Until set, every operation is assumed.
+    void setFeatureSource(DaemonClient* client);
 
     [[nodiscard]] QString machineId() const override { return machineId_; }
     [[nodiscard]] Route route() const override { return route_; }

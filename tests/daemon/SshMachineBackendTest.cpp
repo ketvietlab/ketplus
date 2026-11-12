@@ -206,6 +206,72 @@ class SshMachineBackendTest final : public QObject {
                  QStringLiteral("fixture"));
     }
 
+    // T-18: fork and archive follow the remote daemon's hello; rename and the others forward
+    // to the daemon's local protocol.
+    void conversationOperationsFollowTheDaemonsHello() {
+        using Feature = MachineBackend::Feature;
+        Fixture fixture;
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        auto backend = fixture.backend(store);
+        QVERIFY(!backend->supports(Feature::Rename)); // not connected yet
+        QCOMPARE(backend->unsupportedReason(Feature::Rename),
+                 QStringLiteral("Available once this machine is connected."));
+        backend->connectToHost();
+        QTRY_COMPARE(backend->connectionState(), State::Connected);
+        // An older daemon: no session.fork, no session.archive/1.
+        QVERIFY(backend->supports(Feature::Rename));
+        QVERIFY(!backend->supports(Feature::Fork));
+        QVERIFY(!backend->supports(Feature::Archive));
+        QVERIFY(!backend->supports(Feature::Attachments));
+        QCOMPARE(backend->unsupportedReason(Feature::Fork),
+                 QStringLiteral("Not available on Linux machines yet."));
+        QString refused;
+        backend->forkConversation(
+            "conversation-1", 1, "fork-1",
+            [&](const QJsonObject&, const QString& error) { refused = error; });
+        QTRY_VERIFY(!refused.isEmpty());
+        QVERIFY(!fixture.daemon.requests.contains("session.fork"));
+
+        bool renamed = false;
+        backend->renameConversation(
+            "conversation-1", 1, "Release notes",
+            [&](const QJsonObject&, const QString& error) { renamed = error.isEmpty(); });
+        QTRY_VERIFY(renamed);
+        QCOMPARE(fixture.daemon.requests.last(), QStringLiteral("session.rename"));
+        QCOMPARE(fixture.daemon.payloads.last().value("title").toString(),
+                 QStringLiteral("Release notes"));
+    }
+
+    // A daemon that offers fork and archive: both forward.
+    void forkAndArchiveForwardWhenTheDaemonOffersThem() {
+        using Feature = MachineBackend::Feature;
+        Fixture current;
+        current.daemon.features = {"daemon.host_identity/1", "session.fork", "session.archive/1"};
+        SshMachineStore currentStore(current.storePath());
+        QVERIFY(currentStore.add(current.target));
+        auto newer = current.backend(currentStore);
+        newer->connectToHost();
+        QTRY_COMPARE(newer->connectionState(), State::Connected);
+        QVERIFY(newer->supports(Feature::Fork));
+        QVERIFY(newer->supports(Feature::Archive));
+        bool archived = false;
+        newer->setConversationArchived(
+            "conversation-1", 1, true,
+            [&](const QJsonObject&, const QString& error) { archived = error.isEmpty(); });
+        QTRY_VERIFY(archived);
+        QCOMPARE(current.daemon.requests.last(), QStringLiteral("session.set_archived"));
+        QCOMPARE(current.daemon.payloads.last().value("archived").toBool(), true);
+        bool forked = false;
+        newer->forkConversation(
+            "conversation-1", 1, "fork-1",
+            [&](const QJsonObject&, const QString& error) { forked = error.isEmpty(); });
+        QTRY_VERIFY(forked);
+        QCOMPARE(current.daemon.requests.last(), QStringLiteral("session.fork"));
+        QCOMPARE(current.daemon.payloads.last().value("fork_session_id").toString(),
+                 QStringLiteral("fork-1"));
+    }
+
     void aDroppedSessionReconnectsAndReplaysReads() {
         Fixture fixture;
         SshMachineStore store(fixture.storePath());

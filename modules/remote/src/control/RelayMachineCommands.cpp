@@ -431,12 +431,12 @@ void RelayMachineBackend::answerQuestion(const QString& sessionId, qint64 genera
 }
 
 bool RelayMachineBackend::supports(const Feature feature) const {
-    return state_ == ConnectionState::Connected && feature == Feature::Rename;
+    return state_ == ConnectionState::Connected &&
+           (feature == Feature::Rename || feature == Feature::Fork);
 }
 
 QString RelayMachineBackend::unsupportedReason(const Feature feature) const {
-    if (state_ == ConnectionState::Connected &&
-        (feature == Feature::Fork || feature == Feature::Archive))
+    if (state_ == ConnectionState::Connected && feature == Feature::Archive)
         return tr("Not available through the Relay yet.");
     return MachineBackend::unsupportedReason(feature);
 }
@@ -447,9 +447,12 @@ void RelayMachineBackend::renameConversation(const QString& sessionId, qint64 ge
                    std::move(callback));
 }
 
-void RelayMachineBackend::forkConversation(const QString&, qint64, const QString&,
-                                           Callback callback) {
-    callback({}, unsupportedReason(Feature::Fork));
+void RelayMachineBackend::forkConversation(const QString& sessionId, qint64 generation,
+                                           const QString& forkSessionId, Callback callback) {
+    // The host forks for cloud clients (CloudControlCommands' remote operations) and answers
+    // with the new session in the command's completion.
+    sessionCommand(QStringLiteral("session.fork"), sessionId, generation,
+                   {{"fork_session_id", forkSessionId}}, std::move(callback));
 }
 
 void RelayMachineBackend::setConversationArchived(const QString&, qint64, bool, Callback callback) {

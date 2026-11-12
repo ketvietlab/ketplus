@@ -133,9 +133,10 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
         render();
     });
     connect(actions_, &MachineConversationActions::forked, this,
-            [this](const QString& machine, const QString& sessionId, const qint64 generation) {
-                if (machine == catalog_->machineId())
-                    bind(sessionId, generation, false);
+            [this](const QString& machine, const QString& sessionId, qint64) {
+                pendingFork_ = sessionId;
+                pendingForkMachine_ = machine;
+                catalogChanged();
             });
     connect(catalog_, &MachineCatalog::changed, this, &MachineWorkspaceView::catalogChanged);
     catalogChanged();
@@ -150,6 +151,14 @@ QString MachineWorkspaceView::openSessionId() const {
 void MachineWorkspaceView::catalogChanged() {
     // The selected machine changed or its lists did: restore what that machine last showed.
     const QString machine = catalog_->machineId();
+    if (!pendingFork_.isEmpty() && machine == pendingForkMachine_) {
+        const remote::MachineConversation fork = catalog_->conversation(pendingFork_);
+        if (!fork.sessionId.isEmpty()) {
+            pendingFork_.clear();
+            bind(fork.sessionId, fork.generation, fork.running());
+            return;
+        }
+    }
     if (session_ == nullptr || session_->machineId() != machine) {
         showSession(lastByMachine_.value(machine), true);
         return;
@@ -263,8 +272,13 @@ void MachineWorkspaceView::renderTranscript() {
     const QString sessionId = session_ != nullptr ? session_->sessionId() : QString{};
     const qint64 firstCursor = session_ != nullptr ? session_->transcript().firstCursor() : 0;
     // An older page keeps the reader where they were; anything else follows the newest row.
-    const bool olderAdded = sessionId == renderedSession_ && renderedFirstCursor_ > 0 &&
-                            firstCursor > 0 && firstCursor < renderedFirstCursor_;
+    const bool sameSession = sessionId == renderedSession_;
+    const bool olderAdded = sameSession && renderedFirstCursor_ > 0 && firstCursor > 0 &&
+                            firstCursor < renderedFirstCursor_;
+    // Only a reader at the newest row follows new rows; one reading older rows stays there.
+    QScrollBar* bar = transcript_->verticalScrollBar();
+    const int position = bar->value();
+    const bool following = !sameSession || bar->maximum() == 0 || position >= bar->maximum() - 2;
     transcript_->clear();
     if (session_ != nullptr)
         for (const auto& item : session_->transcript().items()) {
@@ -272,10 +286,14 @@ void MachineWorkspaceView::renderTranscript() {
             row->setData(Qt::UserRole, static_cast<int>(item.kind));
         }
     const int added = transcript_->count() - renderedRows_;
-    if (olderAdded && added > 0 && added < transcript_->count())
+    if (olderAdded && added > 0 && added < transcript_->count()) {
         transcript_->scrollToItem(transcript_->item(added), QAbstractItemView::PositionAtTop);
-    else
+    } else if (following) {
         transcript_->scrollToBottom();
+    } else {
+        transcript_->doItemsLayout();
+        bar->setValue(position);
+    }
     renderedSession_ = sessionId;
     renderedFirstCursor_ = firstCursor;
     renderedRows_ = transcript_->count();

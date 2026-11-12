@@ -115,14 +115,17 @@ operation that fails shows its error.
 | Operation | `MachineBackend` | Local and SSH | Relay |
 |---|---|---|---|
 | Rename | `renameConversation` | `session.rename {title}` | Control v2 `session.rename` |
-| Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | not offered: Desktop's Control v2 client does not carry `session.fork` |
+| Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | Control v2 `session.fork`, the host's remote operation; the new session arrives in the command's completion |
 | Archive | `setConversationArchived` | `session.set_archived {archived}`, daemon feature `session.archive/1` | not offered: `session.set_archived` is not a host remote operation |
 | Attachments | none | not offered: `MachineBackend` has no staging operations | not offered |
 | Older transcript pages | `transcriptPage` | `session.transcript_page {before_cursor, limit}` | window before a cursor, with a snapshot fence |
 | Large events | `transcriptLargeEvent` (`remote::resolveLargeEvents`) | fragments, checked by `LargeEventReassembler` | reassembled on the host |
 
-The client names a fork (`fork_session_id`), so a retried request cannot fork
-twice. A queued Relay rename finishes when the host confirms the command.
+Over SSH the daemon features come from the remote daemon's `daemon.hello`, as on
+This Mac, so an older Linux daemon shows Fork and Archive disabled. The client
+names a fork (`fork_session_id`), so a retried request cannot fork twice; the
+fork opens once the machine lists it (the Relay verifies it first). A queued
+Relay rename or fork finishes when the host confirms the command.
 
 **Rich renderer (deferred, leader decision A).** A remote conversation uses a
 simplified widget transcript, with a visible note above it: "Simplified

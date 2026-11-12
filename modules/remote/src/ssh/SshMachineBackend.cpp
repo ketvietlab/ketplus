@@ -72,6 +72,8 @@ SshMachineBackend::SshMachineBackend(SshTarget target, SshMachineStore* store,
             client_->call(type, payload, sessionId, generation, std::move(callback));
         },
         this);
+    // Fork and archive follow the remote daemon's hello, as they do on This Mac.
+    operations_->setFeatureSource(client_);
     connect(client_, &DaemonClient::eventReceived, this, &MachineBackend::eventReceived);
     connect(client_, &DaemonClient::readyChanged, this, &SshMachineBackend::daemonReady);
     connect(client_, &DaemonClient::hostIdentityRejected, this,

@@ -235,15 +235,22 @@ void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback 
 }
 void ControlV2Client::prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext,
                                      Callback done) {
-    static const QSet<QString> supported{
-        "session.start_turn",         "session.steer",
-        "session.interrupt",          "session.rename",
-        "approval.resolve",           "question.answer",
-        "session.configuration.read", "session.configuration.apply",
-        "session.pending_approvals",  "session.execution_policy.apply",
-        "session.mode.apply",         "workspace.files.tree",
-        "workspace.files.search",     "workspace.files.file",
-        "workspace.files.diff"};
+    static const QSet<QString> supported{"session.start_turn",
+                                         "session.steer",
+                                         "session.interrupt",
+                                         "session.rename",
+                                         "session.fork",
+                                         "approval.resolve",
+                                         "question.answer",
+                                         "session.configuration.read",
+                                         "session.configuration.apply",
+                                         "session.pending_approvals",
+                                         "session.execution_policy.apply",
+                                         "session.mode.apply",
+                                         "workspace.files.tree",
+                                         "workspace.files.search",
+                                         "workspace.files.file",
+                                         "workspace.files.diff"};
     if (!supported.contains(intent.value("kind").toString()) ||
         intent.value("id").toString().isEmpty() ||
         intent.value("idempotencyKey").toString().isEmpty() ||

@@ -56,7 +56,7 @@ class FakeDaemon final : public QObject {
                 }
                 QJsonObject hello{{"ok", true},
                                   {"protocol_minor", 1},
-                                  {"features", QJsonArray{"daemon.host_identity/1"}}};
+                                  {"features", QJsonArray::fromStringList(features)}};
                 if (!fingerprint.isEmpty())
                     hello.insert("host_key_fingerprint", fingerprint);
                 answer(socket, request, hello);
@@ -93,6 +93,7 @@ class FakeDaemon final : public QObject {
 
     QLocalServer server;
     QString fingerprint{"daemon-key-A"};
+    QStringList features{"daemon.host_identity/1"};
     QStringList requests;
     QList<QJsonObject> payloads;
     int hellos{0};

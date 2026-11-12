@@ -99,6 +99,7 @@ void MachineConversationSession::load() {
     open_ = true;
     const quint64 load = ++windowLoad_;
     loadingOlder_ = false;
+    windowLoading_ = true;
     backend_->transcriptWindow(
         sessionId_, generation_, {{QStringLiteral("turn_limit"), 3}},
         guarded([this, load](const QJsonObject& window, const QString& error) {
@@ -106,6 +107,7 @@ void MachineConversationSession::load() {
                 return;
             if (!error.isEmpty()) {
                 fail(error); // the cached transcript stays as it was
+                finishWindow();
                 return;
             }
             remote::resolveLargeEvents(
@@ -115,6 +117,7 @@ void MachineConversationSession::load() {
                         return;
                     if (!resolveError.isEmpty()) {
                         fail(resolveError);
+                        finishWindow();
                         return;
                     }
                     lastError_.clear();
@@ -123,9 +126,17 @@ void MachineConversationSession::load() {
                     hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
                                 transcript_.firstCursor() > 1;
                     emit changed();
+                    finishWindow();
                 }));
         }));
     loadApprovals();
+}
+
+void MachineConversationSession::finishWindow() {
+    // What arrived while the window loaded follows it; what the window already holds is
+    // dropped by its cursor.
+    windowLoading_ = false;
+    pumpLive();
 }
 
 void MachineConversationSession::loadOlder() {
@@ -226,6 +237,43 @@ void MachineConversationSession::applyEvent(const QJsonObject& delivered) {
     if (event.contains(QLatin1String("session_generation")) &&
         event.value(QLatin1String("session_generation")).toInteger() != generation_)
         return;
+    live_.append(event);
+    pumpLive();
+}
+
+void MachineConversationSession::pumpLive() {
+    while (!windowLoading_ && !resolvingLive_ && !live_.isEmpty()) {
+        const QJsonObject event = live_.takeFirst();
+        if (event.value(QLatin1String("payload"))
+                .toObject()
+                .value(QLatin1String("large_event"))
+                .toObject()
+                .isEmpty()) {
+            applyLive(event);
+            continue;
+        }
+        // A large live item (SSH and the local socket): its content is read as a window's is,
+        // and the events after it wait so the rows keep their order.
+        resolvingLive_ = true;
+        remote::resolveLargeEvents(
+            backend_, sessionId_, generation_,
+            {{QStringLiteral("events"), QJsonArray{event}},
+             {QStringLiteral("partial_items"), QJsonArray{}}},
+            guarded([this](const QJsonObject& page, const QString& error) {
+                resolvingLive_ = false;
+                const QJsonArray events = page.value(QLatin1String("events")).toArray();
+                if (!error.isEmpty() || events.isEmpty())
+                    fail(error.isEmpty() ? tr("A large transcript item could not be read.")
+                                         : error);
+                else
+                    applyLive(events.first().toObject());
+                pumpLive();
+            }));
+        return;
+    }
+}
+
+void MachineConversationSession::applyLive(const QJsonObject& event) {
     const QString type = event.value(QLatin1String("event_type")).toString();
     bool changed = transcript_.apply(event);
     if (type == QLatin1String("turn.started") || type == QLatin1String("user.message")) {

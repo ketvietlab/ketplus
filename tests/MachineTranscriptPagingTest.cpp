@@ -192,18 +192,94 @@ class MachineTranscriptPagingTest final : public QObject {
         QVERIFY(view.session()->hasOlder()); // scrolling up again retries
     }
 
+    // Live events that arrive while the window loads follow it instead of being lost with the
+    // old rows, and a live item sent as a large_event reference renders once it is read.
+    void liveEventsDuringALoadAndLargeLiveItemsAreKept() {
+        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+        ssh.answer = pagedHost(sshHost(), "linux-1", 1, true);
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+
+        ssh.hold = true;
+        view.openConversation("linux-1");
+        QCOMPARE(ssh.calls("transcriptWindow").size(), 1);
+        ssh.deliver(message("linux-1", 1, 10, "live during load"));
+        QJsonObject large =
+            journalEvent("linux-1", 11, "item.completed", {{"large_event", largeReference()}});
+        ssh.deliver(large);
+        ssh.deliver(message("linux-1", 1, 12, "after the large item"));
+        QVERIFY(transcriptRows(view).isEmpty());
+        ssh.hold = false;
+        ssh.release();
+
+        QStringList expected = expectedRows().mid(6);
+        expected << "live during load"
+                 << largePayload().value("item").toObject().value("text").toString()
+                 << "after the large item";
+        QTRY_COMPARE(transcriptRows(view), expected);
+        QCOMPARE(ssh.calls("transcriptLargeEvent").size(), 2);
+        QVERIFY(view.session()->lastError().isEmpty());
+    }
+
+    // A reader looking at older rows is not pulled to the newest one by a live event; one at
+    // the newest row follows it.
+    void aReaderInOlderRowsKeepsTheirPlace() {
+        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+        ssh.answer = pagedHost(sshHost(), "linux-1", 1, false);
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        view.resize(320, 260);
+        view.show();
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        view.openConversation("linux-1");
+        QTRY_COMPARE(transcriptRows(view).size(), 3);
+        auto* older = view.findChild<QPushButton*>("machineLoadOlder");
+        older->click();
+        QTRY_COMPARE(transcriptRows(view).size(), 6);
+        older->click();
+        QTRY_COMPARE(transcriptRows(view).size(), 9);
+        auto* list = view.findChild<QListWidget*>("machineTranscript");
+        QScrollBar* bar = list->verticalScrollBar();
+        QTRY_VERIFY(bar->maximum() > 0);
+
+        bar->setValue(0);
+        ssh.deliver(message("linux-1", 1, 10, "live 10"));
+        QTRY_COMPARE(transcriptRows(view).size(), 10);
+        QCoreApplication::processEvents();
+        QCOMPARE(bar->value(), 0);
+
+        bar->setValue(bar->maximum());
+        ssh.deliver(message("linux-1", 1, 11, "live 11"));
+        QTRY_COMPARE(transcriptRows(view).size(), 11);
+        QTRY_COMPARE(bar->value(), bar->maximum());
+    }
+
     // T-18: rename, fork and archive go through MachineBackend where the route carries them;
     // elsewhere they stay in the menu, disabled with the reason. Attachments say why too.
     void conversationActionsFollowTheRoute() {
         FakeMachineBackend ssh("fp-ssh", Route::Ssh);
         ssh.features = {Feature::Rename, Feature::Fork};
         auto base = sshHost();
+        QString forkId;
         ssh.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result,
                          QString* error) {
             base(call, result, error);
-            if (call.operation == "forkConversation")
-                *result = {{"session_id", call.request.value("fork_session_id")},
-                           {"session_generation", 1}};
+            if (call.operation == "forkConversation") {
+                forkId = call.request.value("fork_session_id").toString();
+                *result = {{"session_id", forkId}, {"session_generation", 1}};
+            }
+            // The machine lists the fork once it exists.
+            if (call.operation == "listConversations" && !forkId.isEmpty()) {
+                QJsonArray rows = result->value("sessions").toArray();
+                QJsonObject row = rows.first().toObject();
+                row.insert("session_id", forkId);
+                row.insert("title", "Fork");
+                rows.append(row);
+                *result = {{"sessions", rows}};
+            }
         };
         MachineCatalog catalog;
         MachineWorkspaceView view(&catalog);
@@ -235,8 +311,8 @@ class MachineTranscriptPagingTest final : public QObject {
 
         fork->trigger();
         QCOMPARE(ssh.calls("forkConversation").size(), 1);
-        const QString forkId =
-            ssh.calls("forkConversation").first().request.value("fork_session_id").toString();
+        QCOMPARE(forkId,
+                 ssh.calls("forkConversation").first().request.value("fork_session_id").toString());
         QVERIFY(!forkId.isEmpty());
         QTRY_COMPARE(view.openSessionId(), forkId); // the fork opens
 

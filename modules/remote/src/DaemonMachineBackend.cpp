@@ -227,6 +227,11 @@ void DaemonMachineBackend::answerQuestion(const QString& sessionId, const qint64
         sessionId, generation, std::move(callback));
 }
 
+void DaemonMachineBackend::setFeatureSource(DaemonClient* client) {
+    client_ = client;
+    knowsFeatures_ = client != nullptr;
+}
+
 bool DaemonMachineBackend::supports(const Feature feature) const {
     if (feature == Feature::Attachments)
         return false; // staging files on the machine is not part of MachineBackend yet

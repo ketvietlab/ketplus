@@ -471,9 +471,9 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY(backend.pendingCommands().isEmpty());
     }
 
-    // T-18: rename is a Control v2 command; fork and archive are not offered on this route, so
-    // they are never sent and say why.
-    void renameIsACommandAndForkAndArchiveAreNotOffered() {
+    // T-18: rename and fork are Control v2 commands; archive is not offered on this route, so it
+    // is never sent and says why.
+    void renameAndForkAreCommandsAndArchiveIsNotOffered() {
         QTemporaryDir dir;
         FixtureTransport network;
         ControlV2Client client(QUrl{origin});
@@ -488,7 +488,7 @@ class RemoteRelayBackendTest final : public QObject {
         backend.listConversations({}, listed.callback());
         QTRY_VERIFY(listed.done);
         QVERIFY(backend.supports(Feature::Rename));
-        QVERIFY(!backend.supports(Feature::Fork));
+        QVERIFY(backend.supports(Feature::Fork));
         QVERIFY(!backend.supports(Feature::Archive));
         QVERIFY(!backend.supports(Feature::Attachments));
         QCOMPARE(backend.unsupportedReason(Feature::Archive),
@@ -500,8 +500,8 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY2(renamed.error.isEmpty(), qPrintable(renamed.error));
         Answer forked;
         backend.forkConversation("opaque-session", 3, "fork-1", forked.callback());
-        QVERIFY(forked.done);
-        QCOMPARE(forked.error, QStringLiteral("Not available through the Relay yet."));
+        QTRY_VERIFY(forked.done);
+        QVERIFY2(forked.error.isEmpty(), qPrintable(forked.error));
         Answer archived;
         backend.setConversationArchived("opaque-session", 3, true, archived.callback());
         QVERIFY(archived.done);
@@ -510,7 +510,9 @@ class RemoteRelayBackendTest final : public QObject {
         const auto rename = commandOf(relay, "session.rename");
         QVERIFY(!rename.isEmpty());
         QCOMPARE(relay.plaintexts.value(rename).value("title").toString(), "Release notes");
-        QVERIFY(commandOf(relay, "session.fork").isEmpty());
+        const auto fork = commandOf(relay, "session.fork");
+        QVERIFY(!fork.isEmpty());
+        QCOMPARE(relay.plaintexts.value(fork).value("fork_session_id").toString(), "fork-1");
         QVERIFY(commandOf(relay, "session.set_archived").isEmpty());
         for (const auto& body : std::as_const(network.bodies))
             QVERIFY(!body.contains("Release notes"));

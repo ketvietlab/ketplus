@@ -67,6 +67,8 @@ class MachineWorkspaceView final : public QWidget {
     QMetaObject::Connection createCompletion_;
     MachineConversationActions* actions_{nullptr};
     QString actionError_;
+    QString pendingFork_; // opened once the machine lists it (the Relay verifies it first)
+    QString pendingForkMachine_;
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
     QToolButton* more_{nullptr};

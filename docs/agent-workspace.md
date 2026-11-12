@@ -46,7 +46,7 @@ transcript windows carry `event_type` and the data as `payload`.
   `MachineConversationActions`: Rename…, Fork and Archive through the
   machine's backend, each disabled with `MachineBackend::unsupportedReason()`
   as its tooltip where the route does not carry it (ADR 0119, "Parity of
-  conversation operations"). A fork opens when the machine answers. A failure
+  conversation operations"). A fork opens once the machine lists it. A failure
   shows in the composer's status line.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,
@@ -81,7 +81,11 @@ transcript windows carry `event_type` and the data as `payload`.
   event with `transcriptPage`, one at a time, and keeps the reader's place.
   `remote::resolveLargeEvents()` reads each `large_event` reference fragment by
   fragment first, so a page is added whole or not at all; a failed read shows
-  its error and scrolling up retries. The rows are rebuilt from every kept
+  its error and scrolling up retries. Live events wait while a window loads
+  and then follow it, and a live item sent as a `large_event` reference is
+  read the same way before the events after it apply. A reader looking at
+  older rows keeps their place; one at the newest row follows new rows. The
+  rows are rebuilt from every kept
   event, so a turn split across pages reads as one. The view is a simplified
   transcript with a visible note: the rich renderer is deferred (ADR 0119).
   Attach is shown disabled with its reason.
