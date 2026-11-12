@@ -8,6 +8,7 @@
 #include "machine/MachineSelection.h"
 #include "machine/MachineWorkspaceView.h"
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxMachines.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/LinuxRelayMachines.h"
 #include "remote/LinuxSshMachines.h"
@@ -109,26 +110,6 @@ class LoopbackDaemon {
     QProcess process_;
 };
 
-// As MainWindow::ensureRemoteControl does with its own Connections page: every listed machine's
-// backend is registered, and the activity bar's picker lists it after This Mac. The window's own
-// wiring (startLinuxMachines) attaches this user's saved SSH machines and the deployed Relay, so
-// this flow uses the same Connections classes over the fixtures; MachineWindowTest covers that
-// wiring with fake backends.
-void followConnections(QObject* context, LinuxMachinesSection& connections, MainWindow& window,
-                       ActivityBar* bar,
-                       std::function<remote::MachineBackend*(const QString&)> backendOf) {
-    QObject::connect(&connections, &LinuxMachinesSection::machinesChanged, context,
-                     [&window, bar, backendOf](const QStringList& ids, const QStringList& names) {
-                         auto* selection = window.machineComposition()->selection();
-                         selection->syncBackends(ids, backendOf);
-                         QStringList choices{QStringLiteral("local")};
-                         choices.append(ids);
-                         QStringList labels{QStringLiteral("This Mac")};
-                         labels.append(names);
-                         bar->setMachines(choices, labels, selection->machineId());
-                     });
-}
-
 QComboBox* machinePicker(ActivityBar* bar) {
     return bar->findChild<QComboBox*>("productMachineSelect");
 }
@@ -157,11 +138,11 @@ void screenshot(QWidget* widget, const QString& name) {
 }
 
 // The Connections page as the window shows it, with this flow's Linux machine rows.
-void screenshotConnections(LinuxMachineModel* model, const QString& name) {
+void screenshotConnections(LinuxMachines* machines, const QString& name) {
     if (qEnvironmentVariable("KETPLUS_E2E_SCREENSHOTS").isEmpty())
         return;
     RemoteControlView page;
-    page.linuxMachines()->setModel(model);
+    page.linuxMachines()->setMachines(machines);
     page.resize(1100, 1400);
     page.show();
     QTest::qWait(300);
@@ -240,16 +221,17 @@ class MachineEndToEndTest final : public QObject {
             SshMachineStore saved(fixture.path("machines.json"));
             QVERIFY(saved.add(target));
         }
-        LinuxMachineModel model;
-        LinuxSshMachines ssh(&model, fixture.path("machines.json"),
-                             [&fixture](const SshTarget& machine) {
-                                 return std::make_unique<SshTunnelLink>(machine, fixture.options());
-                             });
-        LinuxMachinesSection connections;
-        connections.setModel(&model);
+        // The app's one set of machines, as main() makes it, over the fixture's sshd.
+        LinuxMachines machines;
+        machines.attachSshBackend(
+            fixture.path("machines.json"), [&fixture](const SshTarget& machine) {
+                return std::make_unique<SshTunnelLink>(machine, fixture.options());
+            });
+        LinuxMachineModel& model = *machines.model();
+        LinuxSshMachines& ssh = *machines.ssh_;
         QStringList pickerLabels;
         QStringList listed;
-        connect(&connections, &LinuxMachinesSection::machinesChanged, this,
+        connect(&machines, &LinuxMachines::machinesChanged, this,
                 [&](const QStringList& ids, const QStringList& names) {
                     listed = ids;
                     pickerLabels = names;
@@ -263,9 +245,10 @@ class MachineEndToEndTest final : public QObject {
         auto* bar = window.findChild<ActivityBar*>();
         QVERIFY(bar != nullptr);
         MachineSelection* selection = window.machineComposition()->selection();
-        followConnections(this, connections, window, bar, [&ssh](const QString& id) {
-            return static_cast<remote::MachineBackend*>(ssh.backend(id));
-        });
+        // The window's own wiring: its Connections, picker and MachineSelection read the set.
+        window.useLinuxMachines(&machines);
+        auto* connections = window.findChild<LinuxMachinesSection*>();
+        QVERIFY(connections != nullptr);
 
         // The saved row's Connect, as the user presses it: its daemon has not named itself yet.
         QCOMPARE(model.machines().size(), 1);
@@ -288,12 +271,12 @@ class MachineEndToEndTest final : public QObject {
         // The Connections row and the picker say SSH and Connected.
         QTRY_VERIFY(pickerLabels.size() == 1 && pickerLabels.first().contains("SSH") &&
                     pickerLabels.first().contains("Connected"));
-        const auto rowState = [&connections] {
-            auto* state = connections.findChild<QLabel*>("linuxMachineState");
+        const auto rowState = [connections] {
+            auto* state = connections->findChild<QLabel*>("linuxMachineState");
             return state != nullptr ? state->text() : QString{};
         };
         QTRY_COMPARE(rowState(), LinuxMachineModel::stateText(LinuxMachine::State::Connected));
-        screenshotConnections(&model, "ssh-connections");
+        screenshotConnections(&machines, "ssh-connections");
 
         // A conversation already on the host, started there earlier.
         struct Started {
@@ -473,19 +456,24 @@ class MachineEndToEndTest final : public QObject {
         relay.hostPaused = true;
 
         // Connections: the Relay lists the host, the account is entitled, the link runs.
-        LinuxMachineModel model;
-        // As in the window, where SSH and the Relay are attached together.
-        model.setBackendsAttached(true);
-        model.setRelayEntitled(true);
-        LinuxRelayMachines relayMachines(&model, [&client, &dir](const QString& relayId) {
+        // The app's one set of machines, as main() makes it: its session is entitled to the
+        // Relay, and each listed host's link runs over the loopback relay.
+        LinuxMachines machines;
+        RemoteControlTestAccess::paired(*machines.client());
+        RemoteControlTestAccess::entitle(*machines.client(), QJsonArray{"ketplus.relay"});
+        machines.loading_ = true; // the listing comes from this flow, not the network
+        machines.attachRelayBackend([&client, &dir](const QString& relayId) {
             return std::make_unique<LoopbackRelayLink>(&client, relayId,
                                                        dir.filePath(relayId + ".outbox.json"));
         });
-        LinuxMachinesSection connections;
-        connections.setModel(&model);
+        LinuxMachineModel& model = *machines.model();
+        // As in the window, where SSH and the Relay are attached together.
+        model.setBackendsAttached(true);
+        QVERIFY(model.relayEntitled());
+        LinuxRelayMachines& relayMachines = *machines.relay_;
         QStringList pickerLabels;
         QStringList listed;
-        connect(&connections, &LinuxMachinesSection::machinesChanged, this,
+        connect(&machines, &LinuxMachines::machinesChanged, this,
                 [&](const QStringList& ids, const QStringList& names) {
                     listed = ids;
                     pickerLabels = names;
@@ -499,9 +487,9 @@ class MachineEndToEndTest final : public QObject {
         auto* bar = window.findChild<ActivityBar*>();
         QVERIFY(bar != nullptr);
         MachineSelection* selection = window.machineComposition()->selection();
-        followConnections(this, connections, window, bar, [&relayMachines](const QString& id) {
-            return relayMachines.backend(id);
-        });
+        window.useLinuxMachines(&machines);
+        auto* connections = window.findChild<LinuxMachinesSection*>();
+        QVERIFY(connections != nullptr);
 
         const QString machineId = CloudCrypto::keyFingerprint(fixture.hostKeys);
         relayMachines.setListed(
@@ -513,12 +501,12 @@ class MachineEndToEndTest final : public QObject {
         QCOMPARE(backend->machineId(), machineId);
         QTRY_VERIFY(pickerLabels.size() == 1 && pickerLabels.first().contains("Relay") &&
                     pickerLabels.first().contains("Connected"));
-        const auto rowState = [&connections] {
-            auto* state = connections.findChild<QLabel*>("linuxMachineState");
+        const auto rowState = [connections] {
+            auto* state = connections->findChild<QLabel*>("linuxMachineState");
             return state != nullptr ? state->text() : QString{};
         };
         QTRY_COMPARE(rowState(), LinuxMachineModel::stateText(LinuxMachine::State::Connected));
-        screenshotConnections(&model, "relay-connections");
+        screenshotConnections(&machines, "relay-connections");
 
         // The picker selects the machine. Its worktree is pending until the host verifies it.
         QVERIFY(pick(bar, machineId));

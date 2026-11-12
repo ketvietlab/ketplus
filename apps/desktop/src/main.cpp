@@ -1,6 +1,7 @@
 #include "app/ApplicationAttributes.h"
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
+#include "remote/LinuxMachines.h"
 #include "ui/InterfaceFont.h"
 #include "ui/Theme.h"
 #include "update/AppUpdater.h"
@@ -46,8 +47,14 @@ int main(int argc, char* argv[]) {
         ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
     });
     ketplus::RepositoryRouter repositories;
+    // The app's one set of Linux machines (ADR 0119): every window shows it, and it connects
+    // once, at launch, so each window's picker lists the machines before Connections opens.
+    ketplus::LinuxMachines linuxMachines;
+    linuxMachines.attachSshBackend();
+    linuxMachines.attachRelayBackend();
+    linuxMachines.start();
     std::function<ketplus::MainWindow*()> createWindow;
-    createWindow = [&app, &theme, &repositories, &createWindow] {
+    createWindow = [&app, &theme, &repositories, &createWindow, &linuxMachines] {
         auto* window = new ketplus::MainWindow(theme);
         window->setAttribute(Qt::WA_DeleteOnClose);
         QObject::connect(window, &ketplus::MainWindow::newWindowRequested, &app,
@@ -62,8 +69,7 @@ int main(int argc, char* argv[]) {
                          &ketplus::RepositoryRouter::openFile);
         QObject::connect(window, &ketplus::MainWindow::repositoryFileDiffRequested, &repositories,
                          &ketplus::RepositoryRouter::openFileDiff);
-        // The saved Linux machines connect at launch, so the machine picker lists them at once.
-        window->startLinuxMachines();
+        window->useLinuxMachines(&linuxMachines);
         return window;
     };
     QObject::connect(&repositories, &ketplus::RepositoryRouter::worktreeRequested, &app,

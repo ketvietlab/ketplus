@@ -181,7 +181,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   reached over SSH, with the Relay as the fallback while SSH cannot reach it
   (the row says why and offers Use SSH). Saved SSH machines and, while
   entitled, the Relay machines connect at launch, so the activity bar's picker
-  lists them before Connections is opened. The picker shows each machine's
+  lists them before Connections is opened. The app owns one set of these
+  backends (`LinuxMachines`) that every window shares: one tunnel and one Relay
+  outbox writer per host. The picker shows each machine's
   route and state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
   `LinuxMachinesSection::machineBackend(id)` in the window's `MachineSelection`
   through `syncBackends()`, so a picked Linux machine shows its own workspace.

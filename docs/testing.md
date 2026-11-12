@@ -249,8 +249,10 @@ stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
 
 `ketplus_machine_end_to_end_tests` (macOS Desktop, offscreen) is the #419
-acceptance: the real `MainWindow` with Connections' SSH and Relay classes
-selects a Linux machine in the picker, starts a conversation in a remote
+acceptance: the real `MainWindow`, given the app's one `LinuxMachines` set
+through `useLinuxMachines()` as `main()` does, with SSH and Relay backends over
+the fixtures, selects a Linux machine in the picker through the window's own
+Connections wiring, starts a conversation in a remote
 worktree, answers an approval, sees the transcript update, survives a stopped
 daemon or relay with Reconnecting/Offline shown and automatic recovery, and
 returns to This Mac. The SSH case needs `sshd` (it skips without one) and uses a

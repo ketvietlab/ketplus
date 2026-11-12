@@ -33,6 +33,10 @@ class RemoteControlTestAccess {
         if (!client.storeHostPins(pins, nullptr))
             qFatal("Synthetic host pin failed");
     }
+    // The session's entitlements, as the account service names them.
+    static void entitle(ControlV2Client& client, const QJsonArray& entitlements) {
+        client.credential_.insert("entitlements", entitlements);
+    }
     static QJsonObject credential(const ControlV2Client& client) { return client.credential_; }
     static QJsonObject hostPins(const ControlV2Client& client) { return client.hostPins_; }
     // A store written before host pins existed: no host-pins account at all.

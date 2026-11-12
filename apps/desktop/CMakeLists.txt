@@ -33,6 +33,8 @@ add_library(ketplus_desktop_support STATIC
     src/remote/LinuxMachineModel.h
     src/remote/LinuxMachineRow.cpp
     src/remote/LinuxMachineRow.h
+    src/remote/LinuxMachines.cpp
+    src/remote/LinuxMachines.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
     src/remote/LinuxRelayMachines.cpp

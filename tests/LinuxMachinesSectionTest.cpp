@@ -150,7 +150,7 @@ void LinuxMachinesSectionTest::rowsShowStateRouteAndErrors() {
     section.resize(760, 720);
     section.show();
     section.model()->setBackendsAttached(true);
-    remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
     QSignalSpy changed(&section, &LinuxMachinesSection::machinesChanged);
     section.model()->setMachines(fleet());
     QCOMPARE(changed.size(), 1);
@@ -395,10 +395,10 @@ void LinuxMachinesSectionTest::relayModeOpensPairingAndRespectsTheEntitlement() 
     QTRY_VERIFY(!connectDialog(section));
 
     // Signed in with the entitlement: the existing pairing link flow.
-    remote::RemoteControlTestAccess::signIn(*section.client_);
-    remote::RemoteControlTestAccess::entitle(*section.client_,
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
+    remote::RemoteControlTestAccess::entitle(*section.machines()->client_,
                                              QJsonArray{QString::fromLatin1(relayEntitlementName)});
-    section.syncEntitlement();
+    section.machines()->syncEntitlement();
     QVERIFY(section.model()->relayEntitled());
     dialog = open();
     relay = dialog->findChild<QWidget*>(QStringLiteral("linuxRelayPage"));
@@ -463,7 +463,7 @@ void LinuxMachinesSectionTest::relayRefreshKeepsSshMachines() {
 void LinuxMachinesSectionTest::pinnedFingerprintNamesTheRelayHost() {
     // The section's own client, as the other tests use: no second credential store.
     LinuxMachinesSection section;
-    auto& client = *section.client_;
+    auto& client = *section.machines()->client_;
     remote::RemoteControlTestAccess::pin(
         client, {{QStringLiteral("m1/1"), QStringLiteral("SHA256:old")},
                  {QStringLiteral("m1/2"), QStringLiteral("SHA256:new")},
@@ -479,7 +479,7 @@ void LinuxMachinesSectionTest::withoutBackendsOnlyTheRelayIsOffered() {
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
-    remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
     QVERIFY(!section.model()->backendsAttached());
     section.model()->setRelayMachines({{QStringLiteral("relay-1"), {}}});
     // As before the model: listed by the Relay, "Available", nothing to connect or disconnect.
@@ -552,7 +552,7 @@ void LinuxMachinesSectionTest::signedOutOffersSshWithoutAnAccount() {
     QTRY_VERIFY(!connectDialog(section));
 
     // Signed in with no machines, the empty state names both routes.
-    remote::RemoteControlTestAccess::signIn(*section.client_);
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
     section.render();
     QVERIFY2(messages().contains(QStringLiteral("SSH")), qPrintable(messages()));
     QVERIFY(messages().contains(QStringLiteral("Relay")));
@@ -670,19 +670,20 @@ void LinuxMachinesSectionTest::theRelayStopsWhenTheSessionIsRevoked() {
         link = made.get();
         return made;
     });
-    remote::RemoteControlTestAccess::signIn(*section.client_);
-    remote::RemoteControlTestAccess::entitle(*section.client_,
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
+    remote::RemoteControlTestAccess::entitle(*section.machines()->client_,
                                              QJsonArray{QString::fromLatin1(relayEntitlementName)});
-    section.syncEntitlement();
-    section.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"),
-                                QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+    section.machines()->syncEntitlement();
+    section.machines()->relay_->setListed(
+        {{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"), QStringLiteral("builder"),
+          QDateTime::currentDateTimeUtc()}});
     QVERIFY(link);
     QCOMPARE(link->connects, 1);
     QCOMPARE(section.model()->machines().first().state, State::Connected);
     QCOMPARE(section.machineBackend(QStringLiteral("SHA256:pinned")), link->backend());
     // The relay refused the refresh credential: signed out, so the Relay stops.
-    remote::RemoteControlTestAccess::signOut(*section.client_);
-    emit section.client_->credentialRevoked();
+    remote::RemoteControlTestAccess::signOut(*section.machines()->client_);
+    emit section.machines()->client_->credentialRevoked();
     QCOMPARE(link->disconnects, 1);
     QVERIFY(!section.model()->relayEntitled());
     QVERIFY(!section.model()->machines().first().connectable);
@@ -751,12 +752,12 @@ void LinuxMachinesSectionTest::theRelayFollowsTheAccountEntitlement() {
     model->setBackendsAttached(true);
     // Signed out or signed in without a named entitlement: not entitled (no default-true).
     QVERIFY(!model->relayEntitled());
-    remote::RemoteControlTestAccess::signIn(*section.client_);
-    section.syncEntitlement();
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
+    section.machines()->syncEntitlement();
     QVERIFY(!model->relayEntitled());
-    remote::RemoteControlTestAccess::entitle(*section.client_,
+    remote::RemoteControlTestAccess::entitle(*section.machines()->client_,
                                              QJsonArray{QStringLiteral("ketrouter.usage")});
-    section.syncEntitlement();
+    section.machines()->syncEntitlement();
     QVERIFY(!model->relayEntitled());
 
     // Not Pro: the Relay mode shows the upgrade hint and no pairing; SSH stays offered.
@@ -775,9 +776,9 @@ void LinuxMachinesSectionTest::theRelayFollowsTheAccountEntitlement() {
     QVERIFY(!relay->findChild<QLineEdit*>(QStringLiteral("linuxPairingLink"))->isVisible());
 
     // The account becomes Pro: the open card offers pairing.
-    remote::RemoteControlTestAccess::entitle(*section.client_,
+    remote::RemoteControlTestAccess::entitle(*section.machines()->client_,
                                              QJsonArray{QString::fromLatin1(relayEntitlementName)});
-    section.syncEntitlement();
+    section.machines()->syncEntitlement();
     QVERIFY(model->relayEntitled());
     QVERIFY(!gate->isVisible());
     QVERIFY(relay->findChild<QLineEdit*>(QStringLiteral("linuxPairingLink"))->isVisible());
@@ -834,8 +835,8 @@ void LinuxMachinesSectionTest::savedMachinesConnectAtLaunchBeforeTheCardIsShown(
         relayLink = made.get();
         return made;
     });
-    remote::RemoteControlTestAccess::signIn(*section.client_);
-    section.loading_ = true; // keeps the Relay list request off the network
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
+    section.machines()->loading_ = true; // keeps the Relay list request off the network
     section.activate();
     QVERIFY(!section.isVisible());
     QTRY_VERIFY(!picker.isEmpty() &&
@@ -843,11 +844,12 @@ void LinuxMachinesSectionTest::savedMachinesConnectAtLaunchBeforeTheCardIsShown(
                     QStringList{QStringLiteral("build-node-01 · SSH · Connected")});
 
     // Without ketPlus Pro the Relay hosts are listed but not attached.
-    section.relay_->setListed({{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"),
-                                QStringLiteral("builder"), QDateTime::currentDateTimeUtc()}});
+    section.machines()->relay_->setListed(
+        {{QStringLiteral("relay-1"), QStringLiteral("SHA256:pinned"), QStringLiteral("builder"),
+          QDateTime::currentDateTimeUtc()}});
     QVERIFY(!relayLink || relayLink->connects == 0);
     // Entitled, the launch attaches and connects them too.
-    remote::RemoteControlTestAccess::entitle(*section.client_,
+    remote::RemoteControlTestAccess::entitle(*section.machines()->client_,
                                              QJsonArray{QString::fromLatin1(relayEntitlementName)});
     section.activate();
     QTRY_VERIFY(relayLink && relayLink->connects == 1);
