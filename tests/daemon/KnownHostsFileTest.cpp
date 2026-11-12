@@ -46,9 +46,9 @@ class KnownHostsFileTest : public QObject {
     }
 
     void keepsOtherNamesOnTheSameLine() {
-        write("build-node-02,10.0.0.2 ssh-ed25519 AAAAone\n");
+        write("build-node-02,192.0.2.10 ssh-ed25519 AAAAone\n");
         QCOMPARE(removeKnownHost(file_, QStringLiteral("build-node-02")), 1);
-        QCOMPARE(read(), QByteArray("10.0.0.2 ssh-ed25519 AAAAone\n"));
+        QCOMPARE(read(), QByteArray("192.0.2.10 ssh-ed25519 AAAAone\n"));
     }
 
     void removesHashedEntries() {
