@@ -62,6 +62,7 @@ bool replaysAfterDisconnect(const QString& type) {
                                           QStringLiteral("session.output.read"),
                                           QStringLiteral("session.media.read"),
                                           QStringLiteral("session.task.output"),
+                                          QStringLiteral("workspace.list"),
                                           QStringLiteral("provider.models"),
                                           QStringLiteral("provider.rate_limits"),
                                           QStringLiteral("provider.runtime_status"),
