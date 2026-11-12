@@ -502,8 +502,15 @@ void ActivityBar::setMachines(const QStringList& ids, const QStringList& names,
 }
 
 void ActivityBar::setRemoteMachineSelected(const bool selected) {
+    remoteMachineSelected_ = selected;
     repositoryAction_->setEnabled(!selected);
-    machineNotice_->setVisible(selected);
+    refreshMachineNotice();
+}
+
+void ActivityBar::refreshMachineNotice() {
+    // A remote machine's repositories list here once its backend answers (ADR 0119); until
+    // then, or while it has none, the notice says so.
+    machineNotice_->setVisible(remoteMachineSelected_ && repositoryCount_ == 0);
 }
 
 void ActivityBar::setSourceControlAvailable(const bool available) {
@@ -517,6 +524,8 @@ void ActivityBar::setSourceControlCount(const int count) {
 
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
+    repositoryCount_ = static_cast<int>(repositories.size());
+    refreshMachineNotice();
 }
 
 ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,
