@@ -347,7 +347,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void askRemoveWorktree(const QString& repository, const QString& worktree,
                            teams::RemovalDone done) override;
     [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
-    [[nodiscard]] QStringList conversationsIn(const QString& path) const override;
+    [[nodiscard]] QList<teams::FolderConversation>
+    conversationsIn(const QString& path) const override;
     void teamStorageCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;

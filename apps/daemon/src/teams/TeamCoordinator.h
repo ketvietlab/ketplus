@@ -257,14 +257,14 @@ class TeamHostPort {
         (void)worktree;
         done(QStringLiteral("Worktrees cannot be removed here."));
     }
-    // The title of a conversation that runs a turn in `path` or a folder under it; empty when
-    // none does.
+    // A conversation in `path` or a folder under it that is not idle, as "“title” is running a
+    // turn" (storage::busy); empty when there is none.
     [[nodiscard]] virtual QString conversationRunningIn(const QString& path) const {
         (void)path;
         return {};
     }
     // The conversations whose folder is `path` or a folder under it, idle or not.
-    [[nodiscard]] virtual QStringList conversationsIn(const QString& path) const {
+    [[nodiscard]] virtual QList<FolderConversation> conversationsIn(const QString& path) const {
         (void)path;
         return {};
     }
@@ -473,7 +473,9 @@ class TeamCoordinator : public QObject {
     // removal of one of those worktrees. Both answer `done` once the host measured or removed;
     // a refusal answers at once and changes nothing.
     using StorageAnswer = std::function<void(const std::optional<TeamError>&, const QJsonObject&)>;
-    using RemovalAnswer = std::function<void(const TeamResult&)>;
+    // With the removal, `note` names in words each conversation that could not be moved out
+    // of the folder; empty when there was none.
+    using RemovalAnswer = std::function<void(const TeamResult&, const QString& note)>;
     void storage(qint64 teamId, StorageAnswer done);
     void removeWorktree(qint64 teamId, const QString& taskId, const QString& actor,
                         RemovalAnswer done);
@@ -658,6 +660,8 @@ class TeamCoordinator : public QObject {
     QHash<QString, QList<std::function<void()>>> worktreeWaits_;
     // ADR 0114 §10: the worktrees the host is removing now, so one is removed once.
     QSet<QString> worktreeRemovals_;
+    void worktreeRemoved(qint64 teamId, const QString& taskId, const QString& path,
+                         RemovalAnswer done);
     // ADR 0114 §10: the size of each done worktree, measured once when it is first listed, so
     // reading the free space again walks no folder.
     QHash<QString, qint64> worktreeSizes_;

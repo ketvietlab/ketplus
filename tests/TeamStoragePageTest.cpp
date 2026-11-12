@@ -259,6 +259,53 @@ class TeamStoragePageTest final : public QObject {
         save(page, "remove-worktree");
         dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
         save(page, "remove-worktree-refused");
+        dialog->findChild<ket::Button*>("teamWorktreeCancel")->click();
+        QTRY_VERIFY(!page.findChild<ket::Dialog*>("teamWorktreeDialog"));
+        daemon_.answers.insert(
+            "team.worktree.remove",
+            {{"ok", true},
+             {"team", team()},
+             {"note", "“Dev 1” (Wait for startup to finish.) could not be moved to the main "
+                      "checkout and still points at the removed folder. Open it on another folder "
+                      "before its next turn."}});
+        page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+        dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+        QVERIFY(dialog);
+        dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
+        save(page, "remove-worktree-note");
+    }
+
+    // Review finding: a removal after which a conversation could not be moved out of the
+    // folder keeps the dialog open and says so in words; nothing more can be sent from it.
+    void aConversationThatStayedIsNamed() {
+        start(storage(18'400'000'000LL, "low"));
+        daemon_.answers.insert(
+            "team.worktree.remove",
+            {{"ok", true},
+             {"team", team()},
+             {"note", "“Dev 1” (Wait for startup to finish.) could not be moved to the main "
+                      "checkout and still points at the removed folder. Open it on another folder "
+                      "before its next turn."}});
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktrees"));
+        page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+        QPointer<ket::Dialog> dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+        QVERIFY(dialog);
+        auto* remove = dialog->findChild<ket::Button*>("teamWorktreeRemove");
+        remove->click();
+        QCOMPARE(daemon_.count("team.worktree.remove"), 1);
+        QVERIFY(dialog->isVisible());
+        auto* note = dialog->findChild<ket::Banner*>("teamWorktreeNote");
+        QVERIFY(!note->isHidden());
+        QVERIFY(note->message().startsWith("“Dev 1”"));
+        QVERIFY(dialog->findChild<ket::Banner*>("teamWorktreeRefusal")->isHidden());
+        QVERIFY(remove->isHidden());
+        auto* close = dialog->findChild<ket::Button*>("teamWorktreeCancel");
+        QCOMPARE(close->text(), QStringLiteral("Close"));
+        close->click();
+        QTRY_VERIFY(!dialog);
     }
 
     // An older daemon refuses team.storage.get: the page shows neither part.

@@ -327,7 +327,7 @@ is paused, stopped or removed on its own at any level.
 - **Removal.** Only after the user confirms it in a dialog. The daemon refuses, in words
   and changing nothing, a task that is not done, a worktree that is not on disk, the main
   checkout (by its canonical path, or a folder with a `.git` directory), the worktree of a
-  conversation that is running a turn, a worktree with uncommitted or untracked changes
+  conversation that is running a turn or waits for an answer or an approval, a worktree with uncommitted or untracked changes
   (`git status --porcelain --untracked-files=all`), and one with commits on no remote
   branch (`git rev-list HEAD --not --remotes`). Otherwise it runs `git worktree remove
   <path>` without `--force`, then `git worktree prune`, both in the main checkout, in
@@ -335,7 +335,10 @@ is paused, stopped or removed on its own at any level.
   keeps its worktree entry; a removal clears the entry and adds `worktree_removed` to
   the task's history. The task's branch and its commits stay. An idle conversation still
   in the folder (the developer of the team's last task stays in its worktree) is moved to
-  the main checkout, so its next turn does not start in a folder that is gone.
+  the main checkout, so its next turn does not start in a folder that is gone. The history
+  entry is written once every move has answered and names what happened to each one; a
+  conversation that could not be moved is named with the reason, in the history and in
+  the answer's `note`, which the dialog shows instead of closing.
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
@@ -446,7 +449,7 @@ trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `team.decision.list`, `team.decision.answer`, `team.storage.get` (`{team_id}`; answers
 `{storage: {free_bytes, level, warn_bytes, stop_bytes, worktrees: [{task_id, title, branch,
 path, size_bytes}]}}`, `free_bytes` and `size_bytes` null when unknown, `level` `low`,
-`stop` or empty) and `team.worktree.remove` (`{team_id, task_id}`; answers `{team}`), §10.
+`stop` or empty) and `team.worktree.remove` (`{team_id, task_id}`; answers `{team, note}`), §10.
 The two are on the desktop wire only, not on the remote team path. Events `team.changed` (the team and its
 revision) and `team.removed` go to every local client.
 

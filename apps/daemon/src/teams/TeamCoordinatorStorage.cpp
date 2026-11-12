@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QJsonArray>
 
+#include <memory>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -29,6 +31,16 @@ QString level(const std::optional<qint64> freeBytes) {
         return QStringLiteral("stop");
     if (*freeBytes < warnBytes)
         return QStringLiteral("low");
+    return {};
+}
+
+QString busy(const QString& state, const bool idle, const bool approvalsPending) {
+    if (approvalsPending)
+        return QStringLiteral("waits for your approval");
+    if (state == QStringLiteral("waiting_for_input"))
+        return QStringLiteral("waits for your answer");
+    if (!idle)
+        return QStringLiteral("is running a turn");
     return {};
 }
 } // namespace storage
@@ -93,7 +105,9 @@ void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
 
 void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
                                      const QString& actor, RemovalAnswer done) {
-    const auto refuse = [&](const TeamError& error) { done({.error = error, .teamId = teamId}); };
+    const auto refuse = [&](const TeamError& error) {
+        done({.error = error, .teamId = teamId}, {});
+    };
     const Team* team = this->team(teamId);
     if (!team)
         return refuse(
@@ -117,60 +131,103 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
         return refuse(notRemoved(QStringLiteral("%1 is the repository's main checkout, which is "
                                                 "never removed.")
                                      .arg(path)));
-    if (const QString running = host_->conversationRunningIn(path); !running.isEmpty())
-        return refuse(notRemoved(QStringLiteral("“%1” is running a turn in %2. Remove the "
-                                                "worktree once the turn has ended.")
-                                     .arg(running, path)));
+    if (const QString busy = host_->conversationRunningIn(path); !busy.isEmpty())
+        return refuse(notRemoved(
+            QStringLiteral("%1 in %2. Remove the worktree once it is idle.").arg(busy, path)));
     if (worktreeRemovals_.contains(path))
         return refuse(notRemoved(QStringLiteral("%1 is being removed already.").arg(path)));
     worktreeRemovals_.insert(path);
-    host_->askRemoveWorktree(
-        team->repository, path,
-        [guard = QPointer<TeamCoordinator>(this), teamId, taskId, path,
-         done = std::move(done)](const QString& error) {
-            if (!guard)
-                return;
-            guard->worktreeRemovals_.remove(path);
-            if (error.isEmpty())
-                guard->worktreeSizes_.remove(path);
-            if (!error.isEmpty()) {
-                done({.error = notRemoved(error), .teamId = teamId});
-                return;
-            }
-            // The folder is gone: the task forgets it, and says so in its history.
-            Team* now = guard->mutableTeam(teamId);
-            Task* removed = now ? now->task(taskId) : nullptr;
-            if (!removed || removed->worktree != path) {
-                done({.error = std::nullopt, .teamId = teamId});
-                return;
-            }
-            const Team before = *now;
-            removed->worktree.clear();
-            // An idle conversation still in the folder, such as the developer of the team's last
-            // task, goes on in the main checkout instead of a folder that is gone.
-            const QStringList moved = guard->host_->conversationsIn(path);
-            for (const QString& sessionId : moved)
-                guard->host_->askPointConversationAt(sessionId, now->repository,
-                                                     [](const QString&) {});
-            const QString text =
-                moved.isEmpty()
-                    ? QStringLiteral("You removed the worktree %1.").arg(path)
-                    : QStringLiteral("You removed the worktree %1; %2 now in the main checkout.")
-                          .arg(path,
-                               moved.size() == 1
-                                   ? QStringLiteral("its conversation works")
-                                   : QStringLiteral("%1 conversations work").arg(moved.size()));
-            const QJsonObject data{{QStringLiteral("path"), path}};
-            guard->addHistory(*removed, QStringLiteral("user"), QStringLiteral("worktree_removed"),
-                              text, data);
-            const auto failed = guard->commit(*now, before, QStringLiteral("user"),
-                                              {{.kind = QStringLiteral("worktree_removed"),
-                                                .text = QStringLiteral("%1: %2").arg(taskId, text),
-                                                .taskId = taskId,
-                                                .actionable = false,
-                                                .data = data}});
-            done({.error = failed, .teamId = teamId});
-        });
+    host_->askRemoveWorktree(team->repository, path,
+                             [guard = QPointer<TeamCoordinator>(this), teamId, taskId, path,
+                              done = std::move(done)](const QString& error) {
+                                 if (!guard)
+                                     return;
+                                 guard->worktreeRemovals_.remove(path);
+                                 if (!error.isEmpty()) {
+                                     done({.error = notRemoved(error), .teamId = teamId}, {});
+                                     return;
+                                 }
+                                 guard->worktreeSizes_.remove(path);
+                                 guard->worktreeRemoved(teamId, taskId, path, std::move(done));
+                             });
+}
+
+// The folder is gone. An idle conversation still in it, such as the developer of the team's
+// last task, is moved to the main checkout; the task forgets the worktree once every move has
+// answered, and its history says what happened to each conversation.
+void TeamCoordinator::worktreeRemoved(const qint64 teamId, const QString& taskId,
+                                      const QString& path, RemovalAnswer done) {
+    const Team* team = this->team(teamId);
+    if (!team) {
+        done({.error = std::nullopt, .teamId = teamId}, {});
+        return;
+    }
+    struct Moves final {
+        int waiting{0};
+        QStringList moved;
+        QStringList stayed;
+    };
+    const QList<FolderConversation> inFolder = host_->conversationsIn(path);
+    auto moves = std::make_shared<Moves>();
+    moves->waiting = static_cast<int>(inFolder.size());
+    const auto finish = [guard = QPointer<TeamCoordinator>(this), teamId, taskId, path, moves,
+                         done = std::move(done)] {
+        if (!guard)
+            return;
+        Team* now = guard->mutableTeam(teamId);
+        Task* removed = now ? now->task(taskId) : nullptr;
+        const QString note =
+            moves->stayed.isEmpty()
+                ? QString{}
+                : QStringLiteral("%1 could not be moved to the main checkout and still points at "
+                                 "the removed folder. Open it on another folder before its next "
+                                 "turn.")
+                      .arg(moves->stayed.join(QStringLiteral("; ")));
+        if (!removed || removed->worktree != path) {
+            done({.error = std::nullopt, .teamId = teamId}, note);
+            return;
+        }
+        const Team before = *now;
+        removed->worktree.clear();
+        QString text = QStringLiteral("You removed the worktree %1.").arg(path);
+        if (!moves->moved.isEmpty())
+            text += QStringLiteral(" %1 now %2 in the main checkout.")
+                        .arg(moves->moved.join(QStringLiteral(", ")), moves->moved.size() == 1
+                                                                          ? QStringLiteral("works")
+                                                                          : QStringLiteral("work"));
+        if (!note.isEmpty())
+            text += QLatin1Char(' ') + note;
+        const QJsonObject data{
+            {QStringLiteral("path"), path},
+            {QStringLiteral("moved"), QJsonArray::fromStringList(moves->moved)},
+            {QStringLiteral("not_moved"), QJsonArray::fromStringList(moves->stayed)}};
+        addHistory(*removed, QStringLiteral("user"), QStringLiteral("worktree_removed"), text,
+                   data);
+        const auto failed = guard->commit(*now, before, QStringLiteral("user"),
+                                          {{.kind = QStringLiteral("worktree_removed"),
+                                            .text = QStringLiteral("%1: %2").arg(taskId, text),
+                                            .taskId = taskId,
+                                            .actionable = false,
+                                            .data = data}});
+        done({.error = failed, .teamId = teamId}, note);
+    };
+    if (inFolder.isEmpty()) {
+        finish();
+        return;
+    }
+    for (const FolderConversation& conversation : inFolder) {
+        const QString name = QStringLiteral("“%1”").arg(
+            conversation.title.isEmpty() ? conversation.sessionId : conversation.title);
+        host_->askPointConversationAt(
+            conversation.sessionId, team->repository, [moves, name, finish](const QString& error) {
+                if (error.isEmpty())
+                    moves->moved.append(name);
+                else
+                    moves->stayed.append(QStringLiteral("%1 (%2)").arg(name, error));
+                if (--moves->waiting == 0)
+                    finish();
+            });
+    }
 }
 
 } // namespace ketplus::daemon::teams

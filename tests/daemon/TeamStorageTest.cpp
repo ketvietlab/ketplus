@@ -55,6 +55,7 @@ class TeamStorageTest final : public QObject {
     std::unique_ptr<LocalJournal> journal_;
     std::unique_ptr<TeamCoordinator> teams_;
     qint64 team_{0};
+    QString note_;
 
     // A task of dev1's with its worktree on disk, closed by the leader unless `done` is false.
     QString taskWithWorktree(const QString& title, const bool done = true) {
@@ -81,7 +82,10 @@ class TeamStorageTest final : public QObject {
     }
     TeamResult remove(const QString& id, const QString& actor = QStringLiteral("user")) {
         TeamResult result{.error = TeamError{"unanswered", {}}, .teamId = team_};
-        teams_->removeWorktree(team_, id, actor, [&](const TeamResult& r) { result = r; });
+        teams_->removeWorktree(team_, id, actor, [&](const TeamResult& r, const QString& n) {
+            result = r;
+            note_ = n;
+        });
         return result;
     }
     int historyOf(const QString& id, const QString& kind) {
@@ -184,10 +188,10 @@ class TeamStorageTest final : public QObject {
         QCOMPARE(refused.error->code, QStringLiteral("worktree_not_removed"));
         QVERIFY(refused.error->message.contains("not done"));
 
-        host_.runningIn.insert(path, QStringLiteral("Dev 1"));
+        host_.runningIn.insert(path, QStringLiteral("“Dev 1” waits for your approval"));
         refused = remove(done);
         QCOMPARE(refused.error->code, QStringLiteral("worktree_not_removed"));
-        QVERIFY2(refused.error->message.contains("running a turn"),
+        QVERIFY2(refused.error->message.startsWith("“Dev 1” waits for your approval in "),
                  qPrintable(refused.error->message));
         host_.runningIn.clear();
 
@@ -248,7 +252,8 @@ class TeamStorageTest final : public QObject {
         const QString path = get(done).worktree;
         host_.holdAnswers = true;
         TeamResult first{.error = TeamError{"unanswered", {}}, .teamId = team_};
-        teams_->removeWorktree(team_, done, "user", [&](const TeamResult& r) { first = r; });
+        teams_->removeWorktree(team_, done, "user",
+                               [&](const TeamResult& r, const QString&) { first = r; });
         QCOMPARE(first.error->code, QStringLiteral("unanswered"));
         const TeamResult again = remove(done);
         QVERIFY2(again.error && again.error->message.contains("being removed"),
@@ -266,18 +271,37 @@ class TeamStorageTest final : public QObject {
     }
 
     // Review finding: an idle conversation still in the folder, as the developer of the last
-    // task is, goes on in the main checkout once the folder is gone.
-    void anIdleConversationInTheWorktreeMovesToTheMainCheckout() {
+    // task is, goes on in the main checkout; one that cannot be moved is named in words, in the
+    // answer and in the history, and never said to work in the main checkout.
+    void conversationsInTheWorktreeAreMovedOrNamed() {
         const QString done = taskWithWorktree("Cart");
         const QString path = get(done).worktree;
-        host_.inFolder.insert(path, {QStringLiteral("dev1")});
+        host_.inFolder.insert(path, {QStringLiteral("dev1"), QStringLiteral("dev2")});
+        host_.pointErrors.insert("dev2", QStringLiteral("Wait for startup to finish."));
         QVERIFY(remove(done).ok());
+        QVERIFY(get(done).worktree.isEmpty());
         QCOMPARE(host_.pointed.value("dev1"), team().repository);
-        bool said = false;
+        QVERIFY(host_.pointed.value("dev2") != team().repository);
+        QVERIFY2(note_.startsWith("“dev2” (Wait for startup to finish.) could not be moved"),
+                 qPrintable(note_));
+        QString text;
         for (const HistoryEntry& entry : get(done).history)
-            said = said || (entry.kind == "worktree_removed" &&
-                            entry.text.contains("its conversation works now in the main checkout"));
-        QVERIFY(said);
+            if (entry.kind == "worktree_removed")
+                text = entry.text;
+        QVERIFY2(text.contains("“dev1” now works in the main checkout."), qPrintable(text));
+        QVERIFY(!text.contains("“dev2” now works"));
+        QVERIFY(text.contains(note_));
+    }
+
+    // Review finding: a conversation that waits for an answer or an approval counts as running.
+    void aWaitingConversationCountsAsRunning() {
+        using storage::busy;
+        QCOMPARE(busy("idle", true, false), QString());
+        QCOMPARE(busy("running", false, false), QStringLiteral("is running a turn"));
+        QCOMPARE(busy("waiting_for_input", false, false), QStringLiteral("waits for your answer"));
+        QCOMPARE(busy("waiting_for_input", true, false), QStringLiteral("waits for your answer"));
+        QCOMPARE(busy("idle", true, true), QStringLiteral("waits for your approval"));
+        QCOMPARE(busy("running", false, true), QStringLiteral("waits for your approval"));
     }
 
     // Criteria 3 and 4 against git: the checks, then remove without force and prune.

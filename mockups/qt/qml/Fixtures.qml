@@ -614,6 +614,7 @@ QtObject {
     // which it says builds should stop.
     readonly property int diskWarnGb: 20
     readonly property int diskStopGb: 12
+    readonly property string unmovedConversationNote: "“Quick search” (Wait for startup or shutdown to finish, or answer the pending request before switching.) could not be moved to the main checkout and still points at the removed folder. Open it on another folder before its next turn."
     readonly property string dirtyWorktreeRefusal: "The worktree has uncommitted or untracked changes (2 files). Commit or discard them, then remove it again."
     readonly property var teams: [
         {

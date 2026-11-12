@@ -80,8 +80,9 @@ ket::Dialog* teamWorktreeRemoval(QWidget* anchor, TeamDirectory* teams, const QS
     auto* how = new Text(tr("ketPlus runs git worktree remove, without force, and then git "
                             "worktree prune from the repository's main checkout. It refuses a "
                             "worktree with uncommitted or untracked changes or with commits on "
-                            "no remote branch, the main checkout, and the folder of a running "
-                            "conversation."),
+                            "no remote branch, the main checkout, and the folder of a "
+                            "conversation that is running or waits for you. An idle "
+                            "conversation in the folder moves to the main checkout."),
                          body);
     how->setTone(QStringLiteral("text-muted"));
     how->setType(12);
@@ -90,6 +91,12 @@ ket::Dialog* teamWorktreeRemoval(QWidget* anchor, TeamDirectory* teams, const QS
     refusal->setObjectName(QStringLiteral("teamWorktreeRefusal"));
     refusal->hide();
     layout->addWidget(refusal);
+    // After a removal: a conversation that could not be moved out of the folder, in words.
+    auto* note = new ket::Banner(ket::BannerTone::Warning, tr("Removed, but a conversation stayed"),
+                                 {}, body);
+    note->setObjectName(QStringLiteral("teamWorktreeNote"));
+    note->hide();
+    layout->addWidget(note);
     dialog->setBody(body);
     dialog->setCardWidth(500);
 
@@ -104,11 +111,21 @@ ket::Dialog* teamWorktreeRemoval(QWidget* anchor, TeamDirectory* teams, const QS
         const QPointer<ket::Dialog> alive(dialog);
         teams->request(QStringLiteral("team.worktree.remove"),
                        {{QStringLiteral("team_id"), teamId}, {QStringLiteral("task_id"), taskId}},
-                       [alive, refusal](const QJsonObject&, const QString& error) {
+                       [alive, refusal, note, remove, cancel](const QJsonObject& result,
+                                                              const QString& error) {
                            if (!alive)
                                return;
-                           if (error.isEmpty()) {
+                           const QString said = result.value(QStringLiteral("note")).toString();
+                           if (error.isEmpty() && said.isEmpty()) {
                                alive->accept();
+                               return;
+                           }
+                           if (error.isEmpty()) {
+                               // Removed: what stays to do is the user's, so the dialog says it.
+                               note->setMessage(said);
+                               note->show();
+                               remove->hide();
+                               cancel->setText(tr("Close"));
                                return;
                            }
                            refusal->setMessage(error);

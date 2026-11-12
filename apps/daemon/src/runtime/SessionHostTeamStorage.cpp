@@ -1,6 +1,7 @@
 // ADR 0114 §10: the team page's disk warning and the removal of a done task's worktree, in the
 // session runtime. Measuring and git run off the event loop; the requests are served only to
 // the desktop (handleCommand refuses team.* from any other client).
+#include "runtime/ApprovalBroker.h"
 #include "runtime/SessionHost.h"
 #include "runtime/TeamWorktreeRemoval.h"
 
@@ -55,19 +56,28 @@ QString SessionHost::conversationRunningIn(const QString& path) const {
         const QString where = QDir::cleanPath(session.stored.worktreePath);
         if (where != folder && !where.startsWith(folder + QLatin1Char('/')))
             continue;
-        if (!agentConversationOf(session).idle)
-            return session.stored.title.isEmpty() ? session.stored.id : session.stored.title;
+        const bool approvals =
+            !approvals_->pendingPage(session.stored.id, session.stored.generation)
+                 .value(QStringLiteral("pending_approvals"))
+                 .toArray()
+                 .isEmpty();
+        const QString busy = teams::storage::busy(
+            session.stored.state, agentConversationOf(session).idle && !session.startingTurn,
+            approvals);
+        if (!busy.isEmpty())
+            return QStringLiteral("“%1” %2").arg(
+                session.stored.title.isEmpty() ? session.stored.id : session.stored.title, busy);
     }
     return {};
 }
 
-QStringList SessionHost::conversationsIn(const QString& path) const {
+QList<teams::FolderConversation> SessionHost::conversationsIn(const QString& path) const {
     const QString folder = QDir::cleanPath(path);
-    QStringList found;
+    QList<teams::FolderConversation> found;
     for (const Session& session : sessions_) {
         const QString where = QDir::cleanPath(session.stored.worktreePath);
         if (where == folder || where.startsWith(folder + QLatin1Char('/')))
-            found.append(session.stored.id);
+            found.append({.sessionId = session.stored.id, .title = session.stored.title});
     }
     return found;
 }
@@ -94,14 +104,16 @@ void SessionHost::teamStorageCommand(const QJsonObject& request, CommandCallback
     teams_->removeWorktree(
         teamId, payload.value(QStringLiteral("task_id")).toString(), QStringLiteral("user"),
         [guard = QPointer<SessionHost>(this),
-         done = std::move(done)](const teams::TeamResult& result) {
+         done = std::move(done)](const teams::TeamResult& result, const QString& note) {
             if (!result.ok()) {
                 done(refusedAnswer(*result.error));
                 return;
             }
             const teams::Team* team = guard ? guard->teams_->team(result.teamId) : nullptr;
+            // `note` names a conversation that could not be moved out of the removed folder.
             done({{QStringLiteral("ok"), true},
-                  {QStringLiteral("team"), team ? guard->teams_->teamJson(*team) : QJsonObject{}}});
+                  {QStringLiteral("team"), team ? guard->teams_->teamJson(*team) : QJsonObject{}},
+                  {QStringLiteral("note"), note}});
         });
 }
 

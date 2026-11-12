@@ -233,10 +233,14 @@ Item {
             startHandover(tasks.find(t => t.id === "T-3"))
         // T-37: the confirmation of a done task's worktree removal, and the daemon's refusal of
         // one that has uncommitted changes, shown in the dialog after Remove.
-        else if ((name === "remove-worktree" || name === "remove-worktree-refused") && doneWorktrees.length > 0) {
+        // `remove-worktree-note` is a removal after which a conversation could not be moved
+        // out of the folder: the dialog stays and names it.
+        else if ((name === "remove-worktree" || name === "remove-worktree-refused" || name === "remove-worktree-note") && doneWorktrees.length > 0) {
             startRemoveWorktree(doneWorktrees[0])
             if (name === "remove-worktree-refused")
                 removeWorktreeDialog.refusal = Fixtures.dirtyWorktreeRefusal
+            if (name === "remove-worktree-note")
+                removeWorktreeDialog.note = Fixtures.unmovedConversationNote
         }
     }
     function openEveryOverlay() {
@@ -281,6 +285,7 @@ Item {
     function startRemoveWorktree(entry) {
         removeWorktreeDialog.entry = entry
         removeWorktreeDialog.refusal = ""
+        removeWorktreeDialog.note = ""
         removeWorktreeDialog.open()
     }
     function removeWorktree(id) {
@@ -1417,6 +1422,8 @@ Item {
         objectName: "removeWorktreeDialog"
         property var entry: null
         property string refusal: ""
+        // Said after a removal: a conversation that could not be moved out of the folder.
+        property string note: ""
         title: "Remove the worktree of " + (entry ? entry.id : "") + "?"
         Column {
             width: removeWorktreeDialog.availableWidth
@@ -1439,7 +1446,7 @@ Item {
             }
             Label {
                 width: parent.width
-                text: "ketPlus runs git worktree remove, without force, and then git worktree prune from the repository's main checkout. It refuses a worktree with uncommitted or untracked changes or with commits on no remote branch, the main checkout, and the folder of a running conversation."
+                text: "ketPlus runs git worktree remove, without force, and then git worktree prune from the repository's main checkout. It refuses a worktree with uncommitted or untracked changes or with commits on no remote branch, the main checkout, and the folder of a conversation that is running or waits for you. An idle conversation in the folder moves to the main checkout."
                 color: KetTheme.t.textMuted
                 font.pixelSize: screen.px(12)
                 wrapMode: Text.Wrap
@@ -1454,11 +1461,20 @@ Item {
                 title: "Not removed"
                 message: removeWorktreeDialog.refusal
             }
+            KetBanner {
+                objectName: "removeWorktreeNote"
+                width: parent.width
+                visible: removeWorktreeDialog.note !== ""
+                tone: KetTheme.BannerTone.Warning
+                title: "Removed, but a conversation stayed"
+                message: removeWorktreeDialog.note
+            }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeWorktreeDialog.reject() },
+            KetButton { text: removeWorktreeDialog.note !== "" ? "Close" : "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeWorktreeDialog.reject() },
             KetButton {
                 text: "Remove worktree"
+                visible: removeWorktreeDialog.note === ""
                 variant: KetTheme.ButtonVariant.Danger
                 enabled: removeWorktreeDialog.refusal === ""
                 onClicked: {

@@ -1,6 +1,7 @@
 #pragma once
 // ADR 0114 §10: the disk under a team's worktrees, and the worktrees of its done tasks.
 #include <QHash>
+#include <QList>
 #include <QString>
 #include <QtGlobal>
 
@@ -18,7 +19,16 @@ inline constexpr qint64 stopBytes = 12LL * 1000 * 1000 * 1000;
 
 // "stop", "low" or "" for enough space; "" when the free space is unknown.
 [[nodiscard]] QString level(std::optional<qint64> freeBytes);
+// Why a conversation keeps its folder from being removed, in words after its title; empty
+// when it is idle. One that waits for an answer or an approval counts as running.
+[[nodiscard]] QString busy(const QString& state, bool idle, bool approvalsPending);
 } // namespace storage
+
+// A conversation whose folder is in a worktree.
+struct FolderConversation final {
+    QString sessionId;
+    QString title;
+};
 
 // What the host measured: the free space of the volume, nothing when it could not tell, and
 // the size on disk of each worktree it could read, by path.

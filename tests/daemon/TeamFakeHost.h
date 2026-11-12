@@ -42,6 +42,8 @@ class FakeHost final : public TeamHostPort {
                             .baseCommit = QStringLiteral("base")};
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
+        if (const QString error = pointErrors.value(sessionId); !error.isEmpty())
+            return error;
         pointed.insert(sessionId, worktree);
         if (conversations.contains(sessionId))
             conversations[sessionId].worktree = worktree;
@@ -163,7 +165,12 @@ class FakeHost final : public TeamHostPort {
     QString conversationRunningIn(const QString& path) const override {
         return runningIn.value(path);
     }
-    QStringList conversationsIn(const QString& path) const override { return inFolder.value(path); }
+    QList<FolderConversation> conversationsIn(const QString& path) const override {
+        QList<FolderConversation> found;
+        for (const QString& id : inFolder.value(path))
+            found.append({.sessionId = id, .title = conversations.value(id).title});
+        return found;
+    }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
@@ -213,6 +220,8 @@ class FakeHost final : public TeamHostPort {
     QString removalError;
     QHash<QString, QString> runningIn;
     QHash<QString, QStringList> inFolder;
+    // A conversation that refuses to be pointed elsewhere, with the reason.
+    QHash<QString, QString> pointErrors;
     QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
