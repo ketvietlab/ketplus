@@ -43,6 +43,9 @@ class SettingsTeamsPage final : public QWidget {
     QLabel* error_;
     int saved_;
     bool pending_{false};
+    // A save asked for while another request was out: sent once that one is answered, so a
+    // value typed while the page was still reading is not lost.
+    bool queuedSave_{false};
 };
 
 } // namespace ketplus

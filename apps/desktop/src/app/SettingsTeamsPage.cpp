@@ -10,6 +10,8 @@
 #include <QPointer>
 #include <QVBoxLayout>
 
+#include <utility>
+
 namespace ketplus {
 namespace {
 
@@ -91,7 +93,13 @@ void SettingsTeamsPage::save() {
     int budget = 0;
     const QString refusal = team_budget::error(field_->text(), &budget);
     showError(refusal);
-    if (!refusal.isEmpty() || budget == saved_ || !requester_ || pending_)
+    if (!refusal.isEmpty() || !requester_)
+        return;
+    if (pending_) {
+        queuedSave_ = true;
+        return;
+    }
+    if (budget == saved_)
         return;
     pending_ = true;
     const QPointer<SettingsTeamsPage> alive(this);
@@ -104,6 +112,7 @@ void SettingsTeamsPage::save() {
 
 void SettingsTeamsPage::receive(const QJsonObject& result, const QString& error) {
     pending_ = false;
+    const bool queued = std::exchange(queuedSave_, false);
     if (!error.isEmpty()) {
         const QString message = result.value(QStringLiteral("error_message")).toString();
         showError(message.isEmpty() ? error : message);
@@ -113,6 +122,11 @@ void SettingsTeamsPage::receive(const QJsonObject& result, const QString& error)
         result.value(QStringLiteral("settings")).toObject().value(QStringLiteral("turn_budget"));
     if (value.isDouble())
         saved_ = value.toInt();
+    // The value the user left the field with while this was out is saved now, not replaced.
+    if (queued) {
+        save();
+        return;
+    }
     // A value typed while the daemon answered stays for the next save.
     if (!field_->hasFocus())
         field_->setText(QString::number(saved_));
