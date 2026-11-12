@@ -262,7 +262,7 @@ objects carries a local path or a tag.
 | `paused`, `paused_reason` | the reason is `user`, `budget`, `empty_role` or empty |
 | `open_decisions` | drives the warning mark |
 | `tasks_total`, `tasks_done` | |
-| `members` | at most 7 entries `{session_id, number, role}` |
+| `members` | every member, at most 8 entries `{session_id, number, role}`: the leader, five developers and two reviewers |
 
 At most 100 entries are returned, followed by `teams_total`.
 
@@ -299,7 +299,7 @@ refusal.
     first review in flight and every waiting task).
   - Counts: `tasks_total`, `tasks_done`, `open_decisions`, `decisions_total`.
   - Times: `created_at`, `changed_at`.
-- **Members**, at most 7, each with these fields:
+- **Members**, every one, at most 8 (the leader, five developers and two reviewers), each with these fields:
   - `session_id`, `session_generation`, and `number` (the conversation number,
     `@agent/NNNN`).
   - `title`: the member's name.
