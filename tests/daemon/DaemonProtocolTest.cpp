@@ -399,6 +399,11 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(eventUploadBackoffMilliseconds(6, false), 32'000);
         QCOMPARE(eventUploadBackoffMilliseconds(7, false), 60'000);
         QCOMPARE(eventUploadBackoffMilliseconds(1'000, false), 60'000);
+        // A cursor gap this journal cannot fill waits up to an hour, not five minutes.
+        QCOMPARE(eventUploadBackoffMilliseconds(1, true, true), 1'000);
+        QCOMPARE(eventUploadBackoffMilliseconds(12, true, true), 2'048'000);
+        QCOMPARE(eventUploadBackoffMilliseconds(13, true, true), 3'600'000);
+        QCOMPARE(eventUploadBackoffMilliseconds(1'000, true, true), 3'600'000);
         for (const int status : {400, 403, 404, 409, 413, 422})
             QVERIFY(eventUploadRefused(status));
         for (const int status : {0, 200, 202, 408, 429, 500, 502, 503})

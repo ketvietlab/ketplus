@@ -371,11 +371,16 @@ batch and retries from the same cursor, down to one event, and doubles it again
 after each accepted batch. Any other failed upload makes that session generation
 wait before its events are sent again, one second doubling on each consecutive
 failure: up to five minutes after a refusal (a 4xx other than 401, 408 and 429,
-such as `stale_generation` for a session the relay has deleted), and up to one
-minute when the relay cannot be reached or fails, a wait that the next successful
-heartbeat ends. New journal events do not shorten the wait; without it, every
+such as `stale_generation` for a session the relay has deleted), up to one hour
+after `409 event_cursor_gap` (the relay waits for a cursor this journal has
+already pruned, so retrying cannot fill the gap), and up to one minute when the
+relay cannot be reached or fails, a wait that the next successful heartbeat
+ends. New journal events do not shorten the wait; without it, every
 event of every session retried each refused upload. A 401 waits only for the next
-credential, and an accepted batch clears the wait. Streamed deltas and `item.completed` envelopes also
+credential, and an accepted batch clears the wait. The daemon remembers the
+cursor the relay accepted through for each session generation, so an upload
+pass (on every heartbeat and journaled event) skips sessions that are in
+flight, waiting, or have nothing newer without reading the journal. Streamed deltas and `item.completed` envelopes also
 carry a plaintext `itemKey` (a truncated SHA-256 of session, generation and
 item id, never the id itself), and a completion whose cloud payload holds the
 item's whole text carries `supersedesDeltas`, so the relay can drop the
@@ -585,7 +590,13 @@ for that session in the last 10 minutes is served from the worktree as it is
 now and answers with the requested revision, without running git again. Any
 other revision is recomputed with git before and after the read and fails as
 `stale_revision` when it differs. Heartbeats compute revisions on their own
-thread, so they never queue a phone's read.
+thread, so they never queue a phone's read. A heartbeat runs git for a worktree
+again only when a conversation on it recorded an event or changed state, git's
+`HEAD`, `logs/HEAD` or `index` file changed (found by walking up from the
+workspace, as for subfolders of a repository), or its revision is older than two minutes
+(edits made outside any conversation); otherwise it publishes the cached
+revision (`WorktreeRevisionCache`). A failed git run is not kept, so the next
+heartbeat tries again.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the

@@ -44,6 +44,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeBranches.h
     src/cloud/WorktreeRepositories.cpp
     src/cloud/WorktreeRepositories.h
+    src/cloud/WorktreeRevisionCache.cpp
+    src/cloud/WorktreeRevisionCache.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
     src/agents/WorkReport.cpp

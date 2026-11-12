@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 3fee15d4d51db3f0b310dc4c23d8f177071f96ac # ket-qt #53: sidebar tree parts
+    GIT_TAG f152473a220e9b4e281e341e461c1d0f7fb18da5 # ket-qt #54: shared 20 Hz animation clock
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"

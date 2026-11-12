@@ -1128,6 +1128,84 @@ class CloudPrivacyTest final : public QObject {
         QTRY_COMPARE(appends(), 3);
     }
 
+    // The relay waits for a cursor this journal pruned: no retry can fill it, so the session waits
+    // on the long gap cap, while another refusal keeps the shorter one.
+    void cursorGapWaitsOnItsOwnCap() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("gap.sqlite"));
+        QString error;
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "first"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        c.start();
+        c.transport.statusForPath.insert("/v2/events:append", 409);
+        c.transport.responseForPath.insert("/v2/events:append", R"({"code":"event_cursor_gap"})");
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::uploadWaitsOnGap(*c.client), 1);
+
+        Access::expireUploadBackoff(*c.client);
+        c.transport.responseForPath.insert("/v2/events:append", R"({"code":"stale_generation"})");
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::uploadWaitsOnGap(*c.client), 0);
+    }
+
+    // Once the relay accepted every event of a session, later passes skip it without reading the
+    // journal until it records another event.
+    void acceptedSessionIsSkippedUntilItsCursorMoves() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("known.sqlite"));
+        QString error;
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "first"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        c.start();
+        c.transport.statusForPath.insert("/v2/events:append", 202);
+        c.transport.responseForPath.insert(
+            "/v2/events:append",
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":1}]})");
+        const auto appends = [&c] {
+            int count = 0;
+            for (const QNetworkRequest& request : c.transport.requests)
+                count += request.url().path() == "/v2/events:append";
+            return count;
+        };
+        // The journal still holds event 1 unsent. A known cursor at the session's last event
+        // skips it before the journal is read, or the event would go out.
+        QVERIFY(Access::registerCursors(*c.client));
+        Access::setKnownUploadedCursor(*c.client, 1);
+        for (int i = 0; i < 5; ++i)
+            Access::uploadAll(*c.client);
+        QTest::qWait(50);
+        QCOMPARE(appends(), 0);
+
+        // A known cursor behind the session's last event reads the journal and uploads.
+        Access::setKnownUploadedCursor(*c.client, 0);
+        Access::uploadAll(*c.client);
+        QTRY_COMPARE(appends(), 1);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::knownUploadedCursor(*c.client), 1);
+        Access::uploadAll(*c.client);
+        QTest::qWait(50);
+        QCOMPARE(appends(), 1);
+
+        c.transport.responseForPath.insert(
+            "/v2/events:append",
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":2}]})");
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "next"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        Access::uploadAll(*c.client);
+        QTRY_COMPARE(appends(), 2);
+        QTRY_COMPARE(Access::knownUploadedCursor(*c.client), 2);
+
+        // A session the journal no longer stores drops its cursor.
+        QVERIFY2(c.journal.deleteSession("session-synthetic", 1, &error), qPrintable(error));
+        Access::uploadAll(*c.client);
+        QCOMPARE(Access::knownUploadedCursor(*c.client), -1);
+    }
+
     void deletionHeartbeatRetriesUntilTheExactOperationIsAcknowledged() {
         QTemporaryDir dir;
         Context c(dir.filePath("deleted.sqlite"));
