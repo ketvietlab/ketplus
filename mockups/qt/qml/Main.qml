@@ -417,7 +417,7 @@ Basic.ApplicationWindow {
             Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
         else if (screen === "teams" && Mock.initialPanel)
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))
-        else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
+        else if (["pair", "linux", "linux-hostkey", "linux-relay", "linux-details", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
