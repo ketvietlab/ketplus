@@ -19,6 +19,17 @@ Popup {
     property var sessionUsage: ({})
     property var accountUsage: ({})
     signal accountRefreshRequested()
+    // Without an API key the cost figures are an estimate the user does not pay per token, so
+    // the conversation and organization blocks wait behind one row, closed each time it opens.
+    readonly property bool costFolds: claude && sessionUsage.mode !== "api_key"
+    property bool costExpanded: false
+    readonly property bool costShown: claude && (!costFolds || costExpanded)
+    // Whether opening the popover reads organization usage now; folded, expanding reads it.
+    readonly property bool readsAccountOnOpen: claude && !costFolds
+    function toggleCostDetails() {
+        costExpanded = !costExpanded
+        if (costExpanded && visible) accountRefreshRequested()
+    }
     property bool compactEnabled: false
     signal compactRequested()
     // CloseOnPressOutside runs before the anchor click; skip the matching reopen.
@@ -42,6 +53,7 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+    onAboutToShow: costExpanded = false
     onAboutToHide: {
         suppressAnchorOpen = true
         Qt.callLater(function() { suppressAnchorOpen = false })
@@ -211,8 +223,59 @@ Popup {
                 color: root.trackColor
             }
 
+            Rectangle {
+                id: costRow
+                objectName: "claudeCostDetails"
+                visible: root.costFolds
+                Layout.fillWidth: true
+                Layout.leftMargin: KetTheme.px(10, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(10, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
+                Layout.bottomMargin: root.costExpanded ? 0 : KetTheme.px(6, KetTheme.zoom)
+                Layout.preferredHeight: KetTheme.px(36, KetTheme.zoom)
+                radius: KetTheme.px(5, KetTheme.zoom)
+                color: costArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
+                border.color: costRow.activeFocus ? KetTheme.t.focusBorder : "transparent"
+                activeFocusOnTab: visible
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Cost details")
+                Accessible.description: root.costExpanded ? qsTr("Expanded") : qsTr("Collapsed")
+                Accessible.onPressAction: root.toggleCostDetails()
+                Keys.onSpacePressed: root.toggleCostDetails()
+                Keys.onReturnPressed: root.toggleCostDetails()
+                Keys.onEnterPressed: root.toggleCostDetails()
+                Row {
+                    x: KetTheme.px(6, KetTheme.zoom)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: KetTheme.px(10, KetTheme.zoom)
+                    Kit.KetIcon {
+                        name: root.costExpanded ? "chevron-down" : "chevron-right"
+                        box: KetTheme.px(14, KetTheme.zoom)
+                        color: root.mutedColor
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Cost details")
+                        color: root.mainColor
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
+                    }
+                }
+                MouseArea {
+                    id: costArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        costRow.forceActiveFocus()
+                        root.toggleCostDetails()
+                    }
+                }
+            }
+
             ClaudeUsageSection {
-                visible: root.claude
+                visible: root.costShown
                 workspace: root.workspace
                 session: root.sessionUsage
                 account: root.accountUsage

@@ -30,7 +30,7 @@ KetPlusMock --smoke --display=secondary                # on another display, lea
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits (limits-cost opens Cost details, limits-api-key has none), reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
 ```
 
 Screens and states (`--screen` / `--state`):

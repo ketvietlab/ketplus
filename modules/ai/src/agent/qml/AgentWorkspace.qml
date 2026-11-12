@@ -609,7 +609,7 @@ Item {
             function onWidthChanged() { if (usageLimitsPopover.visible) Qt.callLater(usageLimitsPopover.positionPopover) }
         }
         onAboutToShow: {
-            if (claude) agentHost.requestClaudeAccountUsage()
+            if (readsAccountOnOpen) agentHost.requestClaudeAccountUsage()
             Qt.callLater(positionPopover)
         }
         onCompactRequested: {

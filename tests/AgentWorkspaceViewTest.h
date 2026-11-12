@@ -22,6 +22,9 @@ class AgentWorkspaceViewTest final : public QObject {
     void compactFollowsProviderCapabilities();
     void usageLimitsPopover();
     void claudeUsageBudget();
+    void runtimeUsageFoldsCostDetails_data();
+    void runtimeUsageFoldsCostDetails();
+    void apiKeyUsageShowsCostDetailsOpen();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
     void heldMessageRequiresExplicitClickAndFencesDuplicates();
