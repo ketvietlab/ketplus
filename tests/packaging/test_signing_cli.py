@@ -80,6 +80,18 @@ elif "--entitlements" in args:
         self.assertEqual((self.source / "Contents/MacOS/KetPlus").read_bytes(),
                          (self.output / "Contents/MacOS/KetPlus").read_bytes())
 
+    def test_rejects_relative_app_before_copying(self):
+        result = self.run_sign(extra=("--app", "relative.app"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("absolute paths", result.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_rejects_relative_output_before_copying(self):
+        result = self.run_sign(extra=("--output", "relative.app"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("absolute paths", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_rejects_ad_hoc_identity_before_copying(self):
         result = self.run_sign(identity="-")
         self.assertNotEqual(result.returncode, 0)
