@@ -226,11 +226,7 @@ void TeamCoordinator::finishTask(Team& team, Task& task, const QString& actor,
             decision.reason = QStringLiteral("%1 is done.").arg(task.id);
             decision.answeredAt = nowIso();
         }
-    team.reviewQueue.removeAll(task.id);
-    if (team.reviewing == task.id) {
-        team.reviewing.clear();
-        team.reviewingMessage.clear();
-    }
+    dropReview(team, task.id);
     task.question.clear();
     applyMove(team, task, state::done, actor, reason, updates);
     addHistory(task, actor, kind, reason, data);

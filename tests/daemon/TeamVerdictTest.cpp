@@ -101,7 +101,7 @@ class TeamVerdictTest final : public QObject {
         QCOMPARE(reviewsTo("rev").size(), 2);
         QVERIFY(reviewsTo("rev").last().body.contains("(round 1 of 2)"));
         QVERIFY(reviewsTo("rev").last().body.contains("had no verdict line"));
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
         bool askedAgain = false;
         for (const HistoryEntry& entry : task(id).history)
             askedAgain = askedAgain || entry.text.contains("sent to Reviewer again");
@@ -116,7 +116,7 @@ class TeamVerdictTest final : public QObject {
         QVERIFY(task(id).question.contains("has no verdict after 2 replies"));
         QCOMPARE(reviewsTo("dev1").size(), 0);
         QCOMPARE(reviewsTo("rev").size(), 2);
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
         QCOMPARE(historyOf(id, "verdict"), 2);
         for (const HistoryEntry& entry : task(id).history)
             if (entry.kind == "verdict")
@@ -223,13 +223,13 @@ class TeamVerdictTest final : public QObject {
     void acceptingAReviewInFlightDropsItsAnswer() {
         const QString first = inReview("One", "dev1");
         const QString second = inReview("Two", "dev2");
-        QCOMPARE(team().reviewing, first);
-        const QString request = team().reviewingMessage;
+        QCOMPARE(firstReviews(team()).reviewing, first);
+        const QString request = firstReviews(team()).message;
         QVERIFY(teams_->acceptReview(team_, first, "Reviewed on the pull request", "Done", "lead")
                     .ok());
         QCOMPARE(task(first).state, state::ready);
         // The next task's review starts, and the late answer does not touch the first.
-        QCOMPARE(team().reviewing, second);
+        QCOMPARE(firstReviews(team()).reviewing, second);
         teams_->reviewFinished("rev", request, "Verdict: findings", false);
         QCOMPARE(task(first).state, state::ready);
         QCOMPARE(task(second).state, state::inReview);

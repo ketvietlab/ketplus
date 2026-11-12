@@ -282,11 +282,22 @@ QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     json.insert(QStringLiteral("turn_budget"), budget);
     json.insert(QStringLiteral("automatic_turns"), used);
     json.insert(QStringLiteral("turns_left"), std::max(0, budget - used));
+    // T-23: "reviewing" and "queued" stay as they were for one reviewer; "reviewers" adds what
+    // each reviewer reviews and has queued, in the order they joined.
+    QJsonArray reviewers;
+    for (const QJsonValue& value : team.value(QStringLiteral("reviews")).toArray()) {
+        const QJsonObject slot = value.toObject();
+        reviewers.append(QJsonObject{
+            {QStringLiteral("session_id"), slot.value(QStringLiteral("reviewer")).toString()},
+            {QStringLiteral("reviewing"), slot.value(QStringLiteral("reviewing")).toString()},
+            {QStringLiteral("queued"), slot.value(QStringLiteral("queue")).toArray()}});
+    }
     json.insert(
         QStringLiteral("review"),
         QJsonObject{
             {QStringLiteral("reviewing"), team.value(QStringLiteral("reviewing")).toString()},
-            {QStringLiteral("queued"), team.value(QStringLiteral("review_queue")).toArray()}});
+            {QStringLiteral("queued"), team.value(QStringLiteral("review_queue")).toArray()},
+            {QStringLiteral("reviewers"), reviewers}});
     json.insert(QStringLiteral("decisions_total"),
                 team.value(QStringLiteral("decisions_total")).toInt());
     json.insert(QStringLiteral("created_at"), team.value(QStringLiteral("created_at")));

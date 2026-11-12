@@ -46,7 +46,7 @@ class TeamMergeTest final : public QObject {
         QVERIFY(teams_->assignTask(team_, id, owner, "lead").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, owner).ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, owner).ok());
-        QCOMPARE(teams_->team(team_)->reviewing, id);
+        QCOMPARE(firstReviews(*teams_->team(team_)).reviewing, id);
         finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(get(id).state, state::ready);
     }

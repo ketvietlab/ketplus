@@ -42,18 +42,34 @@ QJsonObject SessionHost::teamMembership(const QString& sessionId) const {
     for (const QString& role : {teams::role::leader, teams::role::reviewer})
         if (const QString number = teamRoleNumber(sessionId, role); !number.isEmpty())
             json.insert(role + QStringLiteral("_number"), number);
+    // T-23: every reviewer, by number and name, so a member can address either.
+    QJsonArray reviewers;
+    for (const teams::Member& entry : team->members)
+        if (entry.role == teams::role::reviewer)
+            reviewers.append(QJsonObject{{QStringLiteral("number"), memberNumber(entry.sessionId)},
+                                         {QStringLiteral("name"), entry.name}});
+    json.insert(QStringLiteral("reviewers"), reviewers);
     return json;
+}
+
+QString SessionHost::memberNumber(const QString& sessionId) const {
+    const auto it = sessions_.constFind(sessionId);
+    return it == sessions_.cend()
+               ? QString{}
+               : journal_->conversationNumber(it->stored.id, it->stored.generation);
 }
 
 QString SessionHost::teamRoleNumber(const QString& sessionId, const QString& role) const {
     const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
-    const teams::Member* member = team ? team->memberWithRole(role) : nullptr;
-    if (!member)
+    if (!team)
         return {};
-    const auto it = sessions_.constFind(member->sessionId);
-    return it == sessions_.cend()
-               ? QString{}
-               : journal_->conversationNumber(it->stored.id, it->stored.generation);
+    // T-23: "reviewer" is the reviewer of the caller's work; empty when that is not one.
+    if (role == teams::role::reviewer) {
+        const QString reviewer = teams::TeamCoordinator::reviewerFor(*team, sessionId);
+        return reviewer.isEmpty() ? QString{} : memberNumber(reviewer);
+    }
+    const teams::Member* member = team->memberWithRole(role);
+    return member ? memberNumber(member->sessionId) : QString{};
 }
 
 QString SessionHost::teamInstructionsFor(const QString& sessionId) const {

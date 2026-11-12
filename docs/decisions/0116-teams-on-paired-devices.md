@@ -277,7 +277,10 @@ refusal.
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.
   - The automatic-turn budget: `turn_budget`, `automatic_turns` and `turns_left`.
     `turns_left` is computed by the daemon, so the phone infers nothing.
-  - The review queue: `review: {reviewing, queued}`, each a task id.
+  - The review queue: `review: {reviewing, queued, reviewers}`, task ids. T-23 adds
+    `reviewers`: one `{session_id, reviewing, queued}` per reviewer, in the order they
+    joined. `reviewing` and `queued` keep their meaning for a reader from before (the
+    first review in flight and every waiting task).
   - Counts: `tasks_total`, `tasks_done`, `open_decisions`, `decisions_total`.
   - Times: `created_at`, `changed_at`.
 - **Members**, at most 7, each with these fields:

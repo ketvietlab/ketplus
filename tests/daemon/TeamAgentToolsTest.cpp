@@ -242,6 +242,62 @@ class TeamAgentToolsTest final : public QObject {
         QCOMPARE(request->error, QStringLiteral("turn_failed"));
     }
 
+    // T-23: a second reviewer is added in the settings; "reviewer" then names the one of the
+    // sender's work, and a sender with no such work is told to use a number.
+    void twoReviewersAreAddressedByTheirWork() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(command(fixture, "team.member.add",
+                         {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "codex"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("reviewer_unsupported"));
+        const QJsonObject added =
+            command(fixture, "team.member.add",
+                    {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}});
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        const QJsonArray members = added.value("team").toObject().value("members").toArray();
+        QCOMPARE(members.size(), 5);
+        const QJsonObject second = members.last().toObject();
+        QCOMPARE(second.value("role").toString(), QStringLiteral("reviewer"));
+        QCOMPARE(second.value("name").toString(), QStringLiteral("Reviewer 2"));
+        const QString secondReviewer = second.value("session_id").toString();
+        QCOMPARE(command(fixture, "team.member.add",
+                         {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("role_taken"));
+        // The team's description lists both.
+        const QJsonArray reviewers = fixture.agents(team.developer, "agents.whoami")
+                                         .value("team")
+                                         .toObject()
+                                         .value("reviewers")
+                                         .toArray();
+        QCOMPARE(reviewers.size(), 2);
+        QCOMPARE(reviewers.at(1).toObject().value("number").toString(),
+                 fixture.number(secondReviewer));
+        // No task of the developer is with either: it is told to use a number.
+        const QJsonObject unclear = fixture.agents(team.developer, "agents.send",
+                                                   {{"to", "reviewer"}, {"text", "Which one?"}});
+        QCOMPARE(unclear.value("error_code").toString(), QStringLiteral("ambiguous_role"));
+        const QString message = unclear.value("error_message").toString();
+        QVERIFY2(message.contains("#" + fixture.number(team.reviewer)) &&
+                     message.contains("#" + fixture.number(secondReviewer)),
+                 qPrintable(text(unclear)));
+        // Removing one of two is allowed, the last one is not.
+        QVERIFY(command(fixture, "team.member.remove",
+                        {{"team_id", team.id}, {"session_id", secondReviewer}})
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(command(fixture, "team.member.remove",
+                         {{"team_id", team.id}, {"session_id", team.reviewer}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("last_reviewer"));
+    }
+
     void rolesAreAddressesInsideATeam() {
         Fixture fixture;
         QVERIFY(fixture.open());

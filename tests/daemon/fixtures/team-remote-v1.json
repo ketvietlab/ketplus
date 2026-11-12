@@ -133,7 +133,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,
@@ -489,7 +496,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,
@@ -743,7 +757,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,

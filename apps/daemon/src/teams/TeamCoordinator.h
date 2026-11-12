@@ -405,6 +405,9 @@ class TeamCoordinator : public QObject {
     // line has no verdict and is not counted (T-19).
     // `messageId` is the review request that ended. A review is bound to its request from
     // the moment it starts, sent or still held, so a request with another id is ignored.
+    // T-23: the reviewer a member's "reviewer" names: the only one, else the one that reviews
+    // or last reviewed its tasks; empty when that is not one reviewer.
+    [[nodiscard]] static QString reviewerFor(const Team& team, const QString& sessionId);
     void reviewFinished(const QString& reviewerSession, const QString& messageId,
                         const QString& text, bool noFindings, const QString& failure = {});
     // T-19 (TeamCoordinatorReviewTools.cpp), the leader's: void the last recorded verdict of
@@ -512,9 +515,19 @@ class TeamCoordinator : public QObject {
     // read through the host first, which may answer later; nothing of the team changes until
     // then, so a restart meanwhile leaves the task queued.
     void pumpReviews(qint64 teamId);
-    // Starts the review the diff was read for, if that task is still the next one as it was.
-    void startReview(qint64 teamId, const Task& asked, const QString& repository,
-                     const QString& integration, const std::optional<TaskDiff>& diff);
+    // Starts the review the diff was read for, if that task is still the next one of that
+    // reviewer as it was.
+    void startReview(qint64 teamId, const QString& reviewerSession, const Task& asked,
+                     const QString& repository, const QString& integration,
+                     const std::optional<TaskDiff>& diff);
+    // T-23 (TeamCoordinatorReviewers.cpp): a task entering In review goes to one reviewer's
+    // queue, or waits while the team has none; it leaves every queue and review in flight; a
+    // reviewer that joins takes what waited; one that leaves hands its reviews over, the one
+    // in flight first and not counted.
+    static void queueReview(Team& team, const Task& task);
+    static void dropReview(Team& team, const QString& taskId);
+    static void reviewerJoined(Team& team, const QString& sessionId);
+    static void reviewerLeft(Team& team, const QString& sessionId);
     // The questions of a task the review blocked.
     [[nodiscard]] static QString noVerdictQuestion(int round, int replies);
     [[nodiscard]] static QString roundLimitQuestion(int round, int maxRounds);
@@ -569,8 +582,8 @@ class TeamCoordinator : public QObject {
     QHash<qint64, Team> teams_;
     // Checks whose question to git is open, and those asked for again meanwhile: a team id
     // for the merge check, "<team>/<developer>" for the lane check.
-    // Teams whose next review waits for git to read its diff.
-    QSet<qint64> reviewDiffs_;
+    // Reviewers whose next review waits for git to read its diff, as "<team>/<session>".
+    QSet<QString> reviewDiffs_;
     QSet<qint64> mergeChecks_;
     QSet<qint64> mergeChecksAgain_;
     QSet<qint64> pullRequestChecks_;

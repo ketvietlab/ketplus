@@ -90,6 +90,7 @@ class TeamStoreTest final : public QObject {
             host_.add(id);
         host_.add(QStringLiteral("rev"), QStringLiteral("claude"));
         host_.add(QStringLiteral("rev2"), QStringLiteral("claude"));
+        host_.add(QStringLiteral("rev3"), QStringLiteral("claude"));
         host_.add(QStringLiteral("elsewhere"), QStringLiteral("codex"), QStringLiteral("/other"));
     }
 
@@ -137,7 +138,7 @@ class TeamStoreTest final : public QObject {
         QTest::newRow("codex reviewer") << 6 << "reviewer_unsupported";
         QTest::newRow("overlapping lanes") << 7 << "lane_overlap";
         QTest::newRow("same conversation twice") << 8 << "already_member";
-        QTest::newRow("second reviewer") << 9 << "role_taken";
+        QTest::newRow("third reviewer") << 9 << "role_taken";
         QTest::newRow("empty name") << 10 << "invalid_payload";
     }
 
@@ -179,7 +180,9 @@ class TeamStoreTest final : public QObject {
             team.members[2].sessionId = QStringLiteral("dev1");
             break;
         case 9:
+            // T-23: two reviewers are allowed, a third is not.
             team.members.append(member("rev2", role::reviewer, "Second reviewer"));
+            team.members.append(member("rev3", role::reviewer, "Third reviewer"));
             break;
         case 10:
             team.members[1].name = QStringLiteral("  ");
@@ -205,15 +208,18 @@ class TeamStoreTest final : public QObject {
                             member("rev2", role::reviewer, "R")});
         QCOMPARE(teams.create(other, "user").error.value_or(TeamError{}).code,
                  QStringLiteral("already_member"));
-        // The leader and the reviewer stay; the team is deleted instead.
+        // The leader and the last reviewer stay; the team is deleted instead.
         QCOMPARE(teams.removeMember(id, "lead", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("role_required"));
         QCOMPARE(teams.removeMember(id, "rev", "user").error.value_or(TeamError{}).code,
-                 QStringLiteral("role_required"));
-        QCOMPARE(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user")
+                 QStringLiteral("last_reviewer"));
+        // T-23: a second reviewer joins, a third does not.
+        QVERIFY(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user").ok());
+        QCOMPARE(teams.addMember(id, member("rev3", role::reviewer, "R3"), "user")
                      .error.value_or(TeamError{})
                      .code,
                  QStringLiteral("role_taken"));
+        QVERIFY(teams.removeMember(id, "rev2", "user").ok());
         QCOMPARE(teams.addMember(id, member("elsewhere", role::developer, "E", {"z"}), "user")
                      .error.value_or(TeamError{})
                      .code,

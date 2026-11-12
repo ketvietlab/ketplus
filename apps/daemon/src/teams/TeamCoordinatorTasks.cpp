@@ -293,9 +293,9 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                     .taskId = task.id,
                     .actionable = actionable,
                     .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
-    // ADR 0114 §2: the reviewer takes tasks first in, first out; commit() sends the next.
-    if (to == state::inReview && !team.reviewQueue.contains(task.id) && team.reviewing != task.id)
-        team.reviewQueue.append(task.id);
+    // ADR 0114 §2: a reviewer takes its tasks first in, first out; commit() sends the next.
+    if (to == state::inReview)
+        queueReview(team, task);
     // A developer whose work all left its hands needs the leader (ADR 0114 §7).
     if (!task.owner.isEmpty() && (to == state::inReview || to == state::done)) {
         bool busy = false;

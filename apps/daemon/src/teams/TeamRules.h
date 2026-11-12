@@ -35,7 +35,7 @@ namespace rules {
 [[nodiscard]] bool pathUnder(const QString& path, const QString& prefix);
 [[nodiscard]] std::optional<TeamError> laneOverlap(const Team& team, const QString& exceptSession,
                                                    const QStringList& paths);
-// A new team: exactly one leader and one reviewer, one to five developers, all distinct
+// A new team: exactly one leader, one or two reviewers (T-23), one to five developers, all distinct
 // conversations of `repository` on no team, a Claude reviewer, lanes that do not overlap.
 [[nodiscard]] std::optional<TeamError> canCreate(const Team& team,
                                                  const QList<Candidate>& candidates);

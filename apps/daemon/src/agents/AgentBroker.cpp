@@ -258,6 +258,22 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
     if (const QString role = payload.value(QStringLiteral("to")).toString().trimmed().toLower();
         role == QStringLiteral("leader") || role == QStringLiteral("reviewer")) {
         const QString number = host_->teamRoleNumber(caller.sessionId, role);
+        // T-23: with two reviewers, "reviewer" names the one of the caller's work only.
+        if (const QJsonArray reviewers = host_->teamMembership(caller.sessionId)
+                                             .value(QStringLiteral("reviewers"))
+                                             .toArray();
+            number.isEmpty() && role == QStringLiteral("reviewer") && reviewers.size() > 1) {
+            QStringList named;
+            for (const QJsonValue& reviewer : reviewers)
+                named.append(
+                    QStringLiteral("#%1 (%2)")
+                        .arg(reviewer.toObject().value(QStringLiteral("number")).toString(),
+                             reviewer.toObject().value(QStringLiteral("name")).toString()));
+            return failure(QStringLiteral("ambiguous_role"),
+                           QStringLiteral("Your team has two reviewers, and it is not clear which "
+                                          "one reviews your work. Send to a number: %1.")
+                               .arg(named.join(QStringLiteral(" or "))));
+        }
         if (number.isEmpty())
             return failure(QStringLiteral("not_on_team"),
                            QStringLiteral("\"%1\" names a member of your team, and this "

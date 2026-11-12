@@ -106,12 +106,12 @@ class TeamReviewTest final : public QObject {
         QVERIFY(!id.isEmpty());
         // Nothing was sent, yet the review already knows which request answers it.
         QVERIFY(reviewsTo("rev").isEmpty());
-        QCOMPARE(team().reviewing, id);
-        const QString bound = team().reviewingMessage;
+        QCOMPARE(firstReviews(team()).reviewing, id);
+        const QString bound = firstReviews(team()).message;
         QVERIFY(!bound.isEmpty());
         teams_->reviewFinished("rev", "old-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
         // Resumed, the held request goes out under that id and answers the review.
         QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
         QCOMPARE(reviewsTo("rev").size(), 1);
@@ -124,11 +124,11 @@ class TeamReviewTest final : public QObject {
 
     void theBoundRequestSurvivesAReload() {
         const QString id = inReview("Cart", "dev1");
-        const QString bound = team().reviewingMessage;
+        const QString bound = firstReviews(team()).message;
         QCOMPARE(reviewsTo("rev").first().id, bound);
         reload();
-        QCOMPARE(team().reviewing, id);
-        QCOMPARE(team().reviewingMessage, bound);
+        QCOMPARE(firstReviews(team()).reviewing, id);
+        QCOMPARE(firstReviews(team()).message, bound);
         teams_->reviewFinished("rev", "old-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
         teams_->reviewFinished("rev", bound, "Verdict: no findings", true);
@@ -144,22 +144,22 @@ class TeamReviewTest final : public QObject {
         QVERIFY(!id.isEmpty());
         // The task waits in the queue: no review in flight, nothing sent, nothing to answer.
         QVERIFY(reviewsTo("rev").isEmpty());
-        QVERIFY(team().reviewing.isEmpty());
-        QVERIFY(team().reviewingMessage.isEmpty());
-        QCOMPARE(team().reviewQueue, QStringList{id});
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).message.isEmpty());
+        QCOMPARE(firstReviews(team()).queue, QStringList{id});
         teams_->reviewFinished("rev", "old-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
         // The same after a restart: the stored team has no unbound review either.
         reload();
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
         teams_->reviewFinished("rev", "old-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
         // Once the journal takes it, the next change of the team starts the review, bound.
         QVERIFY(sql("DROP TRIGGER refuse_bound"));
         QVERIFY(teams_->update(team_, {{"goal", "Ship the cart"}}, "user").ok());
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
         QCOMPARE(reviewsTo("rev").size(), 1);
-        QCOMPARE(reviewsTo("rev").first().id, team().reviewingMessage);
+        QCOMPARE(reviewsTo("rev").first().id, firstReviews(team()).message);
         teams_->reviewFinished("rev", "old-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
         finishReview(*teams_, "rev", "Verdict: no findings", true);
@@ -171,16 +171,17 @@ class TeamReviewTest final : public QObject {
         const QString id = inReview("Cart", "dev1");
         teams_.reset();
         journal_.reset();
-        QVERIFY(sql("UPDATE teams SET document = json_remove(document, '$.reviewing_message')"));
+        QVERIFY(sql("UPDATE teams SET document = json_remove(document, '$.reviewing_message', "
+                    "'$.reviews', '$.review_waiting')"));
         reload();
-        QCOMPARE(team().reviewing, id);
-        QVERIFY(team().reviewingMessage.isEmpty());
+        QCOMPARE(firstReviews(team()).reviewing, id);
+        QVERIFY(firstReviews(team()).message.isEmpty());
         teams_->reviewFinished("rev", "its-request", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::ready);
         // The next review of that team is bound again.
         const QString next = inReview("Api", "dev2");
-        QCOMPARE(team().reviewing, next);
-        QVERIFY(!team().reviewingMessage.isEmpty());
+        QCOMPARE(firstReviews(team()).reviewing, next);
+        QVERIFY(!firstReviews(team()).message.isEmpty());
     }
 
     void inReviewSendsOneRequestWithTheCriteriaAndThatTaskOnly() {
@@ -194,7 +195,7 @@ class TeamReviewTest final : public QObject {
         QVERIFY(request.body.contains("1. Adds an item"));
         QVERIFY(request.body.contains("web/T-1.txt"));
         QVERIFY(request.body.contains("Verdict: no findings"));
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
         QCOMPARE(task(id).round, 1);
     }
 
@@ -209,13 +210,13 @@ class TeamReviewTest final : public QObject {
         const QString second = inReview("Two", "dev2");
         const QString third_ = inReview("Three", "dev3");
         QCOMPARE(reviewsTo("rev").size(), 1);
-        QCOMPARE(team().reviewQueue, (QStringList{second, third_}));
+        QCOMPARE(firstReviews(team()).queue, (QStringList{second, third_}));
         // A request other than the one in flight that ends is not its answer.
-        QCOMPARE(reviewsTo("rev").first().id, team().reviewingMessage);
-        QVERIFY(!team().reviewingMessage.isEmpty());
+        QCOMPARE(reviewsTo("rev").first().id, firstReviews(team()).message);
+        QVERIFY(!firstReviews(team()).message.isEmpty());
         teams_->reviewFinished("rev", "another", "Fine.\nVerdict: no findings", true);
         QCOMPARE(task(first).state, state::inReview);
-        QCOMPARE(team().reviewing, first);
+        QCOMPARE(firstReviews(team()).reviewing, first);
         finishReview(*teams_, "rev", "Fine.\nVerdict: no findings", true);
         QCOMPARE(task(first).state, state::ready);
         QCOMPARE(reviewsTo("rev").size(), 2);
@@ -226,7 +227,7 @@ class TeamReviewTest final : public QObject {
         QCOMPARE(reviewsTo("rev").size(), 3);
         for (const QString& id : {first, second, third_})
             QCOMPARE(task(id).state, state::ready);
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
     }
 
     void findingsGoBackToTheOwnerUntilTheRoundLimit() {
@@ -262,14 +263,14 @@ class TeamReviewTest final : public QObject {
         finishReview(*teams_, "rev", {}, false, "turn_interrupted");
         QCOMPARE(task(id).state, state::blocked);
         QVERIFY(task(id).question.contains("turn_interrupted"));
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
     }
 
     void onlyTheReviewerFinishesAReview() {
         const QString id = inReview("Cart", "dev1");
         finishReview(*teams_, "dev1", "Verdict: no findings", true);
         QCOMPARE(task(id).state, state::inReview);
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
     }
 
     // The session runtime reads the diff off its event loop. Nothing of the team changes until
@@ -279,17 +280,17 @@ class TeamReviewTest final : public QObject {
         const QString id = inReview("Cart", "dev1");
         QVERIFY(!id.isEmpty());
         QVERIFY(teams_->checksOpen());
-        QVERIFY(team().reviewing.isEmpty());
-        QCOMPARE(team().reviewQueue, QStringList{id});
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
+        QCOMPARE(firstReviews(team()).queue, QStringList{id});
         QVERIFY(reviewsTo("rev").isEmpty());
         reload();
-        QVERIFY(team().reviewing.isEmpty());
-        QCOMPARE(team().reviewQueue, QStringList{id});
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
+        QCOMPARE(firstReviews(team()).queue, QStringList{id});
         // The answer to the coordinator that is gone is dropped; the new one's starts it.
         host_.answer();
-        QCOMPARE(team().reviewing, id);
+        QCOMPARE(firstReviews(team()).reviewing, id);
         QCOMPARE(reviewsTo("rev").size(), 1);
-        QCOMPARE(reviewsTo("rev").first().id, team().reviewingMessage);
+        QCOMPARE(reviewsTo("rev").first().id, firstReviews(team()).message);
         QVERIFY(reviewsTo("rev").first().body.contains("web/" + id + ".txt"));
         QVERIFY(!teams_->checksOpen());
     }
@@ -303,17 +304,17 @@ class TeamReviewTest final : public QObject {
         const int asked = host_.asked;
         QVERIFY(teams_->moveTask(team_, first, state::todo, "lead").ok());
         host_.answer();
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
         QCOMPARE(host_.asked, asked + 1);
         QVERIFY(teams_->update(team_, {{"integration_branch", "release-other"}}, "user").ok());
         host_.answer();
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
         QCOMPARE(host_.asked, asked + 2);
         host_.answer();
-        QCOMPARE(team().reviewing, second);
+        QCOMPARE(firstReviews(team()).reviewing, second);
         QCOMPARE(reviewsTo("rev").size(), 1);
         QCOMPARE(reviewsTo("rev").first().taskId, second);
-        QVERIFY(team().reviewQueue.isEmpty());
+        QVERIFY(firstReviews(team()).queue.isEmpty());
     }
 
     void aTaskThatLeftReviewWhileQueuedIsSkipped() {
@@ -323,14 +324,16 @@ class TeamReviewTest final : public QObject {
         finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(task(first).state, state::ready);
         QCOMPARE(reviewsTo("rev").size(), 1);
-        QVERIFY(team().reviewQueue.isEmpty());
+        QVERIFY(firstReviews(team()).queue.isEmpty());
     }
 
     void aDeletedReviewerLeavesItsReviewForTheNextOne() {
         const QString id = inReview("Cart", "dev1");
         teams_->conversationDeleted("rev");
-        QVERIFY(team().reviewing.isEmpty());
+        // T-23: with no reviewer left the task waits on the team, its round not counted.
+        QVERIFY(team().reviews.isEmpty());
         QCOMPARE(team().reviewQueue, QStringList{id});
+        QCOMPARE(task(id).round, 0);
         host_.add("rev2", "claude");
         QVERIFY(teams_
                     ->addMember(team_,
@@ -339,6 +342,8 @@ class TeamReviewTest final : public QObject {
                     .ok());
         QCOMPARE(reviewsTo("rev2").size(), 1);
         QCOMPARE(reviewsTo("rev2").first().taskId, id);
+        QCOMPARE(task(id).round, 1);
+        QVERIFY(team().reviewQueue.isEmpty());
     }
 
     void theReviewerReviewsATaskEndToEnd_data() {
