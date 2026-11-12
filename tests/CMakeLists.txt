@@ -215,6 +215,23 @@ target_link_libraries(ketplus_machine_window_tests PRIVATE
     ketplus_desktop_shell
 )
 
+# #419 end to end: the window over a real daemon behind a loopback sshd, and over the
+# loopback relay (tests/daemon/SyntheticRelay.h). Needs sshd for the SSH case.
+ketplus_add_gui_test(ketplus_machine_end_to_end_tests MachineEndToEndTest.cpp)
+target_include_directories(ketplus_machine_end_to_end_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/daemon)
+# The Relay case keeps credentials in memory, never in the login keychain.
+target_sources(ketplus_machine_end_to_end_tests PRIVATE daemon/cloud-privacy/MemoryCredentials.cpp)
+target_link_libraries(ketplus_machine_end_to_end_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_shell
+    ketplus_remote_ssh_backend
+    ketplus_remote_control
+)
+target_compile_definitions(ketplus_machine_end_to_end_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
+add_dependencies(ketplus_machine_end_to_end_tests ketplus_daemon)
+
 ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
 target_include_directories(ketplus_linux_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ketplus_linux_machines_tests PRIVATE

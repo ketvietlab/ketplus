@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RemoteControlFixture.h"
+#include "RestoreHost.h"
 #include "control/ControlV2Content.h"
 #include "control/RelayMachineBackend.h"
 
@@ -71,11 +71,16 @@ class SyntheticRelay {
     QJsonArray events;
     int commandReads{0};
     QHash<QString, int> eventPolls;
+    // Answers transcript.restore_window for its session when set (a transcript read).
+    RestoreHost* restore{nullptr};
     QHash<QString, int> readsOfCommand;
     QJsonObject metadata_;
     QJsonObject clientKeys_;
     // Runs while an events request is in flight, before its answer is delivered.
     std::function<void()> onEvents;
+    // When set and it answers a non-empty object, the host's result for that command kind and
+    // plaintext instead of the built-in one (the Desktop tests use the daemon's result shapes).
+    std::function<QJsonObject(const QString& kind, const QJsonObject& plaintext)> results;
 
     SyntheticRelay(FixtureTransport& transport, EncryptedFixture& host, ControlV2Client& client)
         : network(transport), fixture(host) {
@@ -143,6 +148,11 @@ class SyntheticRelay {
             return std::nullopt;
         }
         const auto body = QJsonDocument::fromJson(bytes).object();
+        if (restore != nullptr &&
+            (path.startsWith("/v2/mobile/restore-requests/") ||
+             (body.value("kind") == "transcript.restore_window" &&
+              path == "/v2/mobile/sessions/" + restore->session + "/commands")))
+            return restore->answer(request, bytes);
         if (method == "POST" && path == "/v2/mobile/workspaces/workspace/session-creates")
             return accept(body, bytes, true);
         const auto sessionPath = QStringLiteral("/v2/mobile/sessions/");
@@ -251,8 +261,9 @@ class SyntheticRelay {
             qFatal("Synthetic host rejected a command: %s", qPrintable(error));
         ++executions[id];
         plaintexts.insert(id, QJsonDocument::fromJson(plaintext).object());
-        QJsonObject result;
-        if (kind == "worktree.configuration.read") {
+        QJsonObject result = results ? results(kind, plaintexts.value(id)) : QJsonObject{};
+        if (!result.isEmpty()) {
+        } else if (kind == "worktree.configuration.read") {
             const auto worktreeId = dto.value("worktreeId").toString();
             QString label;
             for (const auto& value : std::as_const(worktrees))
