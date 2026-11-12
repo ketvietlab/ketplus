@@ -46,6 +46,14 @@ Item {
 
     readonly property var members: team ? team.members : []
     readonly property var tasks: team ? team.tasks : []
+    // T-37 (ADR 0114 §10): the disk that holds the team's worktrees, as the daemon measures it.
+    // Below Fixtures.diskWarnGb it warns, below Fixtures.diskStopGb builds should stop; nothing
+    // is paused or removed for the user.
+    readonly property var storage: team && team.storage ? team.storage : null
+    readonly property string diskLevel: !storage ? ""
+        : storage.free < Fixtures.diskStopGb ? "stop" : storage.free < Fixtures.diskWarnGb ? "low" : ""
+    readonly property var doneWorktrees: storage ? storage.worktrees : []
+    function gb(value) { return value.toFixed(1) + " GB" }
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
     readonly property var leader: members.find(m => m.role === "leader") || null
@@ -125,6 +133,9 @@ Item {
                         { when: "Today, 12:20", text: "@agent/4583 passed round 1 of 3 with no findings" },
                         { when: "Today, 12:20", text: "Every criterion is met: Ready to merge" }]) })),
                 decisions: [mergeDecision].concat(decisions) })
+        // `teams/disk-low` and `teams/disk-stop` (T-37): the two levels of the disk warning.
+        if (state === "disk-low" || state === "disk-stop")
+            change({ storage: Object.assign({}, storage, { free: state === "disk-low" ? 18.4 : 9.6 }) })
         if (state === "paused")
             change({ paused: true, pausedReason: "budget", automaticTurns: turnBudget,
                 decisions: [budgetDecision].concat(decisions),
@@ -220,9 +231,16 @@ Item {
             showTask(tasks.some(t => t.id === "T-3") && team.id !== "pilot" ? "T-3" : tasks[0].id)
         else if (name === "handover")
             startHandover(tasks.find(t => t.id === "T-3"))
+        // T-37: the confirmation of a done task's worktree removal, and the daemon's refusal of
+        // one that has uncommitted changes, shown in the dialog after Remove.
+        else if ((name === "remove-worktree" || name === "remove-worktree-refused") && doneWorktrees.length > 0) {
+            startRemoveWorktree(doneWorktrees[0])
+            if (name === "remove-worktree-refused")
+                removeWorktreeDialog.refusal = Fixtures.dirtyWorktreeRefusal
+        }
     }
     function openEveryOverlay() {
-        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog]) {
+        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog, removeWorktreeDialog]) {
             if (dialog === taskDialog || dialog === handoverDialog)
                 openTask = handover = Fixtures.teams[0].tasks[2]
             dialog.open()
@@ -256,6 +274,22 @@ Item {
             return
         removeDialog.who = who
         removeDialog.open()
+    }
+
+    // T-37: the user removes a done task's worktree, only after confirming; the daemon runs
+    // git worktree remove without force and prune, and the task keeps its branch.
+    function startRemoveWorktree(entry) {
+        removeWorktreeDialog.entry = entry
+        removeWorktreeDialog.refusal = ""
+        removeWorktreeDialog.open()
+    }
+    function removeWorktree(id) {
+        const entry = doneWorktrees.find(w => w.id === id)
+        if (!entry)
+            return false
+        change({ storage: Object.assign({}, storage, { worktrees: doneWorktrees.filter(w => w.id !== id) }) })
+        changeTask(id, { worktree: "" }, "You removed the worktree " + entry.path)
+        return true
     }
 
     // The sidebar's team folder opens its team.
@@ -517,6 +551,19 @@ Item {
             deleteTeam()
         }
         showTeam("release")
+        // T-37: the disk warning's two levels, and a confirmed removal of a done worktree.
+        const before = { storage: storage, tasks: tasks }
+        for (const [value, level] of [[Fixtures.diskWarnGb, ""], [Fixtures.diskWarnGb - 0.1, "low"],
+                                      [Fixtures.diskStopGb, "low"], [Fixtures.diskStopGb - 0.1, "stop"]]) {
+            change({ storage: Object.assign({}, storage, { free: value }) })
+            check(diskLevel === level, "the disk warning is " + (level || "off") + " at " + value + " GB")
+        }
+        change(before)
+        const kept = doneWorktrees
+        check(removeWorktree("T-2") && doneWorktrees.length === kept.length - 1
+              && tasks.find(t => t.id === "T-2").worktree === "", "a removed worktree leaves the offer and the task")
+        check(!removeWorktree("T-2"), "a worktree is removed once")
+        change(before)
         return failures
     }
 
@@ -721,6 +768,20 @@ Item {
                 message: "Reviews will queue. A reviewer keeps up with two or three developers; a second reviewer shortens the queue."
                 actionText: "Add a second reviewer"
                 onActionTriggered: screen.openDialog("add-reviewer")
+            }
+
+            // T-37: the free space of the disk under the team's worktrees, at two levels.
+            KetBanner {
+                objectName: "teamDiskBanner"
+                width: parent.width
+                visible: screen.diskLevel !== ""
+                tone: screen.diskLevel === "stop" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
+                title: screen.diskLevel === "stop"
+                       ? "Builds should stop: " + screen.gb(screen.storage.free) + " free"
+                       : screen.diskLevel === "low" ? "Disk space is low: " + screen.gb(screen.storage.free) + " free" : ""
+                message: screen.diskLevel === "stop"
+                         ? "The disk that holds this team's worktrees has less than " + Fixtures.diskStopGb + " GB free, so a build may fill it. Free space before the next build; nothing is paused or removed for you."
+                         : "The disk that holds this team's worktrees has less than " + Fixtures.diskWarnGb + " GB free. Remove the worktrees of done tasks below, or free space, before builds fill it."
             }
 
             Item { width: 1; height: screen.px(4) }
@@ -962,6 +1023,67 @@ Item {
                                     }
                                 }
                                 Mono { Layout.preferredWidth: screen.px(44); text: taskRow.modelData.pr || "–" }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item { width: 1; height: screen.px(4); visible: screen.doneWorktrees.length > 0 }
+
+            // T-37: done tasks whose worktree is still on disk, each offered to the user.
+            SectionTitle {
+                visible: screen.doneWorktrees.length > 0
+                title: "Worktrees of done tasks"
+                count: screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+            }
+            Panel {
+                objectName: "teamDoneWorktrees"
+                visible: screen.doneWorktrees.length > 0
+                height: doneWorktreeRows.height
+                Column {
+                    id: doneWorktreeRows
+                    width: parent.width
+                    Repeater {
+                        model: screen.doneWorktrees
+                        delegate: Item {
+                            id: worktreeRow
+                            required property var modelData
+                            required property int index
+                            width: doneWorktreeRows.width
+                            height: screen.px(56)
+                            Rectangle {
+                                visible: worktreeRow.index > 0
+                                width: parent.width; height: 1
+                                color: KetTheme.t.panelBorder
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: screen.px(18)
+                                anchors.rightMargin: screen.px(12)
+                                spacing: screen.px(14)
+                                Mono { Layout.preferredWidth: screen.px(36); text: worktreeRow.modelData.id }
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: screen.px(3)
+                                    Label {
+                                        width: parent.width
+                                        text: (screen.tasks.find(t => t.id === worktreeRow.modelData.id) || { title: "" }).title
+                                    }
+                                    Mono {
+                                        width: parent.width
+                                        text: worktreeRow.modelData.path
+                                        elide: Text.ElideMiddle
+                                        color: KetTheme.t.textMuted
+                                    }
+                                }
+                                Label { text: worktreeRow.modelData.size; color: KetTheme.t.textSecondary }
+                                KetButton {
+                                    text: "Remove…"
+                                    iconName: "trash"
+                                    variant: KetTheme.ButtonVariant.Ghost
+                                    onClicked: screen.startRemoveWorktree(worktreeRow.modelData)
+                                }
                             }
                         }
                     }
@@ -1283,6 +1405,67 @@ Item {
                     const number = removeDialog.who.number
                     removeDialog.accept()
                     screen.removeMember(number)
+                }
+            }
+        ]
+    }
+
+    // T-37: a done task's worktree goes only when the user confirms it here. The daemon refuses
+    // in words what it will not remove, and a refusal changes nothing.
+    KetDialog {
+        id: removeWorktreeDialog
+        objectName: "removeWorktreeDialog"
+        property var entry: null
+        property string refusal: ""
+        title: "Remove the worktree of " + (entry ? entry.id : "") + "?"
+        Column {
+            width: removeWorktreeDialog.availableWidth
+            spacing: screen.px(10)
+            Label {
+                width: parent.width
+                text: removeWorktreeDialog.entry
+                      ? "Its folder is deleted from disk, freeing " + removeWorktreeDialog.entry.size + ". The task's branch and its commits stay."
+                      : ""
+                color: KetTheme.t.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+            Mono {
+                width: parent.width
+                text: removeWorktreeDialog.entry ? removeWorktreeDialog.entry.path : ""
+                wrapMode: Text.WrapAnywhere
+                elide: Text.ElideNone
+            }
+            Label {
+                width: parent.width
+                text: "ketPlus runs git worktree remove, without force, and then git worktree prune from the repository's main checkout. It refuses a worktree with uncommitted or untracked changes or with commits on no remote branch, the main checkout, and the folder of a running conversation."
+                color: KetTheme.t.textMuted
+                font.pixelSize: screen.px(12)
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+            KetBanner {
+                objectName: "removeWorktreeRefusal"
+                width: parent.width
+                visible: removeWorktreeDialog.refusal !== ""
+                tone: KetTheme.BannerTone.Danger
+                title: "Not removed"
+                message: removeWorktreeDialog.refusal
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeWorktreeDialog.reject() },
+            KetButton {
+                text: "Remove worktree"
+                variant: KetTheme.ButtonVariant.Danger
+                enabled: removeWorktreeDialog.refusal === ""
+                onClicked: {
+                    const id = removeWorktreeDialog.entry.id
+                    removeWorktreeDialog.accept()
+                    if (screen.removeWorktree(id))
+                        screen.window.notify("Removed the worktree of " + id)
                 }
             }
         ]
