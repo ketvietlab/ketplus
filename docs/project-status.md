@@ -78,10 +78,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
-  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a folder in its
-  repository before the other conversations, leader, developers, reviewer, each with its
-  locked role tag, the only tag a sidebar row draws. The folder's name opens the team,
-  its count is the open decisions; its menu adds a member or deletes the team, the
+  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
+  repository's tree before the other conversations, leader, developers, reviewer; a
+  member's role is in its hint and accessible description. The branch's name opens the
+  team, its chevron folds it, and while a decision waits it shows the needs-input mark and
+  a semibold name; its menu adds a member or deletes the team, the
   conversation menu joins or leaves a team with the reason when it cannot, and a drop on
   a folder of the same repository joins as a developer.
   `DaemonClient::teamEventReceived` carries `team.changed` and `team.removed` to the
@@ -144,9 +145,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
-- Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  the mock's field-styled Quick search, a machine header with its chevron, and update
-  pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
+- Pro sidebar uses kit navigation, the mock's tree (#537) built from the ket-qt sidebar
+  tree parts: a repository is the root, its teams branch directly under it, "Conversations
+  (n)" labels the rest where the repository has teams, every conversation is one line
+  (the state's mark, title and #number; role, state, origin and worktree in the hint),
+  guide lines run under each chevron, and folds of repositories and teams survive a
+  restart (a folded repository shows a dot while something inside waits). Also the mock's
+  field-styled Quick search, a machine header with its chevron, and update pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
   daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
   Storage pressure warnings consume the local daemon's existing size-status contract,
   and "Waiting for you" comes from the daemon (ADR 0112). It matches

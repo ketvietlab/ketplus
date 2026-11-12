@@ -9,14 +9,19 @@
 #include <QWidget>
 
 namespace ket {
-class ConversationRow;
-}
+class SidebarRepositoryHeader;
+class SidebarRow;
+class SidebarSectionLabel;
+class SidebarTeamBranch;
+class SidebarTreeGuide;
+} // namespace ket
 class QVBoxLayout;
 
 namespace ketplus {
 
 // A team's folder inside its repository (ADR 0114, #464). `members` are conversation maps in the
-// folder's order, leader first; each carries "teamRole" and its locked role tag in "tags".
+// folder's order, leader first; each carries "teamRole" and its locked role tag in "tags", whose
+// label the row says as the member's role.
 struct SidebarTeam final {
     QString id;
     QString name;
@@ -51,6 +56,11 @@ struct SidebarRepository final {
 // conversation, then name and path. An explicit conversation repository switch promotes its target.
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories);
 
+// The repository list of KétPlus Pro is the tree of the Qt mock (mockups/qt, "Sidebar tree"):
+// a repository is the root, its teams are branches under it, "Conversations (n)" labels the
+// conversations of no team where the repository has teams, and every conversation is one line.
+// The parts are ket-qt's sidebar tree (KetSidebarTree.h); they share the columns of their level,
+// so the text edges hold at every zoom.
 class SidebarRepositoryList final : public QWidget {
     Q_OBJECT
 
@@ -67,6 +77,12 @@ class SidebarRepositoryList final : public QWidget {
                                    const QString& sessionId) const;
 
     static constexpr char kConversationMimeType[] = "application/x-ketplus-conversation";
+
+    // What the tree is built on, as the mock's Sidebar.layoutProblems checks it: a repository's
+    // name, its "Conversations" label and its conversations' titles share a left edge; a team's
+    // name and its members' titles the same; a team's mark stands over its members' marks; every
+    // conversation is one line high. Empty when the visible tree holds all of them.
+    [[nodiscard]] QStringList layoutProblems() const;
 
   signals:
     // A conversation changed visual status without rebuilding its row; the owner redraws its
@@ -87,12 +103,20 @@ class SidebarRepositoryList final : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
-    ket::ConversationRow* createRow(QWidget* group, const QVariantMap& conversation);
+    ket::SidebarRow* createRow(QWidget* parent, const QVariantMap& conversation, int level);
+    void updateRow(ket::SidebarRow* row, const QVariantMap& conversation) const;
     QWidget* createTeamFolder(QWidget* group, const SidebarRepository& repository,
                               const SidebarTeam& team);
     void updateTeamFolders(const QVector<SidebarRepository>& repositories);
-    // The folders' height inside `group`, laid out for the current collapse.
-    int presentTeamFolders(QWidget* group, bool repositoryCollapsed, int rowHeight);
+    void presentTeamFolders(QWidget* group);
+    // A team's fold is stored for its repository: team ids are numbered per daemon, so another
+    // machine's `teams/1` is a different team.
+    static QString teamFoldKey(const QString& repositoryPath, const QString& teamId);
+    void loadCollapsedTeams();
+    // Forgets the folds of teams that left a repository that lists teams; a repository with no
+    // team listed (not loaded yet, or its last team removed) keeps its folds.
+    void forgetMissingTeams(const QVector<SidebarRepository>& repositories);
+    [[nodiscard]] int waitingCount(const SidebarRepository& repository) const;
     bool handleDrag(QObject* watched, QEvent* event);
     void onRepositoryAction(const QString& path, QWidget* anchor);
     void markConversationSeen(const QString& conversationId);
@@ -104,13 +128,14 @@ class SidebarRepositoryList final : public QWidget {
     QVBoxLayout* layout_{nullptr};
     QVector<SidebarRepository> repositories_;
     QStringList structure_;
-    QVector<ket::ConversationRow*> rows_;
-    QVector<QWidget*> headers_;
+    QVector<ket::SidebarRow*> rows_;
+    QVector<ket::SidebarRepositoryHeader*> headers_;
     QVector<QWidget*> groups_;
     QVector<QWidget*> folders_;
     QSet<QString> collapsedPaths_;
     QSet<QString> collapsedTeams_;
-    QPointer<ket::ConversationRow> pressedRow_;
+    bool collapsedTeamsLoaded_{false};
+    QPointer<ket::SidebarRow> pressedRow_;
     QPoint pressPosition_;
     bool teamsAvailable_{false};
     QSet<QString> showAllPaths_;
