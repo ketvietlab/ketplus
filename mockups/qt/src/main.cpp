@@ -107,14 +107,14 @@ int main(int argc, char* argv[]) {
 
     if (parser.isSet(smoke)) {
         QFont brandFont(QStringLiteral("KET Sans"));
-        brandFont.setWeight(QFont::Black);
+        brandFont.setWeight(QFont::Bold);
         brandFont.setPixelSize(32);
         const QFontInfo resolved(brandFont);
         const QRawFont face = QRawFont::fromFont(brandFont);
         std::fprintf(stderr, "Brand font: %s / %s / weight %d\n", qPrintable(resolved.family()),
                      qPrintable(face.styleName()), face.weight());
         if (resolved.family() != QStringLiteral("KET Sans") ||
-            !face.styleName().contains(QStringLiteral("Black")) || face.weight() != 900)
+            !face.styleName().contains(QStringLiteral("Bold")) || face.weight() != 700)
             return 1;
     }
 

@@ -11,11 +11,10 @@ Item {
     property string stem: "ket"
     property color textColor: KetTheme.t.textMain
     readonly property color brandColor: dark ? "#AD97FA" : "#4332C8"
-    readonly property real markSize: metrics.capitalHeight * 1.45
+    readonly property real markSize: size * 1.45
     implicitWidth: markSize + markSize * 0.35 + word.implicitWidth
                    + (edition === "pro" ? size * 0.3 + badge.width : 0)
     implicitHeight: Math.max(markSize, word.implicitHeight, badge.height)
-    FontMetrics { id: metrics; font: word.font }
     Image {
         width: lockup.markSize; height: width
         anchors.verticalCenter: parent.verticalCenter
@@ -30,7 +29,7 @@ Item {
         text: lockup.stem + "<font color='" + lockup.brandColor + "'>Plus</font>"
         color: lockup.textColor
         font.family: "KET Sans"
-        font.weight: Font.Black
+        font.weight: Font.Bold
         font.pixelSize: lockup.size
         font.letterSpacing: -lockup.size * 0.015
     }
