@@ -60,8 +60,8 @@ corrects the record with two tools, refused with `role_forbidden` for any other 
 round back by one and its open merge decisions withdrawn; `team_review_accept` (task,
 evidence such as a pull request review's URL, and reason) makes a task in review, or
 blocked by its review, `ready` and drops a queued or running review of it. Both leave
-history (`verdict_voided`, `review_accepted`) and need no new commit. A busy reviewer **queues** requests first in, first out,
-instead of skipping them. The daemon reads the diff off its event loop before the review
+history (`verdict_voided`, `review_accepted`) and need no new commit. A busy reviewer
+**queues** requests first in, first out, instead of skipping them. The daemon reads the diff off its event loop before the review
 starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
 again, and a diff that is no longer for the next task or the team's integration branch is
 read again. The reviewer is therefore a Claude conversation, the only

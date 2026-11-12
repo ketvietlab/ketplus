@@ -129,10 +129,16 @@ class TeamVerdictTest final : public QObject {
         }
         QCOMPARE(needsLeader, 1);
 
-        // A verdict later clears the count.
+        // Handed to review again, the count starts from zero: a first reply without a verdict
+        // is asked again, not blocked at once.
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        QCOMPARE(task(id).missingVerdicts, 0);
         QCOMPARE(task(id).round, 1);
+        QVERIFY(!reviewsTo("rev").last().body.contains("had no verdict line"));
+        finishReview(*teams_, "rev", "Thinking about it.", false);
+        QCOMPARE(task(id).state, state::inReview);
+        QCOMPARE(task(id).missingVerdicts, 1);
         finishReview(*teams_, "rev", "Fine.\nVerdict: no findings", true);
         QCOMPARE(task(id).state, state::ready);
         QCOMPARE(task(id).missingVerdicts, 0);
