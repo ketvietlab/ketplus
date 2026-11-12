@@ -105,6 +105,24 @@ class AgentUrgentDeliveryTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.steered"), 1, 5000);
     }
 
+    void urgentToATurnInAWaitLoopSaysWhenItIsRead() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        // Every tool but Bash, a wait loop included, comes from Claude as a dynamicToolCall.
+        const QString receiver = fixture.start("claude", "wait-loop-hang");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "item.started"), 1, 5000);
+        const QJsonObject sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(receiver)}, {"text", "look now"}, {"urgent", true}});
+        QCOMPARE(sent.value("delivery").toString(), "steering");
+        QCOMPARE(sent.value("waiting_on").toString(), "a tool (Monitor)");
+        QVERIFY2(sent.value("note").toString().contains("reads the message when that call ends"),
+                 qPrintable(sent.value("note").toString()));
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.steered"), 1, 5000);
+    }
+
     void receiptStatesAreDescribedToAgents() {
         // The agents' instructions and the agents_send tool name each receipt state.
         const QString instructions = agent_messaging::toolInstructions("4821");

@@ -733,16 +733,23 @@ void AgentBroker::noteToolCall(const QString& sessionId, const QString& type,
         return;
     }
     const QString itemType = payload.value(QStringLiteral("item_type")).toString();
-    if (itemType != QStringLiteral("commandExecution") &&
+    // The Claude sidecar reports every tool but Bash, MCP tools and wait loops included, as a
+    // dynamicToolCall.
+    const bool command = itemType == QStringLiteral("commandExecution");
+    if (!command && itemType != QStringLiteral("dynamicToolCall") &&
         itemType != QStringLiteral("mcpToolCall") && itemType != QStringLiteral("webSearch"))
         return;
-    const QString tool = payload.value(QStringLiteral("item"))
-                             .toObject()
-                             .value(QStringLiteral("tool"))
-                             .toString()
-                             .simplified();
-    const QString what = itemType == QStringLiteral("commandExecution")
-                             ? QStringLiteral("a command")
+    QString tool = payload.value(QStringLiteral("item"))
+                       .toObject()
+                       .value(QStringLiteral("tool"))
+                       .toString()
+                       .simplified();
+    // An MCP tool's name is mcp__<server>__<tool>; its last part says what it does.
+    if (tool.startsWith(QStringLiteral("mcp__")))
+        tool = tool.mid(tool.lastIndexOf(QStringLiteral("__")) + 2);
+    const QString what = command ? QStringLiteral("a command")
+                         : itemType == QStringLiteral("dynamicToolCall")
+                             ? QStringLiteral("a tool")
                              : QStringLiteral("a tool call");
     toolCalls_[sessionId].insert(itemId, tool.isEmpty() || tool.size() > 60
                                              ? what

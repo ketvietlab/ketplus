@@ -95,8 +95,8 @@ turn ends), `steering` (urgent, handed to the running turn), `urgent_waiting`
 answer). With `urgent_waiting` the receipt adds `waiting_on`, what the receiver
 waits on in words, and a `note` saying that it could not steer yet and that the
 message should not be sent again. A running turn that is inside a tool call (a
-command, an MCP tool or a web search, tracked from its `item.started` and
-`item.completed` events) can be steered, but its provider reads the steer only
+command, another tool such as a wait loop or an MCP tool, or a web search, tracked
+from its `item.started` and `item.completed` events) can be steered, but its provider reads the steer only
 when that call ends: the receipt then says `steering` with `waiting_on` (for
 example "a command (Bash)") and a note saying so. The tool description and the
 agents' instructions name these states.
