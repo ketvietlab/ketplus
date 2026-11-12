@@ -44,6 +44,9 @@ struct SshTunnelOptions {
     int connectTimeoutSeconds{10};
     int initialBackoffMilliseconds{1000};
     int maximumBackoffMilliseconds{30000};
+    // The forwarder must stay up this long (or carry daemon bytes) before the tunnel reports
+    // Connected; a bridge that fails at once never flaps through Connected.
+    int settleMilliseconds{1500};
 };
 
 class SshTunnel : public QObject {
@@ -116,6 +119,8 @@ class SshTunnel : public QObject {
     void mismatch(const HostKey& key, const QString& error);
     void locate();
     void forward();
+    // Reports Connected once the bridge has carried daemon bytes or outlived the settle period.
+    void settle(quint64 generation);
     void fail(State state, const QString& error);
     void lost(const QString& error);
     void teardown();
@@ -138,6 +143,8 @@ class SshTunnel : public QObject {
     // Bumped by open() and close(): callbacks of an older attempt are dropped.
     quint64 generation_{0};
     int reconnects_{0};
+    // The forwarder has passed daemon bytes in this attempt.
+    bool carried_{false};
     std::unique_ptr<QTemporaryDir> work_;
     QPointer<QProcess> step_;
     QPointer<QProcess> forwarder_;
