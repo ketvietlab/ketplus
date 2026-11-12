@@ -3,6 +3,7 @@
 #include "runtime/SessionHost.h"
 
 #include "agents/AgentInstructions.h"
+#include "teams/TeamAgentTasks.h"
 
 namespace ketplus::daemon {
 namespace {
@@ -160,18 +161,42 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                 {QStringLiteral("you"), teamMembership(sessionId)}};
     }
     if (operation == QStringLiteral("team_tasks")) {
-        if (!taskId.isEmpty()) {
-            const teams::Task* task = team->task(taskId);
-            if (!task)
-                return refusal(QStringLiteral("task_not_found"),
-                               QStringLiteral("There is no task %1.").arg(taskId));
+        // T-36: compact rows for the list; one task with a page of its history; one entry
+        // uncut. The desktop and paired devices read tasks through other commands.
+        if (taskId.isEmpty()) {
+            const auto members = [&](const QString& session) {
+                const teams::Member* member = team->member(session);
+                return teams::AgentMember{.number = memberNumber(session),
+                                          .name = member ? member->name : QString{}};
+            };
+            const teams::AgentTaskFilter filter{
+                .open = payload.value(QStringLiteral("open")).toBool(),
+                .mine = payload.value(QStringLiteral("mine")).toBool() ? sessionId : QString{}};
             return {{QStringLiteral("ok"), true},
-                    {QStringLiteral("task"), teams::taskPageJson(*task)}};
+                    {QStringLiteral("tasks"), teams::agentTaskRows(*team, filter, members)}};
         }
-        QJsonArray tasks;
-        for (const teams::Task& task : team->tasks)
-            tasks.append(teams::toJson(task, false));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("tasks"), tasks}};
+        const teams::Task* task = team->task(taskId);
+        if (!task)
+            return refusal(QStringLiteral("task_not_found"),
+                           QStringLiteral("There is no task %1.").arg(taskId));
+        if (payload.contains(QStringLiteral("entry"))) {
+            const qsizetype entry = payload.value(QStringLiteral("entry")).toInteger(-1);
+            if (entry < 0 || entry >= task->history.size())
+                return refusal(QStringLiteral("entry_not_found"),
+                               QStringLiteral("%1 has history entries 0 to %2.")
+                                   .arg(taskId)
+                                   .arg(task->history.size() - 1));
+            return {{QStringLiteral("ok"), true},
+                    {QStringLiteral("task"),
+                     teams::agentTaskEntry(*task, entry,
+                                           teams_->wholeHistoryText(teamId, taskId, entry))}};
+        }
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("task"),
+                 teams::agentTaskPage(
+                     *task, payload.value(QStringLiteral("history_start")).toInteger(-1),
+                     payload.value(QStringLiteral("history_limit")).toInt(teams::agentHistoryPage),
+                     teams_->wholeHistoryEntries(teamId, taskId))}};
     }
     if (operation == QStringLiteral("team_wait")) {
         if (role == teams::role::reviewer)

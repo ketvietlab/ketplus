@@ -241,6 +241,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
         team = before;
         return journalError(error);
     }
+    saveWholeHistoryTexts(team);
     for (const QString& session : before.memberSessions())
         teamBySession_.remove(session);
     for (const QString& session : team.memberSessions())
@@ -265,10 +266,39 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     return std::nullopt;
 }
 
+void TeamCoordinator::saveWholeHistoryTexts(Team& team) {
+    for (Task& task : team.tasks)
+        for (qsizetype index = 0; index < task.history.size(); ++index) {
+            HistoryEntry& entry = task.history[index];
+            if (entry.wholeText.isEmpty())
+                continue;
+            // A text the journal could not keep reads as its cut, which says what it lost.
+            (void)journal_->saveTeamHistoryText(team.id, task.id, index, entry.wholeText);
+            entry.wholeText.clear();
+        }
+}
+
+std::optional<QString> TeamCoordinator::wholeHistoryText(const qint64 teamId, const QString& taskId,
+                                                         const qsizetype entry) const {
+    return journal_->teamHistoryText(teamId, taskId, entry);
+}
+
+QSet<qsizetype> TeamCoordinator::wholeHistoryEntries(const qint64 teamId,
+                                                     const QString& taskId) const {
+    return journal_->teamHistoryTextEntries(teamId, taskId);
+}
+
 void TeamCoordinator::addHistory(Task& task, const QString& actor, const QString& kind,
                                  const QString& text, const QJsonObject& data) {
-    task.history.append(
-        bounded({.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data}));
+    HistoryEntry entry{.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data};
+    if (text.size() > maximumHistoryText) {
+        // T-36: the document keeps the cut text as people read it; the journal keeps the
+        // whole text once the change is saved (commit()), and only an agent's page says so.
+        entry.wholeText = text.left(maximumWholeHistoryText);
+        entry.text = boundedText(text);
+    }
+    entry.data = boundedData(std::move(entry.data));
+    task.history.append(std::move(entry));
 }
 
 Decision& TeamCoordinator::raiseDecision(Team& team, const QString& kind, const QString& question,

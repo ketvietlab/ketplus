@@ -16,16 +16,6 @@ QStringList stringList(const QJsonValue& value) {
     return result;
 }
 
-QJsonObject toJson(const HistoryEntry& entry) {
-    QJsonObject json{{QStringLiteral("at"), entry.at},
-                     {QStringLiteral("actor"), entry.actor},
-                     {QStringLiteral("kind"), entry.kind},
-                     {QStringLiteral("text"), entry.text}};
-    if (!entry.data.isEmpty())
-        json.insert(QStringLiteral("data"), entry.data);
-    return json;
-}
-
 HistoryEntry historyFromJson(const QJsonObject& json) {
     return bounded({.at = json.value(QStringLiteral("at")).toString(),
                     .actor = json.value(QStringLiteral("actor")).toString(),
@@ -96,17 +86,35 @@ Decision decisionFromJson(const QJsonObject& json) {
 
 } // namespace
 
-QString boundedText(QString text) {
-    if (text.size() <= maximumHistoryText)
+QJsonObject toJson(const HistoryEntry& entry) {
+    QJsonObject json{{QStringLiteral("at"), entry.at},
+                     {QStringLiteral("actor"), entry.actor},
+                     {QStringLiteral("kind"), entry.kind},
+                     {QStringLiteral("text"), entry.text}};
+    if (!entry.data.isEmpty())
+        json.insert(QStringLiteral("data"), entry.data);
+    return json;
+}
+
+QString cutText(QString text, const qsizetype bound, const QString& hint) {
+    if (text.size() <= bound)
         return text;
     // The result stays within the bound, so a text bounded when it was written is the same
     // when the document is read again: room for the note, and no surrogate pair cut in half.
-    constexpr qsizetype note = 40;
-    qsizetype keep = maximumHistoryText - note;
+    const qsizetype note = 40 + (hint.isEmpty() ? 0 : hint.size() + 2);
+    qsizetype keep = std::max<qsizetype>(1, bound - note);
     if (text.at(keep - 1).isHighSurrogate())
         --keep;
-    return QStringLiteral("%1… (%2 more characters)").arg(text.left(keep)).arg(text.size() - keep);
+    const qsizetype more = text.size() - keep;
+    return hint.isEmpty()
+               ? QStringLiteral("%1… (%2 more characters)").arg(text.left(keep)).arg(more)
+               : QStringLiteral("%1… (%2 more characters; %3)")
+                     .arg(text.left(keep))
+                     .arg(more)
+                     .arg(hint);
 }
+
+QString boundedText(QString text) { return cutText(std::move(text), maximumHistoryText); }
 
 QJsonObject boundedData(QJsonObject data) {
     const QStringList keys = data.keys();

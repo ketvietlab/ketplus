@@ -111,6 +111,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/Team.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
+    src/teams/TeamAgentTasks.cpp
+    src/teams/TeamAgentTasks.h
     src/teams/TeamRemoteView.cpp
     src/teams/TeamRemoteView.h
     src/teams/TeamCoordinator.cpp

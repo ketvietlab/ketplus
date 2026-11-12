@@ -18,6 +18,20 @@ QJsonObject list(const QString& description) {
         {QStringLiteral("description"), description}};
 }
 
+QJsonObject flag(const QString& description) {
+    return {{QStringLiteral("type"), QStringLiteral("boolean")},
+            {QStringLiteral("description"), description}};
+}
+
+QJsonObject number(const QString& description, const int minimum, const int maximum = 0) {
+    QJsonObject json{{QStringLiteral("type"), QStringLiteral("integer")},
+                     {QStringLiteral("minimum"), minimum},
+                     {QStringLiteral("description"), description}};
+    if (maximum > 0)
+        json.insert(QStringLiteral("maximum"), maximum);
+    return json;
+}
+
 QJsonObject tool(const QString& name, const QString& description, const QJsonObject& properties,
                  const QStringList& required = {}) {
     QJsonObject schema{{QStringLiteral("type"), QStringLiteral("object")},
@@ -59,8 +73,24 @@ QJsonArray teamTools() {
                             "your own role and lane."),
              {}),
         tool(QStringLiteral("team_tasks"),
-             QStringLiteral("The team's tasks, or one task with its criteria and history."),
-             {{QStringLiteral("task_id"), taskId}}),
+             QStringLiteral(
+                 "Without task_id: one short row per task (id, title, state, round, owner, "
+                 "lane, depends_on, pull_request, and the question of a blocked task); "
+                 "open=true leaves out done tasks, mine=true keeps the tasks you own or review. "
+                 "With task_id: that task's description, criteria and its last 10 history "
+                 "entries, with history_total and history_start; history_start and "
+                 "history_limit (at most 50) read any other part. Each entry has its index; "
+                 "a cut text says so, and entry=<index> returns that entry whole."),
+             {{QStringLiteral("task_id"), taskId},
+              {QStringLiteral("open"), flag(QStringLiteral("Only tasks that are not done."))},
+              {QStringLiteral("mine"), flag(QStringLiteral("Only the tasks you own or review."))},
+              {QStringLiteral("history_start"),
+               number(QStringLiteral("With task_id: the first history entry to read, from 0."), 0)},
+              {QStringLiteral("history_limit"),
+               number(QStringLiteral("With task_id: how many entries, 1 to 50 (default 10)."), 1,
+                      50)},
+              {QStringLiteral("entry"),
+               number(QStringLiteral("With task_id: one history entry by index, uncut."), 0)}}),
         tool(QStringLiteral("team_task_update"),
              QStringLiteral("Developers, on their own task: move it (in_progress, in_review once "
                             "committed, blocked with a question), add a note, mark criteria or "

@@ -106,6 +106,8 @@ ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
+# T-36: team_tasks rows, history pages and whole entries for agents.
+ketplus_add_daemon_test(ketplus_team_agent_tasks_tests TeamAgentTasksTest.cpp)
 ketplus_add_daemon_test(ketplus_team_flow_tests TeamFlowTest.cpp)
 ketplus_add_daemon_test(ketplus_team_goal_tests TeamGoalTest.cpp)
 ketplus_add_daemon_test(ketplus_team_title_tests TeamTitleTest.cpp)

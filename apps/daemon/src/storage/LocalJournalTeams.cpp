@@ -32,6 +32,9 @@ bool LocalJournal::initializeTeams() {
                        "NULL, data TEXT NOT NULL DEFAULT '{}', actionable INTEGER NOT NULL DEFAULT "
                        "0, digested INTEGER NOT NULL DEFAULT 0)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS team_history_texts (team_id INTEGER NOT "
+                       "NULL, task_id TEXT NOT NULL, entry INTEGER NOT NULL, text TEXT NOT NULL, "
+                       "PRIMARY KEY (team_id, task_id, entry))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS team_settings (singleton INTEGER PRIMARY KEY "
                        "CHECK(singleton=1), document TEXT NOT NULL)")};
     for (const QString& statement : statements) {
@@ -174,9 +177,11 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
             *error = database_.lastError().text();
         return false;
     }
-    for (const QString& statement : {QStringLiteral("DELETE FROM team_updates WHERE team_id = ?"),
-                                     QStringLiteral("DELETE FROM team_members WHERE team_id = ?"),
-                                     QStringLiteral("DELETE FROM teams WHERE id = ?")}) {
+    for (const QString& statement :
+         {QStringLiteral("DELETE FROM team_updates WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM team_history_texts WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM team_members WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM teams WHERE id = ?")}) {
         QSqlQuery query(database_);
         query.prepare(statement);
         query.addBindValue(teamId);
@@ -193,6 +198,50 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
         *error = database_.lastError().text();
     database_.rollback();
     return false;
+}
+
+bool LocalJournal::saveTeamHistoryText(const qint64 teamId, const QString& taskId,
+                                       const qsizetype entry, const QString& text, QString* error) {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("INSERT OR REPLACE INTO team_history_texts (team_id, task_id, "
+                                 "entry, text) VALUES (?, ?, ?, ?)"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(static_cast<qint64>(entry));
+    query.addBindValue(text);
+    if (query.exec())
+        return true;
+    if (error)
+        *error = query.lastError().text();
+    return false;
+}
+
+std::optional<QString> LocalJournal::teamHistoryText(const qint64 teamId, const QString& taskId,
+                                                     const qsizetype entry) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT text FROM team_history_texts WHERE team_id = ? AND "
+                                 "task_id = ? AND entry = ?"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(static_cast<qint64>(entry));
+    if (!query.exec() || !query.next())
+        return std::nullopt;
+    return query.value(0).toString();
+}
+
+QSet<qsizetype> LocalJournal::teamHistoryTextEntries(const qint64 teamId,
+                                                     const QString& taskId) const {
+    QSet<qsizetype> entries;
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("SELECT entry FROM team_history_texts WHERE team_id = ? AND task_id = ?"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    if (!query.exec())
+        return entries;
+    while (query.next())
+        entries.insert(query.value(0).toLongLong());
+    return entries;
 }
 
 QList<QJsonObject> LocalJournal::teamDocuments(bool* read) const {
