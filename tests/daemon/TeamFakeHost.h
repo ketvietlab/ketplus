@@ -163,6 +163,7 @@ class FakeHost final : public TeamHostPort {
     QString conversationRunningIn(const QString& path) const override {
         return runningIn.value(path);
     }
+    QStringList conversationsIn(const QString& path) const override { return inFolder.value(path); }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
@@ -211,6 +212,7 @@ class FakeHost final : public TeamHostPort {
     QList<std::pair<QString, QString>> removals;
     QString removalError;
     QHash<QString, QString> runningIn;
+    QHash<QString, QStringList> inFolder;
     QList<std::function<void()>> held;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;

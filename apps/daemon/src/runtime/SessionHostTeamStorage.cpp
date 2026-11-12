@@ -22,19 +22,19 @@ QJsonObject refusedAnswer(const teams::TeamError& error) {
 
 void SessionHost::askStorage(const QString& volumePath, const QStringList& worktrees,
                              teams::StorageDone done) {
-    QThreadPool::globalInstance()->start(
-        [guard = QPointer<SessionHost>(this), volumePath, worktrees, done = std::move(done)]() mutable {
-            teams::StorageFacts facts;
-            QStorageInfo volume(volumePath);
-            if (volume.isValid() && volume.isReady())
-                facts.freeBytes = volume.bytesAvailable();
-            for (const QString& worktree : worktrees)
-                if (QFileInfo(worktree).isDir())
-                    facts.sizes.insert(worktree, team_git::sizeOnDisk(worktree));
-            QMetaObject::invokeMethod(
-                guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
-                Qt::QueuedConnection);
-        });
+    QThreadPool::globalInstance()->start([guard = QPointer<SessionHost>(this), volumePath,
+                                          worktrees, done = std::move(done)]() mutable {
+        teams::StorageFacts facts;
+        QStorageInfo volume(volumePath);
+        if (volume.isValid() && volume.isReady())
+            facts.freeBytes = volume.bytesAvailable();
+        for (const QString& worktree : worktrees)
+            if (QFileInfo(worktree).isDir())
+                facts.sizes.insert(worktree, team_git::sizeOnDisk(worktree));
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+            Qt::QueuedConnection);
+    });
 }
 
 // In the order of the team's other git questions, so no command reads a half-removed worktree.
@@ -61,6 +61,17 @@ QString SessionHost::conversationRunningIn(const QString& path) const {
     return {};
 }
 
+QStringList SessionHost::conversationsIn(const QString& path) const {
+    const QString folder = QDir::cleanPath(path);
+    QStringList found;
+    for (const Session& session : sessions_) {
+        const QString where = QDir::cleanPath(session.stored.worktreePath);
+        if (where == folder || where.startsWith(folder + QLatin1Char('/')))
+            found.append(session.stored.id);
+    }
+    return found;
+}
+
 void SessionHost::teamStorageCommand(const QJsonObject& request, CommandCallback done) {
     const QString type = request.value(QStringLiteral("message_type")).toString();
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -71,16 +82,19 @@ void SessionHost::teamStorageCommand(const QJsonObject& request, CommandCallback
         return;
     }
     if (type == QStringLiteral("team.storage.get")) {
-        teams_->storage(teamId, [done = std::move(done)](const std::optional<teams::TeamError>& error,
-                                                         const QJsonObject& storage) {
-            done(error ? refusedAnswer(*error)
-                       : QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("storage"), storage}});
-        });
+        teams_->storage(teamId,
+                        [done = std::move(done)](const std::optional<teams::TeamError>& error,
+                                                 const QJsonObject& storage) {
+                            done(error ? refusedAnswer(*error)
+                                       : QJsonObject{{QStringLiteral("ok"), true},
+                                                     {QStringLiteral("storage"), storage}});
+                        });
         return;
     }
     teams_->removeWorktree(
         teamId, payload.value(QStringLiteral("task_id")).toString(), QStringLiteral("user"),
-        [guard = QPointer<SessionHost>(this), done = std::move(done)](const teams::TeamResult& result) {
+        [guard = QPointer<SessionHost>(this),
+         done = std::move(done)](const teams::TeamResult& result) {
             if (!result.ok()) {
                 done(refusedAnswer(*result.error));
                 return;

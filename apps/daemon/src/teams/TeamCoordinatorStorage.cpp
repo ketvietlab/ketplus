@@ -46,17 +46,23 @@ QList<const Task*> TeamCoordinator::doneWorktrees(const Team& team) {
 void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
     const Team* team = this->team(teamId);
     if (!team) {
-        done(TeamError{QStringLiteral("team_not_found"), QStringLiteral("The team no longer exists.")},
+        done(TeamError{QStringLiteral("team_not_found"),
+                       QStringLiteral("The team no longer exists.")},
              {});
         return;
     }
-    QStringList paths;
+    // Only a worktree not measured yet is walked; the free space is read every time.
+    QStringList unmeasured;
     for (const Task* task : doneWorktrees(*team))
-        paths.append(task->worktree);
+        if (!worktreeSizes_.contains(task->worktree))
+            unmeasured.append(task->worktree);
     host_->askStorage(
-        team->repository, paths,
+        team->repository, unmeasured,
         [guard = QPointer<TeamCoordinator>(this), teamId,
-         done = std::move(done)](const StorageFacts& facts) {
+         done = std::move(done)](StorageFacts facts) {
+            if (guard)
+                for (auto size = facts.sizes.cbegin(); size != facts.sizes.cend(); ++size)
+                    guard->worktreeSizes_.insert(size.key(), size.value());
             const Team* now = guard ? guard->team(teamId) : nullptr;
             if (!now) {
                 done(TeamError{QStringLiteral("team_not_found"),
@@ -66,14 +72,14 @@ void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
             }
             QJsonArray worktrees;
             for (const Task* task : doneWorktrees(*now)) {
-                const auto size = facts.sizes.constFind(task->worktree);
+                const auto size = guard->worktreeSizes_.constFind(task->worktree);
                 worktrees.append(QJsonObject{
                     {QStringLiteral("task_id"), task->id},
                     {QStringLiteral("title"), task->title},
                     {QStringLiteral("branch"), task->branch},
                     {QStringLiteral("path"), task->worktree},
                     {QStringLiteral("size_bytes"),
-                     size == facts.sizes.cend() ? QJsonValue() : QJsonValue(*size)}});
+                     size == guard->worktreeSizes_.cend() ? QJsonValue() : QJsonValue(*size)}});
             }
             done(std::nullopt,
                  QJsonObject{{QStringLiteral("free_bytes"),
@@ -87,12 +93,11 @@ void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
 
 void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
                                      const QString& actor, RemovalAnswer done) {
-    const auto refuse = [&](const TeamError& error) {
-        done({.error = error, .teamId = teamId});
-    };
+    const auto refuse = [&](const TeamError& error) { done({.error = error, .teamId = teamId}); };
     const Team* team = this->team(teamId);
     if (!team)
-        return refuse({QStringLiteral("team_not_found"), QStringLiteral("The team no longer exists.")});
+        return refuse(
+            {QStringLiteral("team_not_found"), QStringLiteral("The team no longer exists.")});
     // Agents have no tool for it, and the daemon serves team.* only to the desktop; this
     // keeps any other caller out as well.
     if (actor != QStringLiteral("user"))
@@ -100,7 +105,8 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
                        QStringLiteral("Only you remove a worktree, from the team page.")});
     const Task* task = team->task(taskId);
     if (!task)
-        return refuse({QStringLiteral("task_not_found"), QStringLiteral("There is no task %1.").arg(taskId)});
+        return refuse(
+            {QStringLiteral("task_not_found"), QStringLiteral("There is no task %1.").arg(taskId)});
     if (task->state != state::done)
         return refuse(notRemoved(
             QStringLiteral("%1 is not done; only a done task's worktree is removed.").arg(taskId)));
@@ -125,6 +131,8 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
             if (!guard)
                 return;
             guard->worktreeRemovals_.remove(path);
+            if (error.isEmpty())
+                guard->worktreeSizes_.remove(path);
             if (!error.isEmpty()) {
                 done({.error = notRemoved(error), .teamId = teamId});
                 return;
@@ -138,7 +146,20 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
             }
             const Team before = *now;
             removed->worktree.clear();
-            const QString text = QStringLiteral("You removed the worktree %1.").arg(path);
+            // An idle conversation still in the folder, such as the developer of the team's last
+            // task, goes on in the main checkout instead of a folder that is gone.
+            const QStringList moved = guard->host_->conversationsIn(path);
+            for (const QString& sessionId : moved)
+                guard->host_->askPointConversationAt(sessionId, now->repository,
+                                                     [](const QString&) {});
+            const QString text =
+                moved.isEmpty()
+                    ? QStringLiteral("You removed the worktree %1.").arg(path)
+                    : QStringLiteral("You removed the worktree %1; %2 now in the main checkout.")
+                          .arg(path,
+                               moved.size() == 1
+                                   ? QStringLiteral("its conversation works")
+                                   : QStringLiteral("%1 conversations work").arg(moved.size()));
             const QJsonObject data{{QStringLiteral("path"), path}};
             guard->addHistory(*removed, QStringLiteral("user"), QStringLiteral("worktree_removed"),
                               text, data);

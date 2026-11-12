@@ -321,7 +321,9 @@ is paused, stopped or removed on its own at any level.
 - **The offer.** Each done task whose worktree is still a folder on disk, and is not the
   repository's main checkout, is listed under "Worktrees of done tasks" with its path and
   its size on disk (blocks used, links not followed). The page reads it when it opens,
-  when the team's done tasks or their worktrees change, and every minute.
+  when the team's done tasks or their worktrees change, and every minute. A worktree is
+  walked only the first time it is listed; the daemon keeps its size, so the reading every
+  minute asks the volume alone.
 - **Removal.** Only after the user confirms it in a dialog. The daemon refuses, in words
   and changing nothing, a task that is not done, a worktree that is not on disk, the main
   checkout (by its canonical path, or a folder with a `.git` directory), the worktree of a
@@ -331,7 +333,9 @@ is paused, stopped or removed on its own at any level.
   <path>` without `--force`, then `git worktree prune`, both in the main checkout, in
   the order of the team's other git work. A failure is shown in git's words and the task
   keeps its worktree entry; a removal clears the entry and adds `worktree_removed` to
-  the task's history. The task's branch and its commits stay.
+  the task's history. The task's branch and its commits stay. An idle conversation still
+  in the folder (the developer of the team's last task stays in its worktree) is moved to
+  the main checkout, so its next turn does not start in a folder that is gone.
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator

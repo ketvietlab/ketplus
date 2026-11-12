@@ -263,6 +263,11 @@ class TeamHostPort {
         (void)path;
         return {};
     }
+    // The conversations whose folder is `path` or a folder under it, idle or not.
+    [[nodiscard]] virtual QStringList conversationsIn(const QString& path) const {
+        (void)path;
+        return {};
+    }
 };
 
 // A new task as the leader or the user writes it.
@@ -653,6 +658,9 @@ class TeamCoordinator : public QObject {
     QHash<QString, QList<std::function<void()>>> worktreeWaits_;
     // ADR 0114 §10: the worktrees the host is removing now, so one is removed once.
     QSet<QString> worktreeRemovals_;
+    // ADR 0114 §10: the size of each done worktree, measured once when it is first listed, so
+    // reading the free space again walks no folder.
+    QHash<QString, qint64> worktreeSizes_;
     QHash<QString, WorktreeAnswer> worktrees_;
     QHash<QString, HandoffFacts> handoffs_;
     int handoffsAsked_{0};

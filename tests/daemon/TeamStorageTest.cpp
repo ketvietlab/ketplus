@@ -157,6 +157,17 @@ class TeamStorageTest final : public QObject {
         QVERIFY(host_.removals.isEmpty());
         QVERIFY(QFileInfo(get(open).worktree).isDir());
 
+        // Read again, the free space is asked and no worktree is walked: its size is kept.
+        host_.storageFacts = {.freeBytes = 25'000'000'000LL, .sizes = {}};
+        const QJsonObject again = storage();
+        QCOMPARE(host_.storageAsks.size(), 2);
+        QVERIFY(host_.storageAsks.last().second.isEmpty());
+        QCOMPARE(again.value("free_bytes").toInteger(), 25'000'000'000LL);
+        QCOMPARE(again.value("level").toString(), QString());
+        QCOMPARE(
+            again.value("worktrees").toArray().first().toObject().value("size_bytes").toInteger(),
+            4'200'000'000LL);
+
         host_.storageFacts = {};
         QVERIFY(storage().value("free_bytes").isNull());
         QCOMPARE(storage().value("level").toString(), QString());
@@ -250,6 +261,23 @@ class TeamStorageTest final : public QObject {
         QCOMPARE(historyOf(done, "worktree_removed"), 1);
         QVERIFY(!QFileInfo(path).exists());
         QVERIFY(storage().value("worktrees").toArray().isEmpty());
+        // Nobody was in the folder, so no conversation moved.
+        QCOMPARE(host_.pointed.value("dev1"), path);
+    }
+
+    // Review finding: an idle conversation still in the folder, as the developer of the last
+    // task is, goes on in the main checkout once the folder is gone.
+    void anIdleConversationInTheWorktreeMovesToTheMainCheckout() {
+        const QString done = taskWithWorktree("Cart");
+        const QString path = get(done).worktree;
+        host_.inFolder.insert(path, {QStringLiteral("dev1")});
+        QVERIFY(remove(done).ok());
+        QCOMPARE(host_.pointed.value("dev1"), team().repository);
+        bool said = false;
+        for (const HistoryEntry& entry : get(done).history)
+            said = said || (entry.kind == "worktree_removed" &&
+                            entry.text.contains("its conversation works now in the main checkout"));
+        QVERIFY(said);
     }
 
     // Criteria 3 and 4 against git: the checks, then remove without force and prune.
