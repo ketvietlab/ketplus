@@ -194,11 +194,20 @@ class MachineEndToEndTest final : public QObject {
                     });
                 });
 
-        ssh.connectSaved();
-        QTRY_VERIFY_WITH_TIMEOUT(!listed.isEmpty() && ssh.backend(listed.first()) != nullptr &&
-                                     ssh.backend(listed.first())->connectionState() ==
-                                         State::Connected,
-                                 patience);
+        // The saved row's Connect, as the user presses it: its daemon has not named itself yet.
+        QCOMPARE(model.machines().size(), 1);
+        model.requestConnect(model.machines().first().id);
+        const auto sshState = [&] {
+            QString text = "listed=" + listed.join(',') + " picker=" + pickerLabels.join(',');
+            for (const auto& id : std::as_const(listed))
+                if (const auto* machine = model.machine(id))
+                    text += " error=" + LinuxMachineModel::errorMessage(*machine);
+            return text;
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(!listed.isEmpty() && ssh.backend(listed.first()) != nullptr &&
+                                      ssh.backend(listed.first())->connectionState() ==
+                                          State::Connected,
+                                  qPrintable(sshState()), patience);
         const QString machineId = listed.first();
         // The machine is keyed by the daemon's identity, as ADR 0119 says.
         QCOMPARE(ssh.backend(machineId)->machineId(), machineId);
@@ -260,6 +269,9 @@ class MachineEndToEndTest final : public QObject {
         auto* composer = view->findChild<QPlainTextEdit*>("machineComposer");
         auto* send = view->findChild<QPushButton*>("machineSend");
         QTRY_VERIFY(composer->isEnabled() && send->isEnabled());
+        QList<QJsonObject> liveEvents;
+        connect(backend, &remote::MachineBackend::eventReceived, this,
+                [&liveEvents](const QJsonObject& event) { liveEvents.append(event); });
         composer->setPlainText("approve");
         send->click();
         QTRY_VERIFY_WITH_TIMEOUT(
@@ -268,12 +280,48 @@ class MachineEndToEndTest final : public QObject {
 
         // The approval card answers through the machine's backend; the transcript updates.
         QPushButton* approve = nullptr;
-        QTRY_VERIFY_WITH_TIMEOUT((approve = view->findChild<QPushButton*>("machineApprove")) !=
-                                         nullptr &&
-                                     approve->isVisibleTo(view) && approve->isEnabled(),
-                                 patience);
+        const auto approvalState = [&] {
+            QString pending = "pending";
+            qint64 generation = -1;
+            QStringList seen;
+            for (const auto& event : std::as_const(liveEvents)) {
+                if (event.value("session_id").toString() != created)
+                    continue;
+                generation = event.value("session_generation").toInteger();
+                seen.append(event.value("payload").toObject().value("event_type").toString() + "@" +
+                            QString::number(generation));
+            }
+            backend->pendingApprovals(created, generation, {},
+                                      [&pending](const QJsonObject& result, const QString& error) {
+                                          pending =
+                                              error.isEmpty()
+                                                  ? QString::fromUtf8(QJsonDocument(result).toJson(
+                                                        QJsonDocument::Compact))
+                                                  : error;
+                                      });
+            QTest::qWaitFor([&pending] { return pending != "pending"; }, 5000);
+            QStringList buttons;
+            for (auto* button : view->findChildren<QPushButton*>())
+                buttons.append(button->objectName() + (button->isVisibleTo(view) ? "+" : "-") +
+                               (button->isEnabled() ? "e" : "d"));
+            auto* cards = view->findChild<QWidget*>("machineApprovals");
+            QStringList labels;
+            for (auto* label : view->findChildren<QLabel*>())
+                if (label->isVisibleTo(view) && !label->text().isEmpty())
+                    labels.append(label->objectName() + ":" + label->text());
+            buttons.append(QString("cards=") +
+                           (cards && cards->isVisibleTo(view) ? "shown" : "hidden"));
+            buttons.append("labels=" + labels.join(';'));
+            return buttons.join(',') + " transcript=" + transcriptRows(*view).join('|') +
+                   " events=" + seen.join(',') + " approvals=" + pending;
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT((approve = view->findChild<QPushButton*>("machineApprove")) !=
+                                          nullptr &&
+                                      approve->isVisibleTo(view) && approve->isEnabled(),
+                                  qPrintable(approvalState()), patience);
         approve->click();
-        QTRY_VERIFY_WITH_TIMEOUT(transcriptRows(*view).join('\n').contains("finished"), patience);
+        QTRY_VERIFY2_WITH_TIMEOUT(transcriptRows(*view).join('\n').contains("finished"),
+                                  qPrintable(approvalState()), patience);
         QTRY_VERIFY_WITH_TIMEOUT(
             view->findChild<QPushButton*>("machineApprove") == nullptr ||
                 !view->findChild<QPushButton*>("machineApprove")->isVisibleTo(view),
@@ -363,6 +411,8 @@ class MachineEndToEndTest final : public QObject {
 
         // Connections: the Relay lists the host, the account is entitled, the link runs.
         LinuxMachineModel model;
+        // As in the window, where SSH and the Relay are attached together.
+        model.setBackendsAttached(true);
         model.setRelayEntitled(true);
         LinuxRelayMachines relayMachines(&model, [&client, &dir](const QString& relayId) {
             return std::make_unique<LoopbackRelayLink>(&client, relayId,
@@ -422,12 +472,21 @@ class MachineEndToEndTest final : public QObject {
             auto* items = qobject_cast<QStandardItemModel*>(picker->model());
             return index >= 0 && items != nullptr && items->item(index)->isEnabled();
         };
-        QTRY_VERIFY_WITH_TIMEOUT(picker->count() > 0 && picker->itemText(0).contains("verifying"),
-                                 patience);
-        QVERIFY(!pickable("wt-a"));
+        const auto pickerItems = [picker] {
+            QStringList items;
+            for (int i = 0; i < picker->count(); ++i)
+                items.append(picker->itemText(i) + "=" + picker->itemData(i).toString());
+            return items.join(',');
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(pickerItems().contains("verifying"), qPrintable(pickerItems()),
+                                  patience);
+        // wt-a holds a conversation whose metadata the host sealed; wt-empty is only in the
+        // relay's index, so it waits for the host to sign it.
+        QVERIFY(!pickable("wt-empty"));
         // The host returns: the verification lands and the worktree becomes selectable.
         relay.hostPaused = false;
-        QTRY_VERIFY_WITH_TIMEOUT(pickable("wt-a"), patience);
+        QTRY_VERIFY2_WITH_TIMEOUT(pickable("wt-empty"), qPrintable(pickerItems()), patience);
+        QVERIFY(!pickerItems().contains("verifying"));
         QTRY_VERIFY_WITH_TIMEOUT(
             [&] {
                 for (const auto& repository : window.machineComposition()->sidebarRepositories())
