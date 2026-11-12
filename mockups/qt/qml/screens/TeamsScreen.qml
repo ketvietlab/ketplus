@@ -53,6 +53,9 @@ Item {
     readonly property string diskLevel: !storage ? ""
         : storage.free < Fixtures.diskStopGb ? "stop" : storage.free < Fixtures.diskWarnGb ? "low" : ""
     readonly property var doneWorktrees: storage ? storage.worktrees : []
+    // T-62: "Remove all…" is running, and what its last run did: { removed: [ids], kept: {id: reason} }.
+    property bool removingAll: false
+    property var removalOutcome: null
     function gb(value) { return value.toFixed(1) + " GB" }
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
@@ -261,9 +264,15 @@ Item {
             if (name === "remove-worktree-note")
                 removeWorktreeDialog.note = Fixtures.unmovedConversationNote
         }
+        // T-62: the confirmation of Remove all…, and the page after a run that kept one
+        // worktree with git's reason.
+        else if (name === "remove-all" && doneWorktrees.length > 0)
+            removeAllDialog.open()
+        else if (name === "remove-all-kept" && doneWorktrees.length > 0)
+            removeAllWorktrees({ [doneWorktrees[0].id]: Fixtures.dirtyWorktreeRefusal })
     }
     function openEveryOverlay() {
-        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog, removeWorktreeDialog]) {
+        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog, removeWorktreeDialog, removeAllDialog]) {
             if (dialog === taskDialog || dialog === handoverDialog)
                 openTask = handover = Fixtures.teams[0].tasks[2]
             dialog.open()
@@ -314,6 +323,30 @@ Item {
         change({ storage: Object.assign({}, storage, { worktrees: doneWorktrees.filter(w => w.id !== id) }) })
         changeTask(id, { worktree: "" }, "You removed the worktree " + entry.path)
         return true
+    }
+
+    // T-62: every listed worktree through the same removal, one after another. `refused` maps
+    // a task id to the daemon's reason for keeping it, as a refusal would say it.
+    function removeAllWorktrees(refused) {
+        const outcome = { removed: [], kept: {} }
+        for (const entry of doneWorktrees.slice()) {
+            if (refused && refused[entry.id])
+                outcome.kept[entry.id] = refused[entry.id]
+            else if (removeWorktree(entry.id))
+                outcome.removed.push(entry.id)
+        }
+        removalOutcome = outcome
+        return outcome
+    }
+    function removalSummary(outcome) {
+        if (!outcome)
+            return ""
+        const kept = Object.keys(outcome.kept).length
+        const done = "Removed " + count(outcome.removed.length, "worktree", "worktrees") + "."
+        return kept === 0 ? done : done + " Kept " + kept + (kept === 1 ? " with its reason." : " with their reasons.")
+    }
+    function totalSize(entries) {
+        return entries.reduce((sum, e) => sum + parseFloat(e.size), 0).toFixed(1) + " GB"
     }
 
     // The sidebar's team folder opens its team.
@@ -597,6 +630,15 @@ Item {
         check(removeWorktree("T-2") && doneWorktrees.length === kept.length - 1
               && tasks.find(t => t.id === "T-2").worktree === "", "a removed worktree leaves the offer and the task")
         check(!removeWorktree("T-2"), "a worktree is removed once")
+        change(before)
+        const all = doneWorktrees.length
+        const outcome = removeAllWorktrees({})
+        check(outcome.removed.length === all && doneWorktrees.length === 0, "Remove all removes every listed worktree")
+        change(before)
+        const mixed = removeAllWorktrees({ "T-2": Fixtures.dirtyWorktreeRefusal })
+        check(mixed.kept["T-2"] === Fixtures.dirtyWorktreeRefusal && doneWorktrees.some(w => w.id === "T-2"),
+              "a refused worktree stays listed with its reason")
+        removalOutcome = null
         change(before)
         return failures
     }
@@ -1079,6 +1121,23 @@ Item {
                 visible: screen.doneWorktrees.length > 0
                 title: "Worktrees of done tasks"
                 count: screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+                // T-62: one confirmation for every listed worktree.
+                KetButton {
+                    objectName: "teamDoneWorktreesRemoveAll"
+                    text: "Remove all…"
+                    iconName: "trash"
+                    variant: KetTheme.ButtonVariant.Ghost
+                    enabled: !screen.removingAll
+                    onClicked: removeAllDialog.open()
+                }
+            }
+            KetBanner {
+                objectName: "teamDoneWorktreesSummary"
+                width: parent.width
+                visible: screen.removalOutcome !== null
+                tone: screen.removalOutcome && Object.keys(screen.removalOutcome.kept).length > 0
+                      ? KetTheme.BannerTone.Warning : KetTheme.BannerTone.Info
+                title: screen.removalSummary(screen.removalOutcome)
             }
             Panel {
                 objectName: "teamDoneWorktrees"
@@ -1119,12 +1178,22 @@ Item {
                                         elide: Text.ElideMiddle
                                         color: KetTheme.t.textMuted
                                     }
+                                    // T-62: why the last Remove all… kept it.
+                                    Label {
+                                        width: parent.width
+                                        visible: text !== ""
+                                        text: screen.removalOutcome ? (screen.removalOutcome.kept[worktreeRow.modelData.id] || "") : ""
+                                        color: KetTheme.t.danger
+                                        font.pixelSize: screen.px(12)
+                                        elide: Text.ElideRight
+                                    }
                                 }
                                 Label { text: worktreeRow.modelData.size; color: KetTheme.t.textSecondary }
                                 KetButton {
                                     text: "Remove…"
                                     iconName: "trash"
                                     variant: KetTheme.ButtonVariant.Ghost
+                                    enabled: !screen.removingAll
                                     onClicked: screen.startRemoveWorktree(worktreeRow.modelData)
                                 }
                             }
@@ -1526,6 +1595,48 @@ Item {
                     removeWorktreeDialog.accept()
                     if (screen.removeWorktree(id))
                         screen.window.notify("Removed the worktree of " + id)
+                }
+            }
+        ]
+    }
+
+    // T-62: Remove all… names how many worktrees and their size; nothing goes before Remove.
+    KetDialog {
+        id: removeAllDialog
+        objectName: "removeAllWorktreesDialog"
+        readonly property int total: screen.doneWorktrees.length
+        title: "Remove " + screen.count(total, "worktree", "worktrees") + "?"
+        Column {
+            width: removeAllDialog.availableWidth
+            spacing: screen.px(10)
+            Label {
+                width: parent.width
+                text: "The folders of " + screen.doneWorktrees.map(w => w.id).join(", ") + " are deleted from disk, freeing "
+                      + screen.totalSize(screen.doneWorktrees) + " in total. The tasks' branches and their commits stay."
+                color: KetTheme.t.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+            Label {
+                width: parent.width
+                text: "Each one goes through the same checks as Remove…, one after another: a worktree with uncommitted or untracked changes, with commits on no remote branch, or the folder of a conversation that is running or waits for you is kept with the reason, and the others are still removed."
+                color: KetTheme.t.textMuted
+                font.pixelSize: screen.px(12)
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeAllDialog.reject() },
+            KetButton {
+                text: removeAllDialog.total === 1 ? "Remove worktree" : "Remove " + removeAllDialog.total + " worktrees"
+                variant: KetTheme.ButtonVariant.Danger
+                onClicked: {
+                    removeAllDialog.accept()
+                    const outcome = screen.removeAllWorktrees({})
+                    screen.window.notify(screen.removalSummary(outcome))
                 }
             }
         ]
