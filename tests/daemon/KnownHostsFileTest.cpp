@@ -90,17 +90,16 @@ class KnownHostsFileTest : public QObject {
         write("build-node-02 ssh-ed25519 AAAAone\n"
               "other ssh-ed25519 AAAAother\n");
         int attempts = 0;
-        testing::setRewriteHook([this, &attempts] {
+        const auto sshAppends = [this, &attempts] {
             // The first attempt sees ssh accept a key for another host meanwhile.
             if (attempts++ == 0) {
                 QFile out(file_);
                 QVERIFY(out.open(QIODevice::Append));
                 out.write("new-host ssh-ed25519 AAAAnew\n");
             }
-        });
+        };
         QString error;
-        QCOMPARE(removeKnownHost(file_, QStringLiteral("build-node-02"), &error), 1);
-        testing::setRewriteHook({});
+        QCOMPARE(removeKnownHost(file_, QStringLiteral("build-node-02"), &error, sshAppends), 1);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QCOMPARE(attempts, 2);
         QCOMPARE(read(), QByteArray("other ssh-ed25519 AAAAother\n"
@@ -110,15 +109,15 @@ class KnownHostsFileTest : public QObject {
     void aFileThatKeepsChangingIsLeftAsItIs() {
         write("build-node-02 ssh-ed25519 AAAAone\n");
         int attempts = 0;
-        testing::setRewriteHook([this, &attempts] {
+        const auto sshKeepsAppending = [this, &attempts] {
             ++attempts;
             QFile out(file_);
             QVERIFY(out.open(QIODevice::Append));
             out.write("busy ssh-ed25519 AAAAbusy\n");
-        });
+        };
         QString error;
-        QCOMPARE(removeKnownHost(file_, QStringLiteral("build-node-02"), &error), -1);
-        testing::setRewriteHook({});
+        QCOMPARE(removeKnownHost(file_, QStringLiteral("build-node-02"), &error, sshKeepsAppending),
+                 -1);
         QCOMPARE(attempts, 3);
         QVERIFY(!error.isEmpty());
         // Nothing was rewritten: the old key and every appended one are still there.

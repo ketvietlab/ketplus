@@ -21,11 +21,10 @@ namespace ketplus::remote::ssh {
 // does not exist or names no such host), or -1 with `error` set when it cannot be rewritten.
 int removeKnownHost(const QString& file, const QString& knownHostsName, QString* error = nullptr);
 
-namespace testing {
-// Runs once per rewrite attempt, after the new contents are staged and before the file is
-// checked for a concurrent change: a test appends to the file here as ssh would. Empty in
-// production.
-void setRewriteHook(std::function<void()> hook);
-} // namespace testing
+// removeKnownHost() with `beforeCommit` run once per rewrite attempt, after the new contents are
+// staged and before the file is checked for a concurrent change (a test appends to the file
+// there as ssh would). removeKnownHost() passes none.
+int removeKnownHost(const QString& file, const QString& knownHostsName, QString* error,
+                    const std::function<void()>& beforeCommit);
 
 } // namespace ketplus::remote::ssh

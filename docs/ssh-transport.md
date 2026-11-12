@@ -284,7 +284,8 @@ own), the row falls back to the Relay: its state, Connect / Disconnect and
 `machineBackend(id)` are the Relay's, and it stays the Relay's after a
 Disconnect, so Connect reaches the Relay again. Connect and Disconnect act
 only on the route the row shows. The row says why SSH failed ("Using the Relay
-because SSH failed. …") and offers Use SSH, which tries SSH again; once SSH
+because SSH failed. …", or "SSH failed, so Connect uses the Relay. …" while the
+Relay is disconnected) and offers Use SSH, which tries SSH again; once SSH
 answers, the row is SSH's. A user Disconnect of a connected SSH machine is not
 a failure, so the Relay does not take that row. A key mismatch or a changed
 identity is never hidden behind the Relay. After an identity change, Details shows the trusted and the presented
@@ -301,7 +302,8 @@ hidden, attaches both routes and activates its machines, so the picker lists
 them before Connections is opened. The Relay machines attach only while the
 account is entitled. A machine the user disconnected stays closed until they
 connect it. The hidden page polls nothing: its daemon status refresh runs
-only while Connections is shown.
+only while Connections is shown. Each window owns its own SSH and Relay backends, as
+before; one shared set per app is a follow-up.
 
 `LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
 `RelayMachineBackend` for each host that the Relay's worktree index lists,

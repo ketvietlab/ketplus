@@ -198,8 +198,12 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     }
     // The Relay stands in for SSH: say why SSH is not used, and offer it again.
     if (!machine.sshFailure.isEmpty()) {
-        auto* failure =
-            new QLabel(tr("Using the Relay because SSH failed. %1").arg(machine.sshFailure), row);
+        // The Relay stands in for SSH; it is "in use" only while it is up.
+        const bool relayUp = machine.state != LinuxMachine::State::Offline;
+        auto* failure = new QLabel((relayUp ? tr("Using the Relay because SSH failed. %1")
+                                            : tr("SSH failed, so Connect uses the Relay. %1"))
+                                       .arg(machine.sshFailure),
+                                   row);
         failure->setObjectName(QStringLiteral("linuxMachineSshFailure"));
         failure->setProperty("remoteTone", QStringLiteral("warning"));
         failure->setWordWrap(true);

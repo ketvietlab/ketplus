@@ -877,6 +877,13 @@ void LinuxMachinesSectionTest::aRelayFallbackRowSaysWhySshFailedAndOffersSsh() {
     QCOMPARE(useSsh.size(), 1);
     QCOMPARE(useSsh.first().first().toString(), QStringLiteral("SHA256:pinned"));
 
+    // Disconnected, the Relay is not in use; Connect would use it.
+    fallback.state = State::Offline;
+    model->setMachines({fallback});
+    QCOMPARE(text(row(section, "SHA256:pinned"), QStringLiteral("linuxMachineSshFailure")),
+             QStringLiteral("SSH failed, so Connect uses the Relay. Connection timed out."));
+    fallback.state = State::Connected;
+
     // A Relay row that is not standing in for SSH offers neither.
     fallback.sshFailure.clear();
     model->setMachines({fallback});
