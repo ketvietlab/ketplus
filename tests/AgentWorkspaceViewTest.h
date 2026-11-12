@@ -160,6 +160,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void turnEndListsTheTurnsChangedFiles();
     void turnEndShowsTheTurnsWorkReport();
     void forgottenItemsReadStaleAndDoNotNeedYou();
+    void duplicatesHideAndOldFinishedItemsFold();
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
