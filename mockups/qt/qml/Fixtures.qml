@@ -31,8 +31,10 @@ QtObject {
         caption: "Browser capture · " + name + ".png" }))
     // A member's role in its team (Fixtures.teams), drawn as a locked tag beside its
     // conversation. The team sets it; conversations carry no user tags (ADR 0117).
-    // A team has one leader, one reviewer and this many developers at most (and one at least).
+    // A team has one leader and this many developers at most (and one at least).
     readonly property int mostDevelopers: 5
+    // T-23: a team has one or two reviewers.
+    readonly property int mostReviewers: 2
     // ADR 0114, open point 2: Settings → Teams. A new team's automatic-turn budget starts from
     // this value; each team then keeps its own, which changing this one leaves alone.
     property int turnBudget: 40

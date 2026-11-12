@@ -52,8 +52,8 @@ Item {
     readonly property int developers: members.filter(m => m.role === "developer").length
     readonly property int reviewers: members.filter(m => m.role === "reviewer").length
     readonly property int doneTasks: tasks.filter(t => t.state === "done").length
-    // A team has one reviewer; past three developers its reviews queue.
-    readonly property bool reviewQueue: developers >= 4
+    // Past three developers one reviewer's reviews queue; a second reviewer shortens it (T-23).
+    readonly property bool reviewQueue: developers >= 4 && reviewers < Fixtures.mostReviewers
     // A team has one to Fixtures.mostDevelopers developers.
     readonly property bool full: developers >= Fixtures.mostDevelopers
     // New teams count on from here, so a deleted team's id is never given again.
@@ -65,6 +65,15 @@ Item {
     function reference(number) { return number ? "@agent/" + number : "Unassigned" }
     function member(number) { return members.find(m => m.number === number) || null }
     function count(n, one, many) { return n + " " + (n === 1 ? one : many) }
+    // T-23: what a reviewer reviews now and what waits for it.
+    function reviewingText(reviewer) {
+        return reviewer.reviewing ? "Reviewing " + reviewer.reviewing
+             : (reviewer.reviews || []).length > 0 ? "Reviews " + reviewer.reviews.join(", ") : "Reviews every lane"
+    }
+    function queueText(reviewer) {
+        const queue = reviewer.queue || []
+        return queue.length === 0 ? "Nothing queued" : "Queued: " + queue.join(", ")
+    }
 
     // Replaces the current team with a changed copy, so every binding follows.
     function change(patch) {
@@ -79,7 +88,8 @@ Item {
             openTask = tasks.find(t => t.id === id)
     }
 
-    // `teams/empty`: no team yet. `teams/large`: a fourth developer, so reviews queue.
+    // `teams/empty`: no team yet. `teams/large`: a fourth developer, so reviews queue;
+    // `teams/two-reviewers`: the same team with a second reviewer, and no queue notice.
     // `teams/ready`: the user merges, and T-1 passed review: "Merge T-1?" waits for the user.
     // `teams/paused`: the team used its automatic turns and waits for the user to go on.
     function showState(state) {
@@ -89,10 +99,18 @@ Item {
             teams = [Fixtures.liveTeam]
         teamIndex = 0
         filter = ""
-        if (state === "large")
+        if (state === "large" || state === "two-reviewers")
             change({ members: members.concat([{ number: "9079", title: "Check this worktree", role: "developer",
                 provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["apps/desktop/src/onboarding/"],
                 state: "idle", now: "No task yet" }]) })
+        // `teams/two-reviewers` (T-23): the large team with a second reviewer; each reviews one
+        // task of its own, so T-1 and T-6 are reviewed at the same time.
+        if (state === "two-reviewers")
+            change({ members: members.map(m => m.role !== "reviewer" ? m
+                    : Object.assign({}, m, { reviewing: "T-1", queue: [] }))
+                .concat([{ number: "4590", title: "Reviewer 2", role: "reviewer", provider: "Claude · Opus 5.5",
+                    lane: "", reviews: [], paths: [], state: "working", now: "Reviewing T-6",
+                    reviewing: "T-6", queue: [] }]) })
         if (state === "task")
             Qt.callLater(() => screen.showTask("T-3"))
         if (state === "live-task")
@@ -147,6 +165,10 @@ Item {
             startRemove(team.id, "8215")
         else if (name === "add-member" && team)
             addMemberDialog.open()
+        else if (name === "add-reviewer" && team) {
+            addMemberDialog.chooseRole("reviewer")
+            addMemberDialog.open()
+        }
         else if (name === "member-agent" && team) {
             addMemberDialog.open()
             memberAgentDialog.target = ""
@@ -278,7 +300,7 @@ Item {
     }
 
     // Every change to a team goes through these, so the dialogs, the sidebar and --smoke's
-    // checks (selfCheck) share the rules: one leader, one reviewer, one to
+    // checks (selfCheck) share the rules: one leader, one or two reviewers, one to
     // Fixtures.mostDevelopers developers, and a conversation on one team of its own repository.
     function developersOf(team) { return team.members.filter(m => m.role === "developer").length }
     function agentOf(planned) {
@@ -302,7 +324,10 @@ Item {
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
         for (let i = 1; i <= developers; ++i)
             members.push(newMember(repository, "developer", "Developer " + i, agentOf(plan.developer)))
-        members.push(newMember(repository, "reviewer", "Reviewer", agentOf(plan.reviewer)))
+        const reviewers = Math.max(1, Math.min(Fixtures.mostReviewers, plan.reviewer.count))
+        for (let i = 1; i <= reviewers; ++i)
+            members.push(newMember(repository, "reviewer", reviewers === 1 ? "Reviewer" : "Reviewer " + i,
+                                   agentOf(plan.reviewer)))
         let id = ""
         do {
             id = "team-" + (++teamsCreated)
@@ -325,6 +350,16 @@ Item {
         const member = newMember(team.repository, "developer", name, agent, lane, paths)
         change({ members: members.concat([member]) })
         window.notify("Added " + reference(member.number) + " as a developer")
+        return member.number
+    }
+    // A second reviewer for the current team, as a new conversation (T-23): each task in
+    // review then goes to one of the two.
+    function addReviewer(agent, name) {
+        if (!team || reviewers >= Fixtures.mostReviewers)
+            return ""
+        const member = newMember(team.repository, "reviewer", name || "Reviewer " + (reviewers + 1), agent)
+        change({ members: members.concat([member]) })
+        window.notify("Added " + reference(member.number) + " as a second reviewer")
         return member.number
     }
     // A conversation that exists joins from the sidebar (dropped on the folder, or from its
@@ -354,7 +389,8 @@ Item {
     }
     // Why a member of the current team cannot be removed; "" when it can.
     function keeps(who) {
-        return !who ? "" : who.role !== "developer" ? "A team keeps its leader and its reviewer"
+        return !who ? "" : who.role === "leader" ? "A team keeps its leader"
+             : who.role === "reviewer" ? (reviewers <= 1 ? "A team keeps at least one reviewer: add another before removing this one" : "")
              : developers <= 1 ? "A team keeps at least one developer" : ""
     }
     // The conversation stays, among its repository's own; its open tasks become unassigned.
@@ -418,6 +454,17 @@ Item {
         for (const m of members.slice())
             removeMember(m.number)
         check(developers === 1 && !!leader && reviewers === 1, "a team keeps its leader, its reviewer and one developer")
+        // T-23: one or two reviewers; the last one stays.
+        const second = addReviewer(agentOf(plan.reviewer))
+        check(second !== "" && reviewers === 2, "a team takes a second reviewer")
+        check(addReviewer(agentOf(plan.reviewer)) === "" && reviewers === 2, "a team has at most two reviewers")
+        check(removeMember(second) && loose(second) && reviewers === 1, "one of two reviewers can be removed")
+        check(!removeMember(members.find(m => m.role === "reviewer").number), "a team keeps its last reviewer")
+        const pair = createTeam(repository, "Check F", "", "develop", true,
+                                Object.assign({}, plan, { reviewer: Object.assign({}, plan.reviewer, { count: 2 }) }))
+        check(reviewers === 2 && members.length === 5, "New team starts two reviewers when asked")
+        showTeam(pair)
+        deleteTeam()
         // A conversation joins only a team of its own repository.
         const far = createTeam(other, "Check D", "", "main", true, plan)
         check(!join(far, "4822"), "a conversation of another repository cannot join")
@@ -629,7 +676,9 @@ Item {
                 visible: screen.reviewQueue
                 tone: KetTheme.BannerTone.Info
                 title: screen.count(screen.developers, "developer", "developers") + " share one reviewer"
-                message: "Reviews will queue. A reviewer keeps up with two or three developers; split the work into a second team to go faster."
+                message: "Reviews will queue. A reviewer keeps up with two or three developers; a second reviewer shortens the queue."
+                actionText: "Add a second reviewer"
+                onActionTriggered: screen.openDialog("add-reviewer")
             }
 
             Item { width: 1; height: screen.px(4) }
@@ -882,7 +931,8 @@ Item {
             SectionTitle {
                 title: "Members"
                 count: "1 leader · " + screen.count(screen.developers, "developer", "developers")
-                       + (screen.full ? " (the most a team has)" : "") + " · 1 reviewer"
+                       + (screen.full ? " (the most a team has)" : "") + " · "
+                       + screen.count(screen.reviewers, "reviewer", "reviewers")
             }
             Panel {
                 height: memberList.implicitHeight
@@ -949,7 +999,8 @@ Item {
                                         tone: screen.roles[memberRow.modelData.role].tone
                                     }
                                 }
-                                // A developer's lane and its paths; the lanes a reviewer checks.
+                                // A developer's lane and its paths; what a reviewer reviews now
+                                // and its queue (T-23: each of two reviewers has its own).
                                 Column {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: screen.px(340)
@@ -957,10 +1008,17 @@ Item {
                                     Label {
                                         width: parent.width
                                         text: memberRow.modelData.role === "developer" ? memberRow.modelData.lane || "No lane yet"
-                                            : memberRow.modelData.role === "reviewer"
-                                              ? (memberRow.modelData.reviews.length > 0 ? "Reviews " + memberRow.modelData.reviews.join(", ") : "Reviews every lane")
+                                            : memberRow.modelData.role === "reviewer" ? screen.reviewingText(memberRow.modelData)
                                             : "Assigns tasks, orders the merges"
                                         color: memberRow.modelData.role === "developer" ? KetTheme.t.textMain : KetTheme.t.textSecondary
+                                    }
+                                    Mono {
+                                        objectName: "teamReviewerQueue"
+                                        visible: memberRow.modelData.role === "reviewer"
+                                        width: parent.width
+                                        text: screen.queueText(memberRow.modelData)
+                                        color: KetTheme.t.textMuted
+                                        elide: Text.ElideRight
                                     }
                                     Mono {
                                         visible: memberRow.modelData.paths.length > 0
@@ -1412,15 +1470,55 @@ Item {
             return entry ? entry.label : agentProvider
         }
         property bool tried: false
-        title: "Add a developer to " + (screen.team ? screen.team.name : "")
+        // T-23: "developer", or "reviewer" while the team has one reviewer.
+        property string role: "developer"
+        readonly property bool reviewer: role === "reviewer"
+        readonly property bool reviewerOpen: screen.reviewers < Fixtures.mostReviewers
+        function chooseRole(next) {
+            role = next
+            agentProvider = next === "reviewer" ? "claude" : "codex"
+            agentModel = Fixtures.providerModels[agentProvider][0].name
+            agentEffort = next === "reviewer" ? "High" : "Medium"
+        }
+        title: "Add a member to " + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
             laneName.text = ""
             lanePaths.text = ""
             memberName.text = ""
         }
+        onClosed: chooseRole("developer")
         DialogBody {
             KetFieldRow {
+                width: parent.width
+                label: "Role"
+                help: addMemberDialog.reviewerOpen
+                      ? "A second reviewer shortens the queue: each task in review goes to one of the two."
+                      : "The team has two reviewers, the most a team has."
+                Row {
+                    width: parent.width
+                    spacing: screen.px(6)
+                    KetChoice {
+                        objectName: "addMemberDeveloper"
+                        width: (parent.width - parent.spacing) / 2
+                        kind: KetTheme.ToggleKind.Radio
+                        checked: !addMemberDialog.reviewer
+                        text: "Developer"
+                        onToggled: if (checked) addMemberDialog.chooseRole("developer")
+                    }
+                    KetChoice {
+                        objectName: "addMemberReviewer"
+                        width: (parent.width - parent.spacing) / 2
+                        kind: KetTheme.ToggleKind.Radio
+                        enabled: addMemberDialog.reviewerOpen
+                        checked: addMemberDialog.reviewer
+                        text: "Second reviewer"
+                        onToggled: if (checked) addMemberDialog.chooseRole("reviewer")
+                    }
+                }
+            }
+            KetFieldRow {
+                visible: !addMemberDialog.reviewer
                 width: parent.width
                 label: "Lane"
                 help: "The part of the code this developer owns."
@@ -1428,6 +1526,7 @@ Item {
                 KetTextField { id: laneName; width: parent.width; placeholderText: "Onboarding"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
             KetFieldRow {
+                visible: !addMemberDialog.reviewer
                 width: parent.width
                 label: "Paths"
                 help: "Folders separated by commas. An edit outside them is flagged on the task."
@@ -1437,7 +1536,8 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Agent"
-                help: "The new conversation's provider, model and effort."
+                help: addMemberDialog.reviewer ? "A reviewer runs on Claude, the provider that keeps a review read-only."
+                                               : "The new conversation's provider, model and effort."
                 KetButton {
                     width: parent.width
                     text: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel + " · " + addMemberDialog.agentEffort + "  ▾"
@@ -1449,20 +1549,21 @@ Item {
                 width: parent.width
                 label: "Name"
                 help: "How the conversation shows in the team's folder. Its role is a tag beside it."
-                error: addMemberDialog.tried && memberName.text.trim() === "" ? "Name the conversation." : ""
+                error: addMemberDialog.tried && !addMemberDialog.reviewer && memberName.text.trim() === "" ? "Name the conversation." : ""
                 KetTextField {
                     id: memberName
                     width: parent.width
-                    placeholderText: laneName.text.trim() || "Onboarding"
-                    invalid: addMemberDialog.tried && text.trim() === ""
+                    placeholderText: addMemberDialog.reviewer ? "Reviewer " + (screen.reviewers + 1)
+                                                              : laneName.text.trim() || "Onboarding"
+                    invalid: addMemberDialog.tried && !addMemberDialog.reviewer && text.trim() === ""
                 }
             }
             KetBanner {
-                visible: screen.developers >= 3
+                visible: !addMemberDialog.reviewer && screen.developers >= 3 && screen.reviewers < Fixtures.mostReviewers
                 width: parent.width
                 tone: KetTheme.BannerTone.Info
                 title: screen.developers === 3 ? "A fourth developer" : "Reviews already queue"
-                message: "The team's one reviewer keeps up with two or three developers. Past that, reviews queue."
+                message: "The team's one reviewer keeps up with two or three developers. Past that, reviews queue; a second reviewer shortens the queue."
             }
         }
         actions: [
@@ -1472,6 +1573,13 @@ Item {
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     addMemberDialog.tried = true
+                    if (addMemberDialog.reviewer) {
+                        addMemberDialog.accept()
+                        screen.addReviewer({ id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
+                                             model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort },
+                                           memberName.text.trim())
+                        return
+                    }
                     const name = memberName.text.trim()
                     const lane = laneName.text.trim()
                     if (name === "" || lane === "" || lanePaths.text.trim() === "")
@@ -1497,7 +1605,7 @@ Item {
         model: planned ? planned.model : addMemberDialog.agentModel
         effort: planned ? planned.effort : addMemberDialog.agentEffort
         // A review must stay read-only, and Claude is the provider that enforces it (ADR 0067).
-        onlyProvider: target === "reviewer" ? "claude" : ""
+        onlyProvider: target === "reviewer" || (target === "" && addMemberDialog.reviewer) ? "claude" : ""
         onlyReason: "A team's reviewer runs on Claude, the provider that keeps a review read-only."
         onChosen: (provider, model, effort) => {
             if (target !== "") {
@@ -1526,12 +1634,14 @@ Item {
         readonly property var roles: [
             { role: "leader", label: "Leader" },
             { role: "developer", label: "Developers" },
-            { role: "reviewer", label: "Reviewer" }]
-        // One leader and one reviewer, always; only the number of developers is a choice.
+            { role: "reviewer", label: "Reviewers" }]
+        // One leader, always; the number of developers and of reviewers (T-23) is a choice.
         readonly property int mostDevelopers: 5
         readonly property int total: plan.leader.count + plan.developer.count + plan.reviewer.count
         readonly property string advice:
-            plan.developer.count > 3 ? "One reviewer keeps up with two or three developers; with more, reviews queue."
+            plan.developer.count > 3 && plan.reviewer.count < Fixtures.mostReviewers
+                ? "One reviewer keeps up with two or three developers; with more, reviews queue. A second reviewer shortens the queue."
+            : plan.reviewer.count > 1 ? "Each task in review goes to one of the two reviewers, so two tasks are reviewed at the same time."
             : plan.developer.provider === plan.reviewer.provider ? "Developers on another provider than the reviewer get a more independent review."
             : ""
         function withRole(role, patch) {
@@ -1619,7 +1729,7 @@ Item {
                 Label { text: "Members"; font.weight: Font.Medium }
                 Label {
                     width: parent.width
-                    text: "A team has one leader and one reviewer. Create starts every member as a new conversation; the leader gives each developer its lane."
+                    text: "A team has one leader and one or two reviewers. Create starts every member as a new conversation; the leader gives each developer its lane."
                     color: KetTheme.t.textSecondary
                     font.pixelSize: screen.px(12)
                     wrapMode: Text.Wrap
@@ -1651,8 +1761,17 @@ Item {
                                 currentIndex: planRow.planned.count - 1
                                 onActivated: index => newTeamDialog.plan = newTeamDialog.withRole("developer", { count: index + 1 })
                             }
+                            KetSelect {
+                                objectName: "newTeamReviewers"
+                                visible: planRow.modelData.role === "reviewer"
+                                anchors.fill: parent
+                                Accessible.name: "Number of reviewers"
+                                model: Array.from({ length: Fixtures.mostReviewers }, (v, i) => String(i + 1))
+                                currentIndex: planRow.planned.count - 1
+                                onActivated: index => newTeamDialog.plan = newTeamDialog.withRole("reviewer", { count: index + 1 })
+                            }
                             Label {
-                                visible: planRow.modelData.role !== "developer"
+                                visible: planRow.modelData.role === "leader"
                                 x: screen.px(11)
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "1"

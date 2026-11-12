@@ -20,7 +20,7 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "brand", "teams", "teams/task", "teams/large", "teams/empty", "teams/ready", "teams/paused",
+        "changes", "brand", "teams", "teams/task", "teams/large", "teams/two-reviewers", "teams/empty", "teams/ready", "teams/paused",
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
