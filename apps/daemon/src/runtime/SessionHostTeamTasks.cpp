@@ -4,6 +4,7 @@
 
 #include "protocol/DaemonProtocol.h"
 #include "runtime/TeamGit.h"
+#include "runtime/TeamPullRequests.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -122,6 +123,20 @@ void SessionHost::askTasks(const teams::Team& team, const QList<teams::Task>& ta
     teamGit_.start([guard = QPointer<SessionHost>(this), team, tasks, question,
                     done = std::move(done)]() mutable {
         QHash<QString, teams::TaskFacts> facts = team_git::facts(team, tasks, question);
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+            Qt::QueuedConnection);
+    });
+}
+
+// ADR 0118: the remote is asked on its own worker, bounded per request and per batch, so a
+// slow network holds no question to git and no client.
+void SessionHost::askPullRequests(const teams::Team& team, const QStringList& urls,
+                                  teams::PullRequestsDone done) {
+    teamRemote_.start([guard = QPointer<SessionHost>(this), directory = team.repository, urls,
+                       stopping = teamRemoteStopping_, done = std::move(done)]() mutable {
+        QHash<QString, teams::PullRequestFact> facts =
+            team_pull_requests::ask(directory, urls, {}, {}, stopping.get());
         QMetaObject::invokeMethod(
             guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
             Qt::QueuedConnection);

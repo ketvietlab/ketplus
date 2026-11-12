@@ -111,6 +111,28 @@ class FakeHost final : public TeamHostPort {
                 done(facts);
         });
     }
+    // ADR 0118: the remote's pull requests. One not in `pullRequests` is open; held like git
+    // with `holdAnswers`. Counted apart from git, so a test of git's checks is unchanged.
+    void askPullRequests(const Team& team, const QStringList& urls,
+                         PullRequestsDone done) override {
+        (void)team;
+        pullRequestAsks.append(urls);
+        QHash<QString, PullRequestFact> facts;
+        for (const QString& url : urls) {
+            // As the probe does: one that does not answer is an error and ends the batch.
+            if (hangingPullRequests.contains(url)) {
+                facts.insert(url, {.state = {}, .mergeCommit = {}, .error = "timed out"});
+                break;
+            }
+            facts.insert(
+                url, pullRequests.value(
+                         url, {.state = QStringLiteral("open"), .mergeCommit = {}, .error = {}}));
+        }
+        if (holdAnswers)
+            held.append([done, facts] { done(facts); });
+        else
+            done(facts);
+    }
     void answer() {
         const QList<std::function<void()>> waiting = std::exchange(held, {});
         for (const auto& one : waiting)
@@ -137,8 +159,11 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, TeamConversation> conversations;
     QHash<QString, QString> pointed;
     QHash<QString, QString> heads;
+    QHash<QString, PullRequestFact> pullRequests;
+    QList<QStringList> pullRequestAsks;
     QSet<QString> dirty;
     QSet<QString> unreadable;
+    QSet<QString> hangingPullRequests;
     QHash<QString, QStringList> changed;
     QSet<QString> merged;
     bool holdAnswers = false;

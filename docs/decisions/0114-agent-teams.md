@@ -235,6 +235,11 @@ may be journaled after the turn has answered.
    Blocked to be reviewed again, and one merged with commits after its review is done
    with a `merged_unreviewed` update to the leader. *Rejected*: pull request state
    from GitHub — it needs credentials and a network, and is not the branch that matters.
+   *Amended by [ADR 0118](0118-team-tasks-done-by-pull-request.md)*: a task that records a
+   pull request is done when the remote says it is merged, from any open state; the
+   ancestor check counts only a branch with commits of its own and also accepts
+   `origin/<integration>` after a fetch; the leader can close a task with
+   `team_task_close`.
 4. **Storage shape.** *Chosen*: three journal tables. `teams` keeps one JSON document
    per team (settings, members, tasks with criteria and history, decisions, the id
    counters) with its repository, revision and times; the id is
@@ -288,7 +293,8 @@ paths are read with `-z`, so a path is spelled as it is.
 Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
 developers), `team_task_create`,
-`team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_lane_set`,
+`team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
+(ADR 0118), `team_lane_set`,
 `team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
 the role that may.
 

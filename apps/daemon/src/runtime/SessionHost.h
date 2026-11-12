@@ -22,6 +22,7 @@
 #include <QThreadPool>
 #include <QTimer>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -309,6 +310,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
     void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
                   teams::TaskQuestion question, teams::TaskFactsDone done) override;
+    void askPullRequests(const teams::Team& team, const QStringList& urls,
+                         teams::PullRequestsDone done) override;
     void askDiff(const teams::Team& team, const teams::Task& task,
                  teams::TaskDiffDone done) override;
     void askWorktree(const teams::Team& team, const teams::Task& task,
@@ -537,6 +540,11 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QThreadPool mediaReads_;
     // One thread for what a team's own checks ask git, in the order they were asked.
     QThreadPool teamGit_;
+    // ADR 0118: the remote's pull requests, apart from git, so a slow network holds no merge
+    // check, review diff or worktree. Set when the host stops, to end a batch early.
+    QThreadPool teamRemote_;
+    std::shared_ptr<std::atomic_bool> teamRemoteStopping_{
+        std::make_shared<std::atomic_bool>(false)};
 };
 
 } // namespace ketplus::daemon

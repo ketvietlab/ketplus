@@ -88,6 +88,9 @@ void TeamCoordinator::load() {
         if (const Team* team = this->team(id);
             team && team->reviewing.isEmpty() && !team->reviewQueue.isEmpty())
             pumpReviews(id);
+    // ADR 0118: work merged while the daemon was stopped is reconciled now.
+    for (const qint64 id : ids)
+        checkPullRequests(id);
 }
 
 QList<const Team*> TeamCoordinator::teams(const QString& repository) const {

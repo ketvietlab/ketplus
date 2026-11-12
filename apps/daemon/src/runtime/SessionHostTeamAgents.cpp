@@ -227,6 +227,11 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                                           strings(payload.value(QStringLiteral("criteria"))),
                                           sessionId),
                       taskId);
+    if (operation == QStringLiteral("team_task_close"))
+        return answer(
+            teams_->closeTask(teamId, taskId, payload.value(QStringLiteral("evidence")).toString(),
+                              payload.value(QStringLiteral("note")).toString(), sessionId),
+            taskId);
     if (operation == QStringLiteral("team_lane_set")) {
         const QString developer =
             memberByNumber(payload.value(QStringLiteral("developer")).toString());
