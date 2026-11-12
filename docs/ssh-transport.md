@@ -116,7 +116,7 @@ again; a key that changes after the probe fails closed in ssh itself.
 | State | Meaning | Next |
 | --- | --- | --- |
 | `Connecting` | Resolving, probing, locating or forwarding. | |
-| `Connected` | The forwarder carried daemon bytes or stayed up for `settleMilliseconds` (1.5 s); `device()` is the daemon connection. | |
+| `Connected` | The forwarder stayed up for `settleMilliseconds` (1.5 s) after the bridge connected, or carried daemon bytes sooner; `device()` is the daemon connection. | |
 | `Offline` | The host, the forward or the daemon connection failed or closed. | Reconnects. |
 | `DaemonSocketMissing` | The host is reachable but no daemon listens at the resolved socket, or it has no local token. | Reconnects. |
 | `DaemonTokenInsecure` | The daemon token is readable by other users. | Waits for `open()`. |
@@ -126,14 +126,20 @@ again; a key that changes after the probe fails closed in ssh itself.
 
 A reconnect repeats the whole route, including host-key verification. Its delay
 doubles from `initialBackoffMilliseconds` (1 s) up to
-`maximumBackoffMilliseconds` (30 s) and resets only after `Connected`, so a
-bridge that fails within the settle period backs off instead of flapping.
+`maximumBackoffMilliseconds` (30 s). It resets only when daemon bytes come back
+through the channel, not when the settle timer fires: the timer shows only that
+the forwarder is still running, and a slow link or a ProxyJump hop can fail
+later. A bridge that fails within the settle period never reports `Connected`;
+one that fails later reports it at most once per growing backoff interval.
 
 `hostKeyStatus()` follows the same steps: `Verified` once the key matched (on
-the CA path only after ssh accepted the certificate in the locate call),
+the CA path once ssh accepted the certificate in the locate call, even when
+the daemon socket or token is then missing),
 `Mismatch` whenever the tunnel stops in `HostKeyMismatch`, including a refusal
-by ssh in the locate or forward call. `close()` and the destructor kill any
-running ssh child and wait for it (up to 1 s) before it is deleted.
+by ssh in the locate or forward call. Teardown (`close()`, a failed attempt or
+the destructor) kills any running ssh child without blocking: the child is
+detached from the tunnel and deletes itself once it is reaped, so no `QProcess`
+is destroyed while it runs.
 
 ## Security properties
 
@@ -174,7 +180,9 @@ a second probe that cannot reach the host (`Offline`), `@revoked` and
 `@cert-authority` lines, a refused account, a stopped daemon that later starts,
 a permissive or missing token, a key that changes between the lookup and
 locate (`Mismatch`), a stale daemon socket that fails every forward (never
-`Connected`, backoff grows), destroying a connected tunnel without a
+`Connected`, backoff grows), a forward that fails after the settle timer
+reported `Connected` (the backoff still grows), a CA-signed host certificate
+accepted with no daemon running (`Verified`), destroying a connected tunnel without a
 `QProcess` warning, and reconnection after the daemon drops the
 connection (the token is empty in every state but `Connected`). Parser,
 error-classification and socket/token-resolution cases run without sshd. Where `/usr/sbin/sshd` is missing

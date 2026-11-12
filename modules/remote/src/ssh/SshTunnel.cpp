@@ -160,14 +160,18 @@ void SshTunnel::teardown() {
     credential_.fill('\0');
     credential_.clear();
     carried_ = false;
-    // A QProcess destroyed while running warns and leaves the child behind: kill and reap.
+    // A QProcess destroyed while running warns and leaves the child behind. A running child is
+    // killed and detached: it deletes itself once reaped, without blocking this thread, and it
+    // outlives the tunnel if the tunnel is destroyed first.
     const auto stop = [](QProcess* process) {
         process->disconnect();
-        if (process->state() != QProcess::NotRunning) {
-            process->kill();
-            process->waitForFinished(1000);
+        if (process->state() == QProcess::NotRunning) {
+            process->deleteLater();
+            return;
         }
-        process->deleteLater();
+        process->setParent(nullptr);
+        QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+        process->kill();
     };
     if (step_)
         stop(step_);

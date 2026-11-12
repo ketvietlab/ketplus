@@ -21,6 +21,9 @@ void SshTunnel::locate() {
                 fail(classify(err), "The host could not be reached.");
                 return;
             }
+            // ssh accepted the host (and its certificate, on the CA path) for this call, whatever
+            // the probe found on the host.
+            hostKeyStatus_ = HostKeyStatus::Verified;
             remoteSocket_ = probe.socketPath;
             if (!probe.present) {
                 fail(State::DaemonSocketMissing, "The KetPlus daemon is not running on the host.");
@@ -37,8 +40,6 @@ void SshTunnel::locate() {
             case DaemonProbe::Token::Present:
                 break;
             }
-            // ssh accepted the host (and its certificate, on the CA path) for this call.
-            hostKeyStatus_ = HostKeyStatus::Verified;
             credential_ = std::move(probe.credential);
             forward();
         });
@@ -78,7 +79,11 @@ void SshTunnel::forward() {
             return;
         peer_->write(process->readAllStandardOutput());
         carried_ = true;
-        settle(generation);
+        // Daemon bytes came back through the channel: the bridge works end to end.
+        if (state_ == State::Connected)
+            reconnects_ = 0;
+        else
+            settle(generation);
     });
     connect(server, &QLocalServer::newConnection, this, [this, server, process, generation] {
         auto* peer = server->nextPendingConnection();
@@ -138,8 +143,11 @@ void SshTunnel::settle(quint64 generation) {
     if (generation != generation_ || state_ != State::Connecting || !socket_ || !forwarder_ ||
         forwarder_->state() != QProcess::Running)
         return;
-    // Only a bridge that held up resets the backoff.
-    reconnects_ = 0;
+    // The timer only shows the forwarder is still up, not that ssh opened the channel (a slow
+    // link or a ProxyJump hop can fail later). Only daemon bytes reset the backoff, so a bridge
+    // that keeps failing backs off even when it reported Connected first.
+    if (carried_)
+        reconnects_ = 0;
     lastError_.clear();
     setState(State::Connected);
 }
