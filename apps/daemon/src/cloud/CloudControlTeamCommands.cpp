@@ -62,12 +62,16 @@ void CloudControlClient::executeTeamCommand(const QJsonObject& command, const QJ
     QJsonObject localPayload = payload;
     const QByteArray salt = ensurePathIdSalt();
     if (kind == QStringLiteral("team.create")) {
-        // The phone never names a local path: the repository is the catalog's.
+        // The phone never names a local path: the repository is the catalog's, at the catalog
+        // revision the phone drew it from (ADR 0116 §4). The catalog is served at revision 0,
+        // as the worktree commands require.
+        constexpr qint64 currentCatalogRevision = 0;
         const QString repositoryId = command.value(QStringLiteral("repositoryId")).toString();
         QString repository;
         if (!payload.contains(QStringLiteral("repository")) && !repositoryId.isEmpty() &&
             !salt.isEmpty() &&
-            command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1) >= 0) {
+            command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1) ==
+                currentCatalogRevision) {
             for (const QString& candidate : catalogWorktreePaths()) {
                 if (sourceContext(candidate, salt).value(QStringLiteral("repositoryId")) ==
                     repositoryId) {

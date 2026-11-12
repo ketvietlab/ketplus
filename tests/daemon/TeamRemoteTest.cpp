@@ -229,6 +229,10 @@ class TeamRemoteTest final : public QObject {
                  QStringLiteral("invalid_payload"));
         QCOMPARE(code("team.update", {{"team_id", team.id}, {"paused", true}}),
                  QStringLiteral("invalid_payload"));
+        // Revisions start at 1: a zero is a malformed change, not a stale one.
+        QCOMPARE(
+            code("team.update", {{"team_id", team.id}, {"paused", true}, {"expected_revision", 0}}),
+            QStringLiteral("invalid_payload"));
         QCOMPARE(code("team.delete", {{"team_id", team.id}, {"expected_revision", seen}}),
                  QStringLiteral("confirmation_required"));
         QCOMPARE(code("team.task.handover", {{"team_id", team.id},

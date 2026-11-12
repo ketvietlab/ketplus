@@ -116,6 +116,9 @@ class CloudPrivacyTestAccess {
                                 const QJsonObject& content) {
         return client.commandResultAssociatedData(command, attempt, status, code, content);
     }
+    static QJsonArray worktreeSnapshots(const CloudControlClient& client) {
+        return client.worktreeSnapshots();
+    }
     static bool teamSyncPending(const CloudControlClient& client) {
         return client.teamSyncTimer_.isActive();
     }

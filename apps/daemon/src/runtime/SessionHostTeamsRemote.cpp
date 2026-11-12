@@ -82,7 +82,7 @@ std::optional<QJsonObject> payloadRefusal(const QString& type, const QJsonObject
         return invalid(QStringLiteral("Name the team."));
     if (!SessionHost::isRemoteTeamRead(type) && type != QStringLiteral("team.create") &&
         (!payload.value(QStringLiteral("expected_revision")).isDouble() ||
-         payload.value(QStringLiteral("expected_revision")).toInteger() < 0))
+         payload.value(QStringLiteral("expected_revision")).toInteger() < 1))
         return invalid(QStringLiteral("A change names the team revision it was drawn from."));
     if (!pageLimit(payload, QStringLiteral("limit")) ||
         !pageLimit(payload, QStringLiteral("history_limit")))
@@ -187,8 +187,11 @@ void SessionHost::remoteTeamCommand(const QJsonObject& request, const teams::rem
             if (!guard)
                 return;
             const QJsonObject result = remoteTeamAnswer(type, request, ids);
-            if (isMutating(type))
-                journal_->storeCommandResult(messageId, result);
+            // A result that cannot be kept still answers; a delivery after a lost
+            // acknowledgement would then run the change again, so say so.
+            if (isMutating(type) && !journal_->storeCommandResult(messageId, result))
+                qWarning("Unable to keep the result of %s for message %s: %s", qUtf8Printable(type),
+                         qUtf8Printable(messageId), qUtf8Printable(journal_->errorString()));
             done(result);
         });
     };

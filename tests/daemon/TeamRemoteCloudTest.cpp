@@ -11,6 +11,7 @@
 #include "cloud/RemoteAudit.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
@@ -290,6 +291,43 @@ class TeamRemoteCloudTest final : public QObject {
                      .toBool());
     }
 
+    // §4: a new team names its repository by the catalog's id, at the catalog revision the
+    // phone drew it from; a moved revision is the repository no longer being where it was.
+    void aNewTeamNeedsTheCurrentCatalogRevision() {
+        Relay relay;
+        QVERIFY(relay.open());
+        QVERIFY(relay.createTeam());
+        QVERIFY(relay.fixture.journal->rememberWorktree(
+            QFileInfo(relay.fixture.directory.filePath("shop")).canonicalFilePath()));
+        QString repositoryId = QStringLiteral("not-in-the-catalog");
+        const QJsonObject payload{
+            {"name", "Second shop"},
+            {"integration_branch", "integration"},
+            {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                                 {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
+                                 {"reviewer", QJsonObject{{"provider", "claude"}}}}}};
+        const auto create = [&](const QString& id, qint64 catalogRevision) {
+            QJsonObject command = relay.command(id, "team.create", "teams.write");
+            command.insert("repositoryId", repositoryId);
+            command.insert("expectedCatalogRevision", catalogRevision);
+            return relay.run(command, payload);
+        };
+        QCOMPARE(create("create-unknown", 0).value("error_code").toString(),
+                 QStringLiteral("repository_not_found"));
+        // The catalog's ids are read once the path salt exists, as the phone reads them.
+        repositoryId.clear();
+        for (const QJsonValue& entry : Access::worktreeSnapshots(*relay.client))
+            if (repositoryId.isEmpty())
+                repositoryId = entry.toObject().value("repositoryId").toString();
+        QVERIFY(!repositoryId.isEmpty());
+        QCOMPARE(create("create-moved", 7).value("error_code").toString(),
+                 QStringLiteral("repository_not_found"));
+        QCOMPARE(create("create-unnamed", -1).value("error_code").toString(),
+                 QStringLiteral("repository_not_found"));
+        QVERIFY(create("create-current", 0).value("error_code").toString() !=
+                QStringLiteral("repository_not_found"));
+    }
+
     // §5: every change is audited with its device, key version, result and team; reads are not.
     void changesAreAuditedWithTheirTeam() {
         Relay relay;
@@ -301,7 +339,9 @@ class TeamRemoteCloudTest final : public QObject {
             relay.command("audit-write", "team.update", "teams.write"),
             {{"team_id", relay.team}, {"paused", true}, {"expected_revision", relay.revision()}});
         (void)relay.run(relay.command("audit-stale", "team.update", "teams.write"),
-                        {{"team_id", relay.team}, {"paused", false}, {"expected_revision", 0}});
+                        {{"team_id", relay.team},
+                         {"paused", false},
+                         {"expected_revision", relay.revision() - 1}});
         const auto audit = relay.fixture.journal->remoteCommands("team-phone", 10);
         QVERIFY(audit);
         QHash<QString, ketplus::daemon::RemoteCommandAudit> byId;
@@ -355,6 +395,44 @@ class TeamRemoteCloudTest final : public QObject {
                        {{"team", relay.fixture.host->teamMetadata().value(relay.developer)}}}});
         QCOMPARE(sealed.value("team").toObject().value("role"), QJsonValue("developer"));
         QCOMPARE(sealed.value("team").toObject().value("id"), QJsonValue(relay.team));
+
+        // What the relay reads: the member's team reaches it only inside sealed metadata,
+        // never as a plaintext id, role or revision in a heartbeat.
+        QTRY_VERIFY_WITH_TIMEOUT(!Access::teamSyncPending(*relay.client), 3000);
+        bool sealedForMember = false;
+        for (qsizetype index = 0; index < relay.transport.requests.size(); ++index) {
+            if (!relay.transport.requests.at(index).url().path().endsWith("/heartbeat"))
+                continue;
+            const QJsonObject body =
+                QJsonDocument::fromJson(relay.transport.bodies.at(index)).object();
+            QVERIFY2(!hasTeamField(body), relay.transport.bodies.at(index).constData());
+            for (const QJsonValue& session : body.value("sessions").toArray())
+                if (session.toObject().value("id") == QJsonValue(relay.developer) &&
+                    session.toObject().value("encryptedMetadata").isObject())
+                    sealedForMember = true;
+        }
+        QVERIFY(sealedForMember);
+    }
+
+  private:
+    // A plaintext team field anywhere in a JSON value.
+    static bool hasTeamField(const QJsonValue& value) {
+        if (value.isArray()) {
+            const QJsonArray array = value.toArray();
+            return std::any_of(array.cbegin(), array.cend(),
+                               [](const QJsonValue& item) { return hasTeamField(item); });
+        }
+        if (!value.isObject())
+            return false;
+        const QJsonObject object = value.toObject();
+        for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+            if (it.key() == "encryptedMetadata")
+                continue;
+            if (it.key() == "team" || it.key() == "role" || it.key() == "teamId" ||
+                it.key() == "team_id" || it.key() == "revision" || hasTeamField(it.value()))
+                return true;
+        }
+        return false;
     }
 };
 
