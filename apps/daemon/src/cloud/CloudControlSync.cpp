@@ -66,6 +66,12 @@ void CloudControlClient::heartbeat() {
         const QList<StoredSession> stored = journal_->sessions();
         const QHash<QString, QString> repositories = resolveWorktreeRepositories(*journal_);
         QHash<QString, QJsonObject> agentMetadata;
+        // Only the sealed metadata carries this lifecycle hint. Explicit false clears a
+        // previous true on the next heartbeat; no message body or recipient is exported.
+        const QSet<QString> awaiting = journal_->sessionsAwaitingAgentReply();
+        for (const StoredSession& session : stored)
+            agentMetadata[session.id].insert(QStringLiteral("awaitingAgentReply"),
+                                             awaiting.contains(session.id));
         const QHash<QString, QString> numbers = journal_->conversationNumbers();
         for (auto it = numbers.cbegin(); it != numbers.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("number"), it.value());
