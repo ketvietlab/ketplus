@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "ui/AboutDialog.h"
 
 #include "editor/DocumentFormatControls.h"
 
@@ -273,6 +274,12 @@ void MainWindow::createActions() {
                     [](EditorWidget& editor) { editor.collapseToMainSelection(); });
 
     editMenu->addSeparator();
+    // AboutRole moves this into the macOS application menu.
+    auto* aboutAction = editMenu->addAction(QStringLiteral("About ketPlus"));
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this,
+            [this] { showAboutDialog(this, BrandLockup::Edition::Lite); });
     auto* settingsAction = editMenu->addAction(QStringLiteral("Settings…"));
     settingsAction->setMenuRole(QAction::PreferencesRole);
     settingsAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));

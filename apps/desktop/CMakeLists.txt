@@ -251,21 +251,13 @@ qt_add_executable(ketplus WIN32 MACOSX_BUNDLE
 target_link_libraries(ketplus PRIVATE ketplus_desktop_shell ketplus_product_version)
 ketplus_enable_warnings(ketplus)
 
-qt_add_resources(ketplus "ketplus_brand"
+# On the shell library, so its tests draw the same lockup mark as the app.
+qt_add_resources(ketplus_desktop_shell "ketplus_brand"
     PREFIX "/brand"
     BASE "${PROJECT_SOURCE_DIR}/assets/brand"
     FILES
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
-)
-
-qt_add_resources(ketplus "ketplus_wordmarks"
-    PREFIX "/brand"
-    BASE "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1"
-    FILES
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-256.png"
 )
 
 set_target_properties(ketplus PROPERTIES
@@ -502,6 +494,13 @@ install(TARGETS ketplus
     RUNTIME DESTINATION bin
     COMPONENT Runtime
 )
+if(UNIX AND NOT APPLE)
+    # The desktop entry and the hicolor icons (assets/icons/generate-app-icons.sh).
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/ketplus-pro.desktop"
+        DESTINATION share/applications COMPONENT Runtime)
+    install(DIRECTORY "${PROJECT_SOURCE_DIR}/packaging/linux/hicolor/"
+        DESTINATION share/icons/hicolor COMPONENT Runtime)
+endif()
 
 if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)
     # After install(TARGETS ketplus): the bundle it copies embeds the runtime of its last build,

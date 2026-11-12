@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ketPlus Pro
+GenericName=AI Code Workspace
+Comment=Agent Workspace, editor and Git in one app
+Exec=KetPlus %F
+Icon=ketplus-pro
+Terminal=false
+Categories=Development;IDE;
+MimeType=text/plain;inode/directory;
+StartupNotify=true

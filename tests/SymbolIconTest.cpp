@@ -36,11 +36,20 @@ class SymbolIconTest final : public QObject {
         }
         QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/plus.svg")));
         QVERIFY(!QFile::exists(QStringLiteral(":/atlas/icons/plus.svg")));
-        // The agent resources are linked, so the removals above are real; the empty state's
-        // theme-aware brand marks replace the old PNG.
-        QVERIFY(QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark-light.svg")));
-        QVERIFY(QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark-dark.svg")));
-        QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark.png")));
+        // The agent resources are linked, so the removals above are real; the approved ketPlus
+        // mark (1024 px with 64/128 px derivatives) replaced the Két Symbol SVG marks and tile.
+        for (const char* name : {"ketplus-mark", "ketplus-mark-64", "ketplus-mark-128"}) {
+            const QImage mark(QStringLiteral(":/agent/icons/%1.png").arg(QLatin1String(name)));
+            QVERIFY2(!mark.isNull(), name);
+            QCOMPARE(mark.width(), mark.height());
+        }
+        QCOMPARE(QImage(QStringLiteral(":/agent/icons/ketplus-mark.png")).width(), 1024);
+        for (const char* old :
+             {"ketplus-mark-light.svg", "ketplus-mark-dark.svg", "ketplus-mark-tile.svg"})
+            QVERIFY2(!QFile::exists(QStringLiteral(":/agent/icons/%1").arg(QLatin1String(old))),
+                     old);
+        QVERIFY(!QFile::exists(QStringLiteral(":/agent/brand/ketplus-logo-light.png")));
+        QVERIFY(QFile::exists(QStringLiteral(":/agent/BrandLockup.qml")));
     }
 };
 QTEST_MAIN(SymbolIconTest)

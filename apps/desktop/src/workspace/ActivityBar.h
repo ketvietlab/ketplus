@@ -9,6 +9,9 @@
 #include <QWidget>
 
 class QButtonGroup;
+namespace ketplus {
+class BrandLockup;
+}
 class QComboBox;
 class QLabel;
 class QMenu;
@@ -90,7 +93,7 @@ class ActivityBar final : public QWidget {
 
     QButtonGroup* group_{nullptr};
     SidebarSearchButton* quickSearchButton_{nullptr};
-    QLabel* brandWordmark_{nullptr};
+    BrandLockup* brandLockup_{nullptr};
     ket::NavItem* explorerButton_{nullptr};
     ket::NavItem* sourceControlButton_{nullptr};
     ket::NavItem* agentButton_{nullptr};

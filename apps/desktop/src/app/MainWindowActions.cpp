@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "ui/AboutDialog.h"
 
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
@@ -327,6 +328,12 @@ void MainWindow::createActions() {
                     });
 
     editMenu->addSeparator();
+    // AboutRole moves this into the macOS application menu.
+    auto* aboutAction = editMenu->addAction(QStringLiteral("About ketPlus Pro"));
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this,
+            [this] { showAboutDialog(this, BrandLockup::Edition::Pro); });
     auto* settingsAction = editMenu->addAction(QStringLiteral("Settings…"));
     settingsAction->setMenuRole(QAction::PreferencesRole);
     settingsAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));

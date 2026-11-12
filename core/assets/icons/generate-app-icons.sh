@@ -1,7 +1,8 @@
 #!/bin/sh
-# Export the approved Két Symbol drawings without altering their artwork.
+# Export the KetPlus Terminal icon from its approved drawing without altering the artwork.
+# The ketPlus (Lite) and ketPlus Pro icons come from assets/icons/generate-app-icons.sh.
 # macOS tools: AppKit/Swift, sips, iconutil; Python 3 writes PNG-backed ICOs.
-# Usage: generate-app-icons.sh [all|lite|terminal]. No install/sign/deploy steps.
+# Usage: generate-app-icons.sh [all|terminal]. No install/sign/deploy steps.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 brand="$here/../brand"
@@ -56,9 +57,6 @@ output.write_bytes(header + b"".join(entries) + b"".join(data for _, data in ima
 PYICO
 }
 case "${1:-all}" in
-    all) export_icon ketplus ketplus-app-icon KetPlus
-         export_icon ketplus-terminal ketplus-terminal-icon KetPlusTerminal ;;
-    lite) export_icon ketplus ketplus-app-icon KetPlus ;;
-    terminal) export_icon ketplus-terminal ketplus-terminal-icon KetPlusTerminal ;;
-    *) echo "Usage: $0 [all|lite|terminal]" >&2; exit 2 ;;
+    all|terminal) export_icon ketplus-terminal ketplus-terminal-icon KetPlusTerminal ;;
+    *) echo "Usage: $0 [all|terminal]" >&2; exit 2 ;;
 esac

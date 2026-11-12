@@ -262,24 +262,17 @@ set_source_files_properties(
     src/agent/mermaid-pending.svg
     PROPERTIES QT_RESOURCE_ALIAS "mermaid-pending.svg"
 )
-foreach(theme light dark)
+# The approved ketPlus mark (assets/brand, from mockups/qt): BrandLockup.qml, the welcome and
+# the Settings appearance preview load it under :/agent/icons.
+foreach(variant "" "-64" "-128")
     set_source_files_properties(
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-${theme}.svg"
-        PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-${theme}.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark${variant}.png"
+        PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark${variant}.png"
     )
 endforeach()
 set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
-    PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark-tile.svg"
-)
-
-set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-    PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-light.png"
-)
-set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
-    PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-dark.png"
+    src/agent/qml/BrandLockup.qml
+    PROPERTIES QT_RESOURCE_ALIAS "BrandLockup.qml"
 )
 
 
@@ -289,6 +282,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentWorkspace.qml
         src/agent/qml/AgentSidebar.qml
         src/agent/qml/AgentProductNavigation.qml
+        src/agent/qml/BrandLockup.qml
         src/agent/qml/AgentWorkspaceHeader.qml
         src/agent/qml/AgentRunStatus.qml
         src/agent/qml/AgentScopeNotice.qml
@@ -361,12 +355,10 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
 
 
 
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
 
 
 
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-64.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-128.png"
 )

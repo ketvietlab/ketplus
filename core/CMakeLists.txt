@@ -48,6 +48,10 @@ add_library(ketplus_ui STATIC
     src/ui/TypeScale.h
     src/ui/KetFonts.cpp
     src/ui/KetFonts.h
+    src/ui/BrandLockup.cpp
+    src/ui/BrandLockup.h
+    src/ui/AboutDialog.cpp
+    src/ui/AboutDialog.h
 )
 target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets)
 target_include_directories(ketplus_ui PUBLIC
@@ -318,7 +322,9 @@ if(KETPLUS_CM_BUILD_APP)
     qt_add_resources(ketplus_cm "ketplus_brand"
         PREFIX "/brand"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
-        FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
+        FILES
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-mark-256.png"
     )
 
     if(APPLE)
@@ -349,6 +355,11 @@ if(KETPLUS_CM_BUILD_APP)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
         DESTINATION share/licenses/ketplus-cm
     )
+    if(UNIX AND NOT APPLE)
+        # The desktop entry and the hicolor icons (assets/icons/generate-app-icons.sh).
+        install(FILES assets/linux/ketplus.desktop DESTINATION share/applications)
+        install(DIRECTORY assets/linux/hicolor/ DESTINATION share/icons/hicolor)
+    endif()
     # THIRD_PARTY_NOTICES.md names these texts by their path in this tree.
     install(DIRECTORY third_party/licenses/
         DESTINATION share/licenses/ketplus-cm/third_party/licenses
@@ -498,6 +509,18 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_editor_file_refresh_tests)
     ketplus_cm_add_test(ketplus_editor_file_refresh_tests ketplus_editor_file_refresh_tests)
     set_tests_properties(ketplus_editor_file_refresh_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_brand_lockup_tests tests/BrandLockupTest.cpp)
+    target_link_libraries(ketplus_brand_lockup_tests PRIVATE Qt6::Test ketplus_ui)
+    ketplus_cm_add_ket_fonts(ketplus_brand_lockup_tests ketplus_brand_lockup_fonts)
+    qt_add_resources(ketplus_brand_lockup_tests "ketplus_brand_lockup_mark"
+        PREFIX "/brand"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-mark-256.png"
+    )
+    ketplus_enable_warnings(ketplus_brand_lockup_tests)
+    ketplus_cm_add_test(ketplus_brand_lockup_tests ketplus_brand_lockup_tests)
+    set_tests_properties(ketplus_brand_lockup_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_editor_tests tests/EditorWidgetTest.cpp)
     target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor)

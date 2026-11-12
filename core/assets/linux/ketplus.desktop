@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ketPlus
+GenericName=Code Editor
+Comment=Edit code, documents and Git repositories
+Exec=ketplus-cm %F
+Icon=ketplus
+Terminal=false
+Categories=Development;TextEditor;IDE;
+MimeType=text/plain;inode/directory;
+StartupNotify=true
