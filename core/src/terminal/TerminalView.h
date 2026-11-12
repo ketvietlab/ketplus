@@ -58,6 +58,9 @@ class TerminalView final : public QAbstractScrollArea {
   protected:
     bool event(QEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // Tab and Shift+Tab belong to the shell (completion, reverse menus), not to focus
+    // navigation; only the search bar moves focus with them.
+    bool focusNextPrevChild(bool next) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void changeEvent(QEvent* event) override;

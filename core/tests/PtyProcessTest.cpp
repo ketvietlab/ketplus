@@ -92,6 +92,7 @@ class PtyProcessTest final : public QObject {
     void keepsTerminalFontFamilyUnderTheme();
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
+    void tabStaysInTheTerminal();
     void embeddedTabsKeepIndependentSessions();
     void singleSessionHasNoTabChrome();
     void rendersInputMethodPreedit();
@@ -428,6 +429,50 @@ void PtyProcessTest::restoresFocusAfterAnActionMenuCloses() {
     auto* terminal = panel->findChild<TerminalView*>();
     QVERIFY(terminal != nullptr);
     QTRY_COMPARE_WITH_TIMEOUT(qApp->focusWidget(), terminal, 1000);
+}
+
+void PtyProcessTest::tabStaysInTheTerminal() {
+#if defined(Q_OS_UNIX)
+    QWidget window;
+    auto* layout = new QVBoxLayout(&window);
+    auto* panel = new TerminalPanel(&window);
+    auto* after = new QLineEdit(&window);
+    layout->addWidget(panel);
+    layout->addWidget(after);
+    window.resize(640, 320);
+    window.show();
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    auto* terminal = panel->findChild<TerminalView*>();
+    QVERIFY(terminal != nullptr);
+    panel->focusTerminal();
+    QTRY_COMPARE_WITH_TIMEOUT(qApp->focusWidget(), terminal, 1000);
+
+    // Before the shell runs as well as while it runs: Tab and Shift+Tab never leave.
+    QTest::keyClick(terminal, Qt::Key_Tab);
+    QCOMPARE(qApp->focusWidget(), terminal);
+    QTest::keyClick(terminal, Qt::Key_Backtab, Qt::ShiftModifier);
+    QCOMPARE(qApp->focusWidget(), terminal);
+
+    TerminalSession session;
+    auto* running = new TerminalView(session, &window);
+    layout->addWidget(running);
+    QSignalSpy outputSpy(&session, &TerminalSession::outputReceived);
+    running->start(QDir::tempPath());
+    QTRY_VERIFY_WITH_TIMEOUT(!outputSpy.isEmpty(), 10000);
+    running->setFocus(Qt::OtherFocusReason);
+    QTRY_COMPARE_WITH_TIMEOUT(qApp->focusWidget(), running, 1000);
+    QTest::keyClick(running, Qt::Key_Tab);
+    QCOMPARE(qApp->focusWidget(), running);
+    QTest::keyClick(running, Qt::Key_Backtab, Qt::ShiftModifier);
+    QCOMPARE(qApp->focusWidget(), running);
+    // Tab may have opened the shell's completion list; stop it rather than type exit.
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(!session.isRunning(), 10000);
+    delete running; // It refers to `session`, which goes before `window`.
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
 }
 
 void PtyProcessTest::rendersInputMethodPreedit() {

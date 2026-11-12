@@ -439,6 +439,15 @@ bool TerminalView::event(QEvent* event) {
     return QAbstractScrollArea::event(event);
 }
 
+bool TerminalView::focusNextPrevChild(const bool next) {
+    // QWidget::event offers Tab to focus navigation before keyPressEvent; declining sends it
+    // on to keyPressEvent, which writes it to the shell.
+    const QWidget* focused = QApplication::focusWidget();
+    if (searchBar_->isVisible() && focused != nullptr && searchBar_->isAncestorOf(focused))
+        return QAbstractScrollArea::focusNextPrevChild(next);
+    return false;
+}
+
 bool TerminalView::eventFilter(QObject* watched, QEvent* event) {
     if (watched == searchEdit_ && event->type() == QEvent::KeyPress) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
@@ -505,6 +514,11 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
 #endif
     if (!session_.isRunning()) {
         forgetTypedText();
+        // An ignored key goes on to the parent, whose QWidget::event moves focus on Tab.
+        if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
+            event->accept();
+            return;
+        }
         QAbstractScrollArea::keyPressEvent(event);
         return;
     }
