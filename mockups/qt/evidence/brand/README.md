@@ -12,7 +12,8 @@ screen/state entries and zero QML problems. Resolved font: `KET Sans / Bold /
 weight 700` (QFontInfo and QRawFont). Sidebar geometry checks passed for light
 and dark at zoom 1 and the supported maximum 3. A rendered dark Settings view
 at zoom 3 was also inspected: the brand remained fully inside its 720 px sidebar.
-Lilac `#AD97FA` against sidebar `#171B20` has WCAG contrast 7.07:1.
+The accent-text blue of "Plus" and the Pro badge has WCAG contrast 7.4:1
+(`#1238DB` on sidebar `#F7F5F5`) and 8.65:1 (`#9EB5FF` on `#171B20`).
 `QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock` found no registered tests;
 the mock uses its executable smoke checks. Offscreen platform messages about
 size hints and the pre-existing Sans Serif alias are not QML warnings.
