@@ -46,13 +46,14 @@ transcript windows carry `event_type` and the data as `payload`.
   `MachineConversationActions`: Rename…, Fork and Archive through the
   machine's backend, each disabled with `MachineBackend::unsupportedReason()`
   as its tooltip where the route does not carry it (ADR 0119, "Parity of
-  conversation operations"). A fork opens once the machine lists it,
-  if the reader still reads the conversation they forked; opening another
-  conversation, starting a new one, or the machine going away drops it, and a
-  failed or expired fork leaves nothing waiting. A command
-  the Relay queued shows "Fork sent. Waiting for the machine…" (or Rename,
-  Archive) in the status line until the host answers. A failure
-  shows in the composer's status line.
+  conversation operations"). A fork opens once the machine lists it, if the
+  reader is still where they asked from (the forked conversation, another
+  row's menu or the new-conversation composer); opening another conversation,
+  starting a new one, or the machine going away or being destroyed drops it,
+  and a failed or expired fork leaves nothing waiting. A command the Relay
+  queued shows "Fork sent. Waiting for the machine…" (or Rename, Archive) in
+  the status line of the conversation that sent it until the host answers. A
+  failure shows in the composer's status line.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,
   without running Git), and the local and SSH adapter groups checkouts under it

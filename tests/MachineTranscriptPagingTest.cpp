@@ -363,11 +363,12 @@ class MachineTranscriptPagingTest final : public QObject {
         actions.rename("relay-1", "Deploy notes");
         QCOMPARE(relay.calls("renameConversation").first().generation, 4);
         QCOMPARE(finished.size(), 0); // queued: nothing is final yet
-        QCOMPARE(actions.pendingStatus(), QStringLiteral("Rename sent. Waiting for the machine…"));
+        QCOMPARE(actions.pendingStatus("relay-1"),
+                 QStringLiteral("Rename sent. Waiting for the machine…"));
         relay.complete("cmd-1", {}, "The host refused the title.");
         QTRY_VERIFY(!finished.isEmpty());
         QCOMPARE(actions.lastError(), QStringLiteral("The host refused the title."));
-        QVERIFY(actions.pendingStatus().isEmpty());
+        QVERIFY(actions.pendingStatus("relay-1").isEmpty());
     }
 
     // A fork the Relay queued is never silent: the status line says it waits for the machine
@@ -397,7 +398,7 @@ class MachineTranscriptPagingTest final : public QObject {
 
         relay.complete("cmd-fork", {}, "The host could not fork this conversation.");
         QTRY_COMPARE(reason->text(), QStringLiteral("The host could not fork this conversation."));
-        QVERIFY(view.actions()->pendingStatus().isEmpty());
+        QVERIFY(view.actions()->pendingStatus("relay-1").isEmpty());
         QCOMPARE(view.openSessionId(), QStringLiteral("relay-1"));
     }
 };

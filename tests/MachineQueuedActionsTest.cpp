@@ -135,7 +135,7 @@ class MachineQueuedActionsTest final : public QObject {
         QTRY_VERIFY(listed(catalog, host.forkId));
         QCOMPARE(view.openSessionId(), QStringLiteral("c-2"));
         QVERIFY(view.pendingFork().isEmpty());
-        QVERIFY(view.actions()->pendingStatus().isEmpty());
+        QVERIFY(view.actions()->pendingStatus("c-1").isEmpty());
     }
 
     // A fork that fails or expires leaves nothing pending, and says why.
@@ -158,7 +158,7 @@ class MachineQueuedActionsTest final : public QObject {
             relay.complete("cmd-fork", {}, failure);
             QTRY_COMPARE(statusLine(view), failure);
             QVERIFY(view.pendingFork().isEmpty());
-            QVERIFY(view.actions()->pendingStatus().isEmpty());
+            QVERIFY(view.actions()->pendingStatus("c-1").isEmpty());
             host.listFork = true; // even if the id shows up later, nothing opens
             catalog.refresh();
             QTRY_VERIFY(listed(catalog, host.forkId));
@@ -166,21 +166,31 @@ class MachineQueuedActionsTest final : public QObject {
         }
     }
 
-    // A machine that goes away takes its pending fork and its queued commands with it.
-    void aMachineGoingAwayDropsWhatItsCommandsWaitFor() {
+    // A machine whose backend is destroyed takes its pending fork and its queued commands with
+    // it, even when the same machine is bound again later (a Relay sign-out and sign-in).
+    void aDestroyedMachineDropsWhatItsCommandsWaitFor() {
         ForkingHost confirmed;
-        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
-        ssh.features = {Feature::Fork};
-        ssh.answer = confirmed.answer();
+        auto ssh = std::make_unique<FakeMachineBackend>("fp-ssh", Route::Ssh);
+        ssh->features = {Feature::Fork};
+        ssh->answer = confirmed.answer();
         MachineCatalog catalog;
         MachineWorkspaceView view(&catalog);
-        catalog.setBackend(&ssh);
+        catalog.setBackend(ssh.get());
         QTRY_COMPARE(catalog.conversations().size(), 2);
         view.openConversation("c-1");
         view.actions()->fork("c-1");
-        QVERIFY(!view.pendingFork().isEmpty());
-        catalog.setBackend(nullptr);
+        QVERIFY(!view.pendingFork().isEmpty()); // confirmed, not listed yet
+        ssh.reset();
         QVERIFY(view.pendingFork().isEmpty());
+        QVERIFY(catalog.conversations().isEmpty());
+
+        confirmed.listFork = true;
+        FakeMachineBackend again("fp-ssh", Route::Ssh);
+        again.features = {Feature::Fork};
+        again.answer = confirmed.answer();
+        catalog.setBackend(&again);
+        QTRY_VERIFY(listed(catalog, confirmed.forkId));
+        QVERIFY(view.openSessionId() != confirmed.forkId);
 
         ForkingHost queued;
         queued.queued = true;
@@ -191,11 +201,75 @@ class MachineQueuedActionsTest final : public QObject {
         QTRY_COMPARE(catalog.conversations().size(), 2);
         view.openConversation("c-1");
         view.actions()->fork("c-1");
-        QCOMPARE(view.actions()->pendingStatus(),
+        QCOMPARE(view.actions()->pendingStatus("c-1"),
                  QStringLiteral("Fork sent. Waiting for the machine…"));
         relay.reset();
-        QVERIFY(view.actions()->pendingStatus().isEmpty());
-        QVERIFY(view.pendingFork().isEmpty());
+        FakeMachineBackend relayAgain("fp-relay", Route::Relay);
+        relayAgain.answer = queued.answer();
+        catalog.setBackend(&relayAgain);
+        QTRY_COMPARE(catalog.conversations().size(), 2);
+        QVERIFY(view.actions()->pendingStatus("c-1").isEmpty());
+    }
+
+    // The pending text belongs to the conversation that sent the command.
+    void aPendingStatusShowsOnlyOnItsConversation() {
+        ForkingHost host;
+        host.queued = true;
+        FakeMachineBackend relay("fp-relay", Route::Relay);
+        relay.features = {Feature::Fork};
+        relay.answer = host.answer();
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&relay);
+        QTRY_COMPARE(catalog.conversations().size(), 2);
+        view.openConversation("c-1");
+        view.actions()->fork("c-1");
+        view.openConversation("c-2");
+        QVERIFY(statusLine(view) != QStringLiteral("Fork sent. Waiting for the machine…"));
+        QVERIFY(view.actions()->pendingStatus("c-2").isEmpty());
+        view.openConversation("c-1");
+        QCOMPARE(statusLine(view), QStringLiteral("Fork sent. Waiting for the machine…"));
+    }
+
+    // A queued fork the host confirms while the reader stays opens once it is listed.
+    void aQueuedForkOpensWhenTheReaderStayed() {
+        ForkingHost host;
+        host.queued = true;
+        FakeMachineBackend relay("fp-relay", Route::Relay);
+        relay.features = {Feature::Fork};
+        relay.answer = host.answer();
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&relay);
+        QTRY_COMPARE(catalog.conversations().size(), 2);
+        view.openConversation("c-1");
+        view.actions()->fork("c-1");
+        host.listFork = true;
+        relay.complete("cmd-fork", {{"session_id", host.forkId}, {"session_generation", 1}});
+        QTRY_COMPARE(view.openSessionId(), host.forkId);
+        QVERIFY(view.actions()->pendingStatus("c-1").isEmpty());
+    }
+
+    // A fork from another row's menu, or from the new-conversation composer, opens as before:
+    // the reader did not move after asking.
+    void aForkFromTheSidebarOpensTheFork() {
+        for (const bool composer : {false, true}) {
+            ForkingHost host;
+            host.listFork = true;
+            FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+            ssh.features = {Feature::Fork};
+            ssh.answer = host.answer();
+            MachineCatalog catalog;
+            MachineWorkspaceView view(&catalog);
+            catalog.setBackend(&ssh);
+            QTRY_COMPARE(catalog.conversations().size(), 2);
+            if (composer)
+                view.startNewConversation();
+            else
+                view.openConversation("c-2");
+            view.actions()->fork("c-1"); // the c-1 row's menu
+            QTRY_COMPARE(view.openSessionId(), host.forkId);
+        }
     }
 };
 

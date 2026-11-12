@@ -71,6 +71,11 @@ class MachineWorkspaceView final : public QWidget {
     QString actionError_;
     QString pendingFork_; // opened once the machine lists it (the Relay verifies it first)
     QString pendingForkMachine_;
+    struct ForkOrigin {
+        QString machineId;
+        QString openSessionId; // what the reader read when they asked; empty for the composer
+    };
+    QHash<QString, ForkOrigin> forkOrigins_; // fork request id -> where it was asked
     QLabel* banner_{nullptr};
     QLabel* title_{nullptr};
     QToolButton* more_{nullptr};

@@ -134,12 +134,25 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
         actionError_ = actions_->lastError();
         render();
     });
+    // A fork opens when the machine confirms it only if the reader is still where they were
+    // when they asked (the forked conversation, another row's menu, or the new-conversation
+    // composer); one confirmed after they moved on is only listed.
+    connect(actions_, &MachineConversationActions::forkRequested, this,
+            [this](const QString& machine, const QString& requestId, const QString&) {
+                forkOrigins_.insert(requestId, {machine, openSessionId()});
+            });
+    connect(actions_, &MachineConversationActions::forkFailed, this,
+            [this](const QString& requestId) { forkOrigins_.remove(requestId); });
     connect(
         actions_, &MachineConversationActions::forked, this,
-        [this](const QString& machine, const QString& source, const QString& sessionId, qint64) {
-            // A fork the machine confirms after the reader moved on is only listed; it
-            // never pulls the view away from what they read now.
-            if (machine != catalog_->machineId() || openSessionId() != source)
+        [this](const QString& machine, const QString& requestId, const QString& sessionId, qint64) {
+            const auto origin = forkOrigins_.find(requestId);
+            if (origin == forkOrigins_.end())
+                return;
+            const bool stayed = origin->machineId == machine && machine == catalog_->machineId() &&
+                                origin->openSessionId == openSessionId();
+            forkOrigins_.erase(origin);
+            if (!stayed)
                 return;
             pendingFork_ = sessionId;
             pendingForkMachine_ = machine;
@@ -162,6 +175,10 @@ void MachineWorkspaceView::catalogChanged() {
     if (!pendingFork_.isEmpty() &&
         (catalog_->backend() == nullptr || machine != pendingForkMachine_))
         pendingFork_.clear();
+    for (auto origin = forkOrigins_.begin(); origin != forkOrigins_.end();)
+        origin = catalog_->backend() == nullptr || origin->machineId != machine
+                     ? forkOrigins_.erase(origin)
+                     : std::next(origin);
     if (!pendingFork_.isEmpty()) {
         const remote::MachineConversation fork = catalog_->conversation(pendingFork_);
         if (!fork.sessionId.isEmpty()) {
@@ -186,6 +203,8 @@ void MachineWorkspaceView::openConversation(const QString& sessionId) {
     // The reader chose what to read: a fork still waiting to be listed does not take over.
     if (sessionId != pendingFork_)
         pendingFork_.clear();
+    if (sessionId != openSessionId())
+        forkOrigins_.clear();
     if (session_ != nullptr && session_->machineId() == catalog_->machineId() &&
         session_->sessionId() == sessionId)
         return;
@@ -209,6 +228,7 @@ void MachineWorkspaceView::bind(const QString& sessionId, const qint64 generatio
 void MachineWorkspaceView::startNewConversation(const QString& repositoryId) {
     newConversationRepository_ = repositoryId;
     pendingFork_.clear();
+    forkOrigins_.clear();
     const QString machine = catalog_->machineId();
     if (auto previous = lastByMachine_.take(machine); previous != nullptr)
         previous->deleteLater();
@@ -271,8 +291,8 @@ void MachineWorkspaceView::render() {
         reason = tr("Choose a worktree on this machine.");
     else if (newConversation)
         reason = createError_;
-    else if (!actions_->pendingStatus().isEmpty())
-        reason = actions_->pendingStatus();
+    else if (const QString pending = actions_->pendingStatus(openSessionId()); !pending.isEmpty())
+        reason = pending;
     else if (!actionError_.isEmpty())
         reason = actionError_;
     else

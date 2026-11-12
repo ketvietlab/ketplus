@@ -30,12 +30,14 @@ bool MachineConversationActions::available(const Feature feature, QString* reaso
     return supported;
 }
 
-QString MachineConversationActions::pendingStatus() const {
+QString MachineConversationActions::pendingStatus(const QString& sessionId) const {
     const QString machine = catalog_->machineId();
+    const Pending* latest = nullptr;
     for (const Pending& pending : pending_)
-        if (pending.machineId == machine)
-            return pending.status;
-    return {};
+        if (pending.machineId == machine && pending.sessionId == sessionId &&
+            (latest == nullptr || pending.order > latest->order))
+            latest = &pending;
+    return latest != nullptr ? latest->status : QString{};
 }
 
 bool MachineConversationActions::start(const Feature feature, const QString& sessionId,
@@ -51,53 +53,62 @@ bool MachineConversationActions::start(const Feature feature, const QString& ses
 }
 
 remote::MachineBackend::Callback
-MachineConversationActions::done(const QString& sent,
-                                 std::function<void(const QJsonObject&)> succeeded) {
+MachineConversationActions::done(const QString& sessionId, const QString& sent,
+                                 std::function<void(const QJsonObject&)> succeeded,
+                                 std::function<void()> failedToo) {
     // A command the Relay queued finishes on commandCompleted(); the others answer at once.
     // Until it does, pendingStatus() says it was sent and waits for the machine.
-    auto finish = [self = QPointer(this), succeeded = std::move(succeeded)](
-                      const QJsonObject& result, const QString& error,
-                      const QString& commandId = {}) {
-        if (self == nullptr)
-            return;
-        if (!commandId.isEmpty())
-            self->pending_.remove(commandId);
-        if (!error.isEmpty()) {
-            self->lastError_ = error;
-            emit self->failed(error);
-        } else {
-            self->lastError_.clear();
-            self->catalog_->refresh();
-            if (succeeded)
-                succeeded(result);
-        }
-        emit self->finished();
-    };
-    return [self = QPointer(this), backend = QPointer(catalog_->backend()), finish,
+    auto finish =
+        [self = QPointer(this), succeeded = std::move(succeeded), failedToo = std::move(failedToo)](
+            const QJsonObject& result, const QString& error, const QString& commandId = {}) {
+            if (self == nullptr)
+                return;
+            if (!commandId.isEmpty())
+                self->pending_.remove(commandId);
+            if (!error.isEmpty()) {
+                self->lastError_ = error;
+                if (failedToo)
+                    failedToo();
+                emit self->failed(error);
+            } else {
+                self->lastError_.clear();
+                self->catalog_->refresh();
+                if (succeeded)
+                    succeeded(result);
+            }
+            emit self->finished();
+        };
+    return [self = QPointer(this), backend = QPointer(catalog_->backend()), finish, sessionId,
             sent](const QJsonObject& result, const QString& error) mutable {
         const QString commandId = remote::queuedCommandId(result);
         if (!error.isEmpty() || commandId.isEmpty() || backend == nullptr || self == nullptr) {
             finish(result, error);
             return;
         }
-        self->pending_.insert(commandId, {backend->machineId(), sent});
+        self->pending_.insert(commandId,
+                              {backend->machineId(), sessionId, sent, ++self->nextOrder_});
         emit self->pendingChanged();
-        auto connection = std::make_shared<QMetaObject::Connection>();
-        *connection =
-            connect(backend, &remote::MachineBackend::commandCompleted, self,
-                    [commandId, connection, finish](const QString& id, const QJsonObject& completed,
-                                                    const QString& failure) mutable {
-                        if (id != commandId)
-                            return;
-                        disconnect(*connection);
-                        finish(completed, failure, commandId);
-                    });
+        // Both connections end with the command: completed, or its machine gone.
+        auto connections =
+            std::make_shared<std::pair<QMetaObject::Connection, QMetaObject::Connection>>();
+        connections->first = connect(
+            backend, &remote::MachineBackend::commandCompleted, self,
+            [commandId, connections, finish](const QString& id, const QJsonObject& completed,
+                                             const QString& failure) mutable {
+                if (id != commandId)
+                    return;
+                disconnect(connections->first);
+                disconnect(connections->second);
+                finish(completed, failure, commandId);
+            });
         // A machine that goes away answers nothing more: its command is not left waiting.
-        connect(backend, &QObject::destroyed, self, [self, commandId, connection] {
-            disconnect(*connection);
-            if (self != nullptr && self->pending_.remove(commandId) > 0)
-                emit self->pendingChanged();
-        });
+        connections->second =
+            connect(backend, &QObject::destroyed, self, [self, commandId, connections] {
+                disconnect(connections->first);
+                disconnect(connections->second);
+                if (self != nullptr && self->pending_.remove(commandId) > 0)
+                    emit self->pendingChanged();
+            });
     };
 }
 
@@ -106,25 +117,30 @@ void MachineConversationActions::rename(const QString& sessionId, const QString&
     qint64 generation = 0;
     if (trimmed.isEmpty() || !start(Feature::Rename, sessionId, &generation))
         return;
-    catalog_->backend()->renameConversation(sessionId, generation, trimmed,
-                                            done(tr("Rename sent. Waiting for the machine…")));
+    catalog_->backend()->renameConversation(
+        sessionId, generation, trimmed,
+        done(sessionId, tr("Rename sent. Waiting for the machine…")));
 }
 
 void MachineConversationActions::fork(const QString& sessionId) {
     qint64 generation = 0;
     if (!start(Feature::Fork, sessionId, &generation))
         return;
-    // The client names the fork, so a retried request cannot fork twice.
+    // The client names the fork, so a retried request cannot fork twice; the name is also the
+    // request's id in forkRequested(), forked() and forkFailed().
     const QString forkId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString machine = catalog_->machineId();
+    emit forkRequested(machine, forkId, sessionId);
     catalog_->backend()->forkConversation(
         sessionId, generation, forkId,
-        done(tr("Fork sent. Waiting for the machine…"),
-             [this, machine, sessionId, forkId](const QJsonObject& result) {
-                 const QString id = result.value(QLatin1String("session_id")).toString(forkId);
-                 emit forked(machine, sessionId, id,
-                             result.value(QLatin1String("session_generation")).toInteger(1));
-             }));
+        done(
+            sessionId, tr("Fork sent. Waiting for the machine…"),
+            [this, machine, forkId](const QJsonObject& result) {
+                const QString id = result.value(QLatin1String("session_id")).toString(forkId);
+                emit forked(machine, forkId, id,
+                            result.value(QLatin1String("session_generation")).toInteger(1));
+            },
+            [this, forkId] { emit forkFailed(forkId); }));
 }
 
 void MachineConversationActions::archive(const QString& sessionId) {
@@ -132,7 +148,7 @@ void MachineConversationActions::archive(const QString& sessionId) {
     if (!start(Feature::Archive, sessionId, &generation))
         return;
     catalog_->backend()->setConversationArchived(
-        sessionId, generation, true, done(tr("Archive sent. Waiting for the machine…")));
+        sessionId, generation, true, done(sessionId, tr("Archive sent. Waiting for the machine…")));
 }
 
 QMenu* MachineConversationActions::menu(const QString& sessionId, QWidget* parent) {

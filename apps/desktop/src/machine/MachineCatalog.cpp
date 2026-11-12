@@ -25,7 +25,9 @@ QString MachineCatalog::machineId() const {
 }
 
 void MachineCatalog::setBackend(remote::MachineBackend* backend) {
-    if (backend_ == backend)
+    // A destroyed backend has already nulled backend_ (QPointer), but its machine is still
+    // bound until this clears it: the connections are what is left of that binding.
+    if (backend_ == backend && (backend != nullptr || connections_.isEmpty()))
         return;
     for (const auto& connection : std::as_const(connections_))
         disconnect(connection);

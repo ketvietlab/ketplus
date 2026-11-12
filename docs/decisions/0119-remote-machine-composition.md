@@ -125,7 +125,7 @@ Over SSH the daemon features come from the remote daemon's `daemon.hello`, as on
 This Mac, so an older Linux daemon shows Fork and Archive disabled. The client
 names a fork (`fork_session_id`), so a retried request cannot fork twice; the
 fork opens once the machine lists it (the Relay verifies it first), unless the
-reader has moved on. A queued
+reader has moved on since asking. A queued
 Relay rename or fork finishes when the host confirms the command.
 
 **Rich renderer (deferred, leader decision A).** A remote conversation uses a
