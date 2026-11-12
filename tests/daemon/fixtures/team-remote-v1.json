@@ -949,6 +949,20 @@
       }
     }
   },
+  "pausedWithoutReviewer": {
+    "description": "The summary's review part when the last reviewer's conversation was deleted: the team pauses with empty_role, reviewers is empty and the waiting tasks stay queued for the next reviewer.",
+    "result": {
+      "team": {
+        "paused": true,
+        "paused_reason": "empty_role",
+        "review": {
+          "reviewing": "",
+          "queued": ["T-4"],
+          "reviewers": []
+        }
+      }
+    }
+  },
   "createAssociatedData": {
     "request": {
       "id": "team-command-0004",
