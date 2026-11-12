@@ -322,7 +322,7 @@ epoch=<number> event=<open|ice-connected> at=<UTC time>` when its data channels
 open and when ICE reconnects after checking/disconnection. Types are allowlisted
 (`host`, `srflx`, `prflx`, `relay`, `unknown`). `turn` describes the **local**
 client-to-TURN leg only: this libjuice backend supports UDP, so it is `udp` for
-a local relayed candidate, otherwise `none`. A remote relayed candidate does not
+a local relayed candidate, `unknown` when the local type is unavailable, otherwise `none`. A remote relayed candidate does not
 reveal that remote client's TURN transport; correlate its own diagnostics instead
 of guessing from its candidate protocol. Native errors and raw candidates never
 enter this log line.

@@ -20,6 +20,23 @@ inline QString candidateKind(rtc::Candidate::Type type) {
     }
 }
 
+// State used by both the native callback and focused transition tests.
+struct SelectedPathDecision {
+    bool logged = false;
+    rtc::Candidate::Type local = rtc::Candidate::Type::Unknown;
+    rtc::Candidate::Type remote = rtc::Candidate::Type::Unknown;
+
+    bool shouldLog(rtc::Candidate::Type nextLocal, rtc::Candidate::Type nextRemote,
+                   bool reconnected, bool completed = false) {
+        if (logged && !reconnected && !(completed && (local != nextLocal || remote != nextRemote)))
+            return false;
+        logged = true;
+        local = nextLocal;
+        remote = nextRemote;
+        return true;
+    }
+};
+
 // Accept native enums, never candidate strings, URLs, addresses or credentials.
 inline QString selectedPathLog(rtc::Candidate::Type local, rtc::Candidate::Type remote,
                                qint64 epoch, bool reopened, const QDateTime& at) {

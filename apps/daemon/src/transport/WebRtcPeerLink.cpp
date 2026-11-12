@@ -25,8 +25,9 @@ struct WebRtcPeerLink::Impl {
     bool open{false};
     bool stopped{false};
     bool iceConnected{false};
+    SelectedPathDecision pathDecision;
 
-    void reportPath(WebRtcPeerLink* owner, bool reopened) {
+    void reportPath(WebRtcPeerLink* owner, bool reopened, bool completed = false) {
         rtc::Candidate local, remote;
         auto localType = rtc::Candidate::Type::Unknown;
         auto remoteType = rtc::Candidate::Type::Unknown;
@@ -38,6 +39,8 @@ struct WebRtcPeerLink::Impl {
         } catch (const std::exception&) {
             // Native exceptions can contain private candidate data. Do not log them.
         }
+        if (!pathDecision.shouldLog(localType, remoteType, reopened, completed))
+            return;
         qInfo().noquote() << selectedPathLog(localType, remoteType, owner->diagnosticEpoch(),
                                              reopened, QDateTime::currentDateTimeUtc());
     }
@@ -181,8 +184,9 @@ bool WebRtcPeerLink::answer(const QString& offer, const QJsonArray& iceServers) 
                 auto& impl = *target->impl_;
                 const bool connected = value == rtc::PeerConnection::IceState::Connected ||
                                        value == rtc::PeerConnection::IceState::Completed;
-                if (connected && !impl.iceConnected && impl.open)
-                    impl.reportPath(target, true);
+                if (connected && impl.open)
+                    impl.reportPath(target, !impl.iceConnected,
+                                    value == rtc::PeerConnection::IceState::Completed);
                 impl.iceConnected = connected;
             });
         });
