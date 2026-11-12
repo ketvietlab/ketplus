@@ -26,6 +26,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHideEvent>
 #include <QIcon>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -400,7 +401,15 @@ RemoteControlView::RemoteControlView(QWidget* parent)
     });
     connect(daemon_, &remote::DaemonClient::disconnected, this,
             [this](const QString& reason) { setNotice(reason, true); });
-    refreshTimer_->start();
+    // The status is polled while the page is shown (activate() starts it, hiding stops it): the
+    // window creates the page at launch for its Linux machines, before Connections is opened.
+}
+
+void RemoteControlView::hideEvent(QHideEvent* event) {
+    // A minimised window hides it spontaneously and shows it again without activate().
+    if (!event->spontaneous())
+        refreshTimer_->stop();
+    QWidget::hideEvent(event);
 }
 
 RemoteControlView::~RemoteControlView() {
@@ -891,6 +900,7 @@ QWidget* RemoteControlView::createControlPage() {
 void RemoteControlView::activate() {
     if (linuxMachines_)
         linuxMachines_->activate();
+    refreshTimer_->start();
     refreshStatus();
     if (!ticketId_.isEmpty())
         refreshPairing();

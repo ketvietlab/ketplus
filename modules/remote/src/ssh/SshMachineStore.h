@@ -19,6 +19,9 @@ namespace ketplus::remote::ssh {
 [[nodiscard]] SshTarget parseSshDestination(const QString& input, QString* error = nullptr);
 // The stable key a target is stored under: "user@alias:port" with empty parts omitted.
 [[nodiscard]] QString sshTargetKey(const SshTarget& target);
+// The name ssh files the target's host key under in known_hosts: the host for port 22 (or the
+// port ssh_config chooses), "[host]:port" for another port. A bare IPv6 address is a host too.
+[[nodiscard]] QString sshKnownHostsName(const SshTarget& target);
 
 struct SshMachineRecord {
     SshTarget target;

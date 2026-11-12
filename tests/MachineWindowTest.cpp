@@ -131,6 +131,43 @@ class MachineWindowTest final : public QObject {
         QTRY_VERIFY(sidebarTitles(window).contains("Fix the build"));
     }
 
+    // At launch main() starts the window's Linux machines: Connections is created hidden, and a
+    // machine it connects is registered and can be picked before Connections is ever opened.
+    void linuxMachinesStartWithTheWindow() {
+        ThemeManager theme(*qApp);
+        MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        window.resize(1100, 760);
+        window.show();
+        window.startLinuxMachines();
+        auto* connections = window.findChild<RemoteControlView*>();
+        QVERIFY(connections != nullptr);
+        QVERIFY(!shown(connections));
+        LinuxMachinesSection* section = connections->linuxMachines();
+        QVERIFY(section->model()->backendsAttached());
+        QTemporaryDir store;
+        const QString socket =
+            QStringLiteral("ketplus-machine-launch-%1").arg(QCoreApplication::applicationPid());
+        remote::ssh::testing::FakeDaemon daemon(socket);
+        section->attachSshBackend(
+            store.filePath("machines.json"),
+            [socket](const remote::ssh::SshTarget&) -> std::unique_ptr<remote::ssh::SshLink> {
+                return std::make_unique<remote::ssh::testing::FakeLink>(socket);
+            });
+        section->model()->requestSshConnect("build-node-01");
+        MachineSelection* selection = window.machineComposition()->selection();
+        const QString id = daemon.fingerprint;
+        QTRY_VERIFY(selection->backendFor(id) != nullptr);
+        QVERIFY(!shown(connections));
+        auto* bar = window.findChild<ActivityBar*>();
+        emit bar->machineRequested(id);
+        QVERIFY(shown(window.machineComposition()->existingView()));
+        QVERIFY(!shown(connections));
+        QTRY_VERIFY(daemon.requests.contains("workspace.list"));
+        emit bar->machineRequested("local");
+        QCOMPARE(selection->machineId(), QStringLiteral("local"));
+    }
+
     // Connections registers each listed machine's backend (MainWindowRemote's syncBackends call
     // site). A machine picked before its backend exists shows its workspace once Connections
     // registers it; a listed machine without a backend keeps Connections open without bouncing

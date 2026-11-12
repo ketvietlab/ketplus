@@ -162,12 +162,37 @@ class LinuxRelayMachinesTest : public QObject {
         QCOMPARE(machine.name, QStringLiteral("build-node-02"));
         QCOMPARE(machine.sshTarget, QStringLiteral("build-node-02"));
         QCOMPARE(machine.error, Error::None);
-        // Its Disconnect is the Relay's.
+        // The row says why SSH is not used.
+        QVERIFY2(machine.sshFailure.contains(QStringLiteral("Connection timed out.")),
+                 qPrintable(machine.sshFailure));
+        // Its Disconnect is the Relay's, and the row stays the Relay's: Connect reaches the
+        // Relay again, without a sign-in or a restart.
+        auto* link = links_.value(QStringLiteral("relay-1")).data();
+        const int connects = link->connects;
         model.requestDisconnect(pinned);
-        QCOMPARE(links_.value(QStringLiteral("relay-1"))->disconnects, 1);
+        QCOMPARE(link->disconnects, 1);
+        machine = model.machines().first();
+        QCOMPARE(machine.route, Route::Relay);
+        QCOMPARE(machine.state, State::Offline);
+        model.requestConnect(pinned);
+        QCOMPARE(link->connects, connects + 1);
+        QCOMPARE(model.machines().first().route, Route::Relay);
+        QCOMPARE(model.machines().first().state, State::Connected);
+        // Use SSH is SSH's to carry out: the Relay link is left alone.
+        model.requestSshRoute(pinned);
+        QCOMPARE(link->connects, connects + 1);
+        QCOMPARE(link->disconnects, 1);
+
+        // An SSH machine the user disconnected is not "SSH down": the Relay does not take it.
+        ssh.error = Error::None;
+        ssh.errorText.clear();
+        model.setSshMachines({ssh});
         QCOMPARE(model.machines().first().route, Route::Ssh);
-        model.requestConnect(pinned); // SSH's to carry out: the Relay link stays stopped
-        QCOMPARE(links_.value(QStringLiteral("relay-1"))->connects, 1);
+        QVERIFY(model.machines().first().sshFailure.isEmpty());
+        model.requestConnect(pinned); // SSH's: the Relay link is not started
+        QCOMPARE(link->connects, connects + 1);
+        ssh.error = Error::Other;
+        ssh.errorText = QStringLiteral("Connection timed out.");
 
         // A key mismatch is never hidden behind the Relay.
         relay.setEnabled(false);

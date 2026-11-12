@@ -76,6 +76,12 @@ QString sshTargetKey(const SshTarget& target) {
     return key;
 }
 
+QString sshKnownHostsName(const SshTarget& target) {
+    if (target.port <= 0 || target.port == 22)
+        return target.alias;
+    return QStringLiteral("[%1]:%2").arg(target.alias).arg(target.port);
+}
+
 QString SshMachineStore::defaultPath() {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) +
            QStringLiteral("/Ketsuite/KetPlus/ssh/machines.json");

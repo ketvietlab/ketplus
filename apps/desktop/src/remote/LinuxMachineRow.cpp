@@ -196,6 +196,20 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
         error->setTextInteractionFlags(Qt::TextSelectableByMouse);
         copy->addWidget(error);
     }
+    // The Relay stands in for SSH: say why SSH is not used, and offer it again.
+    if (!machine.sshFailure.isEmpty()) {
+        // The Relay stands in for SSH; it is "in use" only while it is up.
+        const bool relayUp = machine.state != LinuxMachine::State::Offline;
+        auto* failure = new QLabel((relayUp ? tr("Using the Relay because SSH failed. %1")
+                                            : tr("SSH failed, so Connect uses the Relay. %1"))
+                                       .arg(machine.sshFailure),
+                                   row);
+        failure->setObjectName(QStringLiteral("linuxMachineSshFailure"));
+        failure->setProperty("remoteTone", QStringLiteral("warning"));
+        failure->setWordWrap(true);
+        failure->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        copy->addWidget(failure);
+    }
     copy->addStretch(1);
     layout->addLayout(copy, 1);
 
@@ -209,6 +223,15 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
             showLinuxMachineDetails(id, guard, row);
     });
     layout->addWidget(details, 0, Qt::AlignVCenter);
+    if (live && !machine.sshFailure.isEmpty()) {
+        auto* useSsh = new ket::Button(tr("Use SSH"), ket::ButtonVariant::Ghost, row);
+        useSsh->setObjectName(QStringLiteral("linuxMachineUseSsh"));
+        QObject::connect(useSsh, &QAbstractButton::clicked, row, [guard, id] {
+            if (guard)
+                guard->requestSshRoute(id);
+        });
+        layout->addWidget(useSsh, 0, Qt::AlignVCenter);
+    }
     // Nothing would carry out Connect or Disconnect before the backends are attached.
     if (!live || (!offersConnect(machine) && !offersDisconnect(machine)))
         return row;

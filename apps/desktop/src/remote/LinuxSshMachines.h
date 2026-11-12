@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
 
 #include <functional>
@@ -43,6 +44,8 @@ class LinuxSshMachines final : public QObject {
     void connectSaved();
     // The backend of the SSH machine with this ADR 0119 machine id; null for any other id.
     [[nodiscard]] remote::ssh::SshMachineBackend* backend(const QString& machineId) const;
+    // backend(), only while the row shows the SSH route.
+    [[nodiscard]] remote::ssh::SshMachineBackend* shownBackend(const QString& machineId) const;
     [[nodiscard]] const remote::ssh::SshMachineStore& store() const { return store_; }
 
   signals:
@@ -82,6 +85,8 @@ class LinuxSshMachines final : public QObject {
     QStringList order_;
     QHash<QString, remote::ssh::SshMachineBackend*> backends_;
     QHash<QString, Pending> pending_;
+    // Machine ids the user disconnected: connectSaved leaves them closed until they connect.
+    QSet<QString> closedByUser_;
 };
 
 } // namespace ketplus

@@ -78,6 +78,10 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 
   public:
+    // Attaches the saved SSH machines and, while the account is entitled, the Relay machines,
+    // and connects them, so the machine picker lists them before Connections is opened. main()
+    // calls it for each window; tests that do not leave the window without remote machines.
+    void startLinuxMachines();
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
     ~MainWindow() override;
 
@@ -144,6 +148,8 @@ class MainWindow final : public QMainWindow {
     // ADR 0119: a remote machine is composed through its MachineBackend (MainWindowMachine).
     void selectMachine(const QString& machineId);
     void setMachineWorkspaceVisible(bool visible);
+    // Creates the Connections page, hidden, with its SSH and Relay backends (ADR 0119).
+    void ensureRemoteControl();
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
     void setShellMode(ActivityBar::Mode mode);

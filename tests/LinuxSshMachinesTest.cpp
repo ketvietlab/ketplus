@@ -1,7 +1,9 @@
 #include "remote/LinuxSshMachines.h"
+#include "FakeRelayLink.h"
 #include "daemon/FakeSshLink.h"
 #include "remote/LinuxMachineModel.h"
 #include "remote/LinuxMachinesSection.h"
+#include "remote/LinuxRelayMachines.h"
 #include "ssh/KnownHostsFile.h"
 #include "ssh/SshMachineStore.h"
 
@@ -266,12 +268,92 @@ class LinuxSshMachinesTest final : public QObject {
                  QStringLiteral("[2001:db8::1]:2222"));
         QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("[2001:db8::1]")),
                  QStringLiteral("2001:db8::1"));
+        // A bare IPv6 address has no port to split off.
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("2001:db8::1")),
+                 QStringLiteral("2001:db8::1"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("dev@2001:db8::1")),
+                 QStringLiteral("2001:db8::1"));
+        QCOMPARE(LinuxMachineModel::knownHostsName(QStringLiteral("dev@[2001:db8::1]:22")),
+                 QStringLiteral("2001:db8::1"));
+        // A saved target is named from its parts: its key "2001:db8::1:2222" would be ambiguous.
+        remote::ssh::SshTarget v6;
+        v6.alias = QStringLiteral("2001:db8::1");
+        v6.port = 2222;
+        QCOMPARE(remote::ssh::sshKnownHostsName(v6), QStringLiteral("[2001:db8::1]:2222"));
+        QCOMPARE(LinuxMachineModel::knownHostsCommandWord(remote::ssh::sshKnownHostsName(v6)),
+                 QStringLiteral("'[2001:db8::1]:2222'"));
         LinuxMachine machine;
         machine.name = QStringLiteral("build-node-02");
         machine.sshTarget = QStringLiteral("dev@build-node-02:2222");
+        machine.knownHostsName = QStringLiteral("[build-node-02]:2222");
         machine.error = LinuxMachine::Error::HostKeyMismatch;
         QVERIFY(LinuxMachineModel::errorMessage(machine).endsWith(
             QStringLiteral("ssh-keygen -R '[build-node-02]:2222'")));
+    }
+
+    void connectAndDisconnectActOnTheRouteTheRowShows() {
+        Fixture fixture;
+        QString id;
+        {
+            LinuxMachineModel model;
+            LinuxSshMachines machines(&model, fixture.storePath(), fixture.links());
+            model.requestSshConnect(QString::fromLatin1(host));
+            QTRY_VERIFY(fixture.only(model) &&
+                        fixture.only(model)->state == LinuxMachine::State::Connected);
+            id = fixture.only(model)->id;
+        }
+        LinuxMachineModel model;
+        LinuxSshMachines machines(&model, fixture.storePath(), fixture.links());
+        QPointer<ketplus::testing::FakeRelayLink> relayLink;
+        LinuxRelayMachines relay(&model, [&relayLink](const QString& relayId) {
+            auto made = std::make_unique<ketplus::testing::FakeRelayLink>(relayId);
+            relayLink = made.get();
+            return made;
+        });
+        relay.setEnabled(true);
+        relay.setListed({{QStringLiteral("relay-1"), id, QStringLiteral("devbox"), {}}});
+        QTRY_VERIFY(relayLink && relayLink->connects == 1);
+        // SSH cannot reach the host at launch: the Relay stands in and says why.
+        fixture.autoConnect = false;
+        machines.connectSaved();
+        QVERIFY(!fixture.opened.isEmpty());
+        auto* sshLink = fixture.opened.last().data();
+        sshLink->setTunnelState(SshTunnel::State::Offline);
+        QTRY_COMPARE(model.machine(id)->route, LinuxMachine::Route::Relay);
+        QVERIFY(!model.machine(id)->sshFailure.isEmpty());
+
+        // Disconnect and Connect are the Relay's; the SSH link is left as it is.
+        model.requestDisconnect(id);
+        QCOMPARE(relayLink->disconnects, 1);
+        QCOMPARE(sshLink->state(), SshTunnel::State::Offline);
+        QCOMPARE(model.machine(id)->route, LinuxMachine::Route::Relay);
+        const int opens = sshLink->opens;
+        model.requestConnect(id);
+        QCOMPARE(relayLink->connects, 2);
+        QCOMPARE(sshLink->opens, opens);
+        QCOMPARE(model.machine(id)->state, LinuxMachine::State::Connected);
+
+        // Use SSH tries SSH again; once it answers, the row is SSH's.
+        sshLink->autoConnect = true;
+        fixture.autoConnect = true;
+        model.requestSshRoute(id);
+        QTRY_VERIFY(model.machine(id)->route == LinuxMachine::Route::Ssh &&
+                    model.machine(id)->state == LinuxMachine::State::Connected);
+        QVERIFY(model.machine(id)->sshFailure.isEmpty());
+
+        // A user Disconnect is not "SSH down": the row stays SSH's, and the Relay is untouched.
+        model.requestDisconnect(id);
+        QTRY_COMPARE(model.machine(id)->state, LinuxMachine::State::Offline);
+        QCOMPARE(model.machine(id)->route, LinuxMachine::Route::Ssh);
+        QCOMPARE(model.machine(id)->error, LinuxMachine::Error::None);
+        QCOMPARE(relayLink->disconnects, 1);
+        // Opening Connections again does not undo it; Connect does.
+        machines.connectSaved();
+        QTest::qWait(50);
+        QCOMPARE(model.machine(id)->state, LinuxMachine::State::Offline);
+        model.requestConnect(id);
+        QTRY_COMPARE(model.machine(id)->state, LinuxMachine::State::Connected);
+        QCOMPARE(model.machine(id)->route, LinuxMachine::Route::Ssh);
     }
 
     void thePickerAndTheSelectionSeamFollowTheMachines() {

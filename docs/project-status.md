@@ -172,8 +172,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   SSH needs no account. Machines are keyed by the ADR 0119 machine id, the
   daemon's host key fingerprint (for the Relay, the one pinned at pairing); the
   Relay's machine id is a route attribute, so a host on both routes is one row,
-  reached over SSH. The activity bar's picker shows each machine's route and
-  state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
+  reached over SSH, with the Relay as the fallback while SSH cannot reach it
+  (the row says why and offers Use SSH). Saved SSH machines and, while
+  entitled, the Relay machines connect at launch, so the activity bar's picker
+  lists them before Connections is opened. The picker shows each machine's
+  route and state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
   `LinuxMachinesSection::machineBackend(id)` in the window's `MachineSelection`
   through `syncBackends()`, so a picked Linux machine shows its own workspace.
 
