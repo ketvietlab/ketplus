@@ -5,6 +5,7 @@
 #include "cloud/RelayWakeups.h"
 #include "cloud/RemoteWorktreeQuota.h"
 #include "cloud/SessionCredentials.h"
+#include "cloud/WorktreeRevisionCache.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
 
@@ -169,7 +170,8 @@ class CloudControlClient final : public QObject {
                      const QHash<QString, QString>& repositories,
                      QHash<QString, QJsonObject>* metadata = nullptr,
                      const QHash<QString, QJsonObject>& agentMetadata = {},
-                     const QHash<QString, QString>& tagColors = {});
+                     const QHash<QString, QString>& tagColors = {},
+                     WorktreeRevisionCache* revisionCache = nullptr, qint64 nowMs = 0);
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
     // phone; a snapshot whose metadata cannot be sealed is
@@ -259,8 +261,12 @@ class CloudControlClient final : public QObject {
     struct EventUploadBackoff {
         int failures{0};
         bool refused{false};
+        bool gap{false};
         QDeadlineTimer retryAt;
     };
+    // session:generation -> the cursor the relay accepted through, as last read or acknowledged
+    // here. uploadEvents() skips a session with nothing newer without reading the journal.
+    QHash<QString, qint64> knownUploadedCursors_;
     // session:generation -> consecutive failed uploads and when the next one may be sent.
     QHash<QString, EventUploadBackoff> eventUploadBackoff_;
     // Sessions the last heartbeat was refused for; their events and keys stay local.
@@ -284,6 +290,8 @@ class CloudControlClient final : public QObject {
     QThreadPool workspaceFilesPool_;
     // Heartbeats hash every worktree; on their own thread they never queue a phone's read.
     QThreadPool heartbeatPool_;
+    // Owned by the heartbeat: copied into its thread and handed back with the result.
+    WorktreeRevisionCache revisionCache_;
     std::atomic_int workspaceFilesPending_{0};
     // session -> (workspace revision, ms since epoch) this daemon recently published for it.
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;

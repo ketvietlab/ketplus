@@ -11,6 +11,8 @@
 
 namespace ketplus {
 
+class TeamCommands;
+
 // ADR 0114: the desktop's copy of the daemon's teams. The daemon owns every team; this cache
 // reads them once (team.list), then follows team.changed and team.removed so a team created on
 // another client appears without a reload. Every change goes back through the daemon.
@@ -44,6 +46,9 @@ class TeamDirectory final : public QObject {
     void applyEvent(const QString& type, const QJsonObject& payload);
     // Sends a team request; a "team" in the answer updates the cache at once.
     void request(const QString& type, const QJsonObject& payload, Reply reply = {});
+    // The commands the user's controls send: each shows at once that it was taken and is
+    // sent once (TeamCommands.h). Shared by the team page, its dialogs and the window.
+    [[nodiscard]] TeamCommands* commands();
 
     [[nodiscard]] QList<QJsonObject> teams() const;
     [[nodiscard]] QList<QJsonObject> teams(const QString& repository) const;
@@ -62,6 +67,7 @@ class TeamDirectory final : public QObject {
     void store(const QJsonObject& received);
 
     Transport transport_;
+    TeamCommands* commands_{nullptr};
     bool available_{false};
     bool stale_{false};
     // A list that failed is asked for again, later each time: the daemon may still be

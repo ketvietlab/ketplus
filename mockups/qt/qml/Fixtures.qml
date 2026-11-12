@@ -64,7 +64,7 @@ QtObject {
                   worktree: "develop", transcript: "activity" },
                 // A finished turn and a running one, both closed by the work report (Fixtures.turnReport).
                 { number: "8213", title: "Finish the repository picker", status: KetTheme.ConversationStatus.Completed,
-                  worktree: "develop", transcript: "report" },
+                  unread: true, worktree: "develop", transcript: "report" },
                 { number: "8215", title: "Follow up on the new UI", status: KetTheme.ConversationStatus.Working,
                   worktree: "develop", transcript: "report-running" },
                 { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
@@ -681,7 +681,7 @@ QtObject {
     readonly property var teams: [
         {
             id: "release", name: "Release 1.4",
-            goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
+            goal: "Ship the new navigation, the repository picker and Settings in ketPlus Pro 1.4.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
             turnBudget: 60, automaticTurns: 23,
             members: [

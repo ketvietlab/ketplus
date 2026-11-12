@@ -4,6 +4,7 @@
 #include "KetButton.h"
 #include "KetIcon.h"
 #include "KetTokens.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPage.h"
@@ -109,13 +110,17 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
         error->setObjectName(QStringLiteral("teamDecisionError"));
         error->setTone(QStringLiteral("danger"));
         error->setVisible(false);
-        const auto answers = [this, id, error](QAbstractButton* button, const QString& choice) {
+        // One answer per decision: the choice taken looks pressed and every choice waits for
+        // the daemon, through a rebuild too (TeamCommands).
+        const QString what = QStringLiteral("decision/") + id;
+        teams_->commands()->bindStatus(error, commandKey(what));
+        const auto answers = [this, id, what](QAbstractButton* button, const QString& choice) {
             button->setObjectName(QStringLiteral("teamDecisionChoice"));
             button->setProperty("choice", choice);
-            connect(button, &QAbstractButton::clicked, this, [this, id, choice, error] {
-                send(QStringLiteral("team.decision.answer"),
-                     {{QStringLiteral("decision_id"), id}, {QStringLiteral("choice"), choice}},
-                     error);
+            teams_->commands()->bind(button, commandKey(what), choice);
+            connect(button, &QAbstractButton::clicked, this, [this, id, what, choice] {
+                send(what, choice, QStringLiteral("team.decision.answer"),
+                     {{QStringLiteral("decision_id"), id}, {QStringLiteral("choice"), choice}});
             });
         };
         // A choice written as a sentence is a row of its own; short choices are buttons.
@@ -316,6 +321,8 @@ void TeamPage::buildMembers(const QJsonObject& team) {
             const QString refusal = leaveRefusal(team, session);
             remove->setEnabled(refusal.isEmpty());
             remove->setToolTip(refusal);
+            teams_->commands()->bind(remove,
+                                     commandKey(QStringLiteral("member/%1/remove").arg(session)));
             connect(remove, &QAbstractButton::clicked, this,
                     [this, session] { emit removeMemberRequested(teamId_, session); });
             line->addWidget(remove);

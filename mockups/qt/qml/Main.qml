@@ -153,6 +153,8 @@ Basic.ApplicationWindow {
         const joined = teamOf("9410")
         if (!joined || joined.id !== "release")
             failures.push("the pointer drag did not add 9410 to Release 1.4")
+        for (const problem of sidebar.layoutProblems())
+            failures.push("sidebar: " + problem)
         for (const failure of failures)
             console.warn("QML teams check failed: " + failure)
     }
@@ -413,11 +415,11 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
-        else if (["repo-menu", "team-menu", "row-menu", "drag-member"].includes(Mock.initialPanel))
+        else if (["repo-menu", "team-menu", "row-menu", "drag-member", "repo-folded"].includes(Mock.initialPanel))
             Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
         else if (screen === "teams" && Mock.initialPanel)
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))
-        else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
+        else if (["pair", "linux", "linux-hostkey", "linux-relay", "linux-details", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))

@@ -5,10 +5,12 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <QUrl>
 #include <algorithm>
 
@@ -217,6 +219,24 @@ QString SessionHost::worktreeCatalogRoot(const Session& session) const {
     return !root.isEmpty() && !commonDirectory(root).isEmpty() ? root : QString{};
 }
 
+void SessionHost::rememberRepositoryIdentity(const QString& worktree) {
+    if (!QFileInfo(worktree).isDir() || journal_->worktreeRepositories().contains(worktree))
+        return;
+    QThreadPool::globalInstance()->start([guard = QPointer<SessionHost>(this), worktree] {
+        const QString common = commonDirectory(worktree);
+        if (QFileInfo(common).fileName() != ".git")
+            return;
+        QMetaObject::invokeMethod(
+            guard,
+            [guard, worktree, common] {
+                guard->journal_->rememberWorktree(worktree);
+                guard->journal_->rememberWorktreeRepository(worktree,
+                                                            QFileInfo(common).absolutePath());
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
     Session* session = nullptr;
     const auto rejected = checkedSession(request, &session);
@@ -370,9 +390,47 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
 
 QJsonObject SessionHost::switchWorktree(const QJsonObject& request) {
     Session* session = nullptr;
+    QString target;
+    if (const QJsonObject refused = switchRefusal(request, &session, &target); !refused.isEmpty())
+        return refused;
+    return finishSwitch(*session, target, worktreeFacts(target),
+                        request.value("message_id").toString());
+}
+
+SessionHost::WorktreeFacts SessionHost::worktreeFacts(const QString& target) {
+    WorktreeFacts facts;
+    // Local IPC may choose another repository. Cloud commands reach this point only
+    // after resolving a granted opaque catalog target; never trust a remote path.
+    facts.repository = !commonDirectory(target).isEmpty();
+    if (!facts.repository)
+        return facts;
+    for (const auto& entry : worktrees(target)) {
+        if (entry.toObject().value("worktree_path").toString() != target)
+            continue;
+        facts.registered = true;
+        facts.branch = entry.toObject().value("branch").toString();
+    }
+    if (facts.branch.startsWith("refs/heads/"))
+        facts.branch.remove(0, 11);
+    return facts;
+}
+
+QJsonObject SessionHost::finishSwitch(Session& session, const QString& target,
+                                      const WorktreeFacts& facts, const QString& messageId) {
+    if (!facts.repository)
+        return failure("invalid_worktree", "The target must be a Git worktree.");
+    if (!facts.registered)
+        return failure("invalid_worktree", "Select a registered Git worktree root.");
+    return moveSessionWorktree(session, target, messageId, facts.branch);
+}
+
+QJsonObject SessionHost::switchRefusal(const QJsonObject& request, Session** found,
+                                       QString* targetPath) {
+    Session* session = nullptr;
     const auto rejected = checkedSession(request, &session);
     if (!rejected.isEmpty())
         return rejected;
+    *found = session;
     const auto payload = request.value("payload").toObject();
     if (payload.value("expected_context_revision").toInteger(-1) != session->stored.contextRevision)
         return failure("stale_context", "Refresh the conversation's execution context.");
@@ -397,29 +455,24 @@ QJsonObject SessionHost::switchWorktree(const QJsonObject& request) {
     const auto target = normalizedWorktree(payload.value("worktree_path").toString());
     if (target.isEmpty())
         return failure("invalid_worktree", "The target worktree does not exist.");
-    // Local IPC may choose another repository. Cloud commands reach this point only
-    // after resolving a granted opaque catalog target; never trust a remote path.
-    if (commonDirectory(target).isEmpty())
-        return failure("invalid_worktree", "The target must be a Git worktree.");
-    bool found = false;
-    for (const auto& entry : worktrees(target))
-        found |= entry.toObject().value("worktree_path").toString() == target;
-    if (!found)
-        return failure("invalid_worktree", "Select a registered Git worktree root.");
-    return moveSessionWorktree(*session, target, request.value("message_id").toString());
+    *targetPath = target;
+    return {};
 }
 
 QJsonObject SessionHost::moveSessionWorktree(Session& session, const QString& target,
-                                             const QString& messageId) {
+                                             const QString& messageId,
+                                             const std::optional<QString>& knownBranch) {
     const bool changed = target != session.stored.worktreePath;
     const auto revision = session.stored.contextRevision + (changed ? 1 : 0);
-    QString branch;
-    for (const auto& entry : worktrees(target)) {
-        if (entry.toObject().value("worktree_path").toString() == target)
-            branch = entry.toObject().value("branch").toString();
+    QString branch = knownBranch.value_or(QString{});
+    if (!knownBranch) {
+        for (const auto& entry : worktrees(target)) {
+            if (entry.toObject().value("worktree_path").toString() == target)
+                branch = entry.toObject().value("branch").toString();
+        }
+        if (branch.startsWith("refs/heads/"))
+            branch.remove(0, 11);
     }
-    if (branch.startsWith("refs/heads/"))
-        branch.remove(0, 11);
     const QJsonObject result{{"ok", true},
                              {"current_branch", branch},
                              {"session_id", session.stored.id},

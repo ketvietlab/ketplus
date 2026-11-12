@@ -168,6 +168,9 @@ struct Team final {
     // Automatic turns held while the team is paused, oldest first (ADR 0114, open point 2):
     // {to, from, kind, task_id, body, expect_reply}.
     QJsonArray held;
+    // T-28: messages the team decided to send, in the same form, sent after the command that
+    // decided them is answered. Stored, so a restart sends what is left, once.
+    QJsonArray outbox;
     // ADR 0114 §2: tasks waiting for the reviewer, first in first out, and the one it reviews.
     QStringList reviewQueue;
     QString reviewing;

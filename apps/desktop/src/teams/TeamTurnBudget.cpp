@@ -4,6 +4,7 @@
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetTextField.h"
+#include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 
 #include <QAbstractButton>
@@ -114,10 +115,13 @@ void TeamTurnBudgetForm::submit(std::function<void()> saved) {
             saved();
         return;
     }
+    const QString key = TeamCommands::key(teamId_, QStringLiteral("turn_budget"));
+    if (teams_->commands()->isPending(key))
+        return;
     const QPointer<TeamTurnBudgetForm> alive(this);
     setEnabled(false);
-    teams_->request(
-        QStringLiteral("team.update"),
+    teams_->commands()->send(
+        key, {}, QStringLiteral("team.update"),
         {{QStringLiteral("team_id"), teamId_}, {QStringLiteral("turn_budget"), budget}},
         [alive, saved = std::move(saved)](const QJsonObject& result, const QString& failure) {
             if (!alive)
@@ -146,6 +150,8 @@ ket::Dialog* TeamTurnBudgetForm::present(QWidget* anchor, TeamDirectory* teams,
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     auto* save = dialog->addButton(tr("Save"), ket::ButtonVariant::Primary);
     save->setObjectName(QStringLiteral("teamTurnBudgetSave"));
+    teams->commands()->bind(save, TeamCommands::key(team.value(QStringLiteral("id")).toString(),
+                                                    QStringLiteral("turn_budget")));
     QObject::connect(save, &QAbstractButton::clicked, dialog,
                      [dialog, form] { form->submit([dialog] { dialog->accept(); }); });
     QObject::connect(form->budgetField(), &QLineEdit::returnPressed, save, &QAbstractButton::click);
