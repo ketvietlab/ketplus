@@ -43,6 +43,13 @@ namespace rules {
                                                     const Candidate& candidate);
 [[nodiscard]] std::optional<TeamError> canRemoveMember(const Team& team, const QString& sessionId);
 [[nodiscard]] std::optional<TeamError> validName(const QString& name, const QString& what);
+// The longest goal a team keeps, in UTF-16 characters (ADR 0114): long enough for an issue
+// with its context and links. A longer goal is refused, never cut.
+inline constexpr qsizetype maximumGoalCharacters = 16000;
+[[nodiscard]] std::optional<TeamError> validGoal(const QString& goal);
+// The conversation numbers a goal mentions as `@agent/<number>`, each once, in order. The `@`
+// follows the start, a space or an opening bracket or quote, as the app's editor draws them.
+[[nodiscard]] QStringList goalMentions(const QString& goal);
 // A branch a team names (its integration branch): empty for none, or a name git accepts
 // (`git check-ref-format --branch`) that cannot be read as an option.
 [[nodiscard]] std::optional<TeamError> validBranch(const QString& branch);

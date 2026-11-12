@@ -158,6 +158,12 @@ class TeamHostPort {
     }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
+    // The numbered conversation on this computer (`@agent/<number>`), for the goal's mentions.
+    [[nodiscard]] virtual std::optional<TeamConversation>
+    conversationByNumber(const QString& number) const {
+        (void)number;
+        return std::nullopt;
+    }
     // The repository's main worktree the conversation works in: the key a team belongs to.
     // Asked only for a conversation that is to join a team, because the session runtime may
     // have to ask git for it.

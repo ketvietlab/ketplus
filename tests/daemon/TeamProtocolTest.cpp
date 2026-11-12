@@ -114,6 +114,22 @@ class TeamProtocolTest final : public QObject {
     }
 
     // ADR 0115: every page of Updates says whether an older one follows, the largest page too.
+    // ADR 0114: a goal above the limit is refused with its size before any member starts.
+    void aGoalAboveTheLimitStartsNoConversation() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QJsonObject refused =
+            command(fixture, "team.create",
+                    {{"repository", fixture.directory.path()},
+                     {"name", "Checkout"},
+                     {"goal", QString(16001, QLatin1Char('x'))},
+                     {"merge_policy", "leader"},
+                     {"plan", plan()}});
+        QCOMPARE(refused.value("error_code").toString(), QStringLiteral("invalid_payload"));
+        QVERIFY(refused.value("error_message").toString().contains(QStringLiteral("16001")));
+        QCOMPARE(sessions(fixture), 0);
+    }
+
     void everyPageOfUpdatesSaysWhetherAnOlderOneFollows() {
         Fixture fixture;
         QVERIFY(fixture.open());

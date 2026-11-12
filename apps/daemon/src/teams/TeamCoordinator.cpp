@@ -303,6 +303,9 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
             candidates.append(*found);
     }
     draft.name = draft.name.trimmed();
+    draft.goal = draft.goal.trimmed();
+    if (auto refused = rules::validGoal(draft.goal))
+        return {.error = refused};
     if (const auto paths = rules::normalisedPaths(draft.sharedPaths))
         draft.sharedPaths = *paths;
     else
@@ -359,8 +362,14 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             return {.error = invalid};
         team->name = name;
     }
-    if (changes.contains(QStringLiteral("goal")))
-        team->goal = changes.value(QStringLiteral("goal")).toString().trimmed().left(4000);
+    if (changes.contains(QStringLiteral("goal"))) {
+        const QString goal = changes.value(QStringLiteral("goal")).toString().trimmed();
+        if (auto invalid = rules::validGoal(goal)) {
+            *team = before;
+            return {.error = invalid};
+        }
+        team->goal = goal;
+    }
     if (changes.contains(QStringLiteral("integration_branch"))) {
         const QString branch =
             changes.value(QStringLiteral("integration_branch")).toString().trimmed();
@@ -489,22 +498,35 @@ void TeamCoordinator::startLeader(const qint64 teamId) {
                                                : member.paths.join(QStringLiteral(", ")))
                                 : QString{});
     }
-    wake(
-        *team,
-        {.teamId = team->id,
-         .teamName = team->name,
-         .toSession = leader->sessionId,
-         .kind = QStringLiteral("team"),
-         .body = QStringList{QStringLiteral("Team %1 is ready and you lead it.").arg(team->name),
-                             QStringLiteral("Goal: %1").arg(team->goal),
-                             QStringLiteral("Integration branch: %1")
-                                 .arg(team->integrationBranch.isEmpty() ? QStringLiteral("HEAD")
-                                                                        : team->integrationBranch),
-                             QStringLiteral("Members:"), members.join(QLatin1Char('\n')), QString{},
-                             QStringLiteral("Plan the work: create the tasks with their "
-                                            "criteria and lanes (team_task_create), then "
-                                            "assign them (team_task_assign).")}
-                     .join(QLatin1Char('\n'))});
+    QStringList body{QStringLiteral("Team %1 is ready and you lead it.").arg(team->name),
+                     QStringLiteral("Goal: %1").arg(team->goal),
+                     QStringLiteral("Integration branch: %1")
+                         .arg(team->integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                                : team->integrationBranch),
+                     QStringLiteral("Members:"), members.join(QLatin1Char('\n'))};
+    // ADR 0114: a mention in the goal points at context; nobody was messaged for it.
+    if (const QStringList numbers = rules::goalMentions(team->goal); !numbers.isEmpty()) {
+        QStringList mentioned;
+        for (const QString& number : numbers) {
+            const auto conversation = host_->conversationByNumber(number);
+            mentioned << (conversation ? QStringLiteral("- #%1 %2").arg(number, conversation->title)
+                                       : QStringLiteral("- #%1 (no conversation with this number "
+                                                        "on this computer)")
+                                             .arg(number));
+        }
+        body << QString{} << QStringLiteral("Conversations the goal mentions:")
+             << mentioned.join(QLatin1Char('\n'))
+             << QStringLiteral("You may ask them for context through agent messaging "
+                               "(agents_send). Creating the team sent them nothing.");
+    }
+    body << QString{}
+         << QStringLiteral("Plan the work: create the tasks with their criteria and lanes "
+                           "(team_task_create), then assign them (team_task_assign).");
+    wake(*team, {.teamId = team->id,
+                 .teamName = team->name,
+                 .toSession = leader->sessionId,
+                 .kind = QStringLiteral("team"),
+                 .body = body.join(QLatin1Char('\n'))});
 }
 
 std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {

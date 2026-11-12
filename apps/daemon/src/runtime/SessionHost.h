@@ -319,6 +319,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0114, in SessionHostTeams.cpp.
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] std::optional<teams::TeamConversation>
+    conversationByNumber(const QString& number) const override;
     [[nodiscard]] QString conversationRepository(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
     std::optional<teams::TaskWorktree>

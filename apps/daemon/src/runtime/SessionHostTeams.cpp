@@ -136,6 +136,19 @@ SessionHost::teamConversation(const QString& sessionId) const {
                                    .idle = agent.idle};
 }
 
+std::optional<teams::TeamConversation>
+SessionHost::conversationByNumber(const QString& number) const {
+    const auto session = number.isEmpty() ? std::nullopt
+                                          : journal_->sessionForConversationNumber(number);
+    if (!session)
+        return std::nullopt;
+    const auto conversation = teamConversation(session->first);
+    // A number names one generation; an older one it once named is not that conversation.
+    if (!conversation || conversation->generation != session->second)
+        return std::nullopt;
+    return conversation;
+}
+
 QString SessionHost::conversationRepository(const QString& sessionId) const {
     const auto it = sessions_.constFind(sessionId);
     return it == sessions_.cend() ? QString{} : repositoryOf(it->stored.worktreePath);
