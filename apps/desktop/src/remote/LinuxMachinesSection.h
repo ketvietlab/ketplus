@@ -5,10 +5,12 @@
 #include <QWidget>
 
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxRelayMachines.h"
 #include "remote/LinuxSshMachines.h"
 
 class QLabel;
 class QAbstractButton;
+class QTimer;
 class QVBoxLayout;
 namespace ket {
 class Dialog;
@@ -40,6 +42,10 @@ class LinuxMachinesSection final : public QWidget {
     // pass a temporary store and fake links.
     void attachSshBackend(QString storePath = remote::ssh::SshMachineStore::defaultPath(),
                           LinuxSshMachines::LinkFactory links = LinuxSshMachines::systemLinks());
+    // Attaches the Relay backend: one link per host the Relay lists, running while the account
+    // is entitled to the Relay. Production uses RelayMachineBackend over the section's client;
+    // tests pass fake links.
+    void attachRelayBackend(LinuxRelayMachines::LinkFactory links = {});
     // The ADR 0119 backend of a machine, for the composition the machine picker hands it to;
     // null while no backend carries it.
     [[nodiscard]] remote::MachineBackend* machineBackend(const QString& id) const;
@@ -67,6 +73,9 @@ class LinuxMachinesSection final : public QWidget {
     remote::ControlV2Client* client_;
     LinuxMachineModel* model_{nullptr};
     LinuxSshMachines* ssh_{nullptr};
+    LinuxRelayMachines* relay_{nullptr};
+    // Refreshes the Relay listing while the section is shown, so host presence stays current.
+    QTimer* presence_;
     // The open connect card is a child of the window, so the section deletes it itself.
     QPointer<ket::Dialog> connectDialog_;
     QLabel* count_;

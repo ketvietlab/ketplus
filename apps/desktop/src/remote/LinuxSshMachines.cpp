@@ -2,8 +2,6 @@
 
 #include "ssh/SshMachineBackend.h"
 
-#include <QCoreApplication>
-
 #include <utility>
 
 namespace ketplus {
@@ -13,8 +11,6 @@ using remote::MachineBackend;
 using remote::ssh::SshMachineBackend;
 using remote::ssh::SshTarget;
 using remote::ssh::SshTunnel;
-
-QString tr(const char* text) { return QCoreApplication::translate("LinuxSshMachines", text); }
 
 LinuxMachine::State stateOf(const MachineBackend::ConnectionState state) {
     switch (state) {

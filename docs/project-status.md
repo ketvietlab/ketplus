@@ -163,8 +163,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   such, Connect / Disconnect / Remove, Forget old key after a mismatch of a
   key ketPlus accepted, and Trust new identity after an ADR 0119 rotation.
   Removing a machine deletes its identity and its accepted key from the
-  KetPlus known_hosts file. The Relay route's live state is still follow-up
-  work: a Relay machine reads as listed by the worktree index. The Relay is
+  KetPlus known_hosts file. The Relay route is wired to `RelayMachineBackend`
+  through `LinuxRelayMachines`: live state, the pinned host identity, host
+  presence ("Host offline, last seen …"), requests that wait for an absent
+  host, and pending outcomes. The Relay is
   gated on the signed-in session's `entitlements` (`ketplus.relay`,
   `AccountEntitlements.h`) and fails closed while the relay names none (D-4).
   SSH needs no account. Machines are keyed by the ADR 0119 machine id, the

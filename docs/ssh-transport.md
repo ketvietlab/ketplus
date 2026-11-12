@@ -284,6 +284,25 @@ target and any key accepted for it. Connect, Disconnect, Remove, Forget old
 key and Trust new identity act on the backend. Saved machines with a trusted
 identity connect when Connections opens.
 
+`LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
+`RelayMachineBackend` for each host that the Relay's worktree index lists,
+with one owner-only outbox file per host
+(`<GenericDataLocation>/Ketsuite/KetPlus/relay/outbox-<hash>.json`). The links
+run only while the signed-in account holds the Relay entitlement (ADR 0119
+"Relay entitlement"). Without it, each Relay row shows "Needs Pro" with an
+upgrade hint and offers no Connect; SSH stays free. A row named by the pinned
+host identity shows it as verified in Details. An unpinned host is
+`relay:<relay id>` and its Details reads "Not verified yet". The listing's
+`machineDisplayName` names the row, and the newest worktree `updatedAt` (the
+host heartbeat, every 15 s) is when the host was last seen. Connected over the
+Relay means only that the Relay answers. When the host has not been seen for
+more than two minutes, the row, Details and picker say "Host offline, last
+seen …", and Connect and Details say that requests wait for the host for up to
+15 minutes (as they do while Connecting or Reconnecting). Commands still in the
+outbox are shown as "outcome pending" until `commandCompleted`. Connections
+refreshes the listing every minute while it is shown. Relay pairings are not
+removed from Desktop; Remove is offered only for SSH machines.
+
 The activity bar's machine picker labels each machine with the same route and
 state as its row (`build-node-02 · SSH · Connected`). Choosing one emits
 `LinuxMachinesSection::machineSelected(id, backend)`, the seam that the
@@ -300,7 +319,10 @@ and forgotten for re-trust, an unreadable store, and destination parsing.
 `ketplus_remote_known_hosts_tests` covers `removeKnownHost()` and
 `hasKnownHost()`. `ketplus_linux_ssh_machines_tests` (offscreen) drives
 Connections' SSH route through the same fake link and daemon
-(`tests/daemon/FakeSshLink.h`). `ketplus_remote_ssh_daemon_integration_tests` runs a real
+(`tests/daemon/FakeSshLink.h`). `ketplus_linux_relay_machines_tests` (offscreen) drives the Relay route
+with fake links: live state, the entitlement gate, fingerprint keying with SSH
+preferred, host presence, pending outcomes and the Pro hint.
+`ketplus_remote_ssh_daemon_integration_tests` runs a real
 `ketplus_daemon` with FakeCodex (no provider quota) behind the loopback `sshd`
 fixture (`tests/daemon/SshFixture.h`). It lists repositories and
 conversations, completes an approval round-trip, pages a transcript,

@@ -508,7 +508,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
     section.resize(640, 320);
     section.show();
     remote::RemoteControlTestAccess::signIn(*section.client_);
-    section.model()->setRelayMachines({{QStringLiteral("build-box"), {}}});
+    section.model()->setRelayMachines({{QStringLiteral("build-box"), {}, {}, {}}});
     // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
     const auto iconInk = [&section] {
         auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));

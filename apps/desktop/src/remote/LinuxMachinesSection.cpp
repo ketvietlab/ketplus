@@ -15,12 +15,13 @@
 #include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QPointer>
-#include <QSet>
 #include <QStyle>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -87,6 +88,14 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
         if (error.isEmpty())
             refreshMachines();
     });
+    presence_ = new QTimer(this);
+    presence_->setInterval(60 * 1000);
+    connect(presence_, &QTimer::timeout, this, [this] {
+        if (isVisible() && relay_ && relay_->enabled())
+            refreshMachines();
+        else if (isVisible())
+            render(); // "last seen" ages even without a new listing
+    });
     // The rows' icons are drawn in the theme's ink.
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
             &LinuxMachinesSection::render);
@@ -133,7 +142,22 @@ void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
 
 void LinuxMachinesSection::syncEntitlement() {
     // The Relay is Pro: entitled only when the signed-in session names it (D-4: fail closed).
-    model_->setRelayEntitled(client_->signedIn() && relayEntitled(client_->entitlements()));
+    const bool entitled = client_->signedIn() && relayEntitled(client_->entitlements());
+    model_->setRelayEntitled(entitled);
+    if (relay_)
+        relay_->setEnabled(entitled);
+}
+
+void LinuxMachinesSection::attachRelayBackend(LinuxRelayMachines::LinkFactory links) {
+    delete relay_;
+    relay_ = new LinuxRelayMachines(
+        model_, links ? std::move(links) : LinuxRelayMachines::systemLinks(client_), this);
+    presence_->start();
+    syncEntitlement();
+    // The rows the section already lists get their links.
+    if (client_->signedIn())
+        refreshMachines();
+    render();
 }
 
 void LinuxMachinesSection::attachSshBackend(QString storePath,
@@ -145,7 +169,9 @@ void LinuxMachinesSection::attachSshBackend(QString storePath,
 }
 
 remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) const {
-    return ssh_ ? ssh_->backend(id) : nullptr;
+    if (auto* backend = ssh_ ? ssh_->backend(id) : nullptr)
+        return backend;
+    return relay_ ? relay_->backend(id) : nullptr;
 }
 
 void LinuxMachinesSection::selectMachine(const QString& id) {
@@ -156,6 +182,8 @@ void LinuxMachinesSection::selectMachine(const QString& id) {
 void LinuxMachinesSection::activate() {
     if (ssh_)
         ssh_->connectSaved();
+    // A refreshed session may have gained or lost the Relay entitlement.
+    syncEntitlement();
     render();
     if (client_->signedIn())
         refreshMachines();
@@ -312,16 +340,33 @@ void LinuxMachinesSection::refreshMachines() {
             return;
         }
         // ADR 0119: each host is named by the fingerprint pinned when it was paired.
+        // Each worktree carries its host's display name and when the host last refreshed it
+        // (its heartbeat): the newest one is when the host was last seen.
         QList<LinuxRelayListing> listed;
-        QSet<QString> seen;
+        QHash<QString, qsizetype> seen;
         for (const auto& item : value.toArray()) {
-            const auto id = item.toObject().value(QStringLiteral("machineId")).toString();
-            if (!id.isEmpty() && !seen.contains(id)) {
-                seen.insert(id);
-                listed.append({id, client_->pinnedFingerprint(id)});
+            const auto worktree = item.toObject();
+            const auto id = worktree.value(QStringLiteral("machineId")).toString();
+            if (id.isEmpty())
+                continue;
+            const auto updated = QDateTime::fromString(
+                worktree.value(QStringLiteral("updatedAt")).toString(), Qt::ISODateWithMs);
+            const auto name = worktree.value(QStringLiteral("machineDisplayName")).toString();
+            if (!seen.contains(id)) {
+                seen.insert(id, listed.size());
+                listed.append({id, client_->pinnedFingerprint(id), name, updated});
+                continue;
             }
+            auto& listing = listed[seen.value(id)];
+            if (updated.isValid() && (!listing.lastSeen.isValid() || updated > listing.lastSeen))
+                listing.lastSeen = updated;
+            if (listing.name.isEmpty())
+                listing.name = name;
         }
-        model_->setRelayMachines(listed);
+        if (relay_)
+            relay_->setListed(listed);
+        else
+            model_->setRelayMachines(listed);
         render();
     });
 }

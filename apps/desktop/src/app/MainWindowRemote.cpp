@@ -33,6 +33,7 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
         remoteControl_ = new RemoteControlView(workspaceSplit_);
         // The saved SSH machines and the SSH route of Connections (ADR 0119).
         remoteControl_->linuxMachines()->attachSshBackend();
+        remoteControl_->linuxMachines()->attachRelayBackend();
         connect(remoteControl_, &RemoteControlView::machinesChanged, this,
                 [this](const QStringList& ids, const QStringList& names) {
                     remoteMachineIds_ = ids;

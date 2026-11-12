@@ -200,6 +200,13 @@ target_link_libraries(ketplus_linux_ssh_machines_tests PRIVATE
     ketplus_desktop_support
 )
 
+# Connections' Relay route against fake Relay links: state, entitlement, presence, pending.
+ketplus_add_gui_test(ketplus_linux_relay_machines_tests LinuxRelayMachinesTest.cpp)
+target_link_libraries(ketplus_linux_relay_machines_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
 add_subdirectory(daemon)
 
 if(APPLE)

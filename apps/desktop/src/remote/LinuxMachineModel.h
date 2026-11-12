@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -44,6 +45,13 @@ struct LinuxMachine final {
     QString sshTarget;
     // A key mismatch whose old key ketPlus accepted itself: Details offers to forget it.
     bool canForgetHostKey{false};
+    // Relay: when the Linux host last reached the Relay. Connected means the Relay answers;
+    // the host itself may be away (hostAway()).
+    QDateTime hostLastSeen;
+    // Relay: commands waiting in the outbox for the host; their outcome is still pending.
+    int pendingCommands{0};
+    // False when the route cannot be used (the Relay without ketPlus Pro): no Connect offered.
+    bool connectable{true};
 
     bool operator==(const LinuxMachine&) const = default;
 };
@@ -52,6 +60,10 @@ struct LinuxMachine final {
 struct LinuxRelayListing final {
     QString relayId;
     QString fingerprint;
+    // The host's display name in the listing; the relay id when it names none.
+    QString name;
+    // The newest time the host refreshed its listing (its heartbeat); invalid when unknown.
+    QDateTime lastSeen;
 };
 
 class LinuxMachineModel : public QObject {
@@ -73,6 +85,11 @@ class LinuxMachineModel : public QObject {
     // The hosts the Relay lists, from the worktree index. SSH machines are kept; a listed host
     // that is already an SSH machine (same fingerprint) stays that one machine.
     void setRelayMachines(const QList<LinuxRelayListing>& listed);
+    // The Relay backend's live state for the host it lists as `relayId`.
+    void setRelayState(const QString& relayId, LinuxMachine::State state,
+                       LinuxMachine::Error error = LinuxMachine::Error::None,
+                       const QString& errorText = {}, int pendingCommands = 0,
+                       bool connectable = true);
     // The ADR 0119 machine id for a Relay listing.
     [[nodiscard]] static QString relayMachineId(const LinuxRelayListing& listing);
 
@@ -120,6 +137,14 @@ class LinuxMachineModel : public QObject {
                                               const QString& text = {});
     // The message for the machine's error, with the path ketPlus offers to fix it.
     [[nodiscard]] static QString errorMessage(const LinuxMachine& machine);
+    // A Relay host that has not refreshed its listing for this long is shown as away. The host
+    // heartbeats every 15 s, so two minutes is several missed beats.
+    static constexpr qint64 hostAwayAfterSeconds = 120;
+    // True for a Relay machine whose host has not been seen within hostAwayAfterSeconds.
+    [[nodiscard]] static bool hostAway(const LinuxMachine& machine, const QDateTime& now);
+    // "Host online" or "Host offline, last seen 5 min ago" for a Relay machine; empty when its
+    // presence is unknown or it is reached over SSH (Connected over SSH means the host answers).
+    [[nodiscard]] static QString presenceText(const LinuxMachine& machine, const QDateTime& now);
     // The activity bar's machine picker: the name with the same route and state as the row.
     [[nodiscard]] static QString pickerLabel(const LinuxMachine& machine);
 

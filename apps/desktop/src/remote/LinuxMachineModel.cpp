@@ -1,6 +1,7 @@
 #include "remote/LinuxMachineModel.h"
 
 #include <QCoreApplication>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -72,13 +73,16 @@ void LinuxMachineModel::setRelayMachines(const QList<LinuxRelayListing>& listed)
         if (known != relay_.cend()) {
             next.append(*known);
             next.last().relayId = listing.relayId;
+            next.last().name = listing.name.isEmpty() ? listing.relayId : listing.name;
+            next.last().hostLastSeen = listing.lastSeen;
             continue;
         }
         // Listed by the Relay's worktree index, so the Relay reached it; the backend reports
         // live state.
         LinuxMachine relay;
         relay.id = id;
-        relay.name = listing.relayId;
+        relay.name = listing.name.isEmpty() ? listing.relayId : listing.name;
+        relay.hostLastSeen = listing.lastSeen;
         // "Trusted" only beside a pinned identity, never beside "Not verified yet".
         relay.detail = listing.fingerprint.isEmpty() ? tr("Linux · Paired") : tr("Linux · Trusted");
         relay.route = LinuxMachine::Route::Relay;
@@ -88,6 +92,21 @@ void LinuxMachineModel::setRelayMachines(const QList<LinuxRelayListing>& listed)
         next.append(relay);
     }
     relay_ = std::move(next);
+    merge();
+}
+
+void LinuxMachineModel::setRelayState(const QString& relayId, const LinuxMachine::State state,
+                                      const LinuxMachine::Error error, const QString& errorText,
+                                      const int pendingCommands, const bool connectable) {
+    for (auto& machine : relay_) {
+        if (machine.relayId != relayId)
+            continue;
+        machine.state = state;
+        machine.error = error;
+        machine.errorText = errorText;
+        machine.pendingCommands = pendingCommands;
+        machine.connectable = connectable;
+    }
     merge();
 }
 
@@ -199,9 +218,33 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine& machine) {
     return errorMessage(machine.error, machine.name, machine.errorText);
 }
 
+bool LinuxMachineModel::hostAway(const LinuxMachine& machine, const QDateTime& now) {
+    return machine.route == LinuxMachine::Route::Relay && machine.hostLastSeen.isValid() &&
+           machine.hostLastSeen.secsTo(now) > hostAwayAfterSeconds;
+}
+
+QString LinuxMachineModel::presenceText(const LinuxMachine& machine, const QDateTime& now) {
+    if (machine.route != LinuxMachine::Route::Relay || !machine.hostLastSeen.isValid())
+        return {};
+    if (!hostAway(machine, now))
+        return tr("Host online");
+    const qint64 minutes = machine.hostLastSeen.secsTo(now) / 60;
+    if (minutes < 60)
+        return tr("Host offline, last seen %1 min ago").arg(minutes);
+    if (minutes < 48 * 60)
+        return tr("Host offline, last seen %1 h ago").arg(minutes / 60);
+    return tr("Host offline, last seen %1")
+        .arg(QLocale().toString(machine.hostLastSeen.toLocalTime().date(), QLocale::ShortFormat));
+}
+
 QString LinuxMachineModel::pickerLabel(const LinuxMachine& machine) {
-    const QString state = machine.error == LinuxMachine::Error::None ? stateText(machine.state)
-                                                                     : tr("Needs attention");
+    QString state = machine.error == LinuxMachine::Error::None ? stateText(machine.state)
+                                                               : tr("Needs attention");
+    // Connected over the Relay means the Relay answers; say so when the host itself is away.
+    if (machine.error == LinuxMachine::Error::None &&
+        machine.state == LinuxMachine::State::Connected &&
+        hostAway(machine, QDateTime::currentDateTimeUtc()))
+        state = tr("Host offline");
     return tr("%1 · %2 · %3").arg(machine.name, routeText(machine.route), state);
 }
 

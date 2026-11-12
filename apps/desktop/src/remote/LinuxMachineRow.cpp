@@ -8,6 +8,7 @@
 #include "KetTokens.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -22,11 +23,48 @@ QString tr(const char* text) { return QCoreApplication::translate("LinuxMachineR
 
 bool attached(const LinuxMachineModel* model) { return model && model->backendsAttached(); }
 
+// Connected over the Relay means the Relay answers; the host itself may be away.
+bool hostAway(const LinuxMachine& machine) {
+    return LinuxMachineModel::hostAway(machine, QDateTime::currentDateTimeUtc());
+}
+
+// What the route cannot do right now, for the row and Details: the Relay without ketPlus Pro.
+QString unavailableText(const LinuxMachine& machine) {
+    return machine.connectable ? QString()
+                               : tr("The ketPlus Relay is part of ketPlus Pro. Upgrade your "
+                                    "KetSuite account to use this route; SSH stays free.");
+}
+
+// Requests over the Relay wait for the host (ADR 0119: up to 15 minutes), so nothing may suggest
+// they run at once while the link or the host is not there.
+QString waitText(const LinuxMachine& machine) {
+    if (machine.route != LinuxMachine::Route::Relay || !machine.connectable)
+        return {};
+    if (hostAway(machine))
+        return tr("Requests wait until the host is back, for up to 15 minutes.");
+    if (machine.state == LinuxMachine::State::Connecting ||
+        machine.state == LinuxMachine::State::Reconnecting)
+        return tr("Requests made now wait for the Relay, for up to 15 minutes.");
+    return {};
+}
+
+QString pendingText(const LinuxMachine& machine) {
+    if (machine.pendingCommands <= 0)
+        return {};
+    return machine.pendingCommands == 1
+               ? tr("1 request sent, outcome pending")
+               : tr("%1 requests sent, outcome pending").arg(machine.pendingCommands);
+}
+
 QString badgeTone(const LinuxMachine& machine, const bool backendsAttached) {
     if (machine.error != LinuxMachine::Error::None)
         return QStringLiteral("danger");
     if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
         return QStringLiteral("positive");
+    if (!machine.connectable)
+        return {};
+    if (machine.state == LinuxMachine::State::Connected && hostAway(machine))
+        return QStringLiteral("warning");
     switch (machine.state) {
     case LinuxMachine::State::Connected:
         return QStringLiteral("positive");
@@ -39,9 +77,13 @@ QString badgeTone(const LinuxMachine& machine, const bool backendsAttached) {
     return {};
 }
 
-// Offline machines offer Connect; any other state can be ended with Disconnect.
+// Offline machines offer Connect; any other state can be ended with Disconnect. A route that
+// cannot be used offers neither.
 bool offersConnect(const LinuxMachine& machine) {
-    return machine.state == LinuxMachine::State::Offline;
+    return machine.connectable && machine.state == LinuxMachine::State::Offline;
+}
+bool offersDisconnect(const LinuxMachine& machine) {
+    return machine.connectable && machine.state != LinuxMachine::State::Offline;
 }
 
 QLabel* roleLabel(const QString& text, const char* role, QWidget* parent) {
@@ -66,6 +108,10 @@ QString linuxMachineBadgeText(const LinuxMachine& machine, const bool backendsAt
     case LinuxMachine::Error::None:
         if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
             return tr("Available");
+        if (!machine.connectable)
+            return tr("Needs Pro");
+        if (machine.state == LinuxMachine::State::Connected && hostAway(machine))
+            return tr("Host offline");
         return LinuxMachineModel::stateText(machine.state);
     case LinuxMachine::Error::HostKeyMismatch:
         return tr("Host key changed");
@@ -126,6 +172,22 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     auto* detail = roleLabel(machine.detail, "deviceMeta", row);
     detail->setObjectName(QStringLiteral("linuxMachineDetail"));
     copy->addWidget(detail);
+    // The Relay host's presence once it is away, what waits for it, and why the route is closed.
+    QStringList notes;
+    if (hostAway(machine))
+        notes.append(LinuxMachineModel::presenceText(machine, QDateTime::currentDateTimeUtc()));
+    if (const auto pending = pendingText(machine); !pending.isEmpty())
+        notes.append(pending);
+    if (const auto closed = unavailableText(machine); !closed.isEmpty())
+        notes.append(closed);
+    if (!notes.isEmpty()) {
+        auto* note = roleLabel(notes.join(QStringLiteral(" · ")), "deviceMeta", row);
+        note->setObjectName(QStringLiteral("linuxMachinePresence"));
+        note->setWordWrap(true);
+        if (hostAway(machine))
+            note->setProperty("remoteTone", QStringLiteral("warning"));
+        copy->addWidget(note);
+    }
     if (machine.error != LinuxMachine::Error::None) {
         auto* error = new QLabel(errorText(machine), row);
         error->setObjectName(QStringLiteral("linuxMachineError"));
@@ -148,12 +210,14 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     });
     layout->addWidget(details, 0, Qt::AlignVCenter);
     // Nothing would carry out Connect or Disconnect before the backends are attached.
-    if (!live)
+    if (!live || (!offersConnect(machine) && !offersDisconnect(machine)))
         return row;
     const bool connect = offersConnect(machine);
     auto* toggle =
         new ket::Button(connect ? tr("Connect") : tr("Disconnect"), ket::ButtonVariant::Ghost, row);
     toggle->setObjectName(QStringLiteral("linuxMachineToggle"));
+    if (const auto wait = waitText(machine); connect && !wait.isEmpty())
+        toggle->setToolTip(wait);
     QObject::connect(toggle, &QAbstractButton::clicked, row, [guard, id, connect] {
         if (!guard)
             return;
@@ -194,6 +258,13 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     form->addRow(tr("Route"), route);
     auto* state = value("linuxDetailsState");
     form->addRow(tr("State"), state);
+    // The Relay host's own presence: Connected means only that the Relay answers.
+    auto* host = value("linuxDetailsHost");
+    form->addRow(tr("Host"), host);
+    auto* pending = value("linuxDetailsPending");
+    form->addRow(QString(), pending);
+    auto* wait = value("linuxDetailsWait");
+    form->addRow(QString(), wait);
     auto* fingerprint = value("linuxDetailsFingerprint");
     const QFont plain = fingerprint->font();
     QFont mono = plain;
@@ -205,6 +276,8 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
                  fingerprint);
     auto* verifiedLabel = value("linuxDetailsVerified");
     form->addRow(QString(), verifiedLabel);
+    auto* unavailable = value("linuxDetailsUnavailable");
+    form->addRow(unavailable);
     auto* error = value("linuxDetailsError");
     error->setProperty("remoteTone", QStringLiteral("danger"));
     form->addRow(error);
@@ -218,13 +291,16 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     ket::Button* trust = nullptr;
     // Nothing would carry out these before the backends are attached.
     if (model->backendsAttached()) {
-        auto* remove = dialog->addButton(tr("Remove"), ket::ButtonVariant::Ghost);
-        remove->setObjectName(QStringLiteral("linuxDetailsRemove"));
-        QObject::connect(remove, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
-            if (guard)
-                guard->requestRemove(id);
-            dialog->accept();
-        });
+        // Only an SSH machine is ketPlus's own to remove; a Relay pairing is ended on the host.
+        if (machine.route == LinuxMachine::Route::Ssh) {
+            auto* remove = dialog->addButton(tr("Remove"), ket::ButtonVariant::Ghost);
+            remove->setObjectName(QStringLiteral("linuxDetailsRemove"));
+            QObject::connect(remove, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+                if (guard)
+                    guard->requestRemove(id);
+                dialog->accept();
+            });
+        }
         // The re-trust paths: shown only while their failure is the machine's.
         forget = dialog->addButton(tr("Forget old key"));
         forget->setObjectName(QStringLiteral("linuxDetailsForgetKey"));
@@ -256,14 +332,26 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         });
     }
     // What can change while the card is open: the state, the key once verified, the error.
-    const auto refresh = [guard, id, dialog, form, state, fingerprint, verifiedLabel, error,
-                          connect, disconnect, forget, trust, plain, mono] {
+    const auto refresh = [guard, id, dialog, form, state, host, pending, wait, unavailable,
+                          fingerprint, verifiedLabel, error, connect, disconnect, forget, trust,
+                          plain, mono] {
         const auto* current = guard ? guard->machine(id) : nullptr;
         if (!current) {
             dialog->reject();
             return;
         }
         state->setText(linuxMachineBadgeText(*current, guard->backendsAttached()));
+        const auto presence =
+            LinuxMachineModel::presenceText(*current, QDateTime::currentDateTimeUtc());
+        host->setText(presence);
+        host->setProperty("remoteTone", hostAway(*current) ? QStringLiteral("warning") : QString());
+        form->setRowVisible(host, !presence.isEmpty());
+        pending->setText(pendingText(*current));
+        form->setRowVisible(pending, !pending->text().isEmpty());
+        wait->setText(waitText(*current));
+        form->setRowVisible(wait, !wait->text().isEmpty());
+        unavailable->setText(unavailableText(*current));
+        form->setRowVisible(unavailable, !unavailable->text().isEmpty());
         const bool verified = !current->fingerprint.isEmpty();
         // A key that did not verify is shown as what it is, never as the machine's key.
         const bool offered = !verified && !current->presentedFingerprint.isEmpty();
@@ -287,7 +375,7 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
         if (connect)
             connect->setEnabled(offersConnect(*current));
         if (disconnect)
-            disconnect->setEnabled(!offersConnect(*current));
+            disconnect->setEnabled(offersDisconnect(*current));
         if (forget)
             forget->setVisible(current->canForgetHostKey);
         if (trust)
