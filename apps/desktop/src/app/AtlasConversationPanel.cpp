@@ -186,7 +186,7 @@ void AtlasConversationPanel::addAtlasRow(QVBoxLayout* layout, const AtlasDescrip
     if (!elsewhere) {
         auto* edit = new ket::Button(tr("Edit"), ket::ButtonVariant::Primary, row);
         edit->setObjectName(QStringLiteral("conversationAtlasEdit"));
-        edit->setAccessibleName(tr("Edit %1 in KétPlus").arg(atlas.title));
+        edit->setAccessibleName(tr("Edit %1 in ketPlus").arg(atlas.title));
         connect(edit, &QAbstractButton::clicked, this,
                 [this, atlas] { emit editRequested(atlas); });
         actions->addWidget(edit);

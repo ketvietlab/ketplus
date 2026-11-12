@@ -16,6 +16,26 @@ elseif(APPLE)
     set(ketplus_dmg_background
         "${CMAKE_CURRENT_BINARY_DIR}/dmg-background.tiff"
     )
+    # sips renders SVG without app fonts, so the lockup arrives as a pre-rendered @2x PNG.
+    set(ketplus_dmg_lockup "${CMAKE_CURRENT_SOURCE_DIR}/macos/dmg-lockup.png")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ketplus_dmg_lockup}")
+    execute_process(
+        COMMAND /usr/bin/base64 -i "${ketplus_dmg_lockup}"
+        OUTPUT_VARIABLE KETPLUS_DMG_LOCKUP_BASE64
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE ketplus_dmg_lockup_result
+    )
+    execute_process(
+        COMMAND /usr/bin/sips -g pixelWidth -g pixelHeight "${ketplus_dmg_lockup}"
+        OUTPUT_VARIABLE ketplus_dmg_lockup_info
+        RESULT_VARIABLE ketplus_dmg_lockup_info_result
+    )
+    if(NOT ketplus_dmg_lockup_result EQUAL 0 OR NOT ketplus_dmg_lockup_info_result EQUAL 0 OR
+       NOT ketplus_dmg_lockup_info MATCHES "pixelWidth: ([0-9]+).*pixelHeight: ([0-9]+)")
+        message(FATAL_ERROR "Unable to read the DMG lockup ${ketplus_dmg_lockup}")
+    endif()
+    math(EXPR KETPLUS_DMG_LOCKUP_WIDTH "${CMAKE_MATCH_1} / 2")
+    math(EXPR KETPLUS_DMG_LOCKUP_HEIGHT "${CMAKE_MATCH_2} / 2")
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/macos/dmg-background.svg.in"
         "${ketplus_dmg_background_svg}"

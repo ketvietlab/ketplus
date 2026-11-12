@@ -36,7 +36,7 @@ struct AppearanceSettings final {
     EditorSettings editor{EditorSettings::defaults()};
     // Derived by normalized(): the editor's size and line height.
     TextTypographySettings terminal{14, 24};
-    // Empty uses the KétPlus profile's bundled monospace family.
+    // Empty uses the ketPlus profile's bundled monospace family.
     QString terminalFontFamily;
     // Derived by normalized(): the interface size plus markdownOffsetPixels, at the zoom.
     TextTypographySettings preview{15, 26};

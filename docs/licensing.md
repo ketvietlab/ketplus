@@ -52,7 +52,7 @@ application.
 | KetPlus Syntax | commit `cb7435c1e9237ee32d3459a58917b0e84b8b6025` | Compiled statically; brings Lexilla as its submodule | MPL 2.0 | Ship the license text; publish source for any modified file |
 | KetQt | commit `d6e77e26a70f14bf22d7eafdaad5e842fae20458` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
-| Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/*.svg`, `assets/brand/*.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus and Terminal app icons | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
+| Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Qt resources of KétPlus, KétPlus Terminal and KétPlus Pro | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | Ship the copyright and complete OFL text; a modified font must not use the reserved names |
 | KÉT Sans Mono | 0.10.4 Medium TTF in `core/assets/fonts` | Embedded in the same Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | As KÉT Sans; never use 0.10.3, which carries the old licence |
 | Két Design System | 0.1.44 Mermaid snapshots in `core/resources/mermaid` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |

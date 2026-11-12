@@ -286,7 +286,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         pending({{"configured", true},
                  {"account", QJsonObject{{"display_name", "Minh Tran"}, {"username", "minh"}}}});
         QCOMPARE(role("name")->text(), QStringLiteral("Minh Tran"));
-        QCOMPARE(role("meta")->text(), QStringLiteral("minh · KétPlus Pro"));
+        QCOMPARE(role("meta")->text(), QStringLiteral("minh · ketPlus Pro"));
         QCOMPARE(account->findChild<ket::Avatar*>()->initials(), QStringLiteral("MT"));
         QVERIFY(signOut->isVisible());
         QCOMPARE(manage->text(), QStringLiteral("Manage connections"));

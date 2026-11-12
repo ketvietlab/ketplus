@@ -38,10 +38,13 @@ Flickable {
             width: KetTheme.px(44, KetTheme.zoom)
             height: width
             sourceSize: Qt.size(width * 2, height * 2)
-            // The app mark on its Chàm tile, as on the mock's welcome.
-            source: "qrc:/agent/icons/ketplus-mark-tile.svg"
+            // The approved ketPlus mark, as on the mock's welcome.
+            objectName: "agentEmptyStateMark"
+            source: "qrc:/agent/icons/ketplus-mark-128.png"
             fillMode: Image.PreserveAspectFit
-            Accessible.name: "KétPlus Pro"
+            smooth: true
+            mipmap: true
+            Accessible.name: "ketPlus Pro"
         }
         Text {
             objectName: "agentEmptyStateTitle"

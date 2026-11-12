@@ -1,4 +1,4 @@
-// The KétPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
+// The ketPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
 #include "terminal/TerminalPanel.h"
@@ -271,7 +271,7 @@ class LiteWindowTest final : public QObject {
         for (auto* item : row->findChildren<ket::StatusItem*>())
             items.append(item->text());
         QVERIFY(items.contains(QStringLiteral("Ln 1, Col 1")));
-        QVERIFY(!items.contains(QStringLiteral("KétPlus")));
+        QVERIFY(!items.contains(QStringLiteral("ketPlus")));
         QStringList buttons;
         for (auto* button : row->findChildren<QAbstractButton*>())
             if (button->isVisibleTo(row))

@@ -2,6 +2,8 @@
 #include "app/AppearanceSettings.h"
 #include "app/MainWindow.h"
 #include "app/SettingsDialog.h"
+#include "ui/AboutDialog.h"
+#include "ui/BrandLockup.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceFont.h"
 #include "ui/InterfaceZoom.h"
@@ -123,6 +125,14 @@ class DesktopZoomTest final : public QObject {
             QCOMPARE(nav->height(), nav->sizeHint().height());
             QTRY_COMPARE(header->height(), px(44));
             QTRY_COMPARE(footer->height(), px(28));
+            // The approved ketPlus Pro lockup at the mock sidebar's 17 px wordmark.
+            auto* lockup = bar->findChild<BrandLockup*>("productBrandLockup");
+            QVERIFY(lockup);
+            QCOMPARE(lockup->edition(), BrandLockup::Edition::Pro);
+            QCOMPARE(lockup->scaledWordSize(),
+                     ket::Appearance::scale(17, InterfaceZoomMetrics::factor(zoom)));
+            QTRY_COMPARE(lockup->size(), lockup->sizeHint());
+            QVERIFY(lockup->mapTo(bar, QPoint(lockup->width(), 0)).x() <= bar->width());
             auto* row = bar->findChild<ket::SidebarRow*>("productConversationButton");
             QVERIFY(row);
             QCOMPARE(row->height(), row->sizeHint().height());
@@ -143,6 +153,15 @@ class DesktopZoomTest final : public QObject {
             if (!capture.isEmpty()) {
                 QDir().mkpath(capture);
                 QVERIFY(bar->grab().save(capture + QString("/sidebar-%1.png").arg(zoom)));
+                if (zoom == 100) {
+                    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.52"));
+                    showAboutDialog(&surface, BrandLockup::Edition::Pro);
+                    QTest::qWait(120);
+                    QVERIFY(surface.grab().save(capture + QStringLiteral("/about-pro.png")));
+                    if (auto* about = surface.findChild<QWidget*>("aboutDialog"))
+                        about->close();
+                    QTest::qWait(60);
+                }
                 // The mock's workspace/storage-warning: the journal banner above Update ready.
                 bar->setStorageStatus(
                     {{"ok", true},
