@@ -149,20 +149,32 @@ daemon then sends the outbox one entry per event-loop pass, oldest first:
 
 1. It points the receiver at its worktree, when the entry names one. A pending move of the
    same receiver out of a handed-over worktree is settled by that switch once it worked.
-   An entry without a worktree settles such moves first, as before.
+   An entry without a worktree, or one whose switch failed, settles such moves first.
 2. It queues the message.
 3. It forgets the entry.
 
-Pointing a conversation at a worktree asks git. With two released assignments, that took a
-first-plan Start 4 s with a git that answers in 2 s, and seconds on a busy machine. So
+Pointing a conversation at a worktree asks git. With two released assignments, that took
+a first-plan Start 4 s with a git that answers in 2 s, and seconds on a busy machine. So
 the checks that need no git run on the daemon's thread, git runs on the team's git
 thread, and the switch is checked again and stored on the daemon's thread when git
 answers. The entry stays stored meanwhile, and the next entry waits for it, so the order
 is kept. A turn start likewise remembers its worktree's repository with git off the
 daemon's thread. Each entry carries the id its message gets, and an entry whose message
-is already queued is only forgotten. So a daemon that stops between a reply and its sends
-sends what is left on its next start, once. A pause answered after a Start does not hold
-what that Start released. Clients never see the `outbox`: the team JSON leaves it out.
+is already queued is only forgotten. So a daemon that stops between a reply and its
+sends sends what is left on its next start, once. A pause answered after a Start does
+not hold what that Start released. Clients never see the `outbox`: the team JSON leaves
+it out.
+
+Settling a move out of a handed-over worktree also runs off the daemon's thread
+(T-32), wherever it happens: after a handover is answered, in an outbox entry, when the
+member's turn ends, and on the next start for moves stored before a stop. One
+conversation's switches run one after another: each decides where the conversation goes
+once the switch before it is stored, and the outbox's message waits for them. A switch
+that worked forgets its move. One that failed, also because the worktree changed while
+git ran, keeps it and is tried again when the member's turn ends; after a handover the
+reason is also noted on the task. A command that names a member standing in a task's
+worktree finds that worktree's repository from the team, without git, so a handover is
+answered before any git runs.
 
 ### 8. A team that stops is moved on (decided 2026-11-11)
 
