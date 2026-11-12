@@ -169,3 +169,59 @@ void AgentWorkspaceViewTest::restoresMetadataBeforeDaemonDiscovery() {
 
     QSettings().remove(settingsKey);
 }
+
+// T-26: a team member's conversation shows the title the daemon keeps. A member an earlier
+// build titled from its first agent message is shown with its member name once the daemon's
+// repair arrives (session.renamed with custom_title false), and a title the user typed on the
+// desktop is kept against an automatic one.
+void AgentWorkspaceViewTest::teamMemberTitlesFollowTheDaemon() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = QFileInfo(directory.path()).canonicalFilePath();
+    const QString settingsKey = ketplus::agent_message::persistedKey(path);
+    QSettings().remove(settingsKey);
+    ketplus::CodexAppServer server(QStringLiteral("/nonexistent/fake-codex"));
+    ketplus::AgentSessionManager manager(&server);
+    const auto titleOf = [&](const QString& id) {
+        for (const QVariant& value : manager.conversations(path)) {
+            const QVariantMap conversation = value.toMap();
+            if (conversation.value(QStringLiteral("id")).toString() == id ||
+                conversation.value(QStringLiteral("threadId")).toString() == id)
+                return conversation.value(QStringLiteral("title")).toString();
+        }
+        return QString{};
+    };
+    emit server.daemonSessionDiscovered(
+        {{QStringLiteral("session_id"), QStringLiteral("member")},
+         {QStringLiteral("worktree_path"), path},
+         {QStringLiteral("title"), QStringLiteral("[KetPlus agent message]")},
+         {QStringLiteral("state"), QStringLiteral("ready")}});
+    emit server.daemonSessionDiscovered({{QStringLiteral("session_id"), QStringLiteral("named")},
+                                         {QStringLiteral("worktree_path"), path},
+                                         {QStringLiteral("title"), QStringLiteral("Developer 2")},
+                                         {QStringLiteral("state"), QStringLiteral("ready")}});
+    QCOMPARE(titleOf(QStringLiteral("named")), QStringLiteral("Developer 2"));
+    // The daemon's repair on load.
+    emit server.notificationReceived(QStringLiteral("thread/name/updated"),
+                                     {{QStringLiteral("threadId"), QStringLiteral("member")},
+                                      {QStringLiteral("threadName"), QStringLiteral("Developer 1")},
+                                      {QStringLiteral("customTitle"), false}});
+    QCOMPARE(titleOf(QStringLiteral("member")), QStringLiteral("Developer 1"));
+    // A later discovery with the member name keeps it.
+    emit server.daemonSessionDiscovered({{QStringLiteral("session_id"), QStringLiteral("member")},
+                                         {QStringLiteral("worktree_path"), path},
+                                         {QStringLiteral("title"), QStringLiteral("Developer 1")},
+                                         {QStringLiteral("state"), QStringLiteral("ready")}});
+    QCOMPARE(titleOf(QStringLiteral("member")), QStringLiteral("Developer 1"));
+    // The user's rename, as the daemon reports it, wins over the automatic name after it.
+    emit server.notificationReceived(QStringLiteral("thread/name/updated"),
+                                     {{QStringLiteral("threadId"), QStringLiteral("named")},
+                                      {QStringLiteral("threadName"), QStringLiteral("Cart work")},
+                                      {QStringLiteral("customTitle"), true}});
+    emit server.daemonSessionDiscovered({{QStringLiteral("session_id"), QStringLiteral("named")},
+                                         {QStringLiteral("worktree_path"), path},
+                                         {QStringLiteral("title"), QStringLiteral("Developer 2")},
+                                         {QStringLiteral("state"), QStringLiteral("ready")}});
+    QCOMPARE(titleOf(QStringLiteral("named")), QStringLiteral("Cart work"));
+    QSettings().remove(settingsKey);
+}
