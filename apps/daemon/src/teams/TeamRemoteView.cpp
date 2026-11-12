@@ -283,6 +283,8 @@ QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     json.insert(QStringLiteral("turn_budget"), budget);
     json.insert(QStringLiteral("automatic_turns"), used);
     json.insert(QStringLiteral("turns_left"), std::max(0, budget - used));
+    // T-53: the review passes per PR, read-only on the phone (the desktop changes it).
+    json.insert(QStringLiteral("max_rounds"), team.value(QStringLiteral("max_rounds")).toInt());
     // T-23: "reviewing" and "queued" stay as they were for one reviewer; "reviewers" adds what
     // each reviewer reviews and has queued, in the order they joined.
     QJsonArray reviewers;

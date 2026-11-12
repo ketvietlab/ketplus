@@ -296,6 +296,27 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
     // T-19: a task handed to review again starts its replies without a verdict from zero.
     if (to == state::inReview)
         task.missingVerdicts = 0;
+    // T-53: a lowered Max review passes applies from the next review request. A task that
+    // already had as many passes as the team now allows goes to the leader instead of to
+    // review, once: the limit it carries becomes the team's, so a leader who hands it to
+    // review again gets the pass it asked for.
+    if (to == state::inReview && task.round > 0 && task.roundLimit > team.maxRounds &&
+        task.round >= team.maxRounds) {
+        task.roundLimit = team.maxRounds;
+        task.resumeState = state::inProgress;
+        task.question =
+            roundLimitQuestion(task.round, team.maxRounds) +
+            QStringLiteral(" The team's Max review passes is now %1.").arg(team.maxRounds);
+        applyMove(team, task, state::blocked, QStringLiteral("daemon"), task.question, updates);
+        updates.append({.kind = QStringLiteral("round_limit"),
+                        .text = QStringLiteral("%1 had %2 review passes; the team now allows %3.")
+                                    .arg(task.id)
+                                    .arg(task.round)
+                                    .arg(team.maxRounds),
+                        .taskId = task.id,
+                        .actionable = true});
+        return;
+    }
     // ADR 0114 §2: a reviewer takes its tasks first in, first out; commit() sends the next.
     if (to == state::inReview)
         queueReview(team, task);

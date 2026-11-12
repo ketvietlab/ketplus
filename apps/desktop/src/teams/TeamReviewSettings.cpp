@@ -4,6 +4,7 @@
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
+#include "KetSelect.h"
 #include "KetToggle.h"
 #include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
@@ -38,16 +39,16 @@ QWidget* pair(ket::Radio* first, ket::Radio* second, QWidget* parent) {
 } // namespace
 
 QString team_review::summary(const int rounds, const QString& place) {
-    if (place == pullRequest)
-        return rounds == 1 ? tr("One review round on the pull request")
-                           : tr("Two review rounds on the pull request");
-    return rounds == 1 ? tr("One review round on the board") : tr("Two review rounds on the board");
+    const QString passes = rounds == 1 ? tr("1 review pass") : tr("%1 review passes").arg(rounds);
+    return place == pullRequest ? tr("%1 on the pull request").arg(passes)
+                                : tr("%1 on the board").arg(passes);
 }
 
 QString team_review::summary(const QJsonObject& team) { return summary(rounds(team), place(team)); }
 
 int team_review::rounds(const QJsonObject& team) {
-    return team.value(QStringLiteral("max_rounds")).toInt(standardRounds) == 1 ? 1 : 2;
+    const int rounds = team.value(QStringLiteral("max_rounds")).toInt(standardRounds);
+    return rounds >= 1 && rounds <= maximumRounds ? rounds : standardRounds;
 }
 
 QString team_review::place(const QJsonObject& team) {
@@ -57,45 +58,51 @@ QString team_review::place(const QJsonObject& team) {
 
 TeamReviewFields::TeamReviewFields(const int rounds, const QString& place, const QString& note,
                                    QWidget* parent)
-    : QWidget(parent), note_(note), one_(new ket::Radio(tr("One"), this)),
-      two_(new ket::Radio(tr("Two"), this)), board_(new ket::Radio(tr("Board"), this)),
+    : QWidget(parent), note_(note), rounds_(new ket::Select(this)),
+      board_(new ket::Radio(tr("Board"), this)),
       pullRequest_(new ket::Radio(tr("Pull request"), this)) {
     setObjectName(QStringLiteral("teamReviewFields"));
-    one_->setObjectName(QStringLiteral("teamReviewRoundsOne"));
-    two_->setObjectName(QStringLiteral("teamReviewRoundsTwo"));
+    rounds_->setObjectName(QStringLiteral("teamReviewRounds"));
+    for (int value = 1; value <= team_review::maximumRounds; ++value)
+        rounds_->addItem(QString::number(value), value);
     board_->setObjectName(QStringLiteral("teamReviewPlaceBoard"));
     pullRequest_->setObjectName(QStringLiteral("teamReviewPlacePullRequest"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(team_page::px(12));
-    roundsRow_ = new ket::FieldRow(tr("Review rounds"), pair(one_, two_, this), {}, this);
+    roundsRow_ = new ket::FieldRow(tr("Max review passes per PR"), rounds_, {}, this);
     roundsRow_->setObjectName(QStringLiteral("teamReviewRoundsRow"));
     placeRow_ = new ket::FieldRow(tr("Review on"), pair(board_, pullRequest_, this), {}, this);
     placeRow_->setObjectName(QStringLiteral("teamReviewPlaceRow"));
     layout->addWidget(roundsRow_);
     layout->addWidget(placeRow_);
-    for (ket::Radio* radio : {one_, two_, board_, pullRequest_})
+    connect(rounds_, &QComboBox::currentIndexChanged, this, &TeamReviewFields::updateHelp);
+    for (ket::Radio* radio : {board_, pullRequest_})
         connect(radio, &QAbstractButton::toggled, this, &TeamReviewFields::updateHelp);
     setValues(rounds, place);
 }
 
-int TeamReviewFields::rounds() const { return one_->isChecked() ? 1 : 2; }
+int TeamReviewFields::rounds() const { return rounds_->currentIndex() + 1; }
 
 QString TeamReviewFields::place() const {
     return pullRequest_->isChecked() ? team_review::pullRequest : team_review::board;
 }
 
 void TeamReviewFields::setValues(const int rounds, const QString& place) {
-    (rounds == 1 ? one_ : two_)->setChecked(true);
+    rounds_->setCurrentIndex((rounds >= 1 && rounds <= team_review::maximumRounds
+                                  ? rounds
+                                  : team_review::standardRounds) -
+                             1);
     (place == team_review::pullRequest ? pullRequest_ : board_)->setChecked(true);
     updateHelp();
 }
 
 void TeamReviewFields::updateHelp() {
     roundsRow_->setHelp(rounds() == 1
-                            ? tr("Findings in the only round go to the leader, who decides.")
-                            : tr("Findings in the first round go back to the developer; findings "
-                                 "in the second go to the leader."));
+                            ? tr("Findings in the only pass go to the leader, who decides.")
+                            : tr("Findings go back to the developer until pass %1; findings in "
+                                 "pass %1 go to the leader, who decides.")
+                                  .arg(rounds()));
     QString help = place() == team_review::pullRequest
                        ? tr("The reviewer reads the same diff, read-only. Its findings are posted "
                             "as a comment on the task's pull request; the board keeps the verdict "
@@ -120,8 +127,9 @@ ket::Dialog* teamReviewSettings(QWidget* anchor, TeamDirectory* teams, const QJs
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(team_page::px(10));
     auto* fields = new TeamReviewFields(team_review::rounds(team), team_review::place(team),
-                                        tr("Applies to tasks that enter review from now; a review "
-                                           "in progress keeps its rounds and place."),
+                                        tr("Applies from the next review request; a review in "
+                                           "progress keeps its passes and place. A task that "
+                                           "already had more passes goes to the leader."),
                                         body);
     layout->addWidget(fields);
     auto* refusal = new ket::Banner(ket::BannerTone::Danger, tr("Not saved"), {}, body);

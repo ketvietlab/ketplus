@@ -370,7 +370,7 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths, max_rounds (1 or 2), review_place ("board" or "pull_request") and
+    // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request") and
     // turn_budget; other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);

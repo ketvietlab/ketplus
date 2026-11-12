@@ -108,12 +108,19 @@ with `team_member`. *Rejected*: a second review engine — it would drift from 0
 settings, chosen in New team and changed in the team's Review settings (`team.create` and
 `team.update` take `max_rounds` and `review_place`):
 
-- `max_rounds` is **1 or 2**, default 2. The user's rule is at most two review passes,
-  so nothing higher is offered or accepted; any other value is refused with
-  `invalid_payload` ("A team reviews a task in one or two rounds before the leader
-  decides."). A team stored when three were allowed reads as two. With one round, a
-  task whose only round ends with findings is `blocked` for the leader with the
-  `round_limit` update, exactly as the second round is with two.
+- `max_rounds` is **1 to 5**, default 2 (T-53, 2026-11-12: the user asked for "Max
+  review passes per PR" as a team setting; it was 1 or 2 under T-40). Any other value
+  is refused with `invalid_payload` ("A team reviews a task in one to five passes
+  before the leader decides."). A stored team with a value outside 1 to 5 reads as
+  two. A change is logged in Updates as "Max review passes: N". With N passes, a task
+  whose pass N ends with findings is `blocked` for the leader with the `round_limit`
+  update.
+- A lowered limit applies from the **next review request**, never retroactively: a
+  review in flight keeps its limit, and a task that already had as many passes as the
+  team now allows is `blocked` with an actionable `round_limit` update when it next
+  enters In review, instead of being reviewed. Its limit then becomes the team's, so a
+  leader who hands it to review again gets that pass. A raised limit gives a task its
+  new passes at its next request.
 - `review_place` is `board` (default) or `pull_request`; anything else is refused in
   words.
 - A task takes both when it **enters a round** (`round_limit`, `review_place` on the
@@ -567,10 +574,11 @@ those conversations when the team starts them, at creation and for a developer a
 later; the user changes one member in its conversation. The reviewer is not in it: its
 review turns run under the verify profile whatever its conversation's policy is (ADR 0067).
 
-`team.create` and `team.update` take `max_rounds` (1 or 2; 2 when absent) and
+`team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document
 returns both (§2). These are local commands; the relay contract and the phone's
-`team.update` are unchanged, so a phone creates a team with two rounds on the board.
+`team.update` are unchanged, so a phone creates a team with two rounds on the board. The
+phone's team summary carries `max_rounds` read-only (T-53, ADR 0116).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,

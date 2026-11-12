@@ -94,11 +94,11 @@ class TeamReviewPlaceTest final : public QObject {
 
     void otherRoundsAndPlacesAreRefusedInWords() {
         for (const QJsonValue& rounds :
-             {QJsonValue(0), QJsonValue(3), QJsonValue(1.5), QJsonValue(QStringLiteral("2"))}) {
+             {QJsonValue(0), QJsonValue(6), QJsonValue(1.5), QJsonValue(QStringLiteral("2"))}) {
             const TeamResult refused = teams_->update(team_, {{"max_rounds", rounds}}, "user");
             QVERIFY(!refused.ok());
             QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
-            QVERIFY(refused.error->message.contains("one or two rounds"));
+            QVERIFY(refused.error->message.contains("one to five passes"));
         }
         const TeamResult place = teams_->update(team_, {{"review_place", "github"}}, "user");
         QVERIFY(!place.ok());
@@ -108,7 +108,7 @@ class TeamReviewPlaceTest final : public QObject {
         // A new team is checked the same way.
         Team draft = standardTeam();
         draft.name = "Other";
-        draft.maxRounds = 3;
+        draft.maxRounds = 6;
         QVERIFY(!teams_->create(draft, "user").ok());
         draft.maxRounds = 1;
         draft.reviewPlace = "github";
@@ -125,9 +125,44 @@ class TeamReviewPlaceTest final : public QObject {
         QCOMPARE(teamFromJson(json).reviewPlace, place::pullRequest);
     }
 
-    void aTeamSavedWithThreeRoundsKeepsTwo() {
+    // T-53: Max review passes per PR is one to five, on create and in the settings.
+    void aTeamTakesUpToFivePasses() {
+        Team draft = standardTeam();
+        draft.name = "Five";
+        draft.maxRounds = 5;
+        // Its own conversations: one conversation is on one team at a time.
+        for (auto& member : draft.members) {
+            member.sessionId += QStringLiteral("-five");
+            host_.add(member.sessionId, member.role == role::reviewer ? QStringLiteral("claude")
+                                                                      : QStringLiteral("codex"));
+        }
+        const TeamResult created = teams_->create(draft, "user");
+        QVERIFY2(created.ok(), qPrintable(created.ok() ? QString() : created.error->message));
+        QCOMPARE(teams_->team(created.teamId)->maxRounds, 5);
+        QVERIFY(teams_->update(team_, {{"max_rounds", 4}}, "user").ok());
+        QCOMPARE(team().maxRounds, 4);
+        QCOMPARE(teamFromJson(toJson(team())).maxRounds, 4);
+        bool logged = false;
+        for (const auto& update : journal_->teamUpdates(team_, false, 100))
+            logged = logged || (update.kind == "review_rounds" &&
+                                update.text == QStringLiteral("Max review passes: 4"));
+        QVERIFY(logged);
+        // With four, findings of the third pass still go back to the owner.
+        const QString id = inReview();
+        for (int pass = 1; pass <= 3; ++pass) {
+            QVERIFY(
+                reviewsTo("rev").last().body.contains(QStringLiteral("(round %1 of 4)").arg(pass)));
+            finishReview(*teams_, "rev", "Verdict: findings", false);
+            QCOMPARE(task(id).state, state::inProgress);
+            again(id);
+        }
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        QCOMPARE(task(id).state, state::blocked);
+    }
+
+    void aTeamSavedWithSixRoundsKeepsTwo() {
         QJsonObject json = toJson(team());
-        json.insert("max_rounds", 3);
+        json.insert("max_rounds", 6);
         json.insert("review_place", "somewhere");
         const Team read = teamFromJson(json);
         QCOMPARE(read.maxRounds, 2);
@@ -159,16 +194,45 @@ class TeamReviewPlaceTest final : public QObject {
         QCOMPARE(task(id).state, state::inProgress);
         QCOMPARE(reviewsTo("dev1").size(), 1);
         QVERIFY(reviewsTo("dev1").first().body.contains("(round 1 of 2)"));
-        // Entering review again, it has the team's one round, now past.
+        // T-53: its next review request is past the team's one pass, so it goes to the
+        // leader instead of to review. Nothing is blocked retroactively before that.
+        const int sent = reviewsTo("rev").size();
         again(id);
+        QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).roundLimit, 1);
-        // Its own round shows as the last one, never "round 2 of 1".
+        QCOMPARE(reviewsTo("rev").size(), sent);
+        QVERIFY(task(id).question.startsWith(
+            QStringLiteral("Review round limit reached (1 of 1) with findings.")));
+        QVERIFY(task(id).question.contains("Max review passes is now 1"));
+        bool limit = false;
+        for (const auto& update : journal_->teamUpdates(team_, true, 100))
+            limit =
+                limit || (update.kind == "round_limit" && update.actionable && update.taskId == id);
+        QVERIFY(limit);
+        // The leader can still hand it to review once more: it gets that pass.
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        again(id);
+        QCOMPARE(task(id).state, state::inReview);
         QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 2)"));
-        QVERIFY(last(id, "review")->text.startsWith("Review round 2 of 2 sent to"));
         finishReview(*teams_, "rev", "Verdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).question,
                  QStringLiteral("Review round limit reached (2 of 2) with findings."));
+    }
+
+    // A raised limit gives the task in progress its new passes at the next request.
+    void aRaisedLimitAppliesFromTheNextRequest() {
+        QVERIFY(teams_->update(team_, {{"max_rounds", 1}}, "user").ok());
+        const QString id = inReview();
+        QVERIFY(teams_->update(team_, {{"max_rounds", 3}}, "user").ok());
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        QCOMPARE(task(id).state, state::blocked);
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        again(id);
+        QCOMPARE(task(id).state, state::inReview);
+        QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 3)"));
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        QCOMPARE(task(id).state, state::inProgress);
     }
 
     void onThePullRequestTheBoardKeepsTheVerdictAndTheLink() {
