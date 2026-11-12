@@ -167,4 +167,18 @@ void AgentWorkspaceViewTest::apiKeyUsageShowsCostDetailsOpen() {
         QVERIFY2(usage.shown(name), qPrintable(name + " shows with an API key"));
     QTRY_COMPARE(usage.reads, 1);
     usage.capture("usage-api-key");
+
+    // Opened before any report, folded, it reads nothing; the first report naming an API key
+    // drops the row, shows both blocks and reads the organization usage once.
+    UsagePopover early;
+    QVERIFY(early.open(claudeSnapshot(QString()), QSize(900, 680)));
+    QVERIFY(early.shown("claudeCostDetails"));
+    QCOMPARE(early.reads, 0);
+    early.view.setUsageSnapshot(claudeSnapshot("api_key"));
+    QTRY_VERIFY(!early.shown("claudeCostDetails"));
+    for (const auto& name : costRows)
+        QTRY_VERIFY2(early.shown(name), qPrintable(name + " shows once the API key is known"));
+    QTRY_COMPARE(early.reads, 1);
+    QTest::qWait(100);
+    QCOMPARE(early.reads, 1);
 }

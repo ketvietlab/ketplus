@@ -30,6 +30,9 @@ Popup {
         costExpanded = !costExpanded
         if (costExpanded && visible) accountRefreshRequested()
     }
+    // A first report that names an API key while the popover is open shows both blocks at
+    // once, so it reads organization usage as opening would have.
+    onCostFoldsChanged: if (claude && !costFolds && visible) accountRefreshRequested()
     property bool compactEnabled: false
     signal compactRequested()
     // CloseOnPressOutside runs before the anchor click; skip the matching reopen.
