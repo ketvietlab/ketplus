@@ -238,6 +238,11 @@ for line in sys.stdin:
             def late(rpc_id=message_id, sid=session_id):
                 finish(rpc_id, sid)
             threading.Timer(0.2, late).start()
+        elif prompt == 'team-limit':
+            emit({'jsonrpc': '2.0', 'id': message_id, 'error': {'code': -32603, 'message':
+                'ActionRequiredError: Your team has reached its usage limit Please reach out to '
+                'an admin to enable on-demand usage, or return on 11/15/2026 when your limit '
+                'resets.'}})
         elif prompt == 'always-upgrade' or (
                 prompt == 'upgrade-plan' and current_model in ('auto', 'default', 'auto-smart', '')):
             emit({'jsonrpc': '2.0', 'method': 'session/update', 'params': {

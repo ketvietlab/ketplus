@@ -235,7 +235,13 @@ Windows), speaks ACP JSON-RPC on stdio, and normalizes `session/update` and
 `agent models`. Effort suffixes are grouped into families; the adapter maps the
 selected family plus effort back to a CLI id before `--model` and
 `session/set_config_option`. After `session/new` the adapter also sends
-`session/set_config_option` for the selected model. The CLI is never
+`session/set_config_option` for the selected model. A process started with
+`--model` keeps that model, so a turn that switches to Auto ends the idle
+process and starts it again without `--model`; the next turn loads its ACP
+session again. A failed turn keeps Cursor's own words: a team or account usage
+limit ("Your team has reached its usage limit … return on MM/DD/YYYY") is
+reported as `limit_reached` with `resets_at` at local midnight of that day, and
+a plan refusal puts the CLI-login explanation in front of Cursor's text. The CLI is never
 bundled; authentication stays with `agent login` or `CURSOR_API_KEY` /
 `CURSOR_AUTH_TOKEN`. The daemon does not call ACP `authenticate`. Override the
 binary with `--cursor` or `KETPLUS_CURSOR_AGENT`.

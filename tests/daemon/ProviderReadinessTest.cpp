@@ -238,6 +238,11 @@ class ProviderReadinessTest final : public QObject {
                                    QStringLiteral("Cursor blocked this model for the Cursor Agent "
                                                   "CLI account.")),
                  QStringLiteral("plan_blocked"));
+        QCOMPARE(providerErrorCode(QStringLiteral("cursor"), none,
+                                   QStringLiteral("Your team has reached its usage limit Please "
+                                                  "reach out to an admin, or return on "
+                                                  "11/15/2026 when your limit resets.")),
+                 QStringLiteral("limit_reached"));
         QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
                                    QStringLiteral("Claude Agent SDK sidecar was not found.")),
                  QStringLiteral("provider_unavailable"));

@@ -6,6 +6,8 @@
 
 #include "FakeCursor.h"
 
+#include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -495,6 +497,97 @@ class CursorAdapterTest final : public QObject {
         QVERIFY(message.contains(CursorAdapter::loginCommand()));
         QVERIFY(message.contains(QStringLiteral("separate")));
         QVERIFY(message.contains(QStringLiteral("Agent CLI")));
+    }
+
+    void keepsCursorUsageLimitWordsAndResetDate() {
+        const QString said = QStringLiteral(
+            "ActionRequiredError: Your team has reached its usage limit Please reach out to an "
+            "admin to enable on-demand usage, or return on 11/15/2026 when your limit resets.");
+        QVERIFY(CursorAdapter::looksLikeUsageLimit(said));
+        QVERIFY(!CursorAdapter::looksLikePlanLimit(said));
+        QVERIFY(!CursorAdapter::looksLikeUsageLimit(QStringLiteral("Upgrade your plan")));
+        const QString shown = CursorAdapter::failureMessage(said);
+        QVERIFY(shown.startsWith(QStringLiteral("Your team has reached its usage limit")));
+        QVERIFY(!shown.contains(CursorAdapter::loginCommand()));
+        QCOMPARE(CursorAdapter::usageLimitResetsAt(said),
+                 QDate(2026, 11, 15).startOfDay().toSecsSinceEpoch());
+        QCOMPARE(CursorAdapter::usageLimitResetsAt(QStringLiteral("usage limit reached")), 0);
+        // A plan refusal keeps the explanation and adds Cursor's own words.
+        const QString plan =
+            CursorAdapter::failureMessage(QStringLiteral("Named models unavailable"));
+        QVERIFY(plan.startsWith(CursorAdapter::planLimitMessage()));
+        QVERIFY(plan.endsWith(QStringLiteral("Cursor said: Named models unavailable")));
+    }
+
+    void reportsCursorTeamUsageLimitAsItsOwnError() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
+        const QString sessionId = startCursor(host, directory.path(), QStringLiteral("team-limit"));
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("runtime.error")).isEmpty(), 3000);
+        const QJsonObject payload =
+            events(QStringLiteral("runtime.error")).first()[QStringLiteral("payload")].toObject();
+        const QString message = payload.value(QStringLiteral("message")).toString();
+        QVERIFY2(message.startsWith(QStringLiteral("Your team has reached its usage limit")),
+                 qPrintable(message));
+        QVERIFY(!message.contains(CursorAdapter::loginCommand()));
+        QCOMPARE(payload.value(QStringLiteral("resets_at")).toInteger(),
+                 QDate(2026, 11, 15).startOfDay().toSecsSinceEpoch());
+    }
+
+    void switchingToAutoRestartsAPinnedProcess() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
+        const auto options = [](const QString& model) {
+            return QJsonObject{{QStringLiteral("provider"), QStringLiteral("cursor")},
+                               {QStringLiteral("model"), model},
+                               {QStringLiteral("permission"), QStringLiteral("workspace-write")}};
+        };
+        const QJsonObject started = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("pinned"),
+                    {{QStringLiteral("worktree_path"), directory.path()},
+                     {QStringLiteral("prompt"), QStringLiteral("First")},
+                     {QStringLiteral("options"), options(QStringLiteral("composer-2.5"))}}),
+            QStringLiteral("desktop-test"));
+        const QString sessionId = started.value(QStringLiteral("session_id")).toString();
+        const qint64 generation = started.value(QStringLiteral("session_generation")).toInteger();
+        QVERIFY(!sessionId.isEmpty());
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 1, 5000);
+        QCOMPARE(logText(logPath).count("args:[\"--model\", \"composer-2.5\", \"acp\"]"), 1);
+
+        const QJsonObject next = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("auto"),
+                    {{QStringLiteral("prompt"), QStringLiteral("Second")},
+                     {QStringLiteral("options"), options(QStringLiteral("auto"))}},
+                    sessionId, generation),
+            QStringLiteral("desktop-test"));
+        QVERIFY2(next.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(QJsonDocument(next).toJson(QJsonDocument::Compact)));
+        QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 2, 5000);
+        const QByteArray log = logText(logPath);
+        QCOMPARE(log.count("args:[\"acp\"]"), 1);
+        QVERIFY(log.lastIndexOf("args:[\"acp\"]") >
+                log.lastIndexOf("args:[\"--model\", \"composer-2.5\", \"acp\"]"));
+        QCOMPARE(events(QStringLiteral("runtime.error")).size(), 0);
     }
 
     void pinsCursorFamilyEffort() {

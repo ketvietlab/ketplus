@@ -74,6 +74,14 @@ class CursorAdapter final : public ProviderAdapter {
     // Surfaced when ACP refuses a named model (plan / Free / wrong CLI login).
     [[nodiscard]] static QString planLimitMessage();
     [[nodiscard]] static bool looksLikePlanLimit(const QString& message);
+    // Cursor's account or team has used up its usage ("Your team has reached its usage limit").
+    // Every model fails until it resets, so no login or model choice helps.
+    [[nodiscard]] static bool looksLikeUsageLimit(const QString& message);
+    // The reset Cursor names ("return on 11/15/2026"), as local midnight of that day in seconds
+    // since the epoch; 0 when it names none.
+    [[nodiscard]] static qint64 usageLimitResetsAt(const QString& message);
+    // What a failed turn shows: Cursor's own words, explained when they need it.
+    [[nodiscard]] static QString failureMessage(const QString& cursorMessage);
     // Email from ~/.cursor/cli-config.json (Agent CLI), not Cursor desktop UI auth.
     [[nodiscard]] static QString cliAuthEmail();
     // PATH plus the well-known install locations probed when PATH is stale
@@ -136,6 +144,8 @@ class CursorAdapter final : public ProviderAdapter {
     void failPending(const QString& reason);
     void setReady(bool ready);
     void noteUnexpectedStop();
+    // Ends an idle process that was started with `--model`, so the next turn starts one without.
+    void restartUnpinned();
     [[nodiscard]] static QString findExecutable();
     [[nodiscard]] static bool looksLikeAuthError(const QString& message);
     // The tail of the CLI's stderr, appended to failures so the user sees why it died.
