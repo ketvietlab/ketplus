@@ -33,6 +33,18 @@ QtObject {
     // conversation. The team sets it; conversations carry no user tags (ADR 0117).
     // A team has one leader, one reviewer and this many developers at most (and one at least).
     readonly property int mostDevelopers: 5
+    // ADR 0114, open point 2: Settings → Teams. A new team's automatic-turn budget starts from
+    // this value; each team then keeps its own, which changing this one leaves alone.
+    property int turnBudget: 40
+    readonly property int fewestTurns: 5
+    readonly property int mostTurns: 200
+    // The daemon's refusal, in the same words, for a value it would refuse.
+    function turnBudgetError(text) {
+        const trimmed = String(text).trim()
+        const value = Number(trimmed)
+        return /^[0-9]+$/.test(trimmed) && value >= fewestTurns && value <= mostTurns ? ""
+            : "Automatic turns are a whole number from " + fewestTurns + " to " + mostTurns + "."
+    }
     readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
     function roleTag(role) {
         return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
@@ -588,6 +600,7 @@ QtObject {
         id: "pilot", name: "Kingfruit Pilot",
         goal: "Đưa Kingfruit vào chạy thử: thuế theo người mua, nhập và sửa hàng loạt sản phẩm, bán hàng tại quầy và báo cáo cuối ngày.",
         repository: "ketviet", branch: "integration", paused: false, merges: "leader",
+        turnBudget: 40, automaticTurns: 12,
         members: [
             { number: "1280", title: "Lead Kingfruit Pilot", role: "leader", provider: "Claude · Opus 5.5",
               lane: "", paths: [], state: "working", now: "Chờ quyết định D-1 để chia tiếp việc" },
@@ -670,6 +683,7 @@ QtObject {
             id: "release", name: "Release 1.4",
             goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
+            turnBudget: 60, automaticTurns: 23,
             members: [
                 { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
                   lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
@@ -771,6 +785,7 @@ QtObject {
             id: "docs", name: "Docs refresh",
             goal: "Bring the user guide in line with 1.4.",
             repository: "ketplus-desktop", branch: "docs/1.4", paused: false, merges: "user",
+            turnBudget: 40, automaticTurns: 4,
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
                   lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },

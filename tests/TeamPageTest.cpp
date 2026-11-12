@@ -13,6 +13,8 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
+#include "teams/TeamTurnBudget.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QHeaderView>
@@ -91,6 +93,8 @@ QJsonObject fixture(int revision = 1, int developers = 2, bool paused = false,
             {"merge_policy", "leader"},
             {"paused", paused},
             {"paused_reason", paused ? "budget" : ""},
+            {"turn_budget", 60},
+            {"automatic_turns", 23},
             {"members", members},
             {"tasks", QJsonArray{task("T-1", "in_progress", "dev1", QJsonArray{"docs/x.md"}),
                                  task("T-2", "blocked", "dev2"), task("T-3", "ready", "dev1"),
@@ -187,6 +191,9 @@ class TeamPageTest final : public QObject {
                  QStringLiteral("The leader merges tasks"));
         QCOMPARE(page.findChild<QLabel*>("teamPageProgress")->text(),
                  QStringLiteral("1 of 4 tasks done"));
+        // ADR 0114, open point 2: the turns used of the team's own budget.
+        QCOMPARE(page.findChild<QLabel*>("teamPageTurns")->text(),
+                 QStringLiteral("23 of 60 automatic turns used"));
         // Waiting for you: the recommended choice first and marked.
         auto* card = page.findChild<QFrame*>("teamDecision_D-1");
         QVERIFY(card);
@@ -594,6 +601,39 @@ class TeamPageTest final : public QObject {
                     QStringLiteral("%1/team-task-%2-all.png").arg(grabs).arg(size.width()));
             dialog->reject();
         }
+    }
+
+    // ADR 0114, open point 2: the header's turns and the team's budget dialog, in both themes,
+    // inside the window. KETPLUS_TEAM_BUDGET_CAPTURE (a folder) saves them beside the mock's.
+    void theTeamsBudgetFitsInBothThemes_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void theTeamsBudgetFitsInBothThemes() {
+        QFETCH(bool, dark);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        start(fixture());
+        QWidget window;
+        window.resize(1440, 900);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(window.size());
+        window.show();
+        auto* turns = page.findChild<QLabel*>("teamPageTurns");
+        QTRY_VERIFY(turns && turns->isVisible());
+        const QRect frame(QPoint(0, 0), window.size());
+        QVERIFY(frame.contains(QRect(turns->mapTo(&window, QPoint()), turns->size())));
+        const QString capture = qEnvironmentVariable("KETPLUS_TEAM_BUDGET_CAPTURE");
+        const QString name = dark ? QStringLiteral("dark") : QStringLiteral("light");
+        auto* dialog = TeamTurnBudgetForm::present(&page, teams_.get(), *teams_->team("7"));
+        auto* field = dialog->findChild<ket::TextField*>("teamTurnBudget");
+        QTRY_VERIFY(field && field->isVisible());
+        QCOMPARE(field->text(), QStringLiteral("60"));
+        QVERIFY(frame.contains(QRect(field->mapTo(&window, QPoint()), field->size())));
+        if (!capture.isEmpty())
+            QVERIFY(window.grab().save(capture + "/app-team-budget-" + name + ".png"));
+        dialog->reject();
     }
 
     // A team.changed from another client updates the page in place of where the reader was.

@@ -215,10 +215,30 @@ may be journaled after the turn has answered.
    worktree per developer switching branches — a handover would have to move
    uncommitted work between worktrees, and a developer could carry it into the wrong
    task.
-2. **The automatic-turn budget.** *Chosen*: a team may start **40 automatic turns** of
-   its members since the user last acted on it (created, resumed or answered a
+2. **The automatic-turn budget.** *Chosen*: a team may start a **budget of automatic
+   turns** of its members since the user last acted on it (created, resumed or answered a
    decision). When it runs out, the team pauses itself and raises one decision:
-   "Continue (40 more turns)" or "Stop". The loop guard of ADR 0027 (hop 6, 30 turns a
+   "Continue (N more turns)" or "Stop", N being the team's own budget.
+   - *Where the number comes from* (2026-11-12): the daemon keeps one global value,
+     **40** until the user changes it in Settings → Teams (`team.settings.get` and
+     `team.settings.update`, feature `teams.settings/1`, kept in the journal's
+     `team_settings` table). A team created without `turn_budget` (an older phone, an
+     agent, a client that sends none) takes it; New team shows it and lets the user send
+     the team's own. Changing the global value changes no existing team.
+   - *A running team*: `team.update {turn_budget}` (also from a paired phone) changes the
+     team's own budget. It applies from the next automatic turn and the turns already used
+     stay counted. A budget that leaves turns withdraws the open "used its N automatic
+     turns" decision and resumes a team the budget paused; one that leaves none changes the
+     number and keeps the pause. A team the user paused stays paused. The change is an
+     Update of kind `turn_budget` (`data: {from, to}`).
+   - *Range*: a whole number from **5 to 200**, the same for the global value, for
+     `team.create` and for `team.update`. Anything else (4, 201, 7.5, a string) is refused
+     with `invalid_payload` and "Automatic turns are a whole number from 5 to 200.";
+     the desktop says the same words in the form, the team's dialog and Settings before
+     sending. 5 keeps a team able to do a round of work; 200 keeps a forgotten team from
+     running for days unattended. A value outside the range found in the journal counts as
+     none (40).
+   The loop guard of ADR 0027 (hop 6, 30 turns a
    chain, 20 an hour per conversation) applies to every automatic turn on top. Team
    messages start their own chain, so an `agents_send` loop inside a team still stops at
    the hop and chain limits. `paused` holds every team message until Resume, in order;
@@ -262,8 +282,10 @@ may be journaled after the turn has answered.
 
 ## Protocol
 
-Features `teams/1` and `teams.tasks/1` in `daemon.hello`. Requests, for trusted local
-clients only (`forbidden` otherwise; agents use the tools below):
+Features `teams/1`, `teams.tasks/1` and `teams.settings/1` in `daemon.hello`. Requests, for
+trusted local clients only (`forbidden` otherwise; agents use the tools below):
+`team.settings.get`, `team.settings.update` (`{turn_budget}`; both answer
+`{settings: {turn_budget, turn_budget_minimum, turn_budget_maximum, turn_budget_default}}`),
 `team.list`, `team.get`, `team.create`, `team.update`, `team.delete`,
 `team.member.add`, `team.member.join`, `team.member.update`, `team.member.remove`,
 `team.task.list`, `team.task.get`, `team.task.create`, `team.task.update`,

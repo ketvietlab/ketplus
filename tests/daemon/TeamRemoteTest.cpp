@@ -393,6 +393,43 @@ class TeamRemoteTest final : public QObject {
         QCOMPARE(phone(fixture, "team.list", {}).value("teams_total").toInt(), 1);
     }
 
+    // ADR 0114, open point 2: an older phone that sends no budget gets the global value; a
+    // newer one sends its own and changes it on a running team. The global value is the
+    // desktop's: a phone does not change it.
+    void aPhoneCarriesTheTeamsBudget() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        QVERIFY(local(fixture, "team.settings.update", {{"turn_budget", 30}}).value("ok").toBool());
+        const QJsonObject older = phone(fixture, "team.create", createPayload(fixture));
+        QVERIFY2(older.value("ok").toBool(), qPrintable(text(older)));
+        QCOMPARE(older.value("team").toObject().value("turn_budget").toInt(), 30);
+        QCOMPARE(older.value("team").toObject().value("turns_left").toInt(),
+                 30 - older.value("team").toObject().value("automatic_turns").toInt());
+        QJsonObject own = createPayload(fixture);
+        own.insert("name", "Own");
+        own.insert("turn_budget", 300);
+        QCOMPARE(phone(fixture, "team.create", own).value("error_code").toString(),
+                 QStringLiteral("invalid_payload"));
+        own.insert("turn_budget", 15);
+        const QJsonObject newer = phone(fixture, "team.create", own);
+        QVERIFY2(newer.value("ok").toBool(), qPrintable(text(newer)));
+        QCOMPARE(newer.value("team").toObject().value("turn_budget").toInt(), 15);
+        const QString id = older.value("team").toObject().value("id").toString();
+        const QJsonObject changed = phone(
+            fixture, "team.update",
+            {{"team_id", id}, {"turn_budget", 50}, {"expected_revision", revision(fixture, id)}});
+        QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+        QCOMPARE(changed.value("team").toObject().value("turn_budget").toInt(), 50);
+        QCOMPARE(phone(fixture, "team.settings.update", {{"turn_budget", 90}}).value("ok").toBool(),
+                 false);
+        QCOMPARE(local(fixture, "team.settings.get", {})
+                     .value("settings")
+                     .toObject()
+                     .value("turn_budget")
+                     .toInt(),
+                 30);
+    }
+
     // §3: each member carries {id, revision, role}; a member that leaves and a deleted team
     // lose it, and the change is announced.
     void theMetadataFollowsTheTeam() {

@@ -14,6 +14,8 @@
 #include "KetToggle.h"
 #include "teams/TeamAgentDialog.h"
 #include "teams/TeamDirectory.h"
+#include "teams/TeamTurnBudget.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QJsonArray>
@@ -47,7 +49,8 @@ struct FakeDaemon {
     QHash<QString, QJsonObject> answers;
     TeamDirectory::Transport transport() {
         return [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
-            if (type != "team.list")
+            // Reads are not what a form sends: the list, and the global budget it starts from.
+            if (type != "team.list" && type != "team.settings.get")
                 sent.append({type, payload});
             const QJsonObject answer = answers.value(type, {{"ok", true}});
             reply(answer, answer.value("ok").toBool() ? QString{}
@@ -172,6 +175,96 @@ class TeamDialogsTest final : public QObject {
                  QStringLiteral("opus"));
         QCOMPARE(created.value("id").toString(), QStringLiteral("9"));
         QVERIFY(teams_->team("9"));
+    }
+
+    // ADR 0114, open point 2: the form starts from Settings → Teams, sends the team's own
+    // budget, and refuses one out of range in words before anything is sent.
+    void theBudgetStartsFromTheGlobalValue() {
+        daemon_.answers.insert("team.settings.get",
+                               {{"ok", true}, {"settings", QJsonObject{{"turn_budget", 70}}}});
+        NewTeamForm form(teams_.get(), "/repo", bothProviders);
+        QCOMPARE(form.budgetField()->text(), QStringLiteral("70"));
+        QCOMPARE(form.payload().value("turn_budget").toInt(), 70);
+        form.nameField()->setText("Shop");
+        for (const QString& bad : {"4", "201", "7.5", "", "forty"}) {
+            form.budgetField()->setText(bad);
+            QVERIFY(!form.validate());
+            QCOMPARE(form.error("turn_budget"),
+                     QStringLiteral("Automatic turns are a whole number from 5 to 200."));
+            QVERIFY(form.budgetField()->isInvalid());
+        }
+        form.submit({});
+        QCOMPARE(daemon_.sent.size(), 0);
+        form.budgetField()->setText("12");
+        daemon_.answers.insert(
+            "team.create", {{"ok", true}, {"team", QJsonObject{{"id", "9"}, {"name", "Shop"}}}});
+        form.submit({});
+        QCOMPARE(daemon_.sent.size(), 1);
+        QCOMPARE(daemon_.sent.first().second.value("turn_budget").toInt(), 12);
+        QVERIFY(!form.budgetField()->isInvalid());
+        // A daemon without team settings: the standard 40.
+        daemon_.answers.insert("team.settings.get", {{"ok", false}, {"error_message", "unknown"}});
+        NewTeamForm older(teams_.get(), "/repo", bothProviders);
+        QCOMPARE(older.budgetField()->text(), QStringLiteral("40"));
+    }
+
+    // The field in both themes, inside the dialog. KETPLUS_TEAM_BUDGET_CAPTURE (a folder)
+    // saves the form beside the mock's.
+    void theBudgetFieldFitsInBothThemes_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void theBudgetFieldFitsInBothThemes() {
+        QFETCH(bool, dark);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        QWidget window;
+        window.resize(1440, 900);
+        window.show();
+        ket::Dialog* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
+        auto* form = dialog->findChild<NewTeamForm*>();
+        QTRY_VERIFY(form->budgetField()->isVisible());
+        QVERIFY(dialog->card()->geometry().contains(
+            QRect(form->budgetField()->mapTo(dialog->card(), QPoint()), form->budgetField()->size())
+                .translated(dialog->card()->pos())));
+        const QString capture = qEnvironmentVariable("KETPLUS_TEAM_BUDGET_CAPTURE");
+        if (!capture.isEmpty())
+            QVERIFY(window.grab().save(capture + "/app-new-team-" +
+                                       (dark ? QStringLiteral("dark") : QStringLiteral("light")) +
+                                       ".png"));
+        dialog->reject();
+    }
+
+    // A running team's budget: checked in words, sent as team.update, the daemon's refusal
+    // shown on the field.
+    void aTeamsBudgetChangesWhileItRuns() {
+        const QJsonObject running{{"id", "7"},         {"name", "Shop"},
+                                  {"turn_budget", 40}, {"automatic_turns", 40},
+                                  {"paused", true},    {"paused_reason", "budget"}};
+        QCOMPARE(team_budget::usage(running), QStringLiteral("40 of 40 automatic turns used"));
+        TeamTurnBudgetForm form(teams_.get(), running);
+        QCOMPARE(form.budgetField()->text(), QStringLiteral("40"));
+        bool saved = false;
+        form.budgetField()->setText("300");
+        form.submit([&] { saved = true; });
+        QVERIFY(!saved);
+        QCOMPARE(form.error(), QStringLiteral("Automatic turns are a whole number from 5 to 200."));
+        QCOMPARE(daemon_.sent.size(), 0);
+        form.budgetField()->setText("60");
+        form.submit([&] { saved = true; });
+        QVERIFY(saved);
+        QCOMPARE(daemon_.sent.size(), 1);
+        QCOMPARE(daemon_.sent.first().first, QStringLiteral("team.update"));
+        QCOMPARE(daemon_.sent.first().second, (QJsonObject{{"team_id", "7"}, {"turn_budget", 60}}));
+        daemon_.answers.insert("team.update", {{"ok", false},
+                                               {"error_code", "stale_team"},
+                                               {"error_message", "The team changed meanwhile."}});
+        saved = false;
+        form.budgetField()->setText("80");
+        form.submit([&] { saved = true; });
+        QVERIFY(!saved);
+        QCOMPARE(form.error(), QStringLiteral("The team changed meanwhile."));
     }
 
     // A refusal keeps what was typed and shows the error at the role it names.

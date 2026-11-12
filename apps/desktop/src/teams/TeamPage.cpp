@@ -11,6 +11,7 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
+#include "teams/TeamTurnBudget.h"
 
 #include <QFileInfo>
 #include <QFrame>
@@ -384,6 +385,7 @@ void TeamPage::buildHeading(const QJsonObject& team) {
              ? tr("You merge tasks")
              : tr("The leader merges tasks"),
          "teamPageMerges");
+    fact(QStringLiteral("clock"), team_budget::usage(team), "teamPageTurns");
     if (!tasks.isEmpty())
         fact({}, tr("%1 of %2 tasks done").arg(done).arg(tasks.size()), "teamPageProgress");
     facts->setAccessibleName(spoken.join(QStringLiteral(", ")));
@@ -401,6 +403,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     const bool paused = team.value(QStringLiteral("paused")).toBool();
     auto* pause =
         menu.addAction(paused ? tr("Resume automatic turns") : tr("Pause automatic turns"));
+    auto* budget = menu.addAction(ket::Icons::icon(u"clock"), tr("Automatic turns…"));
+    budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
@@ -416,6 +420,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
                userMerges ? QStringLiteral("leader") : QStringLiteral("user")}});
     else if (chosen == pause)
         send(QStringLiteral("team.update"), {{QStringLiteral("paused"), !paused}});
+    else if (chosen == budget)
+        afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
     else if (chosen == remove)
         afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
 }

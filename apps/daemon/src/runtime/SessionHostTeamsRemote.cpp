@@ -38,7 +38,7 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("text"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.update"),
          {QStringLiteral("team_id"), QStringLiteral("paused"), QStringLiteral("merge_policy"),
-          QStringLiteral("expected_revision")}},
+          QStringLiteral("turn_budget"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.delete"),
          {QStringLiteral("team_id"), QStringLiteral("confirmation"),
           QStringLiteral("expected_revision")}},
@@ -47,7 +47,8 @@ const QHash<QString, QSet<QString>>& allowedFields() {
          {QStringLiteral("repository"), QStringLiteral("name"), QStringLiteral("goal"),
           QStringLiteral("integration_branch"), QStringLiteral("merge_policy"),
           QStringLiteral("leader_writes_requirements"), QStringLiteral("execution_policy"),
-          QStringLiteral("risk_acknowledged"), QStringLiteral("plan")}},
+          QStringLiteral("risk_acknowledged"), QStringLiteral("plan"),
+          QStringLiteral("turn_budget")}},
         {QStringLiteral("team.member.add"),
          {QStringLiteral("team_id"), QStringLiteral("name"), QStringLiteral("lane"),
           QStringLiteral("paths"), QStringLiteral("provider"), QStringLiteral("model"),
@@ -98,12 +99,13 @@ std::optional<QJsonObject> payloadRefusal(const QString& type, const QJsonObject
     if (type == QStringLiteral("team.update")) {
         const QJsonValue paused = payload.value(QStringLiteral("paused"));
         const QJsonValue policy = payload.value(QStringLiteral("merge_policy"));
-        if ((paused.isUndefined() && policy.isUndefined()) ||
+        const QJsonValue budget = payload.value(QStringLiteral("turn_budget"));
+        if ((paused.isUndefined() && policy.isUndefined() && budget.isUndefined()) ||
             (!paused.isUndefined() && !paused.isBool()) ||
             (!policy.isUndefined() && policy != QStringLiteral("leader") &&
              policy != QStringLiteral("user")))
-            return invalid(QStringLiteral("A paired device pauses, resumes or chooses who "
-                                          "merges."));
+            return invalid(QStringLiteral("A paired device pauses, resumes, chooses who "
+                                          "merges or sets the automatic turns."));
     }
     if (type == QStringLiteral("team.delete") &&
         payload.value(QStringLiteral("confirmation")).toString() != QStringLiteral("DELETE"))

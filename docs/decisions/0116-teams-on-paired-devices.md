@@ -180,8 +180,9 @@ describes them.
 | Answer a decision, including **Start** for the first plan, **Continue** for a used-up budget, **Wake the leader again** | `team.decision.answer` | `team_id`, `decision_id`, `choice` (one of its choices, exactly) or `text` (1 to 4,000 characters), `expected_revision` | that decision | `decision_closed` |
 | Pause / Resume | `team.update` | `team_id`, `paused`, `expected_revision` | settings | none; pausing a paused team succeeds and changes nothing |
 | Who merges | `team.update` | `team_id`, `merge_policy` (`leader` or `user`), `expected_revision` | settings | none |
+| Automatic turns | `team.update` | `team_id`, `turn_budget` (a whole number from 5 to 200, ADR 0114 open point 2), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
-| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}` | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
+| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?` (without it, an older phone's team takes the global value of Settings → Teams) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
@@ -406,7 +407,7 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
      result associated data of §2. `encryptSealed` names its key `session-create:<id>`
      today; it takes the key id as an argument instead.
 4. Restrict the payloads to the fields of §4:
-   - only `paused` and `merge_policy` through `team.update`;
+   - only `paused`, `merge_policy` and `turn_budget` through `team.update`;
    - `confirmation: "DELETE"` for `team.delete`;
    - a reason of 1 to 500 characters for a handover;
    - `choice` or `text` for an answer.

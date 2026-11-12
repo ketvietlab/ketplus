@@ -265,9 +265,14 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths and max_rounds; other keys are ignored.
+    // shared_paths, max_rounds and turn_budget; other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
+    // ADR 0114, open point 2 (TeamCoordinatorSettings.cpp): what a new team starts from,
+    // kept in the journal. Only `turn_budget` for now; changing it changes no team.
+    [[nodiscard]] QJsonObject teamSettings() const;
+    [[nodiscard]] int turnBudgetSetting() const;
+    std::optional<TeamError> updateTeamSettings(const QJsonObject& changes);
     TeamResult addMember(qint64 teamId, Member member, const QString& actor);
     TeamResult updateMember(qint64 teamId, const QString& sessionId, const QString& lane,
                             const QStringList& paths, const QString& actor,
@@ -411,6 +416,10 @@ class TeamCoordinator : public QObject {
     // failure the in-memory team is restored from `before`.
     std::optional<TeamError> commit(Team& team, const Team& before, const QString& actor,
                                     const QList<Update>& updates);
+    // A team's own budget, from team.update; a team paused by its budget runs again when the
+    // new one leaves turns. The turns used stay counted.
+    std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
+                                              QList<Update>& updates);
     // Leaves the developer's open tasks unassigned, with an entry in their history.
     void unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                          const QString& reason, QList<Update>& updates);

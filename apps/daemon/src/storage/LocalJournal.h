@@ -496,6 +496,10 @@ class LocalJournal final {
     bool deleteTeam(qint64 teamId, QString* error = nullptr);
     // `read` is false when the journal could not be read, which is not "no teams".
     [[nodiscard]] QList<QJsonObject> teamDocuments(bool* read = nullptr) const;
+    // ADR 0114: the settings every new team starts from (Settings → Teams); empty when none
+    // were saved. `read` is false when the journal could not be read.
+    [[nodiscard]] QJsonObject teamSettings(bool* read = nullptr) const;
+    bool saveTeamSettings(const QJsonObject& settings, QString* error = nullptr);
     [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
     [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
                                                          QString* error = nullptr);

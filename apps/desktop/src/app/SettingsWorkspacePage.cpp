@@ -52,7 +52,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                              SettingsProvidersPage::Fetcher providers,
                                              QWidget* parent,
                                              SettingsClaudeCredentials::Requester credentials,
-                                             SettingsStoragePage::Requester storageRequester)
+                                             SettingsStoragePage::Requester storageRequester,
+                                             SettingsTeamsPage::Requester teamsRequester)
     : SettingsWorkspace(dialog, QStringLiteral("⌘ ,"), InterfaceUiFont::settingsLabel(), parent) {
     addConversationWidth();
     account_ = new SettingsAccountPage({}, this);
@@ -63,6 +64,10 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // Account has no settings of its own; Restore defaults does not apply to it.
     addSection(tr("Account & devices"), QStringLiteral("account-devices"), account_, false);
     addLink(tr("Agent models"), QStringLiteral("agent-models"));
+    // The daemon keeps the value and it applies as it is left; Restore defaults does not
+    // apply to it.
+    addSection(tr("Teams"), QStringLiteral("teams"),
+               new SettingsTeamsPage(std::move(teamsRequester), this), false);
     addSection(tr("Browser"), QStringLiteral("browser"),
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
     addSection(tr("Computer use"), QStringLiteral("computer"),
@@ -98,6 +103,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
 QLabel#storageUsage, QLabel#storageStatus, QComboBox#storageDetailDays,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
 QLabel#computerStatus, QLabel#browserToolsStatus { color:%3; font-size:{{body}}px; }
+QLabel#teamsTurnBudgetError { font-size:{{body}}px; }
 )QSS"));
     connect(this, &SettingsWorkspace::linkActivated, this, [this](const QString& id) {
         if (id == QStringLiteral("agent-models"))

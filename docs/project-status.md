@@ -49,8 +49,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Automatic turns (#459): only an assignment, a handover, a review and an answered
   decision start a member's turn; every other change waits in Updates for the leader's
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
-  holds every team message in order until Resume, and 40 automatic turns pause the team
-  with one decision.
+  holds every team message in order until Resume, and the team's budget of automatic
+  turns pauses it with one decision ("Continue (N more turns)"). The budget (ADR 0114
+  open point 2, `teams.settings/1`): a global value the daemon keeps, 40 until changed in
+  Settings → Teams, which a team created without its own takes (an older phone included);
+  New team and the team's Automatic turns dialog set a team's own, a whole number from 5
+  to 200, and a larger budget withdraws the budget decision and resumes the team, its used
+  turns still counted. The team page shows the turns used of it.
   Stall watchdog (ADR 0114 §8): 3 minutes after a member's turn ends, a team with work
   left is moved on: an idle developer with a task in progress (or the reviewer with a
   task in review) is nudged once, an idle team wakes the leader with the open tasks at
