@@ -38,6 +38,8 @@ class MachineWorkspaceView final : public QWidget {
     [[nodiscard]] QString openSessionId() const;
     // Rename, fork and archive of this machine's conversations (the sidebar menu uses it too).
     [[nodiscard]] MachineConversationActions* actions() const { return actions_; }
+    // A fork the machine confirmed, opened once it is listed; empty when none waits.
+    [[nodiscard]] QString pendingFork() const { return pendingFork_; }
 
   signals:
     // A conversation was opened or created, for the sidebar's selection.

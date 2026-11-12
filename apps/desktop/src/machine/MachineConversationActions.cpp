@@ -30,6 +30,14 @@ bool MachineConversationActions::available(const Feature feature, QString* reaso
     return supported;
 }
 
+QString MachineConversationActions::pendingStatus() const {
+    const QString machine = catalog_->machineId();
+    for (const Pending& pending : pending_)
+        if (pending.machineId == machine)
+            return pending.status;
+    return {};
+}
+
 bool MachineConversationActions::start(const Feature feature, const QString& sessionId,
                                        qint64* generation) {
     QString reason;
@@ -72,7 +80,7 @@ MachineConversationActions::done(const QString& sent,
             finish(result, error);
             return;
         }
-        self->pending_.insert(commandId, sent);
+        self->pending_.insert(commandId, {backend->machineId(), sent});
         emit self->pendingChanged();
         auto connection = std::make_shared<QMetaObject::Connection>();
         *connection =
@@ -112,9 +120,9 @@ void MachineConversationActions::fork(const QString& sessionId) {
     catalog_->backend()->forkConversation(
         sessionId, generation, forkId,
         done(tr("Fork sent. Waiting for the machine…"),
-             [this, machine, forkId](const QJsonObject& result) {
+             [this, machine, sessionId, forkId](const QJsonObject& result) {
                  const QString id = result.value(QLatin1String("session_id")).toString(forkId);
-                 emit forked(machine, id,
+                 emit forked(machine, sessionId, id,
                              result.value(QLatin1String("session_generation")).toInteger(1));
              }));
 }

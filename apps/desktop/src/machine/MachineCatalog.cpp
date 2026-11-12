@@ -31,6 +31,9 @@ void MachineCatalog::setBackend(remote::MachineBackend* backend) {
         disconnect(connection);
     connections_.clear();
     ++binding_; // drops answers still on their way from the previous machine
+    // A listing queued for the previous machine is dropped by its binding; the new machine
+    // still gets its own.
+    refreshQueued_ = false;
     backend_ = backend;
     clear();
     if (backend == nullptr) {

@@ -29,11 +29,9 @@ class MachineConversationActions final : public QObject {
     // Whether the selected machine can run `feature` now; when not, `reason` says why.
     [[nodiscard]] bool available(Feature feature, QString* reason = nullptr) const;
     [[nodiscard]] QString lastError() const { return lastError_; }
-    // What a command the machine has not confirmed yet is waiting for (the Relay queues
-    // commands until the host answers); empty when nothing waits.
-    [[nodiscard]] QString pendingStatus() const {
-        return pending_.isEmpty() ? QString{} : *pending_.cbegin();
-    }
+    // What a command the selected machine has not confirmed yet is waiting for (the Relay
+    // queues commands until the host answers); empty when nothing waits.
+    [[nodiscard]] QString pendingStatus() const;
 
     void rename(const QString& sessionId, const QString& title);
     void fork(const QString& sessionId);
@@ -46,7 +44,9 @@ class MachineConversationActions final : public QObject {
     void promptRename(const QString& sessionId, QWidget* parent);
 
   signals:
-    void forked(const QString& machineId, const QString& sessionId, qint64 generation);
+    // `sourceSessionId` is the conversation that was forked.
+    void forked(const QString& machineId, const QString& sourceSessionId, const QString& sessionId,
+                qint64 generation);
     void failed(const QString& error);
     void finished();
     void pendingChanged();
@@ -58,7 +58,11 @@ class MachineConversationActions final : public QObject {
 
     MachineCatalog* catalog_;
     QString lastError_;
-    QHash<QString, QString> pending_; // queued command id -> what it waits for
+    struct Pending {
+        QString machineId;
+        QString status;
+    };
+    QHash<QString, Pending> pending_; // queued command id -> its machine and what it waits for
 };
 
 // The sidebar's menu and rename of a remote conversation row: they act through the remote
