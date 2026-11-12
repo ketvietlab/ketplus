@@ -153,7 +153,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   backend is attached (`LinuxMachineModel::setBackendsAttached`) the SSH mode
   and Connect / Disconnect stay hidden and a Relay machine reads "Available",
   as before; every signed-in account may pair through the Relay until the Pro
-  entitlement is fed.
+  entitlement is fed. Machines are keyed by the ADR 0119 machine id, the host key
+  fingerprint (for the Relay, the one pinned at pairing); the Relay's machine
+  id is a route attribute, so a host on both routes is one row.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores

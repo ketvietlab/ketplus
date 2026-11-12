@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QFrame>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSignalSpy>
@@ -22,6 +23,7 @@ class RemoteControlTestAccess {
     static void signIn(ControlV2Client& client) {
         client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
     }
+    static void pin(ControlV2Client& client, const QJsonObject& pins) { client.hostPins_ = pins; }
 };
 } // namespace ketplus::remote
 
@@ -43,6 +45,7 @@ class LinuxMachinesSectionTest final : public QObject {
     void sshFailuresAreActionable();
     void relayModeOpensPairingAndRespectsTheEntitlement();
     void relayRefreshKeepsSshMachines();
+    void pinnedFingerprintNamesTheRelayHost();
     void withoutBackendsOnlyTheRelayIsOffered();
     void signedOutOffersSshWithoutAnAccount();
     void detailsFollowTheModel();
@@ -399,20 +402,55 @@ void LinuxMachinesSectionTest::relayModeOpensPairingAndRespectsTheEntitlement() 
 }
 
 void LinuxMachinesSectionTest::relayRefreshKeepsSshMachines() {
+    // ADR 0119: machines are keyed by the host key fingerprint; the relay id is an attribute.
+    const QString sshKey = QStringLiteral("SHA256:ssh-host");
+    const QString relayKey = QStringLiteral("SHA256:relay-host");
+    auto reported =
+        make(relayKey, "build-node-02", "Linux · Trusted", Route::Relay, State::Offline, relayKey);
+    reported.relayId = QStringLiteral("r-1");
     LinuxMachineModel model;
-    model.setMachines(fleet());
-    model.setRelayMachines({QStringLiteral("relay-1"), QStringLiteral("relay-2"),
-                            QStringLiteral("relay-2"), QString()});
+    model.setMachines(
+        {make(sshKey, "build-node-01", "Ubuntu", Route::Ssh, State::Connected, sshKey), reported});
+    model.setRelayMachines({{QStringLiteral("r-1"), relayKey},
+                            {QStringLiteral("r-2"), sshKey},
+                            {QStringLiteral("r-3"), {}},
+                            {QStringLiteral("r-3"), {}},
+                            {{}, QStringLiteral("SHA256:no-relay-id")}});
     QStringList ids;
     for (const auto& machine : model.machines())
         ids.append(machine.id);
-    QCOMPARE(ids, (QStringList{"ssh-1", "ssh-2", "ssh-3", "ssh-4", "relay-1", "relay-2"}));
+    QCOMPARE(ids, (QStringList{sshKey, relayKey, QStringLiteral("relay:r-3")}));
+    // The host the Relay also lists is still the one SSH machine, with the relay id beside it.
+    QCOMPARE(model.machine(sshKey)->route, Route::Ssh);
+    QCOMPARE(model.machine(sshKey)->relayId, QStringLiteral("r-2"));
     // A known Relay machine keeps what the backend reported about it.
-    QCOMPARE(model.machine("relay-1")->state, State::Offline);
-    QCOMPARE(model.machine("relay-2")->route, Route::Relay);
-    QCOMPARE(model.machine("relay-2")->state, State::Connected);
+    QCOMPARE(model.machine(relayKey)->state, State::Offline);
+    QCOMPARE(model.machine(relayKey)->relayId, QStringLiteral("r-1"));
+    // Paired before host pins: no verified identity yet, so it cannot merge with anything.
+    const auto* unpinned = model.machine(QStringLiteral("relay:r-3"));
+    QCOMPARE(unpinned->route, Route::Relay);
+    QCOMPARE(unpinned->state, State::Connected);
+    QVERIFY(unpinned->fingerprint.isEmpty());
+    QCOMPARE(unpinned->name, QStringLiteral("r-3"));
+
     model.setRelayMachines({});
-    QCOMPARE(model.machines().size(), 4);
+    QCOMPARE(model.machines().size(), 1);
+    QVERIFY(model.machine(sshKey)->relayId.isEmpty());
+}
+
+void LinuxMachinesSectionTest::pinnedFingerprintNamesTheRelayHost() {
+    // The section's own client, as the other tests use: no second credential store.
+    LinuxMachinesSection section;
+    auto& client = *section.client_;
+    remote::RemoteControlTestAccess::pin(
+        client, {{QStringLiteral("m1/1"), QStringLiteral("SHA256:old")},
+                 {QStringLiteral("m1/2"), QStringLiteral("SHA256:new")},
+                 {QStringLiteral("m10/3"), QStringLiteral("SHA256:other")},
+                 {QStringLiteral("a/b/1"), QStringLiteral("SHA256:slash")}});
+    QCOMPARE(client.pinnedFingerprint(QStringLiteral("m1")), QStringLiteral("SHA256:new"));
+    QCOMPARE(client.pinnedFingerprint(QStringLiteral("m10")), QStringLiteral("SHA256:other"));
+    QCOMPARE(client.pinnedFingerprint(QStringLiteral("a/b")), QStringLiteral("SHA256:slash"));
+    QVERIFY(client.pinnedFingerprint(QStringLiteral("m")).isEmpty());
 }
 
 void LinuxMachinesSectionTest::withoutBackendsOnlyTheRelayIsOffered() {
@@ -421,9 +459,9 @@ void LinuxMachinesSectionTest::withoutBackendsOnlyTheRelayIsOffered() {
     section.show();
     remote::RemoteControlTestAccess::signIn(*section.client_);
     QVERIFY(!section.model()->backendsAttached());
-    section.model()->setRelayMachines({QStringLiteral("relay-1")});
+    section.model()->setRelayMachines({{QStringLiteral("relay-1"), {}}});
     // As before the model: listed by the Relay, "Available", nothing to connect or disconnect.
-    auto* card = row(section, "relay-1");
+    auto* card = row(section, "relay:relay-1");
     QVERIFY(card);
     QCOMPARE(text(card, QStringLiteral("linuxMachineState")), QStringLiteral("Available"));
     QVERIFY(!button(card, QStringLiteral("linuxMachineToggle")));
@@ -451,7 +489,7 @@ void LinuxMachinesSectionTest::withoutBackendsOnlyTheRelayIsOffered() {
 
     // Attaching the backends brings SSH and the row actions back.
     section.model()->setBackendsAttached(true);
-    card = row(section, "relay-1");
+    card = row(section, "relay:relay-1");
     QCOMPARE(text(card, QStringLiteral("linuxMachineState")), QStringLiteral("Connected"));
     QVERIFY(button(card, QStringLiteral("linuxMachineToggle")));
 }
