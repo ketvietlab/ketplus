@@ -1,7 +1,8 @@
 # SSH transport
 
-Status: transport primitive implemented (`ketplus_remote_ssh`). It is not yet
-composed into Desktop: no UI adds a host, and `DaemonClient` does not use it yet.
+Status: transport primitive (`ketplus_remote_ssh`) and the ADR 0119 machine
+backend over it (`ketplus_remote_ssh_backend`, see "Machine backend") are
+implemented. They are not yet composed into Desktop: no UI adds a host yet.
 
 Desktop can reach the KetPlus daemon of a Linux host that it can already reach
 with OpenSSH. The relay ([`remote-transport.md`](remote-transport.md)) needs
@@ -157,3 +158,74 @@ a permissive or missing token, and reconnection after the daemon drops the
 connection (the token is empty in every state but `Connected`). Parser,
 error-classification and socket/token-resolution cases run without sshd. Where `/usr/sbin/sshd` is missing
 or cannot run as the user, the sshd cases skip.
+
+## Machine backend
+
+`SshMachineBackend` is the ADR 0119 `MachineBackend` for a Linux host
+([ADR 0119](decisions/0119-remote-machine-composition.md)). It composes three
+parts and adds no protocol of its own:
+
+- `SshTunnelLink` wraps `SshTunnel` (`SshLink` is the seam tests replace).
+- A `DaemonClient` in its remote mode (`DaemonClient(CredentialSource)`)
+  adopts the tunnel's connection with `adoptConnection()` on every
+  `Connected`, sends `daemon.hello` with the host daemon's local token, and
+  queues and replays requests exactly as for This Mac. It never starts,
+  replaces or reconnects a daemon: the tunnel owns reconnects. The token is
+  supplied by the link and kept in memory only.
+- `DaemonMachineBackend` maps the operations to the local request types.
+
+| Tunnel state | Machine state | Reason |
+| --- | --- | --- |
+| `Connecting` | Connecting, or Reconnecting after a session | |
+| `Connected` | Connecting until the hello, then Connected | |
+| `Offline` | Reconnecting after a session; Offline for a host never reached | "The host cannot be reached over SSH." |
+| `DaemonSocketMissing` | Offline (the tunnel keeps retrying) | "ketPlus daemon not installed or not running on this host." |
+| `AuthFailed` | Offline | "SSH refused the sign-in…" |
+| `HostKeyMismatch` | Offline | "The host's SSH key changed…" |
+| `HostKeyRejected` | Offline | "The host's SSH key was not trusted." |
+| `Idle` after `disconnectFromHost()` | Offline | "Disconnected." |
+
+A request made while Offline fails at once with the reason, and so do the
+calls waiting for a hello when the machine becomes Offline.
+`connectionDetails()` gives Connections the route (`SSH`), the target, the
+machine id, the verified SSH host key fingerprint, the state and the reason.
+
+### Machine identity and the machine store
+
+The machine id is the daemon's host key fingerprint from `daemon.hello`
+(`host_key_fingerprint`, feature `daemon.host_identity/1`), which the daemon
+has without a cloud sign-in. The remote client requires it
+(`setHostIdentityRequired`): a hello that names no fingerprint, or a different
+one from the trusted id, fails closed before any queued request is sent.
+
+`SshMachineStore` keeps, in
+`<GenericDataLocation>/Ketsuite/KetPlus/ssh/machines.json` (file 0600,
+directory 0700), each target (alias, user, port), the machine id last trusted
+for it and the conversation bindings (`conversation id -> machine id`). It
+holds no token, key or password, and it never overwrites a file it cannot
+read. `parseSshDestination()` splits Connections' `user@host[:port]` (or
+`[v6]:port`) input into an `SshTarget`.
+
+- The first hello of a new target records its machine id
+  (`trustFirstIdentity`).
+- A later hello with another fingerprint makes the machine Offline with
+  "This machine's identity changed", exposes the presented id, closes the
+  tunnel and ignores Connect. `trustPresentedIdentity()` (Connections' "Trust
+  the new identity") replaces the id and moves every binding of the old id to
+  the new one in one write, then connects. Removing the machine forgets the
+  target, its id and the bindings no other saved target shares.
+
+### Backend tests
+
+`ketplus_remote_ssh_backend_tests` drives the backend with a fake link and a
+fake daemon. It covers the state mapping, an Offline request, the first hello,
+restart persistence without secrets, a dropped session that replays a read,
+rotation fail-closed and re-trust with binding moves, a daemon that names no
+identity, durable add and remove, an unreadable store, and destination
+parsing. `ketplus_remote_ssh_daemon_integration_tests` runs a real
+`ketplus_daemon` with FakeCodex (no provider quota) behind the loopback `sshd`
+fixture (`tests/daemon/SshFixture.h`). It lists repositories and
+conversations, completes an approval round-trip, pages a transcript,
+reconnects after a Desktop restart as the same machine, and reports a host
+without the daemon. Like the tunnel tests, it skips where `sshd` cannot run as
+the user.

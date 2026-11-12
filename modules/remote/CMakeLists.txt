@@ -52,3 +52,11 @@ add_library(ketplus_remote_ssh STATIC
 target_link_libraries(ketplus_remote_ssh PUBLIC Qt6::Core Qt6::Network)
 target_include_directories(ketplus_remote_ssh PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_remote_ssh)
+
+# ADR 0119 machine backend for a Linux host over SshTunnel, with its persistent machine store.
+add_library(ketplus_remote_ssh_backend STATIC
+    src/ssh/SshMachineBackend.cpp src/ssh/SshMachineBackend.h
+    src/ssh/SshMachineStore.cpp src/ssh/SshMachineStore.h)
+target_link_libraries(ketplus_remote_ssh_backend PUBLIC ketplus_remote_ssh ketplus_remote)
+target_include_directories(ketplus_remote_ssh_backend PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_remote_ssh_backend)

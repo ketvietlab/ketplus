@@ -68,10 +68,13 @@ Three implementations:
   maps operations to request types and `readyChanged` / `disconnected` to
   connection states; queueing before the hello, replay after a disconnect and
   reconnect backoff stay in `DaemonClient`. This Mac behaves exactly as before.
-- **SSH** — the same `DaemonMachineBackend`, constructed with the host's
-  machine id and `Route::Ssh`, over a `DaemonClient` whose socket is an
-  SSH-forwarded private local socket to the Linux user's own daemon socket
-  (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`). The wire protocol is the local one;
+- **SSH** — `SshMachineBackend` (`ketplus_remote_ssh_backend`): the same
+  `DaemonMachineBackend` operations with the host's machine id and
+  `Route::Ssh`, over a remote-mode `DaemonClient` that adopts `SshTunnel`'s
+  connection to an SSH-forwarded private local socket, itself forwarded to the
+  Linux user's own daemon socket (`$XDG_RUNTIME_DIR/ketplus-daemon-v0`).
+  The remote-mode client never starts, replaces or reconnects a daemon;
+  `SshTunnel` owns reconnects. The wire protocol is the local one;
   only the transport differs (see "SSH trust"). Connection reasons are
   route-neutral ("The ketPlus daemon is not running."), and only the local
   route turns a missing local daemon install into Offline; the SSH route
@@ -177,8 +180,9 @@ daemon socket. Desktop runs the system `ssh` with the user's configuration and O
 stream-local forwarding,
 `ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -L <local socket>:<remote socket> <host>`,
 where the local socket lives in a directory only the Mac user can open and is
-removed when the connection ends. `DaemonClient` connects to that local socket
-as it does to This Mac's. `ssh -W` is not used: it forwards to a TCP host and
+removed when the connection ends. `SshTunnel` opens the one connection to that
+local socket and a `DaemonClient` in its remote mode adopts it, so the daemon's
+10-second hello deadline never races a second connect. `ssh -W` is not used: it forwards to a TCP host and
 port, not to a Unix socket. Desktop never opens an inbound port on the host and
 never talks to another user's socket.
 
@@ -189,7 +193,7 @@ never talks to another user's socket.
 - **Host authentication** comes from SSH. The host key is verified against the
   user's `known_hosts`. For a host not yet known, Connections displays the
   host key's SHA256 fingerprint and the user explicitly accepts it on first use;
-  Desktop then adds it to `known_hosts`. A changed host key is refused and the
+  Desktop then adds it to its own KetPlus `known_hosts` file, never the user's. A changed host key is refused and the
   machine is Offline with the reason; Desktop never offers to bypass it.
 - **Client authentication** comes from the user's SSH keys or SSH agent. KetPlus
   never stores, prompts for or forwards an SSH password, and runs `ssh` in batch

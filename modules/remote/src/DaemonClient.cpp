@@ -80,16 +80,75 @@ DaemonClient::DaemonClient(QObject* parent)
       statePath_(defaultStatePath()),
       clientId_(
           QStringLiteral("desktop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {
-    // Keep transport backpressure active even while application dispatch is paused.
-    socket_.setReadBufferSize(maximumFrameBytes + 4);
+    initialiseTimers();
+    auto* socket = new QLocalSocket(this);
+    connect(socket, &QLocalSocket::connected, this, &DaemonClient::authenticate);
+    connect(socket, &QLocalSocket::errorOccurred, this,
+            [this](QLocalSocket::LocalSocketError error) {
+                if (error == QLocalSocket::ServerNotFoundError ||
+                    error == QLocalSocket::ConnectionRefusedError) {
+                    launchDaemon();
+                }
+                scheduleReconnect();
+            });
+    attachSocket(socket);
+    QTimer::singleShot(0, this, &DaemonClient::connectToDaemon);
+}
+
+DaemonClient::DaemonClient(CredentialSource credential, QObject* parent)
+    : QObject(parent), credential_(std::move(credential)), adopted_(true),
+      clientId_(
+          QStringLiteral("desktop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {
+    initialiseTimers();
+}
+
+void DaemonClient::initialiseTimers() {
     reconnectTimer_.setSingleShot(true);
     connect(&reconnectTimer_, &QTimer::timeout, this, &DaemonClient::connectToDaemon);
     stableTimer_.setSingleShot(true);
     stableTimer_.setInterval(stableConnectionMs);
     connect(&stableTimer_, &QTimer::timeout, this, [this] { reconnectAttempt_ = 0; });
-    connect(&socket_, &QLocalSocket::connected, this, &DaemonClient::authenticate);
-    connect(&socket_, &QLocalSocket::readyRead, this, &DaemonClient::readFrames);
-    connect(&socket_, &QLocalSocket::disconnected, this, [this] {
+}
+
+void DaemonClient::adoptConnection(QLocalSocket* socket) {
+    if (!adopted_ || socket == socket_.data())
+        return;
+    if (socket_) {
+        // The route replaced its connection: end the old one as a disconnect would.
+        QObject::disconnect(socket_, nullptr, this, nullptr);
+        socket_.clear();
+        handleDisconnected();
+    }
+    if (!socket || socket->state() != QLocalSocket::ConnectedState)
+        return;
+    attachSocket(socket);
+    if (!identityRejected_)
+        authenticate();
+}
+
+void DaemonClient::attachSocket(QLocalSocket* socket) {
+    socket_ = socket;
+    // Keep transport backpressure active even while application dispatch is paused.
+    socket->setReadBufferSize(maximumFrameBytes + 4);
+    connect(socket, &QLocalSocket::readyRead, this, &DaemonClient::readFrames);
+    connect(socket, &QLocalSocket::disconnected, this, [this, socket] {
+        if (socket != socket_.data())
+            return;
+        if (adopted_) {
+            QObject::disconnect(socket, nullptr, this, nullptr);
+            socket_.clear();
+        }
+        handleDisconnected();
+    });
+}
+
+void DaemonClient::abortConnection() {
+    if (socket_)
+        socket_->abort();
+}
+
+void DaemonClient::handleDisconnected() {
+    {
         const bool wasReady = ready_;
         stableTimer_.stop();
         launched_ = false;
@@ -146,22 +205,18 @@ DaemonClient::DaemonClient(QObject* parent)
             emit disconnected(QStringLiteral("KetPlus Daemon disconnected."));
         }
         scheduleReconnect();
-    });
-    connect(&socket_, &QLocalSocket::errorOccurred, this,
-            [this](QLocalSocket::LocalSocketError error) {
-                if (error == QLocalSocket::ServerNotFoundError ||
-                    error == QLocalSocket::ConnectionRefusedError) {
-                    launchDaemon();
-                }
-                scheduleReconnect();
-            });
-    QTimer::singleShot(0, this, &DaemonClient::connectToDaemon);
+    }
 }
 
 DaemonClient::~DaemonClient() {
     reconnectTimer_.stop();
     stableTimer_.stop();
-    socket_.disconnectFromServer();
+    if (socket_) {
+        QObject::disconnect(socket_, nullptr, this, nullptr);
+        // An adopted connection belongs to its route, which closes it.
+        if (!adopted_)
+            socket_->disconnectFromServer();
+    }
     pending_.clear();
     queued_.clear();
 }
@@ -236,16 +291,18 @@ QString DaemonClient::defaultStatePath() { return DaemonPaths::state(); }
 QString DaemonClient::defaultTokenPath() { return DaemonPaths::token(); }
 
 void DaemonClient::connectToDaemon() {
-    if (identityRejected_ || ready_ || socket_.state() == QLocalSocket::ConnectedState ||
-        socket_.state() == QLocalSocket::ConnectingState) {
+    // An adopted connection is opened, and reopened, by its route (adoptConnection()).
+    if (adopted_ || !socket_ || identityRejected_ || ready_ ||
+        socket_->state() == QLocalSocket::ConnectedState ||
+        socket_->state() == QLocalSocket::ConnectingState) {
         return;
     }
-    socket_.abort();
-    socket_.connectToServer(socketPath_);
+    socket_->abort();
+    socket_->connectToServer(socketPath_);
 }
 
 void DaemonClient::scheduleReconnect() {
-    if (identityRejected_ || reconnectTimer_.isActive() || ready_) {
+    if (adopted_ || identityRejected_ || reconnectTimer_.isActive() || ready_) {
         return;
     }
     const int exponent = qMin(reconnectAttempt_++, 6);
@@ -274,7 +331,7 @@ QString DaemonClient::daemonLogPath() {
 }
 
 void DaemonClient::launchDaemon() {
-    if (launched_ || qEnvironmentVariableIsSet("KETPLUS_DISABLE_DAEMON_AUTOSTART")) {
+    if (adopted_ || launched_ || qEnvironmentVariableIsSet("KETPLUS_DISABLE_DAEMON_AUTOSTART")) {
         return;
     }
     const QString executable = daemonExecutable();
@@ -294,9 +351,10 @@ void DaemonClient::launchDaemon() {
 }
 
 void DaemonClient::authenticate() {
-    const QByteArray token = readLocalDaemonCredential(tokenPath_);
+    const QByteArray token = adopted_ ? (credential_ ? credential_() : QByteArray{})
+                                      : readLocalDaemonCredential(tokenPath_);
     if (token.isEmpty()) {
-        socket_.abort();
+        abortConnection();
         scheduleReconnect();
         return;
     }
@@ -311,7 +369,7 @@ void DaemonClient::authenticate() {
         -1,
         [this](const QJsonObject& result, const QString& error) {
             if (!error.isEmpty() || !result.value(QStringLiteral("ok")).toBool()) {
-                socket_.abort();
+                abortConnection();
                 scheduleReconnect();
                 return;
             }
@@ -326,22 +384,27 @@ void DaemonClient::authenticate() {
             for (const QJsonValue& value : result.value(QStringLiteral("features")).toArray())
                 features_.append(value.toString());
             hostKeyFingerprint_ = result.value(QStringLiteral("host_key_fingerprint")).toString();
-            if (!trustedHostKeyFingerprint_.isEmpty() &&
-                hostKeyFingerprint_ != trustedHostKeyFingerprint_) {
+            if (trustedHostKeyFingerprint_.isEmpty() && hostIdentityRequired_)
+                trustedHostKeyFingerprint_ = hostKeyFingerprint_;
+            if ((hostIdentityRequired_ && hostKeyFingerprint_.isEmpty()) ||
+                (!trustedHostKeyFingerprint_.isEmpty() &&
+                 hostKeyFingerprint_ != trustedHostKeyFingerprint_)) {
                 // Fail closed before anything queued reaches a machine we did not trust.
                 identityRejected_ = true;
                 reconnectTimer_.stop();
                 failPending(identityRejectedReason());
                 emit hostIdentityRejected(hostKeyFingerprint_);
-                socket_.abort();
+                abortConnection();
                 return;
             }
             const QString daemonVersion = result.value(QStringLiteral("daemon_version")).toString();
             const QVersionNumber running = QVersionNumber::fromString(daemonVersion);
             const QVersionNumber bundled =
                 QVersionNumber::fromString(QStringLiteral(KETPLUS_PRODUCT_VERSION));
-            if (KETPLUS_AUTO_UPGRADE_DAEMON && !replacementAttempted_ && !running.isNull() &&
-                !bundled.isNull() && QVersionNumber::compare(running, bundled) < 0) {
+            // A remote daemon is the host's own install; only This Mac's is replaced.
+            if (KETPLUS_AUTO_UPGRADE_DAEMON && !adopted_ && !replacementAttempted_ &&
+                !running.isNull() && !bundled.isNull() &&
+                QVersionNumber::compare(running, bundled) < 0) {
                 replaceIdleDaemon(daemonVersion);
                 return;
             }
@@ -398,15 +461,18 @@ void DaemonClient::sendCall(QueuedCall call) {
 
 void DaemonClient::sendEnvelope(const QJsonObject& envelope) {
     const QByteArray frame = encodeFrame(envelope);
-    if (frame.size() > maximumFrameBytes + 4 || socket_.state() != QLocalSocket::ConnectedState) {
-        socket_.abort();
+    if (!socket_ || frame.size() > maximumFrameBytes + 4 ||
+        socket_->state() != QLocalSocket::ConnectedState) {
+        abortConnection();
         return;
     }
-    socket_.write(frame);
+    socket_->write(frame);
 }
 
 void DaemonClient::readFrames() {
-    buffer_.append(socket_.readAll());
+    if (!socket_)
+        return;
+    buffer_.append(socket_->readAll());
     while (true) {
         if (expectedSize_ == 0) {
             if (buffer_.size() < 4) {
@@ -418,7 +484,7 @@ void DaemonClient::readFrames() {
                             static_cast<quint32>(static_cast<uchar>(buffer_[3]));
             buffer_.remove(0, 4);
             if (expectedSize_ == 0 || expectedSize_ > maximumFrameBytes) {
-                socket_.abort();
+                abortConnection();
                 return;
             }
         }
@@ -435,7 +501,7 @@ void DaemonClient::readFrames() {
 void DaemonClient::consumeFrame(const QByteArray& frame) {
     const QJsonDocument document = QJsonDocument::fromJson(frame);
     if (!document.isObject()) {
-        socket_.abort();
+        abortConnection();
         return;
     }
     const QJsonObject envelope = document.object();
@@ -480,6 +546,14 @@ void DaemonClient::setReady(const bool ready) {
     }
     ready_ = ready;
     emit readyChanged(ready_);
+}
+
+void DaemonClient::failWaitingCalls(const QString& reason) {
+    if (ready_)
+        return;
+    for (const QueuedCall& call : std::exchange(queued_, {}))
+        if (call.callback)
+            call.callback({}, reason);
 }
 
 void DaemonClient::failPending(const QString& reason) {
