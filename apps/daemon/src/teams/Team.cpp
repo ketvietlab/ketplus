@@ -56,6 +56,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
+    task.allowedPaths = stringList(json.value(QStringLiteral("allowed_paths")));
     if (task.outsideLane.size() > maximumOutsidePaths)
         task.outsideLane.resize(maximumOutsidePaths);
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
@@ -317,6 +318,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
                      {QStringLiteral("merge_offered"), task.mergeOffered},
                      {QStringLiteral("changed_revision"), task.changedRevision}};
+    if (!task.allowedPaths.isEmpty())
+        json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)

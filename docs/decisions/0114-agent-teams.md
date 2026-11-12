@@ -132,6 +132,19 @@ list, with the full count as `<key>_total`; documents written before the bounds 
 bounded when read. *Rejected*: asking the user for every lane change — it is
 about who edits which file, not what the product does.
 
+*Amended (T-38)*: only tracked changes are compared. The committed part is read from the
+task's branch (`refs/heads/<branch>`), never from whatever the worktree has checked out; the
+uncommitted part is the tracked files changed in the worktree (`git status -uno`), and only
+while the worktree has the task's branch checked out. Untracked and ignored files, such as
+build trees and screen captures, are never outside a lane. Paths any lane may change, such
+as contracts, snapshots, fixtures and tests, are named by the leader with
+`team_paths_allow {paths, reason, task_id?}`: without `task_id` they are the team's shared
+paths, with it the task's own `allowed_paths` (sent with the task only when set). They are
+validated as lane paths (relative, inside the repository, `invalid_payload` otherwise), the
+list replaces the one before, the change goes to Updates and, for a task, to its history,
+and every flag they now cover clears. The team page shows the shared paths with each
+lane's paths and the task dialog a task's allowed paths.
+
 ### 5. Who merges a reviewed task is a team setting (decided)
 
 `mergePolicy` is `leader` (default) or `user`. With `leader`, the leader merges a
@@ -368,6 +381,24 @@ The goal is the leader's main input, so it is written like a brief, not a title.
    Blocked to be reviewed again, and one merged with commits after its review is done
    with a `merged_unreviewed` update to the leader. *Rejected*: pull request state
    from GitHub — it needs credentials and a network, and is not the branch that matters.
+   *Amended (T-38)*: a task gets a head commit only from a commit made on its own branch
+   after its base. At a hand to review the daemon reads the branch; its tip is the task's
+   head only when it differs from the base, has the base as an ancestor, is not contained
+   in the integration branch and is not the head another task was handed in at. A worktree
+   checked out at its base, at the integration branch or at another task's commit therefore
+   gives the task no head, and its review gets no diff of another task: the diff runs from
+   the integration branch to the commit handed in, and a branch still at its base sends
+   none. When git cannot read the branch or its ancestry the hand to review is refused with
+   `git_unavailable`, to be tried again. Without a head of its own it is refused with
+   `no_commits`, unless
+   the task records its pull request: work done in another worktree or repository is
+   handed in with `team_task_update {state: in_review, pull_request, head_commit}`. The
+   daemon records `head_commit` (7 to 40 hexadecimal characters, optional) as the task's
+   head and a `handoff` history entry, and the review request names the pull request and
+   that commit instead of a diff. Git's rule makes a task done only when its branch has
+   commits of its own (its tip is not the base) and it was handed in at one of them; a
+   branch at its base, an empty or unknown base, or a task with an open pull request is
+   never done because the integration branch contains it.
    *Amended by [ADR 0118](0118-team-tasks-done-by-pull-request.md)*: a task that records a
    pull request is done when the remote says it is merged, from any open state; the
    ancestor check counts only a branch with commits of its own and also accepts

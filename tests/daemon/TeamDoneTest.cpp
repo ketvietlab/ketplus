@@ -188,7 +188,8 @@ class TeamDoneTest final : public QObject {
         // was cut from, which the integration branch contains.
         host_.heads.insert(QStringLiteral("team/%1/%2").arg(team_).arg(id), QStringLiteral("base"));
         bringTo(id, state::ready);
-        QCOMPARE(get(id).headCommit, get(id).baseCommit);
+        // T-38: no commit of its own gives the task no head.
+        QVERIFY(get(id).headCommit.isEmpty());
         host_.merged.insert(id);
         teams_->checkMerged(team_);
         QCOMPARE(get(id).state, state::ready);

@@ -57,6 +57,7 @@ const QStringList& names() {
                                    QStringLiteral("team_review_void"),
                                    QStringLiteral("team_review_accept"),
                                    QStringLiteral("team_lane_set"),
+                                   QStringLiteral("team_paths_allow"),
                                    QStringLiteral("team_decision_raise"),
                                    QStringLiteral("team_decision_withdraw")};
     return value;
@@ -106,6 +107,11 @@ QJsonArray teamTools() {
               {QStringLiteral("note"),
                text(QStringLiteral("Progress worth recording on the task."))},
               {QStringLiteral("pull_request"), text(QStringLiteral("The pull request, if any."))},
+              {QStringLiteral("head_commit"),
+               text(QStringLiteral(
+                   "With in_review, for work done in another worktree or repository: the "
+                   "commit the pull request is reviewed at. A commit on the task's own branch "
+                   "is read from git instead."))},
               {QStringLiteral("met"),
                QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
                            {QStringLiteral("items"),
@@ -197,6 +203,17 @@ QJsonArray teamTools() {
                list(QStringLiteral("Path prefixes relative to the repository."))},
               {QStringLiteral("reason"), text(QStringLiteral("Why the lane changes."))}},
              {QStringLiteral("developer"), QStringLiteral("paths"), QStringLiteral("reason")}),
+        tool(QStringLiteral("team_paths_allow"),
+             QStringLiteral("Leader: name the paths any lane may change, such as contracts, "
+                            "snapshots, fixtures or tests: the team's shared paths, or with "
+                            "task_id that task's own. The list replaces the one before; a "
+                            "change there is never flagged outside a lane."),
+             {{QStringLiteral("task_id"), text(QStringLiteral("The task, or none for the team."))},
+              {QStringLiteral("paths"),
+               list(QStringLiteral("Paths relative to the repository root, such as contracts "
+                                   "or tests/fixtures."))},
+              {QStringLiteral("reason"), text(QStringLiteral("Why, recorded in the history."))}},
+             {QStringLiteral("paths"), QStringLiteral("reason")}),
         tool(
             QStringLiteral("team_decision_raise"),
             QStringLiteral("Leader: ask the user a question that changes the product, with two "

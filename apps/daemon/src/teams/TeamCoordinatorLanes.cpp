@@ -11,17 +11,18 @@ bool covered(const QString& path, const QStringList& prefixes) {
                        [&](const QString& prefix) { return rules::pathUnder(path, prefix); });
 }
 
-// The first paths of `files`, sorted, that neither the owner's lane nor the shared paths
-// cover. A developer without prefixes has no lane to leave. A flag that lists hundreds of
-// paths is about the base the files were compared with, not about one lane; the first
-// maximumOutsidePaths of them are enough to act on.
-QStringList outsidePaths(const Team& team, const QString& owner, const QStringList& files) {
-    const Member* member = team.member(owner);
+// The first paths of `files`, sorted, that neither the owner's lane, the team's shared paths
+// nor the task's allowed paths (T-38) cover. A developer without prefixes has no lane to leave. A
+// flag that lists hundreds of paths is about the base the files were compared with, not about one
+// lane; the first maximumOutsidePaths of them are enough to act on.
+QStringList outsidePaths(const Team& team, const Task& task, const QStringList& files) {
+    const Member* member = team.member(task.owner);
     if (!member || member->paths.isEmpty())
         return {};
     QStringList outside;
     for (const QString& file : files)
-        if (!covered(file, member->paths) && !covered(file, team.sharedPaths))
+        if (!covered(file, member->paths) && !covered(file, team.sharedPaths) &&
+            !covered(file, task.allowedPaths))
             outside.append(file);
     outside.removeDuplicates();
     outside.sort();
@@ -135,7 +136,7 @@ void TeamCoordinator::applyLaneFacts(const qint64 teamId, const QString& develop
             !open(*task) || task->worktree != was.worktree || task->branch != was.branch ||
             task->baseCommit != was.baseCommit)
             continue;
-        found.insert(task->id, outsidePaths(*team, developer, *fact->changed));
+        found.insert(task->id, outsidePaths(*team, *task, *fact->changed));
     }
     if (found.isEmpty())
         return;
@@ -152,12 +153,13 @@ void TeamCoordinator::applyLaneFacts(const qint64 teamId, const QString& develop
         qWarning("Unable to record the lane check of %s.", qUtf8Printable(developer));
 }
 
-void TeamCoordinator::recheckLanes(Team& team, QList<Update>& updates) {
+void TeamCoordinator::recheckLanes(Team& team, QList<Update>& updates, const QString& why) {
     for (Task& task : team.tasks) {
         if (task.outsideLane.isEmpty())
             continue;
-        flagOutside(team, task, outsidePaths(team, task.owner, task.outsideLane),
-                    QStringLiteral("a lane change covers the files"), updates);
+        flagOutside(team, task, outsidePaths(team, task, task.outsideLane),
+                    why.isEmpty() ? QStringLiteral("a lane change covers the files") : why,
+                    updates);
     }
 }
 
