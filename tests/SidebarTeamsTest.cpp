@@ -444,11 +444,11 @@ class SidebarTeamsTest final : public QObject {
             loose("u", "Pin ket-qt to the tree parts", "9398", {}),
             loose("d", "Lite edition build", "9387", {{"seen", true}}),
             loose("e", "Relay capability check", "9371", {{"status", "Failed"}, {"seen", true}})};
-        SidebarRepository folded{"/ketviet",
-                                 "ketviet",
+        SidebarRepository folded{"/sample-project",
+                                 "sample-project",
                                  false,
                                  {loose("k", "Gateway logs", "8120", {{"needsInput", true}})}};
-        QSettings().setValue("sidebar/collapsedRepositories", QStringList{"/ketviet"});
+        QSettings().setValue("sidebar/collapsedRepositories", QStringList{"/sample-project"});
         const QString capture = qEnvironmentVariable("KETPLUS_SIDEBAR_TREE_CAPTURE");
         for (const bool dark : {false, true}) {
             theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);

@@ -15,6 +15,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <utility>
 
 using namespace ketplus;
 using namespace ketplus::daemon;
@@ -109,6 +110,67 @@ class TeamReplyTest final : public QObject {
             [&](const QJsonObject& result) { reply = result; });
         QTRY_VERIFY_WITH_TIMEOUT(!reply.isEmpty(), 30000);
         QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
+    }
+
+    // Where a conversation stands, and how many times it was switched, as the journal has it.
+    std::pair<QString, qint64> standing(const QString& sessionId) const {
+        const auto stored = fixture_->journal->readSessions();
+        if (stored)
+            for (const auto& session : *stored)
+                if (session.id == sessionId)
+                    return {QFileInfo(session.worktreePath).canonicalFilePath(),
+                            session.contextRevision};
+        return {};
+    }
+
+    QJsonObject team() {
+        return command("team.get", {{"team_id", teamId_}}).value("team").toObject();
+    }
+
+    // T-32: Start, then the first developer's conversation stands in T-1's worktree with its
+    // assignment turn over. Returns that worktree.
+    QString startedInItsWorktree() {
+        const QString plan = openDecision("first_plan");
+        if (!command("team.decision.answer",
+                     {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}})
+                 .value("ok")
+                 .toBool())
+            return {};
+        QString worktree;
+        for (const QJsonValue& value : team().value("tasks").toArray())
+            if (value.toObject().value("id").toString() == QStringLiteral("T-1"))
+                worktree =
+                    QFileInfo(value.toObject().value("worktree").toString()).canonicalFilePath();
+        const QString developer = developers_.at(0);
+        if (worktree.isEmpty() ||
+            !QTest::qWaitFor([&] { return standing(developer).first == worktree; }, 30000) ||
+            !QTest::qWaitFor(
+                [&] { return fixture_->count(developer, QStringLiteral("turn.completed")) > 0; },
+                30000))
+            return {};
+        QTest::qWait(200);
+        return worktree;
+    }
+
+    QJsonObject handover(qint64* waited, qint64* total) {
+        return queued("team.task.handover",
+                      {{"team_id", teamId_},
+                       {"task_id", "T-1"},
+                       {"owner", developers_.at(1)},
+                       {"reason", "Developer 1 is on the API"}},
+                      waited, total);
+    }
+
+    // The task says nothing of a previous owner that could not leave.
+    bool noWaitingMove() {
+        const QJsonObject current = team();
+        if (!current.value("relocations").toArray().isEmpty())
+            return false;
+        for (const QJsonValue& value : current.value("tasks").toArray())
+            for (const QJsonValue& entry : value.toObject().value("history").toArray())
+                if (entry.toObject().value("text").toString().contains("when its turn ends"))
+                    return false;
+        return true;
     }
 
     QString openDecision(const QString& kind) {
@@ -313,6 +375,73 @@ class TeamReplyTest final : public QObject {
         QVERIFY2(pointed == 2, QJsonDocument(team.value("tasks").toArray()).toJson().constData());
         QTest::qWait(500);
         QCOMPARE(count("assignment"), 2);
+    }
+
+    // T-32, criteria 1 to 3: the previous owner stands in the handed-over worktree. The reply
+    // comes before its switch out asks git; meanwhile the event loop turns and a next command
+    // is answered at once; then it stands in the repository, switched once.
+    void aHandoverIsAnsweredBeforeThePreviousOwnerLeaves() {
+        const QString worktree = startedInItsWorktree();
+        QVERIFY(!worktree.isEmpty());
+        const QString previous = developers_.at(0);
+        const qint64 revision = standing(previous).second;
+        // Half a second a call: the synchronous switch held the reply for a second.
+        const SlowGit slow(fixture_->directory.filePath("bin"), "0.5");
+        QVERIFY(slow.installed);
+        qint64 waited = -1;
+        qint64 total = -1;
+        const QJsonObject reply = handover(&waited, &total);
+        QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
+        qInfo("team.task.handover: waited %lld ms, replied after %lld ms", waited, total);
+        QVERIFY2(total < replyBudgetMs, qPrintable(QString::number(total)));
+        QCOMPARE(standing(previous).first, worktree);
+        QElapsedTimer loop;
+        loop.start();
+        QTest::qWait(50);
+        qInfo("event loop: 50 ms wait took %lld ms while the switch's git runs", loop.elapsed());
+        QVERIFY2(loop.elapsed() < 400, qPrintable(QString::number(loop.elapsed())));
+        const QJsonObject created = queued(
+            "team.task.create", {{"team_id", teamId_}, {"title", "Search"}}, &waited, &total);
+        QVERIFY(created.value("ok").toBool());
+        qInfo("team.task.create during the switch's git: waited %lld ms, replied after %lld ms",
+              waited, total);
+        QVERIFY2(total < replyBudgetMs, qPrintable(QString::number(total)));
+        const QString repository =
+            QFileInfo(fixture_->directory.filePath("shop")).canonicalFilePath();
+        QTRY_COMPARE_WITH_TIMEOUT(standing(previous).first, repository, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(noWaitingMove(), 10000);
+        // The new owner stands in the worktree, and the old one was switched once.
+        QTRY_COMPARE_WITH_TIMEOUT(standing(developers_.at(1)).first, worktree, 30000);
+        QTest::qWait(500);
+        QCOMPARE(standing(previous).second, revision + 1);
+    }
+
+    // T-32, criterion 3: the daemon stops between the reply and the switch out. The next
+    // start carries out the stored move, once.
+    void aRestartBeforeThePreviousOwnerLeftMovesItOnce() {
+        const QString worktree = startedInItsWorktree();
+        QVERIFY(!worktree.isEmpty());
+        const QString previous = developers_.at(0);
+        const qint64 revision = standing(previous).second;
+        qint64 waited = -1;
+        qint64 total = -1;
+        {
+            const SlowGit slow(fixture_->directory.filePath("bin"), "0.5");
+            QVERIFY(slow.installed);
+            QVERIFY(handover(&waited, &total).value("ok").toBool());
+            QCOMPARE(team().value("relocations").toArray().size(), 1);
+            // No switch has been stored since the reply: the move is only stored.
+            fixture_->restart(true);
+        }
+        QCOMPARE(standing(previous).first, worktree);
+        const QString repository =
+            QFileInfo(fixture_->directory.filePath("shop")).canonicalFilePath();
+        QTRY_COMPARE_WITH_TIMEOUT(standing(previous).first, repository, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(noWaitingMove(), 10000);
+        fixture_->restart(true);
+        QTest::qWait(500);
+        QCOMPARE(standing(previous).first, repository);
+        QCOMPARE(standing(previous).second, revision + 1);
     }
 
     // A message held while the team was paused is released by resume after the reply.

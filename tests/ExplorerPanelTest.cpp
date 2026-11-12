@@ -544,8 +544,8 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
     };
     // Phones apply this order too. Being the open repository does not move one, and
     // repositories without a turn follow by name.
-    bar.setRepositories({{QStringLiteral("/work/ketviet"),
-                          QStringLiteral("ketviet"),
+    bar.setRepositories({{QStringLiteral("/work/sample-project"),
+                          QStringLiteral("sample-project"),
                           true,
                           {conversation(QStringLiteral("crm"), QStringLiteral("CRM"), 10)}},
                          {QStringLiteral("/work/zeta"), QStringLiteral("zeta"), false, {}},
@@ -557,7 +557,7 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
                            conversation(QStringLiteral("sidebar"), QStringLiteral("Sidebar"), 30)}},
                          {QStringLiteral("/work/atlas"), QStringLiteral("atlas"), false, {}}});
     QCOMPARE(repositoryOrder(),
-             (QStringList{QStringLiteral("/work/ketplus"), QStringLiteral("/work/ketviet"),
+             (QStringList{QStringLiteral("/work/ketplus"), QStringLiteral("/work/sample-project"),
                           QStringLiteral("/work/atlas"), QStringLiteral("/work/zeta")}));
     QCOMPARE(conversationOrder(),
              (QStringList{QStringLiteral("sidebar"), QStringLiteral("untitled-a"),

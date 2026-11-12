@@ -243,8 +243,7 @@ when either screen changes:
 
 - Desktop: `KetPlusMock --screen=workspace --state=question --light --screenshot=out.png` (and
   `--dark`), scaled to 1440 × 900.
-- Mobile: `ketplus-worktree-mobile.ketatlas/screens/conversation.html?thread=mobile-ui&question=pending&theme=light`
-  (and `theme=dark`) from `ketvietlab/ketplus-app` `develop`, at 393 × 852 CSS pixels and 2×,
+- Mobile: a private mobile mock, at 393 × 852 CSS pixels and 2×,
   with focus moved off the sheet's Close button.
 
 The desktop app's Connections page (`RemoteConnectionsIntro`) shows the same files as resources

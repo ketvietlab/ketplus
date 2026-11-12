@@ -400,7 +400,7 @@
         ],
         "outside_lane": [
           {
-            "path": "apps/ios/Sources/KetPlusRemoteCore/Teams.swift",
+            "path": "src/mobile/Teams.swift",
             "lane": "Mobile UI",
             "owner_number": "4120"
           }

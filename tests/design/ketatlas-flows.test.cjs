@@ -421,7 +421,7 @@ test("repository groups collapse without switching or stopping conversations", (
     assert.equal(restored.document.querySelectorAll('.repository-groups [data-action="new-chat"][data-repo]').length, 6);
 });
 test("new conversation brings its repository to the top of the selected machine", () => {
-    const a = screen("screens/workspace.html?repo=ketviet");
+    const a = screen("screens/workspace.html?repo=sample-project");
     const order = () => [...a.document.querySelectorAll(".repository-group-name[data-repo]")]
         .map(node => node.dataset.repo);
     assert.equal(order()[0], "ketplus-desktop");
@@ -430,7 +430,7 @@ test("new conversation brings its repository to the top of the selected machine"
     a.tick();
     assert.equal(a.K.advanceOperation(), true);
     a.K.mount();
-    assert.equal(order()[0], "ketviet");
+    assert.equal(order()[0], "sample-project");
     assert.equal(a.document.querySelector("#machine-select").value, "local");
 });
 test("quota appears only in the context panel; identity menu routes to settings", () => {
@@ -961,19 +961,19 @@ test("right-click preserves active conversation and archives the clicked reposit
     const a = screen();
     a.input("#prompt", "Keep my active draft");
     const current = a.K.current;
-    rightClick(a, '.conversation[href*="repo=ketviet"]');
+    rightClick(a, '.conversation[href*="repo=sample-project"]');
     assert.equal(a.K.current, current);
     assert.deepEqual(menuCommands(a), ["tags", "copy-agent-reference", "fork", "archive", "delete"]);
     const target = a.K.openContext;
     a.click('[data-context-command="archive"]');
     const confirm = a.follow();
-    assert.equal(confirm.K.resourceTarget().scope.repo, "ketviet");
+    assert.equal(confirm.K.resourceTarget().scope.repo, "sample-project");
     assert.equal(confirm.K.resourceTarget().id, target.id);
     assert.equal(confirm.K.current.draft, "Keep my active draft");
     confirm.click('[data-action="archive-confirm"]');
     const pending = confirm.follow(); pending.tick();
     const done = pending.follow();
-    assert.equal(done.K.demo.scopes['ketviet:develop'].conversations[target.id].archived, true);
+    assert.equal(done.K.demo.scopes['sample-project:develop'].conversations[target.id].archived, true);
     assert.equal(done.K.current.archived, false);
 });
 test("transcript offers only fork and changed-file menu takes precedence", () => {

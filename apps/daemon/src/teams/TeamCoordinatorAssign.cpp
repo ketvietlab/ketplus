@@ -3,6 +3,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include <QDir>
+#include <QPointer>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -175,16 +176,24 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
                                    {QStringLiteral("body"),
                                     QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
                                         .arg(taskId, member->name, reason.trimmed())}});
+    // T-32: the previous owner leaves the worktree after the reply; its git runs off this
+    // thread. A switch that cannot happen yet is noted on the task and tried again when that
+    // member's turn ends.
     if (!previous.isEmpty()) {
-        if (const QString waiting = settleRelocations(teamId, previous); !waiting.isEmpty()) {
-            Team* stored = mutableTeam(teamId);
-            const Team unmoved = *stored;
-            addHistory(*stored->task(taskId), QStringLiteral("daemon"), QStringLiteral("worktree"),
-                       QStringLiteral("The previous owner's conversation leaves %1 when its "
-                                      "turn ends: %2")
-                           .arg(stored->task(taskId)->worktree, waiting));
-            (void)commit(*stored, unmoved, QStringLiteral("daemon"), {});
-        }
+        settleRelocations(
+            teamId, previous,
+            [self = QPointer<TeamCoordinator>(this), teamId, taskId](const QString& waiting) {
+                Team* stored = self && !waiting.isEmpty() ? self->mutableTeam(teamId) : nullptr;
+                Task* task = stored ? stored->task(taskId) : nullptr;
+                if (!task)
+                    return;
+                const Team unmoved = *stored;
+                addHistory(*task, QStringLiteral("daemon"), QStringLiteral("worktree"),
+                           QStringLiteral("The previous owner's conversation leaves "
+                                          "%1 when its turn ends: %2")
+                               .arg(task->worktree, waiting));
+                (void)self->commit(*stored, unmoved, QStringLiteral("daemon"), {});
+            });
         team = mutableTeam(teamId);
     }
     // A task held for the first plan stays held with its new owner.

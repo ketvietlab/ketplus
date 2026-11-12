@@ -235,7 +235,12 @@ credential admission/preservation/repair at daemon startup and client hello,
 isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
-results). The normal full Desktop suite still covers the shared build/interface
+results), `ketplus_remote_control_projection_tests` (sealed metadata projection
+with tampered and unpinned rows, transcript paging across a large event, a tampered
+restore response, a changed host key version and an unpinned host key, against the
+synthetic loopback relay) and `ketplus_remote_ssh_tunnel_tests` (loopback `sshd` with throwaway
+keys: host-key accept, reject and mismatch, auth failure, missing daemon socket
+and reconnect; see [`ssh-transport.md`](ssh-transport.md)). The normal full Desktop suite still covers the shared build/interface
 changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
@@ -591,7 +596,7 @@ Build `ketplus_atlas_live_tunnel_tests`, `ketplus_atlas_live_runtime_tests`, and
 
 The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite starts a temporary project and renderer, verifies live reads after changing source, reattaches with fresh keys and stable source/ports, and checks process cleanup.
 
-The separate relay checkout has `apps/ketsuite/atlas-gateway/native-fixture.mjs`, which launches only the fixture executable. The iOS test `nativeAtlasBridgeTransfersBinaryPostSSEAndWebSocketThroughIsolatedDaemonAndRelay` exercises the real Swift bridge and C++ tunnel through that gateway. Keep its descriptor in a temporary directory and stop the fixture after testing. The native worktree XCUITest uses a new disposable simulator; it is a UI fixture test, separately from daemon/relay integration.
+Companion relay and mobile acceptance procedures are maintained privately. The public fixture executable remains available for native daemon tests.
 
 Confirmation questions with one single-choice Yes/No (or Có/Không) pair submit the
 original option ID on one click. Other questions retain their choice/text flow.

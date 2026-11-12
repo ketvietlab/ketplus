@@ -38,6 +38,8 @@ bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
         return false;
     hostPins_ = pins;
     hostPinsStored_ = true;
+    // A pin change invalidates every host key verified against the previous set.
+    signerVersions_.clear();
     return true;
 }
 QString ControlV2Client::pinnedFingerprint(const QString& machineId) const {

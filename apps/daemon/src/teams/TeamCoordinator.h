@@ -278,6 +278,9 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] const Team* team(qint64 teamId) const;
     [[nodiscard]] const Team* teamOf(const QString& sessionId) const;
     [[nodiscard]] bool isMember(const QString& sessionId) const { return teamOf(sessionId); }
+    // The repository of a worktree the team made for one of its tasks; nothing for another
+    // path. Such a worktree belongs to its team's repository, so git is not asked (T-32).
+    [[nodiscard]] QString taskWorktreeRepository(const QString& worktree) const;
     // The team as clients receive it: the document plus each member's number, title and agent.
     [[nodiscard]] QJsonObject teamJson(const Team& team) const;
     // ADR 0115: the team for team.list and team.changed: teamJson without its tasks and
@@ -471,9 +474,11 @@ class TeamCoordinator : public QObject {
     void send(qint64 teamId, const TeamMessage& message);
     void scheduleOutbox();
     void sendFromOutbox();
-    // The rest of one outbox entry once its conversation points at the task's worktree.
-    // `settle` moves the conversation out of a handed-over worktree first, as send() does.
-    void finishOutboxEntry(qint64 teamId, const QJsonObject& entry, bool deliver, bool settle);
+    // The rest of one outbox entry once its conversation stands where it should: posts it
+    // when `deliver`, then forgets it.
+    void finishOutboxEntry(qint64 teamId, const QJsonObject& entry, bool deliver);
+    // Whether an outbox entry is still for a member that has not received it.
+    [[nodiscard]] bool stillDelivers(qint64 teamId, const TeamMessage& message) const;
     void forgetRelocations(qint64 teamId, const QString& sessionId);
     void notePointError(qint64 teamId, const TeamMessage& message, const QString& error);
     // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
@@ -517,9 +522,20 @@ class TeamCoordinator : public QObject {
     void askFirstPlan(Team& team);
     void askFirstPlanAgain(qint64 teamId);
     // Points the owner at the task's worktree and sends the assignment.
-    // Moves a member out of the worktrees it was handed out of and forgets each move that
-    // is settled: done, or no longer needed. Returns why one is still waiting, if any.
-    QString settleRelocations(qint64 teamId, const QString& sessionId);
+    // ADR 0114 §7 (TeamCoordinatorRelocations.cpp): moves a member out of the worktrees it was
+    // handed out of and forgets each move that is settled: done, or no longer needed. Git runs
+    // off this thread; `done`, if given, gets why one is still waiting, or nothing.
+    void settleRelocations(qint64 teamId, const QString& sessionId, PointDone done);
+    void settleStep(qint64 teamId, const QString& sessionId, PointDone done);
+    // Where a conversation handed out of `move.from` goes; nothing when it needs no switch.
+    [[nodiscard]] std::optional<QString> relocationHome(const Team& team,
+                                                        const Relocation& move) const;
+    // Moves stored before a restart are settled when the teams are loaded.
+    void settleStoredRelocations();
+    // One worktree switch of a conversation at a time: `job` runs now, or after the jobs
+    // before it, and ends with conversationFree().
+    void whenConversationFree(const QString& sessionId, std::function<void()> job);
+    void conversationFree(const QString& sessionId);
     void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
                            const QString& reason = {});
     [[nodiscard]] static QString assignmentText(const Team& team, const Task& task,
@@ -570,6 +586,8 @@ class TeamCoordinator : public QObject {
     bool outboxScheduled_{false};
     // An outbox entry waits for git: the next one waits for it, so the order is kept.
     bool outboxSending_{false};
+    // Conversations with a worktree switch running, and the switches waiting behind it.
+    QHash<QString, QList<std::function<void()>>> conversationJobs_;
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
 

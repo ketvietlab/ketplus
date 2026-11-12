@@ -95,6 +95,8 @@ void TeamCoordinator::load() {
     for (const qint64 id : ids)
         if (const Team* team = this->team(id); team && !team->outbox.isEmpty())
             scheduleOutbox();
+    // T-32: a handover answered before the daemon stopped moves its previous owner now.
+    settleStoredRelocations();
 }
 
 QList<const Team*> TeamCoordinator::teams(const QString& repository) const {

@@ -19,8 +19,7 @@ HTML mock is retained; production rendering remains native Qt/QML.
 ## Sources and scope
 
 - Desktop: `origin/develop` at `e32e355`, fetched and rebased before this mock change.
-- Design reference: `ketvietlab/ketplus-app`, `origin/develop` at `2508489`,
-  `ketplus-worktree-mobile.ketatlas`. The bundle is unchanged from `e909d4e`; there is no `design/` directory.
+- Design reference: the public desktop bundle; companion mobile evidence is maintained privately.
 - User adjustments: keep the native desktop's compact **44 px chat-local header**
   and let the right detail/editor pane own its top tab row; put the context/limit ring **after model/effort in the lower composer
   toolbar**, as on mobile; open its panel in place above the ring; show weekly usage **only inside Context & limits**.
@@ -191,13 +190,8 @@ This static HTML/CSS/classic-JavaScript prototype represents a native Qt applica
 It keeps the public Két AppShell contracts, runtime and semantic tokens;
 `desktop-alignment.css` owns desktop composition. No `atlas.renderer.json` is needed.
 
-- Official desktop adapter: `@ketvietlab/design-system@0.1.44`, revision
-  `e8adee2da3bfeea66c01f46f110fdc5243fb23c0` (ketviet PR #2177, Két Blue); see
-  descriptor and lock. Refresh it with the package's
-  `ket-design-system-atlas materialize ketplus.ketatlas` from that
-  revision, after `npm run design:inventory` and `npm run build:design-system` in
-  `ketsuite/`. `assets/fonts/InterVariable*.woff2` are the font files the
-  stylesheet references, copied unchanged from the same revision.
+- Official desktop adapter: `@ketvietlab/design-system@0.1.44` (Két Blue).
+  Materialize the published package adapter and retain its license notices.
 - KétPlus is not a KetSuite app: `K.template("shell")` drops the application
   switcher and `desktop.css` collapses its column.
 - Mobile's native Két adaptation informs navigation, activity and composer patterns.
@@ -366,7 +360,7 @@ second production framework, copied design-system components or a renderer serve
   then open a screen to try its sandboxed preview.
 - Current repository is pinned first, including during repository search. Worktree
   search stays scoped to that repository, accepts branch or folder paths, and keeps
-  its query when the repository changes. Try `pilot`, then choose `ketviet`.
+  its query when the repository changes. Try `pilot`, then choose `sample-project`.
 - Choosing a repository commits immediately after a simulated acknowledgment; no
   extra Apply action. It restores the last chosen worktree for that repository,
   otherwise the conversation's recorded agent worktree when available, otherwise
@@ -436,7 +430,7 @@ instead of the mock's dashed one.
   sidebar row together.
 - **Manage tags…** renames tags, cycles their colour (8 colours, light and dark values) and
   deletes them. Deleting a tag removes it from its conversations and clears a filter that uses it.
-- Fixtures: `?repo=ketviet`, `&context=conversation`, `&tags=edit[&tagQuery=Release]`,
+- Fixtures: `?repo=sample-project`, `&context=conversation`, `&tags=edit[&tagQuery=Release]`,
   `&tagFilter=account`, `&tags=manage`, `&tags=header` (editor opened from the header). Conversation numbers are a stable hash for the mock;
   native numbers come from the daemon (ADR 0027).
 
