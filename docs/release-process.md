@@ -106,7 +106,9 @@ Apple account use and notarization require the release owner's approval.
 
 Pass `--channel staging|production` and `--arch arm64|x86_64` explicitly. Use a
 separate output directory ending in `<channel>/<arch>` and an HTTPS download prefix
-ending in `/<channel>/<arch>/`. The app's compiled feed must equal that prefix plus
+ending in `/<channel>/<arch>/`. Local QA also accepts HTTP on a literal loopback
+address (for example `127.0.0.1` or `[::1]`); HTTP elsewhere and HTTP release output
+are refused. Channel/architecture scoping still applies to QA. The app's compiled feed must equal that prefix plus
 `appcast.xml`, and its main executable must have exactly the selected architecture.
 For example, with operator-supplied paths:
 
@@ -122,9 +124,10 @@ The command only prepares files; it never uploads or authorizes publishing.
 Existing feeds must carry matching `urn:ketplus:release` channel and architecture
 metadata and scoped archive URLs. Legacy unscoped feeds require a clean scoped
 output directory and an explicit release migration; do not mix their archives.
-Identity metadata is seeded before Sparkle generates/signs the feed; validation
-never rewrites the generated XML. Exported signing-key paths are resolved through
-all symlinks before the outside-checkout check and before being passed to Sparkle.
+Identity metadata is created only for a new feed before Sparkle generation.
+Existing appcasts are validated without rewriting any bytes, preserving namespace
+prefixes, declarations and signatures. Legacy feeds without identity are refused. Exported signing-key paths are resolved through
+all symlinks before a filesystem-identity ancestry check (including case aliases) and before being passed to Sparkle.
 The app pins the compiled feed through its delegate: restoring an old `SUFeedURL`
 preference cannot switch the build's channel or redirect it to HTTP.
 

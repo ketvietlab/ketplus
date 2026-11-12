@@ -20,7 +20,7 @@ usage: publish-update.sh --app KetPlus.app --updates-dir DIR --download-url-pref
   --mode                 release (default) or local-qa; QA artifacts must never be published.
   --app                  Installed, signed ketPlus Pro app bundle (cmake --install output).
   --updates-dir          Scoped directory ending in CHANNEL/ARCH, holding archives and appcast.xml.
-  --download-url-prefix  HTTPS URL the archives are served from (ends with /).
+  --download-url-prefix  HTTPS archive URL (HTTP loopback also allowed in local-qa; ends with /).
   --sparkle-bin          Sparkle's bin directory (build/<preset>/_deps/ketplus_sparkle-src/bin).
   --release-notes        Optional HTML or Markdown release notes for this version.
   --ed-key-file          Optional exported EdDSA private key outside the repository, or - for
@@ -63,7 +63,7 @@ fail() {
 
 [[ -d "$app/Contents" ]] || fail "not an application bundle: $app"
 [[ -x "$sparkle_bin/generate_appcast" ]] || fail "generate_appcast not found in $sparkle_bin"
-[[ "$download_prefix" == https://*/ ]] || fail "--download-url-prefix must be https:// and end with /"
+
 
 plist="$app/Contents/Info.plist"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
@@ -75,7 +75,7 @@ feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist" 2>/dev/null)" ||
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 policy="$repo_root/packaging/macos/update-release-policy.py"
-identity_arguments=(--channel "$channel" --arch "$architecture" --download-prefix "$download_prefix")
+identity_arguments=(--mode "$mode" --channel "$channel" --arch "$architecture" --download-prefix "$download_prefix")
 /usr/bin/python3 "$policy" paths "${identity_arguments[@]}" --updates-dir "$updates_dir" --compiled-feed "$feed" || fail "release identity preflight failed"
 executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" || fail "missing bundle executable"
 [[ "$executable" =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*$ ]] || fail "unsafe bundle executable name"
@@ -89,9 +89,16 @@ fi
 # "-" reads the key from standard input, which keeps it off the file system entirely.
 if [[ -n "$key_file" && "$key_file" != "-" ]]; then
     [[ -f "$key_file" ]] || fail "key file not found: $key_file"
-    key_real="$(/usr/bin/python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$key_file" 2>/dev/null)" ||
-        fail "cannot resolve signing-key path"
-    [[ "$key_real" != "$repo_root"/* ]] || fail "the EdDSA private key must not live in the repository"
+    key_real="$(/usr/bin/python3 - "$key_file" "$repo_root" <<'PYKEY'
+import pathlib, sys
+key = pathlib.Path(sys.argv[1]).resolve(strict=True)
+checkout = pathlib.Path(sys.argv[2]).resolve(strict=True)
+# samefile uses filesystem identity, including case-insensitive APFS aliases.
+if any(parent.samefile(checkout) for parent in key.parents):
+    sys.exit("the EdDSA private key must not live in the repository")
+print(key)
+PYKEY
+)" || fail "cannot resolve an outside-checkout signing-key path"
     key_file="$key_real"
 fi
 

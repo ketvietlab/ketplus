@@ -129,6 +129,51 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
         self.assert_rejected_before_archive(result)
         self.assertIn("must not live in the repository", result.stderr)
 
+    def test_case_alias_of_checkout_key_is_rejected(self):
+        inside = self.root / "repo/synthetic-key"
+        inside.write_text("inert fixture")
+        alias = self.root / "REPO/synthetic-key"
+        if not alias.exists():
+            self.skipTest("filesystem is case-sensitive")
+        result = self.run_update(["--ed-key-file", str(alias)])
+        self.assert_rejected_before_archive(result)
+        self.assertIn("must not live in the repository", result.stderr)
+
+    def test_local_qa_accepts_http_loopback_feed(self):
+        prefix = "http://127.0.0.1:4443/production/arm64/"
+        self.env.update(UPDATE_FEED=prefix + "appcast.xml", UPDATE_DEVELOPER_ID="0", UPDATE_TICKET="0")
+        result = self.run_update(["--mode", "local-qa", "--download-url-prefix", prefix])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.updates / "appcast.xml").is_file())
+
+    def test_http_is_refused_for_release_and_nonloopback_qa(self):
+        for mode, host in (("release", "127.0.0.1"), ("local-qa", "updates.example.invalid"),
+                           ("local-qa", "127.0.0.1.example.invalid")):
+            prefix = f"http://{host}/production/arm64/"
+            self.env["UPDATE_FEED"] = prefix + "appcast.xml"
+            with self.subTest(mode=mode, host=host):
+                self.assert_rejected_before_archive(self.run_update(
+                    ["--mode", mode, "--download-url-prefix", prefix]))
+
+    def test_existing_sparkle_feed_seeding_preserves_every_byte(self):
+        self.updates.mkdir()
+        feed = self.updates / "appcast.xml"
+        original = ('<?xml version="1.0"?><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" '
+                    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ketplus="urn:ketplus:release">'
+                    '<channel><title>ketPlus Pro</title><ketplus:releaseChannel>production</ketplus:releaseChannel>'
+                    '<ketplus:architecture>arm64</ketplus:architecture><!-- preserve this -->'
+                    '<item><sparkle:version>1</sparkle:version><sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>'
+                    '<enclosure url="https://updates.example.invalid/production/arm64/KetPlus-0.1.1.zip" '
+                    'sparkle:edSignature="synthetic-signature" /></item></channel></rss>').encode()
+        feed.write_bytes(original)
+        for operation in ("seed-feed", "seed-feed", "check-feed"):
+            result = subprocess.run([sys.executable, str(self.script.with_name("update-release-policy.py")),
+                operation, "--channel", "production", "--arch", "arm64", "--download-prefix",
+                "https://updates.example.invalid/production/arm64/", "--appcast", str(feed)],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(feed.read_bytes(), original)
+
     def test_external_key_symlink_is_resolved_before_signer(self):
         target = self.root / "external-key"
         target.write_text("inert fixture")
