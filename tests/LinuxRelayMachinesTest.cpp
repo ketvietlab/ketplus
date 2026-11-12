@@ -221,7 +221,7 @@ class LinuxRelayMachinesTest : public QObject {
         QVERIFY(!LinuxMachineModel::hostAway(machine, now));
         QCOMPARE(LinuxMachineModel::presenceText(machine, now), QStringLiteral("Host online"));
         QCOMPARE(LinuxMachineModel::pickerLabel(machine),
-                 QStringLiteral("builder · Relay · Connected"));
+                 QStringLiteral("Connected · Relay · builder"));
 
         relay.setListed({{QStringLiteral("relay-1"), pinned, QStringLiteral("builder"),
                           now.addSecs(-10 * 60)}});
@@ -231,7 +231,7 @@ class LinuxRelayMachinesTest : public QObject {
         QCOMPARE(LinuxMachineModel::presenceText(machine, now),
                  QStringLiteral("Host offline, last seen 10 min ago"));
         QCOMPARE(LinuxMachineModel::pickerLabel(machine),
-                 QStringLiteral("builder · Relay · Host offline"));
+                 QStringLiteral("Host offline · Relay · builder"));
         QCOMPARE(linuxMachineBadgeText(machine, true), QStringLiteral("Host offline"));
         machine.hostLastSeen = now.addSecs(-3 * 3600);
         QCOMPARE(LinuxMachineModel::presenceText(machine, now),

@@ -1,4 +1,6 @@
 #include "FakeCodex.h"
+#include "KetAppearance.h"
+#include "KetSelect.h"
 #include "KetSidebarTree.h"
 #include "MachineTranscriptRows.h"
 #include "SshFixture.h"
@@ -18,6 +20,7 @@
 #include "ssh/SshMachineStore.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
+#include <QScopeGuard>
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -185,6 +188,56 @@ class MachineEndToEndTest final : public QObject {
     QTemporaryDir workspace_;
 
   private slots:
+    void pickerPreservesStateAtDefaultSidebarWidth_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
+    void pickerPreservesStateAtDefaultSidebarWidth() {
+        QFETCH(bool, dark);
+        QVERIFY(QSettings().fileName().startsWith(settings_.path() + "/"));
+        QVERIFY(!QSettings().contains(QStringLiteral("workspace/lastRoot")));
+        ThemeManager theme(*qApp);
+        const auto restoreTheme = qScopeGuard([&] { theme.setMode(ThemeManager::Mode::Light); });
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        ActivityBar bar;
+        bar.resize(240, 760);
+        bar.show();
+        QCOMPARE(bar.width(), 240);
+        auto* picker = machinePicker(&bar);
+        QVERIFY(picker);
+        for (auto state : {LinuxMachine::State::Connected, LinuxMachine::State::Connecting,
+                           LinuxMachine::State::Reconnecting, LinuxMachine::State::Offline}) {
+            LinuxMachine machine;
+            machine.name = QStringLiteral("A very long machine name which must be elided");
+            machine.route = LinuxMachine::Route::Ssh;
+            machine.state = state;
+            const QString label = LinuxMachineModel::pickerLabel(machine);
+            bar.setMachines({QStringLiteral("fixture")}, {label}, QStringLiteral("fixture"));
+            QCoreApplication::processEvents();
+            auto* select = qobject_cast<ket::Select*>(picker);
+            QVERIFY(select);
+            const auto recipe = select->recipe();
+            const auto& appearance = ket::Appearance::instance();
+            const int textWidth =
+                qFloor(select->width() - appearance.scaled(2 * recipe.paddingInline +
+                                                           recipe.iconSize + recipe.spacing));
+            QFont fieldFont = picker->font();
+            fieldFont.setPixelSize(qRound(appearance.scaled(recipe.fontPixels)));
+            const QString shown =
+                QFontMetrics(fieldFont).elidedText(label, Qt::ElideRight, textWidth);
+            QVERIFY2(shown.startsWith(LinuxMachineModel::stateText(state)), qPrintable(shown));
+            QVERIFY(picker->geometry().right() < bar.width());
+            QVERIFY(picker->parentWidget()->rect().contains(picker->geometry()));
+            if (state == LinuxMachine::State::Reconnecting) {
+                screenshot(&bar, QStringLiteral("picker-240-%1").arg(dark ? "dark" : "light"));
+                screenshotPicker(&bar,
+                                 QStringLiteral("picker-240-open-%1").arg(dark ? "dark" : "light"));
+            }
+        }
+    }
+
     void initTestCase() {
         QVERIFY(settings_.isValid() && workspace_.isValid());
         // Application data (repository metadata, stores) stays out of the user's folders.

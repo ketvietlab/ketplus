@@ -10,6 +10,7 @@
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetNavItem.h"
+#include "KetSelect.h"
 #include "KetUpdateCard.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
@@ -208,12 +209,13 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* machineLayout = new QHBoxLayout(machineRow);
     chrome_geometry::margins(machineLayout, 8, 0, 8, 0);
     chrome_geometry::spacing(machineLayout, 4);
-    machineSelect_ = new QComboBox(machineRow);
+    auto* machineSelect = new ket::Select(machineRow);
+    machineSelect_ = machineSelect;
     machineSelect_->setObjectName(QStringLiteral("productMachineSelect"));
     machineSelect_->setAccessibleName(tr("Machine for repositories"));
     machineSelect_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     machineSelect_->addItem(tr("This Mac"), QStringLiteral("local"));
-    chrome_geometry::fixedHeight(machineSelect_, 28);
+    chrome_geometry::fixedHeight(machineSelect_, machineSelect->recipe().height);
     connect(machineSelect_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index >= 0)
             emit machineRequested(machineSelect_->itemData(index).toString());
