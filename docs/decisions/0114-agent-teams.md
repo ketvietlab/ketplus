@@ -192,6 +192,15 @@ question. When the leader's turn ends with actionable updates waiting, or after 
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
 
+**A wait alone sends no digest (decided 2026-11-12).** A `wait` entry is shown on the
+team page and in a digest that has something else in it, but it is never the reason for
+one: when the only undigested updates are waits, the leader's own or a developer's, no
+digest is sent and no turn starts. The waits stay undigested and ride along with the
+next digest that has an actionable update. A member's new wait replaces its earlier
+one, so a digest lists only the latest wait of each member; a leader that renews its wait
+does not read it back several times. The wake-up when a wait's minutes are over (§8) is
+unchanged.
+
 **A command is answered before what it sets off (decided 2026-11-12).** A wake is
 decided when its cause is committed: the budget check, a hold while paused and the turn
 it counts. The message, and for an assignment the worktree its owner is pointed at, go
@@ -269,6 +278,15 @@ wake that is held because the wait ended while the team was paused. Resume asks 
 a held `wait`, `message_failed`, `nudge` or `stall` is not delivered to a member that
 is stopped at that moment. Waits are kept in memory: a
 daemon restart loses them and the watchdog takes over. The reviewer does not wait.
+
+**An urgent message to a member that cannot be steered (decided 2026-11-12).** A
+member's turn may be over while a command it started in the background still runs. A
+message sent to it with `urgent` cannot steer that turn. The sender's receipt then says
+`urgent_waiting` instead of `queued`, with `waiting_on` (for example "a background task")
+and a note that it could not steer yet. The message steers the receiver's turn at the
+first point its provider allows, or starts a turn once the receiver is idle. ADR 0027
+lists every receipt state: `starting`, `queued`, `steering`, `urgent_waiting` and
+`recorded`.
 
 **A message outside the team that failed.** When a member's message to a conversation
 that is not on its team fails, expires or gets no answer, the broker's note in the

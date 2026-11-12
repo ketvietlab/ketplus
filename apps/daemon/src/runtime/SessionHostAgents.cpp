@@ -92,6 +92,17 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.steerable = state == QStringLiteral("running") && !stored.turnId.isEmpty() &&
                              (claude || !stored.threadId.isEmpty()) &&
                              providerSupports(stored.adapter, compat::capability::turnSteer);
+    if (!conversation.idle && !conversation.steerable)
+        conversation.waitingOn =
+            state == QStringLiteral("waiting_for_input")
+                ? QStringLiteral("an approval or an answer from the user")
+            : state == QStringLiteral("stopping") ? QStringLiteral("its turn to stop")
+            : session.startingTurn || state == QStringLiteral("starting") ||
+                    (state == QStringLiteral("running") && stored.turnId.isEmpty())
+                ? QStringLiteral("its turn to start")
+            : state == QStringLiteral("running")
+                ? QStringLiteral("a running turn that its provider cannot steer")
+                : QStringLiteral("a background task (a command or wait it started)");
     return conversation;
 }
 
