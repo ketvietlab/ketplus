@@ -416,6 +416,10 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         menu.addAction(paused ? tr("Resume automatic turns") : tr("Pause automatic turns"));
     auto* budget = menu.addAction(ket::Icons::icon(u"clock"), tr("Automatic turns…"));
     budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
+    // T-23: a second reviewer, at any team size; a team has at most two.
+    auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
+    reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
+    reviewer->setEnabled(TeamDirectory::count(team, QStringLiteral("reviewer")) < 2);
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
@@ -443,6 +447,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
              {{QStringLiteral("paused"), !paused}});
     else if (chosen == budget)
         afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
+    else if (chosen == reviewer)
+        afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)
         afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
 }
@@ -470,7 +476,8 @@ void TeamPage::buildBanners(const QJsonObject& team) {
         auto* banner = new ket::Banner(
             ket::BannerTone::Info, tr("The reviewer is the queue"),
             tr("%1 developers share one reviewer, so finished tasks wait their turn. A second "
-               "reviewer reviews another task at the same time.")
+               "reviewer reviews another task at the same time; a second team, from the team's "
+               "menu, gives the next developers their own.")
                 .arg(developers),
             column_);
         banner->setObjectName(QStringLiteral("teamQueueBanner"));
