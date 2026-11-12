@@ -37,6 +37,10 @@ class SshLink : public QObject {
     [[nodiscard]] virtual QLocalSocket* connection() const = 0;
     // The remote daemon's local credential for daemon.hello, held in memory only.
     [[nodiscard]] virtual QByteArray daemonCredential() const = 0;
+    // The KetPlus-owned known_hosts file accepted keys are recorded in; empty records none.
+    [[nodiscard]] virtual QString knownHostsFile() const { return {}; }
+    // Asked once per unknown host key, as SshTunnel::setHostKeyPrompt().
+    virtual void setHostKeyPrompt(SshTunnel::HostKeyPrompt prompt) { Q_UNUSED(prompt) }
 
   signals:
     void stateChanged(ketplus::remote::ssh::SshTunnel::State state);
@@ -62,9 +66,14 @@ class SshTunnelLink final : public SshLink {
     [[nodiscard]] QByteArray daemonCredential() const override {
         return tunnel_->daemonCredential();
     }
+    [[nodiscard]] QString knownHostsFile() const override { return knownHostsFile_; }
+    void setHostKeyPrompt(SshTunnel::HostKeyPrompt prompt) override {
+        tunnel_->setHostKeyPrompt(std::move(prompt));
+    }
 
   private:
     SshTunnel* tunnel_;
+    QString knownHostsFile_;
 };
 
 class SshMachineBackend final : public MachineBackend {
@@ -114,8 +123,18 @@ class SshMachineBackend final : public MachineBackend {
     bool trustPresentedIdentity(QString* error = nullptr);
     // Records that a conversation was opened on this machine.
     bool bindConversation(const QString& conversationId, QString* error = nullptr);
-    // Closes the route and forgets the machine, its id and its conversation bindings.
+    // Closes the route and forgets the machine, its id, its conversation bindings and the SSH
+    // host keys accepted in ketPlus for it (from the KetPlus known_hosts file).
     bool removeMachine(QString* error = nullptr);
+    // Asked for a first-use SSH host key. A key the user accepts is remembered with the machine,
+    // so removeMachine() and forgetAcceptedHostKeys() can remove it again.
+    void setHostKeyPrompt(SshTunnel::HostKeyPrompt prompt);
+    // The re-trust path after a host key mismatch: removes the keys accepted in ketPlus for this
+    // target from the KetPlus known_hosts file, so the next connectToHost() asks for the new key.
+    // Returns false when ketPlus holds none: the stale key is in the user's own known_hosts.
+    bool forgetAcceptedHostKeys(QString* error = nullptr);
+    // True when the KetPlus known_hosts file holds a key accepted in ketPlus for this target.
+    [[nodiscard]] bool holdsAcceptedHostKey() const;
 
     void listRepositories(Callback callback) override;
     void listWorktrees(const QString& sessionId, qint64 generation, const QJsonObject& request,

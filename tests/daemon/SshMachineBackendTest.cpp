@@ -1,6 +1,8 @@
 #include "ssh/SshMachineBackend.h"
+#include "ssh/KnownHostsFile.h"
 #include "ssh/SshMachineStore.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalServer>
@@ -13,7 +15,10 @@
 #include <memory>
 
 using ketplus::remote::MachineBackend;
+using ketplus::remote::ssh::hasKnownHost;
+using ketplus::remote::ssh::HostKey;
 using ketplus::remote::ssh::parseSshDestination;
+using ketplus::remote::ssh::recordHostKey;
 using ketplus::remote::ssh::SshLink;
 using ketplus::remote::ssh::SshMachineBackend;
 using ketplus::remote::ssh::SshMachineStore;
@@ -141,6 +146,17 @@ class FakeLink final : public SshLink {
         return state_ == SshTunnel::State::Connected ? socket_.data() : nullptr;
     }
     [[nodiscard]] QByteArray daemonCredential() const override { return token; }
+    [[nodiscard]] QString knownHostsFile() const override { return knownHosts; }
+    void setHostKeyPrompt(SshTunnel::HostKeyPrompt next) override { prompt = std::move(next); }
+
+    // What SshTunnel does with an unknown key: ask, and record it in its file when accepted.
+    void offerKey(const HostKey& key) {
+        QVERIFY(prompt);
+        prompt(key, [this, key](const bool accepted) {
+            if (accepted)
+                QVERIFY(recordHostKey(knownHosts, key));
+        });
+    }
 
     void setTunnelState(SshTunnel::State state) {
         if (state != SshTunnel::State::Connected && socket_) {
@@ -157,6 +173,8 @@ class FakeLink final : public SshLink {
 
     bool autoConnect{true};
     int opens{0};
+    QString knownHosts;
+    SshTunnel::HostKeyPrompt prompt;
 
   private:
     QString name_;
@@ -508,6 +526,65 @@ class SshMachineBackendTest final : public QObject {
         QCOMPARE(reloaded.machines().size(), 1);
         QCOMPARE(sshTargetKey(reloaded.machines().first().target), QStringLiteral("buildbox"));
         QVERIFY(reloaded.conversationMachine(QStringLiteral("conversation-1")).isEmpty());
+    }
+
+    void acceptedHostKeysAreForgottenAndRemovedWithTheMachine() {
+        Fixture fixture;
+        const QString knownHosts = fixture.directory.filePath("known_hosts");
+        const SshTarget other{QStringLiteral("buildbox"), {}, 0};
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        QVERIFY(store.add(other));
+        QVERIFY(recordHostKey(knownHosts,
+                              HostKey{QStringLiteral("buildbox"), QStringLiteral("ssh-ed25519"),
+                                      QStringLiteral("AAAAC3NzaC1lZDI1NTE5AAAAIB")}));
+        FakeLink* link = nullptr;
+        auto backend = fixture.backend(store, &link);
+        link->knownHosts = knownHosts;
+        QStringList asked;
+        backend->setHostKeyPrompt([&asked](const HostKey& key, std::function<void(bool)> decide) {
+            asked.append(key.knownHostsName);
+            decide(true);
+        });
+        QVERIFY(!backend->holdsAcceptedHostKey());
+        // A key the user accepted in ketPlus is remembered with the machine.
+        link->offerKey(HostKey{QStringLiteral("[devbox]:2222"), QStringLiteral("ssh-ed25519"),
+                               QStringLiteral("AAAAC3NzaC1lZDI1NTE5AAAAIA")});
+        QCOMPARE(asked, QStringList{QStringLiteral("[devbox]:2222")});
+        QVERIFY(hasKnownHost(knownHosts, QStringLiteral("[devbox]:2222")));
+        QVERIFY(backend->holdsAcceptedHostKey());
+        QCOMPARE(
+            SshMachineStore(fixture.storePath()).acceptedHostKeys(sshTargetKey(fixture.target)),
+            QStringList{QStringLiteral("[devbox]:2222")});
+
+        // Re-trust after a mismatch: the accepted key goes, so the next connect asks again.
+        QVERIFY(backend->forgetAcceptedHostKeys());
+        QVERIFY(!hasKnownHost(knownHosts, QStringLiteral("[devbox]:2222")));
+        QVERIFY(!backend->forgetAcceptedHostKeys()); // nothing of ketPlus's left: user's file
+        link->offerKey(HostKey{QStringLiteral("[devbox]:2222"), QStringLiteral("ssh-ed25519"),
+                               QStringLiteral("AAAAC3NzaC1lZDI1NTE5AAAAIC")});
+        QVERIFY(hasKnownHost(knownHosts, QStringLiteral("[devbox]:2222")));
+
+        // Removing the machine removes its key and leaves the other machine's key alone.
+        QVERIFY(backend->removeMachine());
+        QVERIFY(!hasKnownHost(knownHosts, QStringLiteral("[devbox]:2222")));
+        QVERIFY(hasKnownHost(knownHosts, QStringLiteral("buildbox")));
+        QVERIFY(!SshMachineStore(fixture.storePath()).contains(sshTargetKey(fixture.target)));
+    }
+
+    void aRejectedHostKeyIsNotRemembered() {
+        Fixture fixture;
+        SshMachineStore store(fixture.storePath());
+        QVERIFY(store.add(fixture.target));
+        FakeLink* link = nullptr;
+        auto backend = fixture.backend(store, &link);
+        link->knownHosts = fixture.directory.filePath("known_hosts");
+        backend->setHostKeyPrompt(
+            [](const HostKey&, std::function<void(bool)> decide) { decide(false); });
+        link->offerKey(HostKey{QStringLiteral("[devbox]:2222"), QStringLiteral("ssh-ed25519"),
+                               QStringLiteral("AAAAC3NzaC1lZDI1NTE5AAAAIA")});
+        QVERIFY(store.acceptedHostKeys(sshTargetKey(fixture.target)).isEmpty());
+        QVERIFY(!QFile::exists(link->knownHosts));
     }
 
     void anUnreadableStoreIsNeverOverwritten() {

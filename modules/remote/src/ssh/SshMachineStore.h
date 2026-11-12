@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 // The Linux machines Desktop reaches over SSH, kept across restarts (docs/ssh-transport.md,
 // ADR 0119 "Machine identity" and "Host key rotation"). It holds no secret: per machine the SSH
@@ -23,6 +24,9 @@ struct SshMachineRecord {
     SshTarget target;
     // The daemon's host key fingerprint, or empty until its first hello.
     QString machineId;
+    // The known_hosts names (HostKey::knownHostsName) whose keys the user accepted in ketPlus for
+    // this target, so removing the machine can remove them from the KetPlus known_hosts file.
+    QStringList acceptedHostKeys;
 };
 
 class SshMachineStore final {
@@ -50,6 +54,14 @@ class SshMachineStore final {
     // The explicit "Trust the new identity": replaces the id and moves every conversation bound
     // to the old id to the new one, in one write.
     bool retrust(const QString& targetKey, const QString& machineId, QString* error = nullptr);
+
+    // The user accepted a first-use SSH host key for the target under `knownHostsName`.
+    bool recordAcceptedHostKey(const QString& targetKey, const QString& knownHostsName,
+                               QString* error = nullptr);
+    [[nodiscard]] QStringList acceptedHostKeys(const QString& targetKey) const;
+    // The accepted names no other saved target shares: what removing the target may remove from
+    // the KetPlus known_hosts file.
+    [[nodiscard]] QStringList releasedHostKeys(const QString& targetKey) const;
 
     bool bindConversation(const QString& conversationId, const QString& machineId,
                           QString* error = nullptr);

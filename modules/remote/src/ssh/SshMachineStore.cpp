@@ -102,7 +102,12 @@ void SshMachineStore::load() {
         const QJsonObject machine = value.toObject();
         SshMachineRecord record{
             SshTarget::fromJson(machine.value(QStringLiteral("target")).toObject()),
-            machine.value(QStringLiteral("machine_id")).toString()};
+            machine.value(QStringLiteral("machine_id")).toString(),
+            {}};
+        for (const QJsonValue& name : machine.value(QStringLiteral("accepted_host_keys")).toArray())
+            if (name.isString() && !name.toString().isEmpty() &&
+                !record.acceptedHostKeys.contains(name.toString()))
+                record.acceptedHostKeys.append(name.toString());
         if (record.target.isValid() && indexOf(sshTargetKey(record.target)) < 0)
             machines_.append(std::move(record));
     }
@@ -120,6 +125,9 @@ bool SshMachineStore::save(QString* error) {
         QJsonObject machine{{QStringLiteral("target"), record.target.toJson()}};
         if (!record.machineId.isEmpty())
             machine.insert(QStringLiteral("machine_id"), record.machineId);
+        if (!record.acceptedHostKeys.isEmpty())
+            machine.insert(QStringLiteral("accepted_host_keys"),
+                           QJsonArray::fromStringList(record.acceptedHostKeys));
         machines.append(machine);
     }
     QJsonObject bindings;
@@ -163,7 +171,7 @@ bool SshMachineStore::add(const SshTarget& target, QString* error) {
         return fail(error, QStringLiteral("Enter user@host or user@host:port."));
     if (contains(sshTargetKey(target)))
         return true;
-    machines_.append({target, {}});
+    machines_.append({target, {}, {}});
     if (save(error))
         return true;
     machines_.removeLast();
@@ -231,6 +239,40 @@ bool SshMachineStore::retrust(const QString& targetKey, const QString& machineId
     machines_ = machines;
     bindings_ = bindings;
     return false;
+}
+
+bool SshMachineStore::recordAcceptedHostKey(const QString& targetKey, const QString& knownHostsName,
+                                            QString* error) {
+    const qsizetype index = indexOf(targetKey);
+    if (index < 0)
+        return fail(error, QStringLiteral("This SSH machine is not saved."));
+    if (knownHostsName.isEmpty() || machines_.at(index).acceptedHostKeys.contains(knownHostsName))
+        return true;
+    machines_[index].acceptedHostKeys.append(knownHostsName);
+    if (save(error))
+        return true;
+    machines_[index].acceptedHostKeys.removeLast();
+    return false;
+}
+
+QStringList SshMachineStore::acceptedHostKeys(const QString& targetKey) const {
+    const qsizetype index = indexOf(targetKey);
+    return index < 0 ? QStringList() : machines_.at(index).acceptedHostKeys;
+}
+
+QStringList SshMachineStore::releasedHostKeys(const QString& targetKey) const {
+    const qsizetype index = indexOf(targetKey);
+    if (index < 0)
+        return {};
+    QStringList released;
+    for (const QString& name : machines_.at(index).acceptedHostKeys) {
+        bool shared = false;
+        for (qsizetype other = 0; other < machines_.size() && !shared; ++other)
+            shared = other != index && machines_.at(other).acceptedHostKeys.contains(name);
+        if (!shared)
+            released.append(name);
+    }
+    return released;
 }
 
 bool SshMachineStore::bindConversation(const QString& conversationId, const QString& machineId,
