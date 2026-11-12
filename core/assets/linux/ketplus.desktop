@@ -9,3 +9,4 @@ Terminal=false
 Categories=Development;TextEditor;IDE;
 MimeType=text/plain;inode/directory;
 StartupNotify=true
+StartupWMClass=ketplus-cm

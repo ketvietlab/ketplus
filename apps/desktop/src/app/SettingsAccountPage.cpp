@@ -113,8 +113,8 @@ void SettingsAccountPage::apply(const QJsonObject& status) {
         name_->setText(!displayName.isEmpty() ? displayName
                                               : (!username.isEmpty() ? username : tr("Signed in")));
         meta_->setText(!username.isEmpty() && username != name_->text()
-                           ? tr("%1 · KétPlus Pro").arg(username)
-                           : tr("KétPlus Pro"));
+                           ? tr("%1 · ketPlus Pro").arg(username)
+                           : tr("ketPlus Pro"));
     }
     meta_->show();
     avatar_->setName(signedIn ? name_->text() : QString());

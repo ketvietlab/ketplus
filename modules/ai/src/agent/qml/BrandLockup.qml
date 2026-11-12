@@ -25,7 +25,7 @@ Item {
         objectName: "brandLockupMark"
         width: lockup.markSize; height: width
         anchors.verticalCenter: parent.verticalCenter
-        source: "qrc:/agent/icons/ketplus-mark.png"
+        source: "qrc:/agent/icons/ketplus-mark-128.png"
         sourceSize: Qt.size(width * 2, height * 2)
         smooth: true
         mipmap: true

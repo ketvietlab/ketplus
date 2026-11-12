@@ -37,13 +37,13 @@ class SymbolIconTest final : public QObject {
         QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/plus.svg")));
         QVERIFY(!QFile::exists(QStringLiteral(":/atlas/icons/plus.svg")));
         // The agent resources are linked, so the removals above are real; the approved ketPlus
-        // mark (1024 px with 64/128 px derivatives) replaced the Két Symbol SVG marks and tile.
-        for (const char* name : {"ketplus-mark", "ketplus-mark-64", "ketplus-mark-128"}) {
-            const QImage mark(QStringLiteral(":/agent/icons/%1.png").arg(QLatin1String(name)));
-            QVERIFY2(!mark.isNull(), name);
-            QCOMPARE(mark.width(), mark.height());
-        }
-        QCOMPARE(QImage(QStringLiteral(":/agent/icons/ketplus-mark.png")).width(), 1024);
+        // mark replaced the Két Symbol SVG marks and tile. QML loads only its 128 px derivative
+        // (sharp up to a 64 pt mark at 2x), never the 1024 px master.
+        const QImage mark(QStringLiteral(":/agent/icons/ketplus-mark-128.png"));
+        QVERIFY(!mark.isNull());
+        QCOMPARE(mark.size(), QSize(128, 128));
+        QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark.png")));
+        QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark-64.png")));
         for (const char* old :
              {"ketplus-mark-light.svg", "ketplus-mark-dark.svg", "ketplus-mark-tile.svg"})
             QVERIFY2(!QFile::exists(QStringLiteral(":/agent/icons/%1").arg(QLatin1String(old))),

@@ -337,7 +337,7 @@ if(KETPLUS_CM_BUILD_APP)
 
     set_target_properties(ketplus_cm PROPERTIES
         OUTPUT_NAME "${ketplus_output_name}"
-        MACOSX_BUNDLE_BUNDLE_NAME "KétPlus"
+        MACOSX_BUNDLE_BUNDLE_NAME "ketPlus"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.ketsuite.ketplus.cm"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

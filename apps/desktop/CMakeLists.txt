@@ -262,7 +262,7 @@ qt_add_resources(ketplus_desktop_shell "ketplus_brand"
 
 set_target_properties(ketplus PROPERTIES
     OUTPUT_NAME "KetPlus"
-    MACOSX_BUNDLE_BUNDLE_NAME "KétPlus Pro"
+    MACOSX_BUNDLE_BUNDLE_NAME "ketPlus Pro"
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.ketplus.editor"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

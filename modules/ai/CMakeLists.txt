@@ -358,7 +358,5 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
 
 
 
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-64.png"
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-128.png"
 )

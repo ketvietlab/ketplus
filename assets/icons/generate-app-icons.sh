@@ -26,9 +26,9 @@ fi
 swiftc -O -o "$work/render" "$root/assets/icons/render-brand.swift"
 render() { "$work/render" "$@"; }
 
-# The mark derivatives the QML lockup loads, so it never scales 1024 px down at runtime.
-# 256 px is the widget lockup's source (core's copy serves the Lite app).
-for size in 64 128 256; do
+# The mark derivatives the apps embed, so neither scales 1024 px down at runtime: QML (sidebar
+# lockup, empty state) loads 128 px; the widget lockup loads 256 px (core's copy serves Lite).
+for size in 128 256; do
     sips -z "$size" "$size" "$mark" --out "$root/assets/brand/ketplus-mark-$size.png" >/dev/null
 done
 cp "$root/assets/brand/ketplus-mark-256.png" "$root/core/assets/brand/ketplus-mark-256.png"

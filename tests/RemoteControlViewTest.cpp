@@ -414,7 +414,7 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
                                    {QStringLiteral("username"), QStringLiteral("minh")}}}});
     QCOMPARE(text("remoteAccountName"), QStringLiteral("Minh Tran"));
     QCOMPARE(accounts.constLast().at(0).toString(), QStringLiteral("Minh Tran")); // the sidebar
-    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · KétPlus Pro"));
+    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · ketPlus Pro"));
     QCOMPARE(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->initials(),
              QStringLiteral("MT"));
     // A name that looks like markup is shown as typed.

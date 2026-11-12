@@ -40,7 +40,7 @@ Flickable {
             sourceSize: Qt.size(width * 2, height * 2)
             // The approved ketPlus mark, as on the mock's welcome.
             objectName: "agentEmptyStateMark"
-            source: "qrc:/agent/icons/ketplus-mark.png"
+            source: "qrc:/agent/icons/ketplus-mark-128.png"
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true
