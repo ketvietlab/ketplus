@@ -1,7 +1,7 @@
 // ADR 0067 and ADR 0114: the two profiles a review turn runs under.
 //
-// "read" (a review of another conversation's turn, ADR 0067): plan mode, only the agents
-// server, every other tool refused without a prompt.
+// "read" (a review of another conversation's turn, ADR 0067): plan mode, reading tools and
+// the agents server, every other tool refused without a prompt.
 //
 // "verify" (a team's review round, ADR 0114 §2): the reviewer reads, builds, runs tests and
 // uses the browser without a prompt, writes only inside its scratch directory and the temporary
@@ -124,7 +124,7 @@ export function reviewDecision(profile, tool, toolInput, { scratch = "", cwd = p
   const allow = { behavior: "allow", updatedInput: input };
   const deny = (message) => ({ behavior: "deny", message });
   if (agentsInjected && tool.startsWith("mcp__ketplus_agents__")) return allow;
-  if (profile !== "verify") return deny(readRefusal);
+  if (profile !== "verify") return readTools.has(tool) && tool !== "KillShell" && tool !== "KillBash" ? allow : deny(readRefusal);
   if (browserInjected && tool.startsWith("mcp__ketplus_browser__")) return allow;
   if (modeTools.has(tool)) return deny(refusal("change its permission mode"));
   if (tool === "AskUserQuestion") return deny(refusal("ask the user a question; nobody answers a review turn"));
@@ -143,16 +143,57 @@ export function reviewDecision(profile, tool, toolInput, { scratch = "", cwd = p
   return deny(refusal(`use ${tool}`));
 }
 
+// Where a verify review's tools keep their caches: inside the scratch directory, the one
+// place besides the temporary directories that the sandbox lets them write.
+export function reviewEnvironment(scratch) {
+  const cache = path.join(scratch, "cache");
+  return { XDG_CACHE_HOME: cache, npm_config_cache: path.join(cache, "npm"),
+    CCACHE_DIR: path.join(cache, "ccache"), PIP_CACHE_DIR: path.join(cache, "pip"),
+    GOCACHE: path.join(cache, "go"), CARGO_HOME: path.join(cache, "cargo") };
+}
+
+// Told to the reviewer at the start of every verify turn, so a build is placed where it can run.
+export function reviewInstructions(scratch) {
+  return [
+    "This is a team review turn. You may read, build, run tests and use the browser tools without asking.",
+    `You may write only in your scratch directory, ${scratch}, and in the temporary directory.`,
+    "The reviewed checkout and its .git directory are read-only: never edit, commit, push, merge, approve or close anything.",
+    "Put every build output in the scratch directory: a CMake build tree with -B <scratch>/build,",
+    "xcodebuild with -derivedDataPath <scratch>/DerivedData and -clonedSourcePackagesDirPath <scratch>/SourcePackages,",
+    "and a copy of the checkout in the scratch directory for a script that writes into its own tree.",
+    "Caches (npm, ccache, pip, go, cargo, XDG) already point into the scratch directory.",
+    "Report your findings with the ketplus_agents tools or in your answer.",
+  ].join("\n");
+}
+
+// Runs before permission rules, so an allow rule in a settings file cannot widen the profile.
+function guardHooks(profile, context) {
+  return {
+    PreToolUse: [{
+      onFailure: "block",
+      hooks: [async (hookInput) => {
+        const decision = reviewDecision(profile, hookInput.tool_name || "", hookInput.tool_input, context);
+        return { hookSpecificOutput: { hookEventName: "PreToolUse",
+          permissionDecision: decision.behavior,
+          ...(decision.behavior === "deny" ? { permissionDecisionReason: decision.message } : {}) } };
+      }],
+    }],
+  };
+}
+
 // The query options of a review turn's profile.
 export function reviewOptions(profile, { scratch = "", cwd = process.cwd(), agentsInjected = false, browserInjected = false } = {}) {
-  if (profile === "read")
-    return { permissionMode: "plan", allowedTools: agentsInjected ? ["mcp__ketplus_agents__*"] : [] };
   const context = { scratch, cwd, agentsInjected, browserInjected };
+  if (profile === "read")
+    return { permissionMode: "plan", allowedTools: agentsInjected ? ["mcp__ketplus_agents__*"] : [],
+      hooks: guardHooks(profile, context) };
   return {
     permissionMode: "default",
     allowedTools: [...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
       ...(agentsInjected ? ["mcp__ketplus_agents__*"] : [])],
     additionalDirectories: [scratch],
+    env: reviewEnvironment(scratch),
+    instructions: reviewInstructions(scratch),
     // The provider's command sandbox bounds every command's writes; it fails closed.
     sandbox: {
       enabled: true,
@@ -162,17 +203,6 @@ export function reviewOptions(profile, { scratch = "", cwd = process.cwd(), agen
       // The reviewed checkout stays unwritable even where it lies in a temporary directory.
       filesystem: { allowWrite: writableDirectories(scratch), denyWrite: [cwd] },
     },
-    // Runs before permission rules, so an allow rule in a settings file cannot widen the profile.
-    hooks: {
-      PreToolUse: [{
-        onFailure: "block",
-        hooks: [async (hookInput) => {
-          const decision = reviewDecision(profile, hookInput.tool_name || "", hookInput.tool_input, context);
-          return { hookSpecificOutput: { hookEventName: "PreToolUse",
-            permissionDecision: decision.behavior,
-            ...(decision.behavior === "deny" ? { permissionDecisionReason: decision.message } : {}) } };
-        }],
-      }],
-    },
+    hooks: guardHooks(profile, context),
   };
 }

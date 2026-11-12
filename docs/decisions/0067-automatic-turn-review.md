@@ -69,9 +69,12 @@ that start it (`review_profile` next to `review_guard` in the turn's origin), an
 clients can set neither:
 
 - **read**: a review request from another conversation, the review of one finished
-  turn described above. This is a reading job: plan mode, only the agents server,
-  and every other tool refused without a prompt. A batch that holds such a request
-  runs entirely under this profile.
+  turn described above. This is a reading job: plan mode, reading and search tools,
+  the agents server, and every other tool (Bash included) refused without a prompt.
+  The refusal is a `PreToolUse` hook, as for the verify profile: plan mode alone only
+  tells the model not to act, and an allow rule in a user or project settings file
+  lets a tool call past `canUseTool`, which is how Bash ran in guarded reviews before.
+  A batch that holds such a request runs entirely under this profile.
 - **verify**: a review request the team itself sends for a task in `in_review`
   (ADR 0114 §2). It has no sending conversation, which no conversation can imitate.
   The reviewer checks acceptance criteria that need builds, tests and screenshots.
@@ -106,8 +109,13 @@ recognised by the text check, and the sandbox does not stop network requests, so
 a command can still publish to a remote with the user's credentials. It cannot change
 the files of the reviewed checkout or its `.git` directory, because the sandbox
 refuses those writes. A build that writes outside the scratch and temporary
-directories (a cache in the home directory, a build tree inside the worktree) fails;
-the reviewer builds in its scratch directory.
+directories (a cache in the home directory, a build tree inside the worktree) fails,
+so the verify turn sets the common cache variables (`XDG_CACHE_HOME`, `npm_config_cache`,
+`CCACHE_DIR`, `PIP_CACHE_DIR`, `GOCACHE`, `CARGO_HOME`) into the scratch directory and
+tells the reviewer, in its system prompt, its scratch path and where builds go: a CMake
+tree with `-B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
+-clonedSourcePackagesDirPath <scratch>/SourcePackages`, and a copy of the checkout in the
+scratch directory for a script that writes into its own tree.
 
 Each turn's profile depends only on that turn's launch. The sidecar reuses a live
 query only for a launch with the same profile and scratch directory, and starts a

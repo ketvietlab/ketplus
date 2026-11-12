@@ -968,7 +968,8 @@ of the markdown matrix.
 broker diffs two snapshot trees of the worktree (written through a copy of its
 index) and sends the reviewer a `review` request with `expect_reply`. The
 reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
-in plan mode and denies every permission request. A team's review round runs under
+in plan mode, and a `PreToolUse` hook refuses every tool but reading and the agents
+server, also against settings allow rules. A team's review round runs under
 the guard's verify profile instead (ADR 0067, `review-guard.mjs`): commands in the
 provider sandbox with writes limited to `review-scratch/<session id>` and the
 temporary directories, and a `PreToolUse` hook that refuses changes to the work. Review requests never join a

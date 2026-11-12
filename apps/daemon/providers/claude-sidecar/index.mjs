@@ -608,17 +608,20 @@ async function startRun(messageId, params, prompt, images) {
     emitUsageEvent(sessionId, "usage.session", sessionUsage(run.authentication));
     run.input = new TurnInput(await promptMessage(prompt, images));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
+    const authentication = authenticationOptions(params.authentication);
+    const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
+      review?.instructions || ""].filter(Boolean).join("\n\n");
     const q = queryFn({
       prompt: run.input,
       options: {
-        ...authenticationOptions(params.authentication),
+        ...authentication,
+        // A verify review's caches live in its scratch directory (ADR 0067).
+        ...(review?.env ? { env: { ...(authentication.env || process.env), ...review.env } } : {}),
         cwd: run.cwd,
         mcpServers,
         // The daemon derives this from the same launch as mcpServers on every query,
         // including resume. Preserve Claude Code's system prompt and the user's input.
-        ...(typeof params.browserInstructions === "string" && params.browserInstructions
-          ? { systemPrompt: { type: "preset", preset: "claude_code", append: params.browserInstructions } }
-          : {}),
+        ...(appended ? { systemPrompt: { type: "preset", preset: "claude_code", append: appended } } : {}),
         allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.

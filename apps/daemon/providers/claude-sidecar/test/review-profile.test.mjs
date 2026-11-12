@@ -22,7 +22,8 @@ const fakeSdk = `
       permissionMode: options.permissionMode, skip: options.allowDangerouslySkipPermissions,
       allowedTools: options.allowedTools, sandbox: options.sandbox || null,
       hooks: Object.keys(options.hooks || {}), additionalDirectories: options.additionalDirectories || [],
-      resume: options.resume || "" } }));
+      resume: options.resume || "", cache: options.env?.XDG_CACHE_HOME || "",
+      instructions: options.systemPrompt?.append || "" } }));
     const input = prompt[Symbol.asyncIterator]();
     let serial = 0;
     async function attempt() {
@@ -160,6 +161,11 @@ test("a team's review round verifies without a prompt: reads, runs commands, wri
   assert.deepEqual(result.query.allowedTools, ["mcp__ketplus_browser__*", "mcp__ketplus_agents__*"]);
   assert.deepEqual(result.query.hooks, ["PreToolUse"]);
   assert.ok(result.query.additionalDirectories.includes(scratch));
+  // Caches and build outputs are pointed into the scratch directory, where they can be written.
+  assert.equal(result.query.cache, path.join(scratch, "cache"));
+  assert.match(result.query.instructions, /team review turn/);
+  assert.ok(result.query.instructions.includes(scratch));
+  assert.match(result.query.instructions, /-derivedDataPath/);
   // The provider's sandbox bounds what commands write, and fails closed.
   assert.equal(result.query.sandbox.enabled, true);
   assert.equal(result.query.sandbox.failIfUnavailable, true);
@@ -229,8 +235,9 @@ test("a team's review round cannot change, commit or publish the work", { timeou
   assert.equal(f.stderr(), "");
 });
 
-test("a turn review outside a team keeps the read profile", { timeout: 20000 }, async (t) => {
+test("a turn review outside a team keeps the read profile, also against settings allow rules", { timeout: 20000 }, async (t) => {
   const f = await fixture(t, [
+    { tool: "Read", input: { file_path: "/nonexistent/x" } },
     { tool: "Bash", input: { command: "echo hi" } },
     { tool: "Write", input: { file_path: "/nonexistent/x", content: "x" } },
     { tool: "mcp__ketplus_browser__browser_capture", input: {} },
@@ -242,10 +249,14 @@ test("a turn review outside a team keeps the read profile", { timeout: 20000 }, 
       mcpServers: servers, ...params });
     assert.equal(result.query.permissionMode, "plan");
     assert.equal(result.query.sandbox, null);
-    assert.deepEqual(result.query.hooks, []);
+    // The hook runs before permission rules: an allow rule for Bash in a settings file
+    // cannot let a read review run a command.
+    assert.deepEqual(result.query.hooks, ["PreToolUse"]);
+    assert.equal(result.query.instructions, "");
     assert.deepEqual(result.query.allowedTools, ["mcp__ketplus_agents__*"]);
-    assert.deepEqual(result.decisions.map((decision) => decision.behavior), ["deny", "deny", "deny", "allow"]);
-    assert.equal(result.decisions[0].message, "A review is read-only: reply with your findings instead.");
+    assert.deepEqual(result.decisions.map((decision) => [decision.hook, decision.behavior]),
+      [["allow", "allow"], ["deny", "deny"], ["deny", "deny"], ["deny", "deny"], ["allow", "allow"]]);
+    assert.equal(result.decisions[1].message, "A review is read-only: reply with your findings instead.");
   }
 });
 
