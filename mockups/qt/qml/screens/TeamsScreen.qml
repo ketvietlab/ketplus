@@ -1554,7 +1554,7 @@ Item {
                         kind: KetTheme.ToggleKind.Radio
                         enabled: addMemberDialog.reviewerOpen
                         checked: addMemberDialog.reviewer
-                        text: "Second reviewer"
+                        text: "Reviewer"
                         onToggled: if (checked) addMemberDialog.chooseRole("reviewer")
                     }
                 }

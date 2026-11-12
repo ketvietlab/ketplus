@@ -15,7 +15,6 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamGoal.h"
 #include "teams/TeamPageParts.h"
-#include "teams/TeamReviewerForm.h"
 #include "teams/TeamTaskDialog.h"
 #include "teams/TeamTurnBudget.h"
 #include "ui/Theme.h"
@@ -418,7 +417,7 @@ class TeamPageTest final : public QObject {
                 .value(0);
         };
         QCOMPARE(status("rev"), QStringLiteral("Reviewing T-1 +1"));
-        QCOMPARE(status("rev2"), QStringLiteral("Idle"));
+        QCOMPARE(status("rev2"), QStringLiteral("Nothing queued"));
         auto* remove = page.findChild<QWidget*>("teamMember_rev2")
                            ->findChild<ket::Button*>("teamMemberRemove");
         QVERIFY(remove);
@@ -441,8 +440,23 @@ class TeamPageTest final : public QObject {
             window.grab().save(QStringLiteral("%1/app-new-team-%2.png").arg(capture, name));
         create->reject();
         QJsonObject one = fixture(1, 4, false, false);
-        auto* second = AddReviewerForm::present(&page, teams_.get(), one, models);
-        QTRY_VERIFY(second->findChild<AddReviewerForm*>()->isVisible());
+        auto* second =
+            AddMemberForm::present(&page, teams_.get(), one, models, QStringLiteral("reviewer"));
+        QTRY_VERIFY(second->findChild<AddMemberForm*>()->isVisible());
+        QCOMPARE(second->findChild<AddMemberForm*>()->role(), QStringLiteral("reviewer"));
+        // The card fits the form once its help lines are wrapped: nothing scrolls.
+        QTRY_COMPARE(
+            second->findChild<QScrollArea*>("teamDialogScroll")->verticalScrollBar()->maximum(), 0);
+        // The card follows its body on the next event loop pass: the body ends above the
+        // footer's buttons.
+        const auto* body = second->findChild<QScrollArea*>("teamDialogScroll");
+        const auto* add = second->findChild<ket::Button*>("addMemberButton");
+        QTRY_VERIFY2(body->mapTo(second, QPoint(0, body->height())).y() <=
+                         add->mapTo(second, QPoint()).y(),
+                     qPrintable(QStringLiteral("body ends %1, Add starts %2, card %3")
+                                    .arg(body->mapTo(second, QPoint(0, body->height())).y())
+                                    .arg(add->mapTo(second, QPoint()).y())
+                                    .arg(second->card()->height())));
         if (!capture.isEmpty())
             window.grab().save(QStringLiteral("%1/app-add-reviewer-%2.png").arg(capture, name));
         second->reject();

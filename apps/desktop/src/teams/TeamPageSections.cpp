@@ -316,6 +316,8 @@ void TeamPage::buildMembers(const QJsonObject& team) {
                 busy = true;
             } else if (queued > 0) {
                 doing = tr("%1 waiting").arg(queued);
+            } else {
+                doing = tr("Nothing queued"); // the mock's words for an idle reviewer
             }
             if (queued > 0)
                 waiting = queued == 1 ? tr("1 more task waits for this reviewer.")

@@ -334,10 +334,12 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     auto* add = new ket::Button(tr("Add member"), ket::ButtonVariant::Secondary, row);
     add->setObjectName(QStringLiteral("teamPageAddMember"));
     add->setIcon(ket::Icons::icon(u"plus"));
+    // T-23: a full developer side still takes a second reviewer.
     const bool full =
-        TeamDirectory::count(team, QStringLiteral("developer")) >= team_roles::maximumDevelopers;
+        TeamDirectory::count(team, QStringLiteral("developer")) >= team_roles::maximumDevelopers &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) >= team_roles::maximumReviewers;
     add->setEnabled(!full);
-    add->setToolTip(full ? tr("A team has at most five developers.") : QString{});
+    add->setToolTip(full ? tr("A team has at most five developers and two reviewers.") : QString{});
     connect(add, &QAbstractButton::clicked, this, [this] { emit addMemberRequested(teamId_); });
     line->addWidget(add, 0, Qt::AlignTop);
     auto* more = new ket::IconButton(ket::Icons::icon(u"more"), tr("Team actions"), row);

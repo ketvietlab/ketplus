@@ -2,6 +2,7 @@
 
 #include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetChoice.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetSegmentedControl.h"
@@ -26,6 +27,7 @@
 #include <QScrollArea>
 #include <QShortcut>
 #include <QTextEdit>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -528,65 +530,154 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     return dialog;
 }
 
-AddDeveloperForm::AddDeveloperForm(TeamDirectory* teams, const QJsonObject& team,
-                                   const QVariantList& models, QWidget* parent)
+AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
+                             const QVariantList& models, const QString& role, QWidget* parent)
     : QWidget(parent), teams_(teams), team_(team), models_(models),
-      agent_(team_agents::defaults(models).developer), name_(new ket::TextField(this)),
-      lane_(new ket::TextField(this)), paths_(new ket::TextField(this)),
+      developerChoice_(new ket::Choice(tr("Developer"), {}, ket::ToggleKind::Radio, this)),
+      reviewerChoice_(new ket::Choice(tr("Reviewer"), {}, ket::ToggleKind::Radio, this)),
+      name_(new ket::TextField(this)), lane_(new ket::TextField(this)),
+      paths_(new ket::TextField(this)),
       agentButton_(new ket::Button({}, ket::ButtonVariant::Secondary, this)),
-      nameRow_(new ket::FieldRow(tr("Name"), name_, {}, this)), hint_(note(this, "teamDialogHint")),
-      error_(note(this, "teamDialogError")) {
-    setObjectName(QStringLiteral("addDeveloperForm"));
+      hint_(note(this, "teamDialogHint")), error_(note(this, "teamDialogError")) {
+    setObjectName(QStringLiteral("addMemberForm"));
+    const team_agents::Defaults defaults = team_agents::defaults(models);
+    agents_.insert(developer, defaults.developer);
+    agents_.insert(reviewer, defaults.reviewer);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    name_->setObjectName(QStringLiteral("developerNameField"));
+
+    // The mock's order: Role, the developer's Lane and Paths, Agent, Name.
+    developerChoice_->setObjectName(QStringLiteral("addMemberDeveloper"));
+    reviewerChoice_->setObjectName(QStringLiteral("addMemberReviewer"));
+    auto* roles = new QButtonGroup(this);
+    roles->addButton(developerChoice_);
+    roles->addButton(reviewerChoice_);
+    auto* choices = new QWidget(this);
+    auto* row = new QHBoxLayout(choices);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(6);
+    row->addWidget(developerChoice_, 1);
+    row->addWidget(reviewerChoice_, 1);
+    roleRow_ = new ket::FieldRow(tr("Role"), choices, {}, this);
+    layout->addWidget(roleRow_);
+    connect(developerChoice_, &QAbstractButton::toggled, this, [this](const bool on) {
+        if (on)
+            setRole(developer);
+    });
+    connect(reviewerChoice_, &QAbstractButton::toggled, this, [this](const bool on) {
+        if (on)
+            setRole(reviewer);
+    });
+
     lane_->setObjectName(QStringLiteral("developerLaneField"));
     lane_->setPlaceholderText(tr("Web, API, …"));
+    laneRow_ =
+        new ket::FieldRow(tr("Lane"), lane_, tr("The part of the code this developer owns."), this);
+    layout->addWidget(laneRow_);
     paths_->setObjectName(QStringLiteral("developerPathsField"));
     paths_->setPlaceholderText(tr("src/web, docs/web"));
-    agentButton_->setObjectName(QStringLiteral("teamAgent_developer"));
-    setAgentLabel(agentButton_, team_agents::label(models_, agent_));
-    layout->addWidget(nameRow_);
-    layout->addWidget(new ket::FieldRow(tr("Lane"), lane_, {}, this));
-    layout->addWidget(new ket::FieldRow(
-        tr("Paths"), paths_, tr("Relative to the repository root, separated by commas."), this));
-    layout->addWidget(new ket::FieldRow(tr("Agent"), agentButton_, {}, this));
+    pathsRow_ = new ket::FieldRow(
+        tr("Paths"), paths_, tr("Relative to the repository root, separated by commas."), this);
+    layout->addWidget(pathsRow_);
+    agentRow_ = new ket::FieldRow(tr("Agent"), agentButton_, {}, this);
+    layout->addWidget(agentRow_);
     connect(agentButton_, &QAbstractButton::clicked, this, [this] {
-        const QPointer<AddDeveloperForm> alive(this);
-        TeamAgentChooser::present(window(), tr("Developer"), models_, agent_, {},
+        const QPointer<AddMemberForm> alive(this);
+        TeamAgentChooser::present(window(), team_roles::label(role_), models_, agents_.value(role_),
+                                  role_ == reviewer ? QLatin1String(team_agents::reviewerProvider)
+                                                    : QString{},
                                   [alive](const TeamAgent& agent) {
                                       if (alive)
                                           alive->setAgent(agent);
                                   });
     });
-    const int developers = TeamDirectory::count(team_, developer);
-    if (isFull())
-        showNote(hint_, tr("A team has at most five developers."));
-    else if (developers + 1 >= kQueueHintDevelopers && TeamDirectory::count(team_, reviewer) < 2)
-        showNote(hint_, tr("With %1 developers the single reviewer becomes the queue: tasks "
-                           "wait their turn for review.")
-                            .arg(developers + 1));
+    name_->setObjectName(QStringLiteral("developerNameField"));
+    nameRow_ = new ket::FieldRow(
+        tr("Name"), name_,
+        tr("How the conversation shows in the team's folder. Its role is a tag beside it."), this);
+    layout->addWidget(nameRow_);
     layout->addWidget(hint_);
     layout->addWidget(error_);
     layout->addStretch();
+
+    reviewerChoice_->setEnabled(canAdd(reviewer));
+    developerChoice_->setEnabled(canAdd(developer));
+    // Reviewer when asked for or when the developer side is full, while there is room.
+    const QString start =
+        canAdd(reviewer) && (role == reviewer || !canAdd(developer)) ? reviewer : developer;
+    role_ = start;
+    (start == reviewer ? reviewerChoice_ : developerChoice_)->setChecked(true);
+    describe();
 }
 
-bool AddDeveloperForm::isFull() const {
-    return TeamDirectory::count(team_, developer) >= team_roles::maximumDevelopers;
+bool AddMemberForm::canAdd(const QString& role) const {
+    return role == reviewer
+               ? TeamDirectory::count(team_, reviewer) < team_roles::maximumReviewers
+               : TeamDirectory::count(team_, developer) < team_roles::maximumDevelopers;
 }
 
-QString AddDeveloperForm::hint() const { return hint_->isHidden() ? QString{} : hint_->text(); }
-QString AddDeveloperForm::error() const { return error_->isHidden() ? QString{} : error_->text(); }
+bool AddMemberForm::isFull() const { return !canAdd(role_); }
 
-void AddDeveloperForm::setAgent(const TeamAgent& agent) {
-    agent_ = agent;
-    setAgentLabel(agentButton_, team_agents::label(models_, agent_));
+void AddMemberForm::setRole(const QString& role) {
+    if (role == role_)
+        return;
+    role_ = role;
+    describe();
+    emit roleChanged(role_);
 }
 
-QJsonObject AddDeveloperForm::payload() const {
-    QJsonObject result = agent_.json();
+void AddMemberForm::describe() {
+    const bool reviewing = role_ == reviewer;
+    roleRow_->setHelp(canAdd(reviewer) ? tr("A second reviewer shortens the queue: each task in "
+                                            "review goes to one of the two.")
+                                       : tr("The team has two reviewers, the most a team has."));
+    laneRow_->setVisible(!reviewing);
+    pathsRow_->setVisible(!reviewing);
+    agentButton_->setObjectName(reviewing ? QStringLiteral("teamAgent_reviewer")
+                                          : QStringLiteral("teamAgent_developer"));
+    setAgentLabel(agentButton_, team_agents::label(models_, agents_.value(role_)));
+    agentRow_->setHelp(reviewing ? tr("A reviewer runs on Claude, the provider that keeps a review "
+                                      "read-only.")
+                                 : tr("The new conversation's provider, model and effort."));
+    agentRow_->setError({});
+    nameRow_->setError({});
+    name_->setPlaceholderText(
+        reviewing ? tr("Reviewer %1").arg(TeamDirectory::count(team_, reviewer) + 1) : QString{});
+    showNote(error_, {});
+    const int developers = TeamDirectory::count(team_, developer);
+    if (isFull())
+        showNote(hint_, reviewing ? tr("The team has two reviewers, the most a team has.")
+                                  : tr("A team has at most five developers."));
+    else if (!reviewing && developers + 1 >= kQueueHintDevelopers &&
+             TeamDirectory::count(team_, reviewer) < team_roles::maximumReviewers)
+        showNote(hint_, tr("With %1 developers the single reviewer becomes the queue: tasks "
+                           "wait their turn for review. A second reviewer shortens it.")
+                            .arg(developers + 1));
+    else
+        showNote(hint_, {});
+}
+
+QString AddMemberForm::hint() const { return hint_->isHidden() ? QString{} : hint_->text(); }
+QString AddMemberForm::error() const { return error_->isHidden() ? QString{} : error_->text(); }
+
+void AddMemberForm::setAgent(const TeamAgent& agent) {
+    agents_.insert(role_, agent);
+    setAgentLabel(agentButton_, team_agents::label(models_, agent));
+    agentRow_->setError({});
+}
+
+QJsonObject AddMemberForm::payload() const {
+    QJsonObject result = agents_.value(role_).json();
     result.insert(QStringLiteral("team_id"), team_.value(QStringLiteral("id")).toString());
-    result.insert(QStringLiteral("name"), name_->text().trimmed());
+    const QString name = name_->text().trimmed();
+    if (role_ == reviewer) {
+        // Without a name the daemon calls it "Reviewer 2".
+        result.insert(QStringLiteral("role"), reviewer);
+        if (!name.isEmpty())
+            result.insert(QStringLiteral("name"), name);
+        return result;
+    }
+    result.insert(QStringLiteral("name"), name);
     if (const QString lane = lane_->text().trimmed(); !lane.isEmpty())
         result.insert(QStringLiteral("lane"), lane);
     if (const QJsonArray paths = splitPaths(paths_->text()); !paths.isEmpty())
@@ -594,23 +685,30 @@ QJsonObject AddDeveloperForm::payload() const {
     return result;
 }
 
-bool AddDeveloperForm::validate() {
+bool AddMemberForm::validate() {
     showNote(error_, {});
-    const bool named = !name_->text().trimmed().isEmpty();
+    const bool reviewing = role_ == reviewer;
+    const bool named = reviewing || !name_->text().trimmed().isEmpty();
     nameRow_->setError(named ? QString{} : tr("Name the developer."));
     if (!named)
         name_->setFocus();
-    if (agent_.isEmpty())
-        showNote(error_, tr("Choose the developer's agent."));
-    return named && !agent_.isEmpty() && !isFull();
+    const bool chosen = !agents_.value(role_).isEmpty();
+    if (!chosen) {
+        if (reviewing)
+            agentRow_->setError(tr("The reviewer needs Claude. Set up Claude in Settings → "
+                                   "Agents."));
+        else
+            showNote(error_, tr("Choose the developer's agent."));
+    }
+    return named && chosen && !isFull();
 }
 
-void AddDeveloperForm::submit(std::function<void()> added) {
+void AddMemberForm::submit(std::function<void()> added) {
     if (!validate())
         return;
     if (teams_->commands()->isPending(addKey(team_)))
         return;
-    const QPointer<AddDeveloperForm> alive(this);
+    const QPointer<AddMemberForm> alive(this);
     setEnabled(false);
     teams_->commands()->send(
         addKey(team_), {}, QStringLiteral("team.member.add"), payload(),
@@ -627,24 +725,36 @@ void AddDeveloperForm::submit(std::function<void()> added) {
         });
 }
 
-ket::Dialog* AddDeveloperForm::present(QWidget* anchor, TeamDirectory* teams,
-                                       const QJsonObject& team, const QVariantList& models) {
+ket::Dialog* AddMemberForm::present(QWidget* anchor, TeamDirectory* teams, const QJsonObject& team,
+                                    const QVariantList& models, const QString& role) {
     auto* dialog = new ket::Dialog(
-        tr("Add a developer to %1").arg(team.value(QStringLiteral("name")).toString()), anchor);
-    dialog->setObjectName(QStringLiteral("addDeveloperDialog"));
+        tr("Add a member to %1").arg(team.value(QStringLiteral("name")).toString()), anchor);
+    dialog->setObjectName(QStringLiteral("addMemberDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    auto* form = new AddDeveloperForm(teams, team, models);
-    dialog->setBody(scrolling(form, anchor));
+    auto* form = new AddMemberForm(teams, team, models, role);
+    QScrollArea* scroll = scrolling(form, anchor);
+    dialog->setBody(scroll);
+    // The help lines wrap only once the card has its width, and a role shows other rows: the
+    // body grows to the form then, up to the window's limit, so nothing scrolls without need.
+    const auto fit = [scroll, form] {
+        QTimer::singleShot(0, scroll, [scroll, form] {
+            scroll->setMinimumHeight(qMin(form->sizeHint().height(), scroll->maximumHeight()));
+        });
+    };
+    QObject::connect(form, &AddMemberForm::roleChanged, scroll, fit);
     dialog->setCardWidth(480);
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
-    auto* add = dialog->addButton(tr("Add developer"), ket::ButtonVariant::Primary);
-    add->setObjectName(QStringLiteral("addDeveloperButton"));
+    auto* add = dialog->addButton(tr("Add"), ket::ButtonVariant::Primary);
+    add->setObjectName(QStringLiteral("addMemberButton"));
     add->setEnabled(!form->isFull());
+    QObject::connect(form, &AddMemberForm::roleChanged, add,
+                     [add, form] { add->setEnabled(!form->isFull()); });
     teams->commands()->bind(add, addKey(team));
     QObject::connect(add, &QAbstractButton::clicked, dialog,
                      [dialog, form] { form->submit([dialog] { dialog->accept(); }); });
     dialog->open();
+    fit();
     form->nameField()->setFocus();
     return dialog;
 }

@@ -12,7 +12,6 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPage.h"
-#include "teams/TeamReviewerForm.h"
 #include "terminal/TerminalPanel.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/ExplorerPanel.h"
@@ -342,17 +341,19 @@ void MainWindow::showNewTeamDialog(const QString& repository) {
 void MainWindow::showAddTeamMemberDialog(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
     if (!team || agentManager_ == nullptr ||
-        agentDialogOpen(this, QStringLiteral("addDeveloperDialog")))
+        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
         return;
-    AddDeveloperForm::present(this, teams_, *team, agentManager_->models());
+    AddMemberForm::present(this, teams_, *team, agentManager_->models());
 }
 
 void MainWindow::showAddTeamReviewerDialog(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
     if (!team || agentManager_ == nullptr ||
-        agentDialogOpen(this, QStringLiteral("addReviewerDialog")))
+        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
         return;
-    AddReviewerForm::present(this, teams_, *team, agentManager_->models());
+    // T-23: the same Add a member dialog, on Reviewer.
+    AddMemberForm::present(this, teams_, *team, agentManager_->models(),
+                           QStringLiteral("reviewer"));
 }
 
 } // namespace ketplus

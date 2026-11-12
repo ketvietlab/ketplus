@@ -14,6 +14,7 @@ class QLabel;
 namespace ket {
 class Button;
 class Checkbox;
+class Choice;
 class Dialog;
 class FieldRow;
 class Radio;
@@ -109,17 +110,22 @@ class NewTeamForm final : public QWidget {
 };
 
 // #465: one more developer, never an existing conversation (those join by drag or menu).
-class AddDeveloperForm final : public QWidget {
+// T-23: or the team's second reviewer, chosen by Role as the mock's Add a member does.
+class AddMemberForm final : public QWidget {
     Q_OBJECT
 
   public:
-    AddDeveloperForm(TeamDirectory* teams, const QJsonObject& team, const QVariantList& models,
-                     QWidget* parent = nullptr);
+    AddMemberForm(TeamDirectory* teams, const QJsonObject& team, const QVariantList& models,
+                  const QString& role = QStringLiteral("developer"), QWidget* parent = nullptr);
 
     [[nodiscard]] QJsonObject payload() const;
     bool validate();
     void submit(std::function<void()> added);
+    // The chosen role has no room left: five developers, or two reviewers.
     [[nodiscard]] bool isFull() const;
+    [[nodiscard]] bool canAdd(const QString& role) const;
+    [[nodiscard]] QString role() const { return role_; }
+    void setRole(const QString& role);
     [[nodiscard]] QString hint() const;
     [[nodiscard]] ket::TextField* nameField() const { return name_; }
     [[nodiscard]] ket::TextField* laneField() const { return lane_; }
@@ -127,18 +133,33 @@ class AddDeveloperForm final : public QWidget {
     [[nodiscard]] QString error() const;
     void setAgent(const TeamAgent& agent);
 
+    // `role` preselects Developer or Reviewer (the second one).
     static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QJsonObject& team,
-                                const QVariantList& models);
+                                const QVariantList& models,
+                                const QString& role = QStringLiteral("developer"));
+
+  signals:
+    void roleChanged(const QString& role);
 
   private:
+    void describe();
+
     TeamDirectory* teams_;
     QJsonObject team_;
     QVariantList models_;
-    TeamAgent agent_;
+    QString role_;
+    // Each role keeps its own agent: a reviewer is on Claude.
+    QHash<QString, TeamAgent> agents_;
+    ket::Choice* developerChoice_;
+    ket::Choice* reviewerChoice_;
     ket::TextField* name_;
     ket::TextField* lane_;
     ket::TextField* paths_;
     ket::Button* agentButton_;
+    ket::FieldRow* roleRow_;
+    ket::FieldRow* laneRow_;
+    ket::FieldRow* pathsRow_;
+    ket::FieldRow* agentRow_;
     ket::FieldRow* nameRow_;
     QLabel* hint_;
     QLabel* error_;

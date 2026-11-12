@@ -21,6 +21,8 @@ namespace ketplus {
 // ket::Style::kDescriptionProperty, as the conversation menu does.
 namespace team_roles {
 inline constexpr int maximumDevelopers = 5;
+// T-23: a team has one or two reviewers.
+inline constexpr int maximumReviewers = 2;
 [[nodiscard]] QString label(const QString& role);
 [[nodiscard]] QColor color(const QString& role);
 // Leader first, then developers, then the reviewer; the daemon's order within a role.
