@@ -1060,7 +1060,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(reminder->isHidden());
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(!reminder->isHidden());
-    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("ketPlus Pro 0.1.18")));
     QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("Review and install")));
     // Downloaded, it reads as the mock's "Restart to install".
     updater.remind(QStringLiteral("0.1.18"), true);
@@ -1146,7 +1146,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(!checkNow->isEnabled());
     updater.remind(QStringLiteral("0.1.18"));
     QCOMPARE(badge(), QStringLiteral("Available"));
-    QVERIFY(cardText().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(cardText().contains(QStringLiteral("ketPlus Pro 0.1.18")));
     QVERIFY(!restart->isVisible());
     updater.setCanCheck(true);
     updater.remind(QStringLiteral("0.1.18"), true);

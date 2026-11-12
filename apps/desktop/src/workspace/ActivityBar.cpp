@@ -1,4 +1,5 @@
 #include "workspace/ActivityBar.h"
+#include "ui/BrandLockup.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 #include "ui/SymbolIcon.h"
@@ -127,12 +128,12 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* brandLayout = new QHBoxLayout(brand);
     chrome_geometry::margins(brandLayout, 4, 0, 2, 0);
     chrome_geometry::spacing(brandLayout, 6);
-    brandWordmark_ = new QLabel(brand);
-    brandWordmark_->setObjectName(QStringLiteral("productBrandWordmark"));
-    // The KétPlus Pro wordmark is 4:1 and already names the edition.
-    chrome_geometry::fixedSize(brandWordmark_, 120, 30);
-    brandWordmark_->setAccessibleName(QStringLiteral("KétPlus Pro"));
-    brandLayout->addWidget(brandWordmark_);
+    // The approved ketPlus Pro lockup at the mock sidebar's 17 px wordmark; it follows the
+    // theme and the interface zoom itself.
+    brandLockup_ = new BrandLockup(BrandLockup::Edition::Pro, brand);
+    brandLockup_->setObjectName(QStringLiteral("productBrandLockup"));
+    brandLockup_->setWordSize(17);
+    brandLayout->addWidget(brandLockup_, 0, Qt::AlignVCenter);
     brandLayout->addStretch();
     layout->addWidget(brand);
 
@@ -395,8 +396,8 @@ void ActivityBar::setStorageStatus(const QVariantMap& result) {
 
 void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded) {
     updateReadyButton_->setDetail(downloaded
-                                      ? tr("KétPlus Pro %1 · Restart to install").arg(version)
-                                      : tr("KétPlus Pro %1 · Review and install").arg(version));
+                                      ? tr("ketPlus Pro %1 · Restart to install").arg(version)
+                                      : tr("ketPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
@@ -413,7 +414,7 @@ void ActivityBar::setAccount(const QString& name) {
 
 void ActivityBar::refreshIdentityText() {
     // A long name ends in "…" before the chevron; the tooltip keeps all of it.
-    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    const QString full = accountName_.isEmpty() ? tr("ketPlus") : accountName_;
     QString name = full;
     // Before it is laid out the label has no width yet; the button's resize elides again.
     if (identityButton_->isVisible() && identityName_->width() > 0)

@@ -204,6 +204,13 @@ target_link_libraries(ketplus_machine_conversation_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_machine_paging_tests MachineTranscriptPagingTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_paging_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
 ketplus_add_gui_test(ketplus_machine_window_tests MachineWindowTest.cpp FakeMachineBackend.h)
 target_include_directories(ketplus_machine_window_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ketplus_machine_window_tests PRIVATE

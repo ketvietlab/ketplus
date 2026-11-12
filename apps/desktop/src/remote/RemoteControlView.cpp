@@ -1078,8 +1078,8 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         // Enrollments from before ADR 0109 have no name until the next sign-in.
         accountName_->setText(name.isEmpty() ? QStringLiteral("Signed in") : name);
         accountMeta_->setText(!username.isEmpty() && username != name
-                                  ? QStringLiteral("%1 · KétPlus Pro").arg(username)
-                                  : QStringLiteral("KétPlus Pro"));
+                                  ? QStringLiteral("%1 · ketPlus Pro").arg(username)
+                                  : QStringLiteral("ketPlus Pro"));
         accountAvatar_->setName(name);
         accountAvatar_->setVisible(!name.isEmpty());
         emit accountChanged(configured_ ? name : QString());

@@ -118,6 +118,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorAssign.cpp
+    src/teams/TeamCoordinatorAllowedPaths.cpp
+    src/teams/TeamCoordinatorAttribution.cpp
     src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
     src/teams/TeamCoordinatorGit.cpp

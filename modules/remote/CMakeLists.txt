@@ -8,6 +8,9 @@ add_library(ketplus_remote STATIC
     src/DaemonMachineBackend.cpp
     src/DaemonMachineBackend.h
     src/MachineBackend.h
+    src/MachineBackend.cpp
+    src/MachineLargeEvents.cpp
+    src/MachineLargeEvents.h
     src/MachineRows.cpp
     src/MachineRows.h
     src/SessionCatalogReader.cpp

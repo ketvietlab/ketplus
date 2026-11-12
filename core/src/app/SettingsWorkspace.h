@@ -19,7 +19,7 @@ class SettingsDialog;
 // heading with its shortcut, the section navigation, Appearance and Typography composed from
 // the dialog's own controls, and the dialog's Restore defaults below. Every change applies as
 // it is made (ADR 0103). Colours come from the kit's tokens for the current theme and lengths
-// follow the interface zoom. KétPlus shows it as is; Pro adds its sections in
+// follow the interface zoom. ketPlus shows it as is; Pro adds its sections in
 // SettingsWorkspacePage.
 class SettingsWorkspace : public QWidget {
     Q_OBJECT

@@ -294,7 +294,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
             if (foreign && !result.contains("repository_path")) {
                 list->clear();
                 state->chosen.clear();
-                status->setText("Restart KétPlus to list another repository's worktrees.");
+                status->setText("Restart ketPlus to list another repository's worktrees.");
                 list->setEnabled(true);
                 updateUse();
                 return;

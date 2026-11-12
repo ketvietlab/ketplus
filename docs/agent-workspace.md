@@ -41,8 +41,13 @@ transcript windows carry `event_type` and the data as `payload`.
 
 - **Sidebar.** `listRepositories` and `listConversations` are read together and
   replace the lists at once. Rows are keyed by repository id and session id;
-  a row's `path` is the worktree id, never resolved on This Mac. Context menu
-  and rename are not offered for remote rows yet.
+  a row's `path` is the worktree id, never resolved on This Mac. A remote row's
+  context menu and rename, and the conversation header's "…" button, use
+  `MachineConversationActions`: Rename…, Fork and Archive through the
+  machine's backend, each disabled with `MachineBackend::unsupportedReason()`
+  as its tooltip where the route does not carry it (ADR 0119, "Parity of
+  conversation operations"). A fork opens once the machine lists it. A failure
+  shows in the composer's status line.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,
   without running Git), and the local and SSH adapter groups checkouts under it
@@ -71,6 +76,19 @@ transcript windows carry `event_type` and the data as `payload`.
   or closing the view calls `MachineBackend::conversationClosed()`. After a
   reconnect the listing says whether its turn still runs. A conversation outside
   every listed repository is listed under its own worktree.
+- **Transcript.** The newest window opens the conversation. Scrolling to the
+  top, or "Show earlier messages", reads the page before the oldest cached
+  event with `transcriptPage`, one at a time, and keeps the reader's place.
+  `remote::resolveLargeEvents()` reads each `large_event` reference fragment by
+  fragment first, so a page is added whole or not at all; a failed read shows
+  its error and scrolling up retries. Live events wait while a window loads
+  and then follow it, and a live item sent as a `large_event` reference is
+  read the same way before the events after it apply. A reader looking at
+  older rows keeps their place; one at the newest row follows new rows. The
+  rows are rebuilt from every kept
+  event, so a turn split across pages reads as one. The view is a simplified
+  transcript with a visible note: the rich renderer is deferred (ADR 0119).
+  Attach is shown disabled with its reason.
 - **Held and queued writes.** A route may hold a request while it is
   Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
   says it waits for the machine instead of looking hung. A Relay write may
@@ -88,8 +106,8 @@ transcript windows carry `event_type` and the data as `payload`.
   longer listed is forgotten, and if it was selected the window returns to This
   Mac.
 
-Tests: `tests/MachineCompositionTest.cpp` and `tests/MachineConversationTest.cpp`
-against `tests/FakeMachineBackend.h`; `tests/MachineWindowTest.cpp` on
+Tests: `tests/MachineCompositionTest.cpp`, `tests/MachineConversationTest.cpp`
+and `tests/MachineTranscriptPagingTest.cpp` against `tests/FakeMachineBackend.h`; `tests/MachineWindowTest.cpp` on
 `MainWindow`, with Connections over a fake SSH daemon.
 
 ## Context compaction

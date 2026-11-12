@@ -56,6 +56,11 @@ class FakeHost final : public TeamHostPort {
     QString taskCommit(const Team&, const Task& task) const override {
         return heads.value(task.branch, task.branch + QStringLiteral("@head"));
     }
+    std::optional<QString> ownHead(const Team& team, const Task& task) const override {
+        if (unreadableHeads.contains(task.branch))
+            return std::nullopt;
+        return TeamHostPort::ownHead(team, task);
+    }
     std::optional<TaskDiff> taskDiff(const Team& team, const Task& task) const override {
         (void)team;
         if (unreadable.contains(task.id))
@@ -197,6 +202,8 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, TeamConversation> conversations;
     QHash<QString, QString> pointed;
     QHash<QString, QString> heads;
+    // T-38: branches git cannot read.
+    QSet<QString> unreadableHeads;
     QHash<QString, PullRequestFact> pullRequests;
     QList<QStringList> pullRequestAsks;
     QSet<QString> dirty;

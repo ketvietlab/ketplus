@@ -430,4 +430,33 @@ void RelayMachineBackend::answerQuestion(const QString& sessionId, qint64 genera
                    {{"approval_id", questionId}, {"resolution", resolution}}, std::move(callback));
 }
 
+bool RelayMachineBackend::supports(const Feature feature) const {
+    return state_ == ConnectionState::Connected &&
+           (feature == Feature::Rename || feature == Feature::Fork);
+}
+
+QString RelayMachineBackend::unsupportedReason(const Feature feature) const {
+    if (state_ == ConnectionState::Connected && feature == Feature::Archive)
+        return tr("Not available through the Relay yet.");
+    return MachineBackend::unsupportedReason(feature);
+}
+
+void RelayMachineBackend::renameConversation(const QString& sessionId, qint64 generation,
+                                             const QString& title, Callback callback) {
+    sessionCommand(QStringLiteral("session.rename"), sessionId, generation, {{"title", title}},
+                   std::move(callback));
+}
+
+void RelayMachineBackend::forkConversation(const QString& sessionId, qint64 generation,
+                                           const QString& forkSessionId, Callback callback) {
+    // The host forks for cloud clients (CloudControlCommands' remote operations) and answers
+    // with the new session in the command's completion.
+    sessionCommand(QStringLiteral("session.fork"), sessionId, generation,
+                   {{"fork_session_id", forkSessionId}}, std::move(callback));
+}
+
+void RelayMachineBackend::setConversationArchived(const QString&, qint64, bool, Callback callback) {
+    callback({}, unsupportedReason(Feature::Archive));
+}
+
 } // namespace ketplus::remote

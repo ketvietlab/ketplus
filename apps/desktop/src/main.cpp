@@ -31,11 +31,13 @@ int main(int argc, char* argv[]) {
     QtWebView::initialize();
     ketplus::applyApplicationAttributes();
     QApplication app(argc, argv);
-    // The name keeps the settings location of existing installs; users see KétPlus Pro.
+    // The name keeps the settings location of existing installs; users see ketPlus Pro.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
-    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus Pro"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("ketPlus Pro"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("KetPlus"));
+    // Matches packaging/linux/ketplus-pro.desktop, so Wayland compositors use its name and icon.
+    QGuiApplication::setDesktopFileName(QStringLiteral("ketplus-pro"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 
     ketplus::ThemeManager theme(app);

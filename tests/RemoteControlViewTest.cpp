@@ -414,7 +414,7 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
                                    {QStringLiteral("username"), QStringLiteral("minh")}}}});
     QCOMPARE(text("remoteAccountName"), QStringLiteral("Minh Tran"));
     QCOMPARE(accounts.constLast().at(0).toString(), QStringLiteral("Minh Tran")); // the sidebar
-    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · KétPlus Pro"));
+    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · ketPlus Pro"));
     QCOMPARE(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->initials(),
              QStringLiteral("MT"));
     // A name that looks like markup is shown as typed.
@@ -428,7 +428,7 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     // An enrollment from before the daemon kept the name.
     view.applyStatus({{QStringLiteral("configured"), true}});
     QCOMPARE(text("remoteAccountName"), QStringLiteral("Signed in"));
-    QCOMPARE(accounts.constLast().at(0).toString(), QString()); // the sidebar keeps "KetPlus"
+    QCOMPARE(accounts.constLast().at(0).toString(), QString()); // the sidebar keeps "ketPlus"
     view.applyStatus({{QStringLiteral("configured"), false},
                       {QStringLiteral("account"),
                        QJsonObject{{QStringLiteral("display_name"), QStringLiteral("Stale")}}}});

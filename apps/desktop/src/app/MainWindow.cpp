@@ -8,6 +8,7 @@
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
 #include "machine/MachineComposition.h"
+#include "machine/MachineConversationActions.h"
 #include "machine/MachineWorkspaceView.h"
 #include "workspace/AtlasIndex.h"
 
@@ -92,7 +93,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     repositoryLookupPool_.setMaxThreadCount(2);
     theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
                              appearanceSettings_.interfaceZoomPercent);
-    setWindowTitle(QStringLiteral("KétPlus Pro"));
+    setWindowTitle(QStringLiteral("ketPlus Pro"));
     atlasIndex_ = new AtlasIndex(this);
     connect(atlasIndex_, &AtlasIndex::changed, this, &MainWindow::populateSpotlight);
     refreshAtlasIndex();
@@ -178,15 +179,19 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             &MainWindow::openSidebarConversation);
     connect(activityBar_, &ActivityBar::conversationContextMenuRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
-                if (selectedMachineId_ != QStringLiteral("local"))
-                    return; // remote conversations have no local menu or rename yet
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    showMachineConversationMenu(machines_, conversationId, this);
+                    return;
+                }
                 ensureAgentWorkspace();
                 showAgentConversationContextMenu(normalizedPath(worktreePath), conversationId);
             });
     connect(activityBar_, &ActivityBar::conversationRenameRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
-                if (selectedMachineId_ != QStringLiteral("local"))
-                    return; // remote conversations have no local menu or rename yet
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    renameMachineConversation(machines_, conversationId, this);
+                    return;
+                }
                 ensureAgentWorkspace();
                 // Leave the double-click event before running the modal dialog.
                 QMetaObject::invokeMethod(
@@ -513,7 +518,7 @@ void MainWindow::openFolder(const QString& folderPath) {
         setExplorerVisible(true);
     }
     syncAgentWorkspaceContext(keepAgentWorkspace);
-    setWindowTitle(QStringLiteral("%1 — KétPlus Pro").arg(folder.fileName()));
+    setWindowTitle(QStringLiteral("%1 — ketPlus Pro").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
     if (!suppressWorkspaceRestore_ && !restoringWorkspaceState_) {

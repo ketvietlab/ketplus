@@ -4,6 +4,7 @@
 
 #include <QJsonObject>
 #include <QList>
+#include <QSet>
 #include <QStringList>
 
 #include <functional>
@@ -130,6 +131,27 @@ class FakeMachineBackend final : public remote::MachineBackend {
 
     void conversationClosed(const QString& sessionId) override { closed.append(sessionId); }
     QStringList closed;
+
+    // The conversation operations this machine offers; the others use the base reason.
+    QSet<Feature> features;
+    [[nodiscard]] bool supports(Feature feature) const override {
+        return state_ == ConnectionState::Connected && features.contains(feature);
+    }
+    void renameConversation(const QString& sessionId, qint64 generation, const QString& title,
+                            Callback callback) override {
+        record("renameConversation", sessionId, generation, {{"title", title}},
+               std::move(callback));
+    }
+    void forkConversation(const QString& sessionId, qint64 generation, const QString& forkSessionId,
+                          Callback callback) override {
+        record("forkConversation", sessionId, generation, {{"fork_session_id", forkSessionId}},
+               std::move(callback));
+    }
+    void setConversationArchived(const QString& sessionId, qint64 generation, bool archived,
+                                 Callback callback) override {
+        record("setConversationArchived", sessionId, generation, {{"archived", archived}},
+               std::move(callback));
+    }
 
   private:
     void record(const QString& operation, const QString& sessionId, qint64 generation,

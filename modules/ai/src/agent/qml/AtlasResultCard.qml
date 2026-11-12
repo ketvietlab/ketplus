@@ -75,7 +75,7 @@ Rectangle {
             spacing: Kit.KetTheme.px(8, KetTheme.zoom)
             Kit.KetButton {
                 objectName: "editAtlasResultButton"
-                text: "Edit in KétPlus"
+                text: "Edit in ketPlus"
                 iconName: "edit"
                 variant: Kit.KetTheme.ButtonVariant.Primary
                 visible: !!card.result.available

@@ -6,7 +6,6 @@
 #include "workspace/ActivityBar.h"
 #include <QButtonGroup>
 #include <QLabel>
-#include <QPixmap>
 #include <QStyle>
 #include <QToolButton>
 namespace ketplus {
@@ -16,15 +15,6 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int zoomPercen
             return InterfaceZoomMetrics::geometry(n, zoomPercent);
         };
         avatar->setGeometry(px(7), px(11), px(29), px(29));
-    }
-    const QString wordmark = palette.dark ? QStringLiteral(":/brand/ketplus-logo-dark.png")
-                                          : QStringLiteral(":/brand/ketplus-logo-light.png");
-    const QPixmap source(wordmark);
-    if (!source.isNull()) {
-        const QSize size = brandWordmark_->size() * brandWordmark_->devicePixelRatioF();
-        QPixmap scaled = source.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        scaled.setDevicePixelRatio(brandWordmark_->devicePixelRatioF());
-        brandWordmark_->setPixmap(scaled);
     }
     const QString controlBorder = palette.border;
     const QString sidebarAccent = palette.accentText;

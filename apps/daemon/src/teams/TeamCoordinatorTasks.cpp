@@ -317,7 +317,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
 }
 
 TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId, const QString& to,
-                                     const QString& actor, const QString& note) {
+                                     const QString& actor, const QString& note,
+                                     const QString& reportedHead) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
@@ -377,7 +378,13 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Commit your work in %1 before handing %2 to "
                                                     "review; uncommitted changes are not reviewed.")
                                          .arg(task->worktree, taskId))};
-        task->headCommit = read.head;
+        if (!read.headRead)
+            return {.error = refusal(
+                        QStringLiteral("git_unavailable"),
+                        QStringLiteral("Could not read the branch %1 of %2 from git; try again.")
+                            .arg(task->branch, taskId))};
+        if (auto refused = attributeHead(*team, *task, read.head, reportedHead))
+            return {.error = refused};
     } else if (to == state::blocked) {
         if (!owner && !daemon && !leaderOrUser(role))
             return {.error =

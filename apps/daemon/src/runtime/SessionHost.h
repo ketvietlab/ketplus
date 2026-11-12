@@ -352,6 +352,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void teamStorageCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
+    [[nodiscard]] std::optional<QString> ownHead(const teams::Team& team,
+                                                 const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
                                                           const teams::Task& task) const override;
     [[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,

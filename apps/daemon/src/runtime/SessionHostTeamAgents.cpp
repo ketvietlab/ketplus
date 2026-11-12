@@ -230,7 +230,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         const QString state = payload.value(QStringLiteral("state")).toString();
         if (!state.isEmpty() && state != team->task(taskId)->state)
             return answer(teams_->moveTask(teamId, taskId, state, sessionId,
-                                           payload.value(QStringLiteral("question")).toString()),
+                                           payload.value(QStringLiteral("question")).toString(),
+                                           payload.value(QStringLiteral("head_commit")).toString()),
                           taskId);
         return answer({.teamId = teamId}, taskId);
     }
@@ -294,6 +295,15 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                           strings(payload.value(QStringLiteral("paths"))), sessionId,
                           payload.value(QStringLiteral("reason")).toString()),
                       {});
+    }
+    if (operation == QStringLiteral("team_paths_allow")) {
+        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
+            return refusal(QStringLiteral("invalid_payload"),
+                           QStringLiteral("Give the reason the paths are allowed."));
+        return answer(
+            teams_->allowPaths(teamId, taskId, strings(payload.value(QStringLiteral("paths"))),
+                               payload.value(QStringLiteral("reason")).toString(), sessionId),
+            taskId);
     }
     return teamDecisionOperation(sessionId, operation, payload);
 }

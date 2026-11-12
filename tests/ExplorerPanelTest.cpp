@@ -136,7 +136,7 @@ void ExplorerPanelTest::identityNamesTheSignedInAccount() {
     auto* subtitle = bar.findChild<QLabel*>(QStringLiteral("productIdentitySubtitle"));
     auto* avatar = bar.findChild<QLabel*>(QStringLiteral("productIdentityAvatar"));
     QVERIFY(identity && name && subtitle && avatar);
-    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
+    QCOMPARE(name->text(), QStringLiteral("ketPlus"));
     QCOMPARE(subtitle->text(), QStringLiteral("Personal workspace"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
     // The button draws no text of its own: a QToolButton would centre it.
@@ -167,7 +167,7 @@ void ExplorerPanelTest::identityNamesTheSignedInAccount() {
     QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
     // Signing out returns to the product name.
     bar.setAccount({});
-    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
+    QCOMPARE(name->text(), QStringLiteral("ketPlus"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
 }
 

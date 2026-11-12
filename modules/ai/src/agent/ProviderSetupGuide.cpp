@@ -169,7 +169,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                               "find it.")
                                .arg(thisComputer()));
         value.insert(QStringLiteral("error"), firstLine(message));
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Install the %1 in a terminal.").arg(cli), install)
               << step(id == QStringLiteral("cursor")
                           ? tr("Sign in with the account that has your Cursor plan. A browser "
@@ -271,7 +271,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                      tr("The Claude Agent SDK that ships inside KetPlus is missing, often after an "
                         "interrupted update. Your conversations are safe."));
         value.insert(QStringLiteral("error"), firstLine(message));
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Install the latest KetPlus over this copy from Settings › Updates, or "
                          "download it again."))
               << step(tr("Reopen KetPlus. Nothing else needs to change."));
@@ -356,7 +356,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                      tr("Anthropic refuses the saved API key, so Claude turns fail. The key may "
                         "have been revoked, or its organization disabled."));
         value.insert(QStringLiteral("error"), message);
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Create a new key in Anthropic Console › API keys."))
               << step(tr("Paste it in Settings › Providers › Claude API access and save."))
               << step(tr("Retry, or set Authentication back to your Claude subscription."), {},

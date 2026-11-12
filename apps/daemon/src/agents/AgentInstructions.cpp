@@ -63,6 +63,8 @@ QString teamInstructions(const TeamRoleContext& context) {
             << QStringLiteral(
                    "Task changes arrive as one digest; read it and act once instead of "
                    "asking for status. Change a lane with team_lane_set and give the reason; "
+                   "name paths any lane may change (contracts, snapshots, fixtures, tests) "
+                   "with team_paths_allow, for the team or one task; "
                    "raise a decision with team_decision_raise only for what changes the "
                    "product. You are the only member that speaks to the user. A task whose "
                    "pull request is merged is done by itself; close work merged without one "
@@ -105,7 +107,9 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "something outside the team such as a build, call team_wait so you are "
                      "woken to check again. Hand the "
                      "task to review (state in_review) once its "
-                     "criteria are met and your work is committed. Do not merge.");
+                     "criteria are met and your work is committed on the task's branch. If "
+                     "you worked in another worktree or repository, hand it to review with "
+                     "its pull_request and head_commit. Do not merge.");
     } else {
         lines << QStringLiteral(
             "When a task enters review you receive its criteria and its diff. Review it "

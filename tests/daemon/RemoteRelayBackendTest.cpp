@@ -471,6 +471,53 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY(backend.pendingCommands().isEmpty());
     }
 
+    // T-18: rename and fork are Control v2 commands; archive is not offered on this route, so it
+    // is never sent and says why.
+    void renameAndForkAreCommandsAndArchiveIsNotOffered() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        using Feature = MachineBackend::Feature;
+        QVERIFY(!backend.supports(Feature::Rename)); // not Connected yet
+        connectAndWait(backend);
+        Answer listed;
+        backend.listConversations({}, listed.callback());
+        QTRY_VERIFY(listed.done);
+        QVERIFY(backend.supports(Feature::Rename));
+        QVERIFY(backend.supports(Feature::Fork));
+        QVERIFY(!backend.supports(Feature::Archive));
+        QVERIFY(!backend.supports(Feature::Attachments));
+        QCOMPARE(backend.unsupportedReason(Feature::Archive),
+                 QStringLiteral("Not available through the Relay yet."));
+
+        Answer renamed;
+        backend.renameConversation("opaque-session", 3, "Release notes", renamed.callback());
+        QTRY_VERIFY(renamed.done);
+        QVERIFY2(renamed.error.isEmpty(), qPrintable(renamed.error));
+        Answer forked;
+        backend.forkConversation("opaque-session", 3, "fork-1", forked.callback());
+        QTRY_VERIFY(forked.done);
+        QVERIFY2(forked.error.isEmpty(), qPrintable(forked.error));
+        Answer archived;
+        backend.setConversationArchived("opaque-session", 3, true, archived.callback());
+        QVERIFY(archived.done);
+        QCOMPARE(archived.error, QStringLiteral("Not available through the Relay yet."));
+
+        const auto rename = commandOf(relay, "session.rename");
+        QVERIFY(!rename.isEmpty());
+        QCOMPARE(relay.plaintexts.value(rename).value("title").toString(), "Release notes");
+        const auto fork = commandOf(relay, "session.fork");
+        QVERIFY(!fork.isEmpty());
+        QCOMPARE(relay.plaintexts.value(fork).value("fork_session_id").toString(), "fork-1");
+        QVERIFY(commandOf(relay, "session.set_archived").isEmpty());
+        for (const auto& body : std::as_const(network.bodies))
+            QVERIFY(!body.contains("Release notes"));
+    }
+
     void aSessionIsCreatedInAnEmptyWorktreeTheHostVerified() {
         QTemporaryDir dir;
         FixtureTransport network;

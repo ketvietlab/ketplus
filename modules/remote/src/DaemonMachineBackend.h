@@ -2,6 +2,8 @@
 
 #include "MachineBackend.h"
 
+#include <QPointer>
+
 namespace ketplus::remote {
 
 class DaemonClient;
@@ -29,6 +31,9 @@ class DaemonMachineBackend final : public MachineBackend {
     // setTransportReady() and setTransportUnavailable().
     DaemonMachineBackend(QString machineId, Route route, DaemonCall call,
                          QObject* parent = nullptr);
+    // The client whose daemon.hello says which conversation operations the daemon offers, for
+    // a backend built from a DaemonCall (the SSH route). Until set, every operation is assumed.
+    void setFeatureSource(DaemonClient* client);
 
     [[nodiscard]] QString machineId() const override { return machineId_; }
     [[nodiscard]] Route route() const override { return route_; }
@@ -64,6 +69,13 @@ class DaemonMachineBackend final : public MachineBackend {
                          const QJsonObject& resolution, Callback callback) override;
     void answerQuestion(const QString& sessionId, qint64 generation, const QString& questionId,
                         const QJsonObject& resolution, Callback callback) override;
+    [[nodiscard]] bool supports(Feature feature) const override;
+    void renameConversation(const QString& sessionId, qint64 generation, const QString& title,
+                            Callback callback) override;
+    void forkConversation(const QString& sessionId, qint64 generation, const QString& forkSessionId,
+                          Callback callback) override;
+    void setConversationArchived(const QString& sessionId, qint64 generation, bool archived,
+                                 Callback callback) override;
 
     // workspace.list grouped into the neutral repository shape, linked worktrees under their
     // repository (ADR 0119 "Repository grain").
@@ -77,6 +89,9 @@ class DaemonMachineBackend final : public MachineBackend {
     QString machineId_;
     Route route_{Route::Local};
     DaemonCall call_;
+    // The hello's features; without a client (tests) every feature is assumed.
+    QPointer<DaemonClient> client_;
+    bool knowsFeatures_{false};
     ConnectionState state_{ConnectionState::Connecting};
     QString reason_;
     bool everConnected_{false};

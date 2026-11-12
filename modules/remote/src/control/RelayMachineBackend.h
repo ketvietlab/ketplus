@@ -82,6 +82,18 @@ class RelayMachineBackend final : public MachineBackend {
                          const QJsonObject& resolution, Callback callback) override;
     void answerQuestion(const QString& sessionId, qint64 generation, const QString& questionId,
                         const QJsonObject& resolution, Callback callback) override;
+    // Of the conversation operations, Control v2 carries session.rename and session.fork (the
+    // host's remote operations). Archive (not a host remote operation) and attachment staging
+    // through MachineBackend are not offered on this route yet; each fails with
+    // unsupportedReason().
+    [[nodiscard]] bool supports(Feature feature) const override;
+    [[nodiscard]] QString unsupportedReason(Feature feature) const override;
+    void renameConversation(const QString& sessionId, qint64 generation, const QString& title,
+                            Callback callback) override;
+    void forkConversation(const QString& sessionId, qint64 generation, const QString& forkSessionId,
+                          Callback callback) override;
+    void setConversationArchived(const QString& sessionId, qint64 generation, bool archived,
+                                 Callback callback) override;
 
   private:
     using OutboxRoute = CommandOutbox::Route;

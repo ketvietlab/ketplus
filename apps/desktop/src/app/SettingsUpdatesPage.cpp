@@ -113,7 +113,7 @@ void SettingsUpdatesPage::refresh() {
     card_->setVisible(configured);
     card_->setReady(downloaded);
     if (downloaded) {
-        card_->setTitle(tr("KétPlus Pro %1").arg(pending));
+        card_->setTitle(tr("ketPlus Pro %1").arg(pending));
         badge_->setText(tr("Ready"));
         badge_->setTone(ket::BadgeTone::Success);
         card_->setDetail(laterVersion_ == pending
@@ -122,12 +122,12 @@ void SettingsUpdatesPage::refresh() {
                              : tr("Downloaded and verified. Restart to finish installing; "
                                   "running turns finish first."));
     } else if (!pending.isEmpty()) {
-        card_->setTitle(tr("KétPlus Pro %1").arg(pending));
+        card_->setTitle(tr("ketPlus Pro %1").arg(pending));
         badge_->setText(tr("Available"));
         badge_->setTone(ket::BadgeTone::Accent);
         card_->setDetail(tr("Check for updates to review and install it."));
     } else {
-        card_->setTitle(tr("KétPlus Pro %1").arg(QCoreApplication::applicationVersion()));
+        card_->setTitle(tr("ketPlus Pro %1").arg(QCoreApplication::applicationVersion()));
         const QDateTime checked = updater_.lastUpdateCheck();
         badge_->setText(checked.isValid() ? tr("Up to date") : tr("Installed"));
         badge_->setTone(ket::BadgeTone::Neutral);

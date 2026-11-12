@@ -720,9 +720,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   worktree picker, transcript, composer and approval/question cards follow the
   picker, Offline/Reconnecting render as ADR 0119 specifies, and a new remote
   conversation starts through `createSession` (agent-workspace.md, "Remote
-  machines"). Not yet on remote machines: transcript paging beyond the newest
-  window, large-event reads, attachments, fork/rename/archive and the rich
-  transcript renderer; the remote view uses a plain transcript list.
+  machines"). Scrolling up reads older transcript pages through the backend,
+  with large events reassembled first (live ones too); rename runs on every
+  route, fork where the daemon's hello offers `session.fork` and through the
+  Relay, and archive where it offers `session.archive/1`. Not yet on remote
+  machines, each shown disabled with its reason (ADR 0119, "Parity of
+  conversation operations"): archive through the Relay, attachments on every
+  route, and the rich transcript
+  renderer; the remote view uses a simplified transcript with a visible note.
   See `linux-headless-daemon.md`
   for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without

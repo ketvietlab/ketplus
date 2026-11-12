@@ -2,15 +2,19 @@
 
 #include "machine/MachineApprovalCards.h"
 #include "machine/MachineCatalog.h"
+#include "machine/MachineConversationActions.h"
 #include "machine/MachineConversationSession.h"
 
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QStandardItemModel>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -47,6 +51,23 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     banner_->setWordWrap(true);
     title_ = new QLabel(this);
     title_->setObjectName(QStringLiteral("machineConversationTitle"));
+    actions_ = new MachineConversationActions(catalog_, this);
+    more_ = new QToolButton(this);
+    more_->setObjectName(QStringLiteral("machineConversationActions"));
+    more_->setText(QStringLiteral("…"));
+    more_->setToolTip(tr("Rename, fork or archive"));
+    auto* heading = new QHBoxLayout;
+    heading->addWidget(title_, 1);
+    heading->addWidget(more_);
+    // ADR 0119: remote conversations keep this simplified transcript until the rich renderer
+    // reads MachineBackend; the note says so instead of passing it off as the full view.
+    transcriptNote_ = new QLabel(tr("Simplified transcript: rich rendering of conversations on "
+                                    "Linux machines is not available yet."),
+                                 this);
+    transcriptNote_->setObjectName(QStringLiteral("machineTranscriptNote"));
+    transcriptNote_->setWordWrap(true);
+    older_ = new QPushButton(tr("Show earlier messages"), this);
+    older_->setObjectName(QStringLiteral("machineLoadOlder"));
     worktrees_ = new QComboBox(this);
     worktrees_->setObjectName(QStringLiteral("machineWorktreePicker"));
     transcript_ = new QListWidget(this);
@@ -60,17 +81,22 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     composer_->setMaximumHeight(120);
     composerReason_ = new QLabel(this);
     composerReason_->setObjectName(QStringLiteral("machineComposerReason"));
+    attach_ = new QPushButton(tr("Attach"), this);
+    attach_->setObjectName(QStringLiteral("machineAttach"));
     send_ = new QPushButton(tr("Send"), this);
     send_->setObjectName(QStringLiteral("machineSend"));
     stop_ = new QPushButton(tr("Stop"), this);
     stop_->setObjectName(QStringLiteral("machineStop"));
     auto* actions = new QHBoxLayout;
     actions->addWidget(composerReason_, 1);
+    actions->addWidget(attach_);
     actions->addWidget(stop_);
     actions->addWidget(send_);
     layout->addWidget(banner_);
-    layout->addWidget(title_);
+    layout->addLayout(heading);
     layout->addWidget(worktrees_);
+    layout->addWidget(transcriptNote_);
+    layout->addWidget(older_);
     layout->addWidget(transcript_, 1);
     layout->addWidget(approvals_);
     layout->addWidget(composer_);
@@ -80,6 +106,38 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
         if (session_ != nullptr)
             session_->stop();
     });
+    connect(older_, &QPushButton::clicked, this, [this] {
+        if (session_ != nullptr)
+            session_->loadOlder();
+    });
+    // The reader scrolling to the top reads the page before it, as This Mac's transcript does.
+    // Only a user action counts: re-rendering the rows resets the bar and must not page.
+    auto* bar = transcript_->verticalScrollBar();
+    connect(bar, &QScrollBar::actionTriggered, this, [this, bar] {
+        if (bar->sliderPosition() == bar->minimum() && session_ != nullptr && session_->hasOlder())
+            session_->loadOlder();
+    });
+    connect(more_, &QToolButton::clicked, this, [this] {
+        if (session_ == nullptr)
+            return;
+        QMenu* menu = actions_->menu(session_->sessionId(), this);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        menu->popup(more_->mapToGlobal(QPoint(0, more_->height())));
+    });
+    connect(actions_, &MachineConversationActions::failed, this, [this](const QString& error) {
+        actionError_ = error;
+        render();
+    });
+    connect(actions_, &MachineConversationActions::finished, this, [this] {
+        actionError_ = actions_->lastError();
+        render();
+    });
+    connect(actions_, &MachineConversationActions::forked, this,
+            [this](const QString& machine, const QString& sessionId, qint64) {
+                pendingFork_ = sessionId;
+                pendingForkMachine_ = machine;
+                catalogChanged();
+            });
     connect(catalog_, &MachineCatalog::changed, this, &MachineWorkspaceView::catalogChanged);
     catalogChanged();
 }
@@ -93,6 +151,14 @@ QString MachineWorkspaceView::openSessionId() const {
 void MachineWorkspaceView::catalogChanged() {
     // The selected machine changed or its lists did: restore what that machine last showed.
     const QString machine = catalog_->machineId();
+    if (!pendingFork_.isEmpty() && machine == pendingForkMachine_) {
+        const remote::MachineConversation fork = catalog_->conversation(pendingFork_);
+        if (!fork.sessionId.isEmpty()) {
+            pendingFork_.clear();
+            bind(fork.sessionId, fork.generation, fork.running());
+            return;
+        }
+    }
     if (session_ == nullptr || session_->machineId() != machine) {
         showSession(lastByMachine_.value(machine), true);
         return;
@@ -143,6 +209,8 @@ void MachineWorkspaceView::showSession(MachineConversationSession* session, cons
         session_->close();
     }
     const bool shown = session_ == session;
+    if (!shown)
+        actionError_.clear();
     session_ = session;
     if (session_ != nullptr && !shown && reload)
         session_->load();
@@ -164,15 +232,9 @@ void MachineWorkspaceView::render() {
     if (newConversation)
         renderWorktrees();
 
-    transcript_->clear();
-    if (session_ != nullptr) {
-        for (const auto& item : session_->transcript().items()) {
-            auto* row = new QListWidgetItem(item.text, transcript_);
-            row->setData(Qt::UserRole, static_cast<int>(item.kind));
-        }
-        transcript_->scrollToBottom();
-    }
+    renderTranscript();
     approvals_->refresh();
+    renderActions(newConversation);
 
     const bool connected = catalog_->state() == State::Connected;
     const bool canAct = newConversation
@@ -194,6 +256,8 @@ void MachineWorkspaceView::render() {
         reason = tr("Choose a worktree on this machine.");
     else if (newConversation)
         reason = createError_;
+    else if (!actionError_.isEmpty())
+        reason = actionError_;
     else
         reason = session_->lastError();
     composer_->setReadOnly(!canAct);
@@ -202,6 +266,51 @@ void MachineWorkspaceView::render() {
     send_->setEnabled(canAct);
     stop_->setVisible(session_ != nullptr && session_->running());
     stop_->setEnabled(canAct);
+}
+
+void MachineWorkspaceView::renderTranscript() {
+    const QString sessionId = session_ != nullptr ? session_->sessionId() : QString{};
+    const qint64 firstCursor = session_ != nullptr ? session_->transcript().firstCursor() : 0;
+    // An older page keeps the reader where they were; anything else follows the newest row.
+    const bool sameSession = sessionId == renderedSession_;
+    const bool olderAdded = sameSession && renderedFirstCursor_ > 0 && firstCursor > 0 &&
+                            firstCursor < renderedFirstCursor_;
+    // Only a reader at the newest row follows new rows; one reading older rows stays there.
+    QScrollBar* bar = transcript_->verticalScrollBar();
+    const int position = bar->value();
+    const bool following = !sameSession || bar->maximum() == 0 || position >= bar->maximum() - 2;
+    transcript_->clear();
+    if (session_ != nullptr)
+        for (const auto& item : session_->transcript().items()) {
+            auto* row = new QListWidgetItem(item.text, transcript_);
+            row->setData(Qt::UserRole, static_cast<int>(item.kind));
+        }
+    const int added = transcript_->count() - renderedRows_;
+    if (olderAdded && added > 0 && added < transcript_->count()) {
+        transcript_->scrollToItem(transcript_->item(added), QAbstractItemView::PositionAtTop);
+    } else if (following) {
+        transcript_->scrollToBottom();
+    } else {
+        transcript_->doItemsLayout();
+        bar->setValue(position);
+    }
+    renderedSession_ = sessionId;
+    renderedFirstCursor_ = firstCursor;
+    renderedRows_ = transcript_->count();
+    transcriptNote_->setVisible(session_ != nullptr);
+    older_->setVisible(session_ != nullptr && session_->hasOlder());
+    older_->setEnabled(session_ != nullptr && !session_->loadingOlder());
+    older_->setText(session_ != nullptr && session_->loadingOlder() ? tr("Loading…")
+                                                                    : tr("Show earlier messages"));
+}
+
+void MachineWorkspaceView::renderActions(const bool newConversation) {
+    more_->setVisible(!newConversation);
+    // Attachments are offered on every route and say why they cannot be used yet.
+    QString reason;
+    attach_->setEnabled(
+        actions_->available(MachineConversationActions::Feature::Attachments, &reason));
+    attach_->setToolTip(reason);
 }
 
 void MachineWorkspaceView::renderWorktrees() {

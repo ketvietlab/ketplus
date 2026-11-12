@@ -56,7 +56,7 @@ struct SidebarRepository final {
 // conversation, then name and path. An explicit conversation repository switch promotes its target.
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories);
 
-// The repository list of KétPlus Pro is the tree of the Qt mock (mockups/qt, "Sidebar tree"):
+// The repository list of ketPlus Pro is the tree of the Qt mock (mockups/qt, "Sidebar tree"):
 // a repository is the root, its teams are branches under it, "Conversations (n)" labels the
 // conversations of no team where the repository has teams, and every conversation is one line.
 // The parts are ket-qt's sidebar tree (KetSidebarTree.h); they share the columns of their level,

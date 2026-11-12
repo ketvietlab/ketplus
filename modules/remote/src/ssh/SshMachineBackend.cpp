@@ -72,6 +72,8 @@ SshMachineBackend::SshMachineBackend(SshTarget target, SshMachineStore* store,
             client_->call(type, payload, sessionId, generation, std::move(callback));
         },
         this);
+    // Fork and archive follow the remote daemon's hello, as they do on This Mac.
+    operations_->setFeatureSource(client_);
     connect(client_, &DaemonClient::eventReceived, this, &MachineBackend::eventReceived);
     connect(client_, &DaemonClient::readyChanged, this, &SshMachineBackend::daemonReady);
     connect(client_, &DaemonClient::hostIdentityRejected, this,
@@ -351,6 +353,22 @@ void SshMachineBackend::answerQuestion(const QString& sessionId, const qint64 ge
                                        const QString& questionId, const QJsonObject& resolution,
                                        Callback callback) {
     operations_->answerQuestion(sessionId, generation, questionId, resolution, std::move(callback));
+}
+
+bool SshMachineBackend::supports(const Feature feature) const {
+    return state_ == ConnectionState::Connected && operations_->supports(feature);
+}
+void SshMachineBackend::renameConversation(const QString& sessionId, const qint64 generation,
+                                           const QString& title, Callback callback) {
+    operations_->renameConversation(sessionId, generation, title, std::move(callback));
+}
+void SshMachineBackend::forkConversation(const QString& sessionId, const qint64 generation,
+                                         const QString& forkSessionId, Callback callback) {
+    operations_->forkConversation(sessionId, generation, forkSessionId, std::move(callback));
+}
+void SshMachineBackend::setConversationArchived(const QString& sessionId, const qint64 generation,
+                                                const bool archived, Callback callback) {
+    operations_->setConversationArchived(sessionId, generation, archived, std::move(callback));
 }
 
 } // namespace ketplus::remote::ssh

@@ -153,7 +153,7 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
         // Beside the choices: who asked, when, and what the answer unblocks.
         const QString raisedBy = decision.value(QStringLiteral("raised_by")).toString();
         QStringList about{
-            id, raisedBy == QStringLiteral("daemon") ? tr("KetPlus") : memberName(team, raisedBy),
+            id, raisedBy == QStringLiteral("daemon") ? tr("ketPlus") : memberName(team, raisedBy),
             when(decision.value(QStringLiteral("raised_at")).toString())};
         if (const QString task = decision.value(QStringLiteral("task_id")).toString();
             !task.isEmpty())
@@ -273,7 +273,14 @@ void TeamPage::buildMembers(const QJsonObject& team) {
             where->setObjectName(QStringLiteral("teamMemberPaths"));
             where->setTone(QStringLiteral("text-muted"));
             where->setType(12, QFont::Medium, true);
-            where->setToolTip(paths.join(QLatin1Char('\n')));
+            // T-38: the paths any lane may change go with each lane.
+            QStringList shared;
+            for (const auto& path : team.value(QStringLiteral("shared_paths")).toArray())
+                shared.append(path.toString());
+            where->setToolTip(shared.isEmpty() ? paths.join(QLatin1Char('\n'))
+                                               : tr("%1\nAny lane: %2")
+                                                     .arg(paths.join(QLatin1Char('\n')),
+                                                          shared.join(QStringLiteral(", "))));
         }
         line->addLayout(pair(holds, where), compact_ ? 0 : 6);
         // The narrowest page keeps who and the actions; the lane stays one hover away.
@@ -416,7 +423,7 @@ void TeamPage::buildUpdates() {
         auto* text = new Text(update.value(QStringLiteral("text")).toString(), row);
         text->setObjectName(QStringLiteral("teamUpdate"));
         const QString actor = update.value(QStringLiteral("actor")).toString();
-        QStringList from{actor == QStringLiteral("daemon") ? tr("KetPlus")
+        QStringList from{actor == QStringLiteral("daemon") ? tr("ketPlus")
                          : actor == QStringLiteral("user") ? tr("You")
                                                            : memberName(team, actor)};
         if (const QString task = update.value(QStringLiteral("task_id")).toString();

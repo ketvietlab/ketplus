@@ -117,10 +117,12 @@ HandoffFacts TeamCoordinator::handoffFor(const Team& team, const Task& task) con
         prepared != handoffs_.cend() && prepared->worktree == task.worktree &&
         prepared->branch == task.branch)
         return prepared.value();
+    const auto head = host_->ownHead(team, task);
     return {.worktree = task.worktree,
             .branch = task.branch,
             .dirty = host_->hasUncommittedWork(task.worktree),
-            .head = host_->taskCommit(team, task)};
+            .head = head.value_or(QString{}),
+            .headRead = head.has_value()};
 }
 
 } // namespace ketplus::daemon::teams

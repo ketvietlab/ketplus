@@ -239,7 +239,18 @@ class TeamLaneTest final : public QObject {
         commitAll(worktree, "mine");
         git(worktree, {"-c", "user.email=t@example.com", "-c", "user.name=T", "merge", "-q",
                        "--no-edit", "main"});
+        // Not committed yet but tracked: it counts. T-38: an untracked capture folder and an
+        // ignored build tree never do.
         write(QDir(worktree).filePath("web/pending.txt"));
+        git(worktree, {"add", "web/pending.txt"});
+        {
+            QFile ignore(QDir(worktree).filePath(".gitignore"));
+            QVERIFY(ignore.open(QIODevice::WriteOnly));
+            ignore.write("build/\n");
+        }
+        git(worktree, {"add", ".gitignore"});
+        write(QDir(worktree).filePath("build/daemon/out.o"));
+        write(QDir(worktree).filePath("captures/screen.png"));
 
         Team team;
         team.repository = repository;
@@ -252,14 +263,14 @@ class TeamLaneTest final : public QObject {
         QStringList paths = *changed;
         paths.sort();
         const QString quoted = QString::fromUtf8("web/gi\xe1\xbb\x8f.txt");
-        QCOMPARE(paths, (QStringList{"web/cart.txt", quoted, "web/pending.txt"}));
+        QCOMPARE(paths, (QStringList{".gitignore", "web/cart.txt", quoted, "web/pending.txt"}));
         // With an integration branch the diff is from where the branch left it: the same files.
         team.integrationBranch = "main";
         const auto against = team_git::changedPaths(team, task);
         QVERIFY(against);
         paths = *against;
         paths.sort();
-        QCOMPARE(paths, (QStringList{"web/cart.txt", quoted, "web/pending.txt"}));
+        QCOMPARE(paths, (QStringList{".gitignore", "web/cart.txt", quoted, "web/pending.txt"}));
         const auto diff = team_git::taskDiff(team, task);
         QVERIFY(diff);
         QCOMPARE(diff->files, (QStringList{"web/cart.txt", quoted}));
@@ -381,6 +392,9 @@ class TeamLaneTest final : public QObject {
         write(QDir(worktree).filePath("api/routes.txt"));
         write(QDir(worktree).filePath("web/cart.txt"));
         write(QDir(worktree).filePath("tests/cart.txt"));
+        // T-38: only tracked changes count; an untracked capture is never outside the lane.
+        git(worktree, {"add", "api/routes.txt", "web/cart.txt", "tests/cart.txt"});
+        write(QDir(worktree).filePath("captures/screen.png"));
         const auto ping = [&](const int turns) {
             QVERIFY(fixture
                         .agents(leader, "agents.send",
@@ -393,7 +407,7 @@ class TeamLaneTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(outside().size(), 1, 5000);
         QCOMPARE(outside().first().toString(), QStringLiteral("api/routes.txt"));
         // Reverting the file clears the flag after the next turn, without anyone's action.
-        QVERIFY(QFile::remove(QDir(worktree).filePath("api/routes.txt")));
+        git(worktree, {"rm", "-q", "-f", "api/routes.txt"});
         ping(3);
         QTRY_VERIFY_WITH_TIMEOUT(outside().isEmpty(), 5000);
     }

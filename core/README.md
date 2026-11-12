@@ -1,7 +1,10 @@
 # KétPlus editor core
 
 <p align="center">
-  <img src="assets/brand/ketplus.svg" alt="KétPlus logo" width="144">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/ketplus-lockup-dark.png">
+    <img src="assets/brand/ketplus-lockup-light.png" alt="ketPlus" height="72">
+  </picture>
 </p>
 
 `core/` is the fast, lightweight, cross-platform editor shared by both editions
