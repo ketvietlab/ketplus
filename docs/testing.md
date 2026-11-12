@@ -235,10 +235,12 @@ credential admission/preservation/repair at daemon startup and client hello,
 isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
-results) and `ketplus_remote_control_projection_tests` (sealed metadata projection
+results), `ketplus_remote_control_projection_tests` (sealed metadata projection
 with tampered and unpinned rows, transcript paging across a large event, a tampered
 restore response, a changed host key version and an unpinned host key, against the
-synthetic loopback relay). The normal full Desktop suite still covers the shared build/interface
+synthetic loopback relay) and `ketplus_remote_ssh_tunnel_tests` (loopback `sshd` with throwaway
+keys: host-key accept, reject and mismatch, auth failure, missing daemon socket
+and reconnect; see [`ssh-transport.md`](ssh-transport.md)). The normal full Desktop suite still covers the shared build/interface
 changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
