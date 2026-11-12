@@ -305,6 +305,29 @@ class TeamFlowTest final : public QObject {
                  QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
         QCOMPARE(counts(count("Counts — High: 0, Medium: 1, Low: 2\nVerdict: findings")),
                  QStringLiteral("severity not stated"));
+        // T-62 r2 as it reached the board: the mark comes after the finding's text.
+        const QString settledLine =
+            "- **L1 (Low), xoá sạch thì trang mất tóm tắt:** ✅ **đã sửa.**\n";
+        QCOMPARE(counts(count(settledLine + settledLine + settledLine + "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
+        QCOMPARE(counts(count("- **L1 (Low), xoá sạch thì trang mất tóm tắt:** ✅ **đã sửa.**\n"
+                              "- **L2 (Low), danh sách vẫn giữ dòng cũ:** ❌ chưa sửa.\n"
+                              "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 1 Low, 0 Nit"));
+        QCOMPARE(counts(count("- **N1 (Nit), the docs say fixed-width:** still open.\n"
+                              "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
+    }
+
+    // A summary of counts, or a severity with nothing under it, is no finding.
+    void summariesAndEmptySeveritiesAreNoFindings() {
+        using verdict_line::count;
+        for (const char* reply : {"High: 0, Medium: 1, Low: 2\nVerdict: findings",
+                                  "- High: 0\n- Medium: 1\n- Low: 2\nVerdict: findings",
+                                  "- **High**: không có.\n- **Medium**: none\nVerdict: findings"})
+            QVERIFY2(!count(QString::fromUtf8(reply)).any(), reply);
+        // Words after the severity are a finding, in either language.
+        QVERIFY(count("- **Low**: không có test cho trang.\nVerdict: findings").low == 1);
     }
 
     void anIdleLeaderReadsABurstAsOneDigestAfterTheQuietPeriod() {

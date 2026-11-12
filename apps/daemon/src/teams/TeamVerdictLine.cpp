@@ -37,22 +37,26 @@ Severities count(const QString& reply) {
                        R"((?:[—–\-:,(]\s*)?[*_]*\s*(critical|high|medium|low|nit)\b(.*)$)"),
         insensitive);
     // A finding without an id that starts with its severity: "- **Low**, `a.cpp:4`: …",
-    // "High: …", "Nit — …".
+    // "High: …", "Nit — …". A count after it ("- High: 0") is a summary, not a finding.
     static const QRegularExpression leading(
         QStringLiteral(R"(^([\s>*_\-•+✅❌]*)(critical|high|medium|low|nit)\b[*_]*)"
-                       R"((?:\s*[,.:;(]|\s+[—–\-]|\s*$)(.*)$)"),
+                       R"((?:\s*[,.:;(]|\s+[—–\-]|\s*$)(?!\s*\d)(.*)$)"),
+        insensitive);
+    // "- **High**: none.", "- Low: không có.": a severity with nothing under it.
+    static const QRegularExpression nothing(
+        QStringLiteral(R"(^[\s*_:.,;—–\-]*(?:none|no findings|n/a|không có|không)[\s.!*_]*$)"),
         insensitive);
     // A finding that names its severity before a colon: "web/cart.ts:4 high: no total." A
     // count after the colon ("High: 0, Medium: 1") is a summary, not a finding.
     static const QRegularExpression named(
         QStringLiteral(R"(\b(critical|high|medium|low|nit)\b\s*:(?!\s*\d)(.*)$)"), insensitive);
-    // Round 2 lists the earlier findings again with what became of them: "L1 — Low — fixed".
+    // Round 2 lists the earlier findings again with what became of them: "L1 — Low — fixed",
+    // "- **L1 (Low), …:** ✅ **đã sửa.**". The mark can be anywhere on the line. A line also
+    // marked open (❌) is open.
     static const QRegularExpression settled(
-        QStringLiteral(
-            R"(^[\s.,:;—–\-)*_\]]*✅?\s*(fixed|resolved|addressed|verified|đã sửa)\b|^[^\w]*✅)"),
-        insensitive);
-    const auto open = [](const QString& start, const QString& rest) {
-        return !start.contains(QChar(0x2705)) && !settled.match(rest).hasMatch();
+        QStringLiteral(R"(✅|\b(?:fixed|resolved|addressed)\b|đã sửa)"), insensitive);
+    const auto open = [](const QString& line) {
+        return line.contains(QChar(0x274C)) || !settled.match(line).hasMatch();
     };
     const QStringList lines = reply.split(QLatin1Char('\n'));
     QSet<QString> seen;
@@ -65,11 +69,12 @@ Severities count(const QString& reply) {
             if (seen.contains(id))
                 continue;
             seen.insert(id);
-            if (open(match.captured(1), match.captured(4)))
+            if (open(line))
                 add(match.captured(3));
-        } else if (const auto first = leading.match(line); first.hasMatch()) {
+        } else if (const auto first = leading.match(line);
+                   first.hasMatch() && !nothing.match(first.captured(3)).hasMatch()) {
             seen.insert(QString());
-            if (open(first.captured(1), first.captured(3)))
+            if (open(line))
                 add(first.captured(2));
         }
     }
@@ -84,7 +89,7 @@ Severities count(const QString& reply) {
         if (!match.hasMatch())
             continue;
         found.stated = true;
-        if (open({}, match.captured(2)))
+        if (open(line))
             add(match.captured(1));
     }
     return found;
