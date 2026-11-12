@@ -119,6 +119,7 @@ QJsonArray features(const int minor) {
             QStringLiteral("teams/1"),
             QStringLiteral("teams.tasks/1"),
             QStringLiteral("teams.summary/1"),
+            QStringLiteral("teams.settings/1"),
             QStringLiteral("transport.oversized/1")};
 }
 

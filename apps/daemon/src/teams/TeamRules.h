@@ -2,6 +2,8 @@
 
 #include "teams/Team.h"
 
+#include <QJsonValue>
+
 #include <optional>
 
 namespace ketplus::daemon::teams {
@@ -44,6 +46,9 @@ namespace rules {
 // A branch a team names (its integration branch): empty for none, or a name git accepts
 // (`git check-ref-format --branch`) that cannot be read as an option.
 [[nodiscard]] std::optional<TeamError> validBranch(const QString& branch);
+// A team's automatic-turn budget: a whole number from minimumTurnBudget to maximumTurnBudget.
+// Sets `budget` when it is one.
+[[nodiscard]] std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget);
 // ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the
 // part it acts on changed after that revision: a decision answer its decision, team.update
 // the settings, team.delete the settings and the members, a member change the members, a

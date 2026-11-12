@@ -108,7 +108,11 @@ independent. These safe session snapshots are journaled and restored with the co
 
 A separate Admin API key in Settings → Providers enables desktop organization usage.
 The existing usage popover requests the UTC calendar-month-to-date cost and token report
-on opening or Refresh. It covers all products and keys in that Admin key's organization,
+on opening or Refresh. When the conversation does not run on an API key (runtime
+authentication, or before the first usage report), the conversation and organization
+blocks sit behind one "Cost details" row, collapsed each time the popover opens; the report
+is then requested when the row is expanded, not on opening. Context window and plan limits
+stay visible. It covers all products and keys in that Admin key's organization,
 not just KétPlus or the inference key (which may belong to another organization).
 Cost is after discounts and before credits, not a credit balance. Credit balance and
 account spending limits remain in Anthropic Console; no inferred balance is displayed.

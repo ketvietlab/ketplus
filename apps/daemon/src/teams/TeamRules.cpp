@@ -3,6 +3,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <cmath>
 
 namespace ketplus::daemon::teams::rules {
 namespace {
@@ -68,6 +69,18 @@ std::optional<TeamError> validName(const QString& name, const QString& what) {
         if (character.category() == QChar::Other_Control)
             return refusal(QStringLiteral("invalid_payload"),
                            QStringLiteral("The name of %1 has a control character.").arg(what));
+    return std::nullopt;
+}
+
+std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget) {
+    const double number = value.toDouble(-1);
+    if (!value.isDouble() || number != std::floor(number) || number < minimumTurnBudget ||
+        number > maximumTurnBudget)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("Automatic turns are a whole number from %1 to %2.")
+                           .arg(minimumTurnBudget)
+                           .arg(maximumTurnBudget));
+    *budget = static_cast<int>(number);
     return std::nullopt;
 }
 

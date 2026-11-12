@@ -36,8 +36,12 @@ inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
 inline constexpr int maximumDevelopers = 5;
 inline constexpr int maximumCriteria = 20;
 inline constexpr int defaultReviewRounds = 2;
-// Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2).
+// Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
+// the daemon's global value until the user changes it (Settings → Teams), and the range a
+// team's own value and the global one keep.
 inline constexpr int defaultTurnBudget = 40;
+inline constexpr int minimumTurnBudget = 5;
+inline constexpr int maximumTurnBudget = 200;
 
 struct Member final {
     QString sessionId;

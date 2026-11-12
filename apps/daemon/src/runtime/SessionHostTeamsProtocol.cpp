@@ -156,6 +156,14 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             return refusal;
         }
     }
+    // ADR 0114, open point 2: what a new team starts from (Settings → Teams).
+    if (type == QStringLiteral("team.settings.get"))
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    if (type == QStringLiteral("team.settings.update")) {
+        if (const auto refused = teams_->updateTeamSettings(payload))
+            return failure(*refused);
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    }
     if (type == QStringLiteral("team.list")) {
         const QString repository = payload.value(QStringLiteral("repository")).toString();
         QJsonArray list;
@@ -359,6 +367,12 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                        QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
+    // A team's own budget, or the global one for a client that sends none (an older phone).
+    draft.turnBudget = teams_->turnBudgetSetting();
+    if (payload.contains(QStringLiteral("turn_budget")))
+        if (const auto invalid = teams::rules::validTurnBudget(
+                payload.value(QStringLiteral("turn_budget")), &draft.turnBudget))
+            return failure(invalid->code, invalid->message);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
     // Lanes are checked before anything starts, with placeholder ids.
     for (int index = 0; index < members.size(); ++index)
