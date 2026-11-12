@@ -153,6 +153,23 @@ Item {
         question: "The team used its " + turnBudget + " automatic turns. Continue?",
         detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
         askedBy: "", task: "", when: "Just now", options: ["Continue (" + turnBudget + " more turns)", "Stop"], recommended: 0 })
+    // T-40: how the team reviews. Rounds are one or two (the user's rule is at most two passes);
+    // the place is the board or the task's pull request. A change applies to tasks that enter
+    // review afterwards.
+    readonly property int reviewRounds: team && team.reviewRounds ? team.reviewRounds : 2
+    readonly property string reviewPlace: team && team.reviewPlace ? team.reviewPlace : "board"
+    function reviewText(rounds, place) {
+        return (rounds === 1 ? "One review round" : "Two review rounds")
+            + (place === "pull_request" ? " on the pull request" : " on the board")
+    }
+    function changeReview(rounds, place) {
+        if (rounds === reviewRounds && place === reviewPlace)
+            return
+        change({ reviewRounds: rounds, reviewPlace: place,
+            updates: [{ icon: "eye", text: reviewText(rounds, place) + ", for tasks that enter review from now",
+                        detail: "You · the team", when: "Just now" }].concat(team.updates) })
+        window.notify(team.name + ": " + reviewText(rounds, place).toLowerCase())
+    }
     // A new budget applies from the next automatic turn; the turns used stay counted. One that
     // leaves turns withdraws the budget question and resumes a team it paused.
     function changeTurnBudget(budget) {
@@ -196,6 +213,8 @@ Item {
             disbandDialog.open()
         else if (name === "turn-budget" && team)
             turnBudgetDialog.open()
+        else if (name === "team-review" && team)
+            reviewDialog.open()
         else if (name === "remove-member" && team)
             startRemove(team.id, "8215")
         else if (name === "add-member" && team)
@@ -382,7 +401,8 @@ Item {
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
     // `budget` is the team's own automatic turns; without one it takes Settings → Teams.
-    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission, budget) {
+    // `review` is { rounds, place }; without one, two rounds on the board.
+    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission, budget, review) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
         for (let i = 1; i <= developers; ++i)
@@ -399,6 +419,8 @@ Item {
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
             paused: false, merges: merges || "leader", permission: permission || "Workspace",
             turnBudget: budget || Fixtures.turnBudget, automaticTurns: 0,
+            reviewRounds: review && review.rounds === 1 ? 1 : 2,
+            reviewPlace: review && review.place === "pull_request" ? "pull_request" : "board",
             leaderWrites: leaderWrites, members: members,
             tasks: [], decisions: [], updates: [] }])
         teamIndex = teams.length - 1
@@ -538,6 +560,10 @@ Item {
               "automatic turns are a whole number from 5 to 200")
         const own = createTeam(repository, "Check E", "", "develop", true, plan, "leader", "", 12)
         check(turnBudget === 12, "a team created with its own budget keeps it")
+        check(reviewRounds === 2 && reviewPlace === "board", "a new team reviews in two rounds on the board")
+        changeReview(1, "pull_request")
+        check(reviewRounds === 1 && reviewPlace === "pull_request"
+              && team.updates[0].text.indexOf("enter review from now") > 0, "the team's review is a setting it changes")
         Fixtures.turnBudget = 70
         const taken = createTeam(repository, "Check F", "", "develop", true, plan)
         check(turnBudget === 70, "a team created without a budget takes Settings › Teams")
@@ -551,7 +577,10 @@ Item {
         changeTurnBudget(20)
         check(!team.paused && !decisions.some(d => d.kind === "budget") && automaticTurns === 12
               && turnBudget === 20, "a budget that leaves turns resumes the team and keeps the turns used")
-        for (const id of [b, c, far, own, taken]) {
+        const reviewed = createTeam(repository, "Check G", "", "develop", true, plan, "leader", "", 0,
+                                    { rounds: 1, place: "pull_request" })
+        check(reviewRounds === 1 && reviewPlace === "pull_request", "New team chooses the rounds and the place")
+        for (const id of [b, c, far, own, taken, reviewed]) {
             showTeam(id)
             deleteTeam()
         }
@@ -732,6 +761,15 @@ Item {
                     spacing: screen.px(6)
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "pull-request"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Label { text: screen.team && screen.team.merges === "user" ? "You merge tasks" : "The leader merges tasks"; color: KetTheme.t.textSecondary }
+                }
+                Row {
+                    spacing: screen.px(6)
+                    KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "eye"; box: screen.px(13); color: KetTheme.t.textMuted }
+                    Label {
+                        objectName: "teamReview"
+                        text: screen.reviewText(screen.reviewRounds, screen.reviewPlace)
+                        color: KetTheme.t.textSecondary
+                    }
                 }
                 Row {
                     spacing: screen.px(6)
@@ -1351,6 +1389,12 @@ Item {
             onTriggered: turnBudgetDialog.open()
         }
         KetMenuItem {
+            text: "Review…"
+            description: screen.reviewText(screen.reviewRounds, screen.reviewPlace)
+            iconName: "eye"
+            onTriggered: reviewDialog.open()
+        }
+        KetMenuItem {
             readonly property bool mine: !!screen.team && screen.team.merges === "user"
             text: mine ? "Let the leader merge tasks" : "Merge tasks myself"
             description: mine ? "Once the reviewer passes a task" : "Each reviewed task waits for you"
@@ -1895,7 +1939,7 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1 }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1; teamReview.rounds = 2; teamReview.place = "board" }
         DialogBody {
             KetFieldRow {
                 width: parent.width
@@ -1940,6 +1984,7 @@ Item {
                     }
                 }
             }
+            TeamReviewFields { id: teamReview; width: parent.width }
             KetFieldRow {
                 width: parent.width
                 label: "Automatic turns"
@@ -2065,7 +2110,33 @@ Item {
                     newTeamDialog.accept()
                     screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
                                       leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText,
-                                      Number(teamBudget.text.trim()))
+                                      Number(teamBudget.text.trim()), { rounds: teamReview.rounds, place: teamReview.place })
+                }
+            }
+        ]
+    }
+
+    // T-40: the team's review, changed while it runs; tasks in review keep theirs.
+    KetDialog {
+        id: reviewDialog
+        title: "Review for " + (screen.team ? screen.team.name : "")
+        onOpened: { reviewFields.rounds = screen.reviewRounds; reviewFields.place = screen.reviewPlace }
+        DialogBody {
+            TeamReviewFields {
+                id: reviewFields
+                width: parent.width
+                note: "Applies to tasks that enter review from now; a review in progress keeps its rounds and place."
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: reviewDialog.reject() },
+            KetButton {
+                objectName: "teamReviewSave"
+                text: "Save"
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    reviewDialog.accept()
+                    screen.changeReview(reviewFields.rounds, reviewFields.place)
                 }
             }
         ]
