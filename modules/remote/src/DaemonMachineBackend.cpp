@@ -34,6 +34,8 @@ DaemonMachineBackend::DaemonMachineBackend(DaemonClient* client, QString machine
               client->call(type, payload, sessionId, generation, std::move(callback));
           },
           parent) {
+    client_ = client;
+    knowsFeatures_ = true;
     if (!client) {
         setTransportUnavailable(notRunning());
         return;
@@ -223,6 +225,58 @@ void DaemonMachineBackend::answerQuestion(const QString& sessionId, const qint64
         QStringLiteral("question.answer"),
         {{QStringLiteral("approval_id"), questionId}, {QStringLiteral("resolution"), resolution}},
         sessionId, generation, std::move(callback));
+}
+
+void DaemonMachineBackend::setFeatureSource(DaemonClient* client) {
+    client_ = client;
+    knowsFeatures_ = client != nullptr;
+}
+
+bool DaemonMachineBackend::supports(const Feature feature) const {
+    if (feature == Feature::Attachments)
+        return false; // staging files on the machine is not part of MachineBackend yet
+    if (!knowsFeatures_)
+        return true;
+    if (client_ == nullptr || !client_->isReady())
+        return false;
+    switch (feature) {
+    case Feature::Rename:
+        return true;
+    case Feature::Fork:
+        return client_->hasFeature(QStringLiteral("session.fork"));
+    case Feature::Archive:
+        return client_->hasFeature(QStringLiteral("session.archive/1"));
+    case Feature::Attachments:
+        break;
+    }
+    return false;
+}
+
+void DaemonMachineBackend::renameConversation(const QString& sessionId, const qint64 generation,
+                                              const QString& title, Callback callback) {
+    request(QStringLiteral("session.rename"), {{QStringLiteral("title"), title}}, sessionId,
+            generation, std::move(callback));
+}
+
+void DaemonMachineBackend::forkConversation(const QString& sessionId, const qint64 generation,
+                                            const QString& forkSessionId, Callback callback) {
+    if (!supports(Feature::Fork)) {
+        callback({}, unsupportedReason(Feature::Fork));
+        return;
+    }
+    request(QStringLiteral("session.fork"), {{QStringLiteral("fork_session_id"), forkSessionId}},
+            sessionId, generation, std::move(callback));
+}
+
+void DaemonMachineBackend::setConversationArchived(const QString& sessionId,
+                                                   const qint64 generation, const bool archived,
+                                                   Callback callback) {
+    if (!supports(Feature::Archive)) {
+        callback({}, unsupportedReason(Feature::Archive));
+        return;
+    }
+    request(QStringLiteral("session.set_archived"), {{QStringLiteral("archived"), archived}},
+            sessionId, generation, std::move(callback));
 }
 
 } // namespace ketplus::remote

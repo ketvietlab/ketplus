@@ -159,6 +159,13 @@ class SshMachineBackend final : public MachineBackend {
                          const QJsonObject& resolution, Callback callback) override;
     void answerQuestion(const QString& sessionId, qint64 generation, const QString& questionId,
                         const QJsonObject& resolution, Callback callback) override;
+    [[nodiscard]] bool supports(Feature feature) const override;
+    void renameConversation(const QString& sessionId, qint64 generation, const QString& title,
+                            Callback callback) override;
+    void forkConversation(const QString& sessionId, qint64 generation, const QString& forkSessionId,
+                          Callback callback) override;
+    void setConversationArchived(const QString& sessionId, qint64 generation, bool archived,
+                                 Callback callback) override;
 
     [[nodiscard]] static QString reasonFor(SshTunnel::State state);
 

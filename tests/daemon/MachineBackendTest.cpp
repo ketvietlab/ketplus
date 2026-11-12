@@ -135,6 +135,55 @@ class MachineBackendTest final : public QObject {
         }
     }
 
+    void conversationOperationsMapToTheLocalProtocol() {
+        QList<RecordedCall> calls;
+        DaemonMachineBackend backend(QStringLiteral("SHA256:abc"), MachineBackend::Route::Ssh,
+                                     [&calls](const QString& type, const QJsonObject& payload,
+                                              const QString& sessionId, const qint64 generation,
+                                              const MachineBackend::Callback& callback) {
+                                         calls.append({type, payload, sessionId, generation});
+                                         callback({{QStringLiteral("ok"), true}}, {});
+                                     });
+        using Feature = MachineBackend::Feature;
+        QVERIFY(backend.supports(Feature::Rename));
+        QVERIFY(backend.supports(Feature::Fork));
+        QVERIFY(backend.supports(Feature::Archive));
+        QVERIFY(!backend.supports(Feature::Attachments));
+        const auto ignore = [](const QJsonObject&, const QString& error) {
+            QVERIFY(error.isEmpty());
+        };
+        backend.renameConversation(QStringLiteral("s-1"), 2, QStringLiteral("Release"), ignore);
+        backend.forkConversation(QStringLiteral("s-1"), 2, QStringLiteral("fork-1"), ignore);
+        backend.setConversationArchived(QStringLiteral("s-1"), 2, true, ignore);
+        QCOMPARE(calls.size(), 3);
+        QCOMPARE(calls[0].type, QStringLiteral("session.rename"));
+        QCOMPARE(calls[0].payload, (QJsonObject{{"title", "Release"}}));
+        QCOMPARE(calls[1].type, QStringLiteral("session.fork"));
+        QCOMPARE(calls[1].payload, (QJsonObject{{"fork_session_id", "fork-1"}}));
+        QCOMPARE(calls[2].type, QStringLiteral("session.set_archived"));
+        QCOMPARE(calls[2].payload, (QJsonObject{{"archived", true}}));
+        for (const auto& call : calls) {
+            QCOMPARE(call.sessionId, QStringLiteral("s-1"));
+            QCOMPARE(call.generation, 2);
+        }
+    }
+
+    void featuresWaitForTheDaemonsHello() {
+        // Before the hello the daemon has named no features: nothing is offered, and the reason
+        // says why, so the UI disables rather than hides.
+        DaemonClient client;
+        DaemonMachineBackend backend(&client);
+        using Feature = MachineBackend::Feature;
+        for (const auto feature : {Feature::Rename, Feature::Fork, Feature::Archive})
+            QVERIFY(!backend.supports(feature));
+        QVERIFY(!backend.unsupportedReason(Feature::Fork).isEmpty());
+        QString failure;
+        backend.forkConversation(
+            QStringLiteral("s-1"), 1, QStringLiteral("fork-1"),
+            [&failure](const QJsonObject&, const QString& error) { failure = error; });
+        QCOMPARE(failure, backend.unsupportedReason(Feature::Fork));
+    }
+
     void repositoriesUseTheNeutralShape() {
         QString failure;
         DaemonMachineBackend backend(

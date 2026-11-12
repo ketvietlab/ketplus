@@ -2,11 +2,53 @@
 
 #include "MachineRows.h"
 
+#include <utility>
+
 namespace ketplus {
 
+namespace {
+
+qint64 cursorOf(const QJsonValue& event) {
+    return event.toObject().value(QLatin1String("cursor")).toInteger();
+}
+
+} // namespace
+
 void MachineTranscript::reset(const QJsonArray& events) {
+    events_ = {};
+    for (const QJsonValue& event : events)
+        events_.append(remote::windowEvent(event.toObject()));
+    rebuild();
+}
+
+void MachineTranscript::prepend(const QJsonArray& older) {
+    const qint64 first = firstCursor();
+    QJsonArray merged;
+    for (const QJsonValue& value : older) {
+        const qint64 cursor = cursorOf(value);
+        if (cursor > 0 && (first == 0 || cursor < first) &&
+            (merged.isEmpty() || cursor > cursorOf(merged.last())))
+            merged.append(remote::windowEvent(value.toObject()));
+    }
+    if (merged.isEmpty())
+        return;
+    for (const QJsonValue& value : std::as_const(events_))
+        merged.append(value);
+    events_ = merged;
+    rebuild();
+}
+
+qint64 MachineTranscript::firstCursor() const {
+    for (const QJsonValue& value : events_)
+        if (const qint64 cursor = cursorOf(value); cursor > 0)
+            return cursor;
+    return 0;
+}
+
+void MachineTranscript::rebuild() {
     items_.clear();
     lastCursor_ = 0;
+    const QJsonArray events = std::exchange(events_, {});
     for (const QJsonValue& event : events)
         apply(event.toObject());
 }
@@ -20,6 +62,11 @@ bool MachineTranscript::apply(const QJsonObject& delivered) {
             return false;
         lastCursor_ = cursor;
     }
+    events_.append(event);
+    return applyRow(event);
+}
+
+bool MachineTranscript::applyRow(const QJsonObject& event) {
     const QString type = event.value(QLatin1String("event_type")).toString();
     const QJsonObject payload = event.value(QLatin1String("payload")).toObject();
     if (type == QLatin1String("user.message") || type == QLatin1String("turn.steered")) {
