@@ -51,10 +51,14 @@ Severities count(const QString& reply) {
     static const QRegularExpression named(
         QStringLiteral(R"(\b(critical|high|medium|low|nit)\b\s*:(?!\s*\d)(.*)$)"), insensitive);
     // Round 2 lists the earlier findings again with what became of them: "L1 — Low — fixed",
-    // "- **L1 (Low), …:** ✅ **đã sửa.**". The mark can be anywhere on the line. A line also
-    // marked open (❌) is open.
+    // "- **L1 (Low), …:** ✅ **đã sửa.**". ✅ or "đã sửa" anywhere on the line settles it;
+    // "fixed" does when it reads as the mark, not as prose: at the end, or before "in",
+    // punctuation or a dash ("fixed in abc12", "— fixed."), so "fixed findings count" and
+    // "fixed-width" stay open. A line also marked open (❌) is open.
     static const QRegularExpression settled(
-        QStringLiteral(R"(✅|\b(?:fixed|resolved|addressed)\b|đã sửa)"), insensitive);
+        QStringLiteral(R"(✅|đã sửa|\b(?:fixed|resolved|addressed)\b)"
+                       R"((?=[\s.!*_)]*(?:$|\b(?:in|at|by|on)\b|\s[—–\-]|[,;:])))"),
+        insensitive);
     const auto open = [](const QString& line) {
         return line.contains(QChar(0x274C)) || !settled.match(line).hasMatch();
     };

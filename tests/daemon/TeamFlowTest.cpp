@@ -314,9 +314,11 @@ class TeamFlowTest final : public QObject {
                               "- **L2 (Low), danh sách vẫn giữ dòng cũ:** ❌ chưa sửa.\n"
                               "Verdict: findings")),
                  QStringLiteral("0 High, 0 Medium, 1 Low, 0 Nit"));
+        // "fixed" in a finding's own words is not its mark.
         QCOMPARE(counts(count("- **N1 (Nit), the docs say fixed-width:** still open.\n"
+                              "- **N2 (Nit), a.cpp:3:** fixed values are hard-coded.\n"
                               "Verdict: findings")),
-                 QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 2 Nit"));
     }
 
     // A summary of counts, or a severity with nothing under it, is no finding.
