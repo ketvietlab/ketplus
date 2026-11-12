@@ -225,6 +225,8 @@ void MainWindow::showTeamPage(const QString& teamId, const QString& repository) 
             [this] { return agentManager_->numberedConversations(); });
     connect(teamPage_, &TeamPage::mentionRequested, this, &MainWindow::openConversationNumber);
     connect(teamPage_, &TeamPage::addMemberRequested, this, &MainWindow::showAddTeamMemberDialog);
+    connect(teamPage_, &TeamPage::addReviewerRequested, this,
+            &MainWindow::showAddTeamReviewerDialog);
     connect(teamPage_, &TeamPage::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     connect(teamPage_, &TeamPage::deleteRequested, this, &MainWindow::deleteTeam);
     connect(teamPage_, &TeamPage::removeMemberRequested, this, &MainWindow::leaveTeam);
@@ -339,9 +341,19 @@ void MainWindow::showNewTeamDialog(const QString& repository) {
 void MainWindow::showAddTeamMemberDialog(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
     if (!team || agentManager_ == nullptr ||
-        agentDialogOpen(this, QStringLiteral("addDeveloperDialog")))
+        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
         return;
-    AddDeveloperForm::present(this, teams_, *team, agentManager_->models());
+    AddMemberForm::present(this, teams_, *team, agentManager_->models());
+}
+
+void MainWindow::showAddTeamReviewerDialog(const QString& teamId) {
+    const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
+    if (!team || agentManager_ == nullptr ||
+        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
+        return;
+    // T-23: the same Add a member dialog, on Reviewer.
+    AddMemberForm::present(this, teams_, *team, agentManager_->models(),
+                           QStringLiteral("reviewer"));
 }
 
 } // namespace ketplus

@@ -216,31 +216,54 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         if (!team)
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
-        const MemberPlan plan = planOf(teams::role::developer, payload, {});
-        if (const auto invalid = teams::rules::validName(plan.name, QStringLiteral("a developer")))
+        // T-23: "role" adds a developer (the default) or a team's second reviewer.
+        const QString role = payload.value(QStringLiteral("role")).toString(teams::role::developer);
+        if (role != teams::role::developer && role != teams::role::reviewer)
+            return failure(QStringLiteral("invalid_payload"),
+                           QStringLiteral("A member added to a team is a developer or a "
+                                          "reviewer."));
+        const bool reviewer = role == teams::role::reviewer;
+        const MemberPlan plan =
+            planOf(role, payload, reviewer ? QStringLiteral("Reviewer 2") : QString{});
+        if (const auto invalid = teams::rules::validName(
+                plan.name, reviewer ? QStringLiteral("a reviewer") : QStringLiteral("a developer")))
             return failure(*invalid);
-        if (team->count(teams::role::developer) >= teams::maximumDevelopers)
+        if (!reviewer && team->count(teams::role::developer) >= teams::maximumDevelopers)
             return failure(QStringLiteral("team_full"),
                            QStringLiteral("The team has five developers."));
+        if (reviewer && team->count(teams::role::reviewer) >= teams::maximumReviewers)
+            return failure(QStringLiteral("role_taken"),
+                           QStringLiteral("The team has two reviewers, the most a team has."),
+                           plan.role);
         if (!knownProvider(plan.provider))
             return failure(QStringLiteral("provider_unavailable"),
-                           QStringLiteral("Choose the developer's agent."), plan.role);
+                           reviewer ? QStringLiteral("Choose the reviewer's agent.")
+                                    : QStringLiteral("Choose the developer's agent."),
+                           plan.role);
+        if (reviewer && !teams::rules::reviewerProviderSupported(plan.provider))
+            return failure(QStringLiteral("reviewer_unsupported"),
+                           QStringLiteral("The reviewer must be a Claude conversation, the "
+                                          "provider that keeps a review read-only."),
+                           plan.role);
         if (plan.provider != QStringLiteral("codex") && !availableProvider(plan.provider))
             return failure(QStringLiteral("provider_unavailable"),
                            missingProviderMessage(plan.provider), plan.role);
         QString problem;
-        const QString sessionId =
-            createMemberConversation(team->repository, plan.provider, plan.model, plan.effort,
-                                     plan.name, &problem, team->executionPolicy);
+        // A reviewer keeps its own mode; its review turns are read-only (ADR 0114 §2).
+        const QString sessionId = createMemberConversation(
+            team->repository, plan.provider, plan.model, plan.effort, plan.name, &problem,
+            reviewer ? QString{} : team->executionPolicy);
         if (sessionId.isEmpty())
             return failure(QStringLiteral("member_unavailable"), problem, plan.role);
-        const auto result = teams_->addMember(teamId,
-                                              {.sessionId = sessionId,
-                                               .role = teams::role::developer,
-                                               .name = plan.name,
-                                               .lane = plan.lane.isEmpty() ? plan.name : plan.lane,
-                                               .paths = plan.paths},
-                                              QStringLiteral("user"));
+        const auto result = teams_->addMember(
+            teamId,
+            reviewer ? teams::Member{.sessionId = sessionId, .role = role, .name = plan.name}
+                     : teams::Member{.sessionId = sessionId,
+                                     .role = role,
+                                     .name = plan.name,
+                                     .lane = plan.lane.isEmpty() ? plan.name : plan.lane,
+                                     .paths = plan.paths},
+            QStringLiteral("user"));
         if (!result.ok())
             discardMemberConversation(sessionId);
         return answer(result);
@@ -325,8 +348,19 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
             member.lane = member.name;
         members.append(member);
     }
-    members.append(planOf(teams::role::reviewer, plan.value(QStringLiteral("reviewer")).toObject(),
-                          QStringLiteral("Reviewer")));
+    // T-23: "reviewers" names one or two; a plan without it names one as "reviewer".
+    const QJsonArray reviewers =
+        plan.contains(QStringLiteral("reviewers"))
+            ? plan.value(QStringLiteral("reviewers")).toArray()
+            : QJsonArray{plan.value(QStringLiteral("reviewer")).toObject()};
+    if (reviewers.isEmpty() || reviewers.size() > teams::maximumReviewers)
+        return failure(QStringLiteral("invalid_payload"),
+                       QStringLiteral("A team has one or two reviewers."), teams::role::reviewer);
+    for (qsizetype index = 0; index < reviewers.size(); ++index)
+        members.append(planOf(teams::role::reviewer, reviewers.at(index).toObject(),
+                              reviewers.size() == 1
+                                  ? QStringLiteral("Reviewer")
+                                  : QStringLiteral("Reviewer %1").arg(index + 1)));
     // Every member is checked before any conversation starts: all or nothing.
     for (const MemberPlan& member : std::as_const(members)) {
         if (const auto invalid = teams::rules::validName(member.name, QStringLiteral("a member")))

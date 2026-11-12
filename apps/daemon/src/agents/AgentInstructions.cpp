@@ -115,7 +115,9 @@ QString teamInstructions(const TeamRoleContext& context) {
     }
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
-                            "the team.")
+                            "the team. A team with two reviewers lists both in team_get; "
+                            "\"reviewer\" then reaches the one that reviews your task, and "
+                            "otherwise you send to its number.")
           << QStringLiteral("[/KetPlus team]");
     return lines.join(QLatin1Char('\n'));
 }

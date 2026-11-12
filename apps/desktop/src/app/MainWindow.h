@@ -255,6 +255,7 @@ class MainWindow final : public QMainWindow {
     void deleteTeam(const QString& teamId);
     void showNewTeamDialog(const QString& repository);
     void showAddTeamMemberDialog(const QString& teamId);
+    void showAddTeamReviewerDialog(const QString& teamId);
     // The conversation menu's team entries; true when `chosen` was one of them.
     bool handleConversationTeamAction(QAction* chosen, const QString& sessionId);
     [[nodiscard]] QString conversationSessionId(const QString& worktreePath,

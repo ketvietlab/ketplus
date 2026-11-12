@@ -63,6 +63,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
+    task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
     if (task.outsideLane.size() > maximumOutsidePaths)
@@ -225,6 +226,45 @@ QStringList Team::memberSessions() const {
     return sessions;
 }
 
+ReviewSlot* Team::reviewSlot(const QString& reviewer) {
+    for (ReviewSlot& slot : reviews)
+        if (slot.reviewer == reviewer)
+            return &slot;
+    return nullptr;
+}
+
+const ReviewSlot* Team::reviewSlot(const QString& reviewer) const {
+    for (const ReviewSlot& slot : reviews)
+        if (slot.reviewer == reviewer)
+            return &slot;
+    return nullptr;
+}
+
+const ReviewSlot* Team::reviewSlotOf(const QString& taskId) const {
+    for (const ReviewSlot& slot : reviews)
+        if (slot.reviewing == taskId || slot.queue.contains(taskId))
+            return &slot;
+    return nullptr;
+}
+
+bool Team::reviewInFlight(const QString& taskId) const {
+    for (const ReviewSlot& slot : reviews)
+        if (slot.reviewing == taskId)
+            return true;
+    return false;
+}
+
+bool Team::reviewPending(const QString& taskId) const {
+    return reviewQueue.contains(taskId) || reviewSlotOf(taskId);
+}
+
+bool Team::reviewsWaiting() const {
+    for (const ReviewSlot& slot : reviews)
+        if (!slot.reviewing.isEmpty() || !slot.queue.isEmpty())
+            return true;
+    return false;
+}
+
 QJsonObject toJson(const Member& member) {
     QJsonObject json{{QStringLiteral("session_id"), member.sessionId},
                      {QStringLiteral("role"), member.role},
@@ -262,6 +302,7 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("head_commit"), task.headCommit},
                      {QStringLiteral("pull_request"), task.pullRequest},
                      {QStringLiteral("round"), task.round},
+                     {QStringLiteral("reviewer"), task.reviewer},
                      {QStringLiteral("missing_verdicts"), task.missingVerdicts},
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
@@ -311,6 +352,18 @@ QJsonObject toJson(const Team& team) {
     for (const Relocation& move : team.relocations)
         relocations.append(QJsonObject{{QStringLiteral("session"), move.session},
                                        {QStringLiteral("from"), move.from}});
+    QJsonArray reviews;
+    QStringList waiting = team.reviewQueue;
+    const ReviewSlot* first = nullptr;
+    for (const ReviewSlot& slot : team.reviews) {
+        reviews.append(QJsonObject{{QStringLiteral("reviewer"), slot.reviewer},
+                                   {QStringLiteral("reviewing"), slot.reviewing},
+                                   {QStringLiteral("reviewing_message"), slot.message},
+                                   {QStringLiteral("queue"), strings(slot.queue)}});
+        waiting.append(slot.queue);
+        if (!first && !slot.reviewing.isEmpty())
+            first = &slot;
+    }
     return {{QStringLiteral("id"), QString::number(team.id)},
             {QStringLiteral("repository"), team.repository},
             {QStringLiteral("name"), team.name},
@@ -334,9 +387,13 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("open_decisions"), team.openDecisions()},
             {QStringLiteral("held"), team.held},
             {QStringLiteral("outbox"), team.outbox},
-            {QStringLiteral("review_queue"), strings(team.reviewQueue)},
-            {QStringLiteral("reviewing"), team.reviewing},
-            {QStringLiteral("reviewing_message"), team.reviewingMessage},
+            {QStringLiteral("reviews"), reviews},
+            {QStringLiteral("review_waiting"), strings(team.reviewQueue)},
+            // Before T-23 a team had one reviewer: these say what that one did, for a reader
+            // that knows no "reviews" — the first review in flight and every task waiting.
+            {QStringLiteral("review_queue"), strings(waiting)},
+            {QStringLiteral("reviewing"), first ? first->reviewing : QString{}},
+            {QStringLiteral("reviewing_message"), first ? first->message : QString{}},
             {QStringLiteral("relocations"), relocations},
             {QStringLiteral("next_task"), team.nextTask},
             {QStringLiteral("next_decision"), team.nextDecision},
@@ -375,9 +432,40 @@ Team teamFromJson(const QJsonObject& json) {
         team.decisions.append(decisionFromJson(value.toObject()));
     team.held = json.value(QStringLiteral("held")).toArray();
     team.outbox = json.value(QStringLiteral("outbox")).toArray();
-    team.reviewQueue = stringList(json.value(QStringLiteral("review_queue")));
-    team.reviewing = json.value(QStringLiteral("reviewing")).toString();
-    team.reviewingMessage = json.value(QStringLiteral("reviewing_message")).toString();
+    if (json.contains(QStringLiteral("reviews"))) {
+        for (const auto& value : json.value(QStringLiteral("reviews")).toArray()) {
+            const QJsonObject slot = value.toObject();
+            team.reviews.append(
+                {.reviewer = slot.value(QStringLiteral("reviewer")).toString(),
+                 .reviewing = slot.value(QStringLiteral("reviewing")).toString(),
+                 .message = slot.value(QStringLiteral("reviewing_message")).toString(),
+                 .queue = stringList(slot.value(QStringLiteral("queue")))});
+        }
+        team.reviewQueue = stringList(json.value(QStringLiteral("review_waiting")));
+    }
+    // One slot per reviewer, in the order they joined. A document from before T-23 gives its
+    // one review and queue to the team's reviewer, or keeps the queue waiting without one.
+    QList<ReviewSlot> ordered;
+    for (const Member& member : team.members)
+        if (member.role == role::reviewer) {
+            const ReviewSlot* stored = team.reviewSlot(member.sessionId);
+            ordered.append(stored ? *stored : ReviewSlot{.reviewer = member.sessionId});
+        }
+    team.reviews = ordered;
+    if (!json.contains(QStringLiteral("reviews"))) {
+        const QStringList queue = stringList(json.value(QStringLiteral("review_queue")));
+        const QString reviewing = json.value(QStringLiteral("reviewing")).toString();
+        if (team.reviews.isEmpty()) {
+            team.reviewQueue = queue;
+            if (!reviewing.isEmpty() && !queue.contains(reviewing))
+                team.reviewQueue.prepend(reviewing);
+        } else {
+            team.reviews.first().queue = queue;
+            team.reviews.first().reviewing = reviewing;
+            team.reviews.first().message =
+                json.value(QStringLiteral("reviewing_message")).toString();
+        }
+    }
     for (const auto& value : json.value(QStringLiteral("relocations")).toArray())
         team.relocations.append(
             Relocation{.session = value.toObject().value(QStringLiteral("session")).toString(),

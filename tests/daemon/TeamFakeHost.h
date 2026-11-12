@@ -183,12 +183,17 @@ class FakeHost final : public TeamHostPort {
     QList<std::pair<QString, QJsonObject>> notes;
 };
 
-// The reviewer of `session`'s team answers the request its review in flight is bound to.
+// The first reviewer's share of the reviews (T-23), empty when the team has no reviewer.
+inline ReviewSlot firstReviews(const Team& team) {
+    return team.reviews.isEmpty() ? ReviewSlot{} : team.reviews.first();
+}
+
+// The reviewer `session` answers the request its review in flight is bound to.
 inline void finishReview(TeamCoordinator& teams, const QString& session, const QString& text,
                          const bool noFindings, const QString& failure = {}) {
     const Team* team = teams.teamOf(session);
-    teams.reviewFinished(session, team ? team->reviewingMessage : QString{}, text, noFindings,
-                         failure);
+    const ReviewSlot* slot = team ? team->reviewSlot(session) : nullptr;
+    teams.reviewFinished(session, slot ? slot->message : QString{}, text, noFindings, failure);
 }
 
 inline Team standardTeam() {

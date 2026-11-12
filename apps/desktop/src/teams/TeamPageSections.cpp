@@ -180,9 +180,11 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
 
 void TeamPage::buildMembers(const QJsonObject& team) {
     const int developers = TeamDirectory::count(team, QStringLiteral("developer"));
+    const int reviewers = TeamDirectory::count(team, QStringLiteral("reviewer"));
     addSection(tr("Members"),
-               tr("1 leader · %1 · 1 reviewer")
-                   .arg(developers == 1 ? tr("1 developer") : tr("%1 developers").arg(developers)),
+               tr("1 leader · %1 · %2")
+                   .arg(developers == 1 ? tr("1 developer") : tr("%1 developers").arg(developers),
+                        reviewers == 2 ? tr("2 reviewers") : tr("1 reviewer")),
                "teamMembersHeading");
     auto* panel = new team_page::Panel(column_);
     panel->setObjectName(QStringLiteral("teamMembersPanel"));
@@ -283,6 +285,7 @@ void TeamPage::buildMembers(const QJsonObject& team) {
 
         // What it does now.
         QString doing = tr("Idle");
+        QString waiting;
         bool busy = false;
         for (const auto& task : team.value(QStringLiteral("tasks")).toArray())
             if (task.toObject().value(QStringLiteral("owner")).toString() == session &&
@@ -291,16 +294,41 @@ void TeamPage::buildMembers(const QJsonObject& team) {
                 doing = tr("On %1").arg(task.toObject().value(QStringLiteral("id")).toString());
                 busy = true;
             }
-        if (role == QStringLiteral("reviewer") &&
-            !team.value(QStringLiteral("reviewing")).toString().isEmpty()) {
-            doing = tr("Reviewing %1").arg(team.value(QStringLiteral("reviewing")).toString());
-            busy = true;
+        if (role == QStringLiteral("reviewer")) {
+            // T-23: each reviewer has its own review in flight and queue ("reviews"); a
+            // daemon from before has one, "reviewing".
+            QString reviewing;
+            int queued = 0;
+            if (team.contains(QStringLiteral("reviews"))) {
+                for (const auto& value : team.value(QStringLiteral("reviews")).toArray())
+                    if (value.toObject().value(QStringLiteral("reviewer")).toString() == session) {
+                        reviewing = value.toObject().value(QStringLiteral("reviewing")).toString();
+                        queued = static_cast<int>(
+                            value.toObject().value(QStringLiteral("queue")).toArray().size());
+                    }
+            } else {
+                reviewing = team.value(QStringLiteral("reviewing")).toString();
+            }
+            // The status column is narrow: "+n" counts what waits, the tooltip says it.
+            if (!reviewing.isEmpty()) {
+                doing = queued > 0 ? tr("Reviewing %1 +%2").arg(reviewing).arg(queued)
+                                   : tr("Reviewing %1").arg(reviewing);
+                busy = true;
+            } else if (queued > 0) {
+                doing = tr("%1 waiting").arg(queued);
+            } else {
+                doing = tr("Nothing queued"); // the mock's words for an idle reviewer
+            }
+            if (queued > 0)
+                waiting = queued == 1 ? tr("1 more task waits for this reviewer.")
+                                      : tr("%1 more tasks wait for this reviewer.").arg(queued);
         }
         auto* status = new Text(doing, row, Text::Fit::Elide);
         status->setObjectName(QStringLiteral("teamMemberStatus"));
         status->setTone(busy ? QStringLiteral("accent-text") : QStringLiteral("text-muted"));
         status->setType(13, busy ? QFont::Medium : QFont::Normal);
         status->setFixedWidth(px(140));
+        status->setToolTip(waiting);
         // The status column goes on a narrow page; the row still says it to a screen reader.
         status->setVisible(roomy_);
         line->addWidget(status);
@@ -313,9 +341,10 @@ void TeamPage::buildMembers(const QJsonObject& team) {
         connect(open, &QAbstractButton::clicked, this,
                 [this, session] { emit conversationRequested(session); });
         line->addWidget(open);
-        // Only a developer leaves a team; the others keep the column so Open stays aligned.
+        // A developer leaves a team, and one of two reviewers (T-23); the others keep the
+        // column so Open stays aligned.
         auto* remove = new ket::Button(tr("Remove…"), ket::ButtonVariant::GhostDanger, row);
-        if (developer) {
+        if (developer || (role == QStringLiteral("reviewer") && reviewers > 1)) {
             remove->setObjectName(QStringLiteral("teamMemberRemove"));
             remove->setAccessibleName(tr("Remove %1…").arg(memberName(team, session)));
             const QString refusal = leaveRefusal(team, session);

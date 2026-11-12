@@ -411,6 +411,32 @@ class TeamProtocolTest final : public QObject {
         QVERIFY(command(fixture, "team.list", {}).value("teams").toArray().isEmpty());
     }
 
+    // T-23: New team names one or two reviewers; three are refused before anything starts.
+    void aTeamIsCreatedWithTwoReviewers() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QJsonObject reviewer{{"provider", "claude"}, {"model", "sonnet"}};
+        QJsonObject three = plan();
+        three.insert("reviewers", QJsonArray{reviewer, reviewer, reviewer});
+        QJsonObject result = create(fixture, three);
+        QCOMPARE(result.value("error_code").toString(), QStringLiteral("invalid_payload"));
+        QCOMPARE(sessions(fixture), 0);
+        QJsonObject two = plan();
+        two.remove("reviewer");
+        two.insert("reviewers", QJsonArray{reviewer, reviewer});
+        result = create(fixture, two);
+        QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+        const QJsonObject team = result.value("team").toObject();
+        const QJsonArray members = team.value("members").toArray();
+        QCOMPARE(members.size(), 5);
+        QStringList names;
+        for (const QJsonValue& member : members)
+            if (member.toObject().value("role").toString() == "reviewer")
+                names.append(member.toObject().value("name").toString());
+        QCOMPARE(names, (QStringList{"Reviewer 1", "Reviewer 2"}));
+        QCOMPARE(team.value("reviews").toArray().size(), 2);
+    }
+
     void membersAreAddedJoinedChangedAndRemoved() {
         Fixture fixture;
         QVERIFY(fixture.open());

@@ -334,10 +334,12 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     auto* add = new ket::Button(tr("Add member"), ket::ButtonVariant::Secondary, row);
     add->setObjectName(QStringLiteral("teamPageAddMember"));
     add->setIcon(ket::Icons::icon(u"plus"));
+    // T-23: a full developer side still takes a second reviewer.
     const bool full =
-        TeamDirectory::count(team, QStringLiteral("developer")) >= team_roles::maximumDevelopers;
+        TeamDirectory::count(team, QStringLiteral("developer")) >= team_roles::maximumDevelopers &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) >= team_roles::maximumReviewers;
     add->setEnabled(!full);
-    add->setToolTip(full ? tr("A team has at most five developers.") : QString{});
+    add->setToolTip(full ? tr("A team has at most five developers and two reviewers.") : QString{});
     connect(add, &QAbstractButton::clicked, this, [this] { emit addMemberRequested(teamId_); });
     line->addWidget(add, 0, Qt::AlignTop);
     auto* more = new ket::IconButton(ket::Icons::icon(u"more"), tr("Team actions"), row);
@@ -416,6 +418,10 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         menu.addAction(paused ? tr("Resume automatic turns") : tr("Pause automatic turns"));
     auto* budget = menu.addAction(ket::Icons::icon(u"clock"), tr("Automatic turns…"));
     budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
+    // T-23: a second reviewer, at any team size; a team has at most two.
+    auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
+    reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
+    reviewer->setEnabled(TeamDirectory::count(team, QStringLiteral("reviewer")) < 2);
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
@@ -443,6 +449,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
              {{QStringLiteral("paused"), !paused}});
     else if (chosen == budget)
         afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
+    else if (chosen == reviewer)
+        afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)
         afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
 }
@@ -464,20 +472,21 @@ void TeamPage::buildBanners(const QJsonObject& team) {
         layout_->addWidget(banner);
     }
     const int developers = TeamDirectory::count(team, QStringLiteral("developer"));
-    if (developers >= kQueueBannerDevelopers) {
+    // T-23: a second reviewer takes the queue away, so the banner offers one until it is there.
+    if (developers >= kQueueBannerDevelopers &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) < 2) {
         auto* banner = new ket::Banner(
             ket::BannerTone::Info, tr("The reviewer is the queue"),
             tr("%1 developers share one reviewer, so finished tasks wait their turn. A second "
-               "team gives the next developers their own.")
+               "reviewer reviews another task at the same time; a second team, from the team's "
+               "menu, gives the next developers their own.")
                 .arg(developers),
             column_);
         banner->setObjectName(QStringLiteral("teamQueueBanner"));
-        QAbstractButton* another = banner->setAction(tr("New team…"));
-        another->setObjectName(QStringLiteral("teamQueueNewTeam"));
-        connect(another, &QAbstractButton::clicked, this,
-                [this, repository = team.value(QStringLiteral("repository")).toString()] {
-                    emit newTeamRequested(repository);
-                });
+        QAbstractButton* second = banner->setAction(tr("Add a second reviewer"));
+        second->setObjectName(QStringLiteral("teamQueueAddReviewer"));
+        connect(second, &QAbstractButton::clicked, this,
+                [this] { emit addReviewerRequested(teamId_); });
         layout_->addWidget(banner);
     }
 }

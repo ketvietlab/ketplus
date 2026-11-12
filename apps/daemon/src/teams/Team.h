@@ -34,6 +34,8 @@ inline const QString wakeLeaderChoice = QStringLiteral("Wake the leader again");
 inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
 
 inline constexpr int maximumDevelopers = 5;
+// T-23: a team has one or two reviewers.
+inline constexpr int maximumReviewers = 2;
 inline constexpr int maximumCriteria = 20;
 inline constexpr int defaultReviewRounds = 2;
 // Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
@@ -99,6 +101,9 @@ struct Task final {
     QString headCommit;
     QString pullRequest;
     int round{0};
+    // T-23: the reviewer of its last round, which reviews its next round while it is on the
+    // team.
+    QString reviewer;
     // T-19: replies in a row without a verdict line for the round in review.
     int missingVerdicts{0};
     QStringList outsideLane;
@@ -143,6 +148,19 @@ struct Relocation final {
     bool operator==(const Relocation&) const = default;
 };
 
+// T-23: one reviewer's share of the reviews (ADR 0114 §2): the task it reviews, the request
+// that review is bound to, and the tasks waiting for it, first in first out. A team keeps
+// one per reviewer, in the order the reviewers joined.
+struct ReviewSlot final {
+    QString reviewer;
+    QString reviewing;
+    // The id of the message that asks for that review, chosen when the review starts and
+    // stored with it, before the message is sent. Empty with a review in flight only in a
+    // journal written before reviews were bound to their request.
+    QString message;
+    QStringList queue;
+};
+
 struct Team final {
     qint64 id{0};
     QString repository;
@@ -173,13 +191,10 @@ struct Team final {
     // T-28: messages the team decided to send, in the same form, sent after the command that
     // decided them is answered. Stored, so a restart sends what is left, once.
     QJsonArray outbox;
-    // ADR 0114 §2: tasks waiting for the reviewer, first in first out, and the one it reviews.
+    // ADR 0114 §2, T-23: each reviewer's reviews, and the tasks in review that wait while the
+    // team has no reviewer, first in first out.
+    QList<ReviewSlot> reviews;
     QStringList reviewQueue;
-    QString reviewing;
-    // The id of the message that asks for that review, chosen when the review starts and
-    // stored with it, before the message is sent. Empty with a review in flight only in a
-    // journal written before reviews were bound to their request.
-    QString reviewingMessage;
     QList<Relocation> relocations;
     int nextTask{1};
     int nextDecision{1};
@@ -201,6 +216,16 @@ struct Team final {
     [[nodiscard]] const Decision* decision(const QString& id) const;
     [[nodiscard]] int openDecisions() const;
     [[nodiscard]] QStringList memberSessions() const;
+    [[nodiscard]] ReviewSlot* reviewSlot(const QString& reviewer);
+    [[nodiscard]] const ReviewSlot* reviewSlot(const QString& reviewer) const;
+    // The slot that reviews the task now or has it queued, else nullptr.
+    [[nodiscard]] const ReviewSlot* reviewSlotOf(const QString& taskId) const;
+    // A reviewer reviews the task now.
+    [[nodiscard]] bool reviewInFlight(const QString& taskId) const;
+    // The task is reviewed now, queued for a reviewer, or waits for one.
+    [[nodiscard]] bool reviewPending(const QString& taskId) const;
+    // A reviewer reviews something now, or has something queued.
+    [[nodiscard]] bool reviewsWaiting() const;
 };
 
 // The document stored in the journal and sent to clients (without the client-only fields

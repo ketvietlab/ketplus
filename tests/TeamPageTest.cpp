@@ -11,6 +11,7 @@
 #include "KetSelect.h"
 #include "KetStyle.h"
 #include "KetTextField.h"
+#include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamGoal.h"
 #include "teams/TeamPageParts.h"
@@ -359,7 +360,12 @@ class TeamPageTest final : public QObject {
         QVERIFY(paused->message().contains("automatic turns"));
         paused->action()->click();
         QCOMPARE(daemon_.last("team.update").value("paused").toBool(true), false);
-        QVERIFY(page.findChild<ket::Banner*>("teamQueueBanner"));
+        auto* queue = page.findChild<ket::Banner*>("teamQueueBanner");
+        QVERIFY(queue);
+        QCOMPARE(queue->action()->objectName(), QStringLiteral("teamQueueAddReviewer"));
+        QSignalSpy second(&page, &TeamPage::addReviewerRequested);
+        queue->action()->click();
+        QCOMPARE(second.first().first().toString(), QStringLiteral("7"));
         QVERIFY(!page.findChild<QLabel*>("teamWaitingHeading")); // nothing waits
         TeamPage empty(teams_.get(), "99", "/work/other");
         auto* state = empty.findChild<ket::EmptyState*>("teamPageEmpty");
@@ -370,6 +376,92 @@ class TeamPageTest final : public QObject {
     }
 
     // Answering sends team.decision.answer; the answer's team removes the card.
+    // T-23: two reviewers, each with its own review and queue; no queue banner, and either
+    // one may be removed. KETPLUS_TEAM_REVIEWERS_CAPTURE (a folder) saves the page, the New team
+    // dialog with two reviewers and the second reviewer's dialog beside the mock's.
+    void twoReviewersShowTheirOwnReviews_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void twoReviewersShowTheirOwnReviews() {
+        QFETCH(bool, dark);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        QJsonObject team = fixture(1, 4, false, false);
+        QJsonArray members = team.value("members").toArray();
+        members.append(member("rev2", "reviewer", "Review 2"));
+        team.insert("members", members);
+        team.insert(
+            "reviews",
+            QJsonArray{
+                QJsonObject{
+                    {"reviewer", "rev"}, {"reviewing", "T-1"}, {"queue", QJsonArray{"T-3"}}},
+                QJsonObject{{"reviewer", "rev2"}, {"reviewing", ""}, {"queue", QJsonArray{}}}});
+        team.insert("reviewing", "T-1");
+        start(team);
+        QWidget window;
+        window.resize(1440, 1200);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(window.size());
+        window.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamMember_rev2"));
+        QVERIFY(!page.findChild<ket::Banner*>("teamQueueBanner"));
+        QVERIFY(page.findChild<QLabel*>("teamMembersHeading")
+                    ->parentWidget()
+                    ->accessibleName()
+                    .endsWith("4 developers · 2 reviewers"));
+        const auto status = [&](const char* session) {
+            return labels(page.findChild<QWidget*>(QStringLiteral("teamMember_") + session),
+                          "teamMemberStatus")
+                .value(0);
+        };
+        QCOMPARE(status("rev"), QStringLiteral("Reviewing T-1 +1"));
+        QCOMPARE(status("rev2"), QStringLiteral("Nothing queued"));
+        auto* remove = page.findChild<QWidget*>("teamMember_rev2")
+                           ->findChild<ket::Button*>("teamMemberRemove");
+        QVERIFY(remove);
+        QVERIFY(remove->isEnabled());
+
+        const QString capture = qEnvironmentVariable("KETPLUS_TEAM_REVIEWERS_CAPTURE");
+        const QString name = dark ? QStringLiteral("dark") : QStringLiteral("light");
+        if (!capture.isEmpty())
+            window.grab().save(QStringLiteral("%1/app-team-two-%2.png").arg(capture, name));
+        const QVariantList models{QVariantMap{{"provider", "claude"},
+                                              {"model", "opus"},
+                                              {"displayName", "Opus"},
+                                              {"isDefault", true}}};
+        auto* create = NewTeamForm::present(&page, teams_.get(), "/work/shop", models);
+        auto* count = create->findChild<ket::SegmentedControl*>("teamReviewerCount");
+        QTRY_VERIFY(count && count->isVisible());
+        count->setCurrentIndex(1);
+        QApplication::processEvents();
+        if (!capture.isEmpty())
+            window.grab().save(QStringLiteral("%1/app-new-team-%2.png").arg(capture, name));
+        create->reject();
+        QJsonObject one = fixture(1, 4, false, false);
+        auto* second =
+            AddMemberForm::present(&page, teams_.get(), one, models, QStringLiteral("reviewer"));
+        QTRY_VERIFY(second->findChild<AddMemberForm*>()->isVisible());
+        QCOMPARE(second->findChild<AddMemberForm*>()->role(), QStringLiteral("reviewer"));
+        // The card fits the form once its help lines are wrapped: nothing scrolls.
+        QTRY_COMPARE(
+            second->findChild<QScrollArea*>("teamDialogScroll")->verticalScrollBar()->maximum(), 0);
+        // The card follows its body on the next event loop pass: the body ends above the
+        // footer's buttons.
+        const auto* body = second->findChild<QScrollArea*>("teamDialogScroll");
+        const auto* add = second->findChild<ket::Button*>("addMemberButton");
+        QTRY_VERIFY2(body->mapTo(second, QPoint(0, body->height())).y() <=
+                         add->mapTo(second, QPoint()).y(),
+                     qPrintable(QStringLiteral("body ends %1, Add starts %2, card %3")
+                                    .arg(body->mapTo(second, QPoint(0, body->height())).y())
+                                    .arg(add->mapTo(second, QPoint()).y())
+                                    .arg(second->card()->height())));
+        if (!capture.isEmpty())
+            window.grab().save(QStringLiteral("%1/app-add-reviewer-%2.png").arg(capture, name));
+        second->reject();
+    }
+
     void answeringRemovesTheDecision() {
         start(fixture());
         TeamPage page(teams_.get(), "7", "/work/shop");
@@ -788,7 +880,7 @@ class TeamPageTest final : public QObject {
             QCOMPARE(daemon_.count("team.update"), sent + 1);
             QCOMPARE(daemon_.last("team.update").value("paused").toBool(true), false);
         }
-        QVERIFY(page.findChild<QAbstractButton*>("teamQueueNewTeam"));
+        QVERIFY(page.findChild<QAbstractButton*>("teamQueueAddReviewer"));
     }
 };
 

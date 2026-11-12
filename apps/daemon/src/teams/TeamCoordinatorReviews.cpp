@@ -1,4 +1,4 @@
-// ADR 0114 §2: the team's reviewer reviews each task on the engine of ADR 0067 — a `review`
+// ADR 0114 §2: a reviewer of the team reviews each task on the engine of ADR 0067 — a `review`
 // message with the verdict line — triggered by the task entering In review instead of by a
 // finished turn, queued first in first out instead of skipped.
 #include "teams/TeamCoordinator.h"
@@ -25,12 +25,16 @@ QString utf8Prefix(const QString& text, const qsizetype maximumBytes) {
     return prefix;
 }
 
-// The first queued task that is still In review: the one the next review is for.
-const Task* nextInReview(const Team& team) {
-    for (const QString& id : team.reviewQueue)
+// The first queued task that is still In review: the one the reviewer's next review is for.
+const Task* nextInReview(const Team& team, const ReviewSlot& slot) {
+    for (const QString& id : slot.queue)
         if (const Task* task = team.task(id); task && task->state == state::inReview)
             return task;
     return nullptr;
+}
+
+QString diffKey(const qint64 teamId, const QString& reviewer) {
+    return QStringLiteral("%1/%2").arg(teamId).arg(reviewer);
 }
 
 } // namespace
@@ -92,41 +96,58 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
 
 void TeamCoordinator::pumpReviews(const qint64 teamId) {
     Team* team = mutableTeam(teamId);
-    if (!team || !team->reviewing.isEmpty() || team->reviewQueue.isEmpty())
+    if (!team)
         return;
-    if (!team->memberWithRole(role::reviewer) || reviewDiffs_.contains(teamId))
-        return;
-    const Task* next = nextInReview(std::as_const(*team));
-    if (!next) {
-        // Every queued task left In review while it waited: the queue is emptied.
-        const Team before = *team;
-        team->reviewQueue.clear();
-        (void)commit(*team, before, QStringLiteral("daemon"), {});
-        return;
+    // T-23: each idle reviewer takes the next task of its own queue.
+    QStringList idle;
+    for (const ReviewSlot& slot : std::as_const(team->reviews))
+        if (slot.reviewing.isEmpty() && !slot.queue.isEmpty() &&
+            !reviewDiffs_.contains(diffKey(teamId, slot.reviewer)))
+            idle.append(slot.reviewer);
+    for (const QString& reviewer : std::as_const(idle)) {
+        team = mutableTeam(teamId);
+        const ReviewSlot* slot = team ? team->reviewSlot(reviewer) : nullptr;
+        // A commit() below pumps again and may already have asked for this reviewer's diff.
+        if (!slot || !team->member(reviewer) || !slot->reviewing.isEmpty() ||
+            reviewDiffs_.contains(diffKey(teamId, reviewer)))
+            continue;
+        const Task* next = nextInReview(std::as_const(*team), *slot);
+        if (!next) {
+            // Every queued task left In review while it waited: the queue is emptied.
+            const Team before = *team;
+            team->reviewSlot(reviewer)->queue.clear();
+            (void)commit(*team, before, QStringLiteral("daemon"), {});
+            continue;
+        }
+        reviewDiffs_.insert(diffKey(teamId, reviewer));
+        host_->askDiff(
+            *team, *next,
+            [self = QPointer<TeamCoordinator>(this), teamId, reviewer, asked = *next,
+             repository = team->repository,
+             integration = team->integrationBranch](const std::optional<TaskDiff>& diff) {
+                if (!self)
+                    return;
+                self->reviewDiffs_.remove(diffKey(teamId, reviewer));
+                self->startReview(teamId, reviewer, asked, repository, integration, diff);
+            });
     }
-    reviewDiffs_.insert(teamId);
-    host_->askDiff(*team, *next,
-                   [self = QPointer<TeamCoordinator>(this), teamId, asked = *next,
-                    repository = team->repository,
-                    integration = team->integrationBranch](const std::optional<TaskDiff>& diff) {
-                       if (!self)
-                           return;
-                       self->reviewDiffs_.remove(teamId);
-                       self->startReview(teamId, asked, repository, integration, diff);
-                   });
 }
 
-void TeamCoordinator::startReview(const qint64 teamId, const Task& asked, const QString& repository,
+void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSession,
+                                  const Task& asked, const QString& repository,
                                   const QString& integration, const std::optional<TaskDiff>& diff) {
     Team* team = mutableTeam(teamId);
-    if (!team || !team->reviewing.isEmpty() || team->reviewQueue.isEmpty())
+    const ReviewSlot* slot = team ? team->reviewSlot(reviewerSession) : nullptr;
+    const Member* reviewer = team ? team->member(reviewerSession) : nullptr;
+    // The reviewer left, or took another review, while its diff was read.
+    if (!slot || !reviewer || !slot->reviewing.isEmpty() || slot->queue.isEmpty()) {
+        if (team)
+            pumpReviews(teamId);
         return;
-    const Member* reviewer = team->memberWithRole(role::reviewer);
-    if (!reviewer)
-        return;
+    }
     // The diff is of one task's branch against the integration branch the team had. Another
     // task at the head of the queue, or another branch on either side, needs its own diff.
-    const Task* next = nextInReview(std::as_const(*team));
+    const Task* next = nextInReview(std::as_const(*team), *slot);
     if (!next || next->id != asked.id || next->branch != asked.branch ||
         next->worktree != asked.worktree || next->baseCommit != asked.baseCommit ||
         next->headCommit != asked.headCommit || team->repository != repository ||
@@ -137,26 +158,29 @@ void TeamCoordinator::startReview(const qint64 teamId, const Task& asked, const 
     // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
     const QString taskId = asked.id;
+    const QString reviewerName = reviewer->name;
+    ReviewSlot* taking = team->reviewSlot(reviewerSession);
     // The tasks queued before it left In review while they waited.
-    while (!team->reviewQueue.isEmpty() && team->reviewQueue.takeFirst() != taskId) {
+    while (!taking->queue.isEmpty() && taking->queue.takeFirst() != taskId) {
     }
     Task* task = team->task(taskId);
     ++task->round;
-    team->reviewing = taskId;
+    task->reviewer = reviewerSession;
+    taking->reviewing = taskId;
     // Bound before it is sent: a review held while the team is paused, or one whose
     // message is still on its way, cannot be answered by another request.
     const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    team->reviewingMessage = requestId;
-    const QString reviewerSession = reviewer->sessionId;
-    addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"),
-               (task->missingVerdicts > 0
-                    ? QStringLiteral("Review round %1 of %2 sent to %3 again: the last reply had "
-                                     "no verdict.")
-                    : QStringLiteral("Review round %1 of %2 sent to %3."))
-                   .arg(task->round)
-                   .arg(team->maxRounds)
-                   .arg(reviewer->name),
-               {{QStringLiteral("round"), task->round}});
+    taking->message = requestId;
+    addHistory(
+        *task, QStringLiteral("daemon"), QStringLiteral("review"),
+        (task->missingVerdicts > 0
+             ? QStringLiteral("Review round %1 of %2 sent to %3 again: the last reply had "
+                              "no verdict.")
+             : QStringLiteral("Review round %1 of %2 sent to %3."))
+            .arg(task->round)
+            .arg(team->maxRounds)
+            .arg(reviewerName),
+        {{QStringLiteral("round"), task->round}, {QStringLiteral("reviewer"), reviewerName}});
     const QString body = reviewText(*team, *task, diff);
     if (commit(*team, before, QStringLiteral("daemon"),
                {{.kind = QStringLiteral("review_requested"),
@@ -177,23 +201,25 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                                      const QString& text, const bool noFindings,
                                      const QString& failure) {
     Team* team = mutableTeamOf(reviewerSession);
-    if (!team || team->reviewing.isEmpty())
+    const ReviewSlot* slot = team ? team->reviewSlot(reviewerSession) : nullptr;
+    if (!slot || slot->reviewing.isEmpty())
         return;
     // Only the request this review was bound to answers it; an earlier or unrelated request
     // that ends now does not. Compatibility, and nothing else: a review that was in flight
     // in a journal written before reviews were bound has no id, and is matched as it was
     // then, by the reviewer and the task. No review started by this version is in that
     // state, held or sent.
-    const bool unbound = team->reviewingMessage.isEmpty();
-    if (!unbound && messageId != team->reviewingMessage)
+    const bool unbound = slot->message.isEmpty();
+    if (!unbound && messageId != slot->message)
         return;
     const Member* member = team->member(reviewerSession);
     if (!member || member->role != role::reviewer)
         return;
     const Team before = *team;
-    const QString taskId = team->reviewing;
-    team->reviewing.clear();
-    team->reviewingMessage.clear();
+    ReviewSlot* answered = team->reviewSlot(reviewerSession);
+    const QString taskId = answered->reviewing;
+    answered->reviewing.clear();
+    answered->message.clear();
     Task* task = team->task(taskId);
     QList<Update> updates;
     std::optional<TeamMessage> back;
@@ -230,8 +256,9 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                         {QStringLiteral("round"), round},
                         {QStringLiteral("text"), findings}});
             if (askAgain) {
-                team->reviewQueue.removeAll(taskId);
-                team->reviewQueue.prepend(taskId);
+                // The same reviewer is asked again, first.
+                answered->queue.removeAll(taskId);
+                answered->queue.prepend(taskId);
             } else {
                 // One line for the leader: the blocked task says why.
                 task->resumeState = state::inProgress;
@@ -291,10 +318,9 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
     }
     if (commit(*team, before, QStringLiteral("daemon"), updates))
         return;
+    // commit() sent the next review of this reviewer, or the same one asked again.
     if (back)
         wake(*team, *back);
-    if (askAgain)
-        pumpReviews(team->id);
 }
 
 } // namespace ketplus::daemon::teams

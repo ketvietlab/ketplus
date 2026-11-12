@@ -85,8 +85,7 @@ void TeamCoordinator::load() {
     // stored for it. It starts now, not at the team's next change.
     const QList<qint64> ids = teams_.keys();
     for (const qint64 id : ids)
-        if (const Team* team = this->team(id);
-            team && team->reviewing.isEmpty() && !team->reviewQueue.isEmpty())
+        if (const Team* team = this->team(id); team && team->reviewsWaiting())
             pumpReviews(id);
     // ADR 0118: work merged while the daemon was stopped is reconciled now.
     for (const qint64 id : ids)
@@ -261,7 +260,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     emit teamChanged(directoryJson(team));
     if (actionable)
         scheduleDigest(team.id);
-    if (team.reviewing.isEmpty() && !team.reviewQueue.isEmpty())
+    if (team.reviewsWaiting())
         pumpReviews(team.id);
     return std::nullopt;
 }
@@ -318,8 +317,13 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     const QString now = nowIso();
     draft.createdAt = now;
     draft.changedAt = now;
-    for (Member& member : draft.members)
+    draft.reviews.clear();
+    draft.reviewQueue.clear();
+    for (Member& member : draft.members) {
         member.joinedAt = now;
+        if (member.role == role::reviewer)
+            reviewerJoined(draft, member.sessionId);
+    }
     draft.tasks.clear();
     draft.decisions.clear();
     draft.held = {};
@@ -578,9 +582,11 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
         return {.error = refused};
     member.joinedAt = nowIso();
     team->members.append(member);
+    if (member.role == role::reviewer)
+        reviewerJoined(*team, member.sessionId);
     // An empty role filled again lifts the pause it caused (ADR 0114, point 4).
     if (team->paused && team->pausedReason == QStringLiteral("empty_role") &&
-        team->count(role::leader) == 1 && team->count(role::reviewer) == 1 &&
+        team->count(role::leader) == 1 && team->count(role::reviewer) >= 1 &&
         team->count(role::developer) >= 1) {
         team->paused = false;
         team->pausedReason.clear();
@@ -687,6 +693,8 @@ TeamResult TeamCoordinator::removeMember(const qint64 teamId, const QString& ses
     QList<Update> updates;
     cancelWait(sessionId);
     unassignTasksOf(*team, sessionId, actor, QStringLiteral("%1 left the team").arg(name), updates);
+    // T-23: a reviewer leaves while another stays; its reviews go to that one.
+    reviewerLeft(*team, sessionId);
     team->members.removeIf([&](const Member& member) { return member.sessionId == sessionId; });
     updates.prepend({.kind = QStringLiteral("member_removed"),
                      .text = QStringLiteral("%1 left the team.").arg(name),
@@ -712,13 +720,10 @@ void TeamCoordinator::conversationDeleted(const QString& sessionId) {
     updates.prepend({.kind = QStringLiteral("member_removed"),
                      .text = QStringLiteral("%1 was deleted and left the team.").arg(name),
                      .data = {{QStringLiteral("session_id"), sessionId}}});
-    if (role == role::reviewer && !team->reviewing.isEmpty()) {
-        // The review in flight waits for the next reviewer, first in the queue.
-        team->reviewQueue.prepend(team->reviewing);
-        team->reviewing.clear();
-        team->reviewingMessage.clear();
-    }
-    if (role != role::developer || team->count(role::developer) == 0) {
+    // The reviews it had go to the other reviewer, or wait for the next one, the review in
+    // flight first.
+    reviewerLeft(*team, sessionId);
+    if (team->count(role) == 0) {
         const QString empty = role == role::developer ? QStringLiteral("developer") : role;
         team->paused = true;
         team->pausedReason = QStringLiteral("empty_role");
@@ -740,7 +745,8 @@ std::optional<TeamError> TeamCoordinator::archiveRefusal(const QString& sessionI
     const Team* team = teamOf(sessionId);
     if (!team)
         return std::nullopt;
-    // A developer can be removed; the leader and the reviewer stay as long as the team does.
+    // A developer, or one of two reviewers, can be removed; the leader and the last reviewer
+    // stay as long as the team does.
     const Member* member = team->member(sessionId);
     const QString role = member ? member->role : QString{};
     if (role == role::leader)
@@ -748,7 +754,7 @@ std::optional<TeamError> TeamCoordinator::archiveRefusal(const QString& sessionI
                          QStringLiteral("This conversation leads team %1, and a team keeps its "
                                         "leader. Delete the team before archiving it.")
                              .arg(team->name)};
-    if (role == role::reviewer)
+    if (role == role::reviewer && team->count(role::reviewer) <= 1)
         return TeamError{QStringLiteral("team_member"),
                          QStringLiteral("This conversation reviews for team %1, and a team keeps "
                                         "its reviewer. Give the team another reviewer, or delete "

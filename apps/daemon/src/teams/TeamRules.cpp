@@ -143,8 +143,9 @@ std::optional<TeamError> canCreate(const Team& team, const QList<Candidate>& can
         return refusal(QStringLiteral("role_taken"), QStringLiteral("A team has one leader."));
     if (team.count(role::reviewer) == 0)
         return refusal(QStringLiteral("role_required"), QStringLiteral("A team needs a reviewer."));
-    if (team.count(role::reviewer) > 1)
-        return refusal(QStringLiteral("role_taken"), QStringLiteral("A team has one reviewer."));
+    if (team.count(role::reviewer) > maximumReviewers)
+        return refusal(QStringLiteral("role_taken"),
+                       QStringLiteral("A team has at most two reviewers."));
     const int developers = team.count(role::developer);
     if (developers < 1)
         return refusal(QStringLiteral("last_developer"),
@@ -194,8 +195,9 @@ std::optional<TeamError> canAddMember(const Team& team, const Member& member,
                        QStringLiteral("A member works in the team's repository."));
     if (member.role == role::leader && team.count(role::leader) > 0)
         return refusal(QStringLiteral("role_taken"), QStringLiteral("The team has a leader."));
-    if (member.role == role::reviewer && team.count(role::reviewer) > 0)
-        return refusal(QStringLiteral("role_taken"), QStringLiteral("The team has a reviewer."));
+    if (member.role == role::reviewer && team.count(role::reviewer) >= maximumReviewers)
+        return refusal(QStringLiteral("role_taken"),
+                       QStringLiteral("The team has two reviewers, the most a team has."));
     if (member.role == role::reviewer && !reviewerProviderSupported(candidate.provider))
         return refusal(QStringLiteral("reviewer_unsupported"),
                        QStringLiteral("The reviewer must be a Claude conversation, the provider "
@@ -219,6 +221,13 @@ std::optional<TeamError> canRemoveMember(const Team& team, const QString& sessio
     if (!member)
         return refusal(QStringLiteral("not_member"),
                        QStringLiteral("This conversation is not on the team."));
+    if (member->role == role::reviewer) {
+        if (team.count(role::reviewer) <= 1)
+            return refusal(QStringLiteral("last_reviewer"),
+                           QStringLiteral("A team keeps at least one reviewer: add another "
+                                          "before removing this one."));
+        return std::nullopt;
+    }
     if (member->role != role::developer)
         return refusal(
             QStringLiteral("role_required"),

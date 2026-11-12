@@ -4,6 +4,7 @@
 #include "teams/TeamDialogs.h"
 #include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetChoice.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetProfile.h"
@@ -498,8 +499,61 @@ class TeamDialogsTest final : public QObject {
         dialog->reject();
     }
 
+    // T-23: two reviewers go as "reviewers", both on the reviewer's agent.
+    void aTeamIsCreatedWithTwoReviewers() {
+        NewTeamForm form(teams_.get(), "/repo", bothProviders);
+        auto* count = form.findChild<ket::SegmentedControl*>("teamReviewerCount");
+        QVERIFY(count);
+        const int members = form.memberCount();
+        count->setCurrentIndex(1);
+        QCOMPARE(form.memberCount(), members + 1);
+        const QJsonObject plan = form.payload().value("plan").toObject();
+        QVERIFY(!plan.contains("reviewer"));
+        const QJsonArray reviewers = plan.value("reviewers").toArray();
+        QCOMPARE(reviewers.size(), 2);
+        for (const auto& value : reviewers)
+            QCOMPARE(value.toObject().value("provider").toString(), QStringLiteral("claude"));
+        count->setCurrentIndex(0);
+        QVERIFY(form.payload().value("plan").toObject().contains("reviewer"));
+    }
+
+    // T-23: Add a member's Role offers Reviewer while the team has one; the reviewer
+    // has no lane, runs on Claude and may leave its name to the daemon.
+    void aSecondReviewerIsAddedAndAThirdIsNot() {
+        AddMemberForm form(teams_.get(), team(3), bothProviders);
+        QCOMPARE(form.role(), QStringLiteral("developer"));
+        auto* second = form.findChild<ket::Choice*>("addMemberReviewer");
+        QVERIFY(second && second->isEnabled());
+        second->click();
+        QCOMPARE(form.role(), QStringLiteral("reviewer"));
+        QVERIFY(!form.laneField()->isVisibleTo(&form));
+        QCOMPARE(form.nameField()->placeholderText(), QStringLiteral("Reviewer 2"));
+        QVERIFY(form.hint().isEmpty());
+        form.submit({});
+        QCOMPARE(daemon_.sent.size(), 1);
+        QCOMPARE(daemon_.sent.first().first, QStringLiteral("team.member.add"));
+        const QJsonObject sent = daemon_.sent.first().second;
+        QCOMPARE(sent.value("role").toString(), QStringLiteral("reviewer"));
+        QCOMPARE(sent.value("provider").toString(), QStringLiteral("claude"));
+        QCOMPARE(sent.value("team_id").toString(), QStringLiteral("7"));
+        QVERIFY(!sent.contains("lane"));
+        QVERIFY(!sent.contains("name"));
+        // Opened on Reviewer, as the team menu and the queue banner do.
+        AddMemberForm preset(teams_.get(), team(3), bothProviders, QStringLiteral("reviewer"));
+        QCOMPARE(preset.role(), QStringLiteral("reviewer"));
+        QVERIFY(preset.findChild<ket::Choice*>("addMemberReviewer")->isChecked());
+        // Two reviewers: the choice is off and a reviewer request is not sent.
+        QJsonObject full = team(3);
+        QJsonArray members = full.value("members").toArray();
+        members.append(QJsonObject{{"session_id", "rev2"}, {"role", "reviewer"}});
+        full.insert("members", members);
+        AddMemberForm third(teams_.get(), full, bothProviders, QStringLiteral("reviewer"));
+        QCOMPARE(third.role(), QStringLiteral("developer"));
+        QVERIFY(!third.findChild<ket::Choice*>("addMemberReviewer")->isEnabled());
+    }
+
     void addingADeveloperNeedsANameAndStopsAtFive() {
-        AddDeveloperForm form(teams_.get(), team(2), bothProviders);
+        AddMemberForm form(teams_.get(), team(2), bothProviders);
         QVERIFY(form.hint().contains("single reviewer"));
         form.submit({});
         QVERIFY(daemon_.sent.isEmpty());
@@ -518,15 +572,21 @@ class TeamDialogsTest final : public QObject {
         QCOMPARE(sent.value("paths").toArray(), (QJsonArray{"src/api", "docs/api"}));
         QCOMPARE(sent.value("provider").toString(), QStringLiteral("codex"));
         // One developer: no queue hint yet.
-        AddDeveloperForm small(teams_.get(), team(1), bothProviders);
+        AddMemberForm small(teams_.get(), team(1), bothProviders);
         QVERIFY(small.hint().isEmpty());
         // Five: the entry is disabled.
         QWidget window;
         window.resize(1024, 640);
         window.show();
-        auto* dialog = AddDeveloperForm::present(&window, teams_.get(), team(5), bothProviders);
-        QVERIFY(!dialog->findChild<ket::Button*>("addDeveloperButton")->isEnabled());
-        QVERIFY(dialog->findChild<AddDeveloperForm*>()->hint().contains("five"));
+        auto* dialog = AddMemberForm::present(&window, teams_.get(), team(5), bothProviders);
+        auto* form5 = dialog->findChild<AddMemberForm*>();
+        // T-23: five developers and one reviewer open on Reviewer, which may be added.
+        QCOMPARE(form5->role(), QStringLiteral("reviewer"));
+        QVERIFY(dialog->findChild<ket::Button*>("addMemberButton")->isEnabled());
+        QVERIFY(!form5->findChild<ket::Choice*>("addMemberDeveloper")->isEnabled());
+        form5->setRole(QStringLiteral("developer"));
+        QVERIFY(!dialog->findChild<ket::Button*>("addMemberButton")->isEnabled());
+        QVERIFY(form5->hint().contains("five"));
         dialog->reject();
     }
 };

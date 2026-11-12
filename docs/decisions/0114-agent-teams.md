@@ -23,25 +23,38 @@ and a digest instead of status messages — and leaves messaging as it is.
 - A **team** belongs to one repository and has a name, a goal, an integration branch,
   a merge setting (`mergePolicy`), `leaderWritesRequirements`, a `paused` switch,
   shared paths, members, tasks, decisions and updates. The daemon stores it.
-- Exactly **one leader**, **one to five developers** and exactly **one reviewer**.
+- Exactly **one leader**, **one to five developers** and **one or two reviewers**
+  (T-23).
   A conversation is on at most one team. Members belong to the team's repository.
   The repository is the main worktree git names for a path. The daemon asks git for it
   only where a repository is named or a conversation is to join a team (`team.list`,
   `team.create`, `team.member.add`), off its event loop before the command runs, and
   keeps git's answer. A path it was not asked about beforehand is still asked on the event
   loop, the first time.
-  *Rejected*: any number of reviewers or leaders — two leaders split the plan, and a
-  second reviewer only hides a queue that a second team removes.
+  *Rejected*: more than one leader, since two leaders split the plan, and more than two
+  reviewers. A second reviewer was rejected here at first, because "it only hides a
+  queue that a second team removes". The user reversed that on 2026-11-12: a second
+  reviewer shortens the queue of one team. Each task is still reviewed by one reviewer,
+  never by both (§2). New team offers one or two reviewers. In the team's settings
+  (`team.member.add` with `role: "reviewer"`, `team.member.remove`) a second one is added,
+  and either one is removed while the other stays. A third reviewer is refused with
+  `role_taken`, and removing the last one with `last_reviewer`. A paired phone's New team
+  keeps one reviewer. On the desktop, the Team page's queue banner offers "Add a second
+  reviewer" while a team with three or more developers has one, and each reviewer's row
+  shows its own review and how many tasks wait for it (`reviews`).
 - The **leader** is the only member that reports to the user. It breaks the goal into
   tasks, writes their acceptance criteria (unless `leaderWritesRequirements` is off),
   assigns them, changes lanes and orders the merges. It neither writes code nor
   reviews.
 - A **developer** owns a lane: a name and path prefixes.
-- The **reviewer** reviews each task against its criteria. It owns no task, so it never
+- A **reviewer** reviews each task against its criteria. It owns no task, so it never
   reviews its own work, and it never merges.
 - **No new authority**: nothing a member sends approves a permission request, answers a
   decision or merges a protected branch. ADR 0027 is unchanged; members may address
-  `leader` and `reviewer` by role as well as by number.
+  `leader` and `reviewer` by role as well as by number. With two reviewers,
+  `reviewer` names the one that reviews the sender's tasks. When that is not one
+  reviewer, the send is refused with `ambiguous_role`, which names both numbers. The
+  team's description (`team_get`'s `you.reviewers`) lists both.
 
 ### 2. The reviewer reuses ADR 0067 and reviews per task (decided)
 
@@ -60,8 +73,23 @@ corrects the record with two tools, refused with `role_forbidden` for any other 
 round back by one and its open merge decisions withdrawn; `team_review_accept` (task,
 evidence such as a pull request review's URL, and reason) makes a task in review, or
 blocked by its review, `ready` and drops a queued or running review of it. Both leave
-history (`verdict_voided`, `review_accepted`) and need no new commit. A busy reviewer
-**queues** requests first in, first out, instead of skipping them. The daemon reads the diff off its event loop before the review
+history (`verdict_voided`, `review_accepted`) and need no new commit.
+
+A busy reviewer **queues** requests first in, first out, instead of skipping them.
+**Sharing requests (T-23).** Each reviewer has its own review in flight and its own
+queue, so two reviewers review two tasks at the same time. A task entering `in_review`
+goes to exactly one of them:
+1. the reviewer of its last round, while that reviewer is on the team;
+2. otherwise the idle one;
+3. otherwise the one with the shorter queue (the first to join on a tie).
+
+When a reviewer leaves (removed or deleted), the other one takes its queue. The review
+it had not finished goes first, as the same round: it is not counted again. A team
+without a reviewer keeps its tasks waiting, and the next reviewer takes them. The
+team's document stores this as `reviews` (`reviewer`, `reviewing`, `reviewing_message`,
+`queue`) and `review_waiting`. It still writes `reviewing`, `reviewing_message` and
+`review_queue` for a reader from before: the first review in flight and every waiting
+task. The daemon reads the diff off its event loop before the review
 starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
 again, and a diff that is no longer for the next task or the team's integration branch is
 read again. The reviewer is therefore a Claude conversation, the only
@@ -351,12 +379,12 @@ The goal is the leader's main input, so it is written like a brief, not a title.
    `INTEGER PRIMARY KEY AUTOINCREMENT`, so it is never reused. `team_members` maps a
    session to its team with the session as primary key, so "at most one team" is a
    constraint of the database. `team_updates` is the append-only log with a digest
-   mark. A team is small (seven members, tens of tasks) and always changes as a unit
+   mark. A team is small (eight members, tens of tasks) and always changes as a unit
    under one revision, so a document avoids six join tables and keeps every change
    atomic. Deleting a team deletes its three kinds of rows and no conversation.
    - A **deleted** conversation leaves its team: a developer as if removed (its open
-     tasks become unassigned); for the leader or the reviewer the team is paused and a
-     decision names the empty role.
+     tasks become unassigned); for the leader or the last reviewer the team is paused and
+     a decision names the empty role; one of two reviewers leaves as if removed.
    - **Archiving** a member is refused with `team_member`.
    - A **fork** of a member is not a member.
 5. **The first plan.** *Chosen*: the leader's first list of tasks waits for the user as

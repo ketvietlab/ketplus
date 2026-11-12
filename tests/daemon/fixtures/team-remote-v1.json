@@ -139,7 +139,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,
@@ -495,7 +502,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,
@@ -749,7 +763,14 @@
         "turns_left": 28,
         "review": {
           "reviewing": "T-4",
-          "queued": []
+          "queued": [],
+          "reviewers": [
+            {
+              "session_id": "session-reviewer",
+              "reviewing": "T-4",
+              "queued": []
+            }
+          ]
         },
         "tasks_total": 3,
         "tasks_done": 0,
@@ -925,6 +946,20 @@
             "changed_revision": 7
           }
         ]
+      }
+    }
+  },
+  "pausedWithoutReviewer": {
+    "description": "The summary's review part when the last reviewer's conversation was deleted: the team pauses with empty_role, reviewers is empty and the waiting tasks stay queued for the next reviewer.",
+    "result": {
+      "team": {
+        "paused": true,
+        "paused_reason": "empty_role",
+        "review": {
+          "reviewing": "",
+          "queued": ["T-4"],
+          "reviewers": []
+        }
       }
     }
   },

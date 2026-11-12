@@ -60,7 +60,8 @@ TeamResult TeamCoordinator::voidReview(const qint64 teamId, const QString& taskI
     if (reason.trimmed().isEmpty())
         return refused(teamId, QStringLiteral("invalid_payload"),
                        QStringLiteral("Say why the round is voided."));
-    if (found->state == state::done || found->state == state::inReview || team->reviewing == taskId)
+    if (found->state == state::done || found->state == state::inReview ||
+        team->reviewInFlight(taskId))
         return refused(teamId, QStringLiteral("invalid_transition"),
                        QStringLiteral("%1 has no verdict to void: it is %2.")
                            .arg(taskId, found->state == state::done ? QStringLiteral("done")
@@ -128,12 +129,7 @@ TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& tas
     const QString proof = evidence.trimmed().left(2000);
     const QString why = reason.trimmed().left(2000);
     // A review of it that is queued or in flight is dropped; its answer is then ignored.
-    team->reviewQueue.removeAll(taskId);
-    const bool wasReviewing = team->reviewing == taskId;
-    if (wasReviewing) {
-        team->reviewing.clear();
-        team->reviewingMessage.clear();
-    }
+    dropReview(*team, taskId);
     task->missingVerdicts = 0;
     task->question.clear();
     task->resumeState.clear();
@@ -148,10 +144,9 @@ TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& tas
     applyMove(*team, *task, state::ready, actor, QStringLiteral("review accepted by %1").arg(by),
               updates);
     offerMerges(*team, updates);
+    // commit() sends the next review of a reviewer this one freed.
     if (auto error = commit(*team, before, actor, updates))
         return {.error = error, .teamId = teamId};
-    if (wasReviewing)
-        pumpReviews(teamId);
     return {.error = std::nullopt, .teamId = teamId};
 }
 

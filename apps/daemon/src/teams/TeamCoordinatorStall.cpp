@@ -81,7 +81,9 @@ void TeamCoordinator::checkStall(const qint64 teamId) {
             if (member->role == role::developer && task.owner == session &&
                 task.state == state::inProgress)
                 open.append(QStringLiteral("%1 \"%2\"").arg(task.id, task.title));
-            else if (member->role == role::reviewer && task.state == state::inReview)
+            else if (member->role == role::reviewer && task.state == state::inReview &&
+                     team->reviewSlotOf(task.id) &&
+                     team->reviewSlotOf(task.id)->reviewer == session)
                 open.append(QStringLiteral("%1 \"%2\"").arg(task.id, task.title));
         }
         if (open.isEmpty())

@@ -137,8 +137,8 @@ class TeamDoneTest final : public QObject {
             QVERIFY(merged.first().text.contains(mergeCommit.left(12)));
             QCOMPARE(merged.first().data.value("pull_request").toString(), pullRequest);
             QCOMPARE(merged.first().data.value("merge_commit").toString(), mergeCommit);
-            QVERIFY(!team().reviewQueue.contains(id));
-            QVERIFY(team().reviewing != id);
+            QVERIFY(!firstReviews(team()).queue.contains(id));
+            QVERIFY(firstReviews(team()).reviewing != id);
             QCOMPARE(team().openDecisions(), 0);
             QCOMPARE(updates("goal_reached"), 1);
         }
@@ -148,12 +148,12 @@ class TeamDoneTest final : public QObject {
         const QString id = task("Cart");
         recordPullRequest(id);
         bringTo(id, state::inReview);
-        QCOMPARE(team().reviewing, id);
-        const QString request = team().reviewingMessage;
+        QCOMPARE(firstReviews(team()).reviewing, id);
+        const QString request = firstReviews(team()).message;
         merge();
         teams_->checkPullRequests(team_);
         QCOMPARE(get(id).state, state::done);
-        QVERIFY(team().reviewing.isEmpty());
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
         teams_->reviewFinished("rev", request, "Verdict: findings\n- a bug", false);
         QCOMPARE(get(id).state, state::done);
     }
