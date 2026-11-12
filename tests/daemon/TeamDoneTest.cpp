@@ -301,6 +301,45 @@ class TeamDoneTest final : public QObject {
         QCOMPARE(asked.size(), count);
     }
 
+    // A pull request that never answers ends its batch every time. It sorts first here, so a
+    // check that always started at the beginning would never ask the others; the next check
+    // starts after it, and every other task is done within one check per page.
+    void aPullRequestThatNeverAnswersStarvesNoOther_data() {
+        QTest::addColumn<int>("count");
+        QTest::newRow("2") << 2;
+        QTest::newRow("a page") << TeamCoordinator::maxPullRequestsPerCheck;
+        QTest::newRow("two pages") << 2 * TeamCoordinator::maxPullRequestsPerCheck;
+    }
+    void aPullRequestThatNeverAnswersStarvesNoOther() {
+        QFETCH(int, count);
+        const auto url = [](int i) {
+            return QStringLiteral("https://example.invalid/shop/pull/%1").arg(i, 3, 10, QChar('0'));
+        };
+        QStringList ids;
+        for (int i = 0; i < count; ++i) {
+            ids << task(QStringLiteral("Task %1").arg(i));
+            recordPullRequest(ids.last(), url(i));
+            if (i > 0)
+                merge(url(i));
+        }
+        host_.hangingPullRequests.insert(url(0));
+        const int pages = (count + TeamCoordinator::maxPullRequestsPerCheck - 1) /
+                          TeamCoordinator::maxPullRequestsPerCheck;
+        // The first check asks the hanging one and stops; then one check per page.
+        for (int check = 0; check < pages + 1; ++check)
+            teams_->checkPullRequests(team_);
+        QCOMPARE(host_.pullRequestAsks.size(), pages + 1);
+        // The page it was given starts with the hanging one, which ends the batch at once.
+        QCOMPARE(host_.pullRequestAsks.first().first(), url(0));
+        QCOMPARE(host_.pullRequestAsks.at(1).first(), url(1));
+        for (const QStringList& asked : host_.pullRequestAsks)
+            QVERIFY(asked.size() <= TeamCoordinator::maxPullRequestsPerCheck);
+        for (int i = 1; i < count; ++i)
+            QVERIFY2(get(ids.at(i)).state == state::done, qPrintable(ids.at(i)));
+        QVERIFY(get(ids.first()).state != state::done);
+        QCOMPARE(history(ids.first(), "pull_request").size(), 1);
+    }
+
     // Criterion 6.
     void theLeaderClosesATaskByHandAndNobodyElseMay() {
         const QString id = task("Cart");

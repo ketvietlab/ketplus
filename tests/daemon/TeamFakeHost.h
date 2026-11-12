@@ -118,10 +118,16 @@ class FakeHost final : public TeamHostPort {
         (void)team;
         pullRequestAsks.append(urls);
         QHash<QString, PullRequestFact> facts;
-        for (const QString& url : urls)
+        for (const QString& url : urls) {
+            // As the probe does: one that does not answer is an error and ends the batch.
+            if (hangingPullRequests.contains(url)) {
+                facts.insert(url, {.state = {}, .mergeCommit = {}, .error = "timed out"});
+                break;
+            }
             facts.insert(
                 url, pullRequests.value(
                          url, {.state = QStringLiteral("open"), .mergeCommit = {}, .error = {}}));
+        }
         if (holdAnswers)
             held.append([done, facts] { done(facts); });
         else
@@ -157,6 +163,7 @@ class FakeHost final : public TeamHostPort {
     QList<QStringList> pullRequestAsks;
     QSet<QString> dirty;
     QSet<QString> unreadable;
+    QSet<QString> hangingPullRequests;
     QHash<QString, QStringList> changed;
     QSet<QString> merged;
     bool holdAnswers = false;

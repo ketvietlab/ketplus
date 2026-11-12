@@ -39,7 +39,11 @@ The leader had no way to close a task either.
    when the reason changes. The leader then closes the task by hand (point 5). A closed,
    unmerged pull request is said once as well, actionable for the leader; the task stays.
 3. **Bounds.** A check asks at most 20 distinct pull requests, one request each however many
-   tasks share it, and the next page the next time. A team is asked at most once a minute.
+   tasks share it. The pull requests are taken in sorted order, wrapping around, and a check
+   starts where the last one stopped asking: after its page, or at the first pull request
+   its batch left out. A pull request that never answers ends its batch, so it is asked
+   again only after every other one was; each check asks at least one, so every pull request
+   is asked within as many checks as there are. A team is asked at most once a minute.
    Checks run when the team is checked for merges (a member's turn ends, a client reads the
    team), every 2 minutes on a timer, and once after the daemon loads, so work merged while
    the board lagged or the daemon was stopped is reconciled.

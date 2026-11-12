@@ -72,24 +72,37 @@ void TeamCoordinator::checkPullRequests(const qint64 teamId) {
     if (last != pullRequestCheckedAt_.cend() && now - *last < pullRequestGap_)
         return;
     pullRequestCheckedAt_.insert(teamId, now);
-    // Bounded: one request per pull request, at most a page of them per check, the next page
-    // the next time, so a large board is gone through in turn.
+    // Bounded: one request per pull request, at most a page of them per check. The page starts
+    // where the last check stopped asking, in sorted order and wrapping around, so the board is
+    // gone through in turn and a pull request that never answers (it ends its batch) is asked
+    // again only after every other one was: each check asks at least one, so every pull
+    // request is asked within as many checks as there are pull requests.
     std::sort(urls.begin(), urls.end());
-    if (urls.size() > maxPullRequestsPerCheck) {
-        const int start = pullRequestCursor_.value(teamId) % urls.size();
-        QStringList page;
-        for (int i = 0; i < maxPullRequestsPerCheck; ++i)
-            page.append(urls.at((start + i) % urls.size()));
-        pullRequestCursor_.insert(teamId, start + maxPullRequestsPerCheck);
-        urls = page;
-    }
+    const QString cursor = pullRequestCursor_.value(teamId);
+    const int start =
+        static_cast<int>(std::lower_bound(urls.cbegin(), urls.cend(), cursor) - urls.cbegin()) %
+        static_cast<int>(urls.size());
+    QStringList page;
+    for (int i = 0; i < std::min<int>(maxPullRequestsPerCheck, urls.size()); ++i)
+        page.append(urls.at((start + i) % urls.size()));
+    // The one after the page, for a batch that asks every one of it.
+    const QString afterPage = urls.at((start + page.size()) % urls.size());
     pullRequestChecks_.insert(teamId);
-    host_->askPullRequests(*team, urls,
-                           [self = QPointer<TeamCoordinator>(this),
-                            teamId](const QHash<QString, PullRequestFact>& facts) {
+    host_->askPullRequests(*team, page,
+                           [self = QPointer<TeamCoordinator>(this), teamId, page,
+                            afterPage](const QHash<QString, PullRequestFact>& facts) {
                                if (!self)
                                    return;
                                self->pullRequestChecks_.remove(teamId);
+                               // A batch that stopped early leaves the rest out: the next check
+                               // starts at the first one it did not ask.
+                               QString next = afterPage;
+                               for (const QString& url : page)
+                                   if (!facts.contains(url)) {
+                                       next = url;
+                                       break;
+                                   }
+                               self->pullRequestCursor_.insert(teamId, next);
                                self->applyPullRequestFacts(teamId, facts);
                            });
 }

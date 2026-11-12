@@ -505,7 +505,9 @@ class TeamCoordinator : public QObject {
     QSet<qint64> mergeChecksAgain_;
     QSet<qint64> pullRequestChecks_;
     QHash<qint64, qint64> pullRequestCheckedAt_;
-    QHash<qint64, int> pullRequestCursor_;
+    // Per team, the pull request the next check starts at: the one after the last asked, so
+    // one that never answers cannot keep the others from being asked.
+    QHash<qint64, QString> pullRequestCursor_;
     QTimer* pullRequestTimer_{nullptr};
     int pullRequestPeriod_{defaultPullRequestPeriodMs};
     int pullRequestGap_{defaultPullRequestGapMs};
