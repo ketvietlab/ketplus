@@ -1,4 +1,5 @@
 #include "RemoteControlFixture.h"
+#include <QSet>
 #include <QUrlQuery>
 
 // Sealed session/worktree projection and transcript paging over the synthetic loopback relay.
@@ -31,7 +32,9 @@ QJsonObject indexRow(const QString& id, int generation, const QString& machine,
             {"lastEventCursor", 9},
             {"currentTurnSequence", 1},
             {"repositoryId", "repo-1"},
-            {"worktreeId", worktree}};
+            {"worktreeId", worktree},
+            // As the relay's sessionDto when the host sealed nothing.
+            {"encryptedMetadata", QJsonValue::Null}};
 }
 const QJsonObject metadata{{"branch", "feature/sealed"},
                            {"machineName", "builder"},
@@ -39,7 +42,11 @@ const QJsonObject metadata{{"branch", "feature/sealed"},
                            {"lastTurnStartedAt", "2026-11-12T08:00:00.000Z"},
                            {"lastTurnOutcome", "completed"},
                            {"title", "Sealed title"},
-                           {"state", "running"}};
+                           {"state", "running"},
+                           {"repositoryId", "repo-1"},
+                           {"repositoryLabel", "ketplus"},
+                           {"worktreeId", "wt-a"},
+                           {"worktreeLabel", "ketplus"}};
 
 // Plays the paired host behind the relay: opens each sealed restore request and answers with a
 // fragmented, host-signed page, as CloudControlClient::executeRestoreWindow does.
@@ -54,6 +61,15 @@ struct RestoreHost {
     QList<QJsonObject> payloads;
     bool tamper{false};
     int senderKeyVersion{1};
+    // The host refuses a root page with more events, as it does one too large for its byte cap.
+    int maximumEvents{128};
+    QSet<QString> failed;
+    QStringList cancelled;
+    // As the relay's commandDto: a missing optional field is null, never absent.
+    static QJsonValue orNull(const QJsonObject& command, const char* key) {
+        return command.contains(QLatin1String(key)) ? command.value(QLatin1String(key))
+                                                    : QJsonValue(QJsonValue::Null);
+    }
 
     QJsonObject event(int cursor, int turn, const QJsonObject& payload,
                       const QString& type = "assistant.message") const {
@@ -122,6 +138,11 @@ struct RestoreHost {
         if (path == prefix + "/v2/mobile/sessions/opaque-session/commands")
             return accept(QJsonDocument::fromJson(body).object());
         const QString responsesPrefix = prefix + "/v2/mobile/restore-requests/";
+        if (path.startsWith(responsesPrefix) && path.endsWith("/cancel")) {
+            cancelled.append(
+                path.mid(responsesPrefix.size()).chopped(QStringLiteral("/cancel").size()));
+            return std::pair{200, QJsonObject{{"ok", true}}};
+        }
         if (!path.startsWith(responsesPrefix) || !path.endsWith("/responses"))
             return std::nullopt;
         const auto id =
@@ -133,18 +154,19 @@ struct RestoreHost {
             if (value.toObject().value("responseCursor").toInteger() > after)
                 selected.append(value);
         return std::pair{
-            200, QJsonObject{{"requestId", id},
-                             {"ownerSubjectId", "fixture-owner"},
-                             {"sessionId", "opaque-session"},
-                             {"sessionGeneration", 3},
-                             {"snapshotCursor", command.value("snapshotCursor")},
-                             {"continuationOfRequestId", command.value("continuationOfRequestId")},
-                             {"continuationSequence", command.value("continuationSequence")},
-                             {"continuationDigest", command.value("continuationDigest")},
-                             {"afterCursor", after},
-                             {"nextCursor", responses.value(id).size()},
-                             {"status", "completed"},
-                             {"responses", selected}}};
+            200,
+            QJsonObject{{"requestId", id},
+                        {"ownerSubjectId", "fixture-owner"},
+                        {"sessionId", "opaque-session"},
+                        {"sessionGeneration", 3},
+                        {"snapshotCursor", command.value("snapshotCursor")},
+                        {"continuationOfRequestId", orNull(command, "continuationOfRequestId")},
+                        {"continuationSequence", command.value("continuationSequence")},
+                        {"continuationDigest", orNull(command, "continuationDigest")},
+                        {"afterCursor", after},
+                        {"nextCursor", responses.value(id).size()},
+                        {"status", failed.contains(id) ? "failed" : "completed"},
+                        {"responses", selected}}};
     }
     std::pair<int, QJsonObject> accept(QJsonObject command) {
         // The relay adds the routing scope and the owner it authenticated.
@@ -170,6 +192,19 @@ struct RestoreHost {
         }
         payloads.append(payload);
         requests.insert(id, command);
+        QJsonObject receipt;
+        for (const auto* key : {"id", "sessionId", "sessionGeneration", "kind", "snapshotCursor",
+                                "requestedByteCap", "continuationSequence"})
+            receipt.insert(QLatin1String(key), command.value(QLatin1String(key)));
+        for (const auto* key : {"continuationOfRequestId", "continuationDigest"})
+            receipt.insert(QLatin1String(key), orNull(command, key));
+        receipt.insert("status", "queued");
+        if (!payload.contains("large_event") &&
+            payload.value("event_limit").toInt() > maximumEvents) {
+            failed.insert(id);
+            responses.insert(id, QJsonArray{});
+            return {202, receipt};
+        }
         const auto bytes = QJsonDocument(page(payload)).toJson(QJsonDocument::Compact);
         const auto digest = hex(bytes);
         digests.insert(id, digest);
@@ -214,13 +249,6 @@ struct RestoreHost {
                 {"content", sealed}});
         }
         responses.insert(id, list);
-        QJsonObject receipt;
-        for (const auto* key :
-             {"id", "sessionId", "sessionGeneration", "kind", "snapshotCursor", "requestedByteCap",
-              "continuationOfRequestId", "continuationSequence", "continuationDigest"})
-            if (command.contains(QLatin1String(key)))
-                receipt.insert(QLatin1String(key), command.value(QLatin1String(key)));
-        receipt.insert("status", "queued");
         return {202, receipt};
     }
 };
@@ -258,8 +286,19 @@ class RemoteControlProjectionTest final : public QObject {
         pending.insert("encryptedMetadata",
                        sealedMetadata(fixture.host, "fresh-session", 1, 9, metadata));
         const auto stranger = indexRow("stranger-session", 1, "stranger-host", "wt-x");
+        // A host before sealed metadata, and one that seals it without the title and state.
+        const auto legacy = indexRow("legacy-session", 1, "linux-host", "wt-b");
+        network.replies.insert(prefix + "/v2/mobile/sessions/old-host-session/keys",
+                               QJsonArray{fixture.host.wrapSessionKey("old-host-session", 1, 1,
+                                                                      recipient, "linux-host", 1)});
+        auto oldHost = indexRow("old-host-session", 1, "linux-host", "wt-b");
+        auto withoutTitle = metadata;
+        withoutTitle.remove("title");
+        withoutTitle.remove("state");
+        oldHost.insert("encryptedMetadata",
+                       sealedMetadata(fixture.host, "old-host-session", 1, 9, withoutTitle));
         network.replies.insert(prefix + "/v2/mobile/sessions",
-                               QJsonArray{verified, tampered, pending, stranger});
+                               QJsonArray{verified, tampered, pending, stranger, legacy, oldHost});
         network.replies.insert(prefix + "/v2/mobile/worktrees",
                                QJsonArray{QJsonObject{{"workspaceId", "workspace"},
                                                       {"machineId", "linux-host"},
@@ -290,39 +329,40 @@ class RemoteControlProjectionTest final : public QObject {
         });
         QTRY_VERIFY(answered);
         const auto conversations = result.value("conversations").toArray();
-        QCOMPARE(conversations.size(), 2);
+        QCOMPARE(conversations.size(), 1);
         const auto shown = conversations.at(0).toObject();
         QCOMPARE(shown.value("id").toString(), QStringLiteral("opaque-session"));
-        QCOMPARE(shown.value("metadata").toString(), QStringLiteral("verified"));
         QCOMPARE(shown.value("title").toString(), QStringLiteral("Sealed title"));
         QCOMPARE(shown.value("state").toString(), QStringLiteral("running"));
         QCOMPARE(shown.value("updatedAt").toString(), QStringLiteral("2026-11-12T08:00:00.000Z"));
         QCOMPARE(shown.value("worktreeId").toString(), QStringLiteral("wt-a"));
         QCOMPARE(shown.value("branch").toString(), QStringLiteral("feature/sealed"));
-        // No key yet: listed with the relay's routing copy and no sealed fields.
-        const auto waiting = conversations.at(1).toObject();
-        QCOMPARE(waiting.value("id").toString(), QStringLiteral("fresh-session"));
-        QCOMPARE(waiting.value("metadata").toString(), QStringLiteral("pending"));
-        QVERIFY(!waiting.contains("branch"));
+        // Nothing the relay alone supplies reaches the projection.
         const auto serialized = QJsonDocument(result).toJson();
-        QVERIFY(!serialized.contains("Injected title"));
-        QVERIFY(!serialized.contains("attacker"));
+        for (const auto* forged : {"Relay title", "Injected title", "attacker", "ketplus-fix"})
+            QVERIFY2(!serialized.contains(forged), forged);
         QStringList rejected;
         for (const auto& value : result.value("rejected").toArray())
             rejected.append(value.toObject().value("id").toString() + "=" +
                             value.toObject().value("reason").toString());
         rejected.sort();
-        QCOMPARE(rejected, (QStringList{"stranger-session=unpinned_host",
-                                        "tampered-session=unauthenticated_session_metadata",
-                                        "wt-x=unpinned_host"}));
+        QCOMPARE(
+            rejected,
+            (QStringList{"fresh-session=session_key_pending", "legacy-session=metadata_absent",
+                         "old-host-session=host_upgrade_required", "stranger-session=unpinned_host",
+                         "tampered-session=unauthenticated_session_metadata",
+                         "wt-b=unsigned_index_entry", "wt-x=unpinned_host"}));
+        // The worktree comes from the host-sealed scope; the index only adds its revisions.
         const auto repositories = result.value("repositories").toArray();
         QCOMPARE(repositories.size(), 1);
+        QCOMPARE(repositories.at(0).toObject().value("label").toString(),
+                 QStringLiteral("ketplus"));
         const auto worktrees = repositories.at(0).toObject().value("worktrees").toArray();
-        QCOMPARE(worktrees.size(), 2);
-        QCOMPARE(worktrees.at(0).toObject().value("branch").toString(),
-                 QStringLiteral("feature/sealed"));
-        // A worktree whose only conversation is unverified shows no branch at all.
-        QVERIFY(!worktrees.at(1).toObject().contains("branch"));
+        QCOMPARE(worktrees.size(), 1);
+        const auto worktree = worktrees.at(0).toObject();
+        QCOMPARE(worktree.value("worktreeId").toString(), QStringLiteral("wt-a"));
+        QCOMPARE(worktree.value("branch").toString(), QStringLiteral("feature/sealed"));
+        QCOMPARE(worktree.value("catalogRevision").toInt(-1), 0);
     }
 
     void pagingReassemblesALargeEventAndPagesBackwardsLosslessly() {
@@ -376,6 +416,40 @@ class RemoteControlProjectionTest final : public QObject {
                 events.first().toObject().value("cursor").toInteger());
     }
 
+    void anOversizedPageIsRequestedAgainWithFewerEvents() {
+        FixtureTransport network;
+        ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+        EncryptedFixture fixture(client, network);
+        RemoteControlTestAccess::restorePoll(client, 1);
+        RestoreHost host(fixture);
+        host.clientSigning = CloudCrypto::fromBase64Url(
+            client.identity().value("keys").toObject().value("signingPublicKey").toString());
+        host.large = R"({"item_id":"item-big"})";
+        host.maximumEvents = 32;
+        network.handler = [&](const QNetworkRequest& request, const QByteArray& body) {
+            return host.answer(request, body);
+        };
+        auto target = session;
+        target.insert("lastEventCursor", 9);
+        QString failure = "pending";
+        QJsonObject page;
+        client.transcriptWindow(target, {}, [&](const QJsonValue& value, const QString& error) {
+            page = value.toObject();
+            failure = error;
+        });
+        QTRY_VERIFY(failure != "pending");
+        QVERIFY2(failure.isEmpty(), qPrintable(failure));
+        QCOMPARE(page.value("events").toArray().size(), 3);
+        QList<int> limits;
+        for (const auto& payload : std::as_const(host.payloads))
+            if (!payload.contains("large_event"))
+                limits.append(payload.value("event_limit").toInt());
+        QCOMPARE(limits, (QList<int>{128, 64, 32}));
+        // Every root was the same snapshot at the same position.
+        for (const auto& command : std::as_const(host.requests))
+            QCOMPARE(command.value("snapshotCursor").toInteger(), 9);
+    }
+
     void aTamperedRestoreResponseOrChangedHostKeyVersionIsNeverDelivered() {
         for (const bool tamper : {true, false}) {
             r03::resetCredentials();
@@ -406,6 +480,8 @@ class RemoteControlProjectionTest final : public QObject {
             QVERIFY(delivered.toObject().isEmpty());
             if (!tamper)
                 QVERIFY2(failure.contains("signing key changed"), qPrintable(failure));
+            // The refused request is cancelled at the relay instead of left to its deadline.
+            QTRY_COMPARE(host.cancelled.size(), 1);
         }
     }
 

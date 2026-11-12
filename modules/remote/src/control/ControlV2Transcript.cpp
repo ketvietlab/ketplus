@@ -81,7 +81,13 @@ struct ControlV2Client::RestoreState {
     QJsonObject current;
     QDateTime deadline;
     qint64 beforeCursor{0};
+    qint64 snapshotCursor{0};
     int eventLimit{128};
+    int turnLimit{3};
+    QString owner;
+    int byteCap{512 * 1024};
+    // The current request reached the relay, so abandoning it must cancel it there.
+    bool created{false};
     // Response fragments of the current request.
     qint64 responseCursor{0};
     int attempt{0};
@@ -104,8 +110,42 @@ void ControlV2Client::failRestore(const std::shared_ptr<RestoreState>& state,
                                   const QString& error) {
     if (std::exchange(state->finished, true))
         return;
+    if (state->created && state->epoch == epoch_)
+        // Best effort: the host stops serving it now instead of at its deadline.
+        authorized("POST",
+                   "/v2/mobile/restore-requests/" + segment(state->current.value("id").toString()) +
+                       "/cancel",
+                   QJsonObject{}, [](const QJsonValue&, const QString&) {});
     const auto done = std::move(state->done);
     done({}, error.isEmpty() ? QStringLiteral("restore_window_unavailable") : error);
+}
+
+void ControlV2Client::beginRoot(const std::shared_ptr<RestoreState>& state) {
+    // The relay allows a restore request (and its continuations, which cannot outlive it)
+    // 10 minutes; keep a margin for clock skew.
+    state->deadline = QDateTime::currentDateTimeUtc().addSecs(590);
+    state->deadline.setTime(QTime(state->deadline.time().hour(), state->deadline.time().minute(),
+                                  state->deadline.time().second()));
+    const auto token = QUuid::createUuid().toString(QUuid::Id128);
+    const auto& session = state->session;
+    state->root = {{"id", "restore_" + token},
+                   {"idempotencyKey", "restore_idempotency_" + token},
+                   {"workspaceId", session.value("workspaceId")},
+                   {"machineId", session.value("machineId")},
+                   {"sessionId", session.value("id")},
+                   {"sessionGeneration", session.value("generation")},
+                   {"capability", "transcript.restore_window"},
+                   {"kind", "transcript.restore_window"},
+                   {"ownerSubjectId", state->owner},
+                   {"credentialEpoch", keyVersion_},
+                   {"snapshotCursor", state->snapshotCursor},
+                   {"requestedByteCap", state->byteCap},
+                   {"continuationSequence", 0},
+                   {"deadlineAt", state->deadline.toString(Qt::ISODate)}};
+    startRestore(state, state->root,
+                 {{"before_cursor", state->beforeCursor},
+                  {"event_limit", state->eventLimit},
+                  {"turn_limit", state->turnLimit}});
 }
 
 void ControlV2Client::transcriptWindow(const QJsonObject& session, const QJsonObject& window,
@@ -126,37 +166,20 @@ void ControlV2Client::transcriptWindow(const QJsonObject& session, const QJsonOb
     auto state = std::make_shared<RestoreState>();
     state->session = session;
     state->beforeCursor = before;
+    state->snapshotCursor = snapshot;
     state->eventLimit = eventLimit;
+    state->turnLimit = turnLimit;
+    state->owner = owner;
+    state->byteCap = byteCap;
     state->epoch = epoch_;
     state->done = std::move(done);
-    state->deadline = QDateTime::currentDateTimeUtc().addSecs(300);
-    state->deadline.setTime(QTime(state->deadline.time().hour(), state->deadline.time().minute(),
-                                  state->deadline.time().second()));
-    const auto token = QUuid::createUuid().toString(QUuid::Id128);
-    state->root = {{"id", "restore_" + token},
-                   {"idempotencyKey", "restore_idempotency_" + token},
-                   {"workspaceId", session.value("workspaceId")},
-                   {"machineId", session.value("machineId")},
-                   {"sessionId", session.value("id")},
-                   {"sessionGeneration", session.value("generation")},
-                   {"capability", "transcript.restore_window"},
-                   {"kind", "transcript.restore_window"},
-                   {"ownerSubjectId", owner},
-                   {"credentialEpoch", keyVersion_},
-                   {"snapshotCursor", snapshot},
-                   {"requestedByteCap", byteCap},
-                   {"continuationSequence", 0},
-                   {"deadlineAt", state->deadline.toString(Qt::ISODate)}};
-    sessionKeys(session, [this, state, before, eventLimit, turnLimit](const QByteArray& signing,
-                                                                      const QString& error) {
+    sessionKeys(session, [this, state](const QByteArray& signing, const QString& error) {
         if (!error.isEmpty()) {
             failRestore(state, error);
             return;
         }
         state->signing = signing;
-        startRestore(
-            state, state->root,
-            {{"before_cursor", before}, {"event_limit", eventLimit}, {"turn_limit", turnLimit}});
+        beginRoot(state);
     });
 }
 
@@ -167,6 +190,7 @@ void ControlV2Client::startRestore(const std::shared_ptr<RestoreState>& state,
         return;
     }
     state->current = request;
+    state->created = false;
     state->responseCursor = 0;
     state->attempt = 0;
     state->responses.clear();
@@ -202,20 +226,24 @@ void ControlV2Client::startRestore(const std::shared_ptr<RestoreState>& state,
                        failRestore(state, failure);
                        return;
                    }
-                   for (const auto* key :
-                        {"id", "sessionId", "sessionGeneration", "kind", "snapshotCursor",
-                         "requestedByteCap", "continuationOfRequestId", "continuationDigest"})
-                       if (receipt.value(QLatin1String(key)) != request.value(QLatin1String(key))) {
-                           failRestore(state, "Restore request scope changed.");
-                           return;
-                       }
-                   if (receipt.value("continuationSequence").toInteger(0) !=
+                   bool same = true;
+                   for (const auto* key : {"id", "sessionId", "sessionGeneration", "kind",
+                                           "snapshotCursor", "requestedByteCap"})
+                       same &=
+                           receipt.value(QLatin1String(key)) == request.value(QLatin1String(key));
+                   // The relay sends null continuation fields for a root request.
+                   for (const auto* key : {"continuationOfRequestId", "continuationDigest"})
+                       same &= receipt.value(QLatin1String(key)).toString() ==
+                               request.value(QLatin1String(key)).toString();
+                   if (!same ||
+                       receipt.value("continuationSequence").toInteger(0) !=
                            request.value("continuationSequence").toInteger(0) ||
                        !QStringList{"queued", "claimed", "completed"}.contains(
                            receipt.value("status").toString())) {
                        failRestore(state, "Restore request scope changed.");
                        return;
                    }
+                   state->created = true;
                    pollRestore(state);
                });
 }
@@ -344,6 +372,15 @@ void ControlV2Client::pollRestore(const std::shared_ptr<RestoreState>& state) {
                 return;
             }
             if (status != "queued" && status != "claimed") {
+                // The host refuses a page whose sealed fragments exceed the byte cap; ask for
+                // fewer events at the same snapshot so backward paging never stops there.
+                if (request.value("continuationSequence").toInteger(0) == 0 &&
+                    state->eventLimit > 1) {
+                    state->created = false;
+                    state->eventLimit = qMax(1, state->eventLimit / 2);
+                    beginRoot(state);
+                    return;
+                }
                 failRestore(state, {});
                 return;
             }

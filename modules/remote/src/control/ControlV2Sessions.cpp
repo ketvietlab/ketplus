@@ -72,7 +72,7 @@ void ControlV2Client::senderKey(const QString& id, int version,
                     return;
                 }
             } else if (hostPins_.value(pin).toString() != fingerprint) {
-                done({}, "This host is not paired with this computer.");
+                done({}, QString::fromLatin1(control_v2::hostNotPaired));
                 return;
             }
             done(signing, {});

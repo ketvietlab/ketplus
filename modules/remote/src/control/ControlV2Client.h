@@ -67,6 +67,7 @@ class ControlV2Client final : public QObject {
     void projectNext(const std::shared_ptr<ProjectionState>& state);
     void finishProjection(const std::shared_ptr<ProjectionState>& state);
     [[nodiscard]] bool hostPinned(const QString& machineId) const;
+    void beginRoot(const std::shared_ptr<RestoreState>& state);
     void startRestore(const std::shared_ptr<RestoreState>& state, const QJsonObject& request,
                       const QJsonObject& payload);
     void pollRestore(const std::shared_ptr<RestoreState>& state);

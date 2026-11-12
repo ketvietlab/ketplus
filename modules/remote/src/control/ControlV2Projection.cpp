@@ -12,35 +12,48 @@ bool boundedText(const QJsonValue& value, qsizetype maximum, bool required = tru
         return !required;
     return value.isString() && value.toString().toUtf8().size() <= maximum;
 }
-QJsonObject reject(const QString& kind, const QJsonObject& entry, const QString& reason) {
-    return {{"kind", kind},
-            {"id", entry.value(kind == "worktree" ? "worktreeId" : "id").toString().left(256)},
-            {"machineId", entry.value("machineId").toString().left(256)},
-            {"reason", reason}};
+QJsonObject reject(const QString& kind, const QJsonObject& entry, const QString& reason,
+                   const QString& detail = {}) {
+    QJsonObject row{
+        {"kind", kind},
+        {"id", entry.value(kind == "worktree" ? "worktreeId" : "id").toString().left(256)},
+        {"machineId", entry.value("machineId").toString().left(256)},
+        {"reason", reason}};
+    if (!detail.isEmpty())
+        row.insert("detail", detail.left(512));
+    return row;
 }
-// The fields the host seals for each conversation (CloudControlClient::sessionSnapshots).
+// A stable reason for a failed key verification; the message itself goes in `detail`.
+QString keyFailure(const QString& error) {
+    if (error == QLatin1String(control_v2::noSessionKeyGrant))
+        return "session_key_pending";
+    if (error == QLatin1String(control_v2::hostNotPaired))
+        return "host_key_not_pinned";
+    return "verification_failed";
+}
+// The fields the host seals for each conversation (CloudControlClient::sessionSnapshots). Only
+// these are shown; the relay's plaintext routing copy never reaches the projection.
 QString verifiedMetadata(const QJsonObject& metadata, QJsonObject* row) {
+    if (!boundedText(metadata.value("title"), 1024) || !boundedText(metadata.value("state"), 64))
+        return "host_upgrade_required";
     if (!boundedText(metadata.value("branch"), 1024) ||
         !boundedText(metadata.value("machineName"), 512) ||
         !metadata.value("worktreeExists").isBool() ||
-        !boundedText(metadata.value("title"), 1024, false) ||
-        !boundedText(metadata.value("state"), 64, false) ||
+        !boundedText(metadata.value("repositoryId"), 128) ||
+        !boundedText(metadata.value("worktreeId"), 128) ||
+        !boundedText(metadata.value("repositoryLabel"), 512) ||
+        !boundedText(metadata.value("worktreeLabel"), 512) ||
         !boundedText(metadata.value("lastTurnStartedAt"), 64, false) ||
         !boundedText(metadata.value("lastTurnOutcome"), 32, false) ||
         !boundedText(metadata.value("number"), 16, false))
         return "invalid_session_metadata";
-    // Daemons that seal the title and state are authoritative over the relay's plaintext copy.
-    for (const auto* key : {"title", "state"})
-        if (metadata.value(QLatin1String(key)).isString())
-            row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
-    row->insert("branch", metadata.value("branch"));
-    row->insert("machineName", metadata.value("machineName"));
-    row->insert("worktreeExists", metadata.value("worktreeExists"));
+    for (const auto* key : {"title", "state", "branch", "machineName", "worktreeExists",
+                            "repositoryId", "repositoryLabel", "worktreeId", "worktreeLabel"})
+        row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
     row->insert("updatedAt", metadata.value("lastTurnStartedAt").toString());
     for (const auto* key : {"lastTurnOutcome", "number", "awaitingReply"})
         if (metadata.contains(QLatin1String(key)))
             row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
-    row->insert("metadata", "verified");
     return {};
 }
 } // namespace
@@ -57,9 +70,10 @@ struct ControlV2Client::ProjectionState {
 bool ControlV2Client::hostPinned(const QString& machineId) const {
     if (machineId.isEmpty())
         return false;
-    // A client paired before pins adopts its host on the first key read (see senderKey).
+    // A client paired before pins adopts its host through an event read (see senderKey); until
+    // then no relay-named machine is trusted here.
     if (!hostPinsStored_)
-        return credential_.contains("deviceId");
+        return false;
     const auto prefix = machineId + '/';
     for (auto it = hostPins_.begin(); it != hostPins_.end(); ++it)
         if (it.key().startsWith(prefix))
@@ -121,17 +135,15 @@ void ControlV2Client::projectNext(const std::shared_ptr<ProjectionState>& state)
         projectNext(state);
         return;
     }
+    // Routing scope only: everything shown comes from the sealed metadata below.
     QJsonObject row;
-    for (const auto* key :
-         {"id", "generation", "workspaceId", "machineId", "adapter", "title", "state",
-          "lastEventCursor", "currentTurnSequence", "repositoryId", "repositoryLabel", "worktreeId",
-          "worktreeLabel", "workspaceLabel", "workspaceRevision", "archivedAt"})
+    for (const auto* key : {"id", "generation", "workspaceId", "machineId", "adapter",
+                            "lastEventCursor", "currentTurnSequence", "workspaceRevision"})
         if (session.contains(QLatin1String(key)))
             row.insert(QLatin1String(key), session.value(QLatin1String(key)));
-    if (!session.contains("encryptedMetadata")) {
-        // Daemons before sealed metadata: only the relay's routing copy exists.
-        row.insert("metadata", "absent");
-        state->conversations.append(row);
+    if (!session.value("encryptedMetadata").isObject()) {
+        // The relay sends null when the host sealed nothing; such a row cannot be verified.
+        state->rejected.append(reject("conversation", session, "metadata_absent"));
         projectNext(state);
         return;
     }
@@ -152,15 +164,10 @@ void ControlV2Client::projectNext(const std::shared_ptr<ProjectionState>& state)
                             {"machineId", machine}};
     sessionKeys(scope, [this, state, session, row, content, cursor,
                         turn](const QByteArray& signing, const QString& error) mutable {
-        if (error == QLatin1String(control_v2::noSessionKeyGrant)) {
-            // A first heartbeat can arrive before the wrapped key: list the row, no sealed fields.
-            row.insert("metadata", "pending");
-            state->conversations.append(row);
-            projectNext(state);
-            return;
-        }
         if (!error.isEmpty()) {
-            state->rejected.append(reject("conversation", session, error));
+            // Includes a first heartbeat that arrives before its wrapped key: the next
+            // projection shows the row once the host has granted it.
+            state->rejected.append(reject("conversation", session, keyFailure(error), error));
             projectNext(state);
             return;
         }
@@ -201,57 +208,55 @@ void ControlV2Client::projectNext(const std::shared_ptr<ProjectionState>& state)
 }
 
 void ControlV2Client::finishProjection(const std::shared_ptr<ProjectionState>& state) {
-    // Branches are known only from verified conversation metadata, never from the index.
-    QHash<QString, QString> branches;
-    for (const auto& value : std::as_const(state->conversations)) {
-        const auto row = value.toObject();
+    // Repositories and worktrees come from the host-sealed scope of verified conversations. The
+    // relay's worktree index is unsigned: it only adds revisions to a worktree verified that way.
+    QHash<QString, QJsonObject> indexed;
+    for (const auto& value : std::as_const(state->worktrees)) {
+        const auto entry = value.toObject();
         const auto key =
-            row.value("machineId").toString() + '\n' + row.value("worktreeId").toString();
-        if (row.value("metadata") == "verified" && !branches.contains(key))
-            branches.insert(key, row.value("branch").toString());
+            entry.value("machineId").toString() + '\n' + entry.value("worktreeId").toString();
+        if (!indexed.contains(key))
+            indexed.insert(key, entry);
     }
     QJsonArray repositories;
     QHash<QString, qsizetype> repositoryIndex;
-    QSet<QString> seen;
-    for (const auto& value : std::as_const(state->worktrees)) {
-        const auto entry = value.toObject();
-        const auto machine = entry.value("machineId").toString();
-        const auto repository = entry.value("repositoryId").toString();
-        const auto worktree = entry.value("worktreeId").toString();
-        if (machine.isEmpty() || repository.isEmpty() || repository.size() > 128 ||
-            worktree.isEmpty() || worktree.size() > 128 ||
-            !boundedText(entry.value("repositoryLabel"), 512, false) ||
-            !boundedText(entry.value("worktreeLabel"), 512, false) ||
-            seen.contains(machine + '\n' + worktree)) {
-            state->rejected.append(reject("worktree", entry, "invalid_index_entry"));
+    QSet<QString> shown;
+    for (const auto& value : std::as_const(state->conversations)) {
+        const auto row = value.toObject();
+        const auto machine = row.value("machineId").toString();
+        const auto worktree = row.value("worktreeId").toString();
+        const auto key = machine + '\n' + row.value("repositoryId").toString();
+        if (worktree.isEmpty() || shown.contains(machine + '\n' + worktree))
             continue;
-        }
-        if (!hostPinned(machine)) {
-            state->rejected.append(reject("worktree", entry, "unpinned_host"));
-            continue;
-        }
-        seen.insert(machine + '\n' + worktree);
-        const auto key = machine + '\n' + repository;
+        shown.insert(machine + '\n' + worktree);
         if (!repositoryIndex.contains(key)) {
             repositoryIndex.insert(key, repositories.size());
             repositories.append(QJsonObject{{"machineId", machine},
-                                            {"repositoryId", repository},
-                                            {"label", entry.value("repositoryLabel").toString()},
+                                            {"repositoryId", row.value("repositoryId")},
+                                            {"label", row.value("repositoryLabel")},
                                             {"worktrees", QJsonArray{}}});
         }
+        QJsonObject item{{"worktreeId", worktree},
+                         {"label", row.value("worktreeLabel")},
+                         {"branch", row.value("branch")},
+                         {"exists", row.value("worktreeExists")}};
+        const auto entry = indexed.value(machine + '\n' + worktree);
+        if (entry.value("repositoryId") == row.value("repositoryId"))
+            for (const auto* revision : {"catalogRevision", "lifecycleRevision"})
+                if (entry.value(QLatin1String(revision)).isDouble())
+                    item.insert(QLatin1String(revision), entry.value(QLatin1String(revision)));
         auto group = repositories.at(repositoryIndex.value(key)).toObject();
         auto worktrees = group.value("worktrees").toArray();
-        QJsonObject item{{"worktreeId", worktree},
-                         {"label", entry.value("worktreeLabel").toString()},
-                         {"catalogRevision", entry.value("catalogRevision")},
-                         {"lifecycleRevision", entry.value("lifecycleRevision")}};
-        if (const auto branch = branches.constFind(machine + '\n' + worktree);
-            branch != branches.cend())
-            item.insert("branch", *branch);
         worktrees.append(item);
         group.insert("worktrees", worktrees);
         repositories.replace(repositoryIndex.value(key), group);
     }
+    for (auto it = indexed.cbegin(); it != indexed.cend(); ++it)
+        if (!shown.contains(it.key()))
+            state->rejected.append(reject("worktree", it.value(),
+                                          hostPinned(it.value().value("machineId").toString())
+                                              ? "unsigned_index_entry"
+                                              : "unpinned_host"));
     const auto done = std::move(state->done);
     done(QJsonObject{{"repositories", repositories},
                      {"conversations", state->conversations},

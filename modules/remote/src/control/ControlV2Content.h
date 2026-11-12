@@ -10,6 +10,8 @@ namespace ketplus::remote::control_v2 {
 // sessionKeys() reports this when the host has not wrapped the key for this device yet.
 inline constexpr char noSessionKeyGrant[] =
     "No host-signed session key was granted to this device.";
+// senderKey() reports this when the relay serves host keys that no pin names.
+inline constexpr char hostNotPaired[] = "This host is not paired with this computer.";
 inline QString segment(const QString& value) {
     return QString::fromUtf8(QUrl::toPercentEncoding(value));
 }

@@ -806,7 +806,13 @@ QJsonArray CloudControlClient::sessionSnapshots(
                  {QStringLiteral("lastTurnOutcome"), lastTurnOutcome(session)},
                  // A paired Desktop shows these from the host-signed copy, not the relay's.
                  {QStringLiteral("title"), snapshot.value(QStringLiteral("title"))},
-                 {QStringLiteral("state"), snapshot.value(QStringLiteral("state"))}});
+                 {QStringLiteral("state"), snapshot.value(QStringLiteral("state"))},
+                 {QStringLiteral("repositoryId"), context.value(QStringLiteral("repositoryId"))},
+                 {QStringLiteral("repositoryLabel"),
+                  context.value(QStringLiteral("repositoryLabel"))},
+                 {QStringLiteral("worktreeId"), context.value(QStringLiteral("worktreeId"))},
+                 {QStringLiteral("worktreeLabel"),
+                  context.value(QStringLiteral("worktreeLabel"))}});
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.
