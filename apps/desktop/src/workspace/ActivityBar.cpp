@@ -414,7 +414,7 @@ void ActivityBar::setAccount(const QString& name) {
 
 void ActivityBar::refreshIdentityText() {
     // A long name ends in "…" before the chevron; the tooltip keeps all of it.
-    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    const QString full = accountName_.isEmpty() ? tr("ketPlus") : accountName_;
     QString name = full;
     // Before it is laid out the label has no width yet; the button's resize elides again.
     if (identityButton_->isVisible() && identityName_->width() > 0)

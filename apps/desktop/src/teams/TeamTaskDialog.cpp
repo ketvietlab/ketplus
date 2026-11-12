@@ -399,7 +399,7 @@ void TeamTaskDialog::rebuild() {
         line->addWidget(time, 0, Qt::AlignTop);
         auto* text = new Text(QStringLiteral("%1 · %2").arg(
                                   actor == QStringLiteral("user")     ? tr("You")
-                                  : actor == QStringLiteral("daemon") ? tr("KetPlus")
+                                  : actor == QStringLiteral("daemon") ? tr("ketPlus")
                                   : who.isEmpty() ? actor
                                                   : who.value(QStringLiteral("name")).toString(),
                                   entry.value(QStringLiteral("text")).toString()),

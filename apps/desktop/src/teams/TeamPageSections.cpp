@@ -153,7 +153,7 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
         // Beside the choices: who asked, when, and what the answer unblocks.
         const QString raisedBy = decision.value(QStringLiteral("raised_by")).toString();
         QStringList about{
-            id, raisedBy == QStringLiteral("daemon") ? tr("KetPlus") : memberName(team, raisedBy),
+            id, raisedBy == QStringLiteral("daemon") ? tr("ketPlus") : memberName(team, raisedBy),
             when(decision.value(QStringLiteral("raised_at")).toString())};
         if (const QString task = decision.value(QStringLiteral("task_id")).toString();
             !task.isEmpty())
@@ -416,7 +416,7 @@ void TeamPage::buildUpdates() {
         auto* text = new Text(update.value(QStringLiteral("text")).toString(), row);
         text->setObjectName(QStringLiteral("teamUpdate"));
         const QString actor = update.value(QStringLiteral("actor")).toString();
-        QStringList from{actor == QStringLiteral("daemon") ? tr("KetPlus")
+        QStringList from{actor == QStringLiteral("daemon") ? tr("ketPlus")
                          : actor == QStringLiteral("user") ? tr("You")
                                                            : memberName(team, actor)};
         if (const QString task = update.value(QStringLiteral("task_id")).toString();
