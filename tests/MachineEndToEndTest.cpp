@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardItemModel>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -109,7 +110,10 @@ class LoopbackDaemon {
 };
 
 // As MainWindow::ensureRemoteControl does with its own Connections page: every listed machine's
-// backend is registered, and the activity bar's picker lists it after This Mac.
+// backend is registered, and the activity bar's picker lists it after This Mac. The window's own
+// wiring (startLinuxMachines) attaches this user's saved SSH machines and the deployed Relay, so
+// this flow uses the same Connections classes over the fixtures; MachineWindowTest covers that
+// wiring with fake backends.
 void followConnections(QObject* context, LinuxMachinesSection& connections, MainWindow& window,
                        ActivityBar* bar,
                        std::function<remote::MachineBackend*(const QString&)> backendOf) {
@@ -208,6 +212,8 @@ class MachineEndToEndTest final : public QObject {
   private slots:
     void initTestCase() {
         QVERIFY(settings_.isValid() && workspace_.isValid());
+        // Application data (repository metadata, stores) stays out of the user's folders.
+        QStandardPaths::setTestModeEnabled(true);
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
         // This Mac's daemon is never this user's running one.
@@ -379,11 +385,13 @@ class MachineEndToEndTest final : public QObject {
         // and the window never shows This Mac's lists instead.
         daemon.stop();
         QTRY_VERIFY_WITH_TIMEOUT(backend->connectionState() != State::Connected, patience);
+        // ADR 0119: a route that lost its host is Reconnecting, then Offline.
         const auto down = [](const QString& text) {
-            return text.contains("Reconnecting") || text.contains("Offline") ||
-                   text.contains("Connecting");
+            return text.contains("Reconnecting") || text.contains("Offline");
         };
-        QTRY_VERIFY(pickerLabels.size() == 1 && down(pickerLabels.first()));
+        QTRY_VERIFY_WITH_TIMEOUT(pickerLabels.size() == 1 && down(pickerLabels.first()) &&
+                                     down(machinePicker(bar)->currentText()),
+                                 patience);
         QTRY_VERIFY(down(rowState()));
         QTRY_VERIFY(!composer->isEnabled());
         auto* reason = view->findChild<QLabel*>("machineComposerReason");
@@ -603,11 +611,13 @@ class MachineEndToEndTest final : public QObject {
         // say so, and the window never shows This Mac's lists instead.
         relay.offline = true;
         QTRY_VERIFY_WITH_TIMEOUT(backend->connectionState() != State::Connected, patience);
+        // ADR 0119: a route that lost its host is Reconnecting, then Offline.
         const auto down = [](const QString& text) {
-            return text.contains("Reconnecting") || text.contains("Offline") ||
-                   text.contains("Connecting");
+            return text.contains("Reconnecting") || text.contains("Offline");
         };
-        QTRY_VERIFY(pickerLabels.size() == 1 && down(pickerLabels.first()));
+        QTRY_VERIFY_WITH_TIMEOUT(pickerLabels.size() == 1 && down(pickerLabels.first()) &&
+                                     down(machinePicker(bar)->currentText()),
+                                 patience);
         QTRY_VERIFY(down(rowState()));
         QTRY_VERIFY(!composer->isEnabled());
         auto* reason = view->findChild<QLabel*>("machineComposerReason");
