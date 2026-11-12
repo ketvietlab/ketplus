@@ -93,10 +93,16 @@ QString MachineWorkspaceView::openSessionId() const {
 void MachineWorkspaceView::catalogChanged() {
     // The selected machine changed or its lists did: restore what that machine last showed.
     const QString machine = catalog_->machineId();
-    if (session_ == nullptr || session_->machineId() != machine)
-        showSession(lastByMachine_.value(machine));
-    else
-        render();
+    if (session_ == nullptr || session_->machineId() != machine) {
+        showSession(lastByMachine_.value(machine), true);
+        return;
+    }
+    // The listing is the machine's word on whether a turn still runs, for example one that
+    // ended while the link was down.
+    const remote::MachineConversation row = catalog_->conversation(session_->sessionId());
+    if (!row.sessionId.isEmpty())
+        session_->setRunning(row.running());
+    render();
 }
 
 void MachineWorkspaceView::openConversation(const QString& sessionId) {
@@ -116,8 +122,7 @@ void MachineWorkspaceView::bind(const QString& sessionId, const qint64 generatio
     if (auto previous = lastByMachine_.value(machine); previous != nullptr)
         previous->deleteLater();
     lastByMachine_.insert(machine, session);
-    showSession(session);
-    session->load();
+    showSession(session, true);
     emit conversationOpened(machine, sessionId);
 }
 
@@ -126,14 +131,21 @@ void MachineWorkspaceView::startNewConversation(const QString& repositoryId) {
     const QString machine = catalog_->machineId();
     if (auto previous = lastByMachine_.take(machine); previous != nullptr)
         previous->deleteLater();
-    showSession(nullptr);
+    showSession(nullptr, false);
     composer_->setFocus();
 }
 
-void MachineWorkspaceView::showSession(MachineConversationSession* session) {
-    if (session_ != nullptr)
+void MachineWorkspaceView::showSession(MachineConversationSession* session, const bool reload) {
+    if (session_ != nullptr && session_ != session) {
         disconnect(session_, nullptr, this, nullptr);
+        // Deselected or its machine switched away: the route stops following it, and its
+        // cached transcript stays for when that machine is shown again.
+        session_->close();
+    }
+    const bool shown = session_ == session;
     session_ = session;
+    if (session_ != nullptr && !shown && reload)
+        session_->load();
     if (session_ != nullptr)
         connect(session_, &MachineConversationSession::changed, this,
                 &MachineWorkspaceView::render);
@@ -197,8 +209,12 @@ void MachineWorkspaceView::renderWorktrees() {
     const QSignalBlocker blocker(worktrees_);
     worktrees_->clear();
     auto* model = qobject_cast<QStandardItemModel*>(worktrees_->model());
+    // A repository the machine does not list (a conversation's own worktree) offers them all.
+    bool known = false;
+    for (const auto& repository : catalog_->repositories())
+        known = known || repository.id == newConversationRepository_;
     for (const auto& repository : catalog_->repositories()) {
-        if (!newConversationRepository_.isEmpty() && repository.id != newConversationRepository_)
+        if (known && repository.id != newConversationRepository_)
             continue;
         for (const auto& worktree : repository.worktrees) {
             QString label = repository.label + QStringLiteral(" · ") + worktree.label;

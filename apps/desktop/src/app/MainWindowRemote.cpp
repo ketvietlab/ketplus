@@ -29,7 +29,6 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
         return;
     }
 
-    setMachineWorkspaceVisible(false);
     setAgentWorkspaceVisible(false);
     setAtlasWorkspaceVisible(false);
     if (remoteControl_ == nullptr) {

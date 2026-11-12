@@ -37,7 +37,8 @@ MachineConversationSession::MachineConversationSession(remote::MachineBackend* b
                 const State previous = lastState_;
                 lastState_ = state;
                 // Recovery is automatic: what happened while away is read again.
-                if (state == State::Connected && previous != State::Connected)
+                // Only a conversation still shown is followed again.
+                if (state == State::Connected && previous != State::Connected && open_)
                     load();
                 emit changed();
             });
@@ -82,9 +83,18 @@ QString MachineConversationSession::blockedReason() const {
     return {};
 }
 
+MachineConversationSession::~MachineConversationSession() { close(); }
+
+void MachineConversationSession::close() {
+    if (open_ && backend_ != nullptr)
+        backend_->conversationClosed(sessionId_);
+    open_ = false;
+}
+
 void MachineConversationSession::load() {
     if (backend_ == nullptr)
         return;
+    open_ = true;
     backend_->transcriptWindow(sessionId_, generation_, {{QStringLiteral("turn_limit"), 3}},
                                guarded([this](const QJsonObject& result, const QString& error) {
                                    if (!error.isEmpty()) {
@@ -134,7 +144,8 @@ void MachineConversationSession::loadApprovalsPage(
         }));
 }
 
-void MachineConversationSession::applyEvent(const QJsonObject& event) {
+void MachineConversationSession::applyEvent(const QJsonObject& delivered) {
+    const QJsonObject event = remote::normalizedEvent(delivered);
     if (event.value(QLatin1String("session_id")).toString() != sessionId_)
         return;
     if (event.contains(QLatin1String("session_generation")) &&

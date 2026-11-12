@@ -268,6 +268,15 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(repositoryOf.value(main), main);
         QCOMPARE(repositoryOf.value(linked), main);
         QCOMPARE(repositoryOf.value(broken), broken);
+
+        // A main checkout remembered through a symlink names its canonical repository too.
+        QVERIFY(QFile::link(main, directory.filePath("app-link")));
+        const auto linkPath = QDir(directory.path()).filePath("app-link");
+        QVERIFY(journal.rememberWorktree(linkPath));
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            if (value.toObject().value("path").toString() == linkPath)
+                QCOMPARE(value.toObject().value("repository_path").toString(), main);
     }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;

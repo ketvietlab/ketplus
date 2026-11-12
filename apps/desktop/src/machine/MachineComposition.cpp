@@ -45,6 +45,8 @@ MachineWorkspaceView* MachineComposition::view(QWidget* parent) {
 
 MachineWorkspaceView* MachineComposition::existingView() const { return view_; }
 
+bool MachineComposition::shown() const { return view_ != nullptr && !view_->isHidden(); }
+
 QVector<SidebarRepository> MachineComposition::sidebarRepositories() const {
     if (!remoteSelected())
         return {};

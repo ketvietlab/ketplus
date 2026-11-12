@@ -36,6 +36,8 @@ class MachineComposition final : public QObject {
     // The Agent Workspace of the selected remote machine, created on first use.
     [[nodiscard]] MachineWorkspaceView* view(QWidget* parent);
     [[nodiscard]] MachineWorkspaceView* existingView() const;
+    // The remote Agent Workspace is the window's current workspace.
+    [[nodiscard]] bool shown() const;
     // The sidebar rows of the selected remote machine.
     [[nodiscard]] QVector<SidebarRepository> sidebarRepositories() const;
 

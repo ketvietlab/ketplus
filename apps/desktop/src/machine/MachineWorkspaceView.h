@@ -45,7 +45,8 @@ class MachineWorkspaceView final : public QWidget {
     void renderWorktrees();
     void submit();
     void createConversation(const QString& prompt);
-    void showSession(MachineConversationSession* session);
+    // `reload` reads the conversation again (and the route follows it) when it was not shown.
+    void showSession(MachineConversationSession* session, bool reload);
     void bind(const QString& sessionId, qint64 generation, bool running);
     void finishCreate(const QString& machine, const QJsonObject& result, const QString& error);
 

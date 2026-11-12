@@ -88,6 +88,8 @@ class MainWindow final : public QMainWindow {
     void switchToWorktree(const QString& path);
     void setFileContextWorktree(const QString& path);
     void followConversationCheckout();
+    // ADR 0119: the machines Connections registered and the one the picker selected.
+    MachineComposition* machineComposition();
 
   signals:
     void newWindowRequested();
@@ -139,11 +141,9 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
-    // ADR 0119: the picker's machine; a remote one is composed through its MachineBackend.
+    // ADR 0119: a remote machine is composed through its MachineBackend (MainWindowMachine).
     void selectMachine(const QString& machineId);
     void setMachineWorkspaceVisible(bool visible);
-    // Created on first use; Connections registers each machine's backend in its selection.
-    MachineComposition* machineComposition();
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
     void setShellMode(ActivityBar::Mode mode);
@@ -470,7 +470,6 @@ class MainWindow final : public QMainWindow {
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     MachineComposition* machines_{nullptr};
-    bool machineWorkspaceMode_{false};
     // The Create worktree card asked to open Agent Workspace on what it creates.
     bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};

@@ -1,4 +1,5 @@
 #include "FakeMachineBackend.h"
+#include "MachineHosts.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationSession.h"
 #include "machine/MachineSelection.h"
@@ -17,121 +18,38 @@
 #include <QtTest>
 
 using namespace ketplus;
-using test::FakeMachineBackend;
-using Route = remote::MachineBackend::Route;
-using State = remote::MachineBackend::ConnectionState;
-
-namespace {
-
-QJsonObject journalEvent(const QString& session, qint64 cursor, const QString& type,
-                         const QJsonObject& payload) {
-    return {{"session_id", session},
-            {"session_generation", 1},
-            {"cursor", cursor},
-            {"event_type", type},
-            {"payload", payload}};
-}
-
-// A Linux host over SSH: the daemon's local protocol, a repository with a linked worktree.
-FakeMachineBackend::Answer sshHost() {
-    return [](const FakeMachineBackend::Call& call, QJsonObject* result, QString*) {
-        if (call.operation == "listRepositories") {
-            *result = {{"repositories",
-                        QJsonArray{QJsonObject{
-                            {"id", "/home/dev/app"},
-                            {"label", "app"},
-                            {"path", "/home/dev/app"},
-                            {"available", true},
-                            {"worktrees", QJsonArray{QJsonObject{{"id", "/home/dev/app"},
-                                                                 {"label", "app"},
-                                                                 {"path", "/home/dev/app"},
-                                                                 {"available", true}},
-                                                     QJsonObject{{"id", "/home/dev/app-fix"},
-                                                                 {"label", "app-fix"},
-                                                                 {"path", "/home/dev/app-fix"},
-                                                                 {"available", true}}}}}}}};
-        } else if (call.operation == "listConversations") {
-            *result = {{"sessions", QJsonArray{QJsonObject{{"session_id", "linux-1"},
-                                                           {"session_generation", 1},
-                                                           {"worktree_path", "/home/dev/app-fix"},
-                                                           {"title", "Fix the build"},
-                                                           {"state", "ready"}}}}};
-        } else if (call.operation == "transcriptWindow") {
-            *result = {
-                {"events",
-                 QJsonArray{journalEvent(call.sessionId, 1, "user.message", {{"text", "Build it"}}),
-                            journalEvent(call.sessionId, 2, "assistant.delta",
-                                         {{"item_id", "a"}, {"delta", "Built on Linux."}})}}};
-        } else if (call.operation == "pendingApprovals") {
-            *result = {{"pending_approvals", QJsonArray{}}};
-        } else if (call.operation == "createSession") {
-            *result = {{"session_id", "linux-2"}, {"session_generation", 1}};
-        }
-    };
-}
-
-// A host through the Relay: salted ids, no host paths, one worktree still verifying.
-FakeMachineBackend::Answer relayHost(bool* verified) {
-    return [verified](const FakeMachineBackend::Call& call, QJsonObject* result, QString*) {
-        if (call.operation == "listRepositories") {
-            QJsonArray worktrees{QJsonObject{{"worktreeId", "wt-main"}, {"label", "main"}}};
-            QJsonArray pending;
-            if (*verified)
-                worktrees.append(QJsonObject{{"worktreeId", "wt-new"}, {"label", "feature"}});
-            else
-                pending.append(QJsonObject{{"kind", "worktree"},
-                                           {"id", "wt-new"},
-                                           {"machineId", "relay-machine"},
-                                           {"reason", "verification_pending"}});
-            *result = {{"repositories", QJsonArray{QJsonObject{{"id", "repo-salted"},
-                                                               {"label", "site"},
-                                                               {"available", true},
-                                                               {"worktrees", worktrees}}}},
-                       {"pending", pending}};
-        } else if (call.operation == "listConversations") {
-            *result = {{"sessions", QJsonArray{QJsonObject{{"id", "relay-1"},
-                                                           {"generation", 4},
-                                                           {"repositoryId", "repo-salted"},
-                                                           {"worktreeId", "wt-main"},
-                                                           {"title", "Deploy"}}}}};
-        } else if (call.operation == "pendingApprovals") {
-            *result = {{"pending_approvals", QJsonArray{}}};
-        }
-    };
-}
-
-QStringList transcriptRows(const MachineWorkspaceView& view) {
-    QStringList rows;
-    auto* list = view.findChild<QListWidget*>("machineTranscript");
-    for (int i = 0; i < list->count(); ++i)
-        rows.append(list->item(i)->text());
-    return rows;
-}
-
-} // namespace
+using namespace ketplus::test;
 
 class MachineCompositionTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void selectionKnowsOnlyRegisteredMachines() {
+    void selectionKeepsThePickedMachineWithoutABackend() {
         FakeMachineBackend local("local", Route::Local);
         auto linux = std::make_unique<FakeMachineBackend>("fp-linux", Route::Ssh);
         MachineSelection selection(&local);
         QSignalSpy changed(&selection, &MachineSelection::selectionChanged);
-        selection.select("fp-linux"); // not registered yet: nothing changes
-        QCOMPARE(selection.machineId(), QStringLiteral("local"));
-        QCOMPARE(changed.size(), 0);
-
-        selection.setBackend("fp-linux", linux.get());
+        // Picked before Connections registers it: selected, with no backend (never This Mac's).
         selection.select("fp-linux");
+        QCOMPARE(selection.machineId(), QStringLiteral("fp-linux"));
+        QCOMPARE(selection.backend(), nullptr);
+        QCOMPARE(changed.size(), 1);
+
+        // The backend arriving later binds the selection.
+        selection.setBackend("fp-linux", linux.get());
         QCOMPARE(selection.backend(), linux.get());
+        QCOMPARE(changed.size(), 2);
+        QCOMPARE(changed.last().at(1).value<remote::MachineBackend*>(), linux.get());
         QCOMPARE(selection.machineIds(), (QStringList{"local", "fp-linux"}));
-        // A destroyed backend is forgotten and the window returns to This Mac.
+
+        // A destroyed backend unbinds it; the machine stays picked until Connections drops it.
         linux.reset();
+        QCOMPARE(selection.machineId(), QStringLiteral("fp-linux"));
+        QCOMPARE(selection.backend(), nullptr);
+        QCOMPARE(changed.size(), 3);
+        selection.syncBackends({}, [](const QString&) { return nullptr; });
         QCOMPARE(selection.machineId(), QStringLiteral("local"));
         QCOMPARE(selection.backend(), &local);
-        QCOMPARE(changed.size(), 2);
     }
 
     void switchingMachinesReplacesEveryViewAndRestores() {

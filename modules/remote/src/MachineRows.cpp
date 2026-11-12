@@ -131,6 +131,21 @@ QVector<MachineConversation> conversationsFromListing(const QJsonObject& result)
     return conversations;
 }
 
+QJsonObject normalizedEvent(const QJsonObject& event) {
+    QJsonObject normalized = event;
+    const auto adopt = [&](const char* local, const char* relay) {
+        const QLatin1String to(local), from(relay);
+        if (!normalized.contains(to) && normalized.contains(from))
+            normalized.insert(to, normalized.value(from));
+        normalized.remove(from);
+    };
+    adopt("session_id", "sessionId");
+    adopt("session_generation", "sessionGeneration");
+    adopt("event_type", "eventType");
+    adopt("turn_sequence", "turnSequence");
+    return normalized;
+}
+
 QString queuedCommandId(const QJsonObject& result) {
     if (result.value(QLatin1String("status")).toString() != QLatin1String("queued"))
         return {};

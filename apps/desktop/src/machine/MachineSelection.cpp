@@ -16,11 +16,7 @@ MachineSelection::MachineSelection(remote::MachineBackend* local, QObject* paren
         backends_.insert(localId, local);
 }
 
-remote::MachineBackend* MachineSelection::backend() const {
-    if (auto* selected = backendFor(selected_); selected != nullptr)
-        return selected;
-    return backendFor(localId);
-}
+remote::MachineBackend* MachineSelection::backend() const { return backendFor(selected_); }
 
 remote::MachineBackend* MachineSelection::backendFor(const QString& machineId) const {
     return backends_.value(machineId).data();
@@ -61,21 +57,25 @@ void MachineSelection::syncBackends(
     for (const QString& id : this->machineIds())
         if (id != localId && (!machineIds.contains(id) || backendFor(id) == nullptr))
             removeBackend(id);
+    // A selected machine Connections no longer lists is gone: the window returns to This Mac.
+    if (selected_ != localId && !machineIds.contains(selected_))
+        select(localId);
 }
 
 void MachineSelection::removeBackend(const QString& machineId) {
     if (machineId == localId || !backends_.remove(machineId))
         return;
     emit backendsChanged();
-    if (machineId == selected_) {
-        selected_ = localId;
-        emit selectionChanged(selected_, backend());
-    }
+    // Still selected, now without a route: the views show it as not connected and never fall
+    // back to This Mac (ADR 0119). Connections removing the machine selects This Mac.
+    if (machineId == selected_)
+        emit selectionChanged(selected_, nullptr);
 }
 
 void MachineSelection::select(const QString& machineId) {
-    if (machineId == selected_ || backendFor(machineId) == nullptr)
+    if (machineId.isEmpty() || machineId == selected_)
         return;
+    // A machine without a backend yet stays selected; its backend arrives through setBackend().
     selected_ = machineId;
     emit selectionChanged(selected_, backend());
 }

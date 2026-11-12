@@ -163,7 +163,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             [this](const QString& repositoryPath) {
                 if (selectedMachineId_ != QStringLiteral("local")) {
                     setMachineWorkspaceVisible(true);
-                    if (machineWorkspaceMode_)
+                    if (machines_->shown())
                         machines_->existingView()->startNewConversation(repositoryPath);
                     return;
                 }
@@ -232,11 +232,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             setSourceControlVisible(true);
             break;
         case ActivityBar::Mode::AgentWorkspace:
-            // A remote machine's Agent Workspace is composed from its backend (ADR 0119).
-            if (selectedMachineId_ != QStringLiteral("local"))
-                setMachineWorkspaceVisible(true);
-            else
-                setAgentWorkspaceVisible(true);
+            setAgentWorkspaceVisible(true);
             break;
         case ActivityBar::Mode::Atlas:
             setAtlasWorkspaceVisible(true);

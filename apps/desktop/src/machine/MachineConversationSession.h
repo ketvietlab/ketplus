@@ -46,8 +46,14 @@ class MachineConversationSession final : public QObject {
     // on the Relay until the host confirms. Empty when nothing is outstanding.
     [[nodiscard]] QString writeStatus() const;
 
-    // Reads the newest transcript window and the pending approvals.
+    ~MachineConversationSession() override;
+
+    // Reads the newest transcript window and the pending approvals; the route follows the
+    // conversation's events from then on.
     void load();
+    // The conversation is no longer shown: the route stops following it
+    // (MachineBackend::conversationClosed). The cached transcript stays.
+    void close();
     // A prompt: a new turn, or a steer of the running one.
     void send(const QString& text);
     void stop();
@@ -81,6 +87,7 @@ class MachineConversationSession final : public QObject {
     QString lastError_;
     quint64 approvalsLoad_{0};
     int waiting_{0};
+    bool open_{false};
     QHash<QString, QString> queued_; // Relay command id -> the card it answers (or empty)
     bool running_{false};
     State lastState_{State::Connecting};

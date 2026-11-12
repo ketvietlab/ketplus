@@ -4,6 +4,7 @@
 
 #include <QJsonObject>
 #include <QList>
+#include <QStringList>
 
 #include <functional>
 
@@ -112,6 +113,9 @@ class FakeMachineBackend final : public remote::MachineBackend {
         record("answerQuestion", sessionId, generation,
                {{"approval_id", questionId}, {"resolution", resolution}}, std::move(callback));
     }
+
+    void conversationClosed(const QString& sessionId) override { closed.append(sessionId); }
+    QStringList closed;
 
   private:
     void record(const QString& operation, const QString& sessionId, qint64 generation,

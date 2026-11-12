@@ -209,7 +209,7 @@ void MainWindow::openSidebarConversation(const QString& worktreePath,
     if (selectedMachineId_ != QStringLiteral("local")) {
         // A remote row names a host path or a Relay id; it is never resolved on This Mac.
         setMachineWorkspaceVisible(true);
-        if (machineWorkspaceMode_ && !conversationId.isEmpty())
+        if (machines_->shown() && !conversationId.isEmpty())
             machines_->existingView()->openConversation(conversationId);
         return;
     }

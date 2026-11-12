@@ -11,7 +11,11 @@ namespace {
 // linked worktree's `.git` file names its gitdir, whose `commondir` leads to the main checkout's
 // `.git`. ADR 0119: Desktop groups checkouts by this on every route, so a repository with linked
 // worktrees is one sidebar row. A checkout whose links cannot be read is its own repository.
-QString repositoryPathOf(const QString& checkout) {
+QString repositoryPathOf(const QString& registered) {
+    // Canonical on every branch, so a checkout registered through a symlink and a linked
+    // worktree resolving to it name the same repository.
+    const QString canonical = QFileInfo(registered).canonicalFilePath();
+    const QString checkout = canonical.isEmpty() ? registered : canonical;
     const QFileInfo dotGit(QDir(checkout).filePath(QStringLiteral(".git")));
     if (!dotGit.isFile())
         return checkout;
@@ -27,12 +31,12 @@ QString repositoryPathOf(const QString& checkout) {
         return checkout;
     const QFileInfo commonDir(
         QDir(gitDir).absoluteFilePath(QString::fromUtf8(common.readLine()).trimmed()));
-    const QString canonical = commonDir.canonicalFilePath();
-    if (canonical.isEmpty())
+    const QString commonPath = commonDir.canonicalFilePath();
+    if (commonPath.isEmpty())
         return checkout;
     // A bare repository's common dir is the repository itself; otherwise it is `<root>/.git`.
-    return QFileInfo(canonical).fileName() == QLatin1String(".git") ? QFileInfo(canonical).path()
-                                                                    : canonical;
+    return QFileInfo(commonPath).fileName() == QLatin1String(".git") ? QFileInfo(commonPath).path()
+                                                                     : commonPath;
 }
 } // namespace
 QJsonObject SessionHost::workspaceCatalog(const QString& type, const QJsonObject& payload) {
