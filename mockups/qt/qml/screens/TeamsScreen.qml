@@ -1589,7 +1589,7 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Automatic turns"
-                help: "Turns members start on their own before the team asks you to continue. New teams start from Settings › Teams."
+                help: "Turns members start on their own before the team asks you to continue. New teams start from Settings → Teams."
                 error: newTeamDialog.tried ? Fixtures.turnBudgetError(teamBudget.text) : ""
                 KetTextField {
                     id: teamBudget

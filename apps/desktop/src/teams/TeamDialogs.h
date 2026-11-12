@@ -42,6 +42,7 @@ class NewTeamForm final : public QWidget {
     void submit(std::function<void(const QJsonObject& team)> created);
 
     [[nodiscard]] ket::TextField* nameField() const { return name_; }
+    [[nodiscard]] ket::TextField* budgetField() const { return budget_; }
     [[nodiscard]] ket::SegmentedControl* developerCount() const { return developers_; }
     [[nodiscard]] TeamAgent agent(const QString& role) const { return agents_.value(role); }
     void setAgent(const QString& role, const TeamAgent& agent);
@@ -81,6 +82,8 @@ class NewTeamForm final : public QWidget {
     ket::Radio* userMerges_;
     ket::Select* permissions_;
     ket::FieldRow* permissionsRow_{nullptr};
+    // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
+    ket::TextField* budget_{nullptr};
     ket::SegmentedControl* developers_;
     ket::Checkbox* requirements_;
     QLabel* hint_;

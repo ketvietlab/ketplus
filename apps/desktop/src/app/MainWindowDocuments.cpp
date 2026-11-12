@@ -25,6 +25,7 @@
 #include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "remote/RemoteControlView.h"
+#include "teams/TeamDirectory.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
 #include "ui/InterfaceZoom.h"
@@ -974,6 +975,15 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 QStringLiteral("daemon/storage%1%2/%3")
                     .arg(area.left(1).toUpper(), area.mid(1), operation.section('.', -1)),
                 payload, std::move(reply));
+        },
+        // Settings → Teams: the daemon keeps the automatic turns a new team starts with.
+        [window = QPointer<MainWindow>(this)](const QString& type, const QJsonObject& payload,
+                                              SettingsTeamsPage::Reply reply) {
+            if (!window || window->teams_ == nullptr) {
+                reply({}, SettingsTeamsPage::tr("Teams need a KetPlus Daemon that supports them."));
+                return;
+            }
+            window->teams_->request(type, payload, std::move(reply));
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);

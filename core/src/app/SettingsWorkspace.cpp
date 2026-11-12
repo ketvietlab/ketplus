@@ -54,6 +54,7 @@ QString navigationIcon(const QString& id) {
         {QStringLiteral("storage"), QStringLiteral("layers")},
         {QStringLiteral("updates"), QStringLiteral("download")},
         {QStringLiteral("agent-models"), QStringLiteral("sliders-horizontal")},
+        {QStringLiteral("teams"), QStringLiteral("bot")},
     };
     return ket::Icons::codeForLucide(names.value(id, QStringLiteral("archive")));
 }
