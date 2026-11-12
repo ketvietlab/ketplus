@@ -153,6 +153,13 @@ never publish QA artifacts, and never upload a release or feed without the owner
 separate go-ahead. A successful local build is not signing, notarization or release
 approval; record those gates independently.
 
+`python3 tests/packaging/test_qa_arch_feeds.py` exercises real throwaway Ed25519
+signatures over synthetic archive bytes for both scoped feeds, checks cross-arch
+feed refusal and tampered/unsigned/wrong-key refusal. It invokes OpenSSL and the
+release policy only, without a server or client. This is a producer/crypto fixture,
+not evidence of a complete Sparkle N-to-N+1 update or a signed/notarized DMG.
+The real isolated localhost client QA remains a separate release gate.
+
 ### Preparing a scoped macOS update
 
 `publish-update.sh` defaults to `--mode release`: strict code-signature verification,
