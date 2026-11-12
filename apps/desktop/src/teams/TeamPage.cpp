@@ -347,13 +347,12 @@ void TeamPage::buildHeading(const QJsonObject& team) {
     line->addWidget(more, 0, Qt::AlignTop);
     layout_->addWidget(row);
     if (const QString goal = team.value(QStringLiteral("goal")).toString(); !goal.isEmpty()) {
-        auto* purpose =
-            team_goal::foldedGoal(goal, conversations_ ? conversations_() : QVariantList{}, column_);
+        auto* purpose = team_goal::foldedGoal(
+            goal, conversations_ ? conversations_() : QVariantList{}, column_);
         purpose->setExpanded(goalExpanded_);
         connect(purpose, &ket::ExpandableText::expandedChanged, this,
                 [this](const bool expanded) { goalExpanded_ = expanded; });
-        connect(purpose, &ket::ExpandableText::mentionActivated, this,
-                &TeamPage::mentionRequested);
+        connect(purpose, &ket::ExpandableText::mentionActivated, this, &TeamPage::mentionRequested);
         // The goal whole, under the heading at the column's width (ADR 0114).
         layout_->addWidget(purpose);
     }

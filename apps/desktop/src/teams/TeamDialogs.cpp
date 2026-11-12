@@ -492,8 +492,8 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
                      });
     // Return starts a new line in the goal; Cmd/Ctrl+Return creates the team from anywhere in
     // the form, as the button does.
-    for (const QKeySequence& keys : {QKeySequence(Qt::CTRL | Qt::Key_Return),
-                                     QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
+    for (const QKeySequence& keys :
+         {QKeySequence(Qt::CTRL | Qt::Key_Return), QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
         auto* shortcut = new QShortcut(keys, dialog);
         shortcut->setContext(Qt::WidgetWithChildrenShortcut);
         QObject::connect(shortcut, &QShortcut::activated, create, [create] {

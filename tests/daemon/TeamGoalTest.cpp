@@ -17,7 +17,8 @@ namespace {
 
 // A goal of `characters` characters in paragraphs, with line breaks and a mention.
 QString longGoal(const qsizetype characters) {
-    QString goal = QStringLiteral("Ship the checkout.\n\nContext: ask @agent/8213 about the cart.\n");
+    QString goal =
+        QStringLiteral("Ship the checkout.\n\nContext: ask @agent/8213 about the cart.\n");
     const QString paragraph = QStringLiteral("The cart keeps its items across devices; "
                                              "prices come from the catalog.\n\n");
     while (goal.size() < characters)

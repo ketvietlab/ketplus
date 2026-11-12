@@ -24,8 +24,7 @@ QString detail(const QVariantMap& conversation) {
     QStringList parts{provider.left(1).toUpper() + provider.mid(1)};
     if (conversation.value(QStringLiteral("running")).toBool())
         parts.append(tr("working"));
-    if (const QString path = conversation.value(QStringLiteral("path")).toString();
-        !path.isEmpty())
+    if (const QString path = conversation.value(QStringLiteral("path")).toString(); !path.isEmpty())
         parts.append(path.section(QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty));
     return parts.join(QStringLiteral(" · "));
 }

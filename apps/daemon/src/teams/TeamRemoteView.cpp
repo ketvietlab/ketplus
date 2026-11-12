@@ -269,7 +269,8 @@ QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     json.remove(QStringLiteral("members"));
     const int budget = team.value(QStringLiteral("turn_budget")).toInt();
     const int used = team.value(QStringLiteral("automatic_turns")).toInt();
-    json.insert(QStringLiteral("goal"), cut(team.value(QStringLiteral("goal")).toString(), rules::maximumGoalCharacters));
+    json.insert(QStringLiteral("goal"),
+                cut(team.value(QStringLiteral("goal")).toString(), rules::maximumGoalCharacters));
     json.insert(QStringLiteral("integration_branch"),
                 team.value(QStringLiteral("integration_branch")).toString());
     json.insert(QStringLiteral("merge_policy"), team.value(QStringLiteral("merge_policy")));

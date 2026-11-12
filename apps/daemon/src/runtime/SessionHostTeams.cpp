@@ -147,8 +147,8 @@ SessionHost::teamConversation(const QString& sessionId) const {
 
 std::optional<teams::TeamConversation>
 SessionHost::conversationByNumber(const QString& number) const {
-    const auto session = number.isEmpty() ? std::nullopt
-                                          : journal_->sessionForConversationNumber(number);
+    const auto session =
+        number.isEmpty() ? std::nullopt : journal_->sessionForConversationNumber(number);
     if (!session)
         return std::nullopt;
     const auto conversation = teamConversation(session->first);
