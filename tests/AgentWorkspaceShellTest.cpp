@@ -1675,7 +1675,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
         const QString ketplus = directory.filePath(QStringLiteral("ketplus"));
-        const QString sample - project = directory.filePath(QStringLiteral("sample-project"));
+        const QString sampleProject = directory.filePath(QStringLiteral("sample-project"));
         const QString linked = directory.filePath(QStringLiteral("ketplus-refactor"));
         const auto git = [](const QString& repository, const QStringList& arguments) {
             QProcess process;
@@ -1684,7 +1684,7 @@ class AgentWorkspaceShellTest final : public QObject {
             return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
                    process.exitCode() == 0;
         };
-        for (const QString& repository : {ketplus, sample - project}) {
+        for (const QString& repository : {ketplus, sampleProject}) {
             QVERIFY(QDir().mkpath(repository));
             QVERIFY(git(repository, {QStringLiteral("init"), QStringLiteral("-q"),
                                      QStringLiteral("-b"), QStringLiteral("main")}));
@@ -1699,8 +1699,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(
             git(ketplus, {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-qb"),
                           QStringLiteral("refactor"), linked, QStringLiteral("HEAD")}));
-        const QString atlas =
-            QDir(sample - project).filePath(QStringLiteral("design/crm.ketatlas"));
+        const QString atlas = QDir(sampleProject).filePath(QStringLiteral("design/crm.ketatlas"));
         QVERIFY(QDir().mkpath(atlas));
         QFile manifest(QDir(atlas).filePath(QStringLiteral("atlas.json")));
         QVERIFY(manifest.open(QIODevice::WriteOnly | QIODevice::Text));
@@ -1721,7 +1720,7 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* index = window.findChild<ketplus::AtlasIndex*>();
         QVERIFY(view && manager && index);
         const QString ketplusPath = QFileInfo(ketplus).canonicalFilePath();
-        const QString ketvietPath = QFileInfo(sample - project).canonicalFilePath();
+        const QString sampleProjectPath = QFileInfo(sampleProject).canonicalFilePath();
         const QString linkedPath = QFileInfo(linked).canonicalFilePath();
         manager->activate(linkedPath);
         const QString id = manager->activeConversationId(linkedPath);
@@ -1736,9 +1735,9 @@ class AgentWorkspaceShellTest final : public QObject {
         };
         QTRY_VERIFY(conversationButton() != nullptr);
 
-        window.openFolder(sample - project);
+        window.openFolder(sampleProject);
         QVERIFY(QDir(linkedPath).removeRecursively());
-        QCOMPARE(index->workspaceRoot(), ketvietPath);
+        QCOMPARE(index->workspaceRoot(), sampleProjectPath);
         QTRY_COMPARE(index->atlases().size(), 1);
 
         // Still listed under ketplus in the sidebar; that is the row the reader clicks.
