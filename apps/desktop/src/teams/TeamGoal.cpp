@@ -81,6 +81,12 @@ QString problem(const QString& text, const QStringList& unknown) {
                   "to the details instead.")
             .arg(text.size())
             .arg(maximumCharacters);
+    if (const qsizetype bytes = text.toUtf8().size(); bytes > maximumBytes)
+        return tr("The goal is too long to reach the leader in one message: it takes %L1 of "
+                  "%L2 bytes, as accented letters, other scripts and emoji take more than one "
+                  "each. Shorten it, or link to the details instead.")
+            .arg(bytes)
+            .arg(maximumBytes);
     if (unknown.isEmpty())
         return {};
     QStringList names;
@@ -166,7 +172,7 @@ void TeamGoalEditor::refresh() {
         field_->setUnknownMentions(unknown_);
     }
     const QString now = problem();
-    field_->setInvalid(!unknown_.isEmpty());
+    field_->setInvalid(!unknown_.isEmpty() || text.toUtf8().size() > team_goal::maximumBytes);
     if (now != problem_) {
         problem_ = now;
         emit problemChanged(problem_);

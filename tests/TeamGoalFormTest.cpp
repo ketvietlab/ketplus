@@ -208,6 +208,16 @@ class TeamGoalFormTest final : public QObject {
         QVERIFY(over->error("goal").contains(QLocale().toString(team_goal::maximumCharacters + 5)));
         // The text is never cut.
         QCOMPARE(over->goalField()->text().size(), team_goal::maximumCharacters + 5);
+
+        // Fewer characters than the limit, more bytes than one message to the leader holds.
+        const auto wide = form();
+        const QString cjk(12000, QChar(0x8CFC));
+        wide->goalField()->setText(cjk);
+        QVERIFY(wide->goalField()->isInvalid());
+        wide->submit({});
+        QCOMPARE(sent_.size(), 1);
+        QVERIFY(wide->error("goal").contains(QLocale().toString(cjk.toUtf8().size())));
+        QCOMPARE(wide->goalField()->text(), cjk);
     }
 
     // The goal with a drawn mention and the picker open on the next one, as the mock's

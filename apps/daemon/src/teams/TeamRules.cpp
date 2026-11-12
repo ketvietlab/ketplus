@@ -64,6 +64,12 @@ std::optional<TeamError> validGoal(const QString& goal) {
                        QStringLiteral("The goal has %1 characters; a team keeps at most %2.")
                            .arg(goal.size())
                            .arg(maximumGoalCharacters));
+    if (const qsizetype bytes = goal.toUtf8().size(); bytes > maximumGoalBytes)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("The goal takes %1 bytes as UTF-8; a team keeps at most %2, "
+                                      "so it reaches the leader whole.")
+                           .arg(bytes)
+                           .arg(maximumGoalBytes));
     return std::nullopt;
 }
 

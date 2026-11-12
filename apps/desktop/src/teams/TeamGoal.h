@@ -24,6 +24,9 @@ namespace team_goal {
 
 // The daemon's limit (teams::rules::maximumGoalCharacters); above it the form refuses.
 inline constexpr int maximumCharacters = 16000;
+// And in UTF-8 bytes (teams::rules::maximumGoalBytes), so the goal reaches the leader whole in
+// one message: accented letters, other scripts and emoji take more than one byte each.
+inline constexpr int maximumBytes = 24 * 1024;
 inline constexpr int visibleLines = 6;
 inline constexpr int growLines = 14;
 // The suggestions the picker shows, as the composer's `@agent/` completion does.

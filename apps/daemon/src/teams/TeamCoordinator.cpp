@@ -508,14 +508,22 @@ void TeamCoordinator::startLeader(const qint64 teamId) {
                      QStringLiteral("Members:"), members.join(QLatin1Char('\n'))};
     // ADR 0114: a mention in the goal points at context; nobody was messaged for it.
     if (const QStringList numbers = rules::goalMentions(team->goal); !numbers.isEmpty()) {
+        // Bounded, so the turn fits in one message beside the goal (rules::maximumGoalBytes).
         QStringList mentioned;
-        for (const QString& number : numbers) {
+        for (const QString& number :
+             numbers.first(std::min<qsizetype>(numbers.size(), rules::maximumListedMentions))) {
             const auto conversation = host_->conversationByNumber(number);
-            mentioned << (conversation ? QStringLiteral("- #%1 %2").arg(number, conversation->title)
+            QString title = conversation ? conversation->title : QString{};
+            if (title.size() > rules::maximumMentionTitleCharacters)
+                title = title.left(rules::maximumMentionTitleCharacters - 1) + QChar(0x2026);
+            mentioned << (conversation ? QStringLiteral("- #%1 %2").arg(number, title)
                                        : QStringLiteral("- #%1 (no conversation with this number "
                                                         "on this computer)")
                                              .arg(number));
         }
+        if (numbers.size() > rules::maximumListedMentions)
+            mentioned << QStringLiteral("- and %1 more; their numbers are in the goal.")
+                             .arg(numbers.size() - rules::maximumListedMentions);
         body << QString{} << QStringLiteral("Conversations the goal mentions:")
              << mentioned.join(QLatin1Char('\n'))
              << QStringLiteral("You may ask them for context through agent messaging "

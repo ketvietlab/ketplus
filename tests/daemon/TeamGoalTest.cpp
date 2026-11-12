@@ -27,6 +27,18 @@ QString longGoal(const qsizetype characters) {
     return goal + QLatin1Char('.');
 }
 
+// A goal of exactly `bytes` UTF-8 bytes in Vietnamese, symbols and CJK (about 1.6 bytes a
+// character), with a mention: it reaches the byte limit before the character limit.
+QString nonAsciiGoal(const qsizetype bytes) {
+    const QString phrase = QStringLiteral("Thuế hoá đơn — giỏ hàng ✓ đồng bộ ✓ 購物 ");
+    QString goal = QStringLiteral("Hỏi @agent/8213 trước.\n");
+    while (goal.toUtf8().size() + phrase.toUtf8().size() <= bytes)
+        goal += phrase;
+    while (goal.toUtf8().size() < bytes)
+        goal += QLatin1Char('.');
+    return goal;
+}
+
 } // namespace
 
 class TeamGoalTest final : public QObject {
@@ -105,6 +117,46 @@ class TeamGoalTest final : public QObject {
         const QString longest(rules::maximumGoalCharacters, QLatin1Char('y'));
         QVERIFY(teams_->update(made.teamId, {{"goal", longest}}, "user").ok());
         QCOMPARE(teams_->team(made.teamId)->goal, longest);
+    }
+
+    // A goal of accented letters, other scripts and symbols: its bytes, not its characters,
+    // are what one message to the leader holds, so the limit is on both.
+    void aNonAsciiGoalIsBoundedInBytesNotCut() {
+        const QString longest = nonAsciiGoal(rules::maximumGoalBytes);
+        QCOMPARE(longest.toUtf8().size(), rules::maximumGoalBytes);
+        QVERIFY(longest.size() < rules::maximumGoalCharacters);
+        const TeamResult made = create(longest);
+        QVERIFY2(made.ok(), qPrintable(made.error.value_or(TeamError{}).message));
+        QCOMPARE(teams_->team(made.teamId)->goal, longest);
+        QVERIFY(leaderTurn().contains(QStringLiteral("Goal: ") + longest + QLatin1Char('\n')));
+
+        const QString over = longest + QStringLiteral("ế");
+        QVERIFY(over.size() < rules::maximumGoalCharacters);
+        const TeamResult refused = create(over);
+        QVERIFY(!refused.ok());
+        QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
+        QVERIFY(refused.error->message.contains(QString::number(over.toUtf8().size())));
+        QVERIFY(!teams_->update(made.teamId, {{"goal", over}}, "user").ok());
+        QCOMPARE(teams_->team(made.teamId)->goal, longest);
+    }
+
+    // Many mentions: the first ones are listed with short titles, the rest counted, so the
+    // first turn still fits in one message.
+    void aLongListOfMentionsIsBounded() {
+        host_.add("ctx");
+        host_.conversations["ctx"].number = "1";
+        host_.conversations["ctx"].title = QString(200, QLatin1Char('t'));
+        QStringList mentions;
+        for (int number = 1; number <= rules::maximumListedMentions + 5; ++number)
+            mentions << QStringLiteral("@agent/%1").arg(number);
+        QVERIFY(create(QStringLiteral("Ask ") + mentions.join(QLatin1Char(' '))).ok());
+        const QString turn = leaderTurn();
+        QVERIFY(turn.contains(QStringLiteral("- #1 ") +
+                              QString(rules::maximumMentionTitleCharacters - 1, QLatin1Char('t')) +
+                              QChar(0x2026) + QLatin1Char('\n')));
+        QVERIFY(turn.contains(QStringLiteral("- #%1 ").arg(rules::maximumListedMentions)));
+        QVERIFY(!turn.contains(QStringLiteral("- #%1 ").arg(rules::maximumListedMentions + 1)));
+        QVERIFY(turn.contains(QStringLiteral("- and 5 more; their numbers are in the goal.")));
     }
 
     void theLeaderIsToldWhomTheGoalMentions() {

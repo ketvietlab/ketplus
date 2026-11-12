@@ -46,8 +46,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
   role and lane, and each member's instructions explain its role. The leader's first
   turn carries the goal.
-  The goal (ADR 0114 §9): up to 16,000 characters, kept whole with its line breaks and
-  refused above that, never cut. New team writes it in the kit's multi-line field. Typing
+  The goal (ADR 0114 §9): up to 16,000 characters and 24 KiB of UTF-8, so the leader's
+  first turn holds it whole. It keeps its line breaks and is refused above either limit,
+  never cut. New team writes it in the kit's multi-line field. Typing
   `@` mentions a conversation (`@agent/<number>`), and a number no conversation has stops
   Create. A mention is context only: the leader's first turn lists the mentioned
   conversations with number and title and says it may ask them, and creating the team

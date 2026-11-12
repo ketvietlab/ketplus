@@ -235,15 +235,21 @@ may be journaled after the turn has answered.
 The goal is the leader's main input, so it is written like a brief, not a title.
 
 - **Length.** A goal keeps its line breaks and holds up to 16,000 characters
-  (`teams::rules::maximumGoalCharacters`). The daemon refuses a longer one on
-  `team.create` and `team.update` with `invalid_payload`, naming the count. Nothing cuts
-  a goal: the leader's first turn, the journal and the remote summary carry it whole.
-  New team shows the count under the field and says so before Create.
+  (`teams::rules::maximumGoalCharacters`) and up to 24 KiB of UTF-8
+  (`maximumGoalBytes`). The leader's first turn is one team message, which the broker
+  holds up to 32 KiB of UTF-8, so the rest of that turn fits beside the goal. Accented
+  letters, other scripts and emoji take more than one byte each, so such a goal reaches
+  the byte limit first. The daemon refuses a longer goal on `team.create` and
+  `team.update` with `invalid_payload`, naming the count. Nothing cuts a goal: the
+  leader's first turn, the journal and the remote summary carry it whole. New team shows
+  the character count under the field and says, with the count, which limit a goal is
+  over before Create.
 - **Mentions.** `@agent/<number>` in the goal names a conversation on this computer
   that holds context, as in the composer. A mention means context only:
   - Creating the team messages nobody and adds nobody to it.
   - The leader's first turn lists the mentioned conversations, each with its number and
-    title, or says that no conversation has that number. It tells the leader that it
+    title, or says that no conversation has that number. It lists the first 20, with
+    titles cut at 80 characters, and counts the rest, so the turn stays one message. It tells the leader that it
     may ask them through agent messaging (`agents_send`).
   - A mention starts at the start of the goal, after a space, or after an opening
     bracket or quote, so an e-mail address is not one.

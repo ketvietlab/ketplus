@@ -29,8 +29,20 @@ KetTextArea {
                 found.push(span.number)
         return found
     }
+    // The daemon also keeps the goal within 24 KiB of UTF-8, so it reaches the leader in one message.
+    readonly property int byteLimit: 24 * 1024
+    readonly property int bytes: {
+        let total = 0
+        for (const character of text) {
+            const code = character.codePointAt(0)
+            total += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4
+        }
+        return total
+    }
     readonly property string problem: count > limit
         ? "The goal has " + count.toLocaleString(Qt.locale("en_US"), "f", 0) + " characters; a team keeps at most 16,000. Shorten it, or link to the details instead."
+        : bytes > byteLimit
+        ? "The goal is too long to reach the leader in one message: it takes " + bytes.toLocaleString(Qt.locale("en_US"), "f", 0) + " of 24,576 bytes, as accented letters, other scripts and emoji take more than one each. Shorten it, or link to the details instead."
         : unknown.length === 1 ? "@agent/" + unknown[0] + " is not a conversation on this computer. Correct the number or remove the mention."
         : unknown.length > 1 ? unknown.map(n => "@agent/" + n).join(", ") + " are not conversations on this computer. Correct the numbers or remove the mentions."
         : ""
