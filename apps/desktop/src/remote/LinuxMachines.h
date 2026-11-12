@@ -9,6 +9,7 @@
 #include <QPointer>
 
 class QTimer;
+class MachineEndToEndTest;
 class MachineWindowTest;
 
 namespace ketplus::remote {
@@ -81,6 +82,7 @@ class LinuxMachines final : public QObject {
   private:
     friend class RemoteControlViewTest;
     friend class LinuxMachinesSectionTest;
+    friend class ::MachineEndToEndTest;
     friend class ::MachineWindowTest;
     void syncEntitlement();
     void connectModel();
