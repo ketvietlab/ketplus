@@ -318,11 +318,12 @@ notices, in the change that ships them.
 - The relay sees candidate addresses in memory only, as it already sees client addresses.
 
 The daemon reports `ice-path local=<type> remote=<type> turn=<transport>
-epoch=<number> event=<open|ice-connected> at=<UTC time>` when its data channels
-open and when ICE reconnects after checking/disconnection. Types are allowlisted
+epoch=<number> event=<open|ice-connected|path-changed> at=<UTC time>` when its data channels
+open and when ICE reconnects after checking/disconnection. If completion changes
+the selected candidate types without a reconnect, it logs `path-changed`, not a second `open`. Types are allowlisted
 (`host`, `srflx`, `prflx`, `relay`, `unknown`). `turn` describes the **local**
 client-to-TURN leg only: this libjuice backend supports UDP, so it is `udp` for
-a local relayed candidate, otherwise `none`. A remote relayed candidate does not
+a local relayed candidate, `unknown` when the local type is unavailable, otherwise `none`. A remote relayed candidate does not
 reveal that remote client's TURN transport; correlate its own diagnostics instead
 of guessing from its candidate protocol. Native errors and raw candidates never
 enter this log line.
