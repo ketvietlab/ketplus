@@ -28,6 +28,12 @@ inline bool validContent(const QJsonObject& content, const QString& session, qin
            bytes("tag").size() == 16 && bytes("signature").size() == 64 &&
            bytes("ciphertext").size() <= maximum;
 }
+// Kinds the relay scopes to a catalog worktree rather than a session (worktreeScoped).
+inline bool worktreeScoped(const QString& kind) {
+    return kind == QLatin1String("session.create") ||
+           kind == QLatin1String("worktree.configuration.read") ||
+           kind == QLatin1String("worktree.branches.read");
+}
 inline QJsonArray contentScope(const QJsonObject& content) {
     return {content.value("keyId"), content.value("keyEpoch"), content.value("senderDeviceId"),
             content.value("senderKeyVersion")};

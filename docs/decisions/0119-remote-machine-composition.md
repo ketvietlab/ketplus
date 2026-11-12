@@ -38,6 +38,7 @@ machine. It carries the operations Desktop needs and nothing transport-specific:
 | `listConversations` | `session.list` |
 | `transcriptWindow`, `transcriptPage` | `session.transcript_window`, `session.transcript_page` |
 | `transcriptLargeEvent` | `session.transcript_large_event` |
+| `createSession` | `session.start_turn` with `worktree_path` (the local worktree id) and no session |
 | `startTurn`, `steerTurn`, `stopTurn` | `session.start_turn`, `session.steer`, `session.interrupt` |
 | `pendingApprovals` | `session.pending_approvals` |
 | `resolveApproval`, `answerQuestion` | `approval.resolve`, `question.answer` |
@@ -80,9 +81,10 @@ Three implementations:
   route turns a missing local daemon install into Offline; the SSH route
   reports its own reasons (host unreachable, key changed, not installed on the
   host).
-- **Relay** — a backend over `ControlV2Client` that turns each operation into an
-  encrypted Control v2 command and each authenticated, decrypted event page into
-  `eventReceived`. It is scope item 2 of #419.
+- **Relay** — `RelayMachineBackend` over `ControlV2Client`, which turns each
+  operation into an encrypted Control v2 command and each authenticated,
+  decrypted event page into `eventReceived` (scope item 2 of #419, see "Relay
+  backend").
 
 Existing consumers (`CodexAppServer`, `SessionCatalogReader`, the Connections
 sections) still hold a `DaemonClient` today. They move to a `MachineBackend` one
@@ -209,6 +211,56 @@ to another user's socket.
   KetPlus account, pairing or Relay. Approvals on that host are answered by
   whoever holds that SSH access, exactly as `ketplusctl` on the host would.
 
+### Relay backend
+
+Reads come from `ControlV2Client`'s host-verified projection, filtered to the
+backend's relay machine id; transcript windows and pages from its restore
+path. Repositories use the neutral shape with the salted id and no `path`.
+`createSession` takes `{"repository_id", "worktree_id", "prompt", "options"}`
+and is sent only for a worktree in the verified projection: it reuses the
+deployed `POST /v2/mobile/workspaces/{workspace}/session-creates` command and
+the host's existing `CloudControlCommands` `session.create` path, sealed to the
+machine's pinned agreement key with its envelope bound into the associated
+data. No relay change is needed.
+
+**Worktrees without a conversation (decision C).** The deployed relay's
+worktree index (`GET /v2/mobile/worktrees`) is a plaintext heartbeat copy with
+no host signature, so an entry no verified conversation covers is not shown on
+the relay's word. For each such entry of a pinned machine, lazily and up to a
+bound per listing (`verify_worktrees`, default 32, at most 100), the client
+sends the existing `worktree.configuration.read` command. The host answers
+inside its signed, sealed result with the catalog scope it holds for that
+worktree (`repositoryId`, `worktreeId`, `repositoryLabel`, `worktreeLabel`,
+`catalogRevision`, `lifecycleRevision`). The entry is shown, marked
+`verified: "host_read"`, only when every field equals the index entry.
+Otherwise it is reported in `rejected` with a stable reason:
+`unsigned_index_entry` (beyond the bound or not active), `worktree_not_granted`
+(the relay refused the command as forbidden) or `verification_failed` (no
+answer, a bad signature or a different scope). This needs no relay change and
+no ketviet deploy. **Option A**, a relay-side index whose entries the host
+seals (as it already seals session metadata), would remove the per-entry round
+trip and is future work in ketviet.
+
+**Durable command outbox.** Every write (`startTurn`, `steerTurn`, `stopTurn`,
+`pendingApprovals`, `resolveApproval`, `answerQuestion`, `createSession`) is
+prepared and encrypted once, written to a per-machine owner-only
+`CommandOutbox` file, and only then submitted. After a restart or reconnect,
+only that stored ciphertext is submitted again, so the relay's idempotency key
+answers with the command it already has and the host's command journal runs it
+once. A result is verified (host signature, original scope) before a callback
+or `commandCompleted` sees it, and each command id is applied at most once,
+including after a restart. Plaintext never reaches the file. An entry older
+than the relay's 15-minute command lifetime is given up.
+
+**Connection states** follow the relay link: `Connecting` until the first
+successful read, `Connected`, `Reconnecting` with bounded backoff (1 s doubling
+to 30 s) after a transport failure, and `Offline` after `disconnectFromRelay()`
+or a fatal answer (`invalid_access`, a revoked device or machine, sign-out, a
+changed account). A refresh refused with 401 emits
+`ControlV2Client::credentialRevoked`; the backend fences every request in
+flight, so no response issued before the revocation reaches the UI, and it does
+not retry until the user signs in again.
+
 **Relay** keeps Control v2 unchanged: end-to-end encryption between Desktop and
 the host, host keys pinned at pairing (#88,
 [ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)), and a relay that sees only
@@ -220,8 +272,11 @@ by the Relay's identity, and an SSH machine needs no Relay credential.
 - The local adapter (`DaemonMachineBackend`) and its tests
   (`tests/daemon/MachineBackendTest.cpp`) land with this ADR; no consumer moves
   yet.
-- Scope item 2 (Relay backend), 3 (SSH transport with the fingerprint flow) and
-  4 (Connections: route, Connected/Offline, Details with the verified fingerprint,
+- Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
+  and the host's signed worktree scope in `worktree.configuration.read`, tested
+  against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).
+- Scope item 3 (SSH transport with the fingerprint flow) and
+  item 4 (Connections: route, Connected/Offline, Details with the verified fingerprint,
   Connect/Disconnect, the two-route "Connect a Linux machine" dialog) build on
   this interface.
 - The Qt mock's Connections screen says "there is no SSH"; it is updated to show

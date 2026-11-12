@@ -65,6 +65,11 @@ class MachineBackend : public QObject {
     virtual void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                                       const QJsonObject& request, Callback callback) = 0;
 
+    // A new conversation in a worktree of this machine: {"worktree_id", "prompt", "options"}
+    // with the `id` listWorktrees() or listRepositories() reported (the host path on the local
+    // and SSH routes), plus "repository_id" on the Relay. The result names the new session_id.
+    virtual void createSession(const QJsonObject& request, Callback callback) = 0;
+
     // Turns. `request` is the session.start_turn / session.steer payload.
     virtual void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                            Callback callback) = 0;

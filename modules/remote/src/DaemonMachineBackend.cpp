@@ -141,6 +141,16 @@ void DaemonMachineBackend::transcriptLargeEvent(const QString& sessionId, const 
                   std::move(callback));
 }
 
+void DaemonMachineBackend::createSession(const QJsonObject& request, Callback callback) {
+    // Locally a worktree id is its path, and the first turn creates the conversation.
+    QJsonObject payload{
+        {QStringLiteral("prompt"), request.value(QStringLiteral("prompt"))},
+        {QStringLiteral("worktree_path"), request.value(QStringLiteral("worktree_id"))}};
+    if (request.contains(QStringLiteral("options")))
+        payload.insert(QStringLiteral("options"), request.value(QStringLiteral("options")));
+    this->request(QStringLiteral("session.start_turn"), payload, {}, 0, std::move(callback));
+}
+
 void DaemonMachineBackend::startTurn(const QString& sessionId, const qint64 generation,
                                      const QJsonObject& request, Callback callback) {
     this->request(QStringLiteral("session.start_turn"), request, sessionId, generation,

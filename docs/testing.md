@@ -248,6 +248,16 @@ changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
 
+`ketplus_remote_relay_backend_tests` drives ADR 0119's `RelayMachineBackend`
+against a loopback relay whose replies are shaped like the deployed relay's
+session, worktree and command DTOs, with a synthetic host that decrypts each
+command, runs it once and signs its result: a full turn with an approval and a
+question, a session created in an empty host-verified worktree, per-worktree
+verification (a mismatched scope, an ungranted worktree, the bound), an outbox
+retry of the same ciphertext across a simulated restart, offline and
+reconnect, and a revoked credential that fences an in-flight result. No
+network, account or provider is used.
+
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`
 uses temporary repositories/journals and a fake Codex process;
 `ketplus_daemon_context_relay_tests` uses production relay encryption/serialization

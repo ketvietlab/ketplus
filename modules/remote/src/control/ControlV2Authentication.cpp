@@ -207,7 +207,8 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
                 else
                     credentials_.remove("refresh-operation");
             }
-            if (status == 401) {
+            const bool revoked = status == 401;
+            if (revoked) {
                 ++epoch_;
                 signerVersions_.clear();
                 ++pairingEpoch_;
@@ -221,6 +222,8 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
             for (const auto& waiter : waiters)
                 waiter(failure.isEmpty() ? credential_.value("accessToken").toString() : QString{},
                        failure);
+            if (revoked)
+                emit credentialRevoked();
         });
 }
 void ControlV2Client::signOut(Callback done) {

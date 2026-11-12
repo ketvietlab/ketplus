@@ -26,6 +26,10 @@ class ControlV2Client final : public QObject {
     // Account replacement fences outstanding requests and drops the previous pairing.
     bool setCredential(const QJsonObject& credential, QString* error = nullptr);
     [[nodiscard]] bool signedIn() const { return !credential_.isEmpty(); }
+    // The relay subject this client is signed in as; empty when signed out.
+    [[nodiscard]] QString subjectId() const {
+        return credential_.value("subject").toObject().value("id").toString();
+    }
     // Returns the relay-owned authorization URL; the UI opens it in the system browser.
     void startSignIn(Callback done);
     void cancelSignIn();
@@ -48,6 +52,12 @@ class ControlV2Client final : public QObject {
     // branch come from the host-signed session metadata; a row whose metadata, host pin or
     // index entry fails authentication is left out and named in `rejected`, never shown.
     void projection(Callback done);
+    // The same with options. `verify_worktrees` (0..100, default 0) bounds how many index
+    // worktrees that no verified conversation covers are checked with a host-signed
+    // worktree.configuration.read; an entry is shown only when the host echoes its ids, labels
+    // and revisions, and is otherwise rejected as unsigned_index_entry, worktree_not_granted or
+    // verification_failed. Each shown worktree has `verified` = "conversation" or "host_read".
+    void projection(const QJsonObject& options, Callback done);
     // One bounded transcript window over Control v2, shaped as the local daemon's
     // session.transcript_window page. `window` takes snapshot_cursor (defaults to the session's
     // lastEventCursor), before_cursor (0 = newest turn), event_limit (<= 128), turn_limit
@@ -58,14 +68,33 @@ class ControlV2Client final : public QObject {
     void prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext, Callback done);
     void submit(const QJsonObject& encryptedIntent, Callback done);
     void command(const QJsonObject& submittedIntent, Callback done);
+    // Commands scoped to a catalog worktree before a conversation exists there (session.create,
+    // worktree.configuration.read, worktree.branches.read). `intent` names kind, workspaceId,
+    // machineId, repositoryId and worktreeId (id and idempotencyKey are generated when absent).
+    // The plaintext is sealed to the machine's pinned agreement key; the host seals its result
+    // to this device and signs it with the pinned host key. Persist the prepared envelope and
+    // retry that exact ciphertext, as for session commands.
+    void prepareWorktreeCommand(const QJsonObject& intent, const QJsonObject& plaintext,
+                                Callback done);
+    void submitWorktreeCommand(const QJsonObject& envelope, Callback done);
+    // The command's state; a terminal one carries the verified, decrypted `result`.
+    void worktreeCommand(const QJsonObject& envelope, Callback done);
     [[nodiscard]] static QByteArray commandAssociatedData(const QJsonObject& intent);
 
   signals:
     void signInFinished(const QString& error);
+    // The relay refused the refresh credential: this client is signed out and every response
+    // still in flight is fenced.
+    void credentialRevoked();
 
   private:
     friend class RemoteControlTestAccess;
     struct ProjectionState;
+    void verifyNextWorktree(const std::shared_ptr<ProjectionState>& state);
+    // A non-durable worktree command (a read): prepare, submit, then poll until it ends.
+    void awaitWorktreeCommand(const QJsonObject& intent, const QJsonObject& plaintext,
+                              Callback done);
+    void pollWorktreeCommand(const QJsonObject& envelope, qint64 deadline, Callback done);
     struct RestoreState;
     void projectNext(const std::shared_ptr<ProjectionState>& state);
     void finishProjection(const std::shared_ptr<ProjectionState>& state);
@@ -95,6 +124,11 @@ class ControlV2Client final : public QObject {
                      std::function<void(const QByteArray&, const QString&)> done);
     void senderKey(const QString& id, int version,
                    std::function<void(const QByteArray&, const QString&)> done);
+    // The relay-served key set of a host key version, accepted only when a pin names it.
+    void hostKeys(const QString& id, int version,
+                  std::function<void(const QJsonObject&, const QString&)> done);
+    // The newest key version pinned for a machine; 0 when none is.
+    [[nodiscard]] int pinnedVersion(const QString& machineId) const;
     bool validatePairing(const QJsonObject& ticket, QString* error);
     QUrl origin_;
     daemon::CredentialStore credentials_;

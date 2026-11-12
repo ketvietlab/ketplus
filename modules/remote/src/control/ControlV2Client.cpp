@@ -42,22 +42,25 @@ bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
     signerVersions_.clear();
     return true;
 }
-QString ControlV2Client::pinnedFingerprint(const QString& machineId) const {
+int ControlV2Client::pinnedVersion(const QString& machineId) const {
     // Pins are "machine/version" -> fingerprint; the machine id itself may contain '/'.
-    QString fingerprint;
-    int newest = -1;
+    int newest = 0;
     for (auto it = hostPins_.constBegin(); it != hostPins_.constEnd(); ++it) {
         const qsizetype slash = it.key().lastIndexOf(QLatin1Char('/'));
         if (slash < 0 || it.key().left(slash) != machineId)
             continue;
         bool ok = false;
         const int version = it.key().mid(slash + 1).toInt(&ok);
-        if (ok && version > newest) {
+        if (ok && version > newest)
             newest = version;
-            fingerprint = it.value().toString();
-        }
     }
-    return fingerprint;
+    return newest;
+}
+QString ControlV2Client::pinnedFingerprint(const QString& machineId) const {
+    const int version = pinnedVersion(machineId);
+    return version > 0
+               ? hostPins_.value(QStringLiteral("%1/%2").arg(machineId).arg(version)).toString()
+               : QString{};
 }
 QJsonObject ControlV2Client::identity(QString* error) {
     if (installationId_.isEmpty()) {
