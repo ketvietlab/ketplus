@@ -77,6 +77,8 @@ struct RemoteCommandAudit final {
     QString sessionId;
     QString resultCode;
     QDateTime recordedAt;
+    // ADR 0116 §5: the team a team command acted on, which names no conversation.
+    QString teamId;
 };
 
 // One staged fork's read snapshot and copy position. Destroying it releases the snapshot;
@@ -494,12 +496,17 @@ class LocalJournal final {
     bool deleteTeam(qint64 teamId, QString* error = nullptr);
     // `read` is false when the journal could not be read, which is not "no teams".
     [[nodiscard]] QList<QJsonObject> teamDocuments(bool* read = nullptr) const;
+    // ADR 0114: the settings every new team starts from (Settings → Teams); empty when none
+    // were saved. `read` is false when the journal could not be read.
+    [[nodiscard]] QJsonObject teamSettings(bool* read = nullptr) const;
+    bool saveTeamSettings(const QJsonObject& settings, QString* error = nullptr);
     [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
     [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
                                                          QString* error = nullptr);
-    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
-    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
-                                                      int limit) const;
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first; with `beforeId`,
+    // only those older than it.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly, int limit,
+                                                      qint64 beforeId = 0) const;
     bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: the conversation's current work report ledger, empty before its first report.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;

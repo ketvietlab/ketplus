@@ -45,10 +45,6 @@ bool CodexAppServer::hasArchiveSupport() const noexcept {
     return daemon_ && daemon_->hasFeature(QStringLiteral("session.archive/1"));
 }
 
-bool CodexAppServer::hasTagSupport() const noexcept {
-    return daemon_ && daemon_->hasFeature(QStringLiteral("session.tags/1"));
-}
-
 QString CodexAppServer::executable() const { return executable_; }
 
 void CodexAppServer::call(const QString& method, const QJsonObject& params,

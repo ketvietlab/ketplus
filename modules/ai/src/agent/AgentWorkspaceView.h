@@ -113,8 +113,6 @@ class AgentWorkspaceView final : public QWidget {
         QString composerHint READ composerHint WRITE setComposerHint NOTIFY composerHintChanged)
     // The details pane is open; the header's openers then switch its tab.
     Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
-    // #429: the labels the header's Add tag menu offers, each as {label, color}.
-    Q_PROPERTY(QVariantList tagCatalog READ tagCatalog NOTIFY tagCatalogChanged)
     Q_PROPERTY(
         bool compactWindow READ compactWindow WRITE setCompactWindow NOTIFY compactWindowChanged)
     Q_PROPERTY(bool productSidebarVisible READ productSidebarVisible WRITE setProductSidebarVisible
@@ -459,9 +457,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void requestSettings(const QString& section = {}) {
         emit settingsRequested(section);
     }
-    Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
     // ADR 0114 (#467): each member conversation's role, by daemon session id, as
-    // {team_id, team_name, role, label, color}. The header shows it first and has no Reviewer.
+    // {team_id, team_name, role, label, color}. The header shows it locked and has no Reviewer.
     Q_PROPERTY(QVariantMap teamRoles READ teamRoles NOTIFY teamRolesChanged)
     QVariantMap teamRoles() const { return teamRoles_; }
     void setTeamRoles(const QVariantMap& roles) {
@@ -474,22 +471,6 @@ class AgentWorkspaceView final : public QWidget {
     // #468: a team block's Open T-n. The task is of the open conversation's team, or else of
     // the member team named in the block.
     Q_INVOKABLE void requestTeamTask(const QString& teamName, const QString& taskId);
-    [[nodiscard]] QVariantList tagCatalog() const;
-    void setTagCatalog(const QVariantList& catalog) {
-        if (tagCatalogSet_ && catalog == tagCatalog_)
-            return;
-        tagCatalogSet_ = true;
-        tagCatalog_ = catalog;
-        emit tagCatalogChanged();
-    }
-    // Manage tags… saves the whole catalog; renames maps an old label to its new one.
-    Q_INVOKABLE void requestTagCatalogSave(const QVariantList& tags, const QVariantMap& renames) {
-        emit tagCatalogSaveRequested(tags, renames);
-    }
-    Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
-                                            bool tagged) {
-        emit conversationTagRequested(conversationId, label, tagged);
-    }
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
         if (!destination.isEmpty())
             emit productNavigationRequested(destination);
@@ -582,11 +563,9 @@ class AgentWorkspaceView final : public QWidget {
     }
 
   signals:
-    void tagFilterRequested(const QString& tag);
     void teamRolesChanged();
     void teamRequested(const QString& teamId);
     void teamTaskRequested(const QString& teamId, const QString& taskId);
-    void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
     void findActionsProvidedChanged();
@@ -660,8 +639,6 @@ class AgentWorkspaceView final : public QWidget {
     void productSidebarVisibleChanged();
     void compactWindowChanged();
     void detailsOpenChanged();
-    void tagCatalogChanged();
-    void tagCatalogSaveRequested(const QVariantList& tags, const QVariantMap& renames);
     void compactWindowRequested();
     void conversationWidthChanged();
     void conversationConfigurationRequested(const QString& model, const QString& effort,
@@ -831,8 +808,6 @@ class AgentWorkspaceView final : public QWidget {
     bool productSidebarVisible_{true};
     bool compactWindow_{false};
     bool detailsOpen_{false};
-    QVariantList tagCatalog_;
-    bool tagCatalogSet_{false};
     int conversationWidth_{defaultConversationWidth};
     qint64 conversationConfigurationRevision_{0};
     QVariant conversationCompactWindow_;

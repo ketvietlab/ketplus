@@ -4,16 +4,15 @@ import QtQuick.Controls.Basic as Basic
 import Ket
 
 // A conversation in the sidebar tree (concept): one line, always. A state mark, the title,
-// the number. Nothing else is drawn in the list; the state in words, what started the turn,
-// the tags and the worktree are in the hint of a resting pointer and in the accessible
-// description. The mark carries the state's own icon and colour; a finished conversation
+// the number. Nothing else is drawn in the list; the state in words, what started the turn
+// and the worktree are in the hint of a resting pointer and in the accessible description.
+// Conversations carry no user tags (ADR 0117). The mark carries the state's own icon and colour; a finished conversation
 // that was not read yet has a dot and a semibold title.
 // `indent` is the row's level: its highlight starts there, right of the tree's guide line.
 Basic.AbstractButton {
     id: control
 
     property string number
-    property var tags: []
     property int status: KetTheme.ConversationStatus.NotStarted
     // Finished since the user last opened it.
     property bool unread: false
@@ -30,9 +29,8 @@ Basic.AbstractButton {
                                            : KetTheme.conversationStatusLabel(status))
                                           + (detail ? " · " + detail : "")
     // Everything the row does not draw, one fact a line.
-    readonly property string hint: [role, statusLabel,
-                                    tags.map(t => t.label).join(", "),
-                                    worktree].filter(line => line !== "").join("\n")
+    readonly property string hint: [role, statusLabel, worktree]
+                                   .filter(line => line !== "").join("\n")
     // The level: a repository's own conversations stand at 20, a team's members at 38.
     property real indent: px(20)
     // Where the mark and the title start; the sidebar checks them against the level's heading.

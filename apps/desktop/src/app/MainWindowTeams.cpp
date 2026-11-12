@@ -43,7 +43,12 @@ void MainWindow::setupTeams() {
     const auto update = [this, daemon, list] {
         if (!list)
             return;
-        teams_->setAvailable(daemon->isReady() && daemon->hasFeature(QStringLiteral("teams/1")));
+        // A daemon that went away keeps its teams, stale, so the sidebar does not scatter a
+        // team's members as loose conversations while it reconnects (ADR 0115).
+        if (!daemon->isReady())
+            teams_->setDisconnected();
+        else
+            teams_->setAvailable(daemon->hasFeature(QStringLiteral("teams/1")));
         list->setTeamsAvailable(teams_->isAvailable());
         scheduleSidebarRefresh();
     };
@@ -60,7 +65,7 @@ void MainWindow::setupTeams() {
 QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
                                                   QVariantList& conversations) const {
     QVector<SidebarTeam> folders;
-    if (teams_ == nullptr || !teams_->isAvailable())
+    if (teams_ == nullptr || !teams_->hasTeams())
         return folders;
     for (const QJsonObject& team : teams_->teams(repository)) {
         SidebarTeam folder{
@@ -92,12 +97,13 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
             const QString role = member.value(QStringLiteral("role")).toString();
             row.insert(QStringLiteral("teamId"), folder.id);
             row.insert(QStringLiteral("teamRole"), role);
-            // The role is the first tag, set by the team (#467).
-            QVariantList tags{QVariantMap{{QStringLiteral("label"), team_roles::label(role)},
-                                          {QStringLiteral("color"), team_roles::color(role).name()},
-                                          {QStringLiteral("locked"), true}}};
-            tags += row.value(QStringLiteral("tags")).toList();
-            row.insert(QStringLiteral("tags"), tags);
+            // The role is the row's only tag, locked: the team sets it (#467). Conversations
+            // carry no user tags in the UI (ADR 0117).
+            row.insert(
+                QStringLiteral("tags"),
+                QVariantList{QVariantMap{{QStringLiteral("label"), team_roles::label(role)},
+                                         {QStringLiteral("color"), team_roles::color(role).name()},
+                                         {QStringLiteral("locked"), true}}});
             // #125: the leader waits for the user while a decision is open.
             if (role == QStringLiteral("leader") && folder.openDecisions > 0 &&
                 !row.value(QStringLiteral("running")).toBool())

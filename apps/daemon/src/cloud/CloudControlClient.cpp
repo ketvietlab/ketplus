@@ -163,6 +163,13 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         }
         sync();
     });
+    // ADR 0116 §3: phones learn of a team change from the members' sealed metadata.
+    teamSyncTimer_.setSingleShot(true);
+    connect(&teamSyncTimer_, &QTimer::timeout, this, [this] {
+        lastTeamSync_.restart();
+        stateSyncTimer_.start(0);
+    });
+    connect(host_, &SessionHost::teamEvent, this, &CloudControlClient::noteTeamChanged);
     connect(host_, &SessionHost::eventReady, this, [this](const QJsonObject& event) {
         peers_->eventsChanged(event.value("session_id").toString());
         QTimer::singleShot(0, this, &CloudControlClient::uploadEvents);
@@ -391,6 +398,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
     accountUsername_.clear();
     daemonToken_.clear();
     registeredCloudCursors_.clear();
+    knownUploadedCursors_.clear();
     eventUploadLimits_.clear();
     eventUploadBackoff_.clear();
     daemonTokenExpiresAt_ = {};
@@ -757,10 +765,15 @@ QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
     QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata,
-    const QHash<QString, QString>& tagColors) {
+    const QHash<QString, QString>& tagColors, WorktreeRevisionCache* revisionCache,
+    const qint64 nowMs) {
     QJsonArray sessions;
     const QString machineName = QHostInfo::localHostName().left(128);
     QHash<QString, QString> revisions;
+    QHash<QString, QList<StoredSession>> byWorktree;
+    if (revisionCache != nullptr)
+        for (const StoredSession& session : stored)
+            byWorktree[session.worktreePath].append(session);
     for (const StoredSession& session : stored) {
         const QString label = QFileInfo(session.worktreePath).fileName();
         // The relay only accepts these providers; anything else keeps the historical default.
@@ -822,12 +835,19 @@ QJsonArray CloudControlClient::sessionSnapshots(
             snapshot.insert(it.key(), it.value());
         }
         QString workspaceRevision = revisions.value(session.worktreePath);
-        if (workspaceRevision.isEmpty()) {
-            ReadOnlyWorkspaceFiles files({QStringLiteral("heartbeat"), workspaceId, machineId,
-                                          context.value(QStringLiteral("repositoryId")).toString(),
-                                          context.value(QStringLiteral("worktreeId")).toString(),
-                                          session.worktreePath});
-            workspaceRevision = files.revision();
+        if (!revisions.contains(session.worktreePath)) {
+            const auto compute = [&](const QString& path) {
+                ReadOnlyWorkspaceFiles files(
+                    {QStringLiteral("heartbeat"), workspaceId, machineId,
+                     context.value(QStringLiteral("repositoryId")).toString(),
+                     context.value(QStringLiteral("worktreeId")).toString(), path});
+                return files.revision();
+            };
+            workspaceRevision = revisionCache != nullptr
+                                    ? revisionCache->revision(
+                                          session.worktreePath,
+                                          byWorktree.value(session.worktreePath), nowMs, compute)
+                                    : compute(session.worktreePath);
             revisions.insert(session.worktreePath, workspaceRevision);
         }
         if (!workspaceRevision.isEmpty())

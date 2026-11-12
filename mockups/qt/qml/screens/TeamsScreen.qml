@@ -105,7 +105,7 @@ Item {
                         { when: "Today, 12:20", text: "Every criterion is met: Ready to merge" }]) })),
                 decisions: [mergeDecision].concat(decisions) })
         if (state === "paused")
-            change({ paused: true, pausedReason: "budget",
+            change({ paused: true, pausedReason: "budget", automaticTurns: turnBudget,
                 decisions: [budgetDecision].concat(decisions),
                 members: members.map(m => m.state === "working"
                     ? Object.assign({}, m, { state: "idle", now: "Waits: the team is paused" }) : m) })
@@ -114,9 +114,26 @@ Item {
     readonly property var mergeDecision: ({ id: "D-3", kind: "merge", question: "Merge T-1 into release/1.4?",
         detail: "The review passed with no findings and every criterion is met. You chose to merge each task yourself.",
         askedBy: "", task: "T-1", when: "Just now", options: ["Merge", "Not yet"], recommended: 0 })
-    readonly property var budgetDecision: ({ id: "D-4", kind: "budget", question: "The team used its 40 automatic turns. Continue?",
+    // The daemon words it with the team's own budget (ADR 0114, open point 2).
+    readonly property int turnBudget: team && team.turnBudget ? team.turnBudget : Fixtures.turnBudget
+    readonly property int automaticTurns: team && team.automaticTurns ? team.automaticTurns : 0
+    readonly property var budgetDecision: ({ id: "D-4", kind: "budget",
+        question: "The team used its " + turnBudget + " automatic turns. Continue?",
         detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
-        askedBy: "", task: "", when: "Just now", options: ["Continue with 40 more", "Stay paused"], recommended: 0 })
+        askedBy: "", task: "", when: "Just now", options: ["Continue (" + turnBudget + " more turns)", "Stop"], recommended: 0 })
+    // A new budget applies from the next automatic turn; the turns used stay counted. One that
+    // leaves turns withdraws the budget question and resumes a team it paused.
+    function changeTurnBudget(budget) {
+        const resumes = team.paused && team.pausedReason === "budget" && automaticTurns < budget
+        change({ turnBudget: budget,
+            paused: resumes ? false : team.paused,
+            pausedReason: resumes ? "" : team.pausedReason,
+            decisions: resumes ? decisions.filter(d => d.kind !== "budget") : decisions,
+            updates: [{ icon: "clock", text: "Automatic turns: " + budget + ", " + automaticTurns + " used",
+                        detail: "You · the team", when: "Just now" }].concat(team.updates) })
+        window.notify(resumes ? "Resumed " + team.name + ": " + automaticTurns + " of " + budget + " turns used"
+                              : team.name + " has " + budget + " automatic turns")
+    }
 
     // `--open=new-team|add-member|task|handover` opens a dialog for review captures.
     function openDialog(name) {
@@ -124,6 +141,8 @@ Item {
             startNewTeam("")
         else if (name === "delete-team" && team)
             disbandDialog.open()
+        else if (name === "turn-budget" && team)
+            turnBudgetDialog.open()
         else if (name === "remove-member" && team)
             startRemove(team.id, "8215")
         else if (name === "add-member" && team)
@@ -224,6 +243,7 @@ Item {
             change({
                 decisions: decisions.filter(d => d.id !== decision.id),
                 paused: decision.kind === "budget" ? !yes : team.paused,
+                automaticTurns: decision.kind === "budget" && yes ? 0 : automaticTurns,
                 pausedReason: decision.kind === "budget" && yes ? "" : team.pausedReason,
                 tasks: tasks.map(t => t.id !== decision.task || !yes ? t : Object.assign({}, t, { state: "done",
                     history: t.history.concat([{ when: "Just now", text: "You merged " + t.id + " into " + team.branch }]) })),
@@ -276,7 +296,8 @@ Item {
                     : lane ? "No task yet" : "No lane yet" }
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
-    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission) {
+    // `budget` is the team's own automatic turns; without one it takes Settings → Teams.
+    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission, budget) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
         for (let i = 1; i <= developers; ++i)
@@ -289,6 +310,7 @@ Item {
         teams = teams.concat([{
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
             paused: false, merges: merges || "leader", permission: permission || "Workspace",
+            turnBudget: budget || Fixtures.turnBudget, automaticTurns: 0,
             leaderWrites: leaderWrites, members: members,
             tasks: [], decisions: [], updates: [] }])
         teamIndex = teams.length - 1
@@ -399,7 +421,27 @@ Item {
         // A conversation joins only a team of its own repository.
         const far = createTeam(other, "Check D", "", "main", true, plan)
         check(!join(far, "4822"), "a conversation of another repository cannot join")
-        for (const id of [b, c, far]) {
+        // ADR 0114, open point 2: the global budget, a team's own, and a change while it runs.
+        const global = Fixtures.turnBudget
+        check(["4", "201", "7.5", "", "forty"].every(v => Fixtures.turnBudgetError(v) !== "")
+              && ["5", "40", "200"].every(v => Fixtures.turnBudgetError(v) === ""),
+              "automatic turns are a whole number from 5 to 200")
+        const own = createTeam(repository, "Check E", "", "develop", true, plan, "leader", "", 12)
+        check(turnBudget === 12, "a team created with its own budget keeps it")
+        Fixtures.turnBudget = 70
+        const taken = createTeam(repository, "Check F", "", "develop", true, plan)
+        check(turnBudget === 70, "a team created without a budget takes Settings › Teams")
+        showTeam(own)
+        check(turnBudget === 12, "changing Settings › Teams changes no existing team")
+        Fixtures.turnBudget = global
+        change({ paused: true, pausedReason: "budget", automaticTurns: 12,
+                 decisions: [budgetDecision].concat(decisions) })
+        check(team.paused && decisions.some(d => d.kind === "budget")
+              && budgetDecision.options[0] === "Continue (12 more turns)", "the budget question uses the team's budget")
+        changeTurnBudget(20)
+        check(!team.paused && !decisions.some(d => d.kind === "budget") && automaticTurns === 12
+              && turnBudget === 20, "a budget that leaves turns resumes the team and keeps the turns used")
+        for (const id of [b, c, far, own, taken]) {
             showTeam(id)
             deleteTeam()
         }
@@ -549,6 +591,15 @@ Item {
                     spacing: screen.px(6)
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "pull-request"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Label { text: screen.team && screen.team.merges === "user" ? "You merge tasks" : "The leader merges tasks"; color: KetTheme.t.textSecondary }
+                }
+                Row {
+                    spacing: screen.px(6)
+                    KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "clock"; box: screen.px(13); color: KetTheme.t.textMuted }
+                    Label {
+                        objectName: "teamTurns"
+                        text: screen.automaticTurns + " of " + screen.turnBudget + " automatic turns used"
+                        color: KetTheme.t.textSecondary
+                    }
                 }
                 Label {
                     visible: screen.tasks.length > 0
@@ -1067,6 +1118,12 @@ Item {
             }
         }
         KetMenuItem {
+            text: "Automatic turns…"
+            description: screen.automaticTurns + " of " + screen.turnBudget + " used"
+            iconName: "clock"
+            onTriggered: turnBudgetDialog.open()
+        }
+        KetMenuItem {
             readonly property bool mine: !!screen.team && screen.team.merges === "user"
             text: mine ? "Let the leader merge tasks" : "Merge tasks myself"
             description: mine ? "Once the reviewer passes a task" : "Each reviewed task waits for you"
@@ -1487,7 +1544,7 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1 }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1 }
         DialogBody {
             KetFieldRow {
                 width: parent.width
@@ -1527,6 +1584,18 @@ Item {
                         text: "Me"
                         onToggled: if (checked) newTeamDialog.merges = "user"
                     }
+                }
+            }
+            KetFieldRow {
+                width: parent.width
+                label: "Automatic turns"
+                help: "Turns members start on their own before the team asks you to continue. New teams start from Settings → Teams."
+                error: newTeamDialog.tried ? Fixtures.turnBudgetError(teamBudget.text) : ""
+                KetTextField {
+                    id: teamBudget
+                    width: screen.px(96)
+                    Accessible.name: "Automatic turns"
+                    invalid: newTeamDialog.tried && Fixtures.turnBudgetError(text) !== ""
                 }
             }
             // What the leader and the developers may do without asking, as the composer's Mode
@@ -1628,11 +1697,51 @@ Item {
                 onClicked: {
                     newTeamDialog.tried = true
                     const name = teamName.text.trim()
-                    if (name === "")
+                    if (name === "" || Fixtures.turnBudgetError(teamBudget.text) !== "")
                         return
                     newTeamDialog.accept()
                     screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
-                                      leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText)
+                                      leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText,
+                                      Number(teamBudget.text.trim()))
+                }
+            }
+        ]
+    }
+
+    // The team's own budget, changed while it runs (ADR 0114, open point 2).
+    KetDialog {
+        id: turnBudgetDialog
+        property bool tried: false
+        readonly property string error: tried ? Fixtures.turnBudgetError(turnBudgetField.text) : ""
+        title: "Automatic turns for " + (screen.team ? screen.team.name : "")
+        onOpened: { tried = false; turnBudgetField.text = String(screen.turnBudget) }
+        DialogBody {
+            KetFieldRow {
+                width: parent.width
+                label: "Automatic turns"
+                help: "Applies from the next automatic turn. The " + screen.automaticTurns + " turns used stay counted"
+                      + (screen.team && screen.team.pausedReason === "budget"
+                         ? "; a budget that leaves turns resumes the team." : ".")
+                error: turnBudgetDialog.error
+                KetTextField {
+                    id: turnBudgetField
+                    width: screen.px(96)
+                    Accessible.name: "Automatic turns"
+                    invalid: turnBudgetDialog.error !== ""
+                }
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: turnBudgetDialog.reject() },
+            KetButton {
+                text: "Save"
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    turnBudgetDialog.tried = true
+                    if (Fixtures.turnBudgetError(turnBudgetField.text) !== "")
+                        return
+                    turnBudgetDialog.accept()
+                    screen.changeTurnBudget(Number(turnBudgetField.text.trim()))
                 }
             }
         ]

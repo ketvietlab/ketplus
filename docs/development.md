@@ -160,7 +160,7 @@ preserves npm's relative symlinks so the bundle remains
 relocatable after the temporary install directory is removed. The macOS bundle
 layout check rejects broken or absolute links inside the sidecar.
 
-The sidecar pins Claude Agent SDK 0.3.289 in both package metadata and the lockfile.
+The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockfile.
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 

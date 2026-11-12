@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -68,6 +69,50 @@ class CursorAdapterTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void findsTheCliInstalledAfterStartup() {
+        // The daemon outlives a CLI install: Cursor's installer runs while KetPlus is open and
+        // the setup banner's Retry has to see it without restarting KetPlus.
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray oldPath = qgetenv("PATH");
+        const QByteArray oldHome = qgetenv("HOME");
+        const QByteArray oldOverride = qgetenv("KETPLUS_CURSOR_AGENT");
+        const auto restore = qScopeGuard([&] {
+            qputenv("PATH", oldPath);
+            qputenv("HOME", oldHome);
+            if (oldOverride.isNull())
+                qunsetenv("KETPLUS_CURSOR_AGENT");
+            else
+                qputenv("KETPLUS_CURSOR_AGENT", oldOverride);
+        });
+        const QString bin = directory.filePath(QStringLiteral("bin"));
+        QVERIFY(QDir().mkpath(bin));
+        qputenv("PATH", QFile::encodeName(bin));
+        qputenv("HOME", QFile::encodeName(directory.path()));
+        qunsetenv("KETPLUS_CURSOR_AGENT");
+
+        CursorAdapter cursor;
+        QVERIFY(!cursor.isAvailable());
+
+        const QString agent = QDir(bin).filePath(QStringLiteral("agent"));
+        QVERIFY(writeFakeCursor(agent, directory.filePath(QStringLiteral("cursor.log"))));
+        QTRY_VERIFY_WITH_TIMEOUT(cursor.isAvailable(), 5000);
+        QCOMPARE(cursor.executable(), agent);
+
+        // An updater that removes the binary it replaced is found again at its new path.
+        const QString updated = QDir(directory.filePath(QStringLiteral(".local/bin")))
+                                    .filePath(QStringLiteral("cursor-agent"));
+        QVERIFY(QDir().mkpath(QFileInfo(updated).path()));
+        QVERIFY(QFile::rename(agent, updated));
+        QTRY_COMPARE_WITH_TIMEOUT(cursor.executable(), updated, 5000);
+    }
+
+    void keepsAnExplicitCliPath() {
+        CursorAdapter cursor(QStringLiteral("/missing-cursor-for-explicit-test"));
+        QCOMPARE(cursor.executable(), QStringLiteral("/missing-cursor-for-explicit-test"));
+        QVERIFY(cursor.isAvailable());
+    }
+
     void startsCursorTurnWithoutAcpAuthenticate() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

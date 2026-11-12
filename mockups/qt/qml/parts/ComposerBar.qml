@@ -40,14 +40,18 @@ Item {
     }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    // Review evidence: --open=model|mode|limits.
+    // Review evidence: --open=model|mode|limits; limits-cost opens Cost details and
+    // limits-api-key shows a conversation on an API key, which has no such row.
     function openPanel(name) {
         if (name === "model")
             modelDialog.open()
         else if (name === "mode")
             permissionButton.clicked()
-        else if (name === "limits")
+        else if (["limits", "limits-cost", "limits-api-key"].includes(name)) {
+            limits.apiKey = name === "limits-api-key"
             limits.toggleAbove(ring)
+            limits.costExpanded = name === "limits-cost"
+        }
         else if (name === "composer")
             composer.focusInput()
         // The suggestion popovers, for the side by side with the app's composer.

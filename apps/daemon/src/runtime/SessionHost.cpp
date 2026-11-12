@@ -314,6 +314,8 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
+    teamGit_.setMaxThreadCount(1);
+    teamRemote_.setMaxThreadCount(1);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
         QBuffer source;
@@ -1794,6 +1796,21 @@ void SessionHost::handleCommandDeferred(const QJsonObject& request, const QStrin
     }
     if (isBackgroundTaskCommand(request.value(QStringLiteral("message_type")).toString())) {
         backgroundTaskCommand(request, std::move(done));
+        return;
+    }
+    // ADR 0114 §1: what a team command asks git is read off the event loop first: the
+    // repositories it names, then a task's worktree or its hand to review. Only for the
+    // local client: handleCommand refuses any other before it asks anything.
+    if (localClient(clientId) && request.value(QStringLiteral("message_type"))
+                                     .toString()
+                                     .startsWith(QStringLiteral("team."))) {
+        auto run = [this, request, clientId, done = std::move(done)] {
+            prepareTeamTask(request, [this, request, clientId, done] {
+                done(handleCommand(request, clientId));
+            });
+        };
+        learnRepositories(teamCommandPaths(request.value(QStringLiteral("payload")).toObject()),
+                          std::move(run));
         return;
     }
     if (request.value(QStringLiteral("message_type")).toString() !=

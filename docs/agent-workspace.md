@@ -108,7 +108,11 @@ independent. These safe session snapshots are journaled and restored with the co
 
 A separate Admin API key in Settings → Providers enables desktop organization usage.
 The existing usage popover requests the UTC calendar-month-to-date cost and token report
-on opening or Refresh. It covers all products and keys in that Admin key's organization,
+on opening or Refresh. When the conversation does not run on an API key (runtime
+authentication, or before the first usage report), the conversation and organization
+blocks sit behind one "Cost details" row, collapsed each time the popover opens; the report
+is then requested when the row is expanded, not on opening. Context window and plan limits
+stay visible. It covers all products and keys in that Admin key's organization,
 not just KétPlus or the inference key (which may belong to another organization).
 Cost is after discounts and before credits, not a credit balance. Credit balance and
 account spending limits remain in Anthropic Console; no inferred balance is displayed.
@@ -128,6 +132,11 @@ current-window value.
 
 - The Codex CLI is discovered from `PATH`, `~/.local/bin/codex`, Homebrew, or
   `/usr/local/bin/codex`.
+- A discovered CLI path (not one given with `--codex`/`--cursor` or the
+  `KETPLUS_*` overrides) is looked up again, at most every 2 seconds, while it
+  is missing or its file has gone. A CLI installed while KetPlus runs, or moved
+  by its own updater, is used on the next request or Retry without restarting
+  the daemon (`ProviderExecutable`).
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in
@@ -760,7 +769,9 @@ The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 - Presentation keeps connection availability, folder availability, history load,
   and turn activity as separate axes. The native header displays repository and
   branch labels rather than the absolute worktree path; scope changes cannot turn
-  a late response into the selected conversation's status.
+  a late response into the selected conversation's status. The header and the sidebar
+  draw no user tags and offer no way to add, manage or filter by one (ADR 0117); a team
+  member's role shows as a locked label that opens the team (ADR 0114).
 - Model selection uses one popover with provider tabs, searchable models,
   a discrete effort slider, and reset-to-default. The slider follows the models
   on the open tab, and hides when a model has no separate effort list. Claude is enabled when the

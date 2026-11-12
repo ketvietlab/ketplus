@@ -23,7 +23,6 @@ class Banner;
 namespace ketplus {
 
 class SidebarSearchButton;
-class SidebarTagFilterChip;
 
 struct ThemePalette;
 
@@ -49,7 +48,6 @@ class ActivityBar final : public QWidget {
     void setSourceControlCount(int count);
     void setRepositories(const QVector<SidebarRepository>& repositories);
     [[nodiscard]] SidebarRepositoryList* repositoryList() const { return repositoryList_; }
-    void setTagFilter(const QString& tag);
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
     void setRemoteMachineSelected(bool selected);
@@ -97,8 +95,6 @@ class ActivityBar final : public QWidget {
     ket::NavItem* sourceControlButton_{nullptr};
     ket::NavItem* agentButton_{nullptr};
     ket::NavItem* remoteButton_{nullptr};
-    SidebarTagFilterChip* tagFilter_{nullptr};
-    QWidget* tagFilterRow_{nullptr};
     QWidget* storageNotice_{nullptr};
     ket::Banner* storageBanner_{nullptr};
     SidebarRepositoryList* repositoryList_{nullptr};

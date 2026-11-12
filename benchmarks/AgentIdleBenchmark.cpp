@@ -139,8 +139,7 @@ int main(int argc, char** argv) {
     const QHash<QString, QString> panelButtons{{"mode", "permissionButton"},
                                                {"model", "modelButton"},
                                                {"limits", "usageLimitsButton"},
-                                               {"reviewer", "headerReviewerButton"},
-                                               {"tags", "headerAddTagButton"}};
+                                               {"reviewer", "headerReviewerButton"}};
     const auto panel = parser.value("open");
     // `welcome` opens no panel: the conversation has no messages, like the mock's welcome state.
     const bool welcome = panel == "welcome";
@@ -186,9 +185,7 @@ int main(int argc, char** argv) {
     if (capture) {
         auto active = conversations.first().toMap();
         active.insert("provider", captureProvider);
-        // The mock's header: one tag, and a reviewer picker with nobody assigned.
-        active.insert("tags", QVariantList{QVariantMap{{"label", "Review"}, {"color", "#7c5cd6"}}});
-        active.insert("tagsEditable", true);
+        // The mock's header: a reviewer picker with nobody assigned.
         // The mock's workspace/error: the turn failed, as the session reports it.
         if (transcript == "error" && work != "running")
             active.insert("status", "Error");

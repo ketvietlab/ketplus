@@ -278,6 +278,50 @@ class TeamReviewTest final : public QObject {
         QCOMPARE(team().reviewing, id);
     }
 
+    // The session runtime reads the diff off its event loop. Nothing of the team changes until
+    // the diff comes, so a restart meanwhile leaves the task queued and asks again.
+    void aReviewStartsWhenItsDiffComesAndARestartMeanwhileLosesNothing() {
+        host_.holdAnswers = true;
+        const QString id = inReview("Cart", "dev1");
+        QVERIFY(!id.isEmpty());
+        QVERIFY(teams_->checksOpen());
+        QVERIFY(team().reviewing.isEmpty());
+        QCOMPARE(team().reviewQueue, QStringList{id});
+        QVERIFY(reviewsTo("rev").isEmpty());
+        reload();
+        QVERIFY(team().reviewing.isEmpty());
+        QCOMPARE(team().reviewQueue, QStringList{id});
+        // The answer to the coordinator that is gone is dropped; the new one's starts it.
+        host_.answer();
+        QCOMPARE(team().reviewing, id);
+        QCOMPARE(reviewsTo("rev").size(), 1);
+        QCOMPARE(reviewsTo("rev").first().id, team().reviewingMessage);
+        QVERIFY(reviewsTo("rev").first().body.contains("web/" + id + ".txt"));
+        QVERIFY(!teams_->checksOpen());
+    }
+
+    // A diff is of one task against one integration branch. When another task is next by the
+    // time it comes, or the branch changed, it is dropped and the right one is read.
+    void aDiffForATaskThatIsNoLongerNextIsDroppedAndReadAgain() {
+        host_.holdAnswers = true;
+        const QString first = inReview("One", "dev1");
+        const QString second = inReview("Two", "dev2");
+        const int asked = host_.asked;
+        QVERIFY(teams_->moveTask(team_, first, state::todo, "lead").ok());
+        host_.answer();
+        QVERIFY(team().reviewing.isEmpty());
+        QCOMPARE(host_.asked, asked + 1);
+        QVERIFY(teams_->update(team_, {{"integration_branch", "release-other"}}, "user").ok());
+        host_.answer();
+        QVERIFY(team().reviewing.isEmpty());
+        QCOMPARE(host_.asked, asked + 2);
+        host_.answer();
+        QCOMPARE(team().reviewing, second);
+        QCOMPARE(reviewsTo("rev").size(), 1);
+        QCOMPARE(reviewsTo("rev").first().taskId, second);
+        QVERIFY(team().reviewQueue.isEmpty());
+    }
+
     void aTaskThatLeftReviewWhileQueuedIsSkipped() {
         const QString first = inReview("One", "dev1");
         const QString second = inReview("Two", "dev2");

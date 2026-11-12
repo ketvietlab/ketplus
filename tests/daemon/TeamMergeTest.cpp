@@ -78,6 +78,14 @@ class TeamMergeTest final : public QObject {
             .value("team")
             .toObject();
     }
+    // Reads the team, which asks git about its ready tasks, and reads it again once git has
+    // answered: the daemon asks off its event loop.
+    static QString settledStateOf(agent_test::Fixture& fixture, const QString& teamId) {
+        (void)readTeam(fixture, teamId);
+        if (!QTest::qWaitFor([&] { return !fixture.host->teamChecksPending(); }, 30000))
+            return QStringLiteral("git did not answer");
+        return stateOf(fixture, teamId);
+    }
     static QString stateOf(agent_test::Fixture& fixture, const QString& teamId) {
         return readTeam(fixture, teamId)
             .value("tasks")
@@ -251,6 +259,66 @@ class TeamMergeTest final : public QObject {
         QCOMPARE(team().openDecisions(), 0);
     }
 
+    // The session runtime asks git off its event loop and answers later. One question is open
+    // for a team at a time; a check asked for meanwhile runs when it is answered.
+    void aLateAnswerIsAppliedAndAChecksAskedMeanwhileRunsAfterIt() {
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.holdAnswers = true;
+        host_.asked = 0;
+        teams_->checkMerged(team_);
+        QVERIFY(teams_->checksOpen());
+        QCOMPARE(host_.asked, 1);
+        // Merged after git was asked: this answer does not know it.
+        host_.merged.insert(id);
+        teams_->checkMerged(team_);
+        teams_->checkMerged(team_);
+        QCOMPARE(host_.asked, 1);
+        host_.answer();
+        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(host_.asked, 2);
+        host_.answer();
+        QCOMPARE(get(id).state, state::done);
+        QCOMPARE(host_.asked, 2);
+        QVERIFY(!teams_->checksOpen());
+    }
+
+    // Git answered whether the integration branch the team had contains the task. After the
+    // branch changed the answer says nothing: it is dropped, and git is asked again.
+    void anAnswerForAnotherIntegrationBranchIsDroppedAndAskedAgain() {
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.holdAnswers = true;
+        host_.merged.insert(id);
+        teams_->checkMerged(team_);
+        const int asked = host_.asked;
+        QVERIFY(teams_->update(team_, {{"integration_branch", "release-other"}}, "user").ok());
+        // The new integration branch does not contain the task.
+        host_.merged.remove(id);
+        host_.answer();
+        QCOMPARE(team().integrationBranch, QStringLiteral("release-other"));
+        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(host_.asked, asked + 1);
+        host_.answer();
+        QCOMPARE(get(id).state, state::ready);
+        QVERIFY(!teams_->checksOpen());
+    }
+
+    // An answer that arrives after its team was deleted changes nothing and leaves no
+    // question open.
+    void anAnswerForADeletedTeamIsDropped() {
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.holdAnswers = true;
+        host_.merged.insert(id);
+        teams_->checkMerged(team_);
+        QVERIFY(teams_->checksOpen());
+        QVERIFY(!teams_->remove(team_));
+        host_.answer();
+        QVERIFY(!teams_->team(team_));
+        QVERIFY(!teams_->checksOpen());
+    }
+
     void commitsAfterTheReviewSendAReadyTaskBackToReview() {
         QVERIFY(teams_->update(team_, {{"merge_policy", "user"}}, "user").ok());
         const QString id = task("Cart");
@@ -296,13 +364,15 @@ class TeamMergeTest final : public QObject {
         if (QTest::currentTestFailed())
             return;
         // Not contained yet; then the user merges by hand outside the app.
-        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("ready"));
+        QCOMPARE(settledStateOf(fixture, ready.teamId), QStringLiteral("ready"));
         // A worktree that leaves the branch does not change what was reviewed.
         git(ready.worktree, {"checkout", "-q", "--detach"});
         git(ready.worktree, {"commit", "-q", "--allow-empty", "-m", "Detached"});
-        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("ready"));
+        QCOMPARE(settledStateOf(fixture, ready.teamId), QStringLiteral("ready"));
         git(ready.repository, {"merge", "-q", "--no-ff", "-m", "Merge T-1", ready.branch});
-        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("done"));
+        // The read that asks is answered with the team as it is; the merge follows.
+        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("ready"));
+        QCOMPARE(settledStateOf(fixture, ready.teamId), QStringLiteral("done"));
         QCOMPARE(readTeam(fixture, ready.teamId).value("open_decisions").toInt(), 0);
     }
 
@@ -318,7 +388,7 @@ class TeamMergeTest final : public QObject {
         git(ready.repository, {"commit", "-q", "--allow-empty", "-m", "Later"});
         git(ready.repository, {"branch", "-f", ready.branch, "elsewhere"});
         git(ready.repository, {"checkout", "-q", "integration"});
-        QCOMPARE(stateOf(fixture, ready.teamId), QStringLiteral("blocked"));
+        QCOMPARE(settledStateOf(fixture, ready.teamId), QStringLiteral("blocked"));
         QCOMPARE(readTeam(fixture, ready.teamId).value("open_decisions").toInt(), 0);
     }
 };

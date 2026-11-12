@@ -19,8 +19,10 @@
 #include <QCommandLineParser>
 #include <QDirIterator>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
+#include <QRawFont>
 #include <QScreen>
 #include <QTest>
 #include <QTimer>
@@ -102,6 +104,19 @@ int main(int argc, char* argv[]) {
     while (fonts.hasNext())
         if (QFontDatabase::addApplicationFont(fonts.next()) < 0)
             std::fprintf(stderr, "Could not load %s\n", qPrintable(fonts.filePath()));
+
+    if (parser.isSet(smoke)) {
+        QFont brandFont(QStringLiteral("KET Sans"));
+        brandFont.setWeight(QFont::Bold);
+        brandFont.setPixelSize(32);
+        const QFontInfo resolved(brandFont);
+        const QRawFont face = QRawFont::fromFont(brandFont);
+        std::fprintf(stderr, "Brand font: %s / %s / weight %d\n", qPrintable(resolved.family()),
+                     qPrintable(face.styleName()), face.weight());
+        if (resolved.family() != QStringLiteral("KET Sans") ||
+            !face.styleName().contains(QStringLiteral("Bold")) || face.weight() != 700)
+            return 1;
+    }
 
     // Mock overrides of the KetPlus profile. Monospace text (code, diffs, inline code,
     // conversation numbers) reads at 14 px.
@@ -249,6 +264,16 @@ int main(int argc, char* argv[]) {
                     ++qmlProblems;
                 } else {
                     std::fprintf(stderr, "Keyboard check: View > Search in Files opened Search\n");
+                }
+            }
+        }
+        if (window->metaObject()->indexOfMethod("brandChecks()") >= 0) {
+            for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
+                ket::Appearance::instance().setMode(mode);
+                for (const double scale : {1.0, 3.0}) {
+                    ket::Appearance::instance().setZoom(scale);
+                    QTest::qWait(100);
+                    QMetaObject::invokeMethod(window, "brandChecks");
                 }
             }
         }

@@ -11,6 +11,7 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
+#include "teams/TeamTurnBudget.h"
 
 #include <QFileInfo>
 #include <QFrame>
@@ -19,6 +20,7 @@
 #include <QMenu>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -61,7 +63,9 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     outer->addWidget(scroll_);
     connect(teams_, &TeamDirectory::changed, this, [this] {
-        rebuild();
+        // The directory reports every team: only a change of this one rebuilds the page.
+        if (teams_->team(teamId_).value_or(QJsonObject{}) != shown_)
+            rebuild();
         readUpdates();
     });
     // Sizes follow the zoom and the task table's colours the theme.
@@ -101,12 +105,45 @@ void TeamPage::readUpdates() {
                             if (!error.isEmpty())
                                 return;
                             QJsonArray updates = result.value(QStringLiteral("updates")).toArray();
-                            if (updates == alive->updates_)
+                            const bool more =
+                                result.value(QStringLiteral("updates_has_more")).toBool();
+                            if (updates == alive->updates_ && more == alive->newestHaveMore_)
                                 return;
                             alive->updates_ = updates;
+                            alive->newestHaveMore_ = more;
                             alive->rebuild();
                         });
     });
+}
+
+void TeamPage::readOlderUpdates() {
+    if (olderPending_)
+        return;
+    qint64 oldest = 0;
+    for (const QJsonArray* page : {&updates_, &olderUpdates_})
+        for (const auto& value : *page) {
+            const qint64 id = value.toObject().value(QStringLiteral("id")).toInteger();
+            oldest = oldest == 0 ? id : qMin(oldest, id);
+        }
+    if (oldest <= 0)
+        return;
+    olderPending_ = true;
+    const QPointer<TeamPage> alive(this);
+    teams_->request(QStringLiteral("team.updates.list"),
+                    {{QStringLiteral("team_id"), teamId_},
+                     {QStringLiteral("before_id"), oldest},
+                     {QStringLiteral("limit"), 50}},
+                    [alive](const QJsonObject& result, const QString& error) {
+                        if (!alive)
+                            return;
+                        alive->olderPending_ = false;
+                        if (!error.isEmpty())
+                            return;
+                        for (const auto& value : result.value(QStringLiteral("updates")).toArray())
+                            alive->olderUpdates_.append(value);
+                        alive->olderHaveMore_ = result.value(QStringLiteral("has_more")).toBool();
+                        alive->rebuild();
+                    });
 }
 
 QString TeamPage::memberName(const QJsonObject& team, const QString& sessionId) {
@@ -136,8 +173,60 @@ void TeamPage::resizeEvent(QResizeEvent* event) {
         rebuild();
 }
 
+// The focused widget's own name, or its nearest named ancestor's and the part's place in it: a
+// kit control keeps the focus on a part without a name. A decision's and a member's row carry
+// their id.
+TeamPage::FocusPlace TeamPage::focusPlace() const {
+    QWidget* focused = content_ ? window()->focusWidget() : nullptr;
+    if (!focused || !content_->isAncestorOf(focused))
+        return {};
+    QWidget* const part = focused;
+    while (focused != content_ && focused->objectName().isEmpty())
+        focused = focused->parentWidget();
+    if (focused == content_)
+        return {};
+    FocusPlace place{.name = focused->objectName()};
+    if (part != focused)
+        place.part = static_cast<int>(focused->findChildren<QWidget*>().indexOf(part));
+    const QWidget* scope = content_;
+    for (QWidget* above = focused->parentWidget(); above != content_; above = above->parentWidget())
+        if (above->objectName().contains(QLatin1Char('_'))) {
+            place.row = above->objectName();
+            scope = above;
+            break;
+        }
+    place.index = static_cast<int>(scope->findChildren<QWidget*>(place.name).indexOf(focused));
+    return place;
+}
+
+void TeamPage::restoreFocus(const FocusPlace& place) {
+    if (place.index < 0)
+        return;
+    const QWidget* scope =
+        place.row.isEmpty() ? content_ : content_->findChild<QWidget*>(place.row);
+    if (!scope)
+        return;
+    const QList<QWidget*> same = scope->findChildren<QWidget*>(place.name);
+    if (same.isEmpty())
+        return;
+    QWidget* target = same.at(qMin(place.index, static_cast<int>(same.size()) - 1));
+    // The same part of the rebuilt widget, when it still takes the keyboard there: a banner
+    // does not act on a key, its button does.
+    if (place.part >= 0) {
+        const QList<QWidget*> parts = target->findChildren<QWidget*>();
+        if (place.part < parts.size() && parts.at(place.part)->focusPolicy() != Qt::NoFocus)
+            target = parts.at(place.part);
+    }
+    target->setFocus(Qt::OtherFocusReason);
+}
+
 void TeamPage::rebuild() {
     const int position = scroll_->verticalScrollBar()->value();
+    const FocusPlace focus = focusPlace();
+    const QString currentTask =
+        tasks_ && tasks_->currentRow() >= 0 && tasks_->item(tasks_->currentRow(), 0)
+            ? tasks_->item(tasks_->currentRow(), 0)->text()
+            : QString{};
     roomy_ = roomy();
     compact_ = compact();
     segmented_ = true;
@@ -159,6 +248,7 @@ void TeamPage::rebuild() {
     layout_->setContentsMargins(0, 0, 0, 0);
     layout_->setSpacing(px(14));
     const auto team = teams_->team(teamId_);
+    shown_ = team.value_or(QJsonObject{});
     if (!team) {
         buildEmpty();
     } else {
@@ -174,6 +264,14 @@ void TeamPage::rebuild() {
     // An update keeps the reader where it was.
     content_->adjustSize();
     scroll_->verticalScrollBar()->setValue(position);
+    // And the keyboard where it was: the control that had the focus and the current task.
+    if (tasks_ && !currentTask.isEmpty())
+        for (int row = 0; row < tasks_->rowCount(); ++row)
+            if (tasks_->item(row, 0)->text() == currentTask) {
+                tasks_->setCurrentCell(row, 0);
+                break;
+            }
+    restoreFocus(focus);
 }
 
 // A section's title, what it counts, and at the right what acts on the whole section.
@@ -287,6 +385,7 @@ void TeamPage::buildHeading(const QJsonObject& team) {
              ? tr("You merge tasks")
              : tr("The leader merges tasks"),
          "teamPageMerges");
+    fact(QStringLiteral("clock"), team_budget::usage(team), "teamPageTurns");
     if (!tasks.isEmpty())
         fact({}, tr("%1 of %2 tasks done").arg(done).arg(tasks.size()), "teamPageProgress");
     facts->setAccessibleName(spoken.join(QStringLiteral(", ")));
@@ -304,6 +403,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     const bool paused = team.value(QStringLiteral("paused")).toBool();
     auto* pause =
         menu.addAction(paused ? tr("Resume automatic turns") : tr("Pause automatic turns"));
+    auto* budget = menu.addAction(ket::Icons::icon(u"clock"), tr("Automatic turns…"));
+    budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
@@ -319,6 +420,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
                userMerges ? QStringLiteral("leader") : QStringLiteral("user")}});
     else if (chosen == pause)
         send(QStringLiteral("team.update"), {{QStringLiteral("paused"), !paused}});
+    else if (chosen == budget)
+        afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
     else if (chosen == remove)
         afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
 }
@@ -329,7 +432,9 @@ void TeamPage::buildBanners(const QJsonObject& team) {
             ket::BannerTone::Warning, tr("Automatic turns are paused"),
             pausedReason(team.value(QStringLiteral("paused_reason")).toString()), column_);
         banner->setObjectName(QStringLiteral("teamPausedBanner"));
-        connect(banner->setAction(tr("Resume")), &QAbstractButton::clicked, this, [this] {
+        QAbstractButton* resume = banner->setAction(tr("Resume"));
+        resume->setObjectName(QStringLiteral("teamPausedResume"));
+        connect(resume, &QAbstractButton::clicked, this, [this] {
             send(QStringLiteral("team.update"), {{QStringLiteral("paused"), false}});
         });
         layout_->addWidget(banner);
@@ -343,7 +448,9 @@ void TeamPage::buildBanners(const QJsonObject& team) {
                 .arg(developers),
             column_);
         banner->setObjectName(QStringLiteral("teamQueueBanner"));
-        connect(banner->setAction(tr("New team…")), &QAbstractButton::clicked, this,
+        QAbstractButton* another = banner->setAction(tr("New team…"));
+        another->setObjectName(QStringLiteral("teamQueueNewTeam"));
+        connect(another, &QAbstractButton::clicked, this,
                 [this, repository = team.value(QStringLiteral("repository")).toString()] {
                     emit newTeamRequested(repository);
                 });

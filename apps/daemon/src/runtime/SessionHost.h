@@ -8,6 +8,7 @@
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 #include "teams/TeamCoordinator.h"
+#include "teams/TeamRemoteView.h"
 
 #include <QDeadlineTimer>
 #include <QHash>
@@ -21,6 +22,7 @@
 #include <QThreadPool>
 #include <QTimer>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -56,8 +58,22 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // answers lost the text whenever the provider then refused it. A steer whose provider never
     // answers within steerOutcomeTimeoutMs, or whose daemon restarted before it answered, ends
     // as steer_outcome_unknown rather than being sent twice.
+    // Whether a team's check still waits for git's answer (ADR 0114, open point 3).
+    [[nodiscard]] bool teamChecksPending() const;
     void handleCommandDeferred(const QJsonObject& request, const QString& clientId,
                                CommandCallback done);
+    // ADR 0116: a team command a paired phone sent, already opened and scoped by the cloud
+    // layer. `request` is a local team.* request whose message_id is the mailbox command id;
+    // team.create names its repository by path. The command meets the same TeamCoordinator
+    // rules as a local client's; the answer is the phone's read model (TeamRemoteView.h), and
+    // a change's answer is kept under the command id, so a repeated delivery acts once.
+    void remoteTeamCommand(const QJsonObject& request, const teams::remote::Ids& ids,
+                           CommandCallback done);
+    [[nodiscard]] static bool isRemoteTeamCommand(const QString& type);
+    [[nodiscard]] static bool isRemoteTeamRead(const QString& type);
+    // ADR 0116 §3: the `team` field {id, revision, role} of each member conversation's
+    // sealed metadata, by session id.
+    [[nodiscard]] QHash<QString, QJsonObject> teamMetadata() const;
     static constexpr int steerOutcomeTimeoutMs = 20'000;
     // Streamed text is journaled at most this often per session: consecutive deltas of one item
     // become one event. One event per provider chunk (a word or less) made every reader, above
@@ -101,6 +117,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // agents.* operations of the conversation that holds `token`.
     [[nodiscard]] QJsonObject handleAgentCommand(const QString& token, const QString& type,
                                                  const QJsonObject& payload);
+    // The same, answered through `done`: at once, or for a team's task tool that asks git,
+    // after git was read off the event loop (ADR 0114 §1).
+    void handleAgentCommandDeferred(const QString& token, const QString& type,
+                                    const QJsonObject& payload, CommandCallback done);
     [[nodiscard]] QString agentToken(const QString& sessionId);
 
   signals:
@@ -282,11 +302,22 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0114, in SessionHostTeams.cpp.
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] QString conversationRepository(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
+    void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
+                  teams::TaskQuestion question, teams::TaskFactsDone done) override;
+    void askPullRequests(const teams::Team& team, const QStringList& urls,
+                         teams::PullRequestsDone done) override;
+    void askDiff(const teams::Team& team, const teams::Task& task,
+                 teams::TaskDiffDone done) override;
+    void askWorktree(const teams::Team& team, const teams::Task& task,
+                     teams::WorktreeDone done) override;
+    void askHandoff(const teams::Team& team, const teams::Task& task,
+                    teams::HandoffDone done) override;
     [[nodiscard]] QString taskCommit(const teams::Team& team,
                                      const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
@@ -309,10 +340,25 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
+    [[nodiscard]] bool repositoryKnown(const QString& worktreePath) const;
+    void noteRepository(const QString& worktreePath, const QString& repository) const;
+    void learnRepositories(const QStringList& paths, std::function<void()> then);
+    [[nodiscard]] QStringList teamCommandPaths(const QJsonObject& payload) const;
     void startTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
+    // Has the git a task command will ask for read off the event loop, then calls `then`,
+    // where the command runs as always: a client's request, and a member's team_task_* tool.
+    void prepareTeamTask(const QJsonObject& request, std::function<void()> then);
+    void prepareTeamOperation(const QString& sessionId, const QString& operation,
+                              const QJsonObject& payload, std::function<void()> then);
+    // The member a leader names by its conversation number; empty when it is not on the team.
+    [[nodiscard]] QString teamMemberByNumber(const teams::Team& team, const QString& number) const;
     [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // ADR 0116, in SessionHostTeamsRemote.cpp: the local answer of a phone's team command,
+    // for the phone.
+    [[nodiscard]] QJsonObject remoteTeamAnswer(const QString& type, const QJsonObject& request,
+                                               const teams::remote::Ids& ids);
     // A member conversation that has not had a turn yet. Returns its id, or empty with
     // `problem` set.
     QString createMemberConversation(const QString& worktree, const QString& provider,
@@ -480,6 +526,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     teams::TeamCoordinator* teams_{nullptr};
     // Worktree path → the repository's main worktree, for team membership.
     mutable QHash<QString, QString> repositoryByWorktree_;
+    // Paths git did not answer for, until the event loop turns: one command asks once.
+    mutable QSet<QString> failedRepositoryLookups_;
     QString agentSocket_;
     QString agentExecutable_;
     // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel
@@ -490,6 +538,13 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     int mediaReadsInFlight_{0};
     // Last member: its destructor waits for running decodes before anything else goes away.
     QThreadPool mediaReads_;
+    // One thread for what a team's own checks ask git, in the order they were asked.
+    QThreadPool teamGit_;
+    // ADR 0118: the remote's pull requests, apart from git, so a slow network holds no merge
+    // check, review diff or worktree. Set when the host stops, to end a batch early.
+    QThreadPool teamRemote_;
+    std::shared_ptr<std::atomic_bool> teamRemoteStopping_{
+        std::make_shared<std::atomic_bool>(false)};
 };
 
 } // namespace ketplus::daemon

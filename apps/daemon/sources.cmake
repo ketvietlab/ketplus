@@ -30,6 +30,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
     src/cloud/CloudControlUploadProgress.cpp
+    src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
@@ -43,6 +44,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeBranches.h
     src/cloud/WorktreeRepositories.cpp
     src/cloud/WorktreeRepositories.h
+    src/cloud/WorktreeRevisionCache.cpp
+    src/cloud/WorktreeRevisionCache.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
     src/agents/WorkReport.cpp
@@ -108,14 +111,20 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/Team.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
+    src/teams/TeamRemoteView.cpp
+    src/teams/TeamRemoteView.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorAssign.cpp
     src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorGit.cpp
     src/teams/TeamCoordinatorStall.cpp
     src/teams/TeamCoordinatorWaits.cpp
     src/teams/TeamCoordinatorLanes.cpp
     src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorSettings.cpp
+    src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
@@ -123,7 +132,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/TeamGit.cpp
+    src/runtime/TeamGit.h
+    src/runtime/TeamPullRequests.cpp
+    src/runtime/TeamPullRequests.h
     src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp

@@ -43,6 +43,8 @@ ketplus_add_gui_test(ketplus_desktop_zoom_tests DesktopZoomTest.cpp)
 target_link_libraries(ketplus_desktop_zoom_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_settings_storage_page_tests SettingsStoragePageTest.cpp)
 target_link_libraries(ketplus_settings_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_settings_teams_page_tests SettingsTeamsPageTest.cpp)
+target_link_libraries(ketplus_settings_teams_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_settings_computer_page_tests SettingsComputerPageTest.cpp)
 target_link_libraries(ketplus_settings_computer_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
@@ -64,6 +66,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentUsageCostDetailsTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
     AgentWorkspaceMotionTest.cpp

@@ -1,10 +1,13 @@
 // ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
+#include "teams/TeamRules.h"
 
 #include "protocol/DaemonProtocol.h"
 
 #include <QSet>
 #include <QUuid>
+
+#include <algorithm>
 
 namespace ketplus::daemon {
 namespace {
@@ -52,6 +55,16 @@ MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& 
             .effort = agent.value(QStringLiteral("effort")).toString(),
             .lane = agent.value(QStringLiteral("lane")).toString().trimmed(),
             .paths = strings(agent.value(QStringLiteral("paths")))};
+}
+
+// ADR 0115: one page of a team's Updates, newest first, and whether an older one follows.
+QJsonArray updatesPage(const teams::TeamCoordinator& teams, const qint64 teamId, const int limit,
+                       const qint64 before, bool* more) {
+    const QJsonArray page = teams.updatesJson(teamId, limit, before);
+    const qint64 oldest =
+        page.isEmpty() ? 0 : page.last().toObject().value(QStringLiteral("id")).toInteger();
+    *more = oldest > 0 && !teams.updatesJson(teamId, 1, oldest).isEmpty();
+    return page;
 }
 
 } // namespace
@@ -131,24 +144,60 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
     if (!teams_->isLoaded())
         return failure(QStringLiteral("teams_unavailable"),
                        QStringLiteral("The teams could not be read. Try again."));
+    // ADR 0116 §4: a change drawn from an older revision of the part it acts on is refused,
+    // with the team as it is now. Local clients that send no expected_revision are unfenced.
+    if (const teams::Team* fenced = teams_->team(teamId)) {
+        if (const auto stale = teams::rules::fence(*fenced, type, payload)) {
+            QJsonObject refusal = failure(*stale);
+            refusal.insert(QStringLiteral("team"), teams_->teamJson(*fenced));
+            return refusal;
+        }
+    }
+    // ADR 0114, open point 2: what a new team starts from (Settings → Teams).
+    if (type == QStringLiteral("team.settings.get"))
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    if (type == QStringLiteral("team.settings.update")) {
+        if (const auto refused = teams_->updateTeamSettings(payload))
+            return failure(*refused);
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    }
     if (type == QStringLiteral("team.list")) {
         const QString repository = payload.value(QStringLiteral("repository")).toString();
         QJsonArray list;
         for (const teams::Team* team :
              teams_->teams(repository.isEmpty() ? QString{} : repositoryOf(repository)))
-            list.append(teams_->teamJson(*team));
+            list.append(teams_->directoryJson(*team));
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
-        // ADR 0114, open point 3: reading the team notices a merge made outside the app.
+        // ADR 0114, open point 3: reading the team asks git whether a task was merged outside
+        // the app. The answer comes after this reply, as a `team.changed` event.
         teams_->checkMerged(teamId);
         const teams::Team* team = teams_->team(teamId);
         if (!team)
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
+        // ADR 0115: the newest page of Updates; team.updates.list reads older ones.
+        bool more = false;
+        const QJsonArray page = updatesPage(*teams_, teamId, teams::defaultPage, 0, &more);
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("team"), teams_->teamJson(*team)},
-                {QStringLiteral("updates"), teams_->updatesJson(teamId)}};
+                {QStringLiteral("updates"), page},
+                {QStringLiteral("updates_has_more"), more}};
+    }
+    if (type == QStringLiteral("team.updates.list")) {
+        if (!teams_->team(teamId))
+            return failure(QStringLiteral("team_not_found"),
+                           QStringLiteral("The team no longer exists."));
+        const int limit =
+            std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
+                       teams::maximumPage);
+        const qint64 before = payload.value(QStringLiteral("before_id")).toInteger();
+        bool more = false;
+        const QJsonArray updates = updatesPage(*teams_, teamId, limit, before, &more);
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("updates"), updates},
+                {QStringLiteral("has_more"), more}};
     }
     if (type == QStringLiteral("team.create"))
         return createTeam(payload);
@@ -299,6 +348,8 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
     draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed().left(4000);
     draft.integrationBranch =
         payload.value(QStringLiteral("integration_branch")).toString().trimmed();
+    if (const auto invalid = teams::rules::validBranch(draft.integrationBranch))
+        return failure(invalid->code, invalid->message);
     draft.mergePolicy = payload.value(QStringLiteral("merge_policy")).toString(teams::role::leader);
     draft.executionPolicy =
         payload.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
@@ -313,6 +364,12 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                        QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
+    // A team's own budget, or the global one for a client that sends none (an older phone).
+    draft.turnBudget = teams_->turnBudgetSetting();
+    if (payload.contains(QStringLiteral("turn_budget")))
+        if (const auto invalid = teams::rules::validTurnBudget(
+                payload.value(QStringLiteral("turn_budget")), &draft.turnBudget))
+            return failure(invalid->code, invalid->message);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
     // Lanes are checked before anything starts, with placeholder ids.
     for (int index = 0; index < members.size(); ++index)

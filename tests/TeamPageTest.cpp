@@ -13,6 +13,8 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
+#include "teams/TeamTurnBudget.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QHeaderView>
@@ -91,6 +93,8 @@ QJsonObject fixture(int revision = 1, int developers = 2, bool paused = false,
             {"merge_policy", "leader"},
             {"paused", paused},
             {"paused_reason", paused ? "budget" : ""},
+            {"turn_budget", 60},
+            {"automatic_turns", 23},
             {"members", members},
             {"tasks", QJsonArray{task("T-1", "in_progress", "dev1", QJsonArray{"docs/x.md"}),
                                  task("T-2", "blocked", "dev2"), task("T-3", "ready", "dev1"),
@@ -187,6 +191,9 @@ class TeamPageTest final : public QObject {
                  QStringLiteral("The leader merges tasks"));
         QCOMPARE(page.findChild<QLabel*>("teamPageProgress")->text(),
                  QStringLiteral("1 of 4 tasks done"));
+        // ADR 0114, open point 2: the turns used of the team's own budget.
+        QCOMPARE(page.findChild<QLabel*>("teamPageTurns")->text(),
+                 QStringLiteral("23 of 60 automatic turns used"));
         // Waiting for you: the recommended choice first and marked.
         auto* card = page.findChild<QFrame*>("teamDecision_D-1");
         QVERIFY(card);
@@ -449,6 +456,69 @@ class TeamPageTest final : public QObject {
 
     // An answer that arrives after its handover dialog was cancelled belongs to that dialog:
     // it neither closes the one opened since nor clears what the user wrote there.
+    // ADR 0115: the task's history comes from team.task.get a page at a time.
+    void theTaskDialogReadsItsHistoryPageByPage() {
+        start(fixture());
+        QJsonObject paged = task("T-1", "in_progress", "dev1");
+        QJsonArray newest;
+        for (int index = 70; index < 120; ++index)
+            newest.append(QJsonObject{{"at", "2026-11-10T10:00:00.000Z"},
+                                      {"actor", "daemon"},
+                                      {"text", QStringLiteral("Entry %1").arg(index)}});
+        paged.insert("history", newest);
+        paged.insert("history_total", 120);
+        paged.insert("history_start", 70);
+        daemon_.answers.insert("team.task.get", {{"ok", true}, {"task", paged}});
+        QWidget window;
+        window.resize(1024, 640);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        QCOMPARE(daemon_.last("team.task.get").value("task_id").toString(), QStringLiteral("T-1"));
+        QTRY_COMPARE(labels(dialog, "teamTaskHistory").size(), 50);
+        QVERIFY(labels(dialog, "teamTaskHistory").last().contains("Entry 119"));
+        auto* earlier = dialog->findChild<ket::Button*>("teamTaskHistoryEarlier");
+        QVERIFY(earlier);
+        QJsonObject older = paged;
+        QJsonArray first;
+        for (int index = 20; index < 70; ++index)
+            first.append(QJsonObject{{"at", "2026-11-10T10:00:00.000Z"},
+                                     {"actor", "daemon"},
+                                     {"text", QStringLiteral("Entry %1").arg(index)}});
+        older.insert("history", first);
+        older.insert("history_start", 20);
+        daemon_.answers.insert("team.task.get", {{"ok", true}, {"task", older}});
+        earlier->click();
+        QCOMPARE(daemon_.last("team.task.get").value("history_before").toInt(), 70);
+        QTRY_COMPARE(labels(dialog, "teamTaskHistory").size(), 100);
+        QVERIFY(labels(dialog, "teamTaskHistory").first().contains("Entry 20"));
+        QVERIFY(labels(dialog, "teamTaskHistory").last().contains("Entry 119"));
+    }
+
+    // ADR 0115: older Updates come a page at a time.
+    void olderUpdatesComeOnRequest() {
+        start(fixture());
+        QJsonObject get = daemon_.answers.value("team.get");
+        get.insert("updates_has_more", true);
+        daemon_.answers.insert("team.get", get);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 640);
+        page.show();
+        QTRY_VERIFY(page.findChild<ket::Button*>("teamUpdatesOlder"));
+        daemon_.answers.insert(
+            "team.updates.list",
+            {{"ok", true},
+             {"updates",
+              QJsonArray{QJsonObject{
+                  {"id", 0}, {"at", "2026-11-10T09:00:00.000Z"}, {"text", "Team created"}}}},
+             {"has_more", false}});
+        page.findChild<ket::Button*>("teamUpdatesOlder")->click();
+        QCOMPARE(daemon_.last("team.updates.list").value("before_id").toInt(), 1);
+        QTRY_COMPARE(labels(&page, "teamUpdate").size(), 3);
+        QVERIFY(labels(&page, "teamUpdate").last().contains("Team created"));
+        QVERIFY(!page.findChild<ket::Button*>("teamUpdatesOlder"));
+    }
+
     void aLateHandoverAnswerLeavesANewDialogAlone() {
         start(fixture());
         QWidget window;
@@ -533,6 +603,39 @@ class TeamPageTest final : public QObject {
         }
     }
 
+    // ADR 0114, open point 2: the header's turns and the team's budget dialog, in both themes,
+    // inside the window. KETPLUS_TEAM_BUDGET_CAPTURE (a folder) saves them beside the mock's.
+    void theTeamsBudgetFitsInBothThemes_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void theTeamsBudgetFitsInBothThemes() {
+        QFETCH(bool, dark);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        start(fixture());
+        QWidget window;
+        window.resize(1440, 900);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(window.size());
+        window.show();
+        auto* turns = page.findChild<QLabel*>("teamPageTurns");
+        QTRY_VERIFY(turns && turns->isVisible());
+        const QRect frame(QPoint(0, 0), window.size());
+        QVERIFY(frame.contains(QRect(turns->mapTo(&window, QPoint()), turns->size())));
+        const QString capture = qEnvironmentVariable("KETPLUS_TEAM_BUDGET_CAPTURE");
+        const QString name = dark ? QStringLiteral("dark") : QStringLiteral("light");
+        auto* dialog = TeamTurnBudgetForm::present(&page, teams_.get(), *teams_->team("7"));
+        auto* field = dialog->findChild<ket::TextField*>("teamTurnBudget");
+        QTRY_VERIFY(field && field->isVisible());
+        QCOMPARE(field->text(), QStringLiteral("60"));
+        QVERIFY(frame.contains(QRect(field->mapTo(&window, QPoint()), field->size())));
+        if (!capture.isEmpty())
+            QVERIFY(window.grab().save(capture + "/app-team-budget-" + name + ".png"));
+        dialog->reject();
+    }
+
     // A team.changed from another client updates the page in place of where the reader was.
     void aLiveUpdateKeepsTheScrollPosition() {
         start(fixture());
@@ -549,6 +652,88 @@ class TeamPageTest final : public QObject {
         QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
         QApplication::processEvents();
         QCOMPARE(bar->value(), 40);
+    }
+
+    void anotherTeamsChangeLeavesThePageAlone() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        const QPointer<QWidget> content(page.scrollArea()->widget());
+        QJsonObject other = fixture(9);
+        other.insert("id", "8");
+        other.insert("name", "Billing");
+        teams_->applyEvent("team.changed", {{"team", other}});
+        QApplication::processEvents();
+        QVERIFY(content);
+        QCOMPARE(page.scrollArea()->widget(), content.data());
+        // Its own change still rebuilds it.
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QVERIFY(page.scrollArea()->widget() != content.data());
+        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
+    }
+
+    void aLiveUpdateKeepsTheFocusAndTheCurrentTask() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        QVERIFY(page.tasksTable()->rowCount() > 0);
+        page.tasksTable()->setCurrentCell(0, 0);
+        const QString task = page.tasksTable()->item(0, 0)->text();
+        const QList<QAbstractButton*> open = page.findChildren<QAbstractButton*>("teamMemberOpen");
+        QVERIFY(open.size() > 1);
+        const QString row = open.last()->parentWidget()->objectName();
+        QVERIFY(row.startsWith("teamMember_"));
+        const QPointer<QAbstractButton> before(open.last());
+        before->setFocus();
+        QCOMPARE(page.window()->focusWidget(), open.last());
+        QJsonObject next = fixture(5);
+        next.insert("name", "Shop 2");
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QApplication::processEvents();
+        QVERIFY(!before); // the content was rebuilt
+        QWidget* focused = page.window()->focusWidget();
+        QVERIFY(focused);
+        QCOMPARE(focused->objectName(), QStringLiteral("teamMemberOpen"));
+        QCOMPARE(focused->parentWidget()->objectName(), row);
+        QCOMPARE(page.tasksTable()->item(page.tasksTable()->currentRow(), 0)->text(), task);
+    }
+
+    // A banner's button keeps the keyboard through a live update: Space still resumes the team.
+    // So does a part without a name, which is found again by its place in the banner.
+    void aLiveUpdateKeepsTheFocusOnABannersButton() {
+        start(fixture(1, 4, true, false));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(900, 700);
+        page.show();
+        QApplication::processEvents();
+        for (const bool named : {true, false}) {
+            const QPointer<QAbstractButton> before(
+                page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            QCOMPARE(before->objectName(), QStringLiteral("teamPausedResume"));
+            if (!named)
+                before->setObjectName(QString());
+            before->setFocus();
+            QCOMPARE(page.window()->focusWidget(), before.data());
+            QJsonObject next = fixture(named ? 5 : 6, 4, true, false);
+            next.insert("name", named ? "Shop 2" : "Shop 3");
+            teams_->applyEvent("team.changed", {{"team", next}});
+            QApplication::processEvents();
+            QVERIFY(!before); // the content was rebuilt
+            QWidget* focused = page.window()->focusWidget();
+            QVERIFY(focused);
+            QCOMPARE(focused, page.findChild<ket::Banner*>("teamPausedBanner")->action());
+            const int sent = daemon_.count("team.update");
+            QTest::keyClick(focused, Qt::Key_Space);
+            QCOMPARE(daemon_.count("team.update"), sent + 1);
+            QCOMPARE(daemon_.last("team.update").value("paused").toBool(true), false);
+        }
+        QVERIFY(page.findChild<QAbstractButton*>("teamQueueNewTeam"));
     }
 };
 

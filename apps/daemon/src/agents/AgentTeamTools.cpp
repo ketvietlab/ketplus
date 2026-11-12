@@ -39,6 +39,7 @@ const QStringList& names() {
                                    QStringLiteral("team_task_assign"),
                                    QStringLiteral("team_task_handover"),
                                    QStringLiteral("team_task_criteria"),
+                                   QStringLiteral("team_task_close"),
                                    QStringLiteral("team_lane_set"),
                                    QStringLiteral("team_decision_raise"),
                                    QStringLiteral("team_decision_withdraw")};
@@ -129,6 +130,15 @@ QJsonArray teamTools() {
              {{QStringLiteral("task_id"), taskId},
               {QStringLiteral("criteria"), list(QStringLiteral("The criteria, in order."))}},
              {QStringLiteral("task_id"), QStringLiteral("criteria")}),
+        tool(QStringLiteral("team_task_close"),
+             QStringLiteral("Leader: mark a task done by hand, when its work is in with no pull "
+                            "request or the remote cannot be reached. A merged pull request "
+                            "closes its task by itself."),
+             {{QStringLiteral("task_id"), taskId},
+              {QStringLiteral("evidence"),
+               text(QStringLiteral("A pull request URL or the commit that contains the work."))},
+              {QStringLiteral("note"), text(QStringLiteral("Why the task is done."))}},
+             {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("note")}),
         tool(QStringLiteral("team_lane_set"),
              QStringLiteral("Leader: change a developer's lane and path prefixes. Logged in "
                             "Updates and in the history of the tasks it affects."),

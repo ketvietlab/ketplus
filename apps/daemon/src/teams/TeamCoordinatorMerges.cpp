@@ -48,6 +48,44 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
 }
 
 void TeamCoordinator::checkMerged(const qint64 teamId) {
+    // A merge through a pull request is the remote's to tell (ADR 0118).
+    checkPullRequests(teamId);
+    const Team* team = this->team(teamId);
+    if (!team)
+        return;
+    QList<Task> ready;
+    for (const Task& task : team->tasks)
+        if (task.state == state::ready && !task.branch.isEmpty())
+            ready.append(task);
+    if (ready.isEmpty())
+        return;
+    if (mergeChecks_.contains(teamId)) {
+        mergeChecksAgain_.insert(teamId);
+        return;
+    }
+    mergeChecks_.insert(teamId);
+    host_->askTasks(
+        *team, ready, TaskQuestion::Merge,
+        [self = QPointer<TeamCoordinator>(this), teamId, ready, repository = team->repository,
+         integration = team->integrationBranch](const QHash<QString, TaskFacts>& facts) {
+            if (!self)
+                return;
+            self->mergeChecks_.remove(teamId);
+            bool again = self->mergeChecksAgain_.remove(teamId);
+            // Git answered for the integration branch the team had. An answer
+            // about another one says nothing: it is dropped and asked again.
+            const Team* now = self->team(teamId);
+            if (now && now->repository == repository && now->integrationBranch == integration)
+                self->applyMergeFacts(teamId, ready, facts);
+            else
+                again = now != nullptr;
+            if (again)
+                self->checkMerged(teamId);
+        });
+}
+
+void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& asked,
+                                      const QHash<QString, TaskFacts>& facts) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
@@ -55,14 +93,26 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
     // A ready task was reviewed at one commit (ADR 0114 §5). Commits added to its branch
     // after that were never reviewed.
     QHash<QString, QString> moved;
-    for (const Task& task : team->tasks) {
-        if (task.state != state::ready || task.branch.isEmpty())
+    for (const Task& was : asked) {
+        const Task* task = std::as_const(*team).task(was.id);
+        const auto fact = facts.constFind(was.id);
+        // Git was asked about the task as it was. One that moved on meanwhile is asked
+        // about again by the next check.
+        if (!task || fact == facts.cend() || task->state != state::ready ||
+            task->branch != was.branch || task->headCommit != was.headCommit)
             continue;
-        if (const QString head = host_->taskCommit(*team, task);
-            !head.isEmpty() && !task.headCommit.isEmpty() && head != task.headCommit)
-            moved.insert(task.id, head);
-        if (const auto contained = host_->isMerged(*team, task); contained && *contained)
-            merged.append(task.id);
+        if (!fact->head.isEmpty() && !task->headCommit.isEmpty() && fact->head != task->headCommit)
+            moved.insert(task->id, fact->head);
+        // A branch with no commit of its own is contained in any branch it was cut from: its
+        // work is elsewhere, as in another repository's pull request (ADR 0118).
+        const QString head = fact->head.isEmpty() ? task->headCommit : fact->head;
+        const bool ownCommits =
+            !head.isEmpty() && (task->baseCommit.isEmpty() || head != task->baseCommit);
+        // A task that records a pull request is the pull request's to finish (ADR 0118): its
+        // branch can be contained without its work being merged, as after it took in the
+        // integration branch, or when the work is in another repository.
+        if (fact->merged && *fact->merged && ownCommits && !recordsPullRequest(*task))
+            merged.append(task->id);
     }
     if (merged.isEmpty() && moved.isEmpty())
         return;
@@ -83,9 +133,13 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
     for (const QString& id : merged) {
         Task* task = team->task(id);
         const QString head = moved.take(id);
-        applyMove(*team, *task, state::done, QStringLiteral("daemon"),
-                  QStringLiteral("%1 contains it").arg(team->integrationBranch), updates);
-        withdrawMerge(id, QStringLiteral("%1 is merged.").arg(id));
+        finishTask(*team, *task, QStringLiteral("daemon"),
+                   QStringLiteral("%1 contains it").arg(team->integrationBranch),
+                   QStringLiteral("merged"),
+                   {{QStringLiteral("branch"), task->branch},
+                    {QStringLiteral("integration_branch"), team->integrationBranch},
+                    {QStringLiteral("commit"), head.isEmpty() ? task->headCommit : head}},
+                   updates);
         if (head.isEmpty())
             continue;
         // Too late to stop it; the leader is told what went in without a review.
@@ -111,15 +165,8 @@ void TeamCoordinator::checkMerged(const qint64 teamId) {
         withdrawMerge(task->id, QStringLiteral("%1 changed after its review.").arg(task->id));
     }
     offerMerges(*team, updates);
-    const bool allDone = !team->tasks.isEmpty() &&
-                         std::all_of(team->tasks.cbegin(), team->tasks.cend(),
-                                     [](const Task& task) { return task.state == state::done; });
-    if (allDone)
-        updates.append({.kind = QStringLiteral("goal_reached"),
-                        .text = QStringLiteral("Every task is done. Report to the user once what "
-                                               "%1 contains; merging it onward is the user's.")
-                                    .arg(team->integrationBranch),
-                        .actionable = true});
+    if (!merged.isEmpty())
+        noteGoalReached(*team, updates);
     if (commit(*team, before, QStringLiteral("daemon"), updates))
         qWarning("Unable to record the merged tasks of team %lld.", static_cast<long long>(teamId));
 }

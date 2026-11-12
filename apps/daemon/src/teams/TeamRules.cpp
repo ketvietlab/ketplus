@@ -2,6 +2,9 @@
 
 #include <QSet>
 
+#include <algorithm>
+#include <cmath>
+
 namespace ketplus::daemon::teams::rules {
 namespace {
 
@@ -66,6 +69,40 @@ std::optional<TeamError> validName(const QString& name, const QString& what) {
         if (character.category() == QChar::Other_Control)
             return refusal(QStringLiteral("invalid_payload"),
                            QStringLiteral("The name of %1 has a control character.").arg(what));
+    return std::nullopt;
+}
+
+std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget) {
+    const double number = value.toDouble(-1);
+    if (!value.isDouble() || number != std::floor(number) || number < minimumTurnBudget ||
+        number > maximumTurnBudget)
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("Automatic turns are a whole number from %1 to %2.")
+                           .arg(minimumTurnBudget)
+                           .arg(maximumTurnBudget));
+    *budget = static_cast<int>(number);
+    return std::nullopt;
+}
+
+std::optional<TeamError> validBranch(const QString& branch) {
+    if (branch.isEmpty())
+        return std::nullopt;
+    const auto invalid = [&branch] {
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("\"%1\" is not a branch name.").arg(branch));
+    };
+    if (branch.startsWith(QLatin1Char('-')) || branch == QStringLiteral("@") ||
+        branch.endsWith(QLatin1Char('.')) || branch.contains(QStringLiteral("..")) ||
+        branch.contains(QStringLiteral("@{")) || branch.toUtf8().size() > 255)
+        return invalid();
+    for (const QChar character : branch)
+        if (character.category() == QChar::Other_Control || character == QLatin1Char(' ') ||
+            QStringLiteral("~^:?*[\\").contains(character))
+            return invalid();
+    for (const QString& component : branch.split(QLatin1Char('/')))
+        if (component.isEmpty() || component.startsWith(QLatin1Char('.')) ||
+            component.endsWith(QStringLiteral(".lock")))
+            return invalid();
     return std::nullopt;
 }
 
@@ -162,6 +199,34 @@ std::optional<TeamError> canRemoveMember(const Team& team, const QString& sessio
         return refusal(QStringLiteral("last_developer"),
                        QStringLiteral("A team keeps at least one developer."));
     return std::nullopt;
+}
+
+std::optional<TeamError> fence(const Team& team, const QString& type, const QJsonObject& payload) {
+    const QJsonValue expected = payload.value(QStringLiteral("expected_revision"));
+    if (!expected.isDouble())
+        return std::nullopt;
+    const qint64 seen = expected.toInteger();
+    qint64 changed = 0;
+    if (type == QStringLiteral("team.decision.answer")) {
+        const Decision* decision =
+            team.decision(payload.value(QStringLiteral("decision_id")).toString());
+        changed = decision ? decision->changedRevision : 0;
+    } else if (type == QStringLiteral("team.update")) {
+        changed = team.settingsRevision;
+    } else if (type == QStringLiteral("team.delete")) {
+        changed = std::max(team.settingsRevision, team.membersRevision);
+    } else if (type == QStringLiteral("team.member.add") ||
+               type == QStringLiteral("team.member.remove") ||
+               type == QStringLiteral("team.member.join")) {
+        changed = team.membersRevision;
+    } else if (type == QStringLiteral("team.task.handover")) {
+        const Task* task = team.task(payload.value(QStringLiteral("task_id")).toString());
+        changed = task ? task->changedRevision : 0;
+    }
+    if (changed <= seen)
+        return std::nullopt;
+    return TeamError{QStringLiteral("stale_team"),
+                     QStringLiteral("The team changed after you looked at it. Look again.")};
 }
 
 } // namespace ketplus::daemon::teams::rules

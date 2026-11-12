@@ -3,6 +3,10 @@
 
 #include "storage/LocalJournal.h"
 
+#include <QDir>
+
+#include <utility>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -273,132 +277,6 @@ TeamResult TeamCoordinator::setCriteria(const qint64 teamId, const QString& task
     return {.teamId = teamId};
 }
 
-TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskId,
-                                       const QString& owner, const QString& actor) {
-    Team* team = mutableTeam(teamId);
-    if (!team)
-        return {.error = notFound()};
-    // Before any pointer into the team: the copy shares its lists until they detach.
-    const Team before = *team;
-    Task* task = team->task(taskId);
-    if (!task)
-        return {.error = taskNotFound(taskId)};
-    if (!leaderOrUser(actorRole(*team, actor)))
-        return {.error = forbidden(QStringLiteral("assign tasks"), QStringLiteral("the leader"))};
-    const Member* member = team->member(owner);
-    if (!member || member->role != role::developer)
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A task is owned by a developer of the team."))};
-    if (!task->owner.isEmpty())
-        return {.error =
-                    refusal(QStringLiteral("invalid_transition"),
-                            QStringLiteral("%1 has an owner; hand it over instead.").arg(taskId))};
-    if (task->state != state::todo)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("Only a task in To do is assigned."))};
-    if (task->branch.isEmpty()) {
-        QString error;
-        const auto worktree = host_->createTaskWorktree(*team, *task, &error);
-        if (!worktree)
-            return {.error = refusal(QStringLiteral("worktree_unavailable"), error)};
-        team = mutableTeam(teamId);
-        task = team->task(taskId);
-        task->branch = worktree->branch;
-        task->worktree = worktree->worktree;
-        task->baseCommit = worktree->baseCommit;
-    }
-    task->owner = owner;
-    addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Assigned to %1 by %2.").arg(member->name, actorName(*team, actor)),
-               {{QStringLiteral("from"), QString{}}, {QStringLiteral("to"), owner}});
-    const QString name = member->name;
-    if (auto failed = commit(*team, before, actor,
-                             {{.kind = QStringLiteral("task_assigned"),
-                               .text = QStringLiteral("%1 assigned to %2.").arg(taskId, name),
-                               .taskId = taskId,
-                               .data = {{QStringLiteral("owner"), owner}}}}))
-        return {.error = failed};
-    if (!holdForFirstPlan(teamId, taskId, actor))
-        deliverAssignment(*team, *team->task(taskId), actor, false);
-    return {.teamId = teamId};
-}
-
-TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& taskId,
-                                         const QString& owner, const QString& reason,
-                                         const QString& actor) {
-    Team* team = mutableTeam(teamId);
-    if (!team)
-        return {.error = notFound()};
-    // Before any pointer into the team: the copy shares its lists until they detach.
-    const Team before = *team;
-    Task* task = team->task(taskId);
-    if (!task)
-        return {.error = taskNotFound(taskId)};
-    if (!leaderOrUser(actorRole(*team, actor)))
-        return {.error =
-                    forbidden(QStringLiteral("hand tasks over"), QStringLiteral("the leader"))};
-    if (reason.trimmed().isEmpty())
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A handover needs a reason."))};
-    const Member* member = team->member(owner);
-    if (!member || member->role != role::developer)
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A task is owned by a developer of the team."))};
-    if (task->owner == owner)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("%1 already owns %2.").arg(member->name, taskId))};
-    if (task->state == state::done)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("%1 is done.").arg(taskId))};
-    if (task->state == state::inProgress)
-        for (const Task& other : team->tasks)
-            if (other.owner == owner && other.state == state::inProgress)
-                return {.error = refusal(
-                            QStringLiteral("invalid_transition"),
-                            QStringLiteral("%1 is working on %2.").arg(member->name, other.id))};
-    const QString previous = task->owner;
-    if (task->branch.isEmpty()) {
-        QString error;
-        const auto worktree = host_->createTaskWorktree(*team, *task, &error);
-        if (!worktree)
-            return {.error = refusal(QStringLiteral("worktree_unavailable"), error)};
-        team = mutableTeam(teamId);
-        task = team->task(taskId);
-        task->branch = worktree->branch;
-        task->worktree = worktree->worktree;
-        task->baseCommit = worktree->baseCommit;
-    }
-    // One assignment: the owner changes in the same commit, so a failure leaves the old one.
-    task->owner = owner;
-    addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Handed over from %1 to %2: %3")
-                   .arg(previous.isEmpty() ? QStringLiteral("nobody") : actorName(*team, previous),
-                        member->name, reason.trimmed()),
-               {{QStringLiteral("from"), previous},
-                {QStringLiteral("to"), owner},
-                {QStringLiteral("reason"), reason.trimmed()}});
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("task_handover"),
-                     .text = QStringLiteral("%1 handed over to %2: %3")
-                                 .arg(taskId, member->name, reason.trimmed()),
-                     .taskId = taskId,
-                     .data = {{QStringLiteral("from"), previous}, {QStringLiteral("to"), owner}}}}))
-        return {.error = failed};
-    if (!previous.isEmpty())
-        host_->noteInConversation(previous,
-                                  {{QStringLiteral("kind"), QStringLiteral("team")},
-                                   {QStringLiteral("state"), QStringLiteral("task_handed_over")},
-                                   {QStringLiteral("task_id"), taskId},
-                                   {QStringLiteral("body"),
-                                    QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
-                                        .arg(taskId, member->name, reason.trimmed())}});
-    // A task held for the first plan stays held with its new owner.
-    if (!team->task(taskId)->assignmentHeld)
-        deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
-    return {.teamId = teamId};
-}
-
 void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
@@ -485,7 +363,8 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                         QStringLiteral("Only the owner of %1 hands it to review.").arg(taskId))};
         if (from != state::inProgress)
             return invalid(QStringLiteral("only a task In progress goes to review."));
-        const auto dirty = host_->hasUncommittedWork(task->worktree);
+        const HandoffFacts read = handoffFor(*team, *task);
+        const std::optional<bool>& dirty = read.dirty;
         if (!dirty)
             return {.error = refusal(
                         QStringLiteral("uncommitted_work"),
@@ -495,7 +374,7 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Commit your work in %1 before handing %2 to "
                                                     "review; uncommitted changes are not reviewed.")
                                          .arg(task->worktree, taskId))};
-        task->headCommit = host_->taskCommit(*team, *task);
+        task->headCommit = read.head;
     } else if (to == state::blocked) {
         if (!owner && !daemon && !leaderOrUser(role))
             return {.error =
@@ -575,6 +454,56 @@ QString TeamCoordinator::assignmentText(const Team& team, const Task& task, cons
                             "the task, and hand it to review (state in_review) once the criteria "
                             "are met and your work is committed.");
     return lines.join(QLatin1Char('\n'));
+}
+
+QString TeamCoordinator::settleRelocations(const qint64 teamId, const QString& sessionId) {
+    Team* team = mutableTeam(teamId);
+    if (!team || team->relocations.isEmpty())
+        return {};
+    QString waiting;
+    QList<Relocation> kept;
+    for (const Relocation& move : std::as_const(team->relocations)) {
+        if (move.session != sessionId) {
+            kept.append(move);
+            continue;
+        }
+        const QString from = QDir::cleanPath(move.from);
+        const auto conversation = host_->teamConversation(sessionId);
+        // Settled without a move: the conversation is gone or stands elsewhere already, or
+        // the task came back to this member.
+        if (!team->member(sessionId) || !conversation ||
+            QDir::cleanPath(conversation->worktree) != from)
+            continue;
+        // It goes to the task it works on, else to another task of its own, else to the
+        // repository.
+        QString home = team->repository;
+        bool mine = false;
+        bool working = false;
+        for (const Task& task : std::as_const(team->tasks)) {
+            if (task.owner != sessionId || task.state == state::done || task.worktree.isEmpty())
+                continue;
+            if (QDir::cleanPath(task.worktree) == from) {
+                mine = true;
+            } else if (!working && (task.state == state::inProgress || home == team->repository)) {
+                home = task.worktree;
+                working = task.state == state::inProgress;
+            }
+        }
+        if (mine)
+            continue;
+        if (const QString error = host_->pointConversationAt(sessionId, home); !error.isEmpty()) {
+            waiting = error;
+            kept.append(move);
+        }
+    }
+    if (kept.size() != team->relocations.size()) {
+        const Team before = *team;
+        team->relocations = kept;
+        // A move that stays stored is tried again and found settled.
+        if (commit(*team, before, QStringLiteral("daemon"), {}))
+            qWarning("Unable to forget a settled move out of a handed-over worktree.");
+    }
+    return waiting;
 }
 
 void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& storedTask,

@@ -24,6 +24,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Bounded team messages (ADR 0115):
+  - A message too large for one frame becomes a failure of its request, or a
+    `truncated` event; the client keeps its connection.
+  - `team.list` and `team.changed` carry only the members.
+  - `team.get` carries a summary without history, plus the newest 50 Updates.
+  - History, older Updates and decisions come page by page.
+  - The sidebar keeps a team's members together while the daemon reconnects.
 - Agent teams, store (ADR 0114, #455): the daemon keeps teams in the journal
   (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
   their error codes; a member cannot be archived, its own Reviewer setting is refused
@@ -42,8 +49,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Automatic turns (#459): only an assignment, a handover, a review and an answered
   decision start a member's turn; every other change waits in Updates for the leader's
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
-  holds every team message in order until Resume, and 40 automatic turns pause the team
-  with one decision.
+  holds every team message in order until Resume, and the team's budget of automatic
+  turns pauses it with one decision ("Continue (N more turns)"). The budget (ADR 0114
+  open point 2, `teams.settings/1`): a global value the daemon keeps, 40 until changed in
+  Settings → Teams, which a team created without its own takes (an older phone included);
+  New team and the team's Automatic turns dialog set a team's own, a whole number from 5
+  to 200, and a larger budget withdraws the budget decision and resumes the team, its used
+  turns still counted. The team page shows the turns used of it.
   Stall watchdog (ADR 0114 §8): 3 minutes after a member's turn ends, a team with work
   left is moved on: an idle developer with a task in progress (or the reviewer with a
   task in review) is nudged once, an idle team wakes the leader with the open tasks at
@@ -71,13 +83,23 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
-  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a folder in its
-  repository before the other conversations, leader, developers, reviewer, each with its
-  locked role tag first. The folder's name opens the team, its count is the open
-  decisions; its menu adds a member or deletes the team, the conversation menu joins or
-  leaves a team with the reason when it cannot, and a drop on a folder of the same
-  repository joins as a developer. `DaemonClient::teamEventReceived` carries
-  `team.changed` and `team.removed` to the desktop's `TeamDirectory`.
+  Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
+  a task that records a pull request is done once `gh` says it is merged, from any open
+  state, checked at load, every 2 minutes and with the merge check (at most 20 pull
+  requests a check, once a minute a team, on a worker of its own that stops a batch at the
+  first request without an answer); errors move nothing and are said once. The ancestor
+  check skips tasks with a pull request, needs the branch's own commits and accepts
+  `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
+  live team.
+  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
+  repository's tree before the other conversations, leader, developers, reviewer; a
+  member's role is in its hint and accessible description. The branch's name opens the
+  team, its chevron folds it, and while a decision waits it shows the needs-input mark and
+  a semibold name; its menu adds a member or deletes the team, the
+  conversation menu joins or leaves a team with the reason when it cannot, and a drop on
+  a folder of the same repository joins as a developer.
+  `DaemonClient::teamEventReceived` carries `team.changed` and `team.removed` to the
+  desktop's `TeamDirectory`.
   Dialogs (#465): New team sends one `team.create` with the name, goal, integration
   branch, who merges, the permissions of the leader and the developers (`execution_policy`:
   Read only, Workspace or Full access; Workspace unless chosen; the reviewer stays
@@ -86,10 +108,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   A refusal keeps the dialog open with the error at the role it names. Add a developer
   sends `team.member.add` with a required name, lane, paths and agent, hints at the
   reviewer queue from three developers and is disabled at five.
-  Member header (#467): a member's Agent Workspace header shows its role first as a locked
-  tag that opens the team, has no Reviewer choice (the team's reviewer reviews its
-  tasks), and its tag menu starts with a disabled "Role · Set by team" row. Leaving the
-  team brings the Reviewer choice back with its setting.
+  Member header (#467): a member's Agent Workspace header shows its role as a locked
+  label that opens the team and cannot be edited, and has no Reviewer choice (the team's
+  reviewer reviews its tasks). Leaving the team brings the Reviewer choice back with its
+  setting.
   Team page (#466): Open team shows the team in the workspace area: what waits for the
   user (decisions with the recommended choice first, answered in place through
   `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
@@ -131,17 +153,21 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
-  compact title, filterable tags and an Add tag menu; the daemon stores the tags
-  (`session.tags.set`, ADR 0107). The input retains IME/draft/steering
+  compact title, status, worktree and Reviewer choice, and no user tags (ADR 0117).
+  The input retains IME/draft/steering
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
-- Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  the mock's field-styled Quick search, a machine header with its chevron, and update
-  pills. A tag chosen in the conversation header filters the sidebar and shows as the
-  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
-  local daemon's existing size-status contract. Tags come from the daemon catalog
-  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+- Pro sidebar uses kit navigation, the mock's tree (#537) built from the ket-qt sidebar
+  tree parts: a repository is the root, its teams branch directly under it, "Conversations
+  (n)" labels the rest where the repository has teams, every conversation is one line
+  (the state's mark, title and #number; role, state, origin and worktree in the hint),
+  guide lines run under each chevron, and folds of repositories and teams survive a
+  restart (a folded repository shows a dot while something inside waits). Also the mock's
+  field-styled Quick search, a machine header with its chevron, and update pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
+  daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
+  Storage pressure warnings consume the local daemon's existing size-status contract,
+  and "Waiting for you" comes from the daemon (ADR 0112). It matches
   `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,

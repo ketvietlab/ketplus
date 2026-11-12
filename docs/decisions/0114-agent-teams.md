@@ -25,6 +25,11 @@ and a digest instead of status messages — and leaves messaging as it is.
   shared paths, members, tasks, decisions and updates. The daemon stores it.
 - Exactly **one leader**, **one to five developers** and exactly **one reviewer**.
   A conversation is on at most one team. Members belong to the team's repository.
+  The repository is the main worktree git names for a path. The daemon asks git for it
+  only where a repository is named or a conversation is to join a team (`team.list`,
+  `team.create`, `team.member.add`), off its event loop before the command runs, and
+  keeps git's answer. A path it was not asked about beforehand is still asked on the event
+  loop, the first time.
   *Rejected*: any number of reviewers or leaders — two leaders split the plan, and a
   second reviewer only hides a queue that a second team removes.
 - The **leader** is the only member that reports to the user. It breaks the goal into
@@ -46,7 +51,10 @@ integration branch it was cut from. The verdict line of ADR 0067 decides: `no fi
 makes the task `ready`; `findings`, or a reply without the line, returns it to its owner
 with round + 1. Past `max_rounds` (default 2, 1 to 3) the task is `blocked` and the
 leader's digest says why. A busy reviewer **queues** requests first in, first out,
-instead of skipping them. The reviewer is therefore a Claude conversation, the only
+instead of skipping them. The daemon reads the diff off its event loop before the review
+starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
+again, and a diff that is no longer for the next task or the team's integration branch is
+read again. The reviewer is therefore a Claude conversation, the only
 provider that enforces the read-only guard. A member's own Reviewer setting stays
 stored but does not run while it is on a team, and `session.reviewer.set` is refused
 with `team_member`. *Rejected*: a second review engine — it would drift from 0067.
@@ -71,7 +79,13 @@ a decision only when a change alters what the product does. A prefix belongs to 
 lane (`lane_overlap`). After a developer's turn the daemon compares the files changed on
 the task's branch with the owner's prefixes and the shared paths, records the outside
 paths on the task (`outsideLane`, actionable in the digest) and clears the flag when they
-are reverted or covered. *Rejected*: asking the user for every lane change — it is
+are reverted or covered. The files changed are the diff from where the branch left the
+integration branch; a team without one counts only the branch's own commits since the
+task's base (first parent, no merges), so merging the main line into the branch flags
+nothing. A team's document reaches clients in one 1 MiB frame, so a task keeps at most
+200 outside paths, and a history entry at most 2,000 characters of text and 50 items per
+list, with the full count as `<key>_total`; documents written before the bounds are
+bounded when read. *Rejected*: asking the user for every lane change — it is
 about who edits which file, not what the product does.
 
 ### 5. Who merges a reviewed task is a team setting (decided)
@@ -182,14 +196,49 @@ may be journaled after the turn has answered.
    of the integration branch, in a worktree beside the repository as ADR 0111 places
    them (`<repository>-team-<team-id>-t-<n>`), and
    re-points the owner's conversation at it with the worktree switch of ADR 0111 before
-   the assignment turn starts. A handover re-points the new owner. *Rejected*: one
+   the assignment turn starts. A handover re-points the new owner. The previous owner leaves
+   the task's worktree only when its conversation stands in it: it goes to the task it
+   works on, else to another task of its own, else back to the repository; a conversation
+   that stands elsewhere is left alone. The move is stored with the handover
+   (`relocations`). A conversation that cannot move during its turn leaves when the turn
+   ends or before the team's next message to it, unless the task came back to it. The
+   daemon makes the worktree off its event loop, and reads there what a hand to review
+   needs (the worktree's status and the branch's commit). The command that asks for them
+   (the user's `team.task.assign`, `team.task.handover` and `team.task.move`, a member's
+   `team_task_assign`, `team_task_handover` and `team_task_update`) is answered when git
+   has answered, and is checked then against the team as it has become. A command that
+   would be refused asks git nothing, and one worktree is asked for a task however many
+   commands wait for it. A worktree made for a command that was refused meanwhile stays
+   with the task, because its path and its branch are taken. The worktree switch of
+   ADR 0111 that follows still lists the repository's worktrees on the event loop, as the
+   user's own switch does. *Rejected*: one
    worktree per developer switching branches — a handover would have to move
    uncommitted work between worktrees, and a developer could carry it into the wrong
    task.
-2. **The automatic-turn budget.** *Chosen*: a team may start **40 automatic turns** of
-   its members since the user last acted on it (created, resumed or answered a
+2. **The automatic-turn budget.** *Chosen*: a team may start a **budget of automatic
+   turns** of its members since the user last acted on it (created, resumed or answered a
    decision). When it runs out, the team pauses itself and raises one decision:
-   "Continue (40 more turns)" or "Stop". The loop guard of ADR 0027 (hop 6, 30 turns a
+   "Continue (N more turns)" or "Stop", N being the team's own budget.
+   - *Where the number comes from* (2026-11-12): the daemon keeps one global value,
+     **40** until the user changes it in Settings → Teams (`team.settings.get` and
+     `team.settings.update`, feature `teams.settings/1`, kept in the journal's
+     `team_settings` table). A team created without `turn_budget` (an older phone, an
+     agent, a client that sends none) takes it; New team shows it and lets the user send
+     the team's own. Changing the global value changes no existing team.
+   - *A running team*: `team.update {turn_budget}` (also from a paired phone) changes the
+     team's own budget. It applies from the next automatic turn and the turns already used
+     stay counted. A budget that leaves turns withdraws the open "used its N automatic
+     turns" decision and resumes a team the budget paused; one that leaves none changes the
+     number and keeps the pause. A team the user paused stays paused. The change is an
+     Update of kind `turn_budget` (`data: {from, to}`).
+   - *Range*: a whole number from **5 to 200**, the same for the global value, for
+     `team.create` and for `team.update`. Anything else (4, 201, 7.5, a string) is refused
+     with `invalid_payload` and "Automatic turns are a whole number from 5 to 200.";
+     the desktop says the same words in the form, the team's dialog and Settings before
+     sending. 5 keeps a team able to do a round of work; 200 keeps a forgotten team from
+     running for days unattended. A value outside the range found in the journal counts as
+     none (40).
+   The loop guard of ADR 0027 (hop 6, 30 turns a
    chain, 20 an hour per conversation) applies to every automatic turn on top. Team
    messages start their own chain, so an `agents_send` loop inside a team still stops at
    the hop and chain limits. `paused` holds every team message until Resume, in order;
@@ -197,11 +246,20 @@ may be journaled after the turn has answered.
 3. **How the daemon knows a task is merged.** *Chosen*: the task's head commit is an
    ancestor of the integration branch (`git merge-base --is-ancestor`), checked when a
    member's turn ends and when a client reads the team. No hosting service is called, so
-   a merge made outside the app is noticed the same way. The same check compares the
+   a merge made outside the app is noticed the same way. The daemon asks git off its event
+   loop (as it does for the lane check of §4): the read that asked is answered with the team
+   as it is, and the merge follows as a `team.changed` event. One question is open for a team
+   at a time, and its answer is applied only to a task that is still as it was asked about.
+   An answer about an integration branch the team no longer has is dropped and asked again. The same check compares the
    branch with the commit that was reviewed: a ready task whose branch moved goes back to
    Blocked to be reviewed again, and one merged with commits after its review is done
    with a `merged_unreviewed` update to the leader. *Rejected*: pull request state
    from GitHub — it needs credentials and a network, and is not the branch that matters.
+   *Amended by [ADR 0118](0118-team-tasks-done-by-pull-request.md)*: a task that records a
+   pull request is done when the remote says it is merged, from any open state; the
+   ancestor check counts only a branch with commits of its own and also accepts
+   `origin/<integration>` after a fetch; the leader can close a task with
+   `team_task_close`.
 4. **Storage shape.** *Chosen*: three journal tables. `teams` keeps one JSON document
    per team (settings, members, tasks with criteria and history, decisions, the id
    counters) with its repository, revision and times; the id is
@@ -224,8 +282,10 @@ may be journaled after the turn has answered.
 
 ## Protocol
 
-Features `teams/1` and `teams.tasks/1` in `daemon.hello`. Requests, for trusted local
-clients only (`forbidden` otherwise; agents use the tools below):
+Features `teams/1`, `teams.tasks/1` and `teams.settings/1` in `daemon.hello`. Requests, for
+trusted local clients only (`forbidden` otherwise; agents use the tools below):
+`team.settings.get`, `team.settings.update` (`{turn_budget}`; both answer
+`{settings: {turn_budget, turn_budget_minimum, turn_budget_maximum, turn_budget_default}}`),
 `team.list`, `team.get`, `team.create`, `team.update`, `team.delete`,
 `team.member.add`, `team.member.join`, `team.member.update`, `team.member.remove`,
 `team.task.list`, `team.task.get`, `team.task.create`, `team.task.update`,
@@ -242,23 +302,30 @@ review turns are read-only whatever its conversation's policy is (ADR 0067).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
-`team_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
+`team_member`, `not_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
 team request is served; ask again), `task_not_found`, `invalid_transition`,
 `not_owner`, `role_forbidden`, `dependencies_open`, `dependency_cycle`,
 `uncommitted_work`,
 `decision_closed`, `invalid_payload`.
+A team's integration branch is a name git accepts (`git check-ref-format --branch`) and
+never one that reads as an option; a team that has one changes it, not drops it
+(`invalid_payload`). Every branch the daemon hands to git follows `--end-of-options`, and
+paths are read with `-z`, so a path is spelled as it is.
 
 Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
 developers), `team_task_create`,
-`team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_lane_set`,
+`team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
+(ADR 0118), `team_lane_set`,
 `team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
 the role that may.
 
 ## Consequences
 
 - The daemon, not the prompt, enforces every role rule; role instructions only explain.
-- The phone does not show teams yet; the cloud projection is unchanged.
+- A paired phone reads and changes teams as ADR 0116 says: the daemon advertises
+  `teams.remote/1`, answers sealed `team.*` mailbox commands through the same
+  `TeamCoordinator` rules, and adds a `team` field to the sealed session metadata.
 - An older client without `teams/1` shows the members as ordinary conversations, and
   unknown message kinds (`assignment`, `digest`, `decision`) as plain text.
 

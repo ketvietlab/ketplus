@@ -40,7 +40,6 @@ Column {
     // Leader, developers, then reviewers. A tag filter keeps the members that carry the tag.
     readonly property var shown: ["leader", "developer", "reviewer"]
         .reduce((list, role) => list.concat(team.members.filter(m => m.role === role)), [])
-        .filter(m => window.tagFilter === "" || folder.conversation(m.number).tags.some(t => t.label === window.tagFilter))
     readonly property var roleTags: ({ leader: Fixtures.roleTag("leader"), developer: Fixtures.roleTag("developer"),
                                        reviewer: Fixtures.roleTag("reviewer") })
 
@@ -55,12 +54,9 @@ Column {
         const found = conversations.find(c => c.number === number)
         if (found)
             return found
-        return { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
+        return { number: number, title: who ? who.title : "", worktree: team.branch,
                  status: KetTheme.ConversationStatus.NotStarted }
     }
-
-    // A new team has nobody yet and still shows; a tag filter hides a folder with no match.
-    visible: window.tagFilter === "" || shown.length > 0
 
     Item {
         width: folder.width
@@ -249,7 +245,6 @@ Column {
                     indent: folder.rowLeft
                     text: item.title
                     number: item.number
-                    tags: item.tags
                     status: folder.window.planStatus ? folder.window.planStatus(item.number, item.status) : item.status
                     checked: folder.window.screen === "workspace"
                              && folder.window.conversation.number === item.number

@@ -23,6 +23,37 @@ int roleOrder(const QString& role) {
     return role == role::leader ? 0 : role == role::developer ? 1 : 2;
 }
 
+// ADR 0116 §4: stamps each part of `team` that differs from `before` with the team's new
+// revision, so a phone's change is refused only when the part it acts on moved.
+void stampChanges(Team& team, const Team& before) {
+    const auto settings = [](const Team& one) {
+        return QJsonArray{one.name,   one.goal,         one.integrationBranch, one.mergePolicy,
+                          one.paused, one.pausedReason, one.turnBudget};
+    };
+    team.settingsRevision =
+        settings(team) == settings(before) ? before.settingsRevision : team.revision;
+    const auto members = [](const Team& one) {
+        QJsonArray list;
+        for (const Member& member : one.members)
+            list.append(toJson(member));
+        return list;
+    };
+    team.membersRevision =
+        members(team) == members(before) ? before.membersRevision : team.revision;
+    for (Task& task : team.tasks) {
+        const Task* old = before.task(task.id);
+        task.changedRevision = old ? old->changedRevision : team.revision;
+        if (old && toJson(task) != toJson(*old))
+            task.changedRevision = team.revision;
+    }
+    for (Decision& decision : team.decisions) {
+        const Decision* old = before.decision(decision.id);
+        decision.changedRevision = old ? old->changedRevision : team.revision;
+        if (old && toJson(decision) != toJson(*old))
+            decision.changedRevision = team.revision;
+    }
+}
+
 } // namespace
 
 TeamCoordinator::TeamCoordinator(LocalJournal* journal, TeamHostPort* host, QObject* parent)
@@ -50,6 +81,16 @@ void TeamCoordinator::load() {
             teamBySession_.insert(member.sessionId, team.id);
         teams_.insert(team.id, std::move(team));
     }
+    // A review whose diff was being read when the daemon stopped is still queued: nothing was
+    // stored for it. It starts now, not at the team's next change.
+    const QList<qint64> ids = teams_.keys();
+    for (const qint64 id : ids)
+        if (const Team* team = this->team(id);
+            team && team->reviewing.isEmpty() && !team->reviewQueue.isEmpty())
+            pumpReviews(id);
+    // ADR 0118: work merged while the daemon was stopped is reconciled now.
+    for (const qint64 id : ids)
+        checkPullRequests(id);
 }
 
 QList<const Team*> TeamCoordinator::teams(const QString& repository) const {
@@ -93,6 +134,7 @@ QJsonObject TeamCoordinator::teamJson(const Team& team) const {
         QJsonObject entry = toJson(member);
         if (const auto conversation = host_->teamConversation(member.sessionId)) {
             entry.insert(QStringLiteral("number"), conversation->number);
+            entry.insert(QStringLiteral("session_generation"), conversation->generation);
             entry.insert(QStringLiteral("title"), conversation->title);
             entry.insert(QStringLiteral("provider"), conversation->provider);
             entry.insert(QStringLiteral("model"), conversation->model);
@@ -109,12 +151,55 @@ QJsonObject TeamCoordinator::teamJson(const Team& team) const {
     json.insert(QStringLiteral("members"), members);
     json.remove(QStringLiteral("next_task"));
     json.remove(QStringLiteral("next_decision"));
+    // ADR 0115: a summary. History, held messages and old decisions grow with time; clients
+    // read them with team.task.get and team.decision.list.
+    QJsonArray tasks;
+    for (const Task& task : team.tasks)
+        tasks.append(summaryJson(task));
+    json.insert(QStringLiteral("tasks"), tasks);
+    json.remove(QStringLiteral("held"));
+    json.insert(QStringLiteral("held_count"), team.held.size());
+    QJsonArray decisions;
+    qsizetype answered = 0;
+    for (auto it = team.decisions.crbegin(); it != team.decisions.crend(); ++it) {
+        const bool open = it->state == QStringLiteral("open");
+        if (!open && answered >= summaryAnsweredDecisions)
+            continue;
+        answered += open ? 0 : 1;
+        decisions.prepend(toJson(*it));
+    }
+    json.insert(QStringLiteral("decisions"), decisions);
+    json.insert(QStringLiteral("decisions_total"), team.decisions.size());
     return json;
 }
 
-QJsonArray TeamCoordinator::updatesJson(const qint64 teamId, const int limit) const {
+QJsonObject TeamCoordinator::directoryJson(const Team& team) const {
+    QJsonObject json = teamJson(team);
+    json.remove(QStringLiteral("tasks"));
+    json.remove(QStringLiteral("decisions"));
+    json.insert(QStringLiteral("tasks_total"), team.tasks.size());
+    json.insert(QStringLiteral("directory"), true);
+    return json;
+}
+
+QList<TeamUpdateRecord> TeamCoordinator::updateRecords(const qint64 teamId,
+                                                       const bool undigestedOnly, const int limit,
+                                                       const qint64 beforeId) const {
+    // Updates written before the bounds can hold thousands of paths.
+    QList<TeamUpdateRecord> updates =
+        journal_->teamUpdates(teamId, undigestedOnly, limit, beforeId);
+    for (TeamUpdateRecord& update : updates) {
+        update.text = boundedText(std::move(update.text));
+        update.data = boundedData(std::move(update.data));
+    }
+    return updates;
+}
+
+QJsonArray TeamCoordinator::updatesJson(const qint64 teamId, const int limit,
+                                        const qint64 beforeId) const {
     QJsonArray updates;
-    for (const TeamUpdateRecord& update : journal_->teamUpdates(teamId, false, limit))
+    for (const TeamUpdateRecord& update :
+         updateRecords(teamId, false, std::clamp(limit, 1, maximumPage), beforeId))
         updates.append(QJsonObject{{QStringLiteral("id"), update.id},
                                    {QStringLiteral("at"), update.at},
                                    {QStringLiteral("actor"), update.actor},
@@ -132,7 +217,7 @@ std::optional<Candidate> TeamCoordinator::candidate(const QString& sessionId) co
         return std::nullopt;
     const Team* current = teamOf(sessionId);
     return Candidate{.sessionId = sessionId,
-                     .repository = conversation->repository,
+                     .repository = host_->conversationRepository(sessionId),
                      .provider = conversation->provider,
                      .teamId = current ? current->id : 0};
 }
@@ -142,6 +227,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                                  const QList<Update>& updates) {
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
+    stampChanges(team, before);
     QString error;
     if (!journal_->saveTeam(team.id, before.revision, toJson(team), team.memberSessions(),
                             &error)) {
@@ -160,11 +246,11 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                           .actor = actor,
                                           .kind = update.kind,
                                           .taskId = update.taskId,
-                                          .text = update.text,
-                                          .data = update.data,
+                                          .text = boundedText(update.text),
+                                          .data = boundedData(update.data),
                                           .actionable = update.actionable});
     }
-    emit teamChanged(teamJson(team));
+    emit teamChanged(directoryJson(team));
     if (actionable)
         scheduleDigest(team.id);
     if (team.reviewing.isEmpty() && !team.reviewQueue.isEmpty())
@@ -174,7 +260,8 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
 
 void TeamCoordinator::addHistory(Task& task, const QString& actor, const QString& kind,
                                  const QString& text, const QJsonObject& data) {
-    task.history.append({.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data});
+    task.history.append(
+        bounded({.at = nowIso(), .actor = actor, .kind = kind, .text = text, .data = data}));
 }
 
 Decision& TeamCoordinator::raiseDecision(Team& team, const QString& kind, const QString& question,
@@ -228,6 +315,8 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     draft.automaticTurns = 0;
     draft.nextTask = 1;
     draft.nextDecision = 1;
+    draft.settingsRevision = 1;
+    draft.membersRevision = 1;
     QString error;
     const auto id =
         journal_->insertTeam(draft.repository, toJson(draft), draft.memberSessions(), &error);
@@ -245,7 +334,7 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
                                       .text = QStringLiteral("Team %1 created with %2 members.")
                                                   .arg(draft.name)
                                                   .arg(draft.members.size())});
-    emit teamChanged(teamJson(draft));
+    emit teamChanged(directoryJson(draft));
     startLeader(draft.id);
     return {.teamId = draft.id};
 }
@@ -266,9 +355,22 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     }
     if (changes.contains(QStringLiteral("goal")))
         team->goal = changes.value(QStringLiteral("goal")).toString().trimmed().left(4000);
-    if (changes.contains(QStringLiteral("integration_branch")))
-        team->integrationBranch =
+    if (changes.contains(QStringLiteral("integration_branch"))) {
+        const QString branch =
             changes.value(QStringLiteral("integration_branch")).toString().trimmed();
+        if (auto invalid = rules::validBranch(branch)) {
+            *team = before;
+            return {.error = invalid};
+        }
+        // Lanes and merges are checked against it: a team that has one changes it, not drops it.
+        if (branch.isEmpty() && !team->integrationBranch.isEmpty()) {
+            *team = before;
+            return {.error = TeamError{QStringLiteral("invalid_payload"),
+                                       QStringLiteral("The integration branch can be changed, "
+                                                      "not removed.")}};
+        }
+        team->integrationBranch = branch;
+    }
     if (changes.contains(QStringLiteral("merge_policy"))) {
         const QString policy = changes.value(QStringLiteral("merge_policy")).toString();
         if (policy != role::leader && policy != QStringLiteral("user")) {
@@ -317,6 +419,13 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                                                         : normalised->join(QStringLiteral(", ")))});
         team->sharedPaths = *normalised;
         recheckLanes(*team, updates);
+    }
+    if (changes.contains(QStringLiteral("turn_budget"))) {
+        if (auto invalid =
+                changeTurnBudget(*team, changes.value(QStringLiteral("turn_budget")), updates)) {
+            *team = before;
+            return {.error = invalid};
+        }
     }
     if (changes.contains(QStringLiteral("paused"))) {
         const bool paused = changes.value(QStringLiteral("paused")).toBool();
@@ -504,6 +613,8 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
 
 void TeamCoordinator::unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                                       const QString& reason, QList<Update>& updates) {
+    team.relocations.removeIf(
+        [&sessionId](const Relocation& move) { return move.session == sessionId; });
     for (Task& task : team.tasks) {
         if (task.owner != sessionId || task.state == state::done)
             continue;
@@ -591,6 +702,20 @@ std::optional<TeamError> TeamCoordinator::archiveRefusal(const QString& sessionI
     const Team* team = teamOf(sessionId);
     if (!team)
         return std::nullopt;
+    // A developer can be removed; the leader and the reviewer stay as long as the team does.
+    const Member* member = team->member(sessionId);
+    const QString role = member ? member->role : QString{};
+    if (role == role::leader)
+        return TeamError{QStringLiteral("team_member"),
+                         QStringLiteral("This conversation leads team %1, and a team keeps its "
+                                        "leader. Delete the team before archiving it.")
+                             .arg(team->name)};
+    if (role == role::reviewer)
+        return TeamError{QStringLiteral("team_member"),
+                         QStringLiteral("This conversation reviews for team %1, and a team keeps "
+                                        "its reviewer. Give the team another reviewer, or delete "
+                                        "it, before archiving this conversation.")
+                             .arg(team->name)};
     return TeamError{QStringLiteral("team_member"),
                      QStringLiteral("This conversation is on team %1. Remove it from the team "
                                     "before archiving it.")

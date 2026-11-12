@@ -323,6 +323,7 @@ class TeamAgentToolsTest final : public QObject {
             listWith({{"ok", true}, {"team", QJsonObject{{"role", "leader"}}}});
         QVERIFY(member.contains("team_task_create"));
         QVERIFY(member.contains("team_decision_raise"));
+        QVERIFY(member.contains("team_task_close"));
         const QStringList stranger = listWith({{"ok", true}, {"number", "1234"}});
         QVERIFY(!stranger.contains("team_get"));
         QVERIFY(stranger.contains("agents_send"));

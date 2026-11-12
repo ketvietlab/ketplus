@@ -333,14 +333,23 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         return;
     }
     if (!it->agentToken.isEmpty()) {
-        send(socket, AgentBroker::isOperation(type)
-                         ? protocol::response(
-                               request, host_->handleAgentCommand(
-                                            it->agentToken, type,
-                                            request.value(QStringLiteral("payload")).toObject()))
-                         : protocol::failure(request, QStringLiteral("forbidden"),
-                                             QStringLiteral("Agent connections may only call "
-                                                            "agents.* operations.")));
+        if (!AgentBroker::isOperation(type)) {
+            send(socket, protocol::failure(request, QStringLiteral("forbidden"),
+                                           QStringLiteral("Agent connections may only call "
+                                                          "agents.* operations.")));
+            return;
+        }
+        // Answered at once, except a team's task tool that waits for git (ADR 0114 §1).
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        host_->handleAgentCommandDeferred(
+            it->agentToken, type, request.value(QStringLiteral("payload")).toObject(),
+            [server = QPointer<LocalIpcServer>(this), guardedSocket,
+             request](const QJsonObject& result) {
+                if (!server || guardedSocket.isNull() ||
+                    !server->connections_.contains(guardedSocket))
+                    return;
+                server->send(guardedSocket, protocol::response(request, result));
+            });
         return;
     }
     if (type == QStringLiteral("daemon.prepare_upgrade")) {
@@ -426,14 +435,18 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         });
         return;
     }
-    if (SessionHost::isBackgroundTaskCommand(type)) {
+    // Answered later: a background task command, and a team command that waits for git.
+    if (SessionHost::isBackgroundTaskCommand(type) || type.startsWith(QStringLiteral("team."))) {
         const QPointer<QLocalSocket> guardedSocket(socket);
-        host_->handleCommandDeferred(
-            request, it->clientId, [this, guardedSocket, request](const QJsonObject& result) {
-                if (guardedSocket.isNull() || !connections_.contains(guardedSocket))
-                    return;
-                send(guardedSocket, protocol::response(request, result));
-            });
+        host_->handleCommandDeferred(request, it->clientId,
+                                     [server = QPointer<LocalIpcServer>(this), guardedSocket,
+                                      request](const QJsonObject& result) {
+                                         if (!server || guardedSocket.isNull() ||
+                                             !server->connections_.contains(guardedSocket))
+                                             return;
+                                         server->send(guardedSocket,
+                                                      protocol::response(request, result));
+                                     });
         return;
     }
     if (cloud_ != nullptr && cloud_->handles(type)) {
@@ -484,9 +497,18 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
 }
 
 void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
-    const QByteArray frame = protocol::encodeFrame(envelope);
-    if (frame.size() > protocol::maximumFrameBytes + 4 ||
-        socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+    QByteArray frame = protocol::encodeFrame(envelope);
+    if (frame.size() > protocol::maximumFrameBytes + 4) {
+        // ADR 0115: a message too large for one frame never costs the client its connection.
+        qWarning("Replacing %s of %lld bytes: it exceeds the frame limit.",
+                 qUtf8Printable(envelope.value(QStringLiteral("message_type")).toString()),
+                 static_cast<long long>(frame.size()));
+        frame = protocol::encodeFrame(protocol::oversizedReplacement(envelope, frame.size()));
+    }
+    if (socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+        // A client that stopped reading is dropped; it reconnects and reads the state again.
+        qWarning("Dropping a client: %lld bytes already queued.",
+                 static_cast<long long>(socket->bytesToWrite()));
         socket->abort();
         return;
     }

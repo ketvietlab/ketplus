@@ -24,6 +24,11 @@ class FakeHost final : public TeamHostPort {
         return it.value();
     }
 
+    // A conversation of these tests stands in its repository's main worktree.
+    QString conversationRepository(const QString& sessionId) const override {
+        return conversations.value(sessionId).worktree;
+    }
+
     void add(const QString& id, const QString& provider = QStringLiteral("codex"),
              const QString& repository = QStringLiteral("/repo")) {
         conversations.insert(id, {.sessionId = id,
@@ -32,7 +37,6 @@ class FakeHost final : public TeamHostPort {
                                   .title = id,
                                   .provider = provider,
                                   .worktree = repository,
-                                  .repository = repository,
                                   .idle = true});
     }
 
@@ -241,6 +245,14 @@ class TeamStoreTest final : public QObject {
         QVERIFY(!teams.isMember("dev2"));
         QVERIFY(!teams.archiveRefusal("dev2"));
         QCOMPARE(teams.archiveRefusal("dev1")->code, QStringLiteral("team_member"));
+        // The message says what can be done: a developer is removed, the leader and the
+        // reviewer stay as long as the team does.
+        QVERIFY(teams.archiveRefusal("dev1")->message.contains("Remove it from the team"));
+        const Team& made = *teams.team(id);
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::leader)->sessionId)
+                    ->message.contains("Delete the team"));
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::reviewer)->sessionId)
+                    ->message.contains("another reviewer"));
         QVERIFY(!journal.teamUpdates(id, false, 100).isEmpty());
     }
 

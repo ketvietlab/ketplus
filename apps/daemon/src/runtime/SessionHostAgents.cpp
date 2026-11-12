@@ -49,6 +49,22 @@ QJsonObject SessionHost::handleAgentCommand(const QString& token, const QString&
     return agents_->handle(token, type, payload);
 }
 
+void SessionHost::handleAgentCommandDeferred(const QString& token, const QString& type,
+                                             const QJsonObject& payload, CommandCallback done) {
+    auto run = [this, token, type, payload, done = std::move(done)] {
+        done(agents_->handle(token, type, payload));
+    };
+    // Only the caller the broker will accept has anything read for it.
+    const auto owner = agents_->sessionForToken(token);
+    const auto caller = owner ? agentConversation(owner->first) : std::nullopt;
+    if (!caller || caller->generation != owner->second ||
+        !type.startsWith(QStringLiteral("agents.team_task_"))) {
+        run();
+        return;
+    }
+    prepareTeamOperation(caller->sessionId, type.mid(7), payload, std::move(run));
+}
+
 QString SessionHost::agentToken(const QString& sessionId) {
     const auto it = sessions_.constFind(sessionId);
     return it == sessions_.cend() ? QString{} : agents_->tokenFor(sessionId, it->stored.generation);

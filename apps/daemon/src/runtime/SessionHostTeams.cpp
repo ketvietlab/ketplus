@@ -2,6 +2,7 @@
 #include "runtime/SessionHost.h"
 
 #include "protocol/DaemonProtocol.h"
+#include "runtime/TeamGit.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -10,33 +11,112 @@
 
 namespace ketplus::daemon {
 
+namespace {
+
+// The key of a team created at a path git could not name: the path itself.
+QString ownPath(const QString& worktreePath) {
+    const QString own = QFileInfo(worktreePath).canonicalFilePath();
+    return own.isEmpty() ? worktreePath : own;
+}
+
+} // namespace
+
+// Whether the path's repository is known without git: nothing to ask, or asked before, or a
+// team is filed under the path itself. Such a team was created there, perhaps while git did
+// not answer, and it and its members are found by it whatever git says later.
+bool SessionHost::repositoryKnown(const QString& worktreePath) const {
+    return worktreePath.isEmpty() || repositoryByWorktree_.contains(worktreePath) ||
+           failedRepositoryLookups_.contains(worktreePath) ||
+           (teams_ && !teams_->teams(ownPath(worktreePath)).isEmpty());
+}
+
+// Only git's own answer is kept. A path that is no repository yet, or a git that did not
+// answer in time, is asked again, but not before the event loop turns: a command names a
+// path more than once, and each failed call can take the whole timeout.
+void SessionHost::noteRepository(const QString& worktreePath, const QString& repository) const {
+    if (!repository.isEmpty()) {
+        repositoryByWorktree_.insert(worktreePath, repository);
+        // The main worktree is its own repository: a member's conversation that starts there
+        // is not asked about.
+        repositoryByWorktree_.insert(repository, repository);
+        return;
+    }
+    if (failedRepositoryLookups_.isEmpty())
+        QTimer::singleShot(0, this, [this] { failedRepositoryLookups_.clear(); });
+    failedRepositoryLookups_.insert(worktreePath);
+}
+
 QString SessionHost::repositoryOf(const QString& worktreePath) const {
     if (worktreePath.isEmpty())
         return {};
     if (const auto cached = repositoryByWorktree_.constFind(worktreePath);
         cached != repositoryByWorktree_.cend())
         return cached.value();
-    QProcess process;
-    process.setWorkingDirectory(worktreePath);
-    process.start(QStringLiteral("git"),
-                  {QStringLiteral("--no-optional-locks"), QStringLiteral("rev-parse"),
-                   QStringLiteral("--path-format=absolute"), QStringLiteral("--git-common-dir")});
-    QString repository;
-    if (process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
-        process.exitCode() == 0) {
-        const QFileInfo common(QString::fromUtf8(process.readAllStandardOutput()).trimmed());
-        // The main worktree holds the common ".git"; a bare repository is its own key.
-        repository = common.fileName() == QStringLiteral(".git")
-                         ? QFileInfo(common.absolutePath()).canonicalFilePath()
-                         : common.canonicalFilePath();
-    }
-    if (repository.isEmpty())
-        repository = QFileInfo(worktreePath).canonicalFilePath();
-    if (repository.isEmpty())
-        repository = worktreePath;
-    repositoryByWorktree_.insert(worktreePath, repository);
-    return repository;
+    // A path learnRepositories was not asked about is asked here, on the caller's thread.
+    if (!repositoryKnown(worktreePath))
+        noteRepository(worktreePath, team_git::repositoryOf(worktreePath));
+    return repositoryByWorktree_.value(worktreePath, ownPath(worktreePath));
 }
+
+// Asks git about the paths it has not been asked about, on the thread of the team's other
+// questions, and calls `then` on this one when repositoryOf answers each without git: at once
+// when all are known.
+void SessionHost::learnRepositories(const QStringList& paths, std::function<void()> then) {
+    QStringList unknown;
+    for (const QString& path : paths)
+        if (!repositoryKnown(path) && !unknown.contains(path))
+            unknown.append(path);
+    if (unknown.isEmpty()) {
+        then();
+        return;
+    }
+    teamGit_.start([guard = QPointer<SessionHost>(this), unknown,
+                    then = std::move(then)]() mutable {
+        QList<std::pair<QString, QString>> found;
+        for (const QString& path : std::as_const(unknown)) {
+            // A path git just named as a main worktree is its own repository: a
+            // repository is often named in two spellings, as sent and as resolved.
+            const bool main = std::any_of(found.cbegin(), found.cend(),
+                                          [&path](const auto& one) { return one.second == path; });
+            found.append({path, main ? path : team_git::repositoryOf(path)});
+        }
+        QMetaObject::invokeMethod(
+            guard,
+            [guard, found = std::move(found), then = std::move(then)] {
+                for (const auto& [path, repository] : found)
+                    guard->noteRepository(path, repository);
+                then();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+// The paths a team command asks repositoryOf about: the repository it names, as it is sent
+// and as team.create reads it, and where each conversation it names works.
+QStringList SessionHost::teamCommandPaths(const QJsonObject& payload) const {
+    QStringList paths;
+    const QString repository = payload.value(QStringLiteral("repository")).toString();
+    if (!repository.isEmpty())
+        paths << repository << normalizedWorktree(repository);
+    const std::function<void(const QJsonValue&)> collect = [&](const QJsonValue& value) {
+        if (value.isString()) {
+            const auto it = sessions_.constFind(value.toString());
+            if (it != sessions_.cend())
+                paths << it->stored.worktreePath;
+        } else if (value.isArray()) {
+            for (const QJsonValue& item : value.toArray())
+                collect(item);
+        } else if (value.isObject()) {
+            const QJsonObject object = value.toObject();
+            for (const QJsonValue& item : object)
+                collect(item);
+        }
+    };
+    collect(payload);
+    return paths;
+}
+
+bool SessionHost::teamChecksPending() const { return teams_ && teams_->checksOpen(); }
 
 std::optional<teams::TeamConversation>
 SessionHost::teamConversation(const QString& sessionId) const {
@@ -52,8 +132,12 @@ SessionHost::teamConversation(const QString& sessionId) const {
                                    .model = it->stored.model,
                                    .effort = it->stored.effort,
                                    .worktree = it->stored.worktreePath,
-                                   .repository = repositoryOf(it->stored.worktreePath),
                                    .idle = agent.idle};
+}
+
+QString SessionHost::conversationRepository(const QString& sessionId) const {
+    const auto it = sessions_.constFind(sessionId);
+    return it == sessions_.cend() ? QString{} : repositoryOf(it->stored.worktreePath);
 }
 
 bool SessionHost::onTeam(const QString& sessionId) const {

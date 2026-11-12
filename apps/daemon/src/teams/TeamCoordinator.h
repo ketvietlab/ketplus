@@ -5,10 +5,12 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 
 class QTimer;
 
+#include <functional>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -28,8 +30,6 @@ struct TeamConversation final {
     QString model;
     QString effort;
     QString worktree;
-    // The repository's main worktree, the key a team belongs to.
-    QString repository;
     bool idle{false};
 };
 
@@ -65,11 +65,99 @@ struct TaskDiff final {
     QStringList files;
 };
 
+// What git knows about one task, for a check the daemon makes by itself.
+struct TaskFacts final {
+    // Merge: the commit the task's branch points at, and whether the integration branch
+    // contains the branch. Nothing where git could not tell.
+    QString head;
+    std::optional<bool> merged;
+    // Lane: the paths the task's worktree changed.
+    std::optional<QStringList> changed;
+};
+enum class TaskQuestion { Merge, Lane };
+using TaskFactsDone = std::function<void(const QHash<QString, TaskFacts>&)>;
+// What git answered when a task's worktree was asked for: the worktree, or why there is none.
+struct WorktreeAnswer final {
+    std::optional<TaskWorktree> worktree;
+    QString error;
+};
+// What a hand to review reads from git, and the worktree and branch it was read for: whether
+// work is uncommitted (nothing when git failed) and the commit the branch points at.
+struct HandoffFacts final {
+    QString worktree;
+    QString branch;
+    std::optional<bool> dirty;
+    QString head;
+};
+using WorktreeDone = std::function<void(const WorktreeAnswer&)>;
+using HandoffDone = std::function<void(const HandoffFacts&)>;
+using TaskDiffDone = std::function<void(const std::optional<TaskDiff>&)>;
+// ADR 0118: what the remote says about one pull request. `state` is "open", "merged" or
+// "closed"; empty with `error` set when the remote could not tell.
+struct PullRequestFact final {
+    QString state;
+    QString mergeCommit;
+    QString error;
+};
+using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
+
 class TeamHostPort {
   public:
     virtual ~TeamHostPort() = default;
+    // Asks git about the tasks for one check and answers `done` on the caller's thread, by task
+    // id. Here it answers before it returns. The session runtime asks git off its event loop
+    // and answers later, so the caller applies the answer to the team as it then is.
+    virtual void askTasks(const Team& team, const QList<Task>& tasks, TaskQuestion question,
+                          TaskFactsDone done) {
+        QHash<QString, TaskFacts> facts;
+        for (const Task& task : tasks)
+            facts.insert(task.id, question == TaskQuestion::Merge
+                                      ? TaskFacts{.head = taskCommit(team, task),
+                                                  .merged = isMerged(team, task),
+                                                  .changed = std::nullopt}
+                                      : TaskFacts{.head = {},
+                                                  .merged = std::nullopt,
+                                                  .changed = changedPaths(team, task)});
+        done(facts);
+    }
+    // Reads the task's diff for its review and answers `done` on the caller's thread: before
+    // it returns here, later where the session runtime reads it off its event loop.
+    virtual void askDiff(const Team& team, const Task& task, TaskDiffDone done) {
+        done(taskDiff(team, task));
+    }
+    // Creates the task's branch and worktree, and reads what a hand to review needs, for a
+    // command that was prepared (TeamCoordinator::prepare). Both answer `done` on the caller's
+    // thread: before they return here, later where the session runtime asks git off its
+    // event loop.
+    virtual void askWorktree(const Team& team, const Task& task, WorktreeDone done) {
+        WorktreeAnswer answer;
+        answer.worktree = createTaskWorktree(team, task, &answer.error);
+        done(answer);
+    }
+    virtual void askHandoff(const Team& team, const Task& task, HandoffDone done) {
+        done({.worktree = task.worktree,
+              .branch = task.branch,
+              .dirty = hasUncommittedWork(task.worktree),
+              .head = taskCommit(team, task)});
+    }
+    // ADR 0118: asks the remote about the pull requests, by URL, and answers `done` on the
+    // caller's thread. Without a way to ask, every one is unknown and the leader closes the
+    // task by hand.
+    virtual void askPullRequests(const Team& team, const QStringList& urls, PullRequestsDone done) {
+        (void)team;
+        QHash<QString, PullRequestFact> facts;
+        for (const QString& url : urls)
+            facts.insert(url, {.state = {},
+                               .mergeCommit = {},
+                               .error = QStringLiteral("Pull requests cannot be checked here.")});
+        done(facts);
+    }
     [[nodiscard]] virtual std::optional<TeamConversation>
     teamConversation(const QString& sessionId) const = 0;
+    // The repository's main worktree the conversation works in: the key a team belongs to.
+    // Asked only for a conversation that is to join a team, because the session runtime may
+    // have to ask git for it.
+    [[nodiscard]] virtual QString conversationRepository(const QString& sessionId) const = 0;
     // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
     virtual std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                            QString* error) {
@@ -166,15 +254,25 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] bool isMember(const QString& sessionId) const { return teamOf(sessionId); }
     // The team as clients receive it: the document plus each member's number, title and agent.
     [[nodiscard]] QJsonObject teamJson(const Team& team) const;
-    [[nodiscard]] QJsonArray updatesJson(qint64 teamId, int limit = 200) const;
+    // ADR 0115: the team for team.list and team.changed: teamJson without its tasks and
+    // decisions, marked "directory". Its size follows the members, so the sidebar always
+    // receives every team; a page reads the rest with team.get.
+    [[nodiscard]] QJsonObject directoryJson(const Team& team) const;
+    [[nodiscard]] QJsonArray updatesJson(qint64 teamId, int limit = defaultPage,
+                                         qint64 beforeId = 0) const;
 
     // `draft` carries the settings and the members with their session ids. Nothing is stored
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths and max_rounds; other keys are ignored.
+    // shared_paths, max_rounds and turn_budget; other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
+    // ADR 0114, open point 2 (TeamCoordinatorSettings.cpp): what a new team starts from,
+    // kept in the journal. Only `turn_budget` for now; changing it changes no team.
+    [[nodiscard]] QJsonObject teamSettings() const;
+    [[nodiscard]] int turnBudgetSetting() const;
+    std::optional<TeamError> updateTeamSettings(const QJsonObject& changes);
     TeamResult addMember(qint64 teamId, Member member, const QString& actor);
     TeamResult updateMember(qint64 teamId, const QString& sessionId, const QString& lane,
                             const QStringList& paths, const QString& actor,
@@ -198,6 +296,23 @@ class TeamCoordinator : public QObject {
                         const QString& actor, const QString& note = {});
     TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
                            const QString& actor);
+    // TeamCoordinatorGit.cpp. An assignment and a handover make the task's worktree, and a
+    // hand to review reads the worktree, through the host on the caller's thread. prepare()
+    // asks the host first, where it may answer later, and then calls `then`: the command is
+    // run there as always and finds the answer instead of asking. `then` is called at once
+    // for a command that would be refused or asks git nothing. One worktree is asked for a
+    // task however many commands wait for it.
+    struct TaskRequest final {
+        enum class Kind { Assign, Handover, Move };
+        Kind kind{Kind::Assign};
+        qint64 teamId{0};
+        QString taskId;
+        QString actor;
+        QString owner;
+        QString reason;
+        QString to;
+    };
+    void prepare(const TaskRequest& request, std::function<void()> then);
     // "user", "daemon", the member's role, or empty for a stranger.
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
@@ -237,8 +352,30 @@ class TeamCoordinator : public QObject {
                                 const QString& actor);
 
     // ADR 0114 §5 (TeamCoordinatorMerges.cpp): marks every Ready task the integration branch
-    // contains as done. Run when a member's turn ends and when a client reads the team.
+    // contains as done. Run when a member's turn ends and when a client reads the team. Git
+    // is asked through the host, which may answer later; one question is open for a team at a
+    // time, and a check asked for meanwhile runs when it is answered.
     void checkMerged(qint64 teamId);
+    // ADR 0118 (TeamCoordinatorDone.cpp): every task that records a pull request and is not
+    // done is done once the remote says it is merged. Asked when a team is checked for merges,
+    // at load and on a timer, at most once per `minimumGap` for a team and for at most
+    // maxPullRequestsPerCheck pull requests; an error never moves a task.
+    static constexpr int defaultPullRequestPeriodMs = 2 * 60 * 1000;
+    static constexpr int defaultPullRequestGapMs = 60 * 1000;
+    static constexpr int maxPullRequestsPerCheck = 20;
+    void checkPullRequests(qint64 teamId);
+    // Whether the task records a pull request URL: then only the pull request says it is done.
+    [[nodiscard]] static bool recordsPullRequest(const Task& task);
+    void setPullRequestPeriod(int periodMs, int minimumGapMs);
+    // The leader closes a task by hand: `evidence` is a pull request URL or a commit.
+    TeamResult closeTask(qint64 teamId, const QString& taskId, const QString& evidence,
+                         const QString& note, const QString& actor);
+    // Whether a merge check, a lane check, a review's diff or a prepared command is still
+    // with git.
+    [[nodiscard]] bool checksOpen() const {
+        return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() || !laneChecks_.isEmpty() ||
+               !reviewDiffs_.isEmpty() || !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
+    }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
@@ -270,12 +407,19 @@ class TeamCoordinator : public QObject {
         QJsonObject data;
     };
 
+    // The team's Updates from the journal, within the bounds of Team.h.
+    [[nodiscard]] QList<TeamUpdateRecord> updateRecords(qint64 teamId, bool undigestedOnly,
+                                                        int limit, qint64 beforeId = 0) const;
     [[nodiscard]] Team* mutableTeam(qint64 teamId);
     [[nodiscard]] Team* mutableTeamOf(const QString& sessionId);
     // Stores `team` with revision + 1 and the updates, then emits teamChanged. On a journal
     // failure the in-memory team is restored from `before`.
     std::optional<TeamError> commit(Team& team, const Team& before, const QString& actor,
                                     const QList<Update>& updates);
+    // A team's own budget, from team.update; a team paused by its budget runs again when the
+    // new one leaves turns. The turns used stay counted.
+    std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
+                                              QList<Update>& updates);
     // Leaves the developer's open tasks unassigned, with an entry in their history.
     void unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                          const QString& reason, QList<Update>& updates);
@@ -299,6 +443,17 @@ class TeamCoordinator : public QObject {
     // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
     // open tasks changed with its lane and the shared paths.
     void checkLanes(qint64 teamId, const QString& developer);
+    void applyLaneFacts(qint64 teamId, const QString& developer, const QList<Task>& asked,
+                        const QHash<QString, TaskFacts>& facts);
+    void applyMergeFacts(qint64 teamId, const QList<Task>& asked,
+                         const QHash<QString, TaskFacts>& facts);
+    void applyPullRequestFacts(qint64 teamId, const QHash<QString, PullRequestFact>& facts);
+    // Moves a task that is not done to done (ADR 0118): withdraws its merge decisions and its
+    // place with the reviewer, and records `kind` with `data` in its history.
+    void finishTask(Team& team, Task& task, const QString& actor, const QString& reason,
+                    const QString& kind, const QJsonObject& data, QList<Update>& updates);
+    // The goal_reached update, when every task is done.
+    static void noteGoalReached(const Team& team, QList<Update>& updates);
     // After a lane or the shared paths changed: clears the flagged paths they now cover.
     void recheckLanes(Team& team, QList<Update>& updates);
     // Sets a task's outside paths and records the change; false when nothing changed.
@@ -307,8 +462,13 @@ class TeamCoordinator : public QObject {
     // Offers each Ready task whose dependencies are done for merging, once: an actionable
     // update for the leader, and under mergePolicy "user" a "Merge T-n?" decision.
     void offerMerges(Team& team, QList<Update>& updates);
-    // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp).
+    // Sends the next queued task to an idle reviewer (TeamCoordinatorReviews.cpp). The diff is
+    // read through the host first, which may answer later; nothing of the team changes until
+    // then, so a restart meanwhile leaves the task queued.
     void pumpReviews(qint64 teamId);
+    // Starts the review the diff was read for, if that task is still the next one as it was.
+    void startReview(qint64 teamId, const Task& asked, const QString& repository,
+                     const QString& integration, const std::optional<TaskDiff>& diff);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,
                                             const std::optional<TaskDiff>& diff);
     // Restarts the quiet period of the team's digest.
@@ -321,15 +481,53 @@ class TeamCoordinator : public QObject {
     void askFirstPlan(Team& team);
     void askFirstPlanAgain(qint64 teamId);
     // Points the owner at the task's worktree and sends the assignment.
+    // Moves a member out of the worktrees it was handed out of and forgets each move that
+    // is settled: done, or no longer needed. Returns why one is still waiting, if any.
+    QString settleRelocations(qint64 teamId, const QString& sessionId);
     void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
                            const QString& reason = {});
     [[nodiscard]] static QString assignmentText(const Team& team, const Task& task,
                                                 const QString& fromName, bool handover,
                                                 const QString& reason);
+    // Why the command is refused before git is asked for anything; nothing when it may go on.
+    [[nodiscard]] std::optional<TeamError> assignRefusal(const Team& team, const Task& task,
+                                                         const QString& owner,
+                                                         const QString& actor) const;
+    [[nodiscard]] std::optional<TeamError> handoverRefusal(const Team& team, const Task& task,
+                                                           const QString& owner,
+                                                           const QString& reason,
+                                                           const QString& actor) const;
+    // The task's worktree and what its hand to review reads: the answer prepare() got, or the
+    // host's on this thread.
+    [[nodiscard]] WorktreeAnswer worktreeFor(const Team& team, const Task& task);
+    [[nodiscard]] HandoffFacts handoffFor(const Team& team, const Task& task) const;
+    void worktreeAnswered(qint64 teamId, const QString& taskId, const WorktreeAnswer& answer);
 
     LocalJournal* journal_{nullptr};
     TeamHostPort* host_{nullptr};
     QHash<qint64, Team> teams_;
+    // Checks whose question to git is open, and those asked for again meanwhile: a team id
+    // for the merge check, "<team>/<developer>" for the lane check.
+    // Teams whose next review waits for git to read its diff.
+    QSet<qint64> reviewDiffs_;
+    QSet<qint64> mergeChecks_;
+    QSet<qint64> mergeChecksAgain_;
+    QSet<qint64> pullRequestChecks_;
+    QHash<qint64, qint64> pullRequestCheckedAt_;
+    // Per team, the pull request the next check starts at: the one after the last asked, so
+    // one that never answers cannot keep the others from being asked.
+    QHash<qint64, QString> pullRequestCursor_;
+    QTimer* pullRequestTimer_{nullptr};
+    int pullRequestPeriod_{defaultPullRequestPeriodMs};
+    int pullRequestGap_{defaultPullRequestGapMs};
+    QSet<QString> laneChecks_;
+    QSet<QString> laneChecksAgain_;
+    // Prepared commands, by "<team>/<task>": those waiting for the task's worktree, and the
+    // answers that are there while the commands they were asked for run.
+    QHash<QString, QList<std::function<void()>>> worktreeWaits_;
+    QHash<QString, WorktreeAnswer> worktrees_;
+    QHash<QString, HandoffFacts> handoffs_;
+    int handoffsAsked_{0};
     QHash<QString, qint64> teamBySession_;
     bool loaded_{false};
     QHash<qint64, QTimer*> digestTimers_;

@@ -67,14 +67,28 @@ ketplus_add_daemon_test(ketplus_agent_messaging_tests AgentMessagingTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
+ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
 ketplus_add_daemon_test(ketplus_team_flow_tests TeamFlowTest.cpp)
 ketplus_add_daemon_test(ketplus_team_stall_tests TeamStallTest.cpp)
 ketplus_add_daemon_test(ketplus_team_wait_tests TeamWaitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_review_tests TeamReviewTest.cpp)
 ketplus_add_daemon_test(ketplus_team_lane_tests TeamLaneTest.cpp)
+ketplus_add_daemon_test(ketplus_team_payload_tests TeamPayloadTest.cpp)
 ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
+# ADR 0114, open point 2: the global automatic-turn budget and each team's own.
+ketplus_add_daemon_test(ketplus_team_budget_tests TeamBudgetTest.cpp)
 ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
+# ADR 0118: done by a merged pull request or by the leader.
+ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
+# ADR 0116: team commands from paired phones, checked against the contract's fixture.
+ketplus_add_daemon_test(ketplus_team_remote_tests TeamRemoteTest.cpp)
+target_compile_definitions(ketplus_team_remote_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+ketplus_add_daemon_test(ketplus_team_remote_cloud_tests TeamRemoteCloudTest.cpp)
+target_sources(ketplus_team_remote_cloud_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_compile_definitions(ketplus_team_remote_cloud_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 ketplus_add_daemon_test(ketplus_work_report_tests WorkReportTest.cpp)
 ketplus_add_daemon_test(ketplus_awaiting_reply_tests AwaitingReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_tag_catalog_tests TagCatalogTest.cpp)
@@ -88,6 +102,7 @@ ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformed
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_worktree_revision_cache_tests WorktreeRevisionCacheTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests

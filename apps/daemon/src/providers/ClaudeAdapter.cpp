@@ -104,7 +104,7 @@ QJsonObject decorateClaudeModel(QJsonObject source) {
 } // namespace
 
 ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
-    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable, &findExecutable),
       process_(new QProcess(this)), restartTimer_(new QTimer(this)) {
     restartTimer_->setSingleShot(true);
     connect(restartTimer_, &QTimer::timeout, this, [this] {
@@ -176,7 +176,7 @@ ClaudeAdapter::~ClaudeAdapter() {
     stop();
 }
 
-bool ClaudeAdapter::isAvailable() const { return !executable_.isEmpty(); }
+bool ClaudeAdapter::isAvailable() const { return !executable_.path().isEmpty(); }
 
 QString ClaudeAdapter::missingSidecarMessage() {
     return QStringLiteral("Claude Agent SDK sidecar was not found.");
@@ -185,7 +185,7 @@ QString ClaudeAdapter::missingSidecarMessage() {
 QString ClaudeAdapter::missingMessage() const { return missingSidecarMessage(); }
 
 void ClaudeAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> callback) {
-    callback(compat::bundledClaude(executable_));
+    callback(compat::bundledClaude(executable_.path()));
 }
 
 bool ClaudeAdapter::supports(const QString& capability) const {
@@ -194,7 +194,7 @@ bool ClaudeAdapter::supports(const QString& capability) const {
 
 bool ClaudeAdapter::isReady() const { return ready_; }
 
-QString ClaudeAdapter::executable() const { return executable_; }
+QString ClaudeAdapter::executable() const { return executable_.path(); }
 
 QJsonArray ClaudeAdapter::modelCatalog() {
     const auto model = [](const QString& id, const QString& label, const QString& effort) {
@@ -333,7 +333,7 @@ void ClaudeAdapter::ensureStarted() {
 }
 
 void ClaudeAdapter::configureProcess() {
-    const QFileInfo info(executable_);
+    const QFileInfo info(executable_.path());
     const QString suffix = info.suffix().toLower();
     if (suffix == QStringLiteral("mjs") || suffix == QStringLiteral("js")) {
         const QString node = findNode();
@@ -341,7 +341,7 @@ void ClaudeAdapter::configureProcess() {
         process_->setArguments({info.absoluteFilePath()});
         return;
     }
-    process_->setProgram(executable_);
+    process_->setProgram(executable_.path());
     process_->setArguments({});
 }
 

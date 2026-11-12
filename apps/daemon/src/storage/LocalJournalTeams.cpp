@@ -31,8 +31,9 @@ bool LocalJournal::initializeTeams() {
                        "NULL, kind TEXT NOT NULL, task_id TEXT NOT NULL DEFAULT '', text TEXT NOT "
                        "NULL, data TEXT NOT NULL DEFAULT '{}', actionable INTEGER NOT NULL DEFAULT "
                        "0, digested INTEGER NOT NULL DEFAULT 0)"),
-        QStringLiteral(
-            "CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)")};
+        QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS team_settings (singleton INTEGER PRIMARY KEY "
+                       "CHECK(singleton=1), document TEXT NOT NULL)")};
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
             setError(query.lastError().text());
@@ -40,6 +41,28 @@ bool LocalJournal::initializeTeams() {
         }
     }
     return true;
+}
+
+QJsonObject LocalJournal::teamSettings(bool* read) const {
+    QSqlQuery query(database_);
+    const bool ok =
+        query.exec(QStringLiteral("SELECT document FROM team_settings WHERE singleton = 1"));
+    if (read)
+        *read = ok;
+    return ok && query.next() ? parsed(query.value(0).toString()) : QJsonObject{};
+}
+
+bool LocalJournal::saveTeamSettings(const QJsonObject& settings, QString* error) {
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("INSERT INTO team_settings (singleton, document) VALUES (1, ?) "
+                       "ON CONFLICT(singleton) DO UPDATE SET document = excluded.document"));
+    query.addBindValue(compact(settings));
+    if (query.exec())
+        return true;
+    if (error)
+        *error = query.lastError().text();
+    return false;
 }
 
 bool LocalJournal::writeTeamMembers(const qint64 teamId, const QStringList& sessions,
@@ -223,15 +246,18 @@ std::optional<qint64> LocalJournal::appendTeamUpdate(const TeamUpdateRecord& upd
 }
 
 QList<TeamUpdateRecord> LocalJournal::teamUpdates(const qint64 teamId, const bool undigestedOnly,
-                                                  const int limit) const {
+                                                  const int limit, const qint64 beforeId) const {
     QList<TeamUpdateRecord> updates;
     QSqlQuery query(database_);
     query.prepare(
         QStringLiteral("SELECT id, at, actor, kind, task_id, text, data, actionable, digested "
-                       "FROM team_updates WHERE team_id = ? %1 ORDER BY id %2 LIMIT ?")
+                       "FROM team_updates WHERE team_id = ? %1 %3 ORDER BY id %2 LIMIT ?")
             .arg(undigestedOnly ? QStringLiteral("AND digested = 0") : QString{},
-                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC")));
+                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC"),
+                 beforeId > 0 ? QStringLiteral("AND id < ?") : QString{}));
     query.addBindValue(teamId);
+    if (beforeId > 0)
+        query.addBindValue(beforeId);
     query.addBindValue(limit);
     if (!query.exec())
         return updates;

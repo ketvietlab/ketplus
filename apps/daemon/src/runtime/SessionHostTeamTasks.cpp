@@ -3,28 +3,18 @@
 #include "runtime/SessionHost.h"
 
 #include "protocol/DaemonProtocol.h"
+#include "runtime/TeamGit.h"
+#include "runtime/TeamPullRequests.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace ketplus::daemon {
 namespace {
-
-// A short synchronous git call for the team's bookkeeping; nothing when git failed.
-std::optional<QString> gitOutput(const QString& directory, const QStringList& arguments) {
-    if (directory.isEmpty())
-        return std::nullopt;
-    QProcess process;
-    process.setWorkingDirectory(directory);
-    process.start(QStringLiteral("git"),
-                  QStringList{QStringLiteral("--no-optional-locks")} + arguments);
-    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit ||
-        process.exitCode() != 0)
-        return std::nullopt;
-    return QString::fromUtf8(process.readAllStandardOutput());
-}
 
 QJsonObject refused(const QString& code, const QString& message) {
     return {{QStringLiteral("ok"), false},
@@ -41,38 +31,34 @@ QStringList strings(const QJsonValue& value) {
 
 } // namespace
 
-// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
-// worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
 std::optional<teams::TaskWorktree>
 SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) {
-    const QString base =
-        team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
-    const auto commit =
-        gitOutput(team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                                    base + QStringLiteral("^{commit}")});
-    if (!commit) {
-        *error = QStringLiteral("The integration branch %1 does not exist in %2.")
-                     .arg(base, team.repository);
-        return std::nullopt;
-    }
-    const QString slug = task.id.toLower();
-    const QString branch = QStringLiteral("team/%1/%2").arg(team.id).arg(slug);
-    const QFileInfo repository(team.repository);
-    const QString path = QDir::cleanPath(repository.dir().filePath(
-        QStringLiteral("%1-team-%2-%3").arg(repository.fileName()).arg(team.id).arg(slug)));
-    if (QFileInfo::exists(path)) {
-        *error = QStringLiteral("The worktree path %1 already exists.").arg(path);
-        return std::nullopt;
-    }
-    if (!gitOutput(team.repository,
-                   {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
-                    QStringLiteral("--"), path, commit->trimmed()})) {
-        *error = QStringLiteral("git could not create the worktree %1 on %2.").arg(path, branch);
-        return std::nullopt;
-    }
-    return teams::TaskWorktree{.branch = branch,
-                               .worktree = QFileInfo(path).canonicalFilePath(),
-                               .baseCommit = commit->trimmed()};
+    teams::WorktreeAnswer answer = team_git::createWorktree(team, task);
+    *error = answer.error;
+    return answer.worktree;
+}
+
+// A prepared command's git runs on the thread of the team's other questions, in their order.
+void SessionHost::askWorktree(const teams::Team& team, const teams::Task& task,
+                              teams::WorktreeDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            teams::WorktreeAnswer answer = team_git::createWorktree(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), answer = std::move(answer)] { done(answer); },
+                Qt::QueuedConnection);
+        });
+}
+
+void SessionHost::askHandoff(const teams::Team& team, const teams::Task& task,
+                             teams::HandoffDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            teams::HandoffFacts facts = team_git::handoff(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+                Qt::QueuedConnection);
+        });
 }
 
 QString SessionHost::pointConversationAt(const QString& sessionId, const QString& worktree) {
@@ -97,80 +83,64 @@ QString SessionHost::pointConversationAt(const QString& sessionId, const QString
 }
 
 std::optional<bool> SessionHost::hasUncommittedWork(const QString& worktree) const {
-    const auto status =
-        gitOutput(worktree, {QStringLiteral("status"), QStringLiteral("--porcelain")});
-    if (!status)
-        return std::nullopt;
-    return !status->trimmed().isEmpty();
-}
-
-QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
-    if (task.branch.isEmpty())
-        return {};
-    // The branch itself, not a worktree's HEAD: a worktree can be detached or on another
-    // branch, and the branch can move without it.
-    return gitOutput(team.repository,
-                     {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                      QStringLiteral("--quiet"), QStringLiteral("--end-of-options"),
-                      QStringLiteral("refs/heads/%1^{commit}").arg(task.branch)})
-        .value_or(QString{})
-        .trimmed();
+    return team_git::hasUncommittedWork(worktree);
 }
 
 std::optional<teams::TaskDiff> SessionHost::taskDiff(const teams::Team& team,
                                                      const teams::Task& task) const {
-    const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
-    // The branch against the integration branch it was cut from (ADR 0114 §2).
-    const QString range = QStringLiteral("%1...%2").arg(
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
-    const auto diff = gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
-                                            QStringLiteral("--no-ext-diff"), range});
-    const auto names =
-        gitOutput(directory, {QStringLiteral("diff"), QStringLiteral("--name-only"), range});
-    if (!diff || !names)
-        return std::nullopt;
-    return teams::TaskDiff{.diff = *diff,
-                           .files = names->split(QLatin1Char('\n'), Qt::SkipEmptyParts)};
+    return team_git::taskDiff(team, task);
+}
+
+// A review's diff is read on the thread of the team's other questions to git.
+void SessionHost::askDiff(const teams::Team& team, const teams::Task& task,
+                          teams::TaskDiffDone done) {
+    teamGit_.start(
+        [guard = QPointer<SessionHost>(this), team, task, done = std::move(done)]() mutable {
+            std::optional<teams::TaskDiff> diff = team_git::taskDiff(team, task);
+            QMetaObject::invokeMethod(
+                guard, [done = std::move(done), diff = std::move(diff)] { done(diff); },
+                Qt::QueuedConnection);
+        });
+}
+
+QString SessionHost::taskCommit(const teams::Team& team, const teams::Task& task) const {
+    return team_git::taskCommit(team, task);
 }
 
 std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
                                                      const teams::Task& task) const {
-    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir())
-        return std::nullopt;
-    const QString base =
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch;
-    // Committed on the branch since it left its base, then what is not committed yet.
-    const auto committed =
-        gitOutput(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
-                                  QStringLiteral("%1...HEAD").arg(base)});
-    const auto pending =
-        gitOutput(task.worktree,
-                  {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
-                   QStringLiteral("-uall"), QStringLiteral("--no-renames")});
-    if (!committed || !pending)
-        return std::nullopt;
-    QStringList paths = committed->split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
-        if (entry.size() > 3)
-            paths.append(entry.mid(3));
-    paths.removeDuplicates();
-    return paths;
+    return team_git::changedPaths(team, task);
 }
 
 std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::Task& task) const {
-    if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
-        return std::nullopt;
-    // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
-    QProcess process;
-    process.setWorkingDirectory(team.repository);
-    process.start(QStringLiteral("git"),
-                  {QStringLiteral("--no-optional-locks"), QStringLiteral("merge-base"),
-                   QStringLiteral("--is-ancestor"), task.branch, team.integrationBranch});
-    if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
-        return std::nullopt;
-    if (process.exitCode() == 0 || process.exitCode() == 1)
-        return process.exitCode() == 0;
-    return std::nullopt;
+    return team_git::isMerged(team, task);
+}
+
+// The daemon's own checks ask git on another thread: a slow repository holds no client and no
+// other conversation. The team and the tasks are copies; the answer comes back queued.
+void SessionHost::askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
+                           const teams::TaskQuestion question, teams::TaskFactsDone done) {
+    teamGit_.start([guard = QPointer<SessionHost>(this), team, tasks, question,
+                    done = std::move(done)]() mutable {
+        QHash<QString, teams::TaskFacts> facts = team_git::facts(team, tasks, question);
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+            Qt::QueuedConnection);
+    });
+}
+
+// ADR 0118: the remote is asked on its own worker, bounded per request and per batch, so a
+// slow network holds no question to git and no client.
+void SessionHost::askPullRequests(const teams::Team& team, const QStringList& urls,
+                                  teams::PullRequestsDone done) {
+    teamRemote_.start([guard = QPointer<SessionHost>(this), directory = team.repository, urls,
+                       stopping = teamRemoteStopping_, done = std::move(done)]() mutable {
+        QHash<QString, teams::PullRequestFact> facts =
+            team_pull_requests::ask(directory, urls, {}, {}, stopping.get());
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), facts = std::move(facts)] { done(facts); },
+            Qt::QueuedConnection);
+    });
 }
 
 void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
@@ -201,6 +171,33 @@ void SessionHost::noteInConversation(const QString& sessionId, const QJsonObject
         appendAgentNotice(sessionId, it->stored.generation, note);
 }
 
+// The user's task commands that reach git: assign, hand over, and move, which reads the
+// worktree when the task goes to review. handleCommand refuses what it always refused.
+void SessionHost::prepareTeamTask(const QJsonObject& request, std::function<void()> then) {
+    using Kind = teams::TeamCoordinator::TaskRequest::Kind;
+    const QString type = request.value(QStringLiteral("message_type")).toString();
+    std::optional<Kind> kind;
+    if (type == QStringLiteral("team.task.assign"))
+        kind = Kind::Assign;
+    else if (type == QStringLiteral("team.task.handover"))
+        kind = Kind::Handover;
+    else if (type == QStringLiteral("team.task.move"))
+        kind = Kind::Move;
+    if (!kind || !teams_ || !teams_->isLoaded()) {
+        then();
+        return;
+    }
+    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    teams_->prepare({.kind = *kind,
+                     .teamId = payload.value(QStringLiteral("team_id")).toString().toLongLong(),
+                     .taskId = payload.value(QStringLiteral("task_id")).toString(),
+                     .actor = QStringLiteral("user"),
+                     .owner = payload.value(QStringLiteral("owner")).toString(),
+                     .reason = payload.value(QStringLiteral("reason")).toString(),
+                     .to = payload.value(QStringLiteral("state")).toString()},
+                    std::move(then));
+}
+
 // teams.tasks/1, for trusted local clients: the user acts on the team's tasks.
 QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject& request) {
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -211,9 +208,10 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
             return refused(result.error->code, result.error->message);
         const teams::Team* team = teams_->team(result.teamId);
         const teams::Task* task = team ? team->task(id) : nullptr;
-        return QJsonObject{{QStringLiteral("ok"), true},
-                           {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}},
-                           {QStringLiteral("task"), task ? teams::toJson(*task) : QJsonObject{}}};
+        return QJsonObject{
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}},
+            {QStringLiteral("task"), task ? teams::taskPageJson(*task) : QJsonObject{}}};
     };
     const teams::Team* team = teams_->team(teamId);
     if (!team)
@@ -233,7 +231,14 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
         if (!task)
             return refused(QStringLiteral("task_not_found"),
                            QStringLiteral("There is no task %1.").arg(taskId));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("task"), teams::toJson(*task)}};
+        // ADR 0115: one page of history, newest last; history_before reads the page before.
+        const QJsonValue before = payload.value(QStringLiteral("history_before"));
+        return {
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("task"),
+             teams::taskPageJson(
+                 *task, payload.value(QStringLiteral("history_limit")).toInt(teams::defaultPage),
+                 before.isDouble() ? before.toInteger() : -1)}};
     }
     if (type == QStringLiteral("team.task.create")) {
         QString created;
@@ -270,12 +275,31 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
     // ADR 0114 §3: decisions, answered only by the user through a client.
     const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
     if (type == QStringLiteral("team.decision.list")) {
-        QJsonArray decisions;
+        // ADR 0115: newest first, one page; before_id reads older ones.
         const QString wanted = payload.value(QStringLiteral("state")).toString();
-        for (const teams::Decision& decision : team->decisions)
-            if (wanted.isEmpty() || decision.state == wanted)
-                decisions.append(teams::toJson(decision));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("decisions"), decisions}};
+        const QString before = payload.value(QStringLiteral("before_id")).toString();
+        const int limit =
+            std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
+                       teams::maximumPage);
+        QJsonArray decisions;
+        bool reached = before.isEmpty();
+        bool more = false;
+        for (auto it = team->decisions.crbegin(); it != team->decisions.crend(); ++it) {
+            if (!reached) {
+                reached = it->id == before;
+                continue;
+            }
+            if (!wanted.isEmpty() && it->state != wanted)
+                continue;
+            if (decisions.size() == limit) {
+                more = true;
+                break;
+            }
+            decisions.append(teams::toJson(*it));
+        }
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("decisions"), decisions},
+                {QStringLiteral("has_more"), more}};
     }
     if (type == QStringLiteral("team.decision.answer")) {
         const QString choice = payload.value(QStringLiteral("choice")).toString();

@@ -9,6 +9,7 @@ import KetPlusMock
 // repositories with their conversations, the update notice and the account.
 Rectangle {
     id: sidebar
+    property alias brandLockup: brand
 
     required property var window
     property var expanded: ({})
@@ -138,33 +139,14 @@ Rectangle {
         spacing: 0
 
         // Brand.
-        Row {
+        BrandLockup {
+            id: brand
+            objectName: "sidebarBrand"
+            edition: "pro"
+            size: sidebar.px(17)
             Layout.leftMargin: sidebar.px(11)
             Layout.topMargin: sidebar.px(16)
             Layout.bottomMargin: sidebar.px(14)
-            spacing: sidebar.px(6)
-
-            Image {
-                anchors.verticalCenter: parent.verticalCenter
-                // The bare KétPlus Pro mark (Két Symbol, CC BY 4.0): two Chàm tones on light,
-                // Chàm and a near-white plus on dark.
-                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-bare-"
-                        + (KetTheme.dark ? "dark" : "light") + ".svg"
-                sourceSize: Qt.size(width * 2, height * 2)
-                width: sidebar.px(24)
-                height: width
-            }
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.StyledText
-                // The wordmark is Bold (700); "Pro" is Regular.
-                text: "<b>Két<font color='" + KetTheme.t.accentText + "'>Plus</font></b> Pro"
-                color: KetTheme.t.textMain
-                font.family: KetTheme.fontFamily
-                font.pixelSize: sidebar.px(17)
-                font.weight: Font.Normal
-            }
         }
 
         // Quick search opens the command palette.
@@ -229,7 +211,9 @@ Rectangle {
                     { id: "workspace", text: "Agent Workspace", icon: "chats" },
                     { id: "editor", text: "Files & Editor", icon: "folder" },
                     { id: "changes", text: "Source Control", icon: "branch", count: 3 },
-                    { id: "connections", text: "Connections", icon: "network" }
+                    { id: "connections", text: "Connections", icon: "network" },
+                    // Approved brand reference specimens.
+                    { id: "brand", text: "Brand", icon: "palette" }
                 ]
 
                 KetNavItem {
@@ -315,34 +299,6 @@ Rectangle {
             }
         }
 
-        // An active tag filter.
-        Rectangle {
-            visible: sidebar.window.tagFilter !== ""
-            Layout.fillWidth: true
-            Layout.leftMargin: sidebar.inset
-            Layout.rightMargin: sidebar.inset
-            Layout.bottomMargin: sidebar.px(6)
-            Layout.preferredHeight: sidebar.px(32)
-            radius: sidebar.px(6)
-            color: KetTheme.t.accentSubtle
-            border.color: KetTheme.t.accentBorder
-            Row {
-                x: sidebar.px(10)
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: sidebar.px(6)
-                KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "filter"; box: sidebar.px(12); color: KetTheme.t.accentText }
-                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12); font.weight: Font.Medium }
-            }
-            KetIconButton {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                controlSize: KetTheme.ControlSize.Small
-                iconName: "close"
-                text: "Clear filter"
-                onClicked: sidebar.window.tagFilter = ""
-            }
-        }
-
         // Repositories and conversations.
         Basic.ScrollView {
             Layout.fillWidth: true
@@ -374,9 +330,6 @@ Rectangle {
                                     taken.push(m.number)
                             return sidebar.window.conversationsOf(modelData.name).filter(c => !taken.includes(c.number))
                         }
-                        // Those the tag filter keeps.
-                        readonly property var matching: sidebar.window.tagFilter === "" ? loose
-                            : loose.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
                         width: parent.width
 
                         SidebarRepoHeader {
@@ -464,10 +417,10 @@ Rectangle {
                                 // without a team needs none.
                                 SidebarSection {
                                     objectName: "section-" + repo.modelData.name
-                                    visible: repo.teams.length > 0 && repo.matching.length > 0
+                                    visible: repo.teams.length > 0 && repo.loose.length > 0
                                     x: sidebar.inset
                                     width: repo.width - 2 * sidebar.inset
-                                    count: repo.matching.length
+                                    count: repo.loose.length
                                     onActionTriggered: {
                                         sidebar.window.repository = repo.modelData.name
                                         sidebar.window.showScreen("workspace/welcome")
@@ -476,8 +429,8 @@ Rectangle {
 
                                 Repeater {
                                     model: !repo.open ? []
-                                           : repo.all || sidebar.window.tagFilter !== "" ? repo.matching
-                                           : repo.matching.slice(0, repo.limit)
+                                           : repo.all ? repo.loose
+                                           : repo.loose.slice(0, repo.limit)
 
                                     SidebarRow {
                                         id: row
@@ -489,7 +442,6 @@ Rectangle {
                                         width: repo.width - 2 * sidebar.inset
                                         text: modelData.title
                                         number: modelData.number
-                                        tags: modelData.tags
                                         status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
                                         checked: sidebar.window.screen === "workspace"
                                                  && sidebar.window.conversation.number === modelData.number
@@ -522,8 +474,7 @@ Rectangle {
                                 }
 
                                 Basic.AbstractButton {
-                                    visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
-                                             && repo.loose.length > repo.limit
+                                    visible: repo.open && !repo.all && repo.loose.length > repo.limit
                                     // Under the titles, and it says how many it adds.
                                     x: sidebar.inset + repoHeader.textLeft
                                     height: sidebar.px(28)

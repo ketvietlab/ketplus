@@ -29,67 +29,72 @@ QtObject {
     readonly property var captures: ["sidebar", "editor", "settings"].map(name => ({
         source: "qrc:/qt/qml/KetPlusMock/assets/screenshot-" + name + ".png",
         caption: "Browser capture · " + name + ".png" }))
-    // Tag colours are user data, so they are literals rather than tokens.
-    readonly property var tagColors: ({
-        UI: "#4f6bed", Performance: "#c2780a", Review: "#7c5cd6", Atlas: "#3f8f7a",
-        Account: "#2f8f4e", Bug: "#d1453b", Docs: "#5b6b7f"
-    })
-    // A member's role in its team (Fixtures.teams): the first tag of its conversation. The team
-    // sets it, so it is not among the tags a user adds or removes.
+    // A member's role in its team (Fixtures.teams), drawn as a locked tag beside its
+    // conversation. The team sets it; conversations carry no user tags (ADR 0117).
     // A team has one leader, one reviewer and this many developers at most (and one at least).
     readonly property int mostDevelopers: 5
+    // ADR 0114, open point 2: Settings → Teams. A new team's automatic-turn budget starts from
+    // this value; each team then keeps its own, which changing this one leaves alone.
+    property int turnBudget: 40
+    readonly property int fewestTurns: 5
+    readonly property int mostTurns: 200
+    // The daemon's refusal, in the same words, for a value it would refuse.
+    function turnBudgetError(text) {
+        const trimmed = String(text).trim()
+        const value = Number(trimmed)
+        return /^[0-9]+$/.test(trimmed) && value >= fewestTurns && value <= mostTurns ? ""
+            : "Automatic turns are a whole number from " + fewestTurns + " to " + mostTurns + "."
+    }
     readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
     function roleTag(role) {
         return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
     }
-
-    function tag(label) { return { label: label, color: tagColors[label] || "#5b6b7f" } }
 
     readonly property var repositories: [
         {
             name: "ketplus-desktop",
             conversations: [
                 { number: "4821", title: "Prepare the release", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Review")], worktree: "release/1.4", transcript: "turn-report", hasPlan: true, provider: "Codex",
+                  canReview: true, worktree: "release/1.4", transcript: "turn-report", hasPlan: true, provider: "Codex",
                   providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
                 { number: "4822", title: "Prepare the hotfix", status: KetTheme.ConversationStatus.NeedsInput,
-                  tags: [tag("Review")], worktree: "fix/hotfix", transcript: "short", hasPlan: true,
+                  canReview: true, worktree: "fix/hotfix", transcript: "short", hasPlan: true,
                   provider: "Codex", providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
                 { number: "2035", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], worktree: "develop", transcript: "activity" },
+                  worktree: "develop", transcript: "activity" },
                 // A finished turn and a running one, both closed by the work report (Fixtures.turnReport).
                 { number: "8213", title: "Finish the repository picker", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], unread: true, worktree: "develop", transcript: "report" },
+                  unread: true, worktree: "develop", transcript: "report" },
                 { number: "8215", title: "Follow up on the new UI", status: KetTheme.ConversationStatus.Working,
-                  tags: [], from: "#4821", worktree: "develop", transcript: "report-running" },
+                  worktree: "develop", transcript: "report-running" },
                 { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Performance"), tag("Review")], worktree: "develop", transcript: "running" },
+                  canReview: true, worktree: "develop", transcript: "running" },
                 { number: "3372", title: "Atlas: Onboarding experience", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Atlas")], worktree: "develop", transcript: "atlas" },
+                  worktree: "develop", transcript: "atlas" },
                 { number: "9079", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], worktree: "feature-onboarding", transcript: "short" },
+                  worktree: "feature-onboarding", transcript: "short" },
                 // The turn finished with a request for approval: "Waiting for you", not Completed.
                 { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.AwaitingReply,
-                  tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
+                  worktree: "fix-scroll-anchor", transcript: "short" },
                 { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
-                  tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },
+                  canReview: true, worktree: "feature-onboarding", transcript: "question" },
                 // The reviewer of the Release 1.4 team (Fixtures.teams). A reviewer runs on Claude.
                 { number: "4583", title: "Review fix scroll anchor", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running",
+                  canReview: true, worktree: "fix-scroll-anchor", transcript: "running",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" },
                 { number: "6120", title: "Profile the editor startup", status: KetTheme.ConversationStatus.Error,
-                  tags: [tag("Performance"), tag("Bug")], worktree: "develop", transcript: "error" },
+                  worktree: "develop", transcript: "error" },
                 // A turn the provider ended: the guide in the transcript (workspace/setup-expired…).
                 { number: "7310", title: "Speed up the cold start", status: KetTheme.ConversationStatus.Error,
-                  tags: [tag("Performance")], worktree: "develop", transcript: "setup", setup: "expired",
+                  worktree: "develop", transcript: "setup", setup: "expired",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "5904", title: "Draft release notes", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Docs")], worktree: "develop", transcript: "short" },
+                  worktree: "develop", transcript: "short" },
                 // The rest of the Docs refresh team (teams).
                 { number: "5911", title: "Rewrite the build guide", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Docs")], worktree: "docs/1.4", transcript: "short" },
+                  worktree: "docs/1.4", transcript: "short" },
                 { number: "5923", title: "Review the user guide", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Docs"), tag("Review")], worktree: "docs/1.4", transcript: "short",
+                  canReview: true, worktree: "docs/1.4", transcript: "short",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" }
             ]
         },
@@ -97,18 +102,18 @@ QtObject {
             name: "ketviet",
             conversations: [
                 { number: "7992", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Account"), tag("UI")], worktree: "main", transcript: "activity" },
+                  worktree: "main", transcript: "activity" },
                 { number: "8503", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Account"), tag("Bug"), tag("Review")], worktree: "main", transcript: "running" },
+                  canReview: true, worktree: "main", transcript: "running" },
                 // Every content type of one provider's journal (workspace/claude, codex, cursor).
                 { number: "6120", title: "Fix the choppy sidebar spinner", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Performance")], worktree: "main", transcript: "claude", provider: "Claude",
+                  worktree: "main", transcript: "claude", provider: "Claude",
                   providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "6188", title: "Journal size warning", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Bug")], worktree: "feat/journal-storage", transcript: "codex", provider: "Codex",
+                  worktree: "feat/journal-storage", transcript: "codex", provider: "Codex",
                   providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
                 { number: "6203", title: "Trace the staging tenant flow", status: KetTheme.ConversationStatus.Error,
-                  tags: [], worktree: "main", transcript: "cursor", provider: "Cursor",
+                  worktree: "main", transcript: "cursor", provider: "Cursor",
                   providerId: "cursor", model: "Composer 2", effort: "Default" }
             ]
         },
@@ -116,9 +121,9 @@ QtObject {
             name: "ketplus-app",
             conversations: [
                 { number: "1187", title: "Question sheet", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], worktree: "develop", transcript: "short" },
+                  worktree: "develop", transcript: "short" },
                 { number: "1204", title: "iPhone connection", status: KetTheme.ConversationStatus.NotStarted,
-                  tags: [], worktree: "develop", transcript: "welcome" }
+                  worktree: "develop", transcript: "welcome" }
             ]
         }
     ]
@@ -398,7 +403,7 @@ QtObject {
           rows: [["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
                  ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
         { id: "claude", name: "Claude Agent SDK", note: "", badge: "Ready", tone: "success",
-          rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Claude subscription"],
+          rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Claude subscription"],
                  ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
         { id: "cursor", name: "Cursor CLI", note: "", badge: "Ready", tone: "success",
           rows: [["Version", "2026.9.18"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"],
@@ -474,7 +479,7 @@ QtObject {
             ],
             primary: "Check again", secondary: "Add an API key", secondaryAction: "settings/providers",
             ready: "Claude is signed in",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "No credential found"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "No credential found"]]
         },
         "sidecar-missing": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: true, tone: "danger",
@@ -502,7 +507,7 @@ QtObject {
             ],
             primary: "Retry", secondary: "Use an API key", secondaryAction: "settings/providers",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Expired at 09:12"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Expired at 09:12"]]
         },
         "key-rejected": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: false, tone: "danger",
@@ -517,7 +522,7 @@ QtObject {
             ],
             primary: "Open Settings", primaryAction: "settings/providers", secondary: "Retry", secondaryAction: "retry",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "API key · rejected"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "API key · rejected"]]
         },
         "limit": {
             provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
@@ -595,6 +600,7 @@ QtObject {
         id: "pilot", name: "Kingfruit Pilot",
         goal: "Đưa Kingfruit vào chạy thử: thuế theo người mua, nhập và sửa hàng loạt sản phẩm, bán hàng tại quầy và báo cáo cuối ngày.",
         repository: "ketviet", branch: "integration", paused: false, merges: "leader",
+        turnBudget: 40, automaticTurns: 12,
         members: [
             { number: "1280", title: "Lead Kingfruit Pilot", role: "leader", provider: "Claude · Opus 5.5",
               lane: "", paths: [], state: "working", now: "Chờ quyết định D-1 để chia tiếp việc" },
@@ -677,6 +683,7 @@ QtObject {
             id: "release", name: "Release 1.4",
             goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
             repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
+            turnBudget: 60, automaticTurns: 23,
             members: [
                 { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
                   lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
@@ -778,6 +785,7 @@ QtObject {
             id: "docs", name: "Docs refresh",
             goal: "Bring the user guide in line with 1.4.",
             repository: "ketplus-desktop", branch: "docs/1.4", paused: false, merges: "user",
+            turnBudget: 40, automaticTurns: 4,
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
                   lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },

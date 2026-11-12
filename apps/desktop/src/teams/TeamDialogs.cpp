@@ -10,6 +10,7 @@
 #include "KetToggle.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
+#include "teams/TeamTurnBudget.h"
 
 #include <QButtonGroup>
 #include <QCoreApplication>
@@ -163,6 +164,27 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow_ = mergeRow;
     layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
 
+    budget_ = team_budget::field(tr("Automatic turns"), this);
+    budget_->setObjectName(QStringLiteral("teamTurnBudgetField"));
+    rows_.insert(QStringLiteral("turn_budget"),
+                 new ket::FieldRow(tr("Automatic turns"), budget_,
+                                   tr("Turns members start on their own before the team asks you "
+                                      "to continue. New teams start from Settings → Teams."),
+                                   this));
+    layout->addWidget(rows_.value(QStringLiteral("turn_budget")));
+    team_budget::readGlobal(teams_, budget_, [field = QPointer<ket::TextField>(budget_)](int v) {
+        // What the user typed meanwhile wins over the value read.
+        if (field && !field->isModified())
+            field->setText(QString::number(v));
+    });
+    connect(budget_, &QLineEdit::textEdited, this, [this] {
+        if (errors_.contains(QStringLiteral("turn_budget"))) {
+            const QString message = team_budget::error(budget_->text());
+            rows_.value(QStringLiteral("turn_budget"))->setError(message);
+            budget_->setInvalid(!message.isEmpty());
+        }
+    });
+
     // What the leader and the developers may do without asking, as the composer's Mode
     // lists it. The reviewer is not in it: a review is always read-only.
     permissions_->setObjectName(QStringLiteral("teamPermissions"));
@@ -275,6 +297,7 @@ QJsonObject NewTeamForm::payload() const {
                        {QStringLiteral("risk_acknowledged"),
                         permissions_->currentData().toString() == QStringLiteral("full")},
                        {QStringLiteral("leader_writes_requirements"), requirements_->isChecked()},
+                       {QStringLiteral("turn_budget"), budget_->text().trimmed().toInt()},
                        {QStringLiteral("plan"),
                         QJsonObject{{QStringLiteral("leader"), agents_.value(leader).json()},
                                     {QStringLiteral("developers"), developers},
@@ -298,6 +321,9 @@ bool NewTeamForm::validate() {
     clearErrors();
     if (name_->text().trimmed().isEmpty())
         errors_.insert(QStringLiteral("name"), tr("Name the team."));
+    if (const QString budget = team_budget::error(budget_->text()); !budget.isEmpty())
+        errors_.insert(QStringLiteral("turn_budget"), budget);
+    budget_->setInvalid(errors_.contains(QStringLiteral("turn_budget")));
     for (const QString& role : {leader, developer, reviewer})
         if (agents_.value(role).isEmpty())
             errors_.insert(role, role == reviewer
@@ -317,8 +343,10 @@ void NewTeamForm::showErrors(const QJsonObject& refusal) {
     // The team's own name has no role; the daemon names it "The team" (TeamRules validName).
     const bool aboutName = role.isEmpty() && message.contains(QStringLiteral("The team")) &&
                            message.contains(QStringLiteral("name"));
+    const bool aboutBudget = message.startsWith(QStringLiteral("Automatic turns"));
     const QString where = rows_.contains(role) ? role
                           : aboutName          ? QStringLiteral("name")
+                          : aboutBudget        ? QStringLiteral("turn_budget")
                                                : QString{};
     errors_.insert(where, message);
     if (where.isEmpty())

@@ -22,6 +22,9 @@ class AgentWorkspaceViewTest final : public QObject {
     void compactFollowsProviderCapabilities();
     void usageLimitsPopover();
     void claudeUsageBudget();
+    void runtimeUsageFoldsCostDetails_data();
+    void runtimeUsageFoldsCostDetails();
+    void apiKeyUsageShowsCostDetailsOpen();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
     void heldMessageRequiresExplicitClickAndFencesDuplicates();
@@ -190,8 +193,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void reviewerPickerFollowsTheActiveConversation();
     void agentMentionsCompleteConversations();
     void teamMemberHeaderShowsItsRoleInsteadOfReviewer();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes_data();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes();
     void selectsModelsInUnifiedPicker();
     void restoresStoredConversationModelInsteadOfCatalogDefault();
     void prefetchesModelsWhenAgentBecomesAvailable();

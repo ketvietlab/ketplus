@@ -2,6 +2,8 @@
 
 #include <QDateTime>
 
+#include <algorithm>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -25,11 +27,11 @@ QJsonObject toJson(const HistoryEntry& entry) {
 }
 
 HistoryEntry historyFromJson(const QJsonObject& json) {
-    return {.at = json.value(QStringLiteral("at")).toString(),
-            .actor = json.value(QStringLiteral("actor")).toString(),
-            .kind = json.value(QStringLiteral("kind")).toString(),
-            .text = json.value(QStringLiteral("text")).toString(),
-            .data = json.value(QStringLiteral("data")).toObject()};
+    return bounded({.at = json.value(QStringLiteral("at")).toString(),
+                    .actor = json.value(QStringLiteral("actor")).toString(),
+                    .kind = json.value(QStringLiteral("kind")).toString(),
+                    .text = json.value(QStringLiteral("text")).toString(),
+                    .data = json.value(QStringLiteral("data")).toObject()});
 }
 
 Member memberFromJson(const QJsonObject& json) {
@@ -62,9 +64,12 @@ Task taskFromJson(const QJsonObject& json) {
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
+    if (task.outsideLane.size() > maximumOutsidePaths)
+        task.outsideLane.resize(maximumOutsidePaths);
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
     task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
+    task.changedRevision = json.value(QStringLiteral("changed_revision")).toInteger();
     for (const auto& value : json.value(QStringLiteral("history")).toArray())
         task.history.append(historyFromJson(value.toObject()));
     return task;
@@ -83,10 +88,69 @@ Decision decisionFromJson(const QJsonObject& json) {
             .state = json.value(QStringLiteral("state")).toString(QStringLiteral("open")),
             .answer = json.value(QStringLiteral("answer")).toString(),
             .answeredAt = json.value(QStringLiteral("answered_at")).toString(),
-            .reason = json.value(QStringLiteral("reason")).toString()};
+            .reason = json.value(QStringLiteral("reason")).toString(),
+            .changedRevision = json.value(QStringLiteral("changed_revision")).toInteger()};
 }
 
 } // namespace
+
+QString boundedText(QString text) {
+    if (text.size() <= maximumHistoryText)
+        return text;
+    // The result stays within the bound, so a text bounded when it was written is the same
+    // when the document is read again: room for the note, and no surrogate pair cut in half.
+    constexpr qsizetype note = 40;
+    qsizetype keep = maximumHistoryText - note;
+    if (text.at(keep - 1).isHighSurrogate())
+        --keep;
+    return QStringLiteral("%1… (%2 more characters)").arg(text.left(keep)).arg(text.size() - keep);
+}
+
+QJsonObject boundedData(QJsonObject data) {
+    const QStringList keys = data.keys();
+    for (const QString& key : keys) {
+        QJsonArray list = data.value(key).toArray();
+        if (list.size() <= maximumHistoryListItems)
+            continue;
+        const QString total = key + QStringLiteral("_total");
+        if (!data.contains(total))
+            data.insert(total, list.size());
+        while (list.size() > maximumHistoryListItems)
+            list.removeLast();
+        data.insert(key, list);
+    }
+    return data;
+}
+
+HistoryEntry bounded(HistoryEntry entry) {
+    entry.text = boundedText(std::move(entry.text));
+    entry.data = boundedData(std::move(entry.data));
+    return entry;
+}
+
+QJsonObject summaryJson(const Task& task) {
+    QJsonObject json = toJson(task, false);
+    if (task.outsideLane.size() > summaryOutsidePaths) {
+        json.insert(QStringLiteral("outside_lane"),
+                    strings(task.outsideLane.first(summaryOutsidePaths)));
+        json.insert(QStringLiteral("outside_lane_total"), task.outsideLane.size());
+    }
+    return json;
+}
+
+QJsonObject taskPageJson(const Task& task, const int limit, const qsizetype before) {
+    QJsonObject json = toJson(task, false);
+    const qsizetype total = task.history.size();
+    const qsizetype end = before < 0 || before > total ? total : before;
+    const qsizetype start = std::max<qsizetype>(0, end - std::clamp(limit, 1, maximumPage));
+    QJsonArray history;
+    for (qsizetype index = start; index < end; ++index)
+        history.append(toJson(task.history.at(index)));
+    json.insert(QStringLiteral("history"), history);
+    json.insert(QStringLiteral("history_total"), total);
+    json.insert(QStringLiteral("history_start"), start);
+    return json;
+}
 
 QString nowIso() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }
 
@@ -200,7 +264,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
-                     {QStringLiteral("merge_offered"), task.mergeOffered}};
+                     {QStringLiteral("merge_offered"), task.mergeOffered},
+                     {QStringLiteral("changed_revision"), task.changedRevision}};
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)
@@ -223,7 +288,8 @@ QJsonObject toJson(const Decision& decision) {
             {QStringLiteral("state"), decision.state},
             {QStringLiteral("answer"), decision.answer},
             {QStringLiteral("answered_at"), decision.answeredAt},
-            {QStringLiteral("reason"), decision.reason}};
+            {QStringLiteral("reason"), decision.reason},
+            {QStringLiteral("changed_revision"), decision.changedRevision}};
 }
 
 QJsonObject toJson(const Team& team) {
@@ -239,6 +305,10 @@ QJsonObject toJson(const Team& team) {
     QJsonArray decisions;
     for (const Decision& decision : team.decisions)
         decisions.append(toJson(decision));
+    QJsonArray relocations;
+    for (const Relocation& move : team.relocations)
+        relocations.append(QJsonObject{{QStringLiteral("session"), move.session},
+                                       {QStringLiteral("from"), move.from}});
     return {{QStringLiteral("id"), QString::number(team.id)},
             {QStringLiteral("repository"), team.repository},
             {QStringLiteral("name"), team.name},
@@ -264,9 +334,12 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("review_queue"), strings(team.reviewQueue)},
             {QStringLiteral("reviewing"), team.reviewing},
             {QStringLiteral("reviewing_message"), team.reviewingMessage},
+            {QStringLiteral("relocations"), relocations},
             {QStringLiteral("next_task"), team.nextTask},
             {QStringLiteral("next_decision"), team.nextDecision},
             {QStringLiteral("revision"), team.revision},
+            {QStringLiteral("settings_revision"), team.settingsRevision},
+            {QStringLiteral("members_revision"), team.membersRevision},
             {QStringLiteral("created_at"), team.createdAt},
             {QStringLiteral("changed_at"), team.changedAt}};
 }
@@ -301,9 +374,15 @@ Team teamFromJson(const QJsonObject& json) {
     team.reviewQueue = stringList(json.value(QStringLiteral("review_queue")));
     team.reviewing = json.value(QStringLiteral("reviewing")).toString();
     team.reviewingMessage = json.value(QStringLiteral("reviewing_message")).toString();
+    for (const auto& value : json.value(QStringLiteral("relocations")).toArray())
+        team.relocations.append(
+            Relocation{.session = value.toObject().value(QStringLiteral("session")).toString(),
+                       .from = value.toObject().value(QStringLiteral("from")).toString()});
     team.nextTask = json.value(QStringLiteral("next_task")).toInt(1);
     team.nextDecision = json.value(QStringLiteral("next_decision")).toInt(1);
     team.revision = json.value(QStringLiteral("revision")).toInteger();
+    team.settingsRevision = json.value(QStringLiteral("settings_revision")).toInteger();
+    team.membersRevision = json.value(QStringLiteral("members_revision")).toInteger();
     team.createdAt = json.value(QStringLiteral("created_at")).toString();
     team.changedAt = json.value(QStringLiteral("changed_at")).toString();
     return team;

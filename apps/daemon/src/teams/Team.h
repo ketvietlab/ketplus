@@ -36,8 +36,12 @@ inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
 inline constexpr int maximumDevelopers = 5;
 inline constexpr int maximumCriteria = 20;
 inline constexpr int defaultReviewRounds = 2;
-// Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2).
+// Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
+// the daemon's global value until the user changes it (Settings → Teams), and the range a
+// team's own value and the global one keep.
 inline constexpr int defaultTurnBudget = 40;
+inline constexpr int minimumTurnBudget = 5;
+inline constexpr int maximumTurnBudget = 200;
 
 struct Member final {
     QString sessionId;
@@ -63,6 +67,19 @@ struct HistoryEntry final {
     QString text;
     QJsonObject data;
 };
+
+// A team's whole document goes to clients in one daemon frame (1 MiB), so what a task keeps
+// grows with its work, never with the size of a diff. A list longer than the bound keeps its
+// first entries and records the full count next to it as "<key>_total".
+inline constexpr qsizetype maximumOutsidePaths = 200;
+inline constexpr qsizetype maximumHistoryText = 2000;
+inline constexpr qsizetype maximumHistoryListItems = 50;
+
+// The entry within the bounds above. Entries read from older documents are bounded too, and
+// so are the team's Updates (their text and data), when written and when read.
+[[nodiscard]] HistoryEntry bounded(HistoryEntry entry);
+[[nodiscard]] QString boundedText(QString text);
+[[nodiscard]] QJsonObject boundedData(QJsonObject data);
 
 struct Task final {
     QString id;
@@ -90,6 +107,9 @@ struct Task final {
     // ADR 0114 §5: the task was offered for merging (ready, its dependencies done), once.
     bool mergeOffered{false};
     QList<HistoryEntry> history;
+    // ADR 0116 §4: the team revision at which this task last changed, the fence of a change
+    // a paired phone asks for.
+    qint64 changedRevision{0};
 };
 
 struct Decision final {
@@ -108,6 +128,17 @@ struct Decision final {
     QString answer;
     QString answeredAt;
     QString reason;
+    // ADR 0116 §4: the team revision at which this decision last changed.
+    qint64 changedRevision{0};
+};
+
+// A member that must leave a worktree that was handed to someone else. It is stored with
+// the handover and kept until the conversation has left: a conversation cannot always move
+// while its turn runs (ADR 0114, point 1).
+struct Relocation final {
+    QString session;
+    QString from;
+    bool operator==(const Relocation&) const = default;
 };
 
 struct Team final {
@@ -144,9 +175,14 @@ struct Team final {
     // stored with it, before the message is sent. Empty with a review in flight only in a
     // journal written before reviews were bound to their request.
     QString reviewingMessage;
+    QList<Relocation> relocations;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};
+    // ADR 0116 §4: the team revisions at which its settings (name, goal, branch, merge
+    // setting, paused and its reason) and its member list last changed.
+    qint64 settingsRevision{0};
+    qint64 membersRevision{0};
     QString createdAt;
     QString changedAt;
 
@@ -167,6 +203,22 @@ struct Team final {
 [[nodiscard]] QJsonObject toJson(const Team& team);
 [[nodiscard]] Team teamFromJson(const QJsonObject& json);
 [[nodiscard]] QJsonObject toJson(const Task& task, bool withHistory = true);
+
+// ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
+// The summary lists the first outside paths of a task and the newest answered decisions;
+// the rest comes from team.task.get, team.updates and team.decision.list, page by page.
+inline constexpr qsizetype summaryOutsidePaths = 20;
+inline constexpr qsizetype summaryAnsweredDecisions = 20;
+inline constexpr int defaultPage = 50;
+inline constexpr int maximumPage = 200;
+
+// The task without history in a summary: at most summaryOutsidePaths outside paths, the
+// full count as "outside_lane_total".
+[[nodiscard]] QJsonObject summaryJson(const Task& task);
+// The task with one page of its history: the newest `limit` entries before index `before`
+// (the end when negative), oldest first, with "history_total" and "history_start".
+[[nodiscard]] QJsonObject taskPageJson(const Task& task, int limit = defaultPage,
+                                       qsizetype before = -1);
 [[nodiscard]] QJsonObject toJson(const Decision& decision);
 [[nodiscard]] QJsonObject toJson(const Member& member);
 

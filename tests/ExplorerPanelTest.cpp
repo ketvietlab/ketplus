@@ -1,8 +1,8 @@
 #include "workspace/ExplorerPanel.h"
 #include "KetAvatar.h"
 #include "KetBanner.h"
-#include "KetConversationRow.h"
 #include "KetProfile.h"
+#include "KetSidebarTree.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/SymbolIcons.h"
 
@@ -45,7 +45,7 @@ class ExplorerPanelTest final : public QObject {
     void ordersRepositoryConversationsByLatestTurnAcrossWorktrees();
     void ordersRepositoriesByTheirNewestConversation();
     void scalesSidebarTypeWithInterfaceZoom();
-    void filtersTagsAndUsesAuthoritativeStorageWarning();
+    void drawsNoTagsAndUsesAuthoritativeStorageWarning();
 };
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
@@ -237,9 +237,10 @@ void ExplorerPanelTest::switchesActivityModes() {
     QCOMPARE(rows.at(0)->height(), rows.at(0)->sizeHint().height());
     QVERIFY(rows.at(0)->isChecked());
     QVERIFY(!rows.at(1)->isChecked());
-    QCOMPARE(rows.at(0)->accessibleDescription(), QStringLiteral("Completed"));
-    QCOMPARE(rows.at(1)->accessibleDescription(), QStringLiteral("Working"));
-    QCOMPARE(rows.at(1)->toolTip(), QStringLiteral("Review startup\nfeature"));
+    // The state in words, then the worktree.
+    QVERIFY(rows.at(0)->accessibleDescription().startsWith(QStringLiteral("Completed")));
+    QCOMPARE(rows.at(1)->accessibleDescription(), QStringLiteral("Working, feature"));
+    QCOMPARE(rows.at(1)->toolTip(), QStringLiteral("Review startup\nWorking\nfeature"));
 
     rows.at(1)->click();
     QCOMPARE(conversationRequested.count(), 1);
@@ -332,10 +333,10 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     const auto rows =
         bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
     QCOMPARE(rows.size(), 7);
-    const auto visibleIds = [&rows] {
+    const auto visibleIds = [&rows, &bar] {
         QSet<QString> ids;
         for (auto* row : rows) {
-            if (!row->isHidden())
+            if (row->isVisibleTo(&bar))
                 ids.insert(row->property("conversationId").toString());
         }
         return ids;
@@ -362,13 +363,13 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     groups.at(0)->click();
     QCOMPARE(activation.count(), 0);
     QCOMPARE(visibleIds().size(), 0);
-    QCOMPARE(groups.at(0)->accessibleDescription(), QStringLiteral("Collapsed"));
+    QVERIFY(groups.at(0)->accessibleDescription().startsWith(QStringLiteral("Collapsed, ")));
     QCOMPARE(QSettings().value(QStringLiteral("sidebar/collapsedRepositories")).toStringList(),
              QStringList{QStringLiteral("/repo")});
     groups.at(0)->click();
     QCOMPARE(activation.count(), 0);
     QCOMPARE(visibleIds().size(), 5);
-    QCOMPARE(groups.at(0)->accessibleDescription(), QStringLiteral("Expanded"));
+    QVERIFY(groups.at(0)->accessibleDescription().startsWith(QStringLiteral("Expanded, ")));
     groups.at(1)->click();
     QCOMPARE(activation.count(), 1);
     QCOMPARE(activation.constFirst().constFirst().toString(), QStringLiteral("/other"));
@@ -416,7 +417,7 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
         const auto row = std::find_if(rows.cbegin(), rows.cend(), [&id](QAbstractButton* button) {
             return button->property("conversationId").toString() == id;
         });
-        return row == rows.cend() ? nullptr : qobject_cast<ket::ConversationRow*>(*row);
+        return row == rows.cend() ? nullptr : qobject_cast<ket::SidebarRow*>(*row);
     };
     auto* seen = statusFor(QStringLiteral("seen"));
     auto* persisted = statusFor(QStringLiteral("persisted"));
@@ -467,7 +468,7 @@ void ExplorerPanelTest::runningAgentTurnNamesItsSender() {
         return bar.findChild<QAbstractButton*>(QStringLiteral("productConversationButton"));
     };
     QVERIFY(row());
-    auto* conversation = qobject_cast<ket::ConversationRow*>(row());
+    auto* conversation = qobject_cast<ket::SidebarRow*>(row());
     QVERIFY(conversation);
     QCOMPARE(conversation->number(), QStringLiteral("1093"));
     ketplus::ThemeManager theme(*qApp);
@@ -477,12 +478,12 @@ void ExplorerPanelTest::runningAgentTurnNamesItsSender() {
     const auto capture = qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE");
     if (!capture.isEmpty())
         QVERIFY(bar.grab().save(capture));
-    QVERIFY(conversation->statusLabel().contains(QStringLiteral("from #4821")));
+    QVERIFY(conversation->stateText().contains(QStringLiteral("from #4821")));
     QVERIFY(row()->toolTip().contains(QStringLiteral("Message from #4821 · Release checklist")));
     // The label belongs to the running turn; it goes when the turn ends.
     woken.insert(QStringLiteral("running"), false);
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, {woken}}});
-    QVERIFY(!qobject_cast<ket::ConversationRow*>(row())->statusLabel().contains("from #"));
+    QVERIFY(!qobject_cast<ket::SidebarRow*>(row())->stateText().contains("from #"));
     QVERIFY(!row()->toolTip().contains(QStringLiteral("#4821")));
 }
 
@@ -563,7 +564,7 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
                           QStringLiteral("untitled-b"), QStringLiteral("crm")}));
 }
 
-void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
+void ExplorerPanelTest::drawsNoTagsAndUsesAuthoritativeStorageWarning() {
     ketplus::ActivityBar bar;
     bar.resize(260, 680);
     bar.show();
@@ -575,24 +576,15 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
                     {"title", "Two"},
                     {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
     bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    // As in the mock, no filter shows until a tag in the conversation header is chosen.
-    auto* filter = bar.findChild<QWidget*>("sidebarTagFilter");
-    QVERIFY(filter && !filter->isVisible());
-    bar.setTagFilter("UI");
-    QVERIFY(filter->isVisible());
-    QCOMPARE(filter->accessibleName(), QString("Tagged UI"));
-    const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");
+    // ADR 0117: no tag filter above the repositories and no user tag on a row, even when the
+    // metadata still carries one.
+    QVERIFY(!bar.findChild<QWidget*>("sidebarTagFilter"));
+    const auto rows = bar.findChildren<ket::SidebarRow*>("productConversationButton");
     QCOMPARE(rows.size(), 2);
-    for (auto* row : rows)
-        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    // New rows keep the active filter.
-    bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
-    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
-        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
-    QTest::mouseClick(filter->findChild<QAbstractButton*>("sidebarTagFilterClear"), Qt::LeftButton);
-    QVERIFY(!filter->isVisible());
-    for (auto* row : bar.findChildren<ket::ConversationRow*>("productConversationButton"))
+    for (auto* row : rows) {
         QTRY_VERIFY(row->isVisible());
+        QVERIFY(!row->accessibleDescription().contains(QStringLiteral("Review")));
+    }
     auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
     QVERIFY(warning && !warning->isVisible());
     bar.setStorageStatus({{"ok", true},

@@ -30,6 +30,9 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
+    src/workspace/SidebarRepositoryListDetail.h
+    src/workspace/SidebarRepositoryListLayout.cpp
+    src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h
@@ -48,6 +51,8 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamTaskDialog.cpp
     src/teams/TeamTaskDialog.h
     src/teams/TeamTaskDialogActions.cpp
+    src/teams/TeamTurnBudget.cpp
+    src/teams/TeamTurnBudget.h
 )
 target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Network
@@ -155,6 +160,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsStoragePage.cpp
     src/app/SettingsStorageOverview.cpp
     src/app/SettingsStoragePage.h
+    src/app/SettingsTeamsPage.cpp
+    src/app/SettingsTeamsPage.h
     src/app/ProviderSetupCard.cpp
     src/app/ProviderSetupCard.h
     src/app/SettingsProvidersPage.cpp
