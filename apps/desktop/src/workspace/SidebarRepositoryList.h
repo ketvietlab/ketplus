@@ -109,6 +109,13 @@ class SidebarRepositoryList final : public QWidget {
                               const SidebarTeam& team);
     void updateTeamFolders(const QVector<SidebarRepository>& repositories);
     void presentTeamFolders(QWidget* group);
+    // A team's fold is stored for its repository: team ids are numbered per daemon, so another
+    // machine's `teams/1` is a different team.
+    static QString teamFoldKey(const QString& repositoryPath, const QString& teamId);
+    void loadCollapsedTeams();
+    // Forgets the folds of teams that left a repository that lists teams; a repository with no
+    // team listed (not loaded yet, or its last team removed) keeps its folds.
+    void forgetMissingTeams(const QVector<SidebarRepository>& repositories);
     [[nodiscard]] int waitingCount(const SidebarRepository& repository) const;
     bool handleDrag(QObject* watched, QEvent* event);
     void onRepositoryAction(const QString& path, QWidget* anchor);
@@ -127,6 +134,7 @@ class SidebarRepositoryList final : public QWidget {
     QVector<QWidget*> folders_;
     QSet<QString> collapsedPaths_;
     QSet<QString> collapsedTeams_;
+    bool collapsedTeamsLoaded_{false};
     QPointer<ket::SidebarRow> pressedRow_;
     QPoint pressPosition_;
     bool teamsAvailable_{false};

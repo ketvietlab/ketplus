@@ -180,6 +180,7 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
     }
     const QStringList structure = structureOf(repositories);
     repositories_ = repositories;
+    forgetMissingTeams(repositories);
     if (built_ && structure == structure_) {
         // Selecting a conversation only changes state; rebuilding would flash the sidebar.
         updateRows(repositories);

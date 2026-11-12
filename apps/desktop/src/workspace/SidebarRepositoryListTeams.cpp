@@ -13,6 +13,7 @@
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
@@ -52,6 +53,12 @@ ket::SidebarTreeGuide* membersOf(QWidget* folder) {
                                                      Qt::FindDirectChildrenOnly);
 }
 
+void storeCollapsedTeams(const QSet<QString>& keys) {
+    QStringList values(keys.cbegin(), keys.cend());
+    values.sort();
+    QSettings().setValue(kCollapsedTeamsSetting, values);
+}
+
 void setDropping(QWidget* folder, const bool dropping) {
     folder->setProperty("dropping", dropping);
     if (auto* branch = branchOf(folder))
@@ -60,13 +67,49 @@ void setDropping(QWidget* folder, const bool dropping) {
 
 } // namespace
 
+QString SidebarRepositoryList::teamFoldKey(const QString& repositoryPath, const QString& teamId) {
+    // A path holds no line break, so the pair reads back unambiguously.
+    return repositoryPath + QLatin1Char('\n') + teamId;
+}
+
+void SidebarRepositoryList::loadCollapsedTeams() {
+    if (collapsedTeamsLoaded_)
+        return;
+    collapsedTeamsLoaded_ = true;
+    const QStringList stored = QSettings().value(kCollapsedTeamsSetting).toStringList();
+    collapsedTeams_ = QSet<QString>(stored.cbegin(), stored.cend());
+}
+
+void SidebarRepositoryList::forgetMissingTeams(const QVector<SidebarRepository>& repositories) {
+    loadCollapsedTeams();
+    // Teams can arrive after the repositories; a repository without them yet keeps its folds.
+    if (!teamsAvailable_)
+        return;
+    QHash<QString, QSet<QString>> listed;
+    for (const SidebarRepository& repository : repositories) {
+        if (repository.teams.isEmpty())
+            continue;
+        QSet<QString>& teams = listed[repository.path];
+        for (const SidebarTeam& team : repository.teams)
+            teams.insert(team.id);
+    }
+    const auto before = collapsedTeams_.size();
+    collapsedTeams_.removeIf([&listed](const QString& key) {
+        const auto split = key.indexOf(QLatin1Char('\n'));
+        // A fold stored by id alone, before folds named their repository, cannot be placed.
+        if (split < 0)
+            return true;
+        const auto repository = listed.constFind(key.left(split));
+        return repository != listed.cend() && !repository->contains(key.mid(split + 1));
+    });
+    if (collapsedTeams_.size() != before)
+        storeCollapsedTeams(collapsedTeams_);
+}
+
 QWidget* SidebarRepositoryList::createTeamFolder(QWidget* group,
                                                  const SidebarRepository& repository,
                                                  const SidebarTeam& team) {
-    if (collapsedTeams_.isEmpty()) {
-        const QStringList stored = QSettings().value(kCollapsedTeamsSetting).toStringList();
-        collapsedTeams_ = QSet<QString>(stored.cbegin(), stored.cend());
-    }
+    loadCollapsedTeams();
     // The folder takes the drops; the branch and its members' guide are what it shows.
     auto* folder = new QWidget(group);
     folder->setObjectName(QStringLiteral("productTeamFolder"));
@@ -91,14 +134,13 @@ QWidget* SidebarRepositoryList::createTeamFolder(QWidget* group,
     connect(branch, &ket::SidebarTeamBranch::activated, this,
             [this, id = team.id] { emit teamRequested(id); });
     // A click, not toggled: presenting the stored fold must not store it again.
-    connect(branch->foldButton(), &QAbstractButton::clicked, this, [this, id = team.id] {
-        if (!collapsedTeams_.remove(id))
-            collapsedTeams_.insert(id);
-        QStringList values(collapsedTeams_.cbegin(), collapsedTeams_.cend());
-        values.sort();
-        QSettings().setValue(kCollapsedTeamsSetting, values);
-        applyPresentation();
-    });
+    connect(branch->foldButton(), &QAbstractButton::clicked, this,
+            [this, key = teamFoldKey(repository.path, team.id)] {
+                if (!collapsedTeams_.remove(key))
+                    collapsedTeams_.insert(key);
+                storeCollapsedTeams(collapsedTeams_);
+                applyPresentation();
+            });
     connect(branch->nameButton(), &QWidget::customContextMenuRequested, this,
             [this, id = team.id] { emit teamMenuRequested(id); });
     auto* menu = branch->menuAction();
@@ -142,7 +184,8 @@ void SidebarRepositoryList::updateTeamFolders(const QVector<SidebarRepository>& 
 void SidebarRepositoryList::presentTeamFolders(QWidget* group) {
     for (QWidget* folder : group->findChildren<QWidget*>(QStringLiteral("productTeamFolder"),
                                                          Qt::FindDirectChildrenOnly)) {
-        const bool folded = collapsedTeams_.contains(folder->property("teamId").toString());
+        const bool folded = collapsedTeams_.contains(teamFoldKey(
+            folder->property("repositoryPath").toString(), folder->property("teamId").toString()));
         auto* branch = branchOf(folder);
         branch->setExpanded(!folded);
         auto* members = membersOf(folder);

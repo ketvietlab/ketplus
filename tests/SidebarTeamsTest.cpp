@@ -269,6 +269,36 @@ class SidebarTeamsTest final : public QObject {
         QVERIFY(!header->isWaitingDotShown());
     }
 
+    // A team's fold belongs to its repository: another repository's team with the same id keeps
+    // its own. A team that left a repository forgets its fold; a repository whose teams have not
+    // arrived yet keeps them.
+    void aTeamsFoldIsItsRepositorysAndForgetsRemovedTeams() {
+        const QString setting = QStringLiteral("sidebar/collapsedTeams");
+        SidebarRepositoryList list;
+        list.setTeamsAvailable(true);
+        list.setRepositories({repository("/one"), repository("/two")});
+        list.show();
+        const auto folders = list.findChildren<QWidget*>("productTeamFolder");
+        QCOMPARE(folders.size(), 2);
+        QWidget* first = folders.first()->property("repositoryPath") == "/one" ? folders.first()
+                                                                               : folders.last();
+        QWidget* second = first == folders.first() ? folders.last() : folders.first();
+        first->findChild<QAbstractButton*>("productTeamFolderFold")->click();
+        QVERIFY(!first->findChild<ket::SidebarTeamBranch*>()->isExpanded());
+        QVERIFY(second->findChild<ket::SidebarTeamBranch*>()->isExpanded());
+        QCOMPARE(QSettings().value(setting).toStringList(), QStringList{"/one\n7"});
+
+        // /two lists no team yet: its stored folds stay.
+        QSettings().setValue(setting, QStringList{"/one\n7", "/two\n7", "legacy-id"});
+        SidebarRepository loading = repository("/two");
+        loading.teams.clear();
+        SidebarRepositoryList restarted;
+        restarted.setTeamsAvailable(true);
+        restarted.setRepositories({repository("/one", 0, false, "8"), loading});
+        // Team 7 left /one; /two keeps its fold; an id stored alone cannot be placed.
+        QCOMPARE(QSettings().value(setting).toStringList(), QStringList{"/two\n7"});
+    }
+
     // A row is the state's mark, the title and #number; finished and unread is a dot. The state
     // in words and the worktree are in the hint and the description.
     void aRowSaysItsStateWithoutTags() {
@@ -315,17 +345,37 @@ class SidebarTeamsTest final : public QObject {
         for (const int percent : {100, 125, 150}) {
             ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(percent));
             for (const int width : {ActivityBar::kMinWidth, ActivityBar::kWidth}) {
+                const auto where = [&](const char* place, const QStringList& problems) {
+                    return QStringLiteral("%1 at %2%, %3 px: %4")
+                        .arg(QLatin1String(place))
+                        .arg(percent)
+                        .arg(width)
+                        .arg(problems.join("; "));
+                };
                 SidebarRepositoryList list;
                 list.applyZoom(percent);
                 list.setRepositories({repository("/repo", 1), plain});
                 list.resize(InterfaceZoomMetrics::geometry(width, percent), list.height());
                 list.show();
                 QCoreApplication::processEvents();
-                const QStringList problems = list.layoutProblems();
-                QVERIFY2(problems.isEmpty(), qPrintable(QStringLiteral("%1%, %2 px: %3")
-                                                            .arg(percent)
-                                                            .arg(width)
-                                                            .arg(problems.join("; "))));
+                QVERIFY2(list.layoutProblems().isEmpty(),
+                         qPrintable(where("list", list.layoutProblems())));
+                // The real sidebar too, with its margins and scroll area, at the same zoom.
+                ThemeManager theme(*qApp);
+                ActivityBar bar;
+                bar.applyPalette(theme.palette(), percent);
+                bar.setSidebarWidth(width);
+                bar.resize(bar.width(), 700);
+                bar.setRepositories({repository("/repo", 1), plain});
+                bar.show();
+                QVERIFY(QTest::qWaitForWindowExposed(&bar));
+                auto* inBar = bar.findChild<SidebarRepositoryList*>();
+                QVERIFY(inBar);
+                // The list inside is no wider than the sidebar at this zoom: the narrow case runs.
+                QVERIFY2(inBar->width() <= InterfaceZoomMetrics::geometry(width, percent),
+                         qPrintable(where("width", {QString::number(inBar->width())})));
+                QVERIFY2(inBar->layoutProblems().isEmpty(),
+                         qPrintable(where("sidebar", inBar->layoutProblems())));
             }
         }
         ket::Profile::setCurrent(previous);
