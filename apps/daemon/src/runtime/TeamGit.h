@@ -15,7 +15,16 @@ namespace ketplus::daemon::team_git {
 [[nodiscard]] QString repositoryOf(const QString& worktreePath);
 // The commit the task's branch points at in the team's repository; empty when unknown.
 [[nodiscard]] QString taskCommit(const teams::Team& team, const teams::Task& task);
-// Paths changed in the task's worktree against its base, committed or not.
+// Whether `commit` is an ancestor of `of` (or the same) in `repository`; nothing when git could
+// not tell.
+[[nodiscard]] std::optional<bool> isAncestor(const QString& repository, const QString& commit,
+                                             const QString& of);
+// T-38: the commit the task's branch points at when it is the task's own: made on the branch
+// after its base and not yet in the integration branch. Empty otherwise.
+[[nodiscard]] QString ownHead(const teams::Team& team, const teams::Task& task);
+// Tracked paths the task's branch changed against its base, and, while its worktree has the
+// branch checked out, the tracked files changed there but not committed. Never untracked or
+// ignored files.
 [[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,
                                                       const teams::Task& task);
 // Whether the integration branch contains the task's branch; nothing when git failed.

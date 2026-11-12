@@ -61,6 +61,10 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
             .arg(team.maxRounds),
         QStringLiteral("Branch: %1, against %2").arg(task.branch, team.integrationBranch),
         QStringLiteral("Worktree: %1").arg(task.worktree)};
+    if (TeamCoordinator::recordsPullRequest(task))
+        lines << QStringLiteral("Pull request: %1").arg(task.pullRequest);
+    if (!task.headCommit.isEmpty())
+        lines << QStringLiteral("Head commit: %1").arg(task.headCommit);
     if (!task.description.isEmpty())
         lines << QString{} << task.description;
     lines << QString{} << QStringLiteral("Acceptance criteria:");
@@ -69,7 +73,14 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
     for (int index = 0; index < task.criteria.size(); ++index)
         lines << QStringLiteral("%1. %2").arg(index + 1).arg(task.criteria.at(index).text);
     lines << QString{};
-    if (!diff) {
+    if (diff && diff->outsideBranch) {
+        // T-38: work done in another worktree or repository, named by the hand to review.
+        lines << (task.headCommit.isEmpty()
+                      ? QStringLiteral("The branch has no commit of its own: review the pull "
+                                       "request above.")
+                      : QStringLiteral("The branch has no commit of its own: review the pull "
+                                       "request above at its head commit."));
+    } else if (!diff) {
         lines << QStringLiteral("The diff could not be read; read the branch in the worktree.");
     } else {
         lines << QStringLiteral("Changed files: %1")

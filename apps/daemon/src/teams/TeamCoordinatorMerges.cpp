@@ -101,17 +101,17 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         if (!task || fact == facts.cend() || task->state != state::ready ||
             task->branch != was.branch || task->headCommit != was.headCommit)
             continue;
-        if (!fact->head.isEmpty() && !task->headCommit.isEmpty() && fact->head != task->headCommit)
-            moved.insert(task->id, fact->head);
-        // A branch with no commit of its own is contained in any branch it was cut from: its
+        // T-38: git speaks only of a branch with commits of its own, handed to review at one
+        // of them. A branch still at its base is contained in any branch it was cut from: its
         // work is elsewhere, as in another repository's pull request (ADR 0118).
-        const QString head = fact->head.isEmpty() ? task->headCommit : fact->head;
-        const bool ownCommits =
-            !head.isEmpty() && (task->baseCommit.isEmpty() || head != task->baseCommit);
+        if (!branchHasOwnCommits(*task, fact->head) || !reviewedOwnCommit(*task))
+            continue;
+        if (fact->head != task->headCommit)
+            moved.insert(task->id, fact->head);
         // A task that records a pull request is the pull request's to finish (ADR 0118): its
         // branch can be contained without its work being merged, as after it took in the
         // integration branch, or when the work is in another repository.
-        if (fact->merged && *fact->merged && ownCommits && !recordsPullRequest(*task))
+        if (fact->merged && *fact->merged && !recordsPullRequest(*task))
             merged.append(task->id);
     }
     if (merged.isEmpty() && moved.isEmpty())

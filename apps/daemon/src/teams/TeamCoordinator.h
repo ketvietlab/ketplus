@@ -65,6 +65,8 @@ struct TeamMessage final {
 struct TaskDiff final {
     QString diff;
     QStringList files;
+    // T-38: the branch has no commit of its own; the work is where the hand to review said.
+    bool outsideBranch{false};
 };
 
 // What git knows about one task, for a check the daemon makes by itself.
@@ -326,11 +328,17 @@ class TeamCoordinator : public QObject {
                           const QString& actor);
     TeamResult handoverTask(qint64 teamId, const QString& taskId, const QString& owner,
                             const QString& reason, const QString& actor);
-    // `note` is the question of a blocked task.
+    // `note` is the question of a blocked task. `reportedHead` is the commit a hand to review
+    // names for work done outside the task's branch (T-38, TeamCoordinatorAttribution.cpp).
     TeamResult moveTask(qint64 teamId, const QString& taskId, const QString& to,
-                        const QString& actor, const QString& note = {});
+                        const QString& actor, const QString& note = {},
+                        const QString& reportedHead = {});
     TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
                            const QString& actor);
+    // T-38 (TeamCoordinatorAllowedPaths.cpp): the paths any lane may change, for the whole
+    // team (its shared paths) or, with `taskId`, for that task only. Validated as lane paths.
+    TeamResult allowPaths(qint64 teamId, const QString& taskId, const QStringList& paths,
+                          const QString& reason, const QString& actor);
     // TeamCoordinatorGit.cpp. An assignment and a handover make the task's worktree, and a
     // hand to review reads the worktree, through the host on the caller's thread. prepare()
     // asks the host first, where it may answer later, and then calls `then`: the command is
@@ -401,6 +409,17 @@ class TeamCoordinator : public QObject {
     void checkPullRequests(qint64 teamId);
     // Whether the task records a pull request URL: then only the pull request says it is done.
     [[nodiscard]] static bool recordsPullRequest(const Task& task);
+    // T-38 (TeamCoordinatorAttribution.cpp): whether `branchHead`, the commit the task's branch
+    // points at, is work of the task's own, and whether the task was handed to review with a
+    // commit of its own branch. Only then does git's rule make it done.
+    [[nodiscard]] static bool branchHasOwnCommits(const Task& task, const QString& branchHead);
+    [[nodiscard]] static bool reviewedOwnCommit(const Task& task);
+    // The head a hand to review records: the branch's own commit read from git, or, for work
+    // done in another worktree or repository, the pull request with the commit it names.
+    // Refused when there is neither.
+    [[nodiscard]] static std::optional<TeamError> attributeHead(const Team& team, Task& task,
+                                                                const QString& readHead,
+                                                                const QString& reportedHead);
     void setPullRequestPeriod(int periodMs, int minimumGapMs);
     // The leader closes a task by hand: `evidence` is a pull request URL or a commit.
     TeamResult closeTask(qint64 teamId, const QString& taskId, const QString& evidence,
@@ -518,7 +537,7 @@ class TeamCoordinator : public QObject {
     // The goal_reached update, when every task is done.
     static void noteGoalReached(const Team& team, QList<Update>& updates);
     // After a lane or the shared paths changed: clears the flagged paths they now cover.
-    void recheckLanes(Team& team, QList<Update>& updates);
+    void recheckLanes(Team& team, QList<Update>& updates, const QString& why = {});
     // Sets a task's outside paths and records the change; false when nothing changed.
     bool flagOutside(Team& team, Task& task, const QStringList& outside, const QString& why,
                      QList<Update>& updates);

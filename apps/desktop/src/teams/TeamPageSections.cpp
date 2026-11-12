@@ -273,7 +273,14 @@ void TeamPage::buildMembers(const QJsonObject& team) {
             where->setObjectName(QStringLiteral("teamMemberPaths"));
             where->setTone(QStringLiteral("text-muted"));
             where->setType(12, QFont::Medium, true);
-            where->setToolTip(paths.join(QLatin1Char('\n')));
+            // T-38: the paths any lane may change go with each lane.
+            QStringList shared;
+            for (const auto& path : team.value(QStringLiteral("shared_paths")).toArray())
+                shared.append(path.toString());
+            where->setToolTip(shared.isEmpty() ? paths.join(QLatin1Char('\n'))
+                                               : tr("%1\nAny lane: %2")
+                                                     .arg(paths.join(QLatin1Char('\n')),
+                                                          shared.join(QStringLiteral(", "))));
         }
         line->addLayout(pair(holds, where), compact_ ? 0 : 6);
         // The narrowest page keeps who and the actions; the lane stays one hover away.

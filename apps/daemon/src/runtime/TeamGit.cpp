@@ -53,38 +53,49 @@ QString taskCommit(const teams::Team& team, const teams::Task& task) {
 }
 
 std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Task& task) {
-    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir())
+    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir() || task.branch.isEmpty())
         return std::nullopt;
-    // Committed on the branch since it left its base, then what is not committed yet. With an
-    // integration branch, the diff from where the branch left it. Without one the base is the
-    // commit the task started from, and a developer who merges the repository's main line into
-    // the branch brings in everyone else's files, so only the branch's own commits count.
+    // T-38: only the task's own tracked changes. Committed: the task's branch (not whatever
+    // the worktree has checked out) since it left its base. With an integration branch, the
+    // diff from where the branch left it. Without one the base is the commit the task started
+    // from, and a developer who merges the repository's main line into the branch brings in
+    // everyone else's files, so only the branch's own commits count.
+    const QString branch = QStringLiteral("refs/heads/%1").arg(task.branch);
     const auto committed =
         team.integrationBranch.isEmpty()
             ? output(task.worktree, {QStringLiteral("log"), QStringLiteral("--first-parent"),
                                      QStringLiteral("--no-merges"), QStringLiteral("--format="),
                                      QStringLiteral("--name-only"), QStringLiteral("--no-renames"),
                                      QStringLiteral("-z"), QStringLiteral("--end-of-options"),
-                                     QStringLiteral("%1..HEAD").arg(task.baseCommit)})
-            : output(task.worktree, {QStringLiteral("diff"), QStringLiteral("--name-only"),
-                                     QStringLiteral("-z"), QStringLiteral("--end-of-options"),
-                                     QStringLiteral("%1...HEAD").arg(team.integrationBranch)});
-    const auto pending =
-        output(task.worktree,
-               {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
-                QStringLiteral("-uall"), QStringLiteral("--no-renames")});
-    if (!committed || !pending)
+                                     QStringLiteral("%1..%2").arg(task.baseCommit, branch)})
+            : output(task.worktree,
+                     {QStringLiteral("diff"), QStringLiteral("--name-only"), QStringLiteral("-z"),
+                      QStringLiteral("--end-of-options"),
+                      QStringLiteral("%1...%2").arg(team.integrationBranch, branch)});
+    if (!committed)
         return std::nullopt;
     // -z: a path is spelled as it is, not quoted; --end-of-options: a branch is never an option.
     QStringList paths = committed->split(QChar(u'\0'), Qt::SkipEmptyParts);
-    for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
-        if (entry.size() > 3)
-            paths.append(entry.mid(3));
+    // Not committed yet: tracked files only (-uno), so build trees, captures and other
+    // untracked or ignored files are never work outside a lane; and only while the worktree
+    // has the task's branch checked out, since a worktree at another commit is not its work.
+    const auto checkedOut =
+        output(task.worktree,
+               {QStringLiteral("symbolic-ref"), QStringLiteral("--quiet"), QStringLiteral("HEAD")});
+    if (checkedOut && checkedOut->trimmed() == branch) {
+        const auto pending =
+            output(task.worktree,
+                   {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
+                    QStringLiteral("-z"), QStringLiteral("-uno"), QStringLiteral("--no-renames")});
+        if (!pending)
+            return std::nullopt;
+        for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
+            if (entry.size() > 3)
+                paths.append(entry.mid(3));
+    }
     paths.removeDuplicates();
     return paths;
 }
-
-namespace {
 
 // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
 std::optional<bool> isAncestor(const QString& repository, const QString& commit,
@@ -101,6 +112,8 @@ std::optional<bool> isAncestor(const QString& repository, const QString& commit,
         return process.exitCode() == 0;
     return std::nullopt;
 }
+
+namespace {
 
 QString remoteIntegration(const teams::Team& team) {
     return QStringLiteral("refs/remotes/origin/%1").arg(team.integrationBranch);
@@ -163,9 +176,15 @@ std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
 
 std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Task& task) {
     const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
-    // The branch against the integration branch it was cut from (ADR 0114 §2).
+    // T-38: a branch still at its base has nothing to show; the review reads the work where
+    // the hand to review named it, never another commit the worktree has checked out.
+    if (const QString tip = taskCommit(team, task); !tip.isEmpty() && tip == task.baseCommit)
+        return teams::TaskDiff{.diff = {}, .files = {}, .outsideBranch = true};
+    // The branch against the integration branch it was cut from (ADR 0114 §2), up to the
+    // commit handed to review (T-38), not whatever the branch points at since.
     const QString range = QStringLiteral("%1...%2").arg(
-        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch, task.branch);
+        team.integrationBranch.isEmpty() ? task.baseCommit : team.integrationBranch,
+        task.headCommit.isEmpty() ? task.branch : task.headCommit);
     const auto diff = output(directory, {QStringLiteral("diff"), QStringLiteral("--no-color"),
                                          QStringLiteral("--no-ext-diff"),
                                          QStringLiteral("--end-of-options"), range});
@@ -174,7 +193,9 @@ std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Ta
                            QStringLiteral("-z"), QStringLiteral("--end-of-options"), range});
     if (!diff || !names)
         return std::nullopt;
-    return teams::TaskDiff{.diff = *diff, .files = names->split(QChar(u'\0'), Qt::SkipEmptyParts)};
+    return teams::TaskDiff{.diff = *diff,
+                           .files = names->split(QChar(u'\0'), Qt::SkipEmptyParts),
+                           .outsideBranch = false};
 }
 
 // ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
@@ -217,11 +238,27 @@ std::optional<bool> hasUncommittedWork(const QString& worktree) {
     return !status->trimmed().isEmpty();
 }
 
+QString ownHead(const teams::Team& team, const teams::Task& task) {
+    const QString tip = taskCommit(team, task);
+    // T-38: a branch still at its base has no work of its own.
+    if (tip.isEmpty() || tip == task.baseCommit)
+        return {};
+    // Moved to a commit that does not come after its base, as another task's.
+    if (!task.baseCommit.isEmpty() &&
+        isAncestor(team.repository, task.baseCommit, tip).value_or(false) == false)
+        return {};
+    // Already in the integration branch: nothing on it is the task's to hand in.
+    if (!team.integrationBranch.isEmpty() &&
+        isAncestor(team.repository, tip, team.integrationBranch).value_or(true))
+        return {};
+    return tip;
+}
+
 teams::HandoffFacts handoff(const teams::Team& team, const teams::Task& task) {
     return {.worktree = task.worktree,
             .branch = task.branch,
             .dirty = hasUncommittedWork(task.worktree),
-            .head = taskCommit(team, task)};
+            .head = ownHead(team, task)};
 }
 
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,

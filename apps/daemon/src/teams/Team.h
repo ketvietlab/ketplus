@@ -115,6 +115,9 @@ struct Task final {
     // T-19: replies in a row without a verdict line for the round in review.
     int missingVerdicts{0};
     QStringList outsideLane;
+    // T-38: paths this task may change whatever its owner's lane, beside the team's shared
+    // paths (such as a contract or a fixture it must update). Sent only when set.
+    QStringList allowedPaths;
     // ADR 0114, open point 5: an assignment made before the first plan is approved.
     bool assignmentHeld{false};
     // The user allowed the leader to merge this task under mergePolicy "user".

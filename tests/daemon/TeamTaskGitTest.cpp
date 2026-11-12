@@ -359,7 +359,9 @@ class TeamTaskGitProtocolTest final : public QObject {
         QVERIFY(QFileInfo(reply.value("task").toObject().value("worktree").toString()).isDir());
 
         // The developer's tool hands its task to review: the worktree's status and the
-        // branch's commit are two more.
+        // branch's commit are two more. T-38: a hand to review needs a commit of its own.
+        git(worktree, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
+                       "--allow-empty", "-m", "Cart"});
         QVERIFY(fixture
                     .agents(developer, "agents.team_task_update",
                             {{"task_id", "T-1"}, {"state", "in_progress"}})
