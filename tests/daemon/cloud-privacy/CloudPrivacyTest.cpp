@@ -2352,16 +2352,16 @@ class CloudPrivacyTest final : public QObject {
             QVERIFY(journal.updateAgentMessage(message));
             QVERIFY(waiting().isEmpty());
         }
+        // Request attributes are immutable: updateAgentMessage changes delivery state only.
+        AgentMessageRecord notification = message;
+        notification.id = QStringLiteral("notification-synthetic");
+        notification.state = QStringLiteral("delivered");
+        notification.expectReply = false;
+        QVERIFY(journal.insertAgentMessage(notification));
+        QVERIFY(waiting().isEmpty());
         message.state = QStringLiteral("delivered");
-        message.expectReply = false;
         QVERIFY(journal.updateAgentMessage(message));
-        QVERIFY(waiting().isEmpty());
-        message.expectReply = true;
-        message.expiresAt = now.toString(Qt::ISODateWithMs);
-        QVERIFY(journal.updateAgentMessage(message));
-        QVERIFY(waiting().isEmpty());
-        message.expiresAt = now.addSecs(3600).toString(Qt::ISODateWithMs);
-        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(journal.sessionsAwaitingAgentReply(now.addSecs(3600)).isEmpty());
         QVERIFY(waiting().contains(sender.id));
         AgentMessageRecord second = message;
         second.id = QStringLiteral("second-request-synthetic");
