@@ -4,6 +4,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include "agents/ReviewVerdict.h"
+#include "teams/TeamVerdictLine.h"
 
 #include <QDir>
 #include <QJsonObject>
@@ -329,6 +330,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
     const Member* member = team->member(reviewerSession);
     if (!member || member->role != role::reviewer)
         return;
+    const QString reviewerName = member->name;
     const Team before = *team;
     ReviewSlot* answered = team->reviewSlot(reviewerSession);
     const QString taskId = answered->reviewing;
@@ -373,6 +375,27 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
         };
         if (failure.isEmpty() && !noVerdict)
             task->missingVerdicts = 0;
+        // T-75 (ADR 0114 §7): every verdict is a line for the leader, so its next digest is
+        // due without waiting for another update that needs it. At the round limit the same
+        // line is the `round_limit` warning, so the leader reads it once.
+        const auto told = [&](const bool withFindings, const bool atLimit) {
+            updates.append(
+                {.kind = atLimit ? QStringLiteral("round_limit") : QStringLiteral("verdict"),
+                 .text = verdict_line::text({.taskId = taskId,
+                                             .pullRequest = task->pullRequest,
+                                             .round = round,
+                                             .limit = shownLimit(limit, round),
+                                             .reviewer = reviewerName,
+                                             .findings = withFindings,
+                                             .atLimit = atLimit,
+                                             .reply = text}),
+                 .taskId = taskId,
+                 .actionable = true,
+                 .data = {{QStringLiteral("verdict"), withFindings ? QStringLiteral("findings")
+                                                                   : QStringLiteral("no_findings")},
+                          {QStringLiteral("round"), round},
+                          {QStringLiteral("reviewer"), reviewerName}}});
+        };
         if (!failure.isEmpty()) {
             task->resumeState = state::inProgress;
             task->question = QStringLiteral("The review of round %1 did not finish (%2). Hand "
@@ -414,6 +437,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                        verdictData(QStringLiteral("no_findings")));
             applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
                       QStringLiteral("reviewed, no findings"), updates);
+            told(false, false);
             offerMerges(*team, updates);
         } else {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
@@ -425,15 +449,11 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                 task->question = roundLimitQuestion(round, shownLimit(limit, round));
                 if (!link.isEmpty())
                     task->question += QStringLiteral(" The findings: %1").arg(link);
+                told(true, true);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
-                updates.append({.kind = QStringLiteral("round_limit"),
-                                .text = QStringLiteral("%1 still has findings after %2 rounds.")
-                                            .arg(taskId)
-                                            .arg(round),
-                                .taskId = taskId,
-                                .actionable = true});
             } else {
+                told(true, false);
                 applyMove(*team, *task, state::inProgress, QStringLiteral("daemon"),
                           QStringLiteral("review round %1 found issues").arg(round), updates);
                 back = TeamMessage{
