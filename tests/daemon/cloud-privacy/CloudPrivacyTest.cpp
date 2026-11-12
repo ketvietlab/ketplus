@@ -403,6 +403,52 @@ class CloudPrivacyTest final : public QObject {
             QVERIFY(!request.attribute(QNetworkRequest::Http2AllowedAttribute, true).toBool());
     }
 
+    void removedRelayEnrollmentSignsOutWithoutRetryingOrDeletingLocalWork_data() {
+        QTest::addColumn<int>("status");
+        QTest::addColumn<QByteArray>("body");
+        QTest::addColumn<bool>("signedOut");
+        QTest::addColumn<bool>("storageFailure");
+        QTest::newRow("removed-machine")
+            << 404 << QByteArray(R"({"code":"machine_not_found"})") << true << false;
+        QTest::newRow("removed-machine-storage-failure")
+            << 404 << QByteArray(R"({"code":"machine_not_found"})") << true << true;
+        QTest::newRow("temporary-failure")
+            << 503 << QByteArray(R"({"code":"machine_not_found"})") << false << false;
+        QTest::newRow("unrelated-not-found")
+            << 404 << QByteArray(R"({"code":"not_found"})") << false << false;
+    }
+
+    void removedRelayEnrollmentSignsOutWithoutRetryingOrDeletingLocalWork() {
+        QFETCH(int, status);
+        QFETCH(QByteArray, body);
+        QFETCH(bool, signedOut);
+        QFETCH(bool, storageFailure);
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        r03::failRemovals = storageFailure;
+        const auto resetFailure = qScopeGuard([] { r03::failRemovals = false; });
+        const QString path = QStringLiteral("/v2/daemon/challenges");
+        c.transport.statusForPath.insert(path, status);
+        c.transport.responseForPath.insert(path, body);
+        int callbacks = 0;
+        Access::credential(*c.client, [&](const bool ready, const QString&) {
+            QVERIFY(!ready);
+            ++callbacks;
+        });
+        QTRY_COMPARE(callbacks, 1);
+        QCOMPARE(Access::status(*c.client).value("configured").toBool(), !signedOut);
+        QCOMPARE(c.journal.sessions().size(), 1);
+        if (signedOut) {
+            const qsizetype requests = c.transport.requests.size();
+            Access::upload(*c.client);
+            Access::pollCommands(*c.client);
+            QCoreApplication::processEvents();
+            QCOMPARE(c.transport.requests.size(), requests);
+            QCOMPARE(callbacks, 1);
+        }
+    }
+
     void freshUploadDecryptsToCommandMetadataOnly() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
