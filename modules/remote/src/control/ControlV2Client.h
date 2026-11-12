@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QUrl>
 #include <functional>
+#include <memory>
 
 namespace ketplus::daemon {
 class BrowserSignIn;
@@ -42,6 +43,17 @@ class ControlV2Client final : public QObject {
     void listSessions(Callback done);
     void listWorktrees(Callback done);
     void events(const QJsonObject& session, qint64 afterCursor, Callback done);
+    // The paired hosts' repositories/worktrees and conversations, as
+    // {repositories, conversations, rejected}. Conversation title, state, updated time and
+    // branch come from the host-signed session metadata; a row whose metadata, host pin or
+    // index entry fails authentication is left out and named in `rejected`, never shown.
+    void projection(Callback done);
+    // One bounded transcript window over Control v2, shaped as the local daemon's
+    // session.transcript_window page. `window` takes snapshot_cursor (defaults to the session's
+    // lastEventCursor), before_cursor (0 = newest turn), event_limit (<= 128), turn_limit
+    // (<= 3) and byte_cap (4 KiB..512 KiB). Page backwards with the previous page's
+    // before_cursor and the same snapshot_cursor. Large events are reassembled first.
+    void transcriptWindow(const QJsonObject& session, const QJsonObject& window, Callback done);
     // Persist the prepared encrypted envelope before sending and retry that exact ciphertext.
     void prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext, Callback done);
     void submit(const QJsonObject& encryptedIntent, Callback done);
@@ -53,6 +65,26 @@ class ControlV2Client final : public QObject {
 
   private:
     friend class RemoteControlTestAccess;
+    struct ProjectionState;
+    struct RestoreState;
+    void projectNext(const std::shared_ptr<ProjectionState>& state);
+    void finishProjection(const std::shared_ptr<ProjectionState>& state);
+    [[nodiscard]] bool hostPinned(const QString& machineId) const;
+    void beginRoot(const std::shared_ptr<RestoreState>& state);
+    void startRestore(const std::shared_ptr<RestoreState>& state, const QJsonObject& request,
+                      const QJsonObject& payload);
+    void pollRestore(const std::shared_ptr<RestoreState>& state);
+    void restoreCompleted(const std::shared_ptr<RestoreState>& state, const QByteArray& bytes);
+    void nextLargeEvent(const std::shared_ptr<RestoreState>& state);
+    void requestLargeFragment(const std::shared_ptr<RestoreState>& state);
+    void failRestore(const std::shared_ptr<RestoreState>& state, const QString& error);
+    // "session:generation" -> host signing key version that sessionKeys() verified against a
+    // pin. Content naming another version fails closed: it needs a new pairing (#88).
+    QHash<QString, int> signerVersions_;
+    [[nodiscard]] bool signedByVerifiedKey(const QString& sessionId, qint64 generation,
+                                           const QJsonObject& content) const;
+    // Restore responses are polled while the host works; tests shorten the interval.
+    int restorePollMilliseconds_{250};
     using Reply = std::function<void(int, const QJsonValue&, const QString&)>;
     void request(const QByteArray& method, const QString& path, const QJsonValue& body,
                  const QString& bearer, Reply done);
