@@ -201,6 +201,8 @@ QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
 }
 
 void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
+    if (agentMessages.isEmpty())
+        return;
     QStringList senders;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
@@ -222,6 +224,8 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
         if (const QString provider = first.value("from_provider").toString(); !provider.isEmpty())
             label += QStringLiteral(" · ") + provider.left(1).toUpper() + provider.mid(1);
     }
+    if (first.value("kind").toString() == QStringLiteral("review"))
+        label += QStringLiteral(" · Review request");
     entry.insert(QStringLiteral("subtype"), QStringLiteral("agentMessage"));
     entry.insert(QStringLiteral("meta"), label);
     entry.insert(QStringLiteral("title"), label);
@@ -705,7 +709,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             }
             if (const auto origin = data.value("origin").toString();
                 origin == "agent" || origin == "system" || origin == "team") {
-                markAgentOrigin(entry, data.value("agent_messages").toArray());
+                auto senders = data.value("agent_messages").toArray();
+                if (senders.isEmpty())
+                    senders.append(QJsonObject{{"from_title", "System"}});
+                markAgentOrigin(entry, senders);
                 // #468: a team's own message is drawn as its block; the text stays the body.
                 if (const QVariantMap block =
                         team_blocks::fromAgentMessages(data.value("agent_messages").toArray());

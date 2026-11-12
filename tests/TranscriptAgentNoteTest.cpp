@@ -1,7 +1,10 @@
 #include "AgentWorkspaceViewTest.h"
 #include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/TranscriptNormalizer.h"
+#include <QClipboard>
 #include <QDir>
 
 #include <QJsonArray>
@@ -62,19 +65,18 @@ void AgentWorkspaceViewTest::sentAgentMessageReadsAsTheMockNote() {
 void AgentWorkspaceViewTest::incomingAgentCardsClampAndExpand() {
     const QString longText =
         QStringLiteral("Synthetic digest line, selectable <b>plain text</b>.\n").repeated(24);
-    const QList<QPair<QString, QString>> cases{{"agent", "request"},
-                                               {"agent", "reply"},
-                                               {"agent", "notice"},
-                                               {"system", "notice"},
-                                               {"team", "digest"}};
+    const QList<QPair<QString, QString>> cases{{"agent", "request"}, {"agent", "reply"},
+                                               {"agent", "notice"},  {"system", "notice"},
+                                               {"team", "digest"},   {"agent", "system-wake"}};
     for (const auto& [origin, messageKind] : cases) {
         const QJsonArray senders =
-            origin == "agent"
+            origin == "agent" && messageKind != "system-wake"
                 ? QJsonArray{QJsonObject{{"from_number", "1234"},
                                          {"from_title", "Synthetic peer"},
                                          {"from_provider", "claude"},
                                          {"kind", messageKind}}}
-                : QJsonArray{QJsonObject{{"from_title", "Team Example"}, {"kind", "digest"}}};
+                : QJsonArray{QJsonObject{
+                      {"from_number", ""}, {"from_title", "Team Example"}, {"kind", "digest"}}};
         auto rows = ketplus::agent_message::daemonWindowMessages(
             {{"events",
               QJsonArray{QJsonObject{{"cursor", 1},
@@ -98,14 +100,30 @@ void AgentWorkspaceViewTest::incomingAgentCardsClampAndExpand() {
         QCOMPARE(note->property("previewLines").toInt(), 4);
         QCOMPARE(note->property("iconName").toString(), QStringLiteral("arrow-down"));
         QVERIFY(note->property("label").toString().startsWith(
-            origin == "agent" ? "From @agent/1234" : "From Team Example"));
+            origin == "agent" && messageKind != "system-wake" ? "From @agent/1234"
+                                                              : "From Team Example"));
         auto* body = findVisualItem(note, "transcriptAgentNoteBody");
         auto* toggle = findVisibleItem(note, "transcriptAgentNoteExpand");
         QVERIFY(body && toggle);
         QCOMPARE(body->property("text").toString(), longText);
         QVERIFY(body->property("selectByMouse").toBool());
+        view.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&view));
+        view.quickView()->requestActivate();
+        QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+        QTest::mouseClick(view.quickView(), Qt::LeftButton, {},
+                          body->mapToScene(QPointF(8, 8)).toPoint());
+        body->forceActiveFocus();
+        QTRY_VERIFY(body->hasActiveFocus());
         QVERIFY(QMetaObject::invokeMethod(body, "selectAll"));
         QCOMPARE(body->property("selectedText").toString(), longText);
+        QKeyEvent shortcut(QEvent::ShortcutOverride, Qt::Key_C, Qt::ControlModifier);
+        shortcut.ignore();
+        QCoreApplication::sendEvent(body, &shortcut);
+        QVERIFY(shortcut.isAccepted());
+        QGuiApplication::clipboard()->setText("previous clipboard");
+        QTest::keySequence(view.quickView(), QKeySequence::Copy);
+        QCOMPARE(QGuiApplication::clipboard()->text(), longText);
         QVERIFY(QMetaObject::invokeMethod(body, "deselect"));
         QVERIFY(body->height() <= note->property("previewHeight").toReal() + 1);
         QTest::qWait(300); // Let the initial Latest positioning finish before measuring input.
@@ -125,15 +143,19 @@ void AgentWorkspaceViewTest::incomingAgentCardsClampAndExpand() {
     view.applyTheme(testPalette());
     view.resize(900, 640);
     view.show();
-    view.resetMessages(
-        {QVariantMap{{"kind", "user"}, {"body", "Synthetic owner input"}, {"messageKey", "owner"}}},
-        "owner-card-regression");
-    QTRY_VERIFY(findVisibleItem(view.quickView()->rootObject(), "messageBody"));
-    QVERIFY(!findVisibleItem(view.quickView()->rootObject(), "transcriptAgentNote"));
-    auto* surface = findVisibleItem(view.quickView()->rootObject(), "messageSurface");
-    QVERIFY(surface);
-    QVERIFY(surface->property("color").value<QColor>().alpha() > 0);
-    QVERIFY(surface->property("radius").toReal() > 0);
+    for (const auto type : {"userMessage", "daemonUserMessage"}) {
+        const auto owner = ketplus::ActivityNormalizer::normalize(
+            {{"id", "owner"}, {"type", type}, {"text", "Synthetic owner input"}},
+            ketplus::TranscriptPhase::Completed);
+        QCOMPARE(owner.subtype, QString{});
+        view.resetMessages({owner.toVariantMap()}, QStringLiteral("owner-") + type);
+        QTRY_VERIFY(findVisibleItem(view.quickView()->rootObject(), "messageBody"));
+        QVERIFY(!findVisibleItem(view.quickView()->rootObject(), "transcriptAgentNote"));
+        auto* surface = findVisibleItem(view.quickView()->rootObject(), "messageSurface");
+        QVERIFY(surface);
+        QVERIFY(surface->property("color").value<QColor>().alpha() > 0);
+        QVERIFY(surface->property("radius").toReal() > 0);
+    }
 }
 
 // Optional deterministic captures; no daemon, provider, account or saved user preferences.
@@ -168,5 +190,28 @@ void AgentWorkspaceViewTest::agentCardEvidence() {
         QTest::qWait(300);
         const auto name = mode == ket::Appearance::Mode::Dark ? "dark" : "light";
         QVERIFY(view.quickView()->grabWindow().save(directory + "/" + name + ".png"));
+        auto incoming = rows.first().toMap();
+        incoming.insert("body", QStringLiteral("Synthetic selectable digest line.\n").repeated(8));
+        incoming.insert("messageKey", "paired-incoming");
+        const auto outgoing = ketplus::agent_message::agentNote(
+            {{"state", "sent"},
+             {"message_id", "synthetic-outgoing"},
+             {"direction", "outgoing"},
+             {"kind", "notice"},
+             {"peer_number", "5678"},
+             {"peer_title", "Example peer"},
+             {"peer_provider", "claude"},
+             {"text", "Synthetic outgoing notice, no account data."}},
+            "paired-outgoing");
+        QCOMPARE(outgoing.value("subtype").toString(), QStringLiteral("agentNote"));
+        view.resetMessages({outgoing, incoming}, "paired-card-evidence");
+        QTest::qWait(300);
+        QVERIFY(view.quickView()->grabWindow().save(directory + "/paired-" + name + ".png"));
+        QQuickItem* toggle = nullptr;
+        QTRY_VERIFY((
+            toggle = findVisibleItem(view.quickView()->rootObject(), "transcriptAgentNoteExpand")));
+        QVERIFY(QMetaObject::invokeMethod(toggle, "clicked"));
+        QTest::qWait(300);
+        QVERIFY(view.quickView()->grabWindow().save(directory + "/expanded-" + name + ".png"));
     }
 }

@@ -33,6 +33,7 @@ Loader {
         property color iconColor: KetTheme.t.accentText
         property bool incoming: false
         property bool expanded: false
+        property var taskIds: []
         property bool extraContent: false
         property bool expandBody: true
         width: parent ? parent.width : 0
@@ -78,6 +79,29 @@ Loader {
                 color: KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: host.px(13)
+            }
+            Flickable {
+                width: parent.width
+                height: visible ? taskActions.implicitHeight : 0
+                visible: card.taskIds.length > 0 && !card.expanded
+                contentWidth: taskActions.implicitWidth
+                contentHeight: height
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                Row {
+                    id: taskActions
+                    spacing: host.px(6)
+                    Repeater {
+                        model: card.taskIds
+                        KetButton {
+                            required property string modelData
+                            text: "Open " + modelData
+                            variant: KetTheme.ButtonVariant.Ghost
+                            controlSize: KetTheme.ControlSize.Small
+                            onClicked: host.window.openTeamTask(modelData)
+                        }
+                    }
+                }
             }
             KetButton {
                 visible: cardBody.contentHeight > metrics.height * 4 + 1 || card.extraContent
@@ -165,6 +189,7 @@ Loader {
                 incoming: true
                 label: "From " + host.block.team
                 message: host.block.text || host.block.title || host.block.kind
+                taskIds: [host.block.task].concat((host.block.groups || []).map(group => group.task)).filter((id, index, all) => id && all.indexOf(id) === index)
                 extraContent: true
                 expandBody: false
             }

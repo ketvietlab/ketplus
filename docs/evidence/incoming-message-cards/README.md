@@ -12,3 +12,13 @@ and the unchanged owner bubble are verified by the focused transcript tests.
 | --- | --- | --- |
 | Light | ![Before, light](before-light.png) | ![After, light](after-light.png) |
 | Dark | ![Before, dark](before-dark.png) | ![After, dark](after-dark.png) |
+
+Round-two evidence also includes paired incoming/outgoing cards and expanded incoming
+bodies in both themes. Task links remain available without expanding a team message.
+The owner-bubble regression passes through both live normalizer user-message types;
+the card selection test exercises the platform Copy shortcut and clipboard output.
+
+| Theme | Incoming and outgoing, collapsed | Incoming expanded |
+| --- | --- | --- |
+| Light | ![Both directions, light](paired-light.png) | ![Expanded, light](expanded-light.png) |
+| Dark | ![Both directions, dark](paired-dark.png) | ![Expanded, dark](expanded-dark.png) |

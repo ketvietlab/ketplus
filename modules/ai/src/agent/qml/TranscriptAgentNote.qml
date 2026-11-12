@@ -31,6 +31,9 @@ Rectangle {
     readonly property int previewLines: 4
     readonly property bool overlong: body.contentHeight > previewHeight + 1 || hasExtraContent
     readonly property real previewHeight: noteMetrics.height * previewLines
+    property var taskIds: []
+    signal taskRequested(string taskId)
+    signal copyRequested(string selection)
     signal toggleRequested
 
     Column {
@@ -67,6 +70,13 @@ Rectangle {
             text: note.message
             textFormat: TextEdit.PlainText
             wrapMode: TextEdit.Wrap
+            Keys.onShortcutOverride: event => event.accepted = (event.matches(StandardKey.Copy) && selectedText.length > 0) || event.matches(StandardKey.SelectAll)
+            Keys.onPressed: event => {
+                if (event.matches(StandardKey.Copy) && selectedText.length > 0) {
+                    note.copyRequested(selectedText);
+                    event.accepted = true;
+                }
+            }
             readOnly: true
             selectByMouse: true
             persistentSelection: true
@@ -75,6 +85,30 @@ Rectangle {
             selectedTextColor: KetTheme.t.actionPrimaryInk
             font.family: KetTheme.fontFamily
             font.pixelSize: KetTheme.px(13, KetTheme.zoom)
+        }
+        Flickable {
+            width: parent.width
+            height: visible ? taskActions.implicitHeight : 0
+            visible: note.taskIds.length > 0 && !note.expanded
+            contentWidth: taskActions.implicitWidth
+            contentHeight: height
+            clip: true
+            flickableDirection: Flickable.HorizontalFlick
+            Row {
+                id: taskActions
+                spacing: KetTheme.px(6, KetTheme.zoom)
+                Repeater {
+                    model: note.taskIds
+                    Kit.KetButton {
+                        required property string modelData
+                        objectName: "transcriptTeamBlockOpenTask"
+                        text: "Open " + modelData
+                        variant: Kit.KetTheme.ButtonVariant.Ghost
+                        controlSize: Kit.KetTheme.ControlSize.Small
+                        onClicked: note.taskRequested(modelData)
+                    }
+                }
+            }
         }
         Kit.KetButton {
             objectName: "transcriptAgentNoteExpand"

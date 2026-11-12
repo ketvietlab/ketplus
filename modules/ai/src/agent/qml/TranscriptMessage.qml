@@ -78,7 +78,7 @@ Item {
     required property var teamBlockData
     // #468: a team's own message (assignment, digest, review, decision) is its block, not a bubble.
     readonly property bool teamBlock: kind === "user" && subtype === "teamMessage" && !!teamBlockData && !!teamBlockData.kind
-    readonly property bool incomingCard: kind === "user" && ["agentMessage", "teamMessage", "systemMessage"].indexOf(subtype) >= 0
+    readonly property bool incomingCard: kind === "user" && ["agentMessage", "teamMessage"].indexOf(subtype) >= 0
     readonly property bool userBubble: kind === "user" && !incomingCard
     // Only the failure that ended the latest turn shows the full guide; once the user writes
     // again, the row reads as the notice it was.
@@ -95,8 +95,10 @@ Item {
                 return null;
         }
         const turnModel = errorModel ? shell.modelForId(errorModel) : null;
-        const modelName = turnModel && turnModel.displayName ? turnModel.displayName : errorModel || shell.modelLabel || shell.selectedModel || "";
-        const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider, errorCode, errorDetail || body, modelName);
+        const modelName = turnModel && turnModel.displayName ? turnModel.displayName
+                        : errorModel || shell.modelLabel || shell.selectedModel || "";
+        const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider,
+                                             errorCode, errorDetail || body, modelName);
         return guide && guide.id ? guide : null;
     }
     required property string phase
@@ -368,15 +370,9 @@ Item {
                 visible: changes.length > 0
                 height: visible ? implicitHeight : 0
                 files: changes.map(file => {
-                    const shown = String(file.destination || file.path);
-                    const split = Math.max(shown.lastIndexOf("/"), shown.lastIndexOf("\\"));
-                    return {
-                        name: shown.slice(split + 1),
-                        path: split > 0 ? shown.slice(0, split) : "",
-                        added: file.added || 0,
-                        removed: file.removed || 0,
-                        known: file.known !== false
-                    };
+                    const shown = String(file.destination || file.path)
+                    const split = Math.max(shown.lastIndexOf("/"), shown.lastIndexOf("\\"))
+                    return {name: shown.slice(split + 1), path: split > 0 ? shown.slice(0, split) : "", added: file.added || 0, removed: file.removed || 0, known: file.known !== false}
                 })
                 // A daemon group lists at most 50 files; Review changes shows them all.
                 complete: !turn || turn.complete !== false
@@ -409,6 +405,15 @@ Item {
                 message: messageDelegate.displayBody
                 state: messageDelegate.status
                 iconName: messageDelegate.incomingCard ? "arrow-down" : "send"
+                taskIds: {
+                    if (!messageDelegate.teamBlock)
+                        return [];
+                    const block = messageDelegate.teamBlockData;
+                    const ids = [block.taskId].concat((block.groups || []).map(group => group.taskId));
+                    return ids.filter((id, index) => id && ids.indexOf(id) === index);
+                }
+                onTaskRequested: taskId => agentHost.requestTeamTask(String(messageDelegate.teamBlockData.team || ""), taskId)
+                onCopyRequested: selection => host.copySelectedText(selection)
                 externallyManagedExpansion: true
                 expanded: messageDelegate.userExpanded
                 hasExtraContent: messageDelegate.teamBlock
@@ -475,11 +480,8 @@ Item {
                 sourceComponent: HeldMessageAction {
 
                     messageId: {
-                        try {
-                            return JSON.parse(messageDelegate.payloadData).messageId || "";
-                        } catch (e) {
-                            return "";
-                        }
+                        try { return JSON.parse(messageDelegate.payloadData).messageId || ""; }
+                        catch (e) { return ""; }
                     }
                 }
             }
@@ -1347,6 +1349,7 @@ Item {
                     width: messageColumn.width
                     link: modelData
                     host: messageDelegate.host
+
                 }
             }
 
@@ -1354,6 +1357,7 @@ Item {
                 row: messageDelegate
                 sources: kind === "user" ? [] : messageDelegate.messageImages
             }
+
         }
     }
 }

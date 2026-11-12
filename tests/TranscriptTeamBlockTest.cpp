@@ -161,6 +161,7 @@ void AgentWorkspaceViewTest::teamBlockOpensItsTask() {
     QQuickItem* toggle = nullptr;
     QTRY_VERIFY((toggle = findVisibleItem(root, "transcriptAgentNoteExpand")));
     QVERIFY(!findVisibleItem(root, "transcriptTeamBlock"));
+    QTRY_COMPARE(countVisible(root, "transcriptTeamBlockOpenTask"), 2);
     QVERIFY(QMetaObject::invokeMethod(toggle, "clicked"));
     QQuickItem* block = nullptr;
     QTRY_VERIFY((block = findVisibleItem(root, "transcriptTeamBlock")) != nullptr);
@@ -177,8 +178,7 @@ void AgentWorkspaceViewTest::teamBlockOpensItsTask() {
 
     // The assignment's Open T-3 asks for its task on the team the block names.
     view.resetMessages(transcriptOf(assignmentMessage()), "team-block-assignment");
-    QTRY_VERIFY((toggle = findVisibleItem(root, "transcriptAgentNoteExpand")));
-    QVERIFY(QMetaObject::invokeMethod(toggle, "clicked"));
+    // Task actions stay one click away even while the message body is collapsed.
     QQuickItem* open = nullptr;
     QTRY_VERIFY((open = findVisibleItem(root, "transcriptTeamBlockOpenTask")) != nullptr);
     QSignalSpy requested(&view, &ketplus::AgentWorkspaceView::teamTaskRequested);

@@ -678,15 +678,14 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(outgoingRows.first().toMap().value("title").toString(), "Message to @agent/1093");
         QCOMPARE(outgoingRows.first().toMap().value("meta").toString(),
                  "Held · waiting for approval there");
-        // Explicit agent/system origins use cards even without sender metadata.
+        // Ordinary owner input has no agent metadata and retains its bubble.
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});
         QCOMPARE(reply.value("meta").toString(), "From @agent/2044");
         QVariantMap own = message;
         own.insert("subtype", QString{});
         markAgentOrigin(own, {});
-        QCOMPARE(own.value("subtype").toString(), QStringLiteral("agentMessage"));
-        QCOMPARE(own.value("meta").toString(), QStringLiteral("From System"));
+        QCOMPARE(own.value("subtype").toString(), QString{});
     }
 
     // One note follows a sent message through its states and its reply, as the mock's.
@@ -973,7 +972,7 @@ class ProviderTranscriptTest : public QObject {
         QVariantMap request{{"kind", "user"}};
         markAgentOrigin(request,
                         QJsonArray{QJsonObject{{"kind", "review"}, {"from_number", "4821"}}});
-        QCOMPARE(request.value("meta").toString(), "From @agent/4821");
+        QCOMPARE(request.value("meta").toString(), "From @agent/4821 · Review request");
     }
 
     void cursorPartialToolUpdatesKeepInputsAndResults() {
