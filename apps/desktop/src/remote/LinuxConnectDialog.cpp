@@ -182,6 +182,10 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
     auto* modes = new ket::SegmentedControl({tr("SSH (free)"), tr("ketPlus Relay (Pro)")}, body);
     modes->setObjectName(QStringLiteral("linuxConnectMode"));
     layout->addWidget(modes, 0, Qt::AlignLeft);
+    // Without an attached SSH backend nothing would answer Connect, so only the Relay is offered.
+    const bool sshAvailable = model && model->backendsAttached();
+    if (!sshAvailable)
+        modes->hide();
     const SshPage ssh = makeSshPage(body);
     layout->addWidget(ssh.page);
     const RelayPage relay = makeRelayPage(body);
@@ -244,9 +248,15 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
         ssh.hostKey->hide();
         ssh.host->setEnabled(true);
         sshConnect->setEnabled(true);
+        ssh.host->setFocus();
     };
+    // Enter in the host field connects, as the dialog's primary action.
+    QObject::connect(ssh.host, &QLineEdit::returnPressed, sshConnect, [sshConnect] {
+        if (sshConnect->isVisible() && sshConnect->isEnabled())
+            sshConnect->click();
+    });
     QObject::connect(sshConnect, &QAbstractButton::clicked, dialog,
-                     [ssh, sshConnect, pendingHost, modelGuard] {
+                     [ssh, sshConnect, cancel, pendingHost, modelGuard] {
                          const QString host = ssh.host->text().trimmed();
                          if (const QString problem = validateSshHost(host); !problem.isEmpty()) {
                              showFeedback(ssh.feedback, problem, true);
@@ -256,6 +266,8 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                          *pendingHost = host;
                          ssh.host->setEnabled(false);
                          sshConnect->setEnabled(false);
+                         // Keep the keyboard in the card: Cancel ends the attempt.
+                         cancel->setFocus();
                          showFeedback(ssh.feedback, tr("Connecting to %1…").arg(host));
                          if (modelGuard)
                              modelGuard->requestSshConnect(host);
@@ -275,6 +287,8 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                 ssh.fingerprint->setProperty("fingerprint", fingerprint);
                 showFeedback(ssh.feedback, {});
                 ssh.hostKey->show();
+                // Focus the safe choice: Enter must never trust a key unread.
+                ssh.reject->setFocus();
             });
         QObject::connect(model, &LinuxMachineModel::sshFailed, dialog,
                          [ssh, pendingHost, resetSsh](const QString& host,
@@ -323,10 +337,11 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                          if (clientGuard)
                              clientGuard->cancelPairing();
                      });
-    QObject::connect(dialog, &QObject::destroyed, client, [clientGuard] {
-        if (clientGuard)
-            clientGuard->cancelPairing();
-    });
+    if (client)
+        QObject::connect(dialog, &QObject::destroyed, client, [clientGuard] {
+            if (clientGuard)
+                clientGuard->cancelPairing();
+        });
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
 
     // Relay: the existing pairing flow (#88): check the link, compare the digest, approve.
@@ -412,7 +427,7 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                 });
         });
 
-    const int index = initialMode == LinuxConnectMode::Ssh ? 0 : 1;
+    const int index = initialMode == LinuxConnectMode::Ssh && sshAvailable ? 0 : 1;
     modes->setCurrentIndex(index);
     showMode(index);
     dialog->open();

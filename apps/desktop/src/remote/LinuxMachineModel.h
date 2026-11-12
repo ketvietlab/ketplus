@@ -7,7 +7,7 @@
 
 namespace ketplus {
 
-// What Connections shows for one Linux machine (#419 scope item 4). The states are ADR 0118's;
+// What Connections shows for one Linux machine (#419 scope item 4). The states are ADR 0119's;
 // the backends (T-6) feed them, tests feed a fake. Nothing here reaches a host.
 struct LinuxMachine final {
     enum class Route { Ssh, Relay };
@@ -42,7 +42,15 @@ class LinuxMachineModel : public QObject {
     // The Relay's trusted machine ids, from the worktree index. SSH machines are kept.
     void setRelayMachines(const QStringList& ids);
 
+    // T-6 attaches the SSH and Relay backends that carry out the intents below. Until then
+    // nothing receives them, so the UI offers no SSH mode and no Connect or Disconnect, and a
+    // Relay machine reads "Available" as before this model.
+    [[nodiscard]] bool backendsAttached() const { return backendsAttached_; }
+    void setBackendsAttached(bool attached);
+
     // The Relay is a ketPlus Pro feature; the account service decides, this only mirrors it.
+    // Desktop has no entitlement source yet (T-6 feeds it), so every signed-in account may pair
+    // through the Relay, as before this model.
     [[nodiscard]] bool relayEntitled() const { return relayEntitled_; }
     void setRelayEntitled(bool entitled);
 
@@ -72,6 +80,7 @@ class LinuxMachineModel : public QObject {
   signals:
     void machinesChanged();
     void relayEntitledChanged(bool entitled);
+    void backendsAttachedChanged(bool attached);
     void hostKeyPresented(const QString& host, const QString& fingerprint);
     void sshFailed(const QString& host, ketplus::LinuxMachine::Error error, const QString& text);
     void sshConnected(const QString& host);
@@ -85,6 +94,7 @@ class LinuxMachineModel : public QObject {
   private:
     QList<LinuxMachine> machines_;
     bool relayEntitled_{true};
+    bool backendsAttached_{false};
 };
 
 // `host` is a ~/.ssh/config alias or [user@]host[:port]; an empty result means it is valid.

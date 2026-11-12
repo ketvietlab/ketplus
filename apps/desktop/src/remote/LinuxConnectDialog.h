@@ -20,7 +20,9 @@ class LinuxMachineModel;
 //
 // SSH takes a ~/.ssh/config alias or user@host[:port] and asks the model to connect. A host
 // not in known_hosts comes back as a host key to accept or reject before anything is trusted.
-// No mode has a password field: SSH authenticates with the user's keys or agent (ADR 0118).
+// No mode has a password field: SSH authenticates with the user's keys or agent (ADR 0119).
+//
+// Until the model's backends are attached (T-6) only the Relay mode is offered.
 //
 // The Relay mode is the existing pairing flow (a one-time ketplus:// link from ketplusctl and
 // the claim digest check). Without the Pro entitlement it explains that instead of pairing.

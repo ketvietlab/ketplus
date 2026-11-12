@@ -1,7 +1,7 @@
 # Linux machines in Connections (#419)
 
 Side by side of the mock and the app for the Linux rows, the "Connect a Linux
-machine" dialog and a machine's Details (ADR 0118 states). Both were rendered
+machine" dialog and a machine's Details (ADR 0119 states). Both were rendered
 offscreen.
 
 - Mock: `KetPlusMock --screen=connections --size=1280x1640` and
@@ -19,7 +19,12 @@ offscreen.
 
 Known differences:
 
-- The app's error row also prints what to do under the detail line. The
-  mock's card shows only the badge.
+- The app's error row also prints what to do under the detail line, with the
+  command on a line of its own so it never wraps at its hyphen. The mock's
+  card shows only the badge.
 - The app's Details card is 540 px wide instead of 500 px. At the app's font
   metrics, the full SHA256 key needs that width to stay on one line.
+- The app captures set `LinuxMachineModel::setBackendsAttached(true)`: they
+  show the UI as it will be once T-6 attaches the SSH and Relay backends.
+  Until then the SSH mode and Connect / Disconnect are hidden and a Relay
+  machine reads "Available".

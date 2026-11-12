@@ -67,6 +67,13 @@ void LinuxMachineModel::setRelayMachines(const QStringList& ids) {
     setMachines(std::move(next));
 }
 
+void LinuxMachineModel::setBackendsAttached(const bool attached) {
+    if (backendsAttached_ == attached)
+        return;
+    backendsAttached_ = attached;
+    emit backendsAttachedChanged(attached);
+}
+
 void LinuxMachineModel::setRelayEntitled(const bool entitled) {
     if (relayEntitled_ == entitled)
         return;
@@ -109,14 +116,15 @@ QString LinuxMachineModel::errorMessage(const LinuxMachine::Error error, const Q
     case LinuxMachine::Error::None:
         return {};
     case LinuxMachine::Error::HostKeyMismatch:
+        // Each command sits on a line of its own: it never wraps at its hyphen and copies whole.
         return tr("The host key of %1 does not match the one in known_hosts, so ketPlus did not "
-                  "connect. If the machine was reinstalled, check its new key on the machine "
-                  "and remove the old entry with ssh-keygen -R %1, then connect again.")
+                  "connect. If the machine was reinstalled, check its new key on the machine, "
+                  "remove the old entry and connect again:\nssh-keygen -R %1")
             .arg(host);
     case LinuxMachine::Error::AuthenticationFailed:
-        return tr("%1 did not accept your SSH keys. Add your key to the SSH agent with ssh-add "
-                  "or name it for this host in ~/.ssh/config, then connect again. ketPlus does "
-                  "not use SSH passwords.")
+        return tr("%1 did not accept your SSH keys. ketPlus does not use SSH passwords. Name "
+                  "your key for this host in ~/.ssh/config, or add it to the SSH agent and "
+                  "connect again:\nssh-add")
             .arg(host);
     case LinuxMachine::Error::DaemonNotInstalled:
         return tr("The ketPlus daemon is not installed on %1. Install it for this user on the "

@@ -775,6 +775,8 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
              auditEntry("m5", "session.configuration.apply", "tablet-1", "ok", now.addDays(-3),
                         "s5", true, "Release notes draft")});
         remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->client_);
+        // The evidence shows the UI as it will be with T-6's backends attached.
+        view.linuxMachines_->model()->setBackendsAttached(true);
         // The mock's Linux machines: SSH connected, Relay offline, SSH with a changed host key.
         const auto machine = [](const QString& name, const QString& detail,
                                 LinuxMachine::Route route, LinuxMachine::State state,

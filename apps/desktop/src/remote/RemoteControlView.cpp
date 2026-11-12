@@ -521,7 +521,9 @@ QWidget* RemoteControlView::createControlPage() {
         // Linux pairing goes through its own account, so only phones wait for this Mac's relay.
         phone->setEnabled(!offline_ && !requestInFlight_);
         auto* linux = menu.addAction(tr("Connect a Linux machine"));
-        linux->setToolTip(tr("Over SSH or the ketPlus Relay"));
+        linux->setToolTip(linuxMachines_ && linuxMachines_->model()->backendsAttached()
+                              ? tr("Over SSH or the ketPlus Relay")
+                              : tr("Through the ketPlus Relay"));
         const auto* chosen = menu.exec(pairButton_->mapToGlobal(QPoint(0, pairButton_->height())));
         if (chosen == phone)
             createPairing();

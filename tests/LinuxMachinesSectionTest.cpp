@@ -43,6 +43,10 @@ class LinuxMachinesSectionTest final : public QObject {
     void sshFailuresAreActionable();
     void relayModeOpensPairingAndRespectsTheEntitlement();
     void relayRefreshKeepsSshMachines();
+    void withoutBackendsOnlyTheRelayIsOffered();
+    void signedOutOffersSshWithoutAnAccount();
+    void detailsFollowTheModel();
+    void enterConnectsAndAHostKeyFocusesReject();
 
   private:
     static LinuxMachine make(const QString& id, const QString& name, const QString& detail,
@@ -126,6 +130,7 @@ void LinuxMachinesSectionTest::rowsShowStateRouteAndErrors() {
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
+    section.model()->setBackendsAttached(true);
     remote::RemoteControlTestAccess::signIn(*section.client_);
     QSignalSpy changed(&section, &LinuxMachinesSection::machinesChanged);
     section.model()->setMachines(fleet());
@@ -169,6 +174,7 @@ void LinuxMachinesSectionTest::rowButtonsAndDetailsEmitIntents() {
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
+    section.model()->setBackendsAttached(true);
     auto* model = section.model();
     model->setMachines(fleet());
     QSignalSpy connects(model, &LinuxMachineModel::connectRequested);
@@ -218,6 +224,7 @@ void LinuxMachinesSectionTest::sshModeAcceptsAndRejectsAFirstUseHostKey() {
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
+    section.model()->setBackendsAttached(true);
     auto* model = section.model();
     QSignalSpy requests(model, &LinuxMachineModel::sshConnectRequested);
     QSignalSpy decisions(model, &LinuxMachineModel::hostKeyDecided);
@@ -304,6 +311,7 @@ void LinuxMachinesSectionTest::sshFailuresAreActionable() {
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
+    section.model()->setBackendsAttached(true);
     auto* model = section.model();
     section.beginPairing();
     auto* dialog = connectDialog(section);
@@ -337,6 +345,7 @@ void LinuxMachinesSectionTest::relayModeOpensPairingAndRespectsTheEntitlement() 
     LinuxMachinesSection section;
     section.resize(760, 720);
     section.show();
+    section.model()->setBackendsAttached(true);
     const auto open = [&section] {
         section.beginPairing();
         auto* dialog = connectDialog(section);
@@ -404,6 +413,147 @@ void LinuxMachinesSectionTest::relayRefreshKeepsSshMachines() {
     QCOMPARE(model.machine("relay-2")->state, State::Connected);
     model.setRelayMachines({});
     QCOMPARE(model.machines().size(), 4);
+}
+
+void LinuxMachinesSectionTest::withoutBackendsOnlyTheRelayIsOffered() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    QVERIFY(!section.model()->backendsAttached());
+    section.model()->setRelayMachines({QStringLiteral("relay-1")});
+    // As before the model: listed by the Relay, "Available", nothing to connect or disconnect.
+    auto* card = row(section, "relay-1");
+    QVERIFY(card);
+    QCOMPARE(text(card, QStringLiteral("linuxMachineState")), QStringLiteral("Available"));
+    QVERIFY(!button(card, QStringLiteral("linuxMachineToggle")));
+    button(card, QStringLiteral("linuxMachineDetails"))->click();
+    auto* details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsState")), QStringLiteral("Available"));
+    QVERIFY(!button(details, QStringLiteral("linuxDetailsConnect")));
+    QVERIFY(!button(details, QStringLiteral("linuxDetailsDisconnect")));
+    details->reject();
+    QTRY_VERIFY(
+        !section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+
+    // The card offers the Relay only: no SSH mode would be answered.
+    section.beginPairing();
+    auto* dialog = connectDialog(section);
+    QVERIFY(dialog && dialog->isOpen());
+    QVERIFY(!dialog->findChild<ket::SegmentedControl*>(QStringLiteral("linuxConnectMode"))
+                 ->isVisible());
+    QVERIFY(!dialog->findChild<QWidget*>(QStringLiteral("linuxSshPage"))->isVisible());
+    QVERIFY(dialog->findChild<QWidget*>(QStringLiteral("linuxRelayPage"))->isVisible());
+    dialog->reject();
+    QTRY_VERIFY(!connectDialog(section));
+
+    // Attaching the backends brings SSH and the row actions back.
+    section.model()->setBackendsAttached(true);
+    card = row(section, "relay-1");
+    QCOMPARE(text(card, QStringLiteral("linuxMachineState")), QStringLiteral("Connected"));
+    QVERIFY(button(card, QStringLiteral("linuxMachineToggle")));
+}
+
+void LinuxMachinesSectionTest::signedOutOffersSshWithoutAnAccount() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.setPairingEntryShown(true);
+    section.show();
+    const auto entry = [&section] {
+        return section.findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));
+    };
+    const auto signIn = [&section] {
+        return section.findChild<QAbstractButton*>(QStringLiteral("linuxMachinesSignIn"));
+    };
+    const auto messages = [&section] {
+        QString all;
+        for (auto* label : section.findChildren<QLabel*>())
+            if (label->property("remoteRole").toString() == QStringLiteral("emptyText"))
+                all += label->text();
+        return all;
+    };
+    // Without backends: the Relay's sign-in only, in ketPlus words.
+    QVERIFY(!entry());
+    QVERIFY(signIn());
+    QVERIFY(!messages().contains(QStringLiteral("KetSuite")));
+
+    section.model()->setBackendsAttached(true);
+    QVERIFY(entry());
+    QVERIFY(signIn());
+    QVERIFY2(messages().contains(QStringLiteral("SSH")), qPrintable(messages()));
+    QVERIFY(messages().contains(QStringLiteral("no account")));
+    entry()->click();
+    auto* dialog = connectDialog(section);
+    QVERIFY(dialog && dialog->isOpen());
+    QVERIFY(dialog->findChild<QWidget*>(QStringLiteral("linuxSshPage"))->isVisible());
+    dialog->reject();
+    QTRY_VERIFY(!connectDialog(section));
+
+    // Signed in with no machines, the empty state names both routes.
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    section.render();
+    QVERIFY2(messages().contains(QStringLiteral("SSH")), qPrintable(messages()));
+    QVERIFY(messages().contains(QStringLiteral("Relay")));
+    QVERIFY(entry());
+}
+
+void LinuxMachinesSectionTest::detailsFollowTheModel() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    model->setMachines(fleet());
+    button(row(section, "ssh-1"), QStringLiteral("linuxMachineDetails"))->click();
+    auto* details =
+        section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog"));
+    QVERIFY(details && details->isOpen());
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsState")), QStringLiteral("Connected"));
+    auto* error = details->findChild<QLabel*>(QStringLiteral("linuxDetailsError"));
+    QVERIFY(error->isHidden());
+    QVERIFY(button(details, QStringLiteral("linuxDetailsDisconnect"))->isEnabled());
+
+    // The machine drops while the card is open: the card says so and offers Connect.
+    auto changed = fleet().first();
+    changed.state = State::Offline;
+    changed.error = Error::AuthenticationFailed;
+    model->upsert(changed);
+    QCOMPARE(text(details, QStringLiteral("linuxDetailsState")), QStringLiteral("SSH key refused"));
+    QVERIFY(!error->isHidden());
+    QVERIFY(error->text().contains(QStringLiteral("ssh-add")));
+    QVERIFY(button(details, QStringLiteral("linuxDetailsConnect"))->isEnabled());
+    QVERIFY(!button(details, QStringLiteral("linuxDetailsDisconnect"))->isEnabled());
+
+    // The machine is removed: the card closes rather than describe a machine that is gone.
+    model->setMachines({});
+    QTRY_VERIFY(
+        !section.window()->findChild<ket::Dialog*>(QStringLiteral("linuxMachineDetailsDialog")));
+}
+
+void LinuxMachinesSectionTest::enterConnectsAndAHostKeyFocusesReject() {
+    LinuxMachinesSection section;
+    section.resize(760, 720);
+    section.show();
+    QVERIFY(QTest::qWaitForWindowActive(&section));
+    auto* model = section.model();
+    model->setBackendsAttached(true);
+    QSignalSpy requests(model, &LinuxMachineModel::sshConnectRequested);
+    section.beginPairing();
+    auto* dialog = connectDialog(section);
+    QVERIFY(dialog);
+    auto* host = dialog->findChild<QLineEdit*>(QStringLiteral("linuxSshHost"));
+    host->setText(QStringLiteral("build-node-06"));
+    QTest::keyClick(host, Qt::Key_Return);
+    QCOMPARE(requests.size(), 1);
+    QCOMPARE(requests.first().first().toString(), QStringLiteral("build-node-06"));
+    // A second Enter while connecting asks nothing more.
+    QTest::keyClick(host, Qt::Key_Return);
+    QCOMPARE(requests.size(), 1);
+    model->presentHostKey(QStringLiteral("build-node-06"), QStringLiteral("SHA256:abc"));
+    QTRY_VERIFY(button(dialog, QStringLiteral("linuxSshRejectKey"))->hasFocus());
+    dialog->reject();
 }
 
 } // namespace ketplus

@@ -2,9 +2,7 @@
 #include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
-#include "KetFieldRow.h"
 #include "KetIcons.h"
-#include "KetTextField.h"
 #include "KetTokens.h"
 
 #include "KetPlusProductVersion.h"
@@ -12,25 +10,19 @@
 #include "remote/LinuxConnectDialog.h"
 #include "remote/LinuxMachineRow.h"
 
-#include <QCheckBox>
 #include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPointer>
-#include <QPushButton>
 #include <QSet>
 #include <QStyle>
 #include <QUrl>
-#include <QUrlQuery>
 #include <QVBoxLayout>
-#include <memory>
 
 namespace ketplus {
-namespace {} // namespace
 
 LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     : QWidget(parent), client_(new remote::ControlV2Client(
@@ -124,6 +116,8 @@ void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
         }
         emit machinesChanged(ids, names);
     });
+    connect(model_, &LinuxMachineModel::backendsAttachedChanged, this,
+            &LinuxMachinesSection::render);
     connect(model_, &QObject::destroyed, this, [this] {
         model_ = nullptr;
         setModel(new LinuxMachineModel(this));
@@ -178,37 +172,52 @@ void LinuxMachinesSection::render() {
         for (const auto& machine : machines)
             rows_->addWidget(makeLinuxMachineRow(machine, model_, this));
     };
+    // SSH needs no account, so it is offered signed out too, once a backend can carry it.
+    const bool ssh = model_->backendsAttached();
+    const auto addConnectButton = [this](QBoxLayout* layout, const ket::ButtonVariant variant) {
+        auto* connectButton = new ket::Button(tr("Connect a Linux machine"), variant, this);
+        connectButton->setObjectName(QStringLiteral("linuxMachinesConnect"));
+        connect(connectButton, &QAbstractButton::clicked, this,
+                &LinuxMachinesSection::beginPairing);
+        layout->addWidget(connectButton, 0, Qt::AlignLeft);
+    };
     if (!client_->signedIn()) {
-        // SSH machines need no account; the Relay does.
         addRows();
-        auto* layout = message(tr("Sign in with the same KetSuite account used by the headless "
-                                  "Linux daemon."));
-        auto* signInButton = new ket::Button(tr("Sign in to connect a Linux machine"),
-                                             ket::ButtonVariant::Primary, this);
+        auto* layout = message(
+            ssh ? tr("Connect over SSH with your own SSH keys; no account is needed. To pair "
+                     "through the ketPlus Relay, sign in with the account the Linux daemon uses.")
+                : tr("Sign in with the account the Linux daemon uses to pair it through the "
+                     "ketPlus Relay."));
+        auto* actions = new QHBoxLayout;
+        actions->setSpacing(8);
+        if (ssh && pairingEntryShown_)
+            addConnectButton(actions, ket::ButtonVariant::Primary);
+        auto* signInButton = new ket::Button(
+            ssh ? tr("Sign in for the Relay") : tr("Sign in to connect a Linux machine"),
+            ssh && pairingEntryShown_ ? ket::ButtonVariant::Secondary : ket::ButtonVariant::Primary,
+            this);
+        signInButton->setObjectName(QStringLiteral("linuxMachinesSignIn"));
         connect(signInButton, &QAbstractButton::clicked, this, &LinuxMachinesSection::signIn);
-        layout->addWidget(signInButton, 0, Qt::AlignLeft);
+        actions->addWidget(signInButton, 0, Qt::AlignLeft);
+        actions->addStretch(1);
+        layout->addLayout(actions);
         return;
     }
     if (loading_ && machines.isEmpty()) {
         message(tr("Loading trusted machines…"));
         return;
     }
-    const auto addConnectButton = [this](QBoxLayout* layout) {
-        auto* connectButton =
-            new ket::Button(tr("Connect a Linux machine"), ket::ButtonVariant::Secondary, this);
-        connectButton->setObjectName(QStringLiteral("linuxMachinesConnect"));
-        connect(connectButton, &QAbstractButton::clicked, this,
-                &LinuxMachinesSection::beginPairing);
-        layout->addWidget(connectButton, 0, Qt::AlignLeft);
-    };
     if (machines.isEmpty()) {
-        if (pairingEntryShown_) {
-            addConnectButton(message(tr("No Linux machines yet. Start pairing on the Linux "
-                                        "daemon, then paste its one-time pairing link here.")));
-        } else {
-            message(tr("No Linux machines yet. Start pairing on the Linux daemon, then choose "
-                       "Add › Connect a Linux machine and paste its one-time pairing link."));
-        }
+        const QString how =
+            ssh ? tr("No Linux machines yet. Connect one over SSH with a host from your "
+                     "~/.ssh/config, or pair one through the ketPlus Relay with the one-time "
+                     "link from ketplusctl pairing create.")
+                : tr("No Linux machines yet. Run ketplusctl pairing create on the Linux machine, "
+                     "then paste the one-time pairing link it shows.");
+        if (pairingEntryShown_)
+            addConnectButton(message(how), ket::ButtonVariant::Secondary);
+        else
+            message(how + QLatin1Char(' ') + tr("Choose Add › Connect a Linux machine to start."));
         return;
     }
     addRows();
@@ -216,13 +225,13 @@ void LinuxMachinesSection::render() {
         auto* footer = new QWidget(this);
         auto* layout = new QHBoxLayout(footer);
         layout->setContentsMargins(0, 0, 0, 0);
-        addConnectButton(layout);
+        addConnectButton(layout, ket::ButtonVariant::Secondary);
         rows_->addWidget(footer);
     }
 }
 
 void LinuxMachinesSection::signIn() {
-    setNotice(tr("Opening KetSuite sign-in…"));
+    setNotice(tr("Opening account sign-in…"));
     client_->startSignIn([this](const QJsonValue& value, const QString& error) {
         if (!error.isEmpty()) {
             setNotice(error, true);

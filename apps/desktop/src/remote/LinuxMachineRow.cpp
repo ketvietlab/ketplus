@@ -20,9 +20,13 @@ namespace {
 
 QString tr(const char* text) { return QCoreApplication::translate("LinuxMachineRow", text); }
 
-QString badgeTone(const LinuxMachine& machine) {
+bool attached(const LinuxMachineModel* model) { return model && model->backendsAttached(); }
+
+QString badgeTone(const LinuxMachine& machine, const bool backendsAttached) {
     if (machine.error != LinuxMachine::Error::None)
         return QStringLiteral("danger");
+    if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
+        return QStringLiteral("positive");
     switch (machine.state) {
     case LinuxMachine::State::Connected:
         return QStringLiteral("positive");
@@ -59,9 +63,11 @@ QString errorText(const LinuxMachine& machine) {
 
 } // namespace
 
-QString linuxMachineBadgeText(const LinuxMachine& machine) {
+QString linuxMachineBadgeText(const LinuxMachine& machine, const bool backendsAttached) {
     switch (machine.error) {
     case LinuxMachine::Error::None:
+        if (!backendsAttached && machine.route == LinuxMachine::Route::Relay)
+            return tr("Available");
         return LinuxMachineModel::stateText(machine.state);
     case LinuxMachine::Error::HostKeyMismatch:
         return tr("Host key changed");
@@ -107,7 +113,8 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     auto* name = roleLabel(machine.name, "deviceName", row);
     name->setTextInteractionFlags(Qt::TextSelectableByMouse);
     nameLine->addWidget(name);
-    auto* state = badge(linuxMachineBadgeText(machine), badgeTone(machine), row);
+    const bool live = attached(model);
+    auto* state = badge(linuxMachineBadgeText(machine, live), badgeTone(machine, live), row);
     state->setObjectName(QStringLiteral("linuxMachineState"));
     state->setAccessibleName(tr("Machine %1: %2").arg(machine.name, state->text()));
     nameLine->addWidget(state);
@@ -136,12 +143,13 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     const QPointer<LinuxMachineModel> guard(model);
     const QString id = machine.id;
     QObject::connect(details, &QAbstractButton::clicked, row, [guard, id, row] {
-        if (!guard)
-            return;
-        if (const auto* current = guard->machine(id))
-            showLinuxMachineDetails(*current, guard, row);
+        if (guard)
+            showLinuxMachineDetails(id, guard, row);
     });
     layout->addWidget(details, 0, Qt::AlignVCenter);
+    // Nothing would carry out Connect or Disconnect before the backends are attached.
+    if (!live)
+        return row;
     const bool connect = offersConnect(machine);
     auto* toggle =
         new ket::Button(connect ? tr("Connect") : tr("Disconnect"), ket::ButtonVariant::Ghost, row);
@@ -155,8 +163,11 @@ QFrame* makeLinuxMachineRow(const LinuxMachine& machine, LinuxMachineModel* mode
     return row;
 }
 
-void showLinuxMachineDetails(const LinuxMachine& machine, LinuxMachineModel* model,
-                             QWidget* anchor) {
+void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidget* anchor) {
+    const auto* initial = model ? model->machine(id) : nullptr;
+    if (!initial)
+        return;
+    const LinuxMachine machine = *initial;
     auto* dialog = new ket::Dialog(machine.name, anchor);
     dialog->setObjectName(QStringLiteral("linuxMachineDetailsDialog"));
     // Wider than the mock's 500 px: the whole SHA256 key must show to be compared.
@@ -169,63 +180,87 @@ void showLinuxMachineDetails(const LinuxMachine& machine, LinuxMachineModel* mod
     form->setVerticalSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    const auto value = [body](const QString& text, const char* objectName) {
-        auto* label = new QLabel(text, body);
+    const auto value = [body](const char* objectName) {
+        auto* label = new QLabel(body);
         label->setObjectName(QString::fromLatin1(objectName));
         label->setWordWrap(true);
         label->setTextInteractionFlags(Qt::TextSelectableByMouse);
         return label;
     };
-    form->addRow(tr("Route"), value(machine.route == LinuxMachine::Route::Ssh
-                                        ? tr("SSH, with your SSH keys and known_hosts")
-                                        : tr("ketPlus Relay, end-to-end encrypted"),
-                                    "linuxDetailsRoute"));
-    form->addRow(tr("State"), value(linuxMachineBadgeText(machine), "linuxDetailsState"));
-    const bool verified = !machine.fingerprint.isEmpty();
-    auto* fingerprint =
-        value(verified ? machine.fingerprint : tr("Not verified yet"), "linuxDetailsFingerprint");
-    if (verified) {
-        QFont mono = fingerprint->font();
-        if (const QString family = ket::Profile::current().monoFamily(); !family.isEmpty())
-            mono.setFamily(family);
-        mono.setStyleHint(QFont::Monospace);
-        mono.setPixelSize(13); // the mock's 13 px, so a SHA256 key fits the card on one line
-        fingerprint->setFont(mono);
-        // A key has no spaces to wrap at: let it shrink rather than push the label column.
-        fingerprint->setWordWrap(false);
-        fingerprint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        fingerprint->setToolTip(machine.fingerprint);
-    }
+    auto* route = value("linuxDetailsRoute");
+    route->setText(machine.route == LinuxMachine::Route::Ssh
+                       ? tr("SSH, with your SSH keys and known_hosts")
+                       : tr("ketPlus Relay, end-to-end encrypted"));
+    form->addRow(tr("Route"), route);
+    auto* state = value("linuxDetailsState");
+    form->addRow(tr("State"), state);
+    auto* fingerprint = value("linuxDetailsFingerprint");
+    const QFont plain = fingerprint->font();
+    QFont mono = plain;
+    if (const QString family = ket::Profile::current().monoFamily(); !family.isEmpty())
+        mono.setFamily(family);
+    mono.setStyleHint(QFont::Monospace);
+    mono.setPixelSize(13); // the mock's 13 px, so a SHA256 key fits the card on one line
     form->addRow(machine.route == LinuxMachine::Route::Ssh ? tr("Host key") : tr("Host identity"),
                  fingerprint);
-    if (verified)
-        form->addRow(QString(), value(tr("Verified"), "linuxDetailsVerified"));
-    if (machine.error != LinuxMachine::Error::None) {
-        auto* error = value(errorText(machine), "linuxDetailsError");
-        error->setProperty("remoteTone", QStringLiteral("danger"));
-        form->addRow(error);
-    }
+    auto* verifiedLabel = value("linuxDetailsVerified");
+    verifiedLabel->setText(tr("Verified"));
+    form->addRow(QString(), verifiedLabel);
+    auto* error = value("linuxDetailsError");
+    error->setProperty("remoteTone", QStringLiteral("danger"));
+    form->addRow(error);
     dialog->setBody(body);
     auto* close = dialog->addButton(tr("Close"), ket::ButtonVariant::Ghost);
     QObject::connect(close, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     const QPointer<LinuxMachineModel> guard(model);
-    const QString id = machine.id;
-    auto* disconnect = dialog->addButton(tr("Disconnect"));
-    disconnect->setObjectName(QStringLiteral("linuxDetailsDisconnect"));
-    disconnect->setEnabled(!offersConnect(machine));
-    QObject::connect(disconnect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
-        if (guard)
-            guard->requestDisconnect(id);
-        dialog->accept();
-    });
-    auto* connect = dialog->addButton(tr("Connect"), ket::ButtonVariant::Primary);
-    connect->setObjectName(QStringLiteral("linuxDetailsConnect"));
-    connect->setEnabled(offersConnect(machine));
-    QObject::connect(connect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
-        if (guard)
-            guard->requestConnect(id);
-        dialog->accept();
-    });
+    ket::Button* disconnect = nullptr;
+    ket::Button* connect = nullptr;
+    // Nothing would carry out Connect or Disconnect before the backends are attached.
+    if (model->backendsAttached()) {
+        disconnect = dialog->addButton(tr("Disconnect"));
+        disconnect->setObjectName(QStringLiteral("linuxDetailsDisconnect"));
+        QObject::connect(disconnect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestDisconnect(id);
+            dialog->accept();
+        });
+        connect = dialog->addButton(tr("Connect"), ket::ButtonVariant::Primary);
+        connect->setObjectName(QStringLiteral("linuxDetailsConnect"));
+        QObject::connect(connect, &QAbstractButton::clicked, dialog, [guard, id, dialog] {
+            if (guard)
+                guard->requestConnect(id);
+            dialog->accept();
+        });
+    }
+    // What can change while the card is open: the state, the key once verified, the error.
+    const auto refresh = [guard, id, dialog, form, state, fingerprint, verifiedLabel, error,
+                          connect, disconnect, plain, mono] {
+        const auto* current = guard ? guard->machine(id) : nullptr;
+        if (!current) {
+            dialog->reject();
+            return;
+        }
+        state->setText(linuxMachineBadgeText(*current, guard->backendsAttached()));
+        const bool verified = !current->fingerprint.isEmpty();
+        fingerprint->setText(verified ? current->fingerprint : tr("Not verified yet"));
+        fingerprint->setFont(verified ? mono : plain);
+        // A key has no spaces to wrap at: let it shrink rather than push the label column.
+        fingerprint->setWordWrap(!verified);
+        fingerprint->setSizePolicy(verified ? QSizePolicy::Ignored : QSizePolicy::Preferred,
+                                   QSizePolicy::Preferred);
+        fingerprint->setToolTip(verified ? current->fingerprint : QString());
+        form->setRowVisible(verifiedLabel, verified);
+        const bool failed = current->error != LinuxMachine::Error::None;
+        if (failed)
+            error->setText(errorText(*current));
+        form->setRowVisible(error, failed);
+        if (connect)
+            connect->setEnabled(offersConnect(*current));
+        if (disconnect)
+            disconnect->setEnabled(!offersConnect(*current));
+    };
+    refresh();
+    QObject::connect(model, &LinuxMachineModel::machinesChanged, dialog, refresh);
     dialog->open();
 }
 
