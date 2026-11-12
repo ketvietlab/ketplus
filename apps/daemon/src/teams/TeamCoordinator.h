@@ -401,11 +401,22 @@ class TeamCoordinator : public QObject {
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
-    // (`failure` set). `noFindings` is the verdict line of ADR 0067.
+    // (`failure` set). `noFindings` is the verdict line of ADR 0067; a reply without that
+    // line has no verdict and is not counted (T-19).
     // `messageId` is the review request that ended. A review is bound to its request from
     // the moment it starts, sent or still held, so a request with another id is ignored.
     void reviewFinished(const QString& reviewerSession, const QString& messageId,
                         const QString& text, bool noFindings, const QString& failure = {});
+    // T-19 (TeamCoordinatorReviewTools.cpp), the leader's: void the last recorded verdict of
+    // a task, which goes back to In review with its round counted once less; or accept a
+    // review made outside the board, which makes a task in review, or blocked by its review,
+    // Ready.
+    TeamResult voidReview(qint64 teamId, const QString& taskId, const QString& reason,
+                          const QString& actor);
+    TeamResult acceptReview(qint64 teamId, const QString& taskId, const QString& evidence,
+                            const QString& reason, const QString& actor);
+    // How many times a reply without a verdict is answered by asking the reviewer again.
+    static constexpr int verdictRetries = 1;
 
     // The quiet period after which an idle leader receives the digest (ADR 0114 §7).
     static constexpr int defaultQuietPeriodMs = 20000;
@@ -504,6 +515,10 @@ class TeamCoordinator : public QObject {
     // Starts the review the diff was read for, if that task is still the next one as it was.
     void startReview(qint64 teamId, const Task& asked, const QString& repository,
                      const QString& integration, const std::optional<TaskDiff>& diff);
+    // The questions of a task the review blocked.
+    [[nodiscard]] static QString noVerdictQuestion(int round, int replies);
+    [[nodiscard]] static QString roundLimitQuestion(int round, int maxRounds);
+    [[nodiscard]] static bool blockedByReview(const Task& task);
     [[nodiscard]] static QString reviewText(const Team& team, const Task& task,
                                             const std::optional<TaskDiff>& diff);
     // Restarts the quiet period of the team's digest.

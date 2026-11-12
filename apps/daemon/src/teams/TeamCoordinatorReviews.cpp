@@ -3,9 +3,9 @@
 // finished turn, queued first in first out instead of skipped.
 #include "teams/TeamCoordinator.h"
 
-#include <QUuid>
+#include "agents/ReviewVerdict.h"
 
-#include <QRegularExpression>
+#include <QUuid>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -34,6 +34,19 @@ const Task* nextInReview(const Team& team) {
 }
 
 } // namespace
+
+QString TeamCoordinator::noVerdictQuestion(const int round, const int replies) {
+    return QStringLiteral("The review of round %1 has no verdict after %2 replies. Accept it "
+                          "with team_review_accept, or hand the task to review again.")
+        .arg(round)
+        .arg(replies);
+}
+
+QString TeamCoordinator::roundLimitQuestion(const int round, const int maxRounds) {
+    return QStringLiteral("Review round limit reached (%1 of %2) with findings.")
+        .arg(round)
+        .arg(maxRounds);
+}
 
 QString TeamCoordinator::reviewText(const Team& team, const Task& task,
                                     const std::optional<TaskDiff>& diff) {
@@ -65,6 +78,10 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
             lines << QStringLiteral("The diff was shortened to fit one message; read the rest "
                                     "in the worktree.");
     }
+    if (task.missingVerdicts > 0)
+        lines << QString{}
+              << QStringLiteral("Your last reply to this round had no verdict line, so it was "
+                                "not counted. Review again and end with the verdict line.");
     lines << QString{}
           << QStringLiteral("Review read-only against the criteria: say for each one whether it "
                             "is met, then each finding with file, line, severity and a one-line "
@@ -132,7 +149,10 @@ void TeamCoordinator::startReview(const qint64 teamId, const Task& asked, const 
     team->reviewingMessage = requestId;
     const QString reviewerSession = reviewer->sessionId;
     addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review"),
-               QStringLiteral("Review round %1 of %2 sent to %3.")
+               (task->missingVerdicts > 0
+                    ? QStringLiteral("Review round %1 of %2 sent to %3 again: the last reply had "
+                                     "no verdict.")
+                    : QStringLiteral("Review round %1 of %2 sent to %3."))
                    .arg(task->round)
                    .arg(team->maxRounds)
                    .arg(reviewer->name),
@@ -177,9 +197,14 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
     Task* task = team->task(taskId);
     QList<Update> updates;
     std::optional<TeamMessage> back;
+    bool askAgain = false;
+    // T-19: a reply without a verdict line is neither findings nor no findings.
+    const bool noVerdict = !noFindings && reviewVerdict(text) == ReviewVerdict::none;
     if (task && task->state == state::inReview) {
         const QString findings = utf8Prefix(text.trimmed(), findingsBytes);
         const int round = task->round;
+        if (failure.isEmpty() && !noVerdict)
+            task->missingVerdicts = 0;
         if (!failure.isEmpty()) {
             task->resumeState = state::inProgress;
             task->question = QStringLiteral("The review of round %1 did not finish (%2). Hand "
@@ -188,6 +213,32 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                                  .arg(failure);
             applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                       updates);
+        } else if (noVerdict) {
+            // Not counted: the round is asked again, as the same round, a bounded number of
+            // times; then the leader is asked once.
+            --task->round;
+            ++task->missingVerdicts;
+            askAgain = task->missingVerdicts <= verdictRetries;
+            addHistory(*task, reviewerSession, QStringLiteral("verdict"),
+                       (askAgain ? QStringLiteral("Round %1: no verdict. The reply had no verdict "
+                                                  "line; the round is not counted and the "
+                                                  "reviewer is asked again.")
+                                 : QStringLiteral("Round %1: no verdict again. The round is not "
+                                                  "counted; the leader decides."))
+                           .arg(round),
+                       {{QStringLiteral("verdict"), verdictName(ReviewVerdict::none)},
+                        {QStringLiteral("round"), round},
+                        {QStringLiteral("text"), findings}});
+            if (askAgain) {
+                team->reviewQueue.removeAll(taskId);
+                team->reviewQueue.prepend(taskId);
+            } else {
+                // One line for the leader: the blocked task says why.
+                task->resumeState = state::inProgress;
+                task->question = noVerdictQuestion(round, task->missingVerdicts);
+                applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
+                          updates);
+            }
         } else if (noFindings) {
             addHistory(*task, reviewerSession, QStringLiteral("verdict"),
                        QStringLiteral("Round %1: no findings.").arg(round),
@@ -206,10 +257,7 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
             if (round >= team->maxRounds) {
                 // Past the limit the leader decides (ADR 0114 §2).
                 task->resumeState = state::inProgress;
-                task->question = QStringLiteral("Review round limit reached (%1 of %2) with "
-                                                "findings.")
-                                     .arg(round)
-                                     .arg(team->maxRounds);
+                task->question = roundLimitQuestion(round, team->maxRounds);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
                 updates.append({.kind = QStringLiteral("round_limit"),
@@ -221,10 +269,6 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
             } else {
                 applyMove(*team, *task, state::inProgress, QStringLiteral("daemon"),
                           QStringLiteral("review round %1 found issues").arg(round), updates);
-                static const QRegularExpression verdictLine(
-                    QStringLiteral("^\\W*verdict\\W*:"), QRegularExpression::CaseInsensitiveOption |
-                                                             QRegularExpression::MultilineOption);
-                const bool noVerdict = !verdictLine.match(text).hasMatch();
                 back = TeamMessage{
                     .teamId = team->id,
                     .teamName = team->name,
@@ -238,9 +282,6 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
                                 .arg(team->name, taskId, task->title)
                                 .arg(round)
                                 .arg(team->maxRounds),
-                            noVerdict ? QStringLiteral("(The reply had no verdict line, so it "
-                                                       "counts as findings.)")
-                                      : QString{},
                             QString{}, findings, QString{},
                             QStringLiteral("Fix them, commit, and move the task to in_review again "
                                            "with team_task_update.")}
@@ -252,6 +293,8 @@ void TeamCoordinator::reviewFinished(const QString& reviewerSession, const QStri
         return;
     if (back)
         wake(*team, *back);
+    if (askAgain)
+        pumpReviews(team->id);
 }
 
 } // namespace ketplus::daemon::teams

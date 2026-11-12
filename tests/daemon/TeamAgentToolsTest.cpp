@@ -176,6 +176,22 @@ class TeamAgentToolsTest final : public QObject {
                              {"reason", "docs too"}})
                     .value("ok")
                     .toBool());
+        // T-19: only the leader voids a review round or accepts a review; T-1 has neither.
+        for (const QString& member : {team.developer, team.reviewer})
+            for (const char* operation : {"agents.team_review_void", "agents.team_review_accept"})
+                QCOMPARE(fixture
+                             .agents(member, operation,
+                                     {{"task_id", "T-1"}, {"reason", "x"}, {"evidence", "y"}})
+                             .value("error_code")
+                             .toString(),
+                         QStringLiteral("role_forbidden"));
+        for (const char* operation : {"agents.team_review_void", "agents.team_review_accept"})
+            QCOMPARE(fixture
+                         .agents(team.leader, operation,
+                                 {{"task_id", "T-1"}, {"reason", "x"}, {"evidence", "y"}})
+                         .value("error_code")
+                         .toString(),
+                     QStringLiteral("invalid_transition"));
         // A conversation on no team has no team tools.
         const QString loner = fixture.start("codex", "alone");
         QCOMPARE(fixture.agents(loner, "agents.team_get").value("error_code").toString(),
@@ -324,6 +340,8 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(member.contains("team_task_create"));
         QVERIFY(member.contains("team_decision_raise"));
         QVERIFY(member.contains("team_task_close"));
+        QVERIFY(member.contains("team_review_void"));
+        QVERIFY(member.contains("team_review_accept"));
         const QStringList stranger = listWith({{"ok", true}, {"number", "1234"}});
         QVERIFY(!stranger.contains("team_get"));
         QVERIFY(stranger.contains("agents_send"));

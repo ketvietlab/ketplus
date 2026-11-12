@@ -127,6 +127,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
     src/teams/TeamCoordinatorReviews.cpp
+    src/teams/TeamCoordinatorReviewTools.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
     src/storage/LocalJournalWorkReports.cpp

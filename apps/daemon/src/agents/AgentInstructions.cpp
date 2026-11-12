@@ -50,40 +50,43 @@ QString teamInstructions(const TeamRoleContext& context) {
             .arg(context.role, context.team,
                  context.goal.isEmpty() ? QStringLiteral("(not set yet)") : context.goal)};
     if (context.role == QStringLiteral("leader")) {
-        lines << QStringLiteral(
-                     "Break the goal into tasks with team_task_create, each with acceptance "
-                     "criteria%1, a lane and its dependencies, and assign them by lane with "
-                     "team_task_assign. Do not write code and do not review: developers do the "
-                     "work and the team's reviewer reviews each task.")
-                     .arg(context.leaderWritesRequirements
-                              ? QString{}
-                              : QStringLiteral(" (written by the user: you may not change their "
-                                               "text)"))
-              << QStringLiteral(
-                     "Task changes arrive as one digest; read it and act once instead of "
-                     "asking for status. Change a lane with team_lane_set and give the reason; "
-                     "raise a decision with team_decision_raise only for what changes the "
-                     "product. You are the only member that speaks to the user. A task whose "
-                     "pull request is merged is done by itself; close work merged without one "
-                     "with team_task_close, giving the commit or pull request as evidence.")
-              << QStringLiteral(
-                     "The team only moves when a turn ends in an action. Before you end a "
-                     "turn, every task that is not done must have an owner working on it, be "
-                     "blocked with what it waits for, or wait on a decision you raised. To "
-                     "wait for something outside the team (a build, a deployment, another "
-                     "conversation), call team_wait with what you wait for: you are woken to "
-                     "check again. Do not end a turn to wait without it.")
-              << (context.mergePolicy == QStringLiteral("user")
-                      ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
-                                       "unless the user allowed that one task.")
-                            .arg(context.integrationBranch)
-                      : QStringLiteral("You merge each Ready task into %1, in the order the "
-                                       "tasks depend on each other, and hand a conflict back to "
-                                       "its owner. Merge into no other branch.")
-                            .arg(context.integrationBranch))
-              << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
-                                "request or answer for the user.")
-                     .arg(context.integrationBranch);
+        lines
+            << QStringLiteral(
+                   "Break the goal into tasks with team_task_create, each with acceptance "
+                   "criteria%1, a lane and its dependencies, and assign them by lane with "
+                   "team_task_assign. Do not write code and do not review: developers do the "
+                   "work and the team's reviewer reviews each task.")
+                   .arg(context.leaderWritesRequirements
+                            ? QString{}
+                            : QStringLiteral(" (written by the user: you may not change their "
+                                             "text)"))
+            << QStringLiteral(
+                   "Task changes arrive as one digest; read it and act once instead of "
+                   "asking for status. Change a lane with team_lane_set and give the reason; "
+                   "raise a decision with team_decision_raise only for what changes the "
+                   "product. You are the only member that speaks to the user. A task whose "
+                   "pull request is merged is done by itself; close work merged without one "
+                   "with team_task_close, giving the commit or pull request as evidence. A review "
+                   "verdict that should not have counted is voided with team_review_void; a "
+                   "review made on the pull request is accepted with team_review_accept.")
+            << QStringLiteral(
+                   "The team only moves when a turn ends in an action. Before you end a "
+                   "turn, every task that is not done must have an owner working on it, be "
+                   "blocked with what it waits for, or wait on a decision you raised. To "
+                   "wait for something outside the team (a build, a deployment, another "
+                   "conversation), call team_wait with what you wait for: you are woken to "
+                   "check again. Do not end a turn to wait without it.")
+            << (context.mergePolicy == QStringLiteral("user")
+                    ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
+                                     "unless the user allowed that one task.")
+                          .arg(context.integrationBranch)
+                    : QStringLiteral("You merge each Ready task into %1, in the order the "
+                                     "tasks depend on each other, and hand a conflict back to "
+                                     "its owner. Merge into no other branch.")
+                          .arg(context.integrationBranch))
+            << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
+                              "request or answer for the user.")
+                   .arg(context.integrationBranch);
     } else if (context.role == QStringLiteral("developer")) {
         lines << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
                      .arg(context.lane,

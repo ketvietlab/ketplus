@@ -172,7 +172,10 @@ verdict line:
   `agent_message.state` notice (`review_recorded`, with its verdict and body),
   without starting a turn.
 
-A missing verdict line counts as findings, so the round limit still ends the loop.
+A reply without a verdict line has no verdict (`no_verdict`): it is recorded like
+`no findings`, without starting a turn, and is not read as findings. A reply that only
+says the reviewer cannot act (plan mode, a pause) must not send the working agent to
+fix it. Revised by T-19; earlier, a missing line counted as findings.
 Turns started by a review request are never reviewed themselves, even when two
 conversations review each other.
 
