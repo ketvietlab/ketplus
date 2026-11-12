@@ -20,8 +20,7 @@
 
 namespace ketplus {
 
-LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
-    : QWidget(parent), machines_(new LinuxMachines(this)) {
+LinuxMachinesSection::LinuxMachinesSection(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("linuxMachinesSection"));
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -75,7 +74,22 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     // The rows' icons are drawn in the theme's ink.
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
             &LinuxMachinesSection::render);
-    connectMachines();
+    // The machines come with the shared set (setMachines), or with its own on first use.
+}
+
+LinuxMachines* LinuxMachinesSection::machines() const {
+    if (!machines_ && !shared_) {
+        auto* self = const_cast<LinuxMachinesSection*>(this);
+        self->machines_ = new LinuxMachines(self);
+        self->ownsMachines_ = true;
+        self->connectMachines();
+    }
+    return machines_;
+}
+
+void LinuxMachinesSection::showEvent(QShowEvent* event) {
+    machines(); // a section shown without a shared set lists its own
+    QWidget::showEvent(event);
 }
 
 QStringList LinuxMachinesSection::machineIds() const {
@@ -91,12 +105,14 @@ void LinuxMachinesSection::setMachines(LinuxMachines* machines) {
     if (machines_) {
         machines_->removeSection(this);
         disconnect(machines_, nullptr, this, nullptr);
-        disconnect(machines_->model(), nullptr, this, nullptr);
+        if (shownModel_)
+            disconnect(shownModel_, nullptr, this, nullptr);
         if (ownsMachines_)
             delete machines_.data();
     }
     machines_ = machines;
     ownsMachines_ = false;
+    shared_ = true;
     connectMachines();
     machines_->publishMachines(); // the window's picker lists the shared machines at once
 }
@@ -105,32 +121,63 @@ void LinuxMachinesSection::connectMachines() {
     machines_->addSection(this);
     connect(machines_, &LinuxMachines::machinesChanged, this,
             &LinuxMachinesSection::machinesChanged);
-    connect(machines_->model(), &LinuxMachineModel::machinesChanged, this,
-            &LinuxMachinesSection::render);
-    connect(machines_->model(), &LinuxMachineModel::backendsAttachedChanged, this,
-            &LinuxMachinesSection::render);
+    connectModel();
+    connect(machines_, &LinuxMachines::modelReplaced, this, [this] {
+        connectModel();
+        render();
+    });
     connect(machines_, &LinuxMachines::changed, this, &LinuxMachinesSection::render);
     connect(machines_, &LinuxMachines::notice, this, &LinuxMachinesSection::setNotice);
     render();
 }
 
+void LinuxMachinesSection::connectModel() {
+    // Only one model is followed: the set's current one.
+    if (shownModel_)
+        disconnect(shownModel_, nullptr, this, nullptr);
+    shownModel_ = machines_->model();
+    connect(shownModel_, &LinuxMachineModel::machinesChanged, this, &LinuxMachinesSection::render);
+    connect(shownModel_, &LinuxMachineModel::backendsAttachedChanged, this,
+            &LinuxMachinesSection::render);
+}
+
+LinuxMachineModel* LinuxMachinesSection::model() const {
+    if (auto* set = machines())
+        return set->model();
+    if (!emptyModel_)
+        const_cast<LinuxMachinesSection*>(this)->emptyModel_ =
+            new LinuxMachineModel(const_cast<LinuxMachinesSection*>(this));
+    return emptyModel_;
+}
+
+void LinuxMachinesSection::setModel(LinuxMachineModel* model) {
+    if (auto* set = machines())
+        set->setModel(model);
+}
+
 void LinuxMachinesSection::attachRelayBackend(LinuxRelayMachines::LinkFactory links) {
-    machines_->attachRelayBackend(std::move(links));
+    if (auto* set = machines())
+        set->attachRelayBackend(std::move(links));
 }
 
 void LinuxMachinesSection::attachSshBackend(QString storePath,
                                             LinuxSshMachines::LinkFactory links) {
-    machines_->attachSshBackend(std::move(storePath), std::move(links));
+    if (auto* set = machines())
+        set->attachSshBackend(std::move(storePath), std::move(links));
 }
 
 remote::MachineBackend* LinuxMachinesSection::machineBackend(const QString& id) const {
-    return machines_->machineBackend(id);
+    auto* set = machines();
+    return set ? set->machineBackend(id) : nullptr;
 }
 
 void LinuxMachinesSection::activate() {
     // Connections is shown here: a prompt the machines raise opens in this window.
-    machines_->setPromptSection(this);
-    machines_->start();
+    auto* set = machines();
+    if (!set)
+        return; // the app's set is gone: the app is quitting
+    set->setPromptSection(this);
+    set->start();
 }
 
 void LinuxMachinesSection::setPairingEntryShown(const bool shown) {
@@ -241,7 +288,8 @@ LinuxMachinesSection::~LinuxMachinesSection() {
     if (machines_) {
         machines_->removeSection(this);
         disconnect(machines_, nullptr, this, nullptr);
-        disconnect(machines_->model(), nullptr, this, nullptr);
+        if (shownModel_)
+            disconnect(shownModel_, nullptr, this, nullptr);
     }
     delete connectDialog_.data();
 }
@@ -252,16 +300,18 @@ void LinuxMachinesSection::openConnectCard(const QString& sshHost) {
     if (connectDialog_)
         return;
     // SSH needs no account, so the card opens signed out too; its Relay mode offers sign-in.
-    QPointer<LinuxMachines> machines = machines_;
-    connectDialog_ = openLinuxConnectDialog(this, model(), machines_->client(),
-                                            {[machines] {
-                                                 if (machines)
-                                                     machines->signIn();
+    QPointer<LinuxMachines> set = machines();
+    if (!set)
+        return;
+    connectDialog_ = openLinuxConnectDialog(this, model(), set->client(),
+                                            {[set] {
+                                                 if (set)
+                                                     set->signIn();
                                              },
-                                             [this, machines](const QString& message) {
+                                             [this, set](const QString& message) {
                                                  setNotice(message);
-                                                 if (machines)
-                                                     machines->refreshMachines();
+                                                 if (set)
+                                                     set->refreshMachines();
                                              }},
                                             LinuxConnectMode::Ssh, sshHost);
 }

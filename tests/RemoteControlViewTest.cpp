@@ -445,8 +445,8 @@ void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
     view.resize(840, 720);
     view.show();
     auto* linux = view.linuxMachines_;
-    remote::RemoteControlTestAccess::signIn(*linux->machines_->client_);
-    linux->machines_->syncEntitlement();
+    remote::RemoteControlTestAccess::signIn(*linux->machines()->client_);
+    linux->machines()->syncEntitlement();
     linux->render();
     const auto connectButton = [linux] {
         return linux->findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));
@@ -509,7 +509,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
     LinuxMachinesSection section;
     section.resize(640, 320);
     section.show();
-    remote::RemoteControlTestAccess::signIn(*section.machines_->client_);
+    remote::RemoteControlTestAccess::signIn(*section.machines()->client_);
     section.model()->setRelayMachines({{QStringLiteral("build-box"), {}, {}, {}}});
     // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
     const auto iconInk = [&section] {
@@ -780,7 +780,7 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                         now.addDays(-1), "s4", true, "New worktree experiment/parser"),
              auditEntry("m5", "session.configuration.apply", "tablet-1", "ok", now.addDays(-3),
                         "s5", true, "Release notes draft")});
-        remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->machines_->client_);
+        remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->machines()->client_);
         // The evidence shows the UI as it will be with T-6's backends attached.
         view.linuxMachines_->model()->setBackendsAttached(true);
         // The mock's Linux machines: SSH connected, Relay offline, SSH with a changed host key.
@@ -875,12 +875,12 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                 [](const QString& relayId) -> std::unique_ptr<LinuxRelayLink> {
                     return std::make_unique<testing::FakeRelayLink>(relayId);
                 });
-            section->machines_->syncEntitlement();
+            section->machines()->syncEntitlement();
             section->model()->requestSshConnect(QStringLiteral("build-node-01"));
             QTRY_VERIFY(section->model()->machines().size() == 1 &&
                         section->model()->machines().first().state ==
                             LinuxMachine::State::Connected);
-            section->machines_->relay_->setListed(
+            section->machines()->relay_->setListed(
                 {{QStringLiteral("relay-build-node-02"),
                   QStringLiteral("SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s"),
                   QStringLiteral("build-node-02"),
@@ -918,10 +918,10 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                 }
             }
             view.resize(1280 - 240, 900);
-            delete section->machines_->relay_;
-            section->machines_->relay_ = nullptr;
-            delete section->machines_->ssh_;
-            section->machines_->ssh_ = nullptr;
+            delete section->machines()->relay_;
+            section->machines()->relay_ = nullptr;
+            delete section->machines()->ssh_;
+            section->machines()->ssh_ = nullptr;
             section->model()->setMachines({});
         }
         view.renderDevices({});
