@@ -340,9 +340,14 @@ ThemeManager consumes it through a snapshot controller. Its default file is `App
 Revision is an unsigned 64-bit decimal string, avoiding JSON number precision
 loss. Locked atomic commits advance it monotonically, while identical commits
 are idempotent. Unknown scheme IDs are valid selection identities; the consumer
-resolves catalog absence with a built-in fallback. Invalid identities, malformed
-or newer config schemas, symlinks and lock/write errors leave the last known
-in-memory selection intact and are exposed through `lastError()` and `failed`.
+resolves catalog absence with a built-in fallback. Malformed JSON or invalid field
+values leave the last known in-memory selection intact on startup/refresh and are
+exposed through `lastError()` and `failed`. The next explicit commit repairs them
+under the write lock with an atomic replacement and a new revision; an unchanged
+selection also repairs the file. No automatic repair happens during observation.
+Newer schema versions, oversized files (whose version cannot safely be inspected),
+symlinks and read/lock/write errors remain protected from replacement. Invalid
+requested identities are rejected.
 
 The constructor accepts a legacy `appearance/theme` value. It migrates
 System/Light/Dark only when the file is absent and rechecks under the write lock
