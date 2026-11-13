@@ -80,6 +80,23 @@ commit.
 
 ## Pro release
 
+Production Pro desktop DMGs and Linux daemon packages use
+`https://api.ketplus.app`. The `release` and `daemon-release` presets enable
+`KETPLUS_PRODUCTION_RELEASE=ON`; a manual configure must pass that flag explicitly.
+It selects the production URL and refuses a conflicting `KETPLUS_CONTROL_URL`.
+Bundle verification checks the daemon's `--build-info`, rejects another URL and
+rejects a runtime-overridable production daemon. For example:
+
+```sh
+cmake --preset release
+# Headless Linux package:
+cmake --preset daemon-release
+```
+
+Developer/QA configurations retain the staging default until the staging domain
+cutover is approved. A generic `CMAKE_BUILD_TYPE=Release` without the production
+flag remains available for explicitly configured staging and isolated local QA.
+
 A production desktop release additionally requires:
 
 - a clean commit on `main` reached through the approved release flow;
