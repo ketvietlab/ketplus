@@ -24,6 +24,28 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+
+- VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
+  includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
+  approximations. Semantic colors remain metadata; extension code never runs.
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
+- GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
+  `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
+  streamed turns, cancellation, bounded request deadlines and explicit sign-in
+  failures have deterministic fake-process coverage. Turn-bound one-time approvals
+  and host Browser MCP setup/routing/cleanup also have fake-process coverage;
+  unverified Copilot MCP identities still require approval. Model discovery uses
+  bounded, cached ACP session catalogs and a provider-default fallback; explicit
+  selections are confirmed before prompting. Authenticated Copilot behavior
+  remains unverified.
+
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a
     `truncated` event; the client keeps its connection.
@@ -97,7 +119,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
-  Repository ([ADR 0121](decisions/0121-team-and-task-repository.md)): the user (Team page,
+  Repository ([ADR 0123](decisions/0123-team-and-task-repository.md)): the user (Team page,
   Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
   checked main checkout and integration branch; started tasks keep the repository they began
   in, and `team_task_create` may name a task's own repository.

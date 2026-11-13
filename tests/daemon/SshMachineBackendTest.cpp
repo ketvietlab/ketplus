@@ -224,6 +224,7 @@ class SshMachineBackendTest final : public QObject {
         QVERIFY(!backend->supports(Feature::Fork));
         QVERIFY(!backend->supports(Feature::Archive));
         QVERIFY(!backend->supports(Feature::Attachments));
+        QVERIFY(!backend->supports(Feature::SessionPreparation));
         QCOMPARE(backend->unsupportedReason(Feature::Fork),
                  QStringLiteral("Not available on Linux machines yet."));
         QString refused;
@@ -233,6 +234,13 @@ class SshMachineBackendTest final : public QObject {
         QTRY_VERIFY(!refused.isEmpty());
         QVERIFY(!fixture.daemon.requests.contains("session.fork"));
 
+        refused.clear();
+        backend->prepareSession(
+            {{"worktree_id", "/home/dev/app"}, {"client_request_id", "draft-1"}},
+            [&](const QJsonObject&, const QString& error) { refused = error; });
+        QTRY_VERIFY(!refused.isEmpty());
+        QVERIFY(!fixture.daemon.requests.contains("session.prepare"));
+
         bool renamed = false;
         backend->renameConversation(
             "conversation-1", 1, "Release notes",
@@ -241,6 +249,35 @@ class SshMachineBackendTest final : public QObject {
         QCOMPARE(fixture.daemon.requests.last(), QStringLiteral("session.rename"));
         QCOMPARE(fixture.daemon.payloads.last().value("title").toString(),
                  QStringLiteral("Release notes"));
+    }
+
+    void preparationRequiresTheAdvertisedCapabilityAndPreservesTheRequestIdentity() {
+        Fixture current;
+        current.daemon.capabilities = {"session.prepare/1", "attachment.stage.begin",
+                                       "attachment.stage.chunk", "attachment.stage.commit",
+                                       "attachment.stage.cancel"};
+        SshMachineStore store(current.storePath());
+        QVERIFY(store.add(current.target));
+        auto backend = current.backend(store);
+        backend->connectToHost();
+        QTRY_COMPARE(backend->connectionState(), State::Connected);
+        QVERIFY(backend->supports(MachineBackend::Feature::SessionPreparation));
+        bool prepared = false;
+        backend->prepareSession(
+            {{"worktree_id", "/home/dev/app"},
+             {"client_request_id", "draft-1"},
+             {"options", QJsonObject{{"provider", "codex"}}}},
+            [&](const QJsonObject&, const QString& error) { prepared = error.isEmpty(); });
+        QTRY_VERIFY(prepared);
+        QCOMPARE(current.daemon.requests.last(), "session.prepare");
+        QCOMPARE(current.daemon.payloads.last().value("client_request_id").toString(), "draft-1");
+        QCOMPARE(current.daemon.payloads.last().value("worktree_path").toString(), "/home/dev/app");
+        bool cancelled = false;
+        backend->cancelPreparedSession(
+            "draft-session", 1,
+            [&](const QJsonObject&, const QString& error) { cancelled = error.isEmpty(); });
+        QTRY_VERIFY(cancelled);
+        QCOMPARE(current.daemon.requests.last(), "session.prepare.cancel");
     }
 
     // A daemon that offers fork and archive: both forward.

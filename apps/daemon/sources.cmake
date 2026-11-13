@@ -32,6 +32,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlUploadProgress.cpp
     src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
+    src/cloud/CloudControlPreparations.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h
@@ -63,8 +64,22 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
+    src/providers/CopilotAdapter.cpp
+    src/providers/CopilotAdapter.h
+    src/providers/CopilotCatalog.cpp
+    src/providers/CopilotCatalog.h
     src/providers/CursorAdapter.cpp
-    src/providers/CursorBrowserSession.cpp
+    src/providers/CursorModelCatalog.cpp
+    src/providers/CursorModelConfig.cpp
+    src/providers/CursorModelVariant.h
+    src/providers/CursorRequests.cpp
+    src/providers/acp/AcpAdapter.h
+    src/providers/acp/AcpProcess.cpp
+    src/providers/acp/AcpProtocol.cpp
+    src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpPermissions.cpp
+    src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
     src/providers/CodexAdapter.h
@@ -158,6 +173,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/SessionHostPreparation.cpp
     src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
@@ -183,6 +199,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
     src/storage/LocalJournal.cpp
+    src/storage/LocalJournalPreparations.cpp
+    src/storage/SessionPreparation.h
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
     src/storage/LocalJournalHistoryPurge.cpp

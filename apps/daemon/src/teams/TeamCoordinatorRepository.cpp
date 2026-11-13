@@ -1,4 +1,4 @@
-// T-90 (ADR 0121): the repository a team works in can change, and a task can work in a
+// T-90 (ADR 0123): the repository a team works in can change, and a task can work in a
 // repository of its own. A task that already has a branch keeps the repository and the
 // integration branch it was started in, so its worktree, merge check, pull request and
 // cleanup keep reading the place its work is. Nothing on disk moves.

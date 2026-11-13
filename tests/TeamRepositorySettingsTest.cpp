@@ -1,4 +1,4 @@
-// T-90 (ADR 0121): the team's Repository settings send the repository, the integration branch
+// T-90 (ADR 0123): the team's Repository settings send the repository, the integration branch
 // and the reason, keep the daemon's refusal in its words, and the team page names the whole
 // path. Against a fake daemon; run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamRepositorySettings.h"

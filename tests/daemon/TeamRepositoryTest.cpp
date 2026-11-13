@@ -1,4 +1,4 @@
-// T-90 (ADR 0121): a team moves to another repository, and a task can work in a repository of
+// T-90 (ADR 0123): a team moves to another repository, and a task can work in a repository of
 // its own. The coordinator cases use a fake runtime; the git cases temporary repositories with
 // a bare remote; the leader's tool the session runtime with the scripted fake providers. No
 // network, no real provider and no real team.

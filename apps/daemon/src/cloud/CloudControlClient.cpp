@@ -781,11 +781,11 @@ QJsonArray CloudControlClient::sessionSnapshots(
     for (const StoredSession& session : stored) {
         const QString label = QFileInfo(session.worktreePath).fileName();
         // The relay only accepts these providers; anything else keeps the historical default.
-        const QString adapter =
-            QStringList{QStringLiteral("codex"), QStringLiteral("claude"), QStringLiteral("cursor")}
-                    .contains(session.adapter)
-                ? session.adapter
-                : QStringLiteral("codex");
+        const QString adapter = QStringList{QStringLiteral("codex"), QStringLiteral("claude"),
+                                            QStringLiteral("cursor"), QStringLiteral("copilot")}
+                                        .contains(session.adapter)
+                                    ? session.adapter
+                                    : QStringLiteral("codex");
         QJsonObject snapshot{{QStringLiteral("id"), session.id},
                              {QStringLiteral("workspaceId"), workspaceId},
                              {QStringLiteral("machineId"), machineId},

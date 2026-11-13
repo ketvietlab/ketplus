@@ -48,7 +48,7 @@ struct TaskWorktree final {
 // team's (the task's own, or the team's before it changed meanwhile) is kept with the task.
 void takeWorktree(const Team& team, Task& task, const TaskWorktree& made);
 
-// T-90 (ADR 0121): a repository checked for a team or a task. `repository` is the canonical
+// T-90 (ADR 0123): a repository checked for a team or a task. `repository` is the canonical
 // path of its main checkout; `error`, when set, says in words a person can act on why it was
 // refused.
 struct RepositoryCheck final {
@@ -207,7 +207,7 @@ class TeamHostPort {
     // Asked only for a conversation that is to join a team, because the session runtime may
     // have to ask git for it.
     [[nodiscard]] virtual QString conversationRepository(const QString& sessionId) const = 0;
-    // T-90 (ADR 0121): whether a team or task may work in `path`: the main checkout of a Git
+    // T-90 (ADR 0123): whether a team or task may work in `path`: the main checkout of a Git
     // repository whose origin has `integrationBranch` (any repository when it is empty).
     [[nodiscard]] virtual RepositoryCheck checkRepository(const QString& path,
                                                           const QString& integrationBranch) const {
@@ -334,7 +334,7 @@ struct TaskDraft final {
     QString lane;
     QStringList dependsOn;
     QStringList criteria;
-    // T-90 (ADR 0121): another repository than the team's for this task, and its integration
+    // T-90 (ADR 0123): another repository than the team's for this task, and its integration
     // branch (the team's when empty). Empty: the team's repository.
     QString repository;
     QString integrationBranch;
@@ -599,7 +599,7 @@ class TeamCoordinator : public QObject {
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
                                               QList<Update>& updates);
-    // T-90 (ADR 0121), in TeamCoordinatorRepository.cpp: moves the team to another
+    // T-90 (ADR 0123), in TeamCoordinatorRepository.cpp: moves the team to another
     // repository (and integration branch). Tasks that already have a branch keep the
     // repository they were started in; nothing on disk moves.
     std::optional<TeamError> changeRepository(Team& team, const QJsonObject& changes,

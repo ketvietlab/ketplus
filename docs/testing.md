@@ -50,6 +50,37 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks primary-role precedence in alphabetic and reversed
+attribute order, missing-primary fallbacks, effect-color presence/validity in both
+option orders, syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, internal DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
+## VS Code importer fixtures
+
+`ketplus_vscode_import_tests` covers original dark/light/include themes, standard
+DOCTYPE tmTheme resources, explicit style resets, ordered fallback chains, ANSI16,
+semantic metadata without application, unsupported selectors and multi-variant
+VSIX. Failure cases cover unsafe paths/archives, malformed data, entity expansion,
+include cycles and shared byte/canonical-output limits. Fixture provenance is in
+`core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
+targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
+
+## Theme input security fixtures
+
+`ketplus_theme_input_tests` runs headlessly with no provider or network access.
+It constructs small ZIP fixtures in memory, including patched hostile metadata,
+and tests JSONC comment/string boundaries and error locations, ZIP traversal,
+links/collisions/CRC failure, all four archive budgets, standard plist DOCTYPE acceptance without external resolution, internal DTD/entity rejection,
+and local/archive includes with cycles, escapes and the 16-level boundary.
+
 ## Target map
 
 | Area | Build/test target | Primary coverage |
@@ -59,6 +90,7 @@ version for the same reason. No job in the matrix uses provider quota.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, Remove clears an unreadable or invalid API or Admin entry but not a locked one, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
@@ -68,6 +100,7 @@ version for the same reason. No job in the matrix uses provider quota.
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
 | Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
+| Copilot desktop presentation | `ketplus_copilot_presentation_tests` | platform setup guides, daemon discovery/provider identity, transcript names, Teams availability, model permissions and missing/older-daemon states; native QML offscreen at wide and narrow zoomed layouts; `KETPLUS_COPILOT_CAPTURE` saves the wide picker screenshot; no provider invocation |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
 | Desktop zoom | `ketplus_desktop_zoom_tests` | repeated 90/100/110/125% zoom transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and merging with another window's newer settings |
@@ -95,6 +128,10 @@ version for the same reason. No job in the matrix uses provider quota.
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
 | Claude/Cursor framing | `ketplus_provider_framing_tests` | Coalesced real QProcess output, 16-MiB per-line boundary, aggregate valid frames, oversized complete/partial suffixes, failure drain and fresh-generation recovery; fixture process only |
 | Malformed provider frames | `ketplus_provider_malformed_frame_tests` | Fake Codex/Claude/Cursor processes: initialize and pending calls, UTF-8/binary/control/JSON failures, suffix quarantine, once-only error callbacks, payload-free diagnostics and fresh-generation recovery; an oversized Claude or Cursor line, in the initialize response or a later call, publishes one stop and one crash backoff; POSIX process fixtures skip on Windows |
+| Copilot adapter | `ketplus_daemon_copilot_adapter_tests`, `ketplus_copilot_cli_tests` | Discovery/overrides, Windows wrapper policy, fake ACP stream/cancel, explicit/nested/exit authentication failures, sanitized unrelated errors, fresh-process retry, startup deadline and host routing; no provider quota |
+| Copilot permissions/browser | `ketplus_daemon_copilot_tools_tests` | Fake ACP permission option IDs, no promotion to always, absent options, expiry/cancel, stale turn/process answers, forged browser identity, host approval cards, MCP setup/resume/disable, routing, image content and completion/failure/shutdown cleanup; no provider quota |
+| Copilot models | `ketplus_copilot_catalog_tests` | Config/grouped and advertised legacy catalogs, model/string/output bounds, fallback, cache/coalescing/expiry, timeout/stop cleanup, host model discovery, selected model before prompt, switches across turns, empty load state and explicit setter failures; native fixture executable only, no provider quota |
+| Shared ACP engine | `ketplus_daemon_acp_adapter_tests` | Provider-independent fake stdio process: initialize, MCP session creation/load fallback, assistant/tool/usage events, permission option IDs and forged MCP identity refusal, cancellation, pending-call shutdown and malformed-output restart |
 | ACP capability defaults | `ketplus_provider_compatibility_tests`, `ketplus_daemon_cursor_adapter_tests` | Missing/null/wrong-type capability fields, boolean controls/reset and actual session/load suppression; fake Cursor explicitly advertises implemented features |
 | Provider line scanning | `ketplus_provider_line_reader_tests` | Deep array/object streams, chunk/depth bounds, JSON escapes/Unicode, invalid metadata, dotted-key isolation, next-line/reset recovery and a fresh-child POSIX peak-memory bound; no live provider |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry, inherited macOS access-control entries removed from state, journal, media and refs and an exposed token replaced, a second daemon refused while the first holds hour-old locks |
@@ -128,6 +165,7 @@ version for the same reason. No job in the matrix uses provider quota.
 | Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
+| First-turn remote attachments (ADR 0122) | `ketplus_session_preparation_store_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_machine_preparation_tests` | Private allocation/retry, atomic activation/cancel, restart/expiry and bounded receipts; authenticated Relay routing and creator-key barrier before ACK; encrypted staging through the first fake-provider turn; offscreen composer retry, visible/removable pending files during preparation/refusal, text-only recovery, late cancellation after view destruction, restart-safe durable cancellation and old-hosted/old-daemon fallback. Run the existing Machine attachment/conversation and SSH/Relay backend suites too. |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
 | Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle, deny list and work display, reverted toggle on save failure |

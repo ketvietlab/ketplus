@@ -1,4 +1,5 @@
 #include "teams/TeamGoal.h"
+#include "agent/ProviderDisplay.h"
 
 #include "KetExpandableText.h"
 #include "KetMarkdown.h"
@@ -21,7 +22,7 @@ QString tr(const char* text) { return QCoreApplication::translate("ketplus::Team
 
 QString detail(const QVariantMap& conversation) {
     const QString provider = conversation.value(QStringLiteral("provider")).toString();
-    QStringList parts{provider.left(1).toUpper() + provider.mid(1)};
+    QStringList parts{provider_display::name(provider)};
     if (conversation.value(QStringLiteral("running")).toBool())
         parts.append(tr("working"));
     if (const QString path = conversation.value(QStringLiteral("path")).toString(); !path.isEmpty())

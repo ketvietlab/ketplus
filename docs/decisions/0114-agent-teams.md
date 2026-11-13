@@ -657,10 +657,10 @@ Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
 developers), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
-(ADR 0118), `team_lane_set`, `team_paths_allow`, `team_repository_set` (ADR 0121),
+(ADR 0118), `team_lane_set`, `team_paths_allow`, `team_repository_set` (ADR 0123),
 `team_decision_raise` and `team_decision_withdraw` (leader). `team_task_create` takes an
 optional `repository` and `integration_branch` for a task that works in another repository
-than the team's (ADR 0121). A call by the wrong role names
+than the team's (ADR 0123). A call by the wrong role names
 the role that may.
 
 `team_tasks` (T-36) answers in shapes bounded for a model's context:

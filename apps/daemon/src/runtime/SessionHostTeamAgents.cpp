@@ -308,7 +308,7 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             taskId);
     }
     if (operation == QStringLiteral("team_repository_set")) {
-        // T-90 (ADR 0121): the leader names why, as for a lane change.
+        // T-90 (ADR 0123): the leader names why, as for a lane change.
         if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
             return refusal(QStringLiteral("invalid_payload"),
                            QStringLiteral("Give the reason the repository changes."));

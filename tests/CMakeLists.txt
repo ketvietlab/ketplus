@@ -139,6 +139,9 @@ target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desk
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.cpp)
+target_link_libraries(ketplus_copilot_presentation_tests PRIVATE
+    Qt6::Test Qt6::Quick ketplus_ai ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
 ketplus_add_gui_test(ketplus_team_goal_form_tests TeamGoalFormTest.cpp)
 target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_desktop_shell)
@@ -150,7 +153,7 @@ ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_review_settings_tests TeamReviewSettingsTest.cpp)
 target_link_libraries(ketplus_team_review_settings_tests PRIVATE Qt6::Test ketplus_desktop_shell)
-# T-90 (ADR 0121): the team's Repository settings.
+# T-90 (ADR 0123): the team's Repository settings.
 ketplus_add_gui_test(ketplus_team_repository_settings_tests TeamRepositorySettingsTest.cpp)
 target_link_libraries(ketplus_team_repository_settings_tests PRIVATE Qt6::Test
                       ketplus_desktop_shell)
@@ -220,6 +223,10 @@ target_link_libraries(ketplus_machine_conversation_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
+ketplus_add_gui_test(ketplus_machine_preparation_tests MachinePreparationTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_preparation_tests PRIVATE
+    Qt6::Test ketplus_desktop_support)
 
 ketplus_add_gui_test(ketplus_machine_paging_tests MachineTranscriptPagingTest.cpp
     FakeMachineBackend.h MachineHosts.h)
@@ -298,6 +305,7 @@ if(APPLE)
             "-DKETPLUS_APP_BUNDLE=$<TARGET_BUNDLE_DIR:ketplus>"
             "-DKETPLUS_PRODUCT_VERSION=${PROJECT_VERSION}"
             "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/packaging/macos/VerifyBundle.cmake"
     )
 endif()

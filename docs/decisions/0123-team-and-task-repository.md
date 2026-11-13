@@ -1,4 +1,4 @@
-# ADR 0121: A team's repository can change, and a task can work in its own
+# ADR 0123: A team's repository can change, and a task can work in its own
 
 Status: accepted (2026-11-13). Amends ADR 0114 (open point 1, §6 and §10) and ADR 0118.
 

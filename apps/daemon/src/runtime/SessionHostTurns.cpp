@@ -101,8 +101,9 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
         beginClaudeTurn(sessionId, generation, input, options);
         return;
     }
-    if (it->stored.adapter == QStringLiteral("cursor")) {
-        beginCursorTurn(sessionId, generation, input, options);
+    if (it->stored.adapter == QStringLiteral("cursor") ||
+        it->stored.adapter == QStringLiteral("copilot")) {
+        beginAcpTurn(sessionId, generation, input, options);
         return;
     }
     if (it->stored.threadId.isEmpty()) {
@@ -261,15 +262,18 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         });
 }
 
-void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generation,
-                                  const QJsonArray& input, const QJsonObject& options) {
+void SessionHost::beginAcpTurn(const QString& sessionId, const qint64 generation,
+                               const QJsonArray& input, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
-    ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
-    if (it == sessions_.end() || it->stored.generation != generation || cursor == nullptr)
+    ProviderAdapter* const target = it == sessions_.end() ? nullptr : provider(it->stored.adapter);
+    if (it == sessions_.end() || it->stored.generation != generation || target == nullptr)
         return;
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
-        failTurnStart(*it, QStringLiteral("Cursor turn has no prompt."));
+        failTurnStart(*it, QStringLiteral("%1 turn has no prompt.")
+                               .arg(it->stored.adapter == QStringLiteral("copilot")
+                                        ? QStringLiteral("GitHub Copilot")
+                                        : QStringLiteral("Cursor")));
         return;
     }
     QJsonObject params{{QStringLiteral("sessionId"), sessionId},
@@ -290,7 +294,7 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("agentMcpServer"), agent_tools::acpServer(*launch));
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
-    cursor->call(
+    target->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);

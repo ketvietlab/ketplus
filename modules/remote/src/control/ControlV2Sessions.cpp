@@ -239,6 +239,7 @@ void ControlV2Client::prepareCommand(const QJsonObject& intent, const QJsonObjec
                                          "attachment.stage.chunk",
                                          "attachment.stage.commit",
                                          "attachment.stage.cancel",
+                                         "session.prepare.cancel",
                                          "session.start_turn",
                                          "session.steer",
                                          "session.interrupt",
