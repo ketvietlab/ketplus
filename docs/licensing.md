@@ -49,6 +49,7 @@ application.
 | Scintilla | `rel-5-5-2`, commit `a1c86144eed9e3d2187e3a8b391d11ca909f00d2` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | Lexilla | `rel-5-5-2`, commit `3e6f317eed854bc312b4c4453206189d381c7ae7` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
+| miniz | 3.1.2, commit `77d0dce8627735138c51770d1799a1ef48f2117d` | Compiled statically for bounded ZIP theme reads; no executable or network transport | MIT | Ship `miniz-MIT.txt` complete with Lite and Pro |
 | KetPlus Syntax | commit `cb7435c1e9237ee32d3459a58917b0e84b8b6025` | Compiled statically; brings Lexilla as its submodule | MPL 2.0 | Ship the license text; publish source for any modified file |
 | KetQt | commit `d6e77e26a70f14bf22d7eafdaad5e842fae20458` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
