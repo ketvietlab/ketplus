@@ -230,7 +230,10 @@ creation/loading with host-supplied MCP servers, prompt/cancel, permission
 responses and canonical transcript events. CLI discovery, launch/version policy,
 model catalogs and provider extensions stay in each concrete adapter. Cursor's
 `cursor/*` requests and account/model error explanations remain Cursor-specific;
-the shared engine has no provider names or installation paths.
+the shared engine has no provider names or installation paths. MCP permission
+exemptions default to denied: only a concrete adapter can interpret its own
+trusted tool identity. Provider-specific client capability metadata and session
+mode identifiers are opt-in hooks.
 
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,

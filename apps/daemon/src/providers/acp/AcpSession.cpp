@@ -61,6 +61,10 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
         applySessionModel(acpId, model, result, [this, callback, acpId, ketplusSessionId] {
             const QString mode =
                 sessionPermissionMode(permissionBySession_.value(ketplusSessionId));
+            if (mode.isEmpty()) {
+                callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
+                return;
+            }
             sendCall(QStringLiteral("session/set_mode"),
                      {{QStringLiteral("sessionId"), acpId}, {QStringLiteral("modeId"), mode}},
                      [callback, acpId](const QJsonObject&, const QString&) {
@@ -127,20 +131,7 @@ void AcpAdapter::handlePermissionRequest(const QJsonValue& requestId, const QJso
     }
     const QJsonObject toolCall = params.value(QStringLiteral("toolCall")).toObject();
     QJsonObject input = toolCall.value(QStringLiteral("rawInput")).toObject();
-    // MCP identity comes from rawInput, independently of the display title.
-    // Only the server injected for this session receives the browser exemption.
-    const QString provider = input.value(QStringLiteral("providerIdentifier")).toString();
-    if (((browserSessions_.contains(sessionId) && provider == QStringLiteral("ketplus_browser")) ||
-         (computerSessions_.contains(sessionId) &&
-          provider == QStringLiteral("ketplus_computer"))) &&
-        !input.value(QStringLiteral("toolName")).toString().isEmpty()) {
-        respond(requestId, {{QStringLiteral("allow"), true}});
-        return;
-    }
-    if (agentSessions_.contains(sessionId) &&
-        input.value(QStringLiteral("providerIdentifier")).toString() ==
-            QStringLiteral("ketplus_agents") &&
-        !input.value(QStringLiteral("toolName")).toString().isEmpty()) {
+    if (autoApprovePermission(sessionId, toolCall)) {
         respond(requestId, {{QStringLiteral("allow"), true}});
         return;
     }

@@ -96,6 +96,9 @@ class CursorAdapter final : public AcpAdapter {
 
   private:
     void configureProcess() override;
+    QJsonObject clientCapabilities() const override;
+    bool autoApprovePermission(const QString& sessionId,
+                               const QJsonObject& toolCall) const override;
     void checkLaunch(std::function<void(const QString&)> done) override;
     void stopAuxiliaryProcesses() override;
     void resetProviderState() override;

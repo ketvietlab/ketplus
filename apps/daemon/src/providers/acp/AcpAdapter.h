@@ -29,6 +29,9 @@ class AcpAdapter : public ProviderAdapter {
   protected:
     // Set process_ program/arguments; the engine owns channels, environment and signals.
     virtual void configureProcess() = 0;
+    virtual QJsonObject clientCapabilities() const;
+    // rawInput is provider-owned data, not a portable authenticated MCP identity.
+    virtual bool autoApprovePermission(const QString&, const QJsonObject&) const { return false; }
     // The callback reports an empty error when launching is allowed.
     virtual void checkLaunch(std::function<void(const QString&)> done) { done({}); }
     // Called while the concrete adapter is alive by its explicit stop()/destructor.
@@ -41,7 +44,7 @@ class AcpAdapter : public ProviderAdapter {
         done();
     }
     // Translate host policy into the provider's advertised ACP mode identifier.
-    virtual QString sessionPermissionMode(const QString& profile) const { return profile; }
+    virtual QString sessionPermissionMode(const QString&) const { return {}; }
     virtual QString sessionError(const QString& error) const { return error; }
     virtual QString turnFailureMessage(const QString& error) const { return error; }
     virtual bool isFailureText(const QString&) const { return false; }

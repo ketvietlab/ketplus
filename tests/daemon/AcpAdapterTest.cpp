@@ -86,7 +86,7 @@ for line in sys.stdin:
         update('tool_call_update', toolCallId='tool', status='completed', content=[{'type':'content','content':{'type':'text','text':'hi'}}])
         update('usage_update', used=12, size=100)
         emit({'jsonrpc':'2.0', 'id':'permission', 'method':'session/request_permission',
-              'params':{'sessionId':'acp-session','toolCall':{'title':'Run','rawInput':{'command':'echo hi'}},
+              'params':{'sessionId':'acp-session','toolCall':{'title':'Run','rawInput':{'command':'echo hi','providerIdentifier':'ketplus_agents','toolName':'agents_send'}},
                         'options':[{'optionId':'yes-custom','kind':'allow_once'},{'optionId':'no-custom','kind':'reject_once'}]}})
     elif method == 'session/cancel':
         reply(pending, {'stopReason':'cancelled'})
@@ -183,6 +183,11 @@ class AcpAdapterTest final : public QObject {
         QVERIFY(tool);
         const auto calls = call(adapter, "fixture/log")["calls"].toArray();
         QCOMPARE(calls[0].toObject()["method"].toString(), "initialize");
+        const auto capabilities =
+            calls[0].toObject()["params"].toObject()["clientCapabilities"].toObject();
+        QVERIFY(!capabilities.contains("_meta"));
+        for (const auto& value : calls)
+            QVERIFY(value.toObject()["method"] != "session/set_mode");
         const auto session = calls[1].toObject()["params"].toObject();
         QCOMPARE(session["mcpServers"].toArray().last().toObject()["name"].toString(),
                  "ketplus_agents");

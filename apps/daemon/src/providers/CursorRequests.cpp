@@ -123,4 +123,18 @@ bool CursorAdapter::handleExtensionRequest(const QJsonObject& object) {
     }
     return false;
 }
+
+bool CursorAdapter::autoApprovePermission(const QString& sessionId,
+                                          const QJsonObject& toolCall) const {
+    // Cursor supplies these fields as CLI-authenticated MCP identity, not model arguments.
+    const auto input = toolCall.value(QStringLiteral("rawInput")).toObject();
+    if (input.value(QStringLiteral("toolName")).toString().isEmpty())
+        return false;
+    const QString server = input.value(QStringLiteral("providerIdentifier")).toString();
+    return (browserSessions_.contains(sessionId) && server == QStringLiteral("ketplus_browser")) ||
+           (computerSessions_.contains(sessionId) &&
+            server == QStringLiteral("ketplus_computer")) ||
+           (agentSessions_.contains(sessionId) && server == QStringLiteral("ketplus_agents"));
+}
+
 } // namespace ketplus::daemon

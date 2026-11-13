@@ -142,45 +142,47 @@ void AcpAdapter::ensureStarted() {
     process_->start();
 }
 
+QJsonObject AcpAdapter::clientCapabilities() const {
+    return QJsonObject{
+        {QStringLiteral("fs"), QJsonObject{{QStringLiteral("readTextFile"), false},
+                                           {QStringLiteral("writeTextFile"), false}}},
+        {QStringLiteral("terminal"), false},
+        {QStringLiteral("session"),
+         QJsonObject{{QStringLiteral("configOptions"),
+                      QJsonObject{{QStringLiteral("boolean"), QJsonObject{}}}}}}};
+}
+
 void AcpAdapter::initialize() {
     narrowing_.reset();
-    sendCall(
-        QStringLiteral("initialize"),
-        {{QStringLiteral("protocolVersion"), 1},
-         {QStringLiteral("clientCapabilities"),
-          QJsonObject{{QStringLiteral("fs"), QJsonObject{{QStringLiteral("readTextFile"), false},
-                                                         {QStringLiteral("writeTextFile"), false}}},
-                      {QStringLiteral("terminal"), false},
-                      {QStringLiteral("session"),
-                       QJsonObject{{QStringLiteral("configOptions"),
-                                    QJsonObject{{QStringLiteral("boolean"), QJsonObject{}}}}}},
-                      {QStringLiteral("_meta"),
-                       QJsonObject{{QStringLiteral("parameterizedModelPicker"), true}}}}},
-         {QStringLiteral("clientInfo"),
-          QJsonObject{{QStringLiteral("name"), QStringLiteral("ketplus-daemon")},
-                      {QStringLiteral("title"), QStringLiteral("KetPlus Daemon")},
-                      {QStringLiteral("version"), QStringLiteral("0.1.0")}}}},
-        [this](const QJsonObject& result, const QString& error) {
-            starting_ = false;
-            narrowing_.acpInitialized(result);
-            if (!error.isEmpty()) {
-                const QString reason = QStringLiteral("%1 ACP initialization failed: %2%3")
-                                           .arg(label_, error, stderrTail());
-                noteUnexpectedStop();
-                failPending(reason);
-                emit stopped(reason);
-                stopping_ = true;
-                process_->terminate();
-                return;
-            }
-            setReady(true);
-            const QList<QueuedCall> calls = std::exchange(queued_, {});
-            for (const QueuedCall& call : calls)
-                call.method == QStringLiteral("turn/start") ? startTurn(call.params, call.callback)
-                : call.method == QStringLiteral("turn/interrupt")
-                    ? interruptTurn(call.params, call.callback)
-                    : sendCall(call.method, call.params, call.callback);
-        });
+    sendCall(QStringLiteral("initialize"),
+             {{QStringLiteral("protocolVersion"), 1},
+              {QStringLiteral("clientCapabilities"), clientCapabilities()},
+              {QStringLiteral("clientInfo"),
+               QJsonObject{{QStringLiteral("name"), QStringLiteral("ketplus-daemon")},
+                           {QStringLiteral("title"), QStringLiteral("KetPlus Daemon")},
+                           {QStringLiteral("version"), QStringLiteral("0.1.0")}}}},
+             [this](const QJsonObject& result, const QString& error) {
+                 starting_ = false;
+                 narrowing_.acpInitialized(result);
+                 if (!error.isEmpty()) {
+                     const QString reason = QStringLiteral("%1 ACP initialization failed: %2%3")
+                                                .arg(label_, error, stderrTail());
+                     noteUnexpectedStop();
+                     failPending(reason);
+                     emit stopped(reason);
+                     stopping_ = true;
+                     process_->terminate();
+                     return;
+                 }
+                 setReady(true);
+                 const QList<QueuedCall> calls = std::exchange(queued_, {});
+                 for (const QueuedCall& call : calls)
+                     call.method == QStringLiteral("turn/start")
+                         ? startTurn(call.params, call.callback)
+                     : call.method == QStringLiteral("turn/interrupt")
+                         ? interruptTurn(call.params, call.callback)
+                         : sendCall(call.method, call.params, call.callback);
+             });
 }
 
 void AcpAdapter::failPending(const QString& reason) {

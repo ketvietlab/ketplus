@@ -425,4 +425,11 @@ bool CursorAdapter::holdAssistantText(const QString& text) const { return isPlan
 qint64 CursorAdapter::failureResetsAt(const QString& error) const {
     return looksLikeUsageLimit(error) ? usageLimitResetsAt(error) : 0;
 }
+QJsonObject CursorAdapter::clientCapabilities() const {
+    auto capabilities = AcpAdapter::clientCapabilities();
+    capabilities.insert(QStringLiteral("_meta"),
+                        QJsonObject{{QStringLiteral("parameterizedModelPicker"), true}});
+    return capabilities;
+}
+
 } // namespace ketplus::daemon
