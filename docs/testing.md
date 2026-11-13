@@ -50,6 +50,16 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## VS Code importer fixtures
+
+`ketplus_vscode_import_tests` covers original dark/light/include themes, standard
+DOCTYPE tmTheme resources, explicit style resets, ordered fallback chains, ANSI16,
+semantic metadata without application, unsupported selectors and multi-variant
+VSIX. Failure cases cover unsafe paths/archives, malformed data, entity expansion,
+include cycles and shared byte/canonical-output limits. Fixture provenance is in
+`core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
+targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
+
 ## Theme input security fixtures
 
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
