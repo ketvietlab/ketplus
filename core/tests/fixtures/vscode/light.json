@@ -1,0 +1,5 @@
+{
+  "name":"Fixture Paper", "type":"light",
+  "colors":{"editor.background":"#FAFAFA", "editor.foreground":"#112233", "list.inactiveSelectionBackground":"#DDEEFF", "foreground":"#222222", "terminal.background":"#FFFFFF"},
+  "tokenColors":[{"scope":"keyword", "settings":{"foreground":"#3344AA", "fontStyle":"bold"}}]
+}
