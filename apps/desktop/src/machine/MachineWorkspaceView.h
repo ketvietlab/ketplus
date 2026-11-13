@@ -12,6 +12,7 @@ class QLabel;
 class QPlainTextEdit;
 class QPushButton;
 class QToolButton;
+class QVBoxLayout;
 namespace ketplus::remote {
 class MachineBackend;
 }
@@ -81,6 +82,7 @@ class MachineWorkspaceView final : public QWidget {
     void bind(const QString& sessionId, qint64 generation, bool running);
     void finishCreate(const QString& machine, const QJsonObject& result, const QString& error);
     void discardPreparation();
+    void renderPendingAttachments();
     void preparedAttachments(const QJsonObject& result);
     void sendPreparedAttachments(const QString& prompt);
     QPointer<remote::MachineBackend> draftBackend_;
@@ -90,6 +92,8 @@ class MachineWorkspaceView final : public QWidget {
     QString draftWorktree_;
     QString draftRepository_;
     QStringList pendingAttachmentPaths_;
+    QWidget* pendingAttachments_{nullptr};
+    QVBoxLayout* pendingAttachmentLayout_{nullptr};
     quint64 draftEpoch_{0};
     bool preparing_{false};
 

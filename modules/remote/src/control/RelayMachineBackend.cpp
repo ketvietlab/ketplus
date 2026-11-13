@@ -38,6 +38,9 @@ RelayMachineBackend::RelayMachineBackend(ControlV2Client* client, QString relayM
     connect(events_, &QTimer::timeout, this, &RelayMachineBackend::pollEvents);
     if (!outbox_.load(&outboxError_))
         qWarning("Relay command outbox unavailable: %s", qUtf8Printable(outboxError_));
+    for (const auto& entry : outbox_.pending())
+        if (entry.envelope.value("kind") == "session.prepare")
+            recoveredPreparations_.insert(entry.id());
     if (client_) {
         connect(client_, &ControlV2Client::credentialRevoked, this,
                 [this] { failed(QStringLiteral("Account changed.")); });
@@ -97,6 +100,7 @@ void RelayMachineBackend::fence(const QString& reason) {
     retry_->stop();
     events_->stop();
     delivering_.clear();
+    recoveringPreparations_.clear();
     // A new connection reads unrecorded results back at the first retry step again.
     recordAttempts_.clear();
     const auto callbacks = std::exchange(callbacks_, {});

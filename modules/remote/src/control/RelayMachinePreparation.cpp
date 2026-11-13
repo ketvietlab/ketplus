@@ -2,8 +2,49 @@
 #include "control/RelayMachineBackend.h"
 
 #include <QDateTime>
+#include <QTimer>
+#include <QUuid>
 
 namespace ketplus::remote {
+
+void RelayMachineBackend::discardRecoveredPreparation(const QString& id,
+                                                      const QJsonObject& command) {
+    // The composer is not restored across process restart. Keep the preparation pending
+    // until its encrypted cancellation replaces it in one durable outbox write.
+    recoveringPreparations_.insert(id);
+    const auto token = QUuid::createUuid().toString(QUuid::Id128);
+    const QJsonObject intent{{"id", "command_" + token},
+                             {"idempotencyKey", "command_idempotency_" + token},
+                             {"workspaceId", command.value("workspaceId")},
+                             {"machineId", relayMachineId_},
+                             {"sessionId", command.value("result").toObject().value("session_id")},
+                             {"sessionGeneration", 1},
+                             {"capability", "session.prepare.cancel"},
+                             {"kind", "session.prepare.cancel"}};
+    const auto epoch = generation_;
+    client_->prepareCommand(
+        intent, {}, guarded([this, id, epoch](const QJsonValue& value, const QString& error) {
+            if (epoch != generation_)
+                return;
+            QString storage;
+            if (error.isEmpty() &&
+                outbox_.replace(id, OutboxRoute::Session, value.toObject(), &storage)) {
+                recoveredPreparations_.remove(id);
+                recoveringPreparations_.remove(id);
+                delivering_.remove(id);
+                resume();
+                return;
+            }
+            recoveringPreparations_.remove(id);
+            delivering_.remove(id);
+            // Encryption/key lookup or storage may be temporarily unavailable. Re-read the
+            // signed result on retry; never forget the allocation before cleanup is durable.
+            QTimer::singleShot(options_.commandPollMilliseconds, this, [this, epoch] {
+                if (epoch == generation_ && state_ == ConnectionState::Connected)
+                    resume();
+            });
+        }));
+}
 
 void RelayMachineBackend::createSession(const QJsonObject& request, Callback callback) {
     if (request.value("prompt").toString().trimmed().isEmpty()) {

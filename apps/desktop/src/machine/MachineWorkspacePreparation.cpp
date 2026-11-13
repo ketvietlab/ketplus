@@ -8,12 +8,16 @@
 #include "machine/MachineConversationSession.h"
 #include <QComboBox>
 #include <QDateTime>
+#include <QFileInfo>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QToolButton>
 #include <QUuid>
+#include <QVBoxLayout>
 #include <memory>
 #include <utility>
 
@@ -26,17 +30,54 @@ void MachineWorkspaceView::renderActions(const bool newConversation) {
     auto* backend = catalog_->backend();
     const bool prepare = newConversation && backend &&
                          backend->supports(remote::MachineBackend::Feature::SessionPreparation) &&
-                         worktrees_->currentData().isValid() && !creating_ && !preparing_ &&
+                         worktrees_->currentData().isValid() && !creating_ &&
                          (!draftSession_ || !draftSession_->hasAttachmentSend());
     attach_->setEnabled(
         prepare || (session_ && actions_->available(
                                     MachineConversationActions::Feature::Attachments, &reason)));
-    attach_->setText(!pendingAttachmentPaths_.isEmpty() && !preparing_ ? tr("Retry attachments")
-                                                                       : tr("Attach"));
+    attach_->setText(tr("Attach"));
     attach_->setToolTip(
         session_  ? reason
         : prepare ? QString{}
                   : tr("This machine does not offer attachments before its first message yet."));
+}
+
+void MachineWorkspaceView::renderPendingAttachments() {
+    while (auto* item = pendingAttachmentLayout_->takeAt(0)) {
+        if (auto* widget = item->widget()) {
+            widget->hide();
+            widget->deleteLater();
+        }
+        delete item;
+    }
+    pendingAttachments_->setVisible(!session_ && !pendingAttachmentPaths_.isEmpty());
+    if (session_ || pendingAttachmentPaths_.isEmpty())
+        return;
+    for (const auto& path : std::as_const(pendingAttachmentPaths_)) {
+        auto* row = new QWidget(pendingAttachments_);
+        auto* line = new QHBoxLayout(row);
+        line->setContentsMargins(0, 0, 0, 0);
+        auto* name = new QLabel(QFileInfo(path).fileName(), row);
+        name->setTextFormat(Qt::PlainText);
+        name->setWordWrap(true);
+        auto* remove = new QPushButton(tr("Remove"), row);
+        remove->setAccessibleName(tr("Remove %1").arg(QFileInfo(path).fileName()));
+        connect(remove, &QPushButton::clicked, this, [this, path] {
+            pendingAttachmentPaths_.removeAll(path);
+            if (pendingAttachmentPaths_.isEmpty())
+                discardPreparation(); // Any late result is cancelled by the epoch guard.
+            render();
+        });
+        line->addWidget(name, 1);
+        line->addWidget(remove);
+        pendingAttachmentLayout_->addWidget(row);
+    }
+    if (!preparing_) {
+        auto* retry = new QPushButton(tr("Retry attachments"), pendingAttachments_);
+        retry->setObjectName("machineRetryAttachments");
+        connect(retry, &QPushButton::clicked, this, [this] { attachFiles({}); });
+        pendingAttachmentLayout_->addWidget(retry, 0, Qt::AlignLeft);
+    }
 }
 
 void MachineWorkspaceView::discardPreparation() {
@@ -68,13 +109,17 @@ void MachineWorkspaceView::attachFiles(const QStringList& paths) {
         return;
     }
     auto* backend = catalog_->backend();
-    if (!backend || preparing_ || creating_ || !worktrees_->currentData().isValid() ||
+    if (!backend || creating_ || !worktrees_->currentData().isValid() ||
         !backend->supports(remote::MachineBackend::Feature::SessionPreparation) ||
         (paths.isEmpty() && pendingAttachmentPaths_.isEmpty()))
         return;
     for (const auto& path : paths)
         if (!pendingAttachmentPaths_.contains(path))
             pendingAttachmentPaths_.append(path);
+    if (preparing_) {
+        render();
+        return;
+    }
     if (draftRequestId_.isEmpty()) {
         draftRequestId_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
         draftWorktree_ = worktrees_->currentData().toString();

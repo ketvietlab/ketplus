@@ -30,7 +30,12 @@ work, create misleading transcript content and complicate cancellation.
 
 Choose a pre-created inactive session, rather than a separate pending-file store.
 The additive Relay operation and coordinated hosted support are approved. Shipping
-requires both sides to implement the lifecycle and advertise the capability.
+requires both sides to implement the lifecycle and advertise the capability. Until
+the hosted Relay supports the additive contract and the target advertises
+`session.prepare/1`, first-turn Attach stays unavailable; a missing/failed hosted
+capability read disables only preparation. Plain first sends and existing-session
+uploads keep their previous behavior. Hosted deployment is a separate owner step,
+not implied by merging the desktop change.
 
 When the first file is attached, prepare a session for the selected enrolled
 worktree without starting a provider, recording a user message or charging a turn.
@@ -86,20 +91,34 @@ session/key scope before accepting any attachment command.
 
 Keep the text and selected files visible while preparation runs; disable Send until
 preparation and all commits succeed. On preparation or upload failure, retain the
-draft and show retry/removal. A failed turn keeps ready attachment IDs, as existing
-conversation sends do. Do not consume them on a queued Relay acknowledgement.
+draft and show retry/removal. Local file names and Remove remain available before a
+session exists, including during preparation and after refusal; the text remains
+editable. Removing every selected file cancels/abandons preparation and enables an
+ordinary text-only first message without leaving the view. A failed turn keeps ready
+attachment IDs, as existing conversation sends do. Do not consume them on a queued Relay acknowledgement.
 
-Prepared sessions are private to the authenticated subject and creating device. They
-have no provider turn or transcript entry and are excluded from ordinary session,
+Over Relay, prepared sessions are private to the authenticated subject and creating
+device. They have no provider turn or transcript entry and are excluded from ordinary session,
 repository, team, phone and other-subject listings before the first real turn.
 Only the owner can stage, start the first turn, or discard a prepared session;
-knowing an ID or sharing the same workspace is insufficient. Routing metadata may
-identify this private scope, but attachment contents remain encrypted.
+knowing an ID or sharing the same workspace is insufficient on Relay. Local IPC and
+SSH use the existing OS-user trust boundary: clients connected to the same daemon
+as the same host OS user share the `local` owner, just as for ordinary sessions.
+SSH authentication identifies that host user, not an individual desktop device;
+this feature does not claim isolation between two desktops using that same user.
+Separate host OS users/daemons are required for separate local/SSH subjects. Routing
+metadata may identify this private scope, but attachment contents remain encrypted.
 
 Removing a file cancels its existing staging operation. Discarding the draft also
 cancels preparation/staging and removes the prepared session and staged bytes,
-including when a queued preparation completes late. Cancellation is atomic against
-activation: it cannot delete a session whose real first turn already started.
+including when a queued preparation completes late. The composer itself is not
+restored after a desktop process restart: the Relay backend replays its durable
+preparation envelope, verifies the result and atomically replaces that outbox entry
+with an encrypted cancellation before recording preparation as complete. A crash
+before that replacement replays preparation; a crash after it replays cancellation.
+Transient key/storage failures retain the pending preparation for retry. No
+plaintext attachment data or local file path is added to the outbox. Cancellation is
+atomic against activation: it cannot delete a session whose real first turn already started.
 
 An abandoned prepared session expires **24 hours after its original allocation**.
 Retries and heartbeat do not renew that deadline. The daemon cleans expired prepared

@@ -5,6 +5,9 @@
 #include "machine/MachineWorkspaceView.h"
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -91,7 +94,9 @@ class MachinePreparationTest final : public QObject {
         const auto requestId =
             backend.calls("prepareSession").first().request.value("client_request_id");
         failPrepare = false;
-        view.attachFiles({}); // Retry keeps the request identity and selected local file.
+        auto* retry = view.findChild<QPushButton*>("machineRetryAttachments");
+        QTRY_VERIFY(retry && retry->isVisible());
+        QTest::mouseClick(retry, Qt::LeftButton); // Same request identity and local file.
         QCOMPARE(backend.calls("prepareSession").size(), 2);
         QCOMPARE(backend.calls("prepareSession").last().request.value("client_request_id"),
                  requestId);
@@ -121,6 +126,73 @@ class MachinePreparationTest final : public QObject {
         QCOMPARE(backend.calls("createSession").size(), 0);
         QCOMPARE(backend.calls("cancelPreparedSession").size(), 0);
     }
+    void pendingFilesCanBeRemovedDuringPreparationAndAfterFailure_data() {
+        QTest::addColumn<bool>("pending");
+        QTest::newRow("in-flight") << true;
+        QTest::newRow("refused") << false;
+    }
+    void pendingFilesCanBeRemovedDuringPreparationAndAfterFailure() {
+        QFETCH(bool, pending);
+        FakeMachineBackend backend("machine", Route::Relay);
+        backend.features = {remote::MachineBackend::Feature::Attachments,
+                            remote::MachineBackend::Feature::SessionPreparation};
+        bool refuse = true;
+        backend.answer = answers(&refuse);
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        view.resize(1000, 760);
+        view.show();
+        catalog.setBackend(&backend);
+        QTRY_VERIFY(!catalog.repositories().isEmpty());
+        view.startNewConversation();
+        auto* input = view.findChild<QPlainTextEdit*>("machineComposer");
+        auto* send = view.findChild<QPushButton*>("machineSend");
+        input->setPlainText("Keep this first message");
+        QTemporaryDir filesDir;
+        QFile file(filesDir.filePath("reference.txt"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("reference");
+        file.flush();
+        backend.hold = pending;
+        view.attachFiles({file.fileName()});
+        auto* files = view.findChild<QWidget*>("machinePendingAttachments");
+        QVERIFY(files && files->isVisible());
+        QVERIFY(input->isEnabled() && !input->isReadOnly());
+        QVERIFY(!send->isEnabled());
+        QTRY_VERIFY([&] {
+            for (auto* label : files->findChildren<QLabel*>())
+                if (label->isVisible() && label->text() == QFileInfo(file.fileName()).fileName())
+                    return true;
+            return false;
+        }());
+        QPushButton* remove = nullptr;
+        for (auto* button : files->findChildren<QPushButton*>())
+            if (button->isVisible() && button->text() == "Remove")
+                remove = button;
+        QVERIFY(remove && remove->isEnabled());
+        if (!pending)
+            QVERIFY(view.findChild<QPushButton*>("machineRetryAttachments")->isVisible());
+        if (!qEnvironmentVariable("KETPLUS_TEST_CAPTURE_DIR").isEmpty()) {
+            QDir captures(qEnvironmentVariable("KETPLUS_TEST_CAPTURE_DIR"));
+            QVERIFY(captures.mkpath("."));
+            QVERIFY(view.grab().save(
+                captures.filePath(pending ? "pending-files.png" : "preparation-refused.png")));
+        }
+        QTest::mouseClick(remove, Qt::LeftButton);
+        QVERIFY(!files->isVisible());
+        QVERIFY(send->isEnabled());
+        QCOMPARE(input->toPlainText(), "Keep this first message");
+        // A discarded in-flight allocation must still be cancelled when it arrives.
+        refuse = false;
+        backend.hold = false;
+        backend.release();
+        QCOMPARE(backend.calls("cancelPreparedSession").size(), pending ? 1 : 0);
+        QCOMPARE(backend.calls("attachment.stage.begin").size(), 0);
+        QTest::mouseClick(send, Qt::LeftButton);
+        QCOMPARE(backend.calls("createSession").size(), 1);
+        QCOMPARE(backend.calls("startTurn").size(), 0);
+    }
+
     void leavingCancelsAnAllocationEvenIfPreparationCompletesLate() {
         FakeMachineBackend backend("machine", Route::Relay);
         backend.features = {remote::MachineBackend::Feature::Attachments,
@@ -199,8 +271,14 @@ class MachinePreparationTest final : public QObject {
         QCOMPARE(backend.calls("createSession").size(), 1);
         QCOMPARE(backend.calls("startTurn").size(), 0);
     }
+    void oldDaemonKeepsFirstTurnAttachmentsUnavailable_data() {
+        QTest::addColumn<bool>("relay");
+        QTest::newRow("ssh") << false;
+        QTest::newRow("relay") << true;
+    }
     void oldDaemonKeepsFirstTurnAttachmentsUnavailable() {
-        FakeMachineBackend backend("machine", Route::Ssh);
+        QFETCH(bool, relay);
+        FakeMachineBackend backend("machine", relay ? Route::Relay : Route::Ssh);
         backend.features = {remote::MachineBackend::Feature::Attachments};
         backend.answer = answers();
         MachineCatalog catalog;
@@ -211,6 +289,12 @@ class MachinePreparationTest final : public QObject {
         QVERIFY(!view.findChild<QPushButton*>("machineAttach")->isEnabled());
         view.attachFiles({"unused-synthetic-file.txt"});
         QCOMPARE(backend.calls("prepareSession").size(), 0);
+        auto* input = view.findChild<QPlainTextEdit*>("machineComposer");
+        input->setPlainText("Plain first message against an older target");
+        auto* send = view.findChild<QPushButton*>("machineSend");
+        QVERIFY(send->isEnabled());
+        QTest::mouseClick(send, Qt::LeftButton);
+        QCOMPARE(backend.calls("createSession").size(), 1);
     }
 };
 QTEST_MAIN(MachinePreparationTest)

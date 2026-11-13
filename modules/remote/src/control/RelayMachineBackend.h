@@ -139,6 +139,7 @@ class RelayMachineBackend final : public MachineBackend {
     void poll(const CommandOutbox::Entry& entry);
     void finish(const QString& id, const QJsonObject& command, const QString& error);
     void pollEvents();
+    void discardRecoveredPreparation(const QString& id, const QJsonObject& command);
 
     QPointer<ControlV2Client> client_;
     QString relayMachineId_;
@@ -155,6 +156,8 @@ class RelayMachineBackend final : public MachineBackend {
     QTimer* events_{nullptr};
     QHash<QString, Callback> callbacks_;
     QSet<QString> delivering_;
+    QSet<QString> recoveredPreparations_;
+    QSet<QString> recoveringPreparations_;
     // Completions not yet recorded in the outbox, by id: how often a record was retried.
     QHash<QString, int> recordAttempts_;
     // Outbox commands added by this process and never handed to the relay: only these can be

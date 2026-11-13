@@ -93,15 +93,22 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     layout->addWidget(approvals_);
     attachmentStack_ = new QStackedWidget(this);
     layout->addWidget(attachmentStack_);
+    pendingAttachments_ = new QWidget(this);
+    pendingAttachments_->setObjectName("machinePendingAttachments");
+    pendingAttachmentLayout_ = new QVBoxLayout(pendingAttachments_);
+    pendingAttachmentLayout_->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(pendingAttachments_);
     layout->addWidget(composer_);
     composer_->installEventFilter(this);
     connect(attach_, &QPushButton::clicked, this, [this] {
         if (attachmentPanel_)
             attachmentPanel_->chooseFiles();
-        else if (!pendingAttachmentPaths_.isEmpty())
-            attachFiles({});
-        else
-            attachFiles(QFileDialog::getOpenFileNames(this, tr("Attach images or text files")));
+        else {
+            const auto paths =
+                QFileDialog::getOpenFileNames(this, tr("Attach images or text files"));
+            if (!paths.isEmpty())
+                attachFiles(paths);
+        }
     });
     connect(worktrees_, &QComboBox::currentIndexChanged, this, [this] {
         if (!draftRequestId_.isEmpty() &&
@@ -317,12 +324,13 @@ void MachineWorkspaceView::render() {
     renderTranscript();
     approvals_->refresh();
     renderActions(newConversation);
+    renderPendingAttachments();
 
     const bool connected = catalog_->state() == State::Connected;
-    const bool canAct =
-        newConversation ? connected && worktrees_->currentData().isValid() && !creating_ &&
-                              !preparing_ && (!draftSession_ || !draftSession_->hasAttachmentSend())
-                        : session_->canAct();
+    const bool canAct = newConversation
+                            ? connected && worktrees_->currentData().isValid() && !creating_ &&
+                                  (!draftSession_ || !draftSession_->hasAttachmentSend())
+                            : session_->canAct();
     // A request the route holds or queued is named, so the composer never looks hung.
     QString reason;
     if (newConversation && preparing_)
@@ -352,7 +360,7 @@ void MachineWorkspaceView::render() {
     composer_->setReadOnly(!canAct);
     composer_->setEnabled(canAct);
     composerReason_->setText(reason);
-    send_->setEnabled(canAct && pendingAttachmentPaths_.isEmpty() &&
+    send_->setEnabled(canAct && !preparing_ && pendingAttachmentPaths_.isEmpty() &&
                       (!attachmentPanel_ || attachmentPanel_->allReady()));
     stop_->setVisible(session_ != nullptr && session_->running());
     stop_->setEnabled(canAct);
@@ -415,6 +423,8 @@ void MachineWorkspaceView::renderWorktrees() {
 }
 
 void MachineWorkspaceView::submit() {
+    if (preparing_ || !pendingAttachmentPaths_.isEmpty())
+        return;
     const QString prompt = composer_->toPlainText().trimmed();
     if (prompt.isEmpty() && (!attachmentPanel_ || !attachmentPanel_->hasAttachments()))
         return;

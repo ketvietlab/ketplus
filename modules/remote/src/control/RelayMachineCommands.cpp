@@ -258,6 +258,17 @@ void RelayMachineBackend::poll(const CommandOutbox::Entry& entry) {
 
 void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
                                  const QString& error) {
+    if (recoveredPreparations_.contains(id) && error.isEmpty() &&
+        command.value("status") == "completed" &&
+        command.value("result").toObject().value("ok").toBool() &&
+        !command.value("result").toObject().value("session_id").toString().isEmpty() &&
+        command.value("result").toObject().value("session_generation").toInteger() == 1 &&
+        command.value("result").toObject().value("expires_at_ms").toInteger() >
+            QDateTime::currentMSecsSinceEpoch()) {
+        if (!recoveringPreparations_.contains(id))
+            discardRecoveredPreparation(id, command);
+        return;
+    }
     delivering_.remove(id);
     // A command's result is applied once, however many times it is read back.
     if (outbox_.isCompleted(id) || !outbox_.isPending(id)) {
