@@ -72,6 +72,8 @@ class InstallerTransactionTests(unittest.TestCase):
         daemon = ("#!/usr/bin/env python3\nimport sys,time,os,socket,signal\nfrom pathlib import Path\n"
                   "if '--build-info' in sys.argv: print(" + repr(json.dumps(info)) + ");sys.exit()\n"
                   "if '--check-runtime' in sys.argv: sys.exit(" + str(int(bad_runtime)) + ")\n"
+                  "if (Path(os.environ['HOME'])/'require-clean-stage-on-restart').exists() and "
+                  + repr(version) + "=='1.2.3' and list((Path(os.environ['HOME'])/'.local/opt/ketplus').glob('.ssh-stage-*')): sys.exit(3)\n"
                   "p=Path(os.environ['HOME'])/'qa-child.pid'\n"
                   "s=socket.socket(socket.AF_UNIX);path=os.environ['KETPLUS_DAEMON_SOCKET']\n"
                   "def stop(*args): raise SystemExit()\n"
@@ -145,6 +147,13 @@ class InstallerTransactionTests(unittest.TestCase):
         self.assertEqual(marker.read_text(), 'must survive')
         self.assertTrue((self.home / 'daemon.sock').exists())
 
+    def test_parent_traversal_in_state_path_is_refused(self):
+        self.env['KETPLUS_DAEMON_STATE'] = str(self.home / 'data/Ketsuite/KetPlus/../outside.sqlite')
+        result, rows = self.call({'action': 'preflight', 'socket': str(self.home / 'daemon.sock')})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('parent traversal', rows[0]['error'])
+        self.assertEqual(list(self.home.iterdir()), [])
+
     def test_writable_parent_is_refused_without_changes(self):
         parent = self.home / '.local'
         parent.mkdir()
@@ -156,6 +165,7 @@ class InstallerTransactionTests(unittest.TestCase):
 
     def test_upgrade_rollback_restores_receipt_and_user_data(self):
         self.installed()
+        (self.home / 'require-clean-stage-on-restart').write_text('release staging before restart')
         before = (self.root / 'ssh-install.json').read_bytes()
         data = Path(self.env['KETPLUS_DAEMON_DATA_DIR'])
         (data / 'keep').write_text('original')

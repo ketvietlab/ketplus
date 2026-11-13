@@ -50,15 +50,18 @@ All six focused suites pass on Linux, offscreen; no test is skipped:
 | --- | --- |
 | `ketplus_ssh_install_ui_tests` | 6 passed, 0 failed, 0 skipped |
 | `ketplus_remote_ssh_tunnel_tests` | 21 passed, 0 failed, 0 skipped |
-| `ketplus_remote_ssh_backend_tests` | 17 passed, 0 failed, 0 skipped |
+| `ketplus_remote_ssh_backend_tests` | 18 passed, 0 failed, 0 skipped |
 | `ketplus_daemon_upgrade_tests` | 6 passed, 0 failed, 0 skipped |
 | `ketplus_daemon_release_tests` | 17 passed, 0 failed, 0 skipped |
-| `ketplus_ssh_install_transaction_tests` | 20 passed |
+| `ketplus_ssh_install_transaction_tests` | 21 passed |
 
 The transaction suite uses disposable fixture runtimes to cover committed upgrade,
 rollback after upgrade/uninstall/startup, interrupted uploads, checksum/runtime/
 archive failures, busy refusal, downgrade refusal, writable parents, unknown or
-modified runtime files, and preservation/removal of existing/new external tokens.
+modified runtime files, parent-traversal paths, and preservation/removal of
+existing/new external tokens.
+Rollback releases staging before restarting the previous process and confirms the
+restored socket peer; the restart fixture refuses to start while staging remains.
 These fixture tests are distinct from the real-daemon Connections proof above.
 
 Public-tree hygiene: **4/4 pass**. Changed C++ files are clang-formatted and

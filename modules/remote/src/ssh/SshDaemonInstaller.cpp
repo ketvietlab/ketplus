@@ -150,10 +150,15 @@ void SshDaemonInstaller::command(const QJsonObject& description, bool transactio
                 return;
             }
             if (transaction || code != 0 || preflight_.isEmpty()) {
-                complete(false, failureMessage_.isEmpty()
-                                    ? tr("Daemon operation failed or was rolled back. Check the "
-                                         "host if SSH was lost during rollback.")
-                                    : failureMessage_);
+                QString message = failureMessage_.isEmpty() ? tr("The daemon operation failed.")
+                                                            : failureMessage_;
+                if (transaction && process->property("committed").toBool())
+                    message +=
+                        tr(" The operation committed, but final cleanup failed; check the host.");
+                else if (transaction && !rolledBack_)
+                    message +=
+                        tr(" Rollback could not be confirmed; check the host before retrying.");
+                complete(false, message);
                 return;
             }
             if (action_ == "install") {

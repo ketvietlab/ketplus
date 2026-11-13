@@ -83,6 +83,15 @@ def inventory(directory):
     return result
 
 
+def peer_pid(path, timeout=5):
+    with socket.socket(socket.AF_UNIX) as peer:
+        peer.settimeout(timeout)
+        peer.connect(str(path))
+        pid, uid, _ = struct.unpack('3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+    require(uid == os.getuid(), 'The daemon socket belongs to another account.')
+    return pid
+
+
 def safe_extract(archive, destination):
     # Validate the complete table before creating any extracted entry. The publisher puts
     # bin/, lib/, plugins/, etc. directly at the archive root (no CPack wrapper directory).
@@ -184,6 +193,9 @@ class Transaction:
         self.new = None
         self.lock = None
         self.created_token = False
+        require(not any('..' in path.parts for path in
+                        (self.home, self.data, self.state, self.token, self.socket)),
+                'Paths with parent traversal must be managed manually.')
         require(self.state.is_relative_to(self.data),
                 'State files outside the daemon data directory must be managed manually.')
 
@@ -235,13 +247,9 @@ class Transaction:
             info = self.socket.lstat()
             require(stat.S_ISSOCK(info.st_mode) and info.st_uid == os.getuid(),
                     'The daemon socket is not owned by this account.')
-            with socket.socket(socket.AF_UNIX) as peer:
-                peer.settimeout(5)
-                peer.connect(str(self.socket))
-                pid, uid, _ = struct.unpack('3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+            pid = peer_pid(self.socket)
             command = Path('/proc') / str(pid) / 'cmdline'
-            require(uid == os.getuid() and
-                    str(self.previous / 'bin/ketplus_daemon').encode() in command.read_bytes().split(b'\0')[:2],
+            require(str(self.previous / 'bin/ketplus_daemon').encode() in command.read_bytes().split(b'\0')[:2],
                     'The socket belongs to a different daemon. Nothing was changed.')
             self.old_pid = pid
         require(not self.socket.is_symlink(), 'The daemon socket is a symbolic link.')
@@ -430,10 +438,20 @@ class Transaction:
                 shutil.rmtree(self.new)
             if self.created_token:
                 self.token.unlink(missing_ok=True)
-            if self.stopped and self.previous:
-                self.start(self.previous)
         if self.stage and self.stage.exists():
             shutil.rmtree(self.stage)
+        if not self.committed and self.stopped and self.previous:
+            restored = self.start(self.previous)
+            for _ in range(100):
+                require(restored.poll() is None, 'The previous daemon could not restart; check the host.')
+                try:
+                    if peer_pid(self.socket, .1) == restored.pid:
+                        break
+                except (OSError, Refused):
+                    pass
+                time.sleep(.1)
+            else:
+                raise Refused('The previous daemon restart could not be confirmed; check the host.')
         if self.lock is not None:
             os.close(self.lock)
         if not self.committed:

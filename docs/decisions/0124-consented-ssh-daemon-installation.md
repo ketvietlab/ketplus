@@ -113,8 +113,9 @@ on Linux is a prerequisite, not installed automatically.
 
 Preflight is read-only. Reject custom `daemon.env`, an existing user service,
 unmanaged installation or running daemon, foreign-owned/symlinked parent paths,
-and modified or additional files in the managed runtime inventory. State files outside the daemon data directory require manual management. Normal custom/manual installations retain the
-existing manual-management path; this installer does not adopt or overwrite them.
+paths containing parent traversal, and modified or additional files in the managed
+runtime inventory. State files outside the daemon data directory require manual
+management. Normal custom/manual installations retain the existing manual-management path; this installer does not adopt or overwrite them.
 An installed but stopped managed daemon offers **Start managed daemon** separately.
 
 Versioned complete runtime:
@@ -153,10 +154,14 @@ process arguments, logs or the repository.
 
 The SSH transaction remains open after startup. Only a real authenticated
 `daemon.hello` through `SshMachineBackend` with the same verified SSH identity lets
-Desktop send `commit`. Cancellation is honoured until this commit decision; once sent, the transaction finishes rather than claiming it can undo an acknowledged commit. EOF, decline, cancellation, failed hello, disconnect or a
-90-second confirmation timeout rolls back the runtime link, receipt and data
-snapshot, stops only the newly started child, and restarts the previously running
-managed daemon. Interrupted upload or runtime validation changes no activation.
+Desktop send `commit`. Cancellation is honoured until this commit decision; once
+sent, the transaction finishes rather than claiming it can undo an acknowledged
+commit. EOF, decline, cancellation, failed hello, disconnect or a 90-second
+confirmation timeout rolls back the runtime link, receipt and data
+snapshot and stops only the newly started child. It releases staging before
+restarting the previously running managed daemon and confirms that the restored
+process owns the socket before reporting rollback complete. Interrupted upload or
+runtime validation changes no activation.
 The helper also handles SSH hangup/termination by running cleanup. Errors expose
 fixed messages, not subprocess stderr, tokens, journals or server banners.
 If SSH is lost during rollback or the host fails, Desktop reports that manual
