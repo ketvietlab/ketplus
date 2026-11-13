@@ -201,7 +201,7 @@ void MainWindow::refreshSidebarRepositories() {
     }
 
     // A team's members are listed under the team, wherever their conversations were created
-    // (a team can move to another repository, ADR 0121): take them first, from every group.
+    // (a team can move to another repository, ADR 0123): take them first, from every group.
     QHash<QString, QVector<SidebarTeam>> teamsByRepository;
     for (const QString& root : std::as_const(roots))
         teamsByRepository.insert(root, takeSidebarTeams(root, conversationsByRepository));
