@@ -727,8 +727,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   route, fork where the daemon's hello offers `session.fork` and through the
   Relay, and archive where it offers `session.archive/1`. Not yet on remote
   machines, each shown disabled with its reason (ADR 0119, "Parity of
-  conversation operations"): archive through the Relay, attachments on every
-  route. Remote transcripts render through This Mac's rich renderer in
+  conversation operations"): archive through the Relay. Attachments stage through
+  SSH and the encrypted Relay outbox for existing conversations. Remote transcripts render through This Mac's rich renderer in
   transcript-only mode (ketplus#598); file actions that need this Mac's disk
   say why they are unavailable.
   `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
@@ -946,3 +946,13 @@ receipt identifies a linked artifact, not successful preview validation. Invalid
 missing, oversized or out-of-worktree manifests are unavailable; ambiguous
 relative links after a context change are blocked. No provider invocation is
 required to inspect a receipt.
+
+### Linux conversation attachments (#623)
+
+Remote conversations stage files and clipboard images through the machine-neutral
+backend over SSH and the encrypted Relay outbox. Uploads advance only after each
+begin/chunk/commit result is confirmed; Relay `queued` receipts wait for
+`commandCompleted`. Ready attachment IDs accompany start/steer, and failures remain
+visible in the draft. Per-file limits match the local workspace; daemon draft quotas
+remain authoritative. Attachments require an existing conversation/session. See ADR
+0119 for lifecycle and protocol details and ADR 0007 for staging limits.

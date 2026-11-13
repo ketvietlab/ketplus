@@ -4,6 +4,8 @@ if(APPLE)
 endif()
 
 add_library(ketplus_desktop_support STATIC
+    src/machine/MachineAttachmentPanel.cpp
+    src/machine/MachineAttachmentPanel.h
     src/machine/MachineApprovalCards.cpp
     src/machine/MachineApprovalCards.h
     src/machine/MachineCatalog.cpp

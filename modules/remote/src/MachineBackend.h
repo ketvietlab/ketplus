@@ -103,6 +103,14 @@ class MachineBackend : public QObject {
     }
     // Why a feature is disabled, for its tooltip.
     [[nodiscard]] virtual QString unsupportedReason(Feature feature) const;
+    // Existing attachment.stage protocol (ADR 0007). A queued response is not completion;
+    // consumers must wait for commandCompleted before advancing the upload sequence.
+    enum class AttachmentOperation { Begin, Chunk, Commit, Cancel };
+    virtual void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
+                                   qint64 generation, const QJsonObject& request,
+                                   Callback callback);
+    [[nodiscard]] static QString attachmentCommandKind(AttachmentOperation operation);
+
     // session.rename {title}.
     virtual void renameConversation(const QString& sessionId, qint64 generation,
                                     const QString& title, Callback callback);

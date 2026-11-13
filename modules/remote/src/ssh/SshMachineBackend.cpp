@@ -324,6 +324,12 @@ void SshMachineBackend::transcriptLargeEvent(const QString& sessionId, const qin
                                              const QJsonObject& request, Callback callback) {
     operations_->transcriptLargeEvent(sessionId, generation, request, std::move(callback));
 }
+void SshMachineBackend::attachmentCommand(const AttachmentOperation operation,
+                                          const QString& sessionId, const qint64 generation,
+                                          const QJsonObject& request, Callback callback) {
+    operations_->attachmentCommand(operation, sessionId, generation, request, std::move(callback));
+}
+
 void SshMachineBackend::startTurn(const QString& sessionId, const qint64 generation,
                                   const QJsonObject& request, Callback callback) {
     operations_->startTurn(sessionId, generation, request, std::move(callback));
