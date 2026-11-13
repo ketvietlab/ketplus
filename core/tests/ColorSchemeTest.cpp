@@ -1,13 +1,13 @@
 #include "ui/theme/ColorScheme.h"
-#include "KetSyntax.h"
-#include "KetTokens.h"
 #include "ui/theme/ColorSchemeCatalog.h"
 #include "ui/theme/ColorSchemeTokens.h"
+#include <QApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLockFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -18,67 +18,17 @@ namespace {
 QByteArray sparse() {
     return R"({"schemaVersion":1,"id":"test-scheme","name":"Test","kind":"highContrast","extends":"builtin-dark"})";
 }
-ThemePalette legacyPalette(ket::Theme theme) {
-    const auto token = [theme](const char* name) {
-        QColor color = ket::Tokens::color(QString::fromLatin1(name), theme);
-        if (color.alpha() < 255) {
-            const QColor base = ket::Tokens::color(u"panel-bg", theme);
-            const qreal alpha = color.alphaF();
-            color = QColor::fromRgbF(color.redF() * alpha + base.redF() * (1 - alpha),
-                                     color.greenF() * alpha + base.greenF() * (1 - alpha),
-                                     color.blueF() * alpha + base.blueF() * (1 - alpha));
-        }
-        return color.name(QColor::HexRgb).toUpper();
-    };
-    const auto syntax = ket::syntaxRecipe(theme);
-    const auto hex = [](const QColor& color) { return color.name(QColor::HexRgb).toUpper(); };
-    return {
-
-        .dark = theme == ket::Theme::Dark,
-        .appBackground = token("page-bg"),
-        .pageBackground = token("page-bg"),
-        .sidebarBackground = token("sidebar-bg"),
-        .panelBackground = token("panel-bg"),
-        .panelSubtle = token("panel-bg-subtle"),
-        .surfaceRaised = token("surface-raised"),
-        .surfaceHover = token("surface-hover"),
-        .textMain = token("text-main"),
-        .textSecondary = token("text-secondary"),
-        .textMuted = token("text-muted"),
-        .textDisabled = token("text-disabled"),
-        .border = token("panel-border"),
-        .borderStrong = token("border-strong"),
-        .interactiveBackground = token("interactive-bg"),
-        .interactiveHover = token("interactive-hover"),
-        .interactiveActive = token("interactive-active"),
-        .accent = token("accent"),
-        .accentHover = token("accent-hover"),
-        .accentActive = token("accent-active"),
-        .accentSubtle = token("accent-subtle"),
-        .accentMuted = token("accent-muted"),
-        .focus = token("color-focus"),
-        .tabActiveText = token("tab-active-text"),
-        .accentText = token("accent-text"),
-        .actionPrimary = token("action-primary-bg"),
-        .actionPrimaryHover = token("action-primary-hover"),
-        .actionPrimaryActive = token("action-primary-active"),
-        .actionPrimaryInk = token("action-primary-ink"),
-        .positive = token("positive"),
-        .warning = token("warning"),
-        .danger = token("danger"),
-        .info = token("info"),
-        .syntaxKeyword = hex(syntax.keyword),
-        .syntaxString = hex(syntax.string),
-        .syntaxNumber = hex(syntax.number),
-        .syntaxType = hex(syntax.type),
-        .syntaxComment = hex(syntax.comment),
-        .syntaxAttribute = hex(syntax.attribute),
-    };
-}
 } // namespace
 class ColorSchemeTest : public QObject {
     Q_OBJECT
   private slots:
+    void initTestCase() {
+        QCoreApplication::setOrganizationName(QStringLiteral("KetPlusTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("ColorScheme"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QVERIFY(settingsDirectory_.isValid());
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory_.path());
+    }
     void colors_data() {
         QTest::addColumn<QString>("text");
         QTest::addColumn<QColor>("expected");
@@ -196,15 +146,58 @@ class ColorSchemeTest : public QObject {
         QCOMPARE(resolveColorScheme(scheme).kind, SchemeKind::HighContrast);
     }
     void builtinParity() {
+        auto& app = *qobject_cast<QApplication*>(QCoreApplication::instance());
+        ThemeManager manager(app);
         for (auto kind : {SchemeKind::Light, SchemeKind::Dark}) {
             const auto builtin = builtinColorScheme(kind);
             const auto reread = ColorSchemeReader::read(ColorSchemeWriter::write(builtin));
             QVERIFY(reread.ok());
             QVERIFY(reread.scheme == builtin);
-            QVERIFY(
-                colorSchemePalette(builtin) ==
-                legacyPalette(kind == SchemeKind::Light ? ket::Theme::Light : ket::Theme::Dark));
+            manager.setMode(kind == SchemeKind::Light ? ThemeManager::Mode::Light
+                                                      : ThemeManager::Mode::Dark);
+            QVERIFY(colorSchemePalette(builtin) == manager.palette());
         }
+    }
+    void alphaProjectionComposites() {
+        auto scheme = builtinColorScheme(SchemeKind::Light);
+        scheme.ui["chrome.panelBackground"] = QColor(0, 0, 0);
+        scheme.ui["list.hover"] = QColor(255, 255, 255, 26);
+        QCOMPARE(colorSchemePalette(scheme).interactiveHover, QStringLiteral("#1A1A1A"));
+        QCOMPARE(resolveColorScheme(scheme).ui.value("list.hover").alpha(), 26);
+        scheme.ui["chrome.panelBackground"] = QColor(0, 0, 0, 128);
+        QCOMPARE(colorSchemePalette(scheme).panelBackground, QStringLiteral("#7F7F7F"));
+    }
+    void unknownTypedKeysRejectPublication() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ColorSchemeCatalog catalog(dir.path());
+        for (const QString& group :
+             {QStringLiteral("ui"), QStringLiteral("editor"), QStringLiteral("terminal"),
+              QStringLiteral("diff"), QStringLiteral("syntax")}) {
+            auto scheme = ColorSchemeReader::read(sparse()).scheme;
+            const QString key = group == u"ui" ? QStringLiteral("chrome.customToken")
+                                               : QStringLiteral("customToken");
+            if (group == u"syntax")
+                scheme.syntax[key].fg = QColor(1, 2, 3);
+            else {
+                SchemeColors* colors = group == u"ui"         ? &scheme.ui
+                                       : group == u"editor"   ? &scheme.editor
+                                       : group == u"terminal" ? &scheme.terminal
+                                                              : &scheme.diff;
+                colors->insert(key, QColor(1, 2, 3));
+            }
+            QList<SchemeDiagnostic> diagnostics;
+            QVERIFY(ColorSchemeWriter::write(scheme, &diagnostics).isEmpty());
+            QCOMPARE(diagnostics.size(), 1);
+            QCOMPARE(diagnostics[0].path, QStringLiteral("$.") + group + QLatin1Char('.') + key);
+            const auto result = catalog.add(scheme);
+            QVERIFY(!result.success);
+            QVERIFY(!result.diagnostics.isEmpty());
+        }
+        ColorSchemeCatalog missing(dir.filePath("not-created"));
+        QList<SchemeDiagnostic> diagnostics;
+        QVERIFY(!missing.remove(QStringLiteral("user-scheme"), &diagnostics));
+        QCOMPARE(diagnostics[0].message, QStringLiteral("Scheme catalog directory does not exist"));
     }
     void catalogLifecycle() {
         QTemporaryDir dir;
@@ -297,6 +290,9 @@ class ColorSchemeTest : public QObject {
                  QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
                      "/color-schemes");
     }
+
+  private:
+    QTemporaryDir settingsDirectory_;
 };
 QTEST_MAIN(ColorSchemeTest)
 #include "ColorSchemeTest.moc"
