@@ -67,8 +67,8 @@
     "selection": "#23315D",
     "selectionFg": "#F2F4F7",
     "caret": "#365FD6",
-    "lineHighlight": "#171B20",
-    "gutterBg": "#1D2228",
+    "lineHighlight": "#202C4B24",
+    "gutterBg": "#171B20",
     "gutterFg": "#858D99"
   },
   "syntax": {

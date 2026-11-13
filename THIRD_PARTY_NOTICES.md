@@ -16,7 +16,7 @@ not covered by any licence listed here; see `TRADEMARKS.md` at the repository ro
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` | `Lexilla.txt` |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` | `libvterm-MIT.txt` |
 | miniz | 3.1.2 (`77d0dce8627735138c51770d1799a1ef48f2117d`) — https://github.com/richgel999/miniz | `miniz-MIT.txt` |
-| KetQt | `d47638214f80695524cd2724996674da7afdbb6a` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
+| KetQt | `e8b5322a407834ef22750de3377bb72d933e5b4b` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
 | Két Design System tokens (in KetQt) | 0.1.44 | `Ket-Design-System-MIT.txt` |
 | Két Symbol (in KetQt and the Terminal app icon) | 0.12.0 — Két Symbol © 2026 Két Việt, CC BY 4.0 | `Ket-Symbol-CC-BY-4.0.txt` |
 | KÉT Sans | 1.1.0 — https://github.com/ketvietlab/ket-sans-font/releases/tag/v1.1.0 | `KET-Sans-OFL-1.1.txt` |

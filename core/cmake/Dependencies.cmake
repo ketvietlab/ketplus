@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 652685a8e36e95823011b93eb1f24113e41be7fa # ket-qt develop: merged #56 (toast bottom avoidance)
+    GIT_TAG e8b5322a407834ef22750de3377bb72d933e5b4b # Temporary: ket-qt PR #57 runtime color overrides; repin develop merge before landing
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"
