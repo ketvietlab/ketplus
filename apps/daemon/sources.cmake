@@ -57,12 +57,23 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/CopilotCli.cpp
+    src/providers/CopilotCli.h
     src/providers/ProviderResponseEnvelope.h
     src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp
-    src/providers/CursorBrowserSession.cpp
+    src/providers/CursorModelCatalog.cpp
+    src/providers/CursorModelConfig.cpp
+    src/providers/CursorModelVariant.h
+    src/providers/CursorRequests.cpp
+    src/providers/acp/AcpAdapter.h
+    src/providers/acp/AcpProcess.cpp
+    src/providers/acp/AcpProtocol.cpp
+    src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
     src/providers/CodexAdapter.h
