@@ -7,7 +7,7 @@ The composer clock is immediately right of the Context/Limit ring, with equal vi
 and a shared vertical center, including at the minimum main-window size.
 
 All paths below are relative to `mockups/qt/evidence/schedules/`. Each basename has both
-`-light.png` and `-dark.png` variants (30 states, 60 PNGs).
+`-light.png` and `-dark.png` variants (31 states, 62 PNGs).
 
 | Surface/state | Screenshot basenames | Reproduce with |
 | --- | --- | --- |
@@ -15,7 +15,8 @@ All paths below are relative to `mockups/qt/evidence/schedules/`. Each basename 
 | Edit existing schedule: team/new-conversation/weekly | `02-editor-team`, `02-editor-new-conversation`, `02-editor-weekly` | `--screen=schedules --state=edit`, `new-conversation`, `weekly` |
 | Visible busy/missed policies; required prompt error | `02-editor-policies`, `02-editor-validation` | `--screen=schedules --state=policies`, `validation` |
 | Failure history and delete confirmation | `03-history-failure`, `03-delete` | `--screen=schedules --state=failure`, `delete` |
-| New conversation: default, one-time, repeat + More, weekly | `04-new-send-now`, `04-new-at-time`, `04-new-repeat-more`, `04-new-weekly` | `--screen=workspace --state=schedule-new`, `schedule-at`, `schedule-more`, `schedule-weekly` |
+| New conversation: Send now default, one-time, repeat + More, weekly | `04-new-send-now`, `04-new-at-time`, `04-new-repeat-more`, `04-new-weekly` | `--screen=workspace --state=schedule-new`, `schedule-at`, `schedule-more`, `schedule-weekly` |
+| Separate Repeat example (not the default) | `04-new-repeat` | `--screen=workspace --state=schedule-repeat` |
 | Active clock with the normal Send action | `04-scheduled-send` | `--screen=workspace --state=schedule-ready` |
 | Existing-conversation manage-only clock menu | `04-existing-schedule` | `--screen=workspace --state=schedule-existing` |
 | Scheduled user-message marker | `05-scheduled-transcript` | `--screen=workspace --state=scheduled` |
@@ -28,6 +29,11 @@ All paths below are relative to `mockups/qt/evidence/schedules/`. Each basename 
 | True empty manager, creation guidance only | `09-empty` | `--screen=schedules --state=empty` |
 | Minimum manager/editor | `10-minimum`, `10-minimum-editor` | `--screen=schedules --size=900x600`; add `--state=new-conversation` for editor |
 | Minimum composer popover and scheduled submit | `10-minimum-popover`, `10-minimum-scheduled-send` | `--screen=workspace --size=1024x640 --state=schedule-more`, `schedule-ready` |
+
+The default/new-conversation capture (`04-new-send-now`) selects **Send now**, hides
+the time/repeat fields and keeps the clock inactive. `04-new-repeat` is an explicitly
+requested example. `04-scheduled-send` represents an applied schedule, never the default.
+Smoke also checks that reopening restores the applied choice and Cancel preserves it.
 
 ## Reproduction and checks
 
@@ -43,9 +49,9 @@ the offscreen platform renders the menu bar inside the captured client window. E
 native review run uses `--display=secondary` on DELL, separately from these captures.
 
 CTest covers recurrence validation, start bounds, store mutations, deterministic empty and
-policy startup, six composer startup states at minimum size, a genuinely inactive waiting
+policy startup, seven composer startup states at minimum size, a genuinely inactive waiting
 team, recurring New team creation and visible role/model controls. The Pro smoke visits
-84 screen states and exercises in-memory creation, editing, pause/run/delete and existing
+85 screen states and exercises in-memory creation, editing, pause/run/delete and existing
 team behavior. The Lite smoke checks that the unrelated edition still opens correctly.
 
 Round-1 corrections: deterministic empty/policy captures (F1/F2), obsolete sidebar clocks

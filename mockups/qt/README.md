@@ -121,7 +121,9 @@ new sidebar navigation entry, sidebar clock or conversation-header clock.
 
 The composer clock sits immediately to the right of the Context/Limit ring, with the same
 visible diameter and vertical center. In a new, unsent conversation it opens Send now, At a
-time and Repeat options. More contains busy/missed policies. Applying a schedule activates
+time and Repeat options. With no applied schedule it always starts at **Send now**, hides
+the time/repeat fields and leaves the clock inactive. Reopening restores an applied choice;
+Cancel preserves it. More contains busy/missed policies. Applying a schedule activates
 the clock. Send keeps its normal appearance and label, and saves the schedule when pressed. Existing conversations show
 this clock only when they have a schedule, with Edit, Pause/Resume and Open in Schedules.
 
@@ -132,7 +134,7 @@ Team pages expose manage-only Schedules; a waiting team uses a separate, inactiv
 
 `--screen=schedules` opens the manager. States: `empty`, `failure`, `team`, `edit`, `weekly`,
 `new-conversation` (edit an existing new-conversation target), `validation`, `policies`, `delete`.
-Workspace states: `schedule-new`, `schedule-at`, `schedule-more`, `schedule-weekly`,
+Workspace states: `schedule-new` (default Send now), `schedule-repeat` (explicit Repeat example), `schedule-at`, `schedule-more`, `schedule-weekly`,
 `schedule-ready`, `schedule-existing`, `scheduled` and `schedule-failure`. Team states:
 `scheduled` (waiting) and `recurring` (active history). New team dialogs use
 `--open=new-team`, `new-team-scheduled`, `new-team-repeat`, `new-team-members` or
@@ -161,7 +163,7 @@ before showing them and refuses an unavailable requested display. `--screenshot`
 the schedule window when open; `--size` also sizes that window. The minimum main window
 is 1024 × 640; Schedules supports 900 × 600.
 
-See [the scheduling evidence index](evidence/schedules/README.md) for all 60 light/dark
+See [the scheduling evidence index](evidence/schedules/README.md) for all 62 light/dark
 captures, minimum-size views, state arguments and a SHA-256 manifest.
 
 ## Transcript content types

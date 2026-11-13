@@ -16,7 +16,7 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "schedules", "schedules/empty", "schedules/failure", "schedules/team",
-        "workspace/scheduled", "workspace/schedule-failure", "workspace/schedule-new", "workspace/schedule-ready", "workspace/schedule-existing", "teams/scheduled", "teams/recurring",
+        "workspace/scheduled", "workspace/schedule-failure", "workspace/schedule-new", "workspace/schedule-repeat", "workspace/schedule-ready", "workspace/schedule-existing", "teams/scheduled", "teams/recurring",
         "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
         "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
@@ -310,7 +310,7 @@ Basic.ApplicationWindow {
     function evidenceChecks() {
         let valid = true
         if (Mock.initialScreen === "schedules") valid = schedules.evidenceChecks(Mock.initialState)
-        if (Mock.initialScreen === "workspace" && ["schedule-new", "schedule-ready", "schedule-more", "schedule-at", "schedule-weekly", "schedule-existing"].includes(Mock.initialState)) valid = workspace.scheduleEvidenceChecks()
+        if (Mock.initialScreen === "workspace" && ["schedule-new", "schedule-repeat", "schedule-ready", "schedule-more", "schedule-at", "schedule-weekly", "schedule-existing"].includes(Mock.initialState)) valid = workspace.scheduleEvidenceChecks(Mock.initialState)
         if (Mock.initialScreen === "teams") valid = teams.scheduleEvidenceChecks(Mock.initialState, Mock.initialPanel)
         if (!valid) console.warn("QML evidence check failed: " + Mock.initialScreen + "/" + Mock.initialState + "/" + Mock.initialPanel)
         return valid
@@ -332,7 +332,7 @@ Basic.ApplicationWindow {
             schedules.showState(String(id).split("/")[1] || "")
             return
         }
-        if (["workspace/schedule-new", "workspace/schedule-ready", "workspace/schedule-more", "workspace/schedule-at", "workspace/schedule-weekly"].includes(id)) {
+        if (["workspace/schedule-new", "workspace/schedule-repeat", "workspace/schedule-ready", "workspace/schedule-more", "workspace/schedule-at", "workspace/schedule-weekly"].includes(id)) {
             showScreen("workspace/welcome")
             Qt.callLater(() => workspace.openComposerPanel(id.split("/")[1]))
             return

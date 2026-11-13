@@ -71,11 +71,12 @@ Item {
     // Review evidence: --open=model|mode|limits; limits-cost opens Cost details and
     // limits-api-key shows a conversation on an API key, which has no such row.
     function openPanel(name) {
-        if (["schedule-new", "schedule-ready", "schedule-more", "schedule-weekly", "schedule-at", "schedule-existing"].includes(name)) {
+        if (["schedule-new", "schedule-repeat", "schedule-ready", "schedule-more", "schedule-weekly", "schedule-at", "schedule-existing"].includes(name)) {
             if (name !== "schedule-existing") composer.text = "Write a new post for the website"
             openSchedule()
-            if (newConversation && name !== "schedule-new") {
-                firstSchedule.preview(name === "schedule-weekly" ? "weekly" : name === "schedule-at" ? "at" : name === "schedule-more" ? "more" : "repeat")
+            const example = ({ "schedule-repeat": "repeat", "schedule-ready": "repeat", "schedule-weekly": "weekly", "schedule-at": "at", "schedule-more": "more" })[name]
+            if (newConversation && example) {
+                firstSchedule.preview(example)
                 if (name === "schedule-ready") firstSchedule.apply()
             }
         }
@@ -220,7 +221,7 @@ Item {
         KetMenuItem { text: bar.existingSchedule && bar.existingSchedule.enabled ? "Pause" : "Resume"; onTriggered: if (bar.existingSchedule) bar.window.scheduleStore.patch(bar.existingSchedule.id, { enabled: !bar.existingSchedule.enabled }) }
         KetMenuItem { text: "Open in Schedules"; onTriggered: if (bar.existingSchedule) bar.window.openSchedules(bar.existingSchedule.id) }
     }
-    function scheduleEvidenceChecks() {
+    function scheduleEvidenceChecks(state) {
         const geometry = scheduleButton.visible && scheduleButton.x >= ring.x + ring.width
             && scheduleButton.x + scheduleButton.width <= footer.width + 1
             && Math.abs(KetTheme.iconDrawSize(scheduleButton.glyphSize) * 0.817 - ring.width) < 1
@@ -228,6 +229,7 @@ Item {
         if (newConversation) {
             const valid = geometry && composer.width === width && composer.actionButton.visible
                 && (firstSchedule.geometryVisible() || (scheduleSet && scheduleButton.checked))
+                && (state !== "schedule-new" || (firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked))
             if (!valid) console.warn("QML schedule geometry: ring=" + ring.x + "/" + ring.width + " center=" + (ring.y + ring.height / 2) + ", clock=" + scheduleButton.x + "/" + footer.width + " glyph=" + scheduleButton.glyphSize + " center=" + (scheduleButton.y + scheduleButton.height / 2) + ", popup=" + firstSchedule.x + "," + firstSchedule.y + " " + firstSchedule.width + "x" + firstSchedule.height + ", overlay=" + (firstSchedule.parent ? firstSchedule.parent.width + "x" + firstSchedule.parent.height : "none"))
             return valid
         }
@@ -235,19 +237,27 @@ Item {
     }
     function scheduleChecks() {
         if (!newConversation) return false
-        firstSchedule.prepare(null); firstSchedule.preview("repeat")
+        setScheduleDraft(null); openSchedule()
+        const defaults = firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked
+        firstSchedule.preview("at"); firstSchedule.close(); openSchedule()
+        const cancelDefault = firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked
+        firstSchedule.preview("repeat")
         firstSchedule.apply()
         const scheduled = scheduleSet && composer.actionButton.visible
             && composer.actionButton.Accessible.name === "Send request" && composer.width === width
         scheduleButton.clicked()
         const staysActive = scheduleButton.checked && firstSchedule.visible
+            && firstSchedule.mode === 2
+        const previous = JSON.stringify(scheduleDraft)
+        firstSchedule.preview("at"); firstSchedule.close(); openSchedule()
+        const cancelSaved = firstSchedule.mode === 2 && JSON.stringify(scheduleDraft) === previous && scheduleButton.checked
         firstSchedule.close()
         composer.text = "A scheduled first message"
         const count = window.scheduleStore.entries.length
         composer.actionButton.clicked()
         const saved = window.scheduleStore.entries.length === count + 1
             && !!existingSchedule && existingSchedule.prompt === "A scheduled first message"
-        return scheduled && staysActive && saved && !!existingSchedule && !newConversation
+        return defaults && cancelDefault && scheduled && staysActive && cancelSaved && saved && !!existingSchedule && !newConversation
     }
     KetMenu {
         id: attachMenu

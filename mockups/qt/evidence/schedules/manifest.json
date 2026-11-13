@@ -204,7 +204,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "5033bd4690bc399f08b097e08c192d0b0db189f7bc1620e56efd51e6589d391a"
+    "sha256": "fa6221a8bd1017222ec08cdecdeea8a73fd389b56be1656e479582b35dc3fe89"
   },
   {
     "file": "04-new-send-now-dark.png",
@@ -215,7 +215,29 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "9c32927e41df8b4b0e7f3ff1d090878fed5bbee50f144102dfcf752a80c35f27"
+    "sha256": "22989e779cfca31b9cd00907c49312e3ef34199ce589374eab647e0fa17e6c45"
+  },
+  {
+    "file": "04-new-repeat-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-repeat",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "d53fff28b7aaefe9be7b57c6b6a151ce89a3b3bf2919367bf33dc2e226016c61"
+  },
+  {
+    "file": "04-new-repeat-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-repeat",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "3ef912e567e9e3a38e57a0e88c9c42e6238e7d2769c1aad8d75f502ef93659a1"
   },
   {
     "file": "04-new-at-time-light.png",

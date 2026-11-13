@@ -99,7 +99,7 @@ Item {
     onConversationChanged: { detailsOpen = false; syncPlan() }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    function scheduleEvidenceChecks() { return composerBar.scheduleEvidenceChecks() }
+    function scheduleEvidenceChecks(state) { return composerBar.scheduleEvidenceChecks(state) }
     function scheduleChecks() { return composerBar.scheduleChecks() }
     function openComposerPanel(name) {
         if (name === "content-tabs") detailsPane.openTabMenu()

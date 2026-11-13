@@ -20,6 +20,7 @@ CASES = [
     ("03-history-failure", ["--screen=schedules", "--state=failure"]),
     ("03-delete", ["--screen=schedules", "--state=delete"]),
     ("04-new-send-now", ["--screen=workspace", "--state=schedule-new"]),
+    ("04-new-repeat", ["--screen=workspace", "--state=schedule-repeat"]),
     ("04-new-at-time", ["--screen=workspace", "--state=schedule-at"]),
     ("04-new-repeat-more", ["--screen=workspace", "--state=schedule-more"]),
     ("04-new-weekly", ["--screen=workspace", "--state=schedule-weekly"]),
