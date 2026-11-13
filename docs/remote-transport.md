@@ -256,7 +256,10 @@ payload (`modules/remote/src/TranscriptVisibility.h`): KetPlus's own agents tool
 `tasks.changed` background task snapshot. Desktop applies the same rule to its live view, its
 history windows and the daemon's activity groups, and clients hide those rows. The events stay in
 the journal and in the stream: the task bar still reads `tasks.changed`, and an older client that
-ignores the marker draws them as before.
+ignores the marker draws them as before. A journal grouped before this rule existed is grouped
+again once on open, for each session where such a call had joined a group (`activity_rules` row
+`internal_steps_hidden`, run by the bounded passes after open of ADR 0097). A large item's stub
+carries no marker; the phone hides that call by its tool name once it fetches the item.
 
 ## Resume and retry
 
