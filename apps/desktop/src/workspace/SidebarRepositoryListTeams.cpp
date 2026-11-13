@@ -27,6 +27,15 @@
 namespace ketplus {
 namespace {
 
+// T-89: a full team keeps its + in place, disabled, and the tooltip says why.
+void applyAddRefusal(ket::SidebarTeamBranch* branch, const QString& refusal) {
+    auto* add = branch->addAction();
+    add->setEnabled(refusal.isEmpty());
+    add->setToolTip(refusal.isEmpty()
+                        ? QCoreApplication::translate("SidebarRepositoryList", "Add member")
+                        : refusal);
+}
+
 const auto kCollapsedTeamsSetting = QStringLiteral("sidebar/collapsedTeams");
 
 struct DraggedConversation {
@@ -129,8 +138,12 @@ QWidget* SidebarRepositoryList::createTeamFolder(QWidget* group,
     branch->nameButton()->setToolTip(tr("Open the team page of %1").arg(team.name));
     branch->nameButton()->setContextMenuPolicy(Qt::CustomContextMenu);
     branch->foldButton()->setObjectName(QStringLiteral("productTeamFolderFold"));
-    // Members join from the team page or by a drag; the branch offers no add of its own.
-    branch->addAction()->hide();
+    // T-89: the branch shows its + whenever the row is hot, so it adds a member, or says why the
+    // team takes no one more; hiding it once did not last past the first hover.
+    branch->addAction()->setObjectName(QStringLiteral("productTeamFolderAdd"));
+    applyAddRefusal(branch, team.addRefusal);
+    connect(branch, &ket::SidebarTeamBranch::addTriggered, this,
+            [this, id = team.id] { emit teamAddMemberRequested(id); });
     connect(branch, &ket::SidebarTeamBranch::activated, this,
             [this, id = team.id] { emit teamRequested(id); });
     // A click, not toggled: presenting the stored fold must not store it again.
@@ -174,6 +187,7 @@ void SidebarRepositoryList::updateTeamFolders(const QVector<SidebarRepository>& 
                     continue;
                 folder->setProperty("full", team.full);
                 if (auto* branch = branchOf(folder)) {
+                    applyAddRefusal(branch, team.addRefusal);
                     branch->setMemberCount(static_cast<int>(team.members.size()));
                     branch->setDecisionCount(team.openDecisions);
                 }

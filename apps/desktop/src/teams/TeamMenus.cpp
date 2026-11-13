@@ -89,6 +89,14 @@ int team_roles::order(const QString& role) {
     return 1;
 }
 
+QString team_roles::fullReason(const QJsonObject& team) {
+    // T-23: a full developer side still takes a second reviewer, so only both sides full stop it.
+    const bool full =
+        TeamDirectory::count(team, QStringLiteral("developer")) >= maximumDevelopers &&
+        TeamDirectory::count(team, QStringLiteral("reviewer")) >= maximumReviewers;
+    return full ? tr("The team is full: at most five developers and two reviewers.") : QString{};
+}
+
 QStringList team_states::all() {
     return {QStringLiteral("todo"),    QStringLiteral("in_progress"), QStringLiteral("in_review"),
             QStringLiteral("blocked"), QStringLiteral("ready"),       QStringLiteral("done")};
@@ -114,10 +122,7 @@ TeamFolderMenuActions addTeamFolderMenuActions(QMenu& menu, const QJsonObject& t
     TeamFolderMenuActions actions;
     actions.open = entry(menu, tr("Open team"), u"users", "openTeamAction");
     actions.addMember = entry(menu, tr("Add member…"), u"plus", "addTeamMemberAction");
-    refuse(actions.addMember,
-           TeamDirectory::count(team, QStringLiteral("developer")) >= team_roles::maximumDevelopers
-               ? tr("A team has at most five developers.")
-               : QString{});
+    refuse(actions.addMember, team_roles::fullReason(team));
     menu.addSeparator();
     actions.remove = entry(menu, tr("Delete team…"), u"trash", "deleteTeamAction");
     actions.remove->setProperty(ket::Style::kDangerProperty, true);

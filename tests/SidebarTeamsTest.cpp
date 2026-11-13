@@ -16,6 +16,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDragEnterEvent>
+#include <QEnterEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLayout>
@@ -37,12 +38,15 @@ QJsonObject member(const QString& session, const QString& role, const QString& n
     return {{"session_id", session}, {"role", role}, {"name", name}};
 }
 
-QJsonObject team(const QString& id, int developers, int revision = 1) {
+QJsonObject team(const QString& id, int developers, int revision = 1, int reviewers = 1) {
     QJsonArray members{member("s-lead", "leader", "Lead")};
     for (int index = 1; index <= developers; ++index)
         members.append(member(QStringLiteral("s-dev%1").arg(index), "developer",
                               QStringLiteral("Dev %1").arg(index)));
-    members.append(member("s-rev", "reviewer", "Review"));
+    for (int index = 1; index <= reviewers; ++index)
+        members.append(
+            member(index == 1 ? QStringLiteral("s-rev") : QStringLiteral("s-rev%1").arg(index),
+                   "reviewer", QStringLiteral("Review")));
     return {{"id", id},           {"name", "Shop"},       {"repository", "/repo"},
             {"members", members}, {"revision", revision}, {"open_decisions", 0}};
 }
@@ -473,10 +477,62 @@ class SidebarTeamsTest final : public QObject {
         QCOMPARE(texts(menu), (QStringList{"Open team", "Add member…", "—", "Delete team…"}));
         QVERIFY(actions.addMember->isEnabled());
         QVERIFY(actions.remove->property(ket::Style::kDangerProperty).toBool());
+        // T-89: five developers still take a second reviewer, so the entry stays enabled.
+        QMenu reviewerRoom;
+        actions = addTeamFolderMenuActions(reviewerRoom, team("7", 5));
+        QVERIFY(actions.addMember->isEnabled());
         QMenu full;
-        actions = addTeamFolderMenuActions(full, team("7", 5));
+        actions = addTeamFolderMenuActions(full, team("7", 5, 1, 2));
         QVERIFY(!actions.addMember->isEnabled());
-        QCOMPARE(reason(actions.addMember), QStringLiteral("A team has at most five developers."));
+        QCOMPARE(reason(actions.addMember),
+                 QStringLiteral("The team is full: at most five developers and two reviewers."));
+    }
+
+    // T-89: the branch shows its + whenever the row is hot. On a team with room a click or the
+    // keyboard asks for the Add member dialog; on a full team it stays, disabled, and says why.
+    void theBranchPlusAddsAMemberOrSaysWhyNot() {
+        SidebarRepositoryList list;
+        list.resize(320, 600);
+        list.setTeamsAvailable(true);
+        list.setRepositories({repository("/repo")});
+        list.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&list));
+        auto* branch = list.findChild<ket::SidebarTeamBranch*>("productTeamFolderHeader");
+        QVERIFY(branch);
+        auto* add = branch->addAction();
+        QCOMPARE(add->objectName(), QStringLiteral("productTeamFolderAdd"));
+        // Hovering the row shows it, as Jay saw: it must not be a + with nothing behind it.
+        QEnterEvent enter(QPointF(4, 4), QPointF(4, 4), branch->mapToGlobal(QPointF(4, 4)));
+        QApplication::sendEvent(branch, &enter);
+        QVERIFY(add->isVisibleTo(&list));
+        QVERIFY(add->isEnabled());
+        QCOMPARE(add->toolTip(), QStringLiteral("Add member"));
+        QSignalSpy asked(&list, &SidebarRepositoryList::teamAddMemberRequested);
+        QTest::mouseClick(add, Qt::LeftButton);
+        QCOMPARE(asked.size(), 1);
+        QCOMPARE(asked.first().first().toString(), QStringLiteral("7"));
+        add->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(add, Qt::Key_Space);
+        QCOMPARE(asked.size(), 2);
+        // A full team, updated in place: the + stays where it was, disabled, with the reason.
+        const QString reason =
+            QStringLiteral("The team is full: at most five developers and two reviewers.");
+        SidebarRepository full = repository("/repo", 0, true);
+        full.teams.first().addRefusal = reason;
+        list.setRepositories({full});
+        QCOMPARE(list.findChild<ket::SidebarTeamBranch*>("productTeamFolderHeader"), branch);
+        QVERIFY(add->isVisibleTo(&list));
+        QVERIFY(!add->isEnabled());
+        QCOMPARE(add->toolTip(), reason);
+        QTest::mouseClick(add, Qt::LeftButton);
+        QTest::keyClick(add, Qt::Key_Space);
+        QCOMPARE(asked.size(), 2);
+        // Room again: it takes a member again.
+        list.setRepositories({repository("/repo")});
+        QVERIFY(add->isEnabled());
+        QCOMPARE(add->toolTip(), QStringLiteral("Add member"));
+        QTest::mouseClick(add, Qt::LeftButton);
+        QCOMPARE(asked.size(), 3);
     }
 
     void theRepositoryAddsAConversationOrATeam() {

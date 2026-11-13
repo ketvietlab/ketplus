@@ -58,6 +58,8 @@ void MainWindow::setupTeams() {
     connect(teams_, &TeamDirectory::changed, this, [this] { scheduleSidebarRefresh(); });
     connect(list, &SidebarRepositoryList::teamRequested, this, &MainWindow::openTeam);
     connect(list, &SidebarRepositoryList::teamMenuRequested, this, &MainWindow::showTeamMenu);
+    connect(list, &SidebarRepositoryList::teamAddMemberRequested, this,
+            &MainWindow::showAddTeamMemberDialog);
     connect(list, &SidebarRepositoryList::teamJoinRequested, this, &MainWindow::joinTeam);
     connect(list, &SidebarRepositoryList::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     update();
@@ -76,6 +78,7 @@ MainWindow::takeSidebarTeams(const QString& repository,
             .openDecisions = team.value(QStringLiteral("open_decisions")).toInt(),
             .full = TeamDirectory::count(team, QStringLiteral("developer")) >=
                     team_roles::maximumDevelopers,
+            .addRefusal = team_roles::fullReason(team),
         };
         QJsonArray members = team.value(QStringLiteral("members")).toArray();
         QList<QJsonObject> ordered;
@@ -340,10 +343,20 @@ bool MainWindow::handleConversationTeamAction(QAction* chosen, const QString& se
     return false;
 }
 
+void MainWindow::ensureAgentSessions() {
+    const bool created = agentWorkspace_ == nullptr;
+    ensureAgentWorkspace();
+    // Creating the workspace adds its pane to the split; the editor keeps its layout (T-89).
+    if (created && !agentWorkspaceMode_)
+        agentWorkspace_->hide();
+}
+
 void MainWindow::showNewTeamDialog(const QString& repository) {
-    if (teams_ == nullptr || !teams_->isAvailable() || agentManager_ == nullptr ||
+    if (teams_ == nullptr || !teams_->isAvailable() ||
         agentDialogOpen(this, QStringLiteral("newTeamDialog")))
         return;
+    // T-89: the sidebar shows teams in the editor too, before the agent workspace exists.
+    ensureAgentSessions();
     const auto open = [this, repository](const QVariantList& models) {
         NewTeamForm::present(
             this, teams_, repository, models,
@@ -370,17 +383,17 @@ void MainWindow::showNewTeamDialog(const QString& repository) {
 
 void MainWindow::showAddTeamMemberDialog(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
-    if (!team || agentManager_ == nullptr ||
-        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
+    if (!team || agentDialogOpen(this, QStringLiteral("addMemberDialog")))
         return;
+    ensureAgentSessions();
     AddMemberForm::present(this, teams_, *team, agentManager_->models());
 }
 
 void MainWindow::showAddTeamReviewerDialog(const QString& teamId) {
     const auto team = teams_ ? teams_->team(teamId) : std::nullopt;
-    if (!team || agentManager_ == nullptr ||
-        agentDialogOpen(this, QStringLiteral("addMemberDialog")))
+    if (!team || agentDialogOpen(this, QStringLiteral("addMemberDialog")))
         return;
+    ensureAgentSessions();
     // T-23: the same Add a member dialog, on Reviewer.
     AddMemberForm::present(this, teams_, *team, agentManager_->models(),
                            QStringLiteral("reviewer"));

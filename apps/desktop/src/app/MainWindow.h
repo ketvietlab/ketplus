@@ -313,6 +313,8 @@ class MainWindow final : public QMainWindow {
     void typeInTerminal(const QString& command);
     void focusTerminal();
     void ensureAgentWorkspace();
+    // The conversation sessions a dialog needs, without opening the agent pane outside its mode.
+    void ensureAgentSessions();
     void syncAgentWorkspaceContext(bool loadTranscript);
     void createAgentWorktree();
     // Create worktree… in a conversation's picker: creates in `repository` and moves that

@@ -30,6 +30,9 @@ inline constexpr int maximumReviewers = 2;
 [[nodiscard]] QColor color(const QString& role);
 // Leader first, then developers, then the reviewer; the daemon's order within a role.
 [[nodiscard]] int order(const QString& role);
+// T-89: why the team takes no one more, once both its developer and its reviewer side are full,
+// or empty while either has room. The sidebar's +, the ⋯ menu and the team page share it.
+[[nodiscard]] QString fullReason(const QJsonObject& team);
 } // namespace team_roles
 
 namespace team_states {
