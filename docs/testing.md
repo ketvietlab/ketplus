@@ -60,6 +60,17 @@ include cycles and shared byte/canonical-output limits. Fixture provenance is in
 `core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
 targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
 
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
 ## Theme input security fixtures
 
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
