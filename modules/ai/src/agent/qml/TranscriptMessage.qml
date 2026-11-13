@@ -153,8 +153,8 @@ Item {
         userExpanded = view.activityState(userExpansionKey)?.expanded === true;
     }
     onUserExpansionKeyChanged: restoreUserExpansion()
-    // The reading column plus the 20 px inset each side that rows keep from the pane's edges.
-    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + KetTheme.px(40, KetTheme.zoom))
+    // The reading column plus the inset each side that rows keep from the pane's edges.
+    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + 2 * shell.transcriptRowInset)
     readonly property real contentColumnX: (width - contentColumnWidth) / 2
     // Like Claude: an agent turn has one copy action, under its last answer, for the text the
     // agent wrote (not its commands or files); a request keeps its own copy.
@@ -279,8 +279,8 @@ Item {
     Kit.KetDayDivider {
         id: dayDivider
         objectName: "transcriptDayDivider"
-        width: messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
-        x: messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        width: messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset
+        x: messageDelegate.contentColumnX + shell.transcriptRowInset
         text: kind === "user" && !chunkContinuation ? view.dayLabel(index, timestamp, view.messageModel ? view.messageModel.count : 0) : ""
         visible: text.length > 0
         height: visible ? implicitHeight : 0
@@ -293,7 +293,7 @@ Item {
         visible: kind === "user" && !messageDelegate.activityRow && (imageGallery.imageCount > 0)
         width: messageSurface.userMaximumWidth
         height: visible ? implicitHeight : 0
-        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset
         y: messageDelegate.surfaceInset + messageDelegate.dayLead
         spacing: KetTheme.px(6, KetTheme.zoom)
         // Reparenting one gallery between the lead and the bubble stops its taps reaching the
@@ -309,9 +309,9 @@ Item {
         id: steerNotice
         objectName: "transcriptSteerNotice"
         visible: kind === "user" && eventType === "turn.steered"
-        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset
         y: messageSurface.y + messageSurface.height + KetTheme.px(6, KetTheme.zoom)
-        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom))
+        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset)
         height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
         text: "Sent while " + (provider ? shell.providerTitle(provider) : "the agent") + " was working · joined the running turn"
         color: KetTheme.t.textMuted
@@ -329,9 +329,9 @@ Item {
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
-        x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset : messageDelegate.contentColumnX + shell.transcriptRowInset
         y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) - messageDelegate.firstRowLift
-        width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
         visible: !imagesOnly

@@ -4,6 +4,7 @@
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
 #include "ui/KetFonts.h"
+#include "ui/theme/ThemeSchemeController.h"
 
 #include "KetAppearance.h"
 #include "KetDialog.h"
@@ -20,6 +21,7 @@
 #include <QInputMethodEvent>
 #include <QInputMethodQueryEvent>
 #include <QLabel>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTabWidget>
@@ -35,6 +37,7 @@ class TerminalAppTest final : public QObject {
     void initTestCase();
     void cleanup();
     void createsAndClosesTabs();
+    void newTabsInheritAnUnsavedSchemePreview();
     void drawsTheTabStripActions();
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
@@ -123,6 +126,29 @@ void TerminalAppTest::followsTheKitAppearance() {
 
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTRY_COMPARE(background(), ket::Tokens::color(u"page-bg", ket::Theme::Dark));
+}
+
+void TerminalAppTest::newTabsInheritAnUnsavedSchemePreview() {
+    TerminalWindow window(QDir::tempPath());
+    window.show();
+    auto* original = window.currentTab();
+    auto* controller = qApp->findChild<ThemeSchemeController*>(QStringLiteral("terminalSchemes"));
+    QVERIFY(controller);
+    auto scheme = builtinColorScheme(SchemeKind::Light);
+    scheme.id = QStringLiteral("unsaved-terminal");
+    scheme.terminal[QStringLiteral("bg")] = QColor(12, 34, 56);
+    controller->preview(scheme);
+    const auto restore = qScopeGuard([&] { controller->cancelPreview(); });
+    QTRY_COMPARE(controller->scheme().id, QStringLiteral("unsaved-terminal"));
+    const auto background = [](TerminalTab* tab) {
+        const auto image = tab->view()->viewport()->grab().toImage();
+        return image.pixelColor(image.width() - 4, image.height() - 4);
+    };
+    QTRY_COMPARE(background(original), QColor(12, 34, 56));
+    QCOMPARE(window.currentTab(), original);
+    window.addTab(QDir::tempPath());
+    QVERIFY(window.currentTab() != original);
+    QTRY_COMPARE(background(window.currentTab()), QColor(12, 34, 56));
 }
 
 void TerminalAppTest::savesAndRestoresTheAppearance() {

@@ -1,5 +1,7 @@
 #include "AgentWorkspaceViewTest.h"
 
+#include "KetAppearance.h"
+
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
@@ -422,6 +424,77 @@ void AgentWorkspaceViewTest::streamedActivityJoinsGroupWithoutReset() {
     QCOMPARE(model->hiddenRowCount(), 2);
     QCOMPARE(model->count(), 2);
     QCOMPARE(resets.size(), 0);
+}
+
+void AgentWorkspaceViewTest::runningIndicatorLinesUpWithTheRows_data() {
+    QTest::addColumn<qreal>("zoom");
+    QTest::addColumn<int>("width");
+    QTest::newRow("default zoom") << 1.0 << 900;
+    QTest::newRow("default zoom, wide") << 1.0 << 1500;
+    QTest::newRow("zoom 125%") << 1.25 << 900;
+    QTest::newRow("zoom 125%, narrow") << 1.25 << 560;
+}
+
+// T-88: the dots of "Working…" start where the transcript's rows start: the group summary
+// above it ("Explored 3 files · Running") and the composer's box below it.
+void AgentWorkspaceViewTest::runningIndicatorLinesUpWithTheRows() {
+    QFETCH(qreal, zoom);
+    QFETCH(int, width);
+    auto& appearance = ket::Appearance::instance();
+    const qreal previousZoom = appearance.zoom();
+    appearance.setZoom(zoom);
+    const auto restoreZoom = qScopeGuard([&] { appearance.setZoom(previousZoom); });
+
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(width, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.resetMessages({textRow("u", "user", "Go"), readRow("c1", "ls"), readRow("c2", "pwd"),
+                        readRow("c3", "git status"), textRow("a", "assistant", "Looking.")},
+                       "workspace:run-status");
+    view.setSessionState("Run status", "Working…", true);
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+
+    QQuickItem* summary = nullptr;
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QQuickItem* dots = nullptr;
+    QTRY_VERIFY((dots = findVisualItem(root, "workingAnimationIcon")) != nullptr);
+    auto* composer = findVisualItem(root, "agentComposer");
+    QVERIFY(composer);
+    QQuickItem* answer = nullptr;
+    QTRY_VERIFY((answer = findVisualItem(delegateAt(transcript, 2), "messageSurface")) != nullptr);
+    const qreal dotsX = dots->mapToScene(QPointF{}).x();
+    const qreal summaryX = summary->mapToScene(QPointF{}).x();
+    const qreal answerX = answer->mapToScene(QPointF{}).x();
+    const qreal composerX = composer->mapToScene(QPointF{}).x();
+    // The rows themselves stay where they were: the reading column plus its inset.
+    const qreal pane = transcript->width();
+    const qreal inset = ket::Appearance::scale(20, zoom);
+    const qreal column = qMin<qreal>(
+        pane, ket::Appearance::scale(ketplus::AgentWorkspaceView::defaultConversationWidth, zoom) +
+                  2 * inset);
+    QCOMPARE(summaryX - transcript->mapToScene(QPointF{}).x(), (pane - column) / 2 + inset);
+    // The composer's box keeps its own ring outside the column.
+    QVERIFY(composerX >= summaryX);
+    // Opt-in capture for the pull request, dark and at the default zoom.
+    const QString capture = qEnvironmentVariable("KETPLUS_RUN_STATUS_CAPTURE");
+    if (!capture.isEmpty() && zoom == 1.0 && width == 900) {
+        auto& mode = ket::Appearance::instance();
+        const auto previousMode = mode.mode();
+        mode.setMode(ket::Appearance::Mode::Dark);
+        const auto restoreMode = qScopeGuard([&] { mode.setMode(previousMode); });
+        view.applyTheme(ketplus::currentThemePalette());
+        QTest::qWait(200);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    QVERIFY2(qAbs(dotsX - summaryX) <= 0.5,
+             qPrintable(QStringLiteral("dots at %1, rows at %2").arg(dotsX).arg(summaryX)));
+    QVERIFY2(qAbs(dotsX - answerX) <= 0.5,
+             qPrintable(QStringLiteral("dots at %1, answer at %2").arg(dotsX).arg(answerX)));
 }
 
 void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {

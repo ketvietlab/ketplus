@@ -18,6 +18,7 @@ struct ReadSelection {
     ThemeSelection selection;
     quint64 revision{0};
     bool exists{false};
+    bool recoverable{false};
     QString error;
 };
 bool validId(const QString& id) {
@@ -45,13 +46,27 @@ ReadSelection readSelection(const QString& path) {
     }
     constexpr qsizetype maximumBytes = 16 * 1024;
     const auto bytes = file.read(maximumBytes + 1);
+    if (file.error() != QFileDevice::NoError) {
+        result.error = QStringLiteral("Cannot read theme selection");
+        return result;
+    }
+    // An oversized file may contain a future schema outside the read budget.
+    if (bytes.size() > maximumBytes) {
+        result.error = QStringLiteral("Theme selection exceeds size limit");
+        return result;
+    }
     const auto document = QJsonDocument::fromJson(bytes);
-    if (bytes.size() > maximumBytes || !document.isObject()) {
+    if (!document.isObject()) {
+        result.recoverable = true;
         result.error = QStringLiteral("Invalid theme selection JSON");
         return result;
     }
     const auto object = document.object();
     const auto version = object.value(QStringLiteral("schemaVersion"));
+    if (version.isDouble() && version.toDouble() > 1) {
+        result.error = QStringLiteral("Unsupported theme selection schema version");
+        return result;
+    }
     const auto follow = object.value(QStringLiteral("followSystem"));
     const auto revision = object.value(QStringLiteral("revision"));
     static const QRegularExpression digits(QStringLiteral("^[1-9][0-9]{0,19}\\z"));
@@ -63,8 +78,10 @@ ReadSelection readSelection(const QString& path) {
     result.selection.lightSchemeId = object.value(QStringLiteral("lightSchemeId")).toString();
     result.selection.darkSchemeId = object.value(QStringLiteral("darkSchemeId")).toString();
     if (!version.isDouble() || version.toDouble() != 1 || !follow.isBool() || !revisionOk ||
-        !validSelection(result.selection))
-        result.error = QStringLiteral("Unsupported or invalid theme selection fields");
+        !validSelection(result.selection)) {
+        result.recoverable = true;
+        result.error = QStringLiteral("Invalid theme selection fields");
+    }
     return result;
 }
 QByteArray writeSelection(const ThemeSelection& selection, quint64 revision) {
@@ -154,11 +171,14 @@ bool ThemeSelectionStore::commit(const ThemeSelection& wanted) {
         return false;
     }
     const auto stored = readSelection(filePath());
-    if (!stored.error.isEmpty()) {
+    if (!stored.error.isEmpty() && !stored.recoverable) {
         fail(stored.error);
         return false;
     }
-    if (stored.exists && stored.selection == wanted && stored.revision >= revision_) {
+    // Only an explicit commit repairs corrupt data, under the same lock and atomic
+    // replacement as an ordinary write. Refresh/startup retain the last valid value.
+    if (stored.error.isEmpty() && stored.exists && stored.selection == wanted &&
+        stored.revision >= revision_) {
         const bool changedRevision = revision_ != stored.revision;
         selection_ = stored.selection;
         revision_ = stored.revision;

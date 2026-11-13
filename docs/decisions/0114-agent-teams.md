@@ -496,7 +496,8 @@ is paused, stopped or removed on its own at any level.
 1. **A developer's working directory.** *Chosen*: a task owns its worktree. When a task
    is first assigned the daemon creates branch `team/<team-id>/t-<n>` from the head
    of the integration branch, in a worktree beside the repository as ADR 0111 places
-   them (`<repository>-team-<team-id>-t-<n>`), and
+   them (`<repository>-team-<team-id>-t-<n>`; since ADR 0123 §9 a new task's are
+   `<type>/<slug>-t<n>` and `<repository>-<type>-<slug>-t<n>`), and
    re-points the owner's conversation at it with the worktree switch of ADR 0111 before
    the assignment turn starts. A handover re-points the new owner. The previous owner leaves
    the task's worktree only when its conversation stands in it: it goes to the task it
@@ -657,8 +658,10 @@ Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
 developers), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
-(ADR 0118), `team_lane_set`,
-`team_decision_raise` and `team_decision_withdraw` (leader). A call by the wrong role names
+(ADR 0118), `team_lane_set`, `team_paths_allow`, `team_repository_set` (ADR 0123),
+`team_decision_raise` and `team_decision_withdraw` (leader). `team_task_create` takes an
+optional `repository` and `integration_branch` for a task that works in another repository
+than the team's (ADR 0123). A call by the wrong role names
 the role that may.
 
 `team_tasks` (T-36) answers in shapes bounded for a model's context:

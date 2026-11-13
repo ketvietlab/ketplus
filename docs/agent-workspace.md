@@ -602,8 +602,21 @@ current-window value.
   repository's worktrees are ordered by when their latest turn started, so
   sending a message, from the desktop or a phone, moves that conversation to
   the top; ties and conversations that never started a turn follow by title.
-  Repositories are ordered by their newest conversation, then by name, so
-  opening or switching one never reorders the list. The start time
+  Repositories are ordered by the newest turn start of anything they show, their
+  own conversations and their teams' members alike (T-92), then by name, so
+  opening or switching one never reorders the list. Repositories the user pinned
+  (**Pin to top** in the repository header's context menu; **Unpin** to undo)
+  come first, in the order they were pinned, with a small pin after the name.
+  Pins are this Mac's: kept in `QSettings` (`sidebar/pinnedRepositories`) by
+  canonical path, a pin whose folder is gone is dropped silently, another
+  machine's repositories cannot be pinned, and phones do not receive them.
+  A conversation's group is fixed: it stays under the repository it was created
+  in (the daemon's `conversation_path`, written once), and a team member stays
+  under its team, whatever worktree or repository the conversation later runs
+  in. Switching worktree or repository, from the worktree picker or a team task
+  assignment, changes only the execution context (Source Control, Files and the
+  composer's repository and branch), never the row's group or the repository
+  order; the highlighted repository is the open conversation's group. The start time
   (`lastTurnStartedAt`) is the daemon's: the journal stamps it on the session
   with each `user.message`, `session.list` reports it, and the heartbeat seals
   it into the session metadata for phones, which apply the same order. Each expanded

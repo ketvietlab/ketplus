@@ -160,13 +160,11 @@ void MainWindow::ensureAgentWorkspace() {
                const QString& executionPath, qint64 revision) {
             if (agentWorkspace_->activePath() == path &&
                 agentManager_->activeConversationId(path) == conversation) {
-                const auto previousRepository =
-                    sidebarRepositoryForPath(agentWorkspace_->executionPath());
                 agentWorkspace_->setExecutionBranch(branch, executionPath, revision);
-                const auto repository = sidebarRepositoryForPath(executionPath);
-                agentWorkspace_->setRepositoryName(QFileInfo(repository).fileName());
-                if (repository != previousRepository)
-                    promotedSidebarRepository_ = repository;
+                // T-92: the execution context only; the conversation's sidebar group stays
+                // the repository it was created in.
+                agentWorkspace_->setRepositoryName(
+                    QFileInfo(sidebarRepositoryForPath(executionPath)).fileName());
                 if (normalizedPath(executionPath) !=
                     normalizedPath(fileContextRoot_.isEmpty() ? workspaceRoot_ : fileContextRoot_))
                     setFileContextWorktree(executionPath);
@@ -204,7 +202,6 @@ void MainWindow::ensureAgentWorkspace() {
                     agentManager_->activeConversationId(path) != conversation)
                     return;
                 setFileContextWorktree(selectedPath);
-                promotedSidebarRepository_ = sidebarRepositoryForPath(selectedPath);
                 scheduleSidebarRefresh(true);
             },
             agentWorkspace_->executionPath(), roots, currentRepository,
@@ -226,7 +223,8 @@ void MainWindow::ensureAgentWorkspace() {
         return agentManager_->transcriptPayload(agentWorkspace_->activePath(), scope, key, kind);
     });
     workspaceSplit_->insertWidget(0, agentWorkspace_);
-    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
+    agentWorkspace_->applyColorScheme(theme_.colorScheme(),
+                                      appearanceSettings_.interfaceZoomPercent);
     agentWorkspace_->setAgentAvailable(agentManager_->isAvailable());
     // ADR 0027: `#` completion lists every numbered conversation on this computer.
     agentWorkspace_->setConversationDirectory(

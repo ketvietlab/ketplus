@@ -158,6 +158,27 @@ class SchemeManagerTest : public QObject {
         QCOMPARE(changed.size(), 1);
         QCOMPARE(manager.colorScheme().id, QStringLiteral("builtin-light"));
     }
+    void setModeRecoversCorruptSelection() {
+        QTemporaryDir directory;
+        ThemeManager manager(*qApp, nullptr, directory.path());
+        manager.setMode(ThemeManager::Mode::Light);
+        QFile file(directory.filePath("selection.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("broken");
+        file.close();
+        QSignalSpy changed(&manager, &ThemeManager::themeChanged);
+        manager.setMode(ThemeManager::Mode::Dark);
+        QCOMPARE(manager.mode(), ThemeManager::Mode::Dark);
+        QCOMPARE(manager.colorScheme().id, QStringLiteral("builtin-dark"));
+        QVERIFY(manager.schemeError().isEmpty());
+        QCOMPARE(changed.size(), 1);
+        ThemeSelectionStore reopened(directory.path());
+        QVERIFY(reopened.lastError().isEmpty());
+        QCOMPARE(reopened.selection(), manager.schemeSelection());
+        manager.setMode(ThemeManager::Mode::Light);
+        QCOMPARE(manager.colorScheme().id, QStringLiteral("builtin-light"));
+        QCOMPARE(changed.size(), 2);
+    }
     void externalCommitCancelsLocalPreview() {
         QTemporaryDir directory;
         ThemeManager manager(*qApp, nullptr, directory.path());

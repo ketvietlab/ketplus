@@ -152,6 +152,9 @@ void MainWindow::refreshSidebarRepositories() {
     // Conversations are stored per worktree. Group them under their repository so the
     // sidebar reads repository > conversation, with the worktree carried by each row.
     QHash<QString, QVariantList> conversationsByRepository;
+    // T-92: the open conversation's group is the highlighted one, also after it switched to a
+    // worktree of another repository.
+    QString selectedRepository;
     if (agentManager_ != nullptr) {
         // The transcript may show a worktree other than the open folder (a deleted worktree
         // opened as history). Selection follows the transcript in every mode, so opening
@@ -166,8 +169,11 @@ void MainWindow::refreshSidebarRepositories() {
         for (const QString& path : std::as_const(paths)) {
             for (const QVariant& value : agentManager_->conversations(path)) {
                 QVariantMap conversation = value.toMap();
-                const auto executionPath = conversation.value("executionPath", path).toString();
-                const QString repository = sidebarRepositoryForPath(executionPath);
+                // T-92: grouped by where it was created (`path`, the daemon's
+                // conversation_path, written once), not the worktree it runs in now: switching
+                // worktree or repository changes Source Control, Files and the composer's label,
+                // never the row's group.
+                const QString repository = sidebarRepositoryForPath(path);
                 if (repository.isEmpty())
                     continue;
                 const bool selected = path == currentWorktree &&
@@ -185,6 +191,8 @@ void MainWindow::refreshSidebarRepositories() {
                     continue;
                 conversation.insert(QStringLiteral("path"), path);
                 conversation.insert(QStringLiteral("selected"), selected);
+                if (selected)
+                    selectedRepository = repository;
                 conversationsByRepository[repository].append(conversation);
                 if (!roots.contains(repository))
                     roots.append(repository);
@@ -192,14 +200,21 @@ void MainWindow::refreshSidebarRepositories() {
         }
     }
 
+    // A team's members are listed under the team, wherever their conversations were created
+    // (a team can move to another repository, ADR 0121): take them first, from every group.
+    QHash<QString, QVector<SidebarTeam>> teamsByRepository;
+    for (const QString& root : std::as_const(roots))
+        teamsByRepository.insert(root, takeSidebarTeams(root, conversationsByRepository));
     QVector<SidebarRepository> repositories;
     repositories.reserve(roots.size());
-    for (const QString& root : std::as_const(roots)) {
-        QVariantList conversations = conversationsByRepository.value(root);
-        QVector<SidebarTeam> teams = takeSidebarTeams(root, conversations);
-        repositories.append({root, QFileInfo(root).fileName(), root == activeRepository,
-                             conversations, root == promotedSidebarRepository_, teams});
-    }
+    for (const QString& root : std::as_const(roots))
+        repositories.append({.path = root,
+                             .name = QFileInfo(root).fileName(),
+                             .active = root == (selectedRepository.isEmpty() ? activeRepository
+                                                                             : selectedRepository),
+                             .conversations = conversationsByRepository.value(root),
+                             .teams = teamsByRepository.value(root),
+                             .pinnable = true});
     activityBar_->setRepositories(repositories);
     updateTeamRoles();
 }

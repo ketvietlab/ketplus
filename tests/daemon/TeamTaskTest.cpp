@@ -512,10 +512,11 @@ class TeamTaskProtocolTest final : public QObject {
                          {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}});
         QVERIFY2(result.value("ok").toBool(), qPrintable(agent_test::text(result)));
         const QJsonObject task = result.value("task").toObject();
-        QCOMPARE(task.value("branch").toString(), QStringLiteral("team/%1/t-1").arg(teamId));
+        // T-93: named from its title.
+        QCOMPARE(task.value("branch").toString(), QStringLiteral("feat/cart-t1"));
         const QString worktree = task.value("worktree").toString();
         QVERIFY(QFileInfo(worktree).isDir());
-        QVERIFY(worktree.endsWith(QStringLiteral("shop-team-%1-t-1").arg(teamId)));
+        QVERIFY(worktree.endsWith(QStringLiteral("shop-feat-cart-t1")));
         // The owner now works in the task's worktree and receives the assignment, both after
         // the reply (T-28).
         const auto ownerPath = [&] {

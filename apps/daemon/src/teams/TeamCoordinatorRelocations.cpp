@@ -42,7 +42,7 @@ QString TeamCoordinator::taskWorktreeRepository(const QString& worktree) const {
     for (const Team& team : teams_)
         for (const Task& task : team.tasks)
             if (!task.worktree.isEmpty() && QDir::cleanPath(task.worktree) == path)
-                return team.repository;
+                return taskScope(team, task).repository; // T-90: the task's own, if any.
     return {};
 }
 

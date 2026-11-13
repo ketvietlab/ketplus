@@ -2,6 +2,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
@@ -111,42 +112,120 @@ class ThemeSelectionTest : public QObject {
         QVERIFY(existing.open(QIODevice::ReadOnly));
         QCOMPARE(existing.readAll(), before);
     }
-    void malformedAndNewerConfigPreservesLastValid() {
+    void explicitCommitRepairsMalformedConfig_data() {
+        QTest::addColumn<QByteArray>("corrupt");
+        QTest::newRow("truncated-json") << QByteArray("{\"schemaVersion\":1,");
+        QTest::newRow("array") << QByteArray("[]");
+        QTest::newRow("missing-fields") << QByteArray("{}");
+        const QJsonObject valid{{"schemaVersion", 1},
+                                {"revision", "2"},
+                                {"followSystem", false},
+                                {"schemeId", "builtin-dark"},
+                                {"lightSchemeId", "builtin-light"},
+                                {"darkSchemeId", "builtin-dark"}};
+        for (const auto& field : {"schemaVersion", "followSystem", "schemeId", "revision"}) {
+            auto invalid = valid;
+            invalid.insert(field, QJsonArray{});
+            QTest::newRow(field) << QJsonDocument(invalid).toJson();
+        }
+    }
+    void explicitCommitRepairsMalformedConfig() {
+        QFETCH(QByteArray, corrupt);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ThemeSelectionStore store(dir.path());
+        auto previous = store.selection();
+        previous.followSystem = false;
+        previous.schemeId = QStringLiteral("builtin-dark");
+        QVERIFY(store.commit(previous));
+        ThemeSelectionStore peer(dir.path());
+        QSignalSpy changed(&store, &ThemeSelectionStore::changed);
+        QSignalSpy peerChanged(&peer, &ThemeSelectionStore::changed);
+        QFile file(store.filePath());
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(corrupt), corrupt.size());
+        file.close();
+        store.refresh();
+        peer.refresh();
+        QVERIFY(!store.lastError().isEmpty());
+        QVERIFY(store.selection() == previous);
+        QCOMPARE(store.revision(), quint64(2));
+        QCOMPARE(changed.count(), 0);
+        // Observation must not repair the file, and recovery must still take the lock.
+        QLockFile lock(dir.filePath(".selection.lock"));
+        QVERIFY(lock.tryLock());
+        QVERIFY(!store.commit(previous));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), corrupt);
+        file.close();
+        lock.unlock();
+        // Even committing the current selection repairs corruption and publishes once.
+        QVERIFY(store.commit(previous));
+        QCOMPARE(store.revision(), quint64(3));
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(store.lastError().isEmpty());
+        QTRY_COMPARE(peerChanged.count(), 1);
+        QCOMPARE(peer.revision(), quint64(3));
+        QVERIFY(peer.selection() == previous);
+        ThemeSelectionStore restarted(dir.path());
+        QVERIFY(restarted.lastError().isEmpty());
+        QCOMPARE(restarted.revision(), quint64(3));
+        QVERIFY(restarted.selection() == previous);
+        QVERIFY(store.commit(previous));
+        QCOMPARE(changed.count(), 1);
+    }
+    void malformedStartupCanCommit() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QFile file(dir.filePath("selection.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("broken");
+        file.close();
+        ThemeSelectionStore restarted(dir.path(), QStringLiteral("dark"));
+        QVERIFY(!restarted.lastError().isEmpty());
+        QCOMPARE(restarted.revision(), quint64(0));
+        auto wanted = restarted.selection();
+        wanted.schemeId = QStringLiteral("builtin-light");
+        QVERIFY(restarted.commit(wanted));
+        QVERIFY(restarted.lastError().isEmpty());
+        ThemeSelectionStore reopened(dir.path());
+        QVERIFY(reopened.selection() == wanted);
+        QCOMPARE(reopened.revision(), quint64(1));
+    }
+    void newerAndOversizedConfigRemainProtected_data() {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::newRow("future-schema-invalid-fields") << QByteArray("{\"schemaVersion\":2}");
+        QTest::newRow("future-schema")
+            << QJsonDocument(QJsonObject{{"schemaVersion", 2},
+                                         {"revision", "20"},
+                                         {"followSystem", true},
+                                         {"schemeId", "builtin-light"},
+                                         {"lightSchemeId", "builtin-light"},
+                                         {"darkSchemeId", "builtin-dark"}})
+                   .toJson();
+        QTest::newRow("oversized") << QByteArray(17 * 1024, ' ');
+    }
+    void newerAndOversizedConfigRemainProtected() {
+        QFETCH(QByteArray, bytes);
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         ThemeSelectionStore store(dir.path());
         const auto previous = store.selection();
         QSignalSpy changed(&store, &ThemeSelectionStore::changed);
         QFile file(store.filePath());
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        const auto valid = file.readAll();
-        file.close();
-        for (const auto& bytes :
-             {QByteArray("broken"), QByteArray("[]"), QByteArray(17 * 1024, ' ')}) {
-            QVERIFY(file.open(QIODevice::WriteOnly));
-            file.write(bytes);
-            file.close();
-            store.refresh();
-            QVERIFY(!store.lastError().isEmpty());
-            QVERIFY(store.selection() == previous);
-            QCOMPARE(store.revision(), quint64(1));
-            QVERIFY(!store.commit(previous));
-            QCOMPARE(changed.count(), 0);
-        }
-        auto future = QJsonDocument::fromJson(valid).object();
-        future.insert("schemaVersion", 2);
         QVERIFY(file.open(QIODevice::WriteOnly));
-        file.write(QJsonDocument(future).toJson());
-        file.close();
-        ThemeSelectionStore restarted(dir.path());
-        QVERIFY(!restarted.lastError().isEmpty());
-        QVERIFY(!restarted.commit(previous));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        file.write(valid);
+        QCOMPARE(file.write(bytes), bytes.size());
         file.close();
         store.refresh();
-        QVERIFY(store.lastError().isEmpty());
-        QVERIFY(store.commit(previous));
+        QVERIFY(!store.lastError().isEmpty());
+        QVERIFY(!store.commit(previous));
+        QVERIFY(store.selection() == previous);
+        QCOMPARE(store.revision(), quint64(1));
+        QCOMPARE(changed.count(), 0);
+        ThemeSelectionStore restarted(dir.path());
+        QVERIFY(!restarted.commit(previous));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), bytes);
     }
     void invalidRevisions_data() {
         QTest::addColumn<QJsonValue>("revision");
