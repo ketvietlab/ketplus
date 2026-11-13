@@ -35,7 +35,7 @@ void SchemeLibraryPanel::syncSelection() {
                                      : state.schemeId;
     for (auto* button : rows_->findChildren<QAbstractButton*>())
         button->setChecked(button->property("schemeId").toString() == selectedId_);
-    remove_->setEnabled(!selectedId_.isEmpty() && !selectedId_.startsWith(u"builtin-"));
+    remove_->setEnabled(!selectedId_.isEmpty() && !SchemeLibrary::isBuiltinId(selectedId_));
     for (const auto& key :
          {QStringLiteral("preferredLightScheme"), QStringLiteral("preferredDarkScheme")})
         if (auto* select = preferences_->findChild<ket::Select*>(key)) {

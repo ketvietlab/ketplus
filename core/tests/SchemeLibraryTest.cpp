@@ -45,6 +45,7 @@ class SchemeLibraryTest final : public QObject {
         registerKetFonts();
     }
     void recognizesReservedNamespacesAndSourceMetadata();
+    void selectionSyncKeepsBuiltinsReadOnly();
     void detectsFormatsAndRoundTrips();
     void importsOnlyChosenVariants();
     void rejectsInvalidInputWithoutWriting();
@@ -75,6 +76,41 @@ void SchemeLibraryTest::recognizesReservedNamespacesAndSourceMetadata() {
     QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("JetBrains"));
     scheme.metadata = {};
     QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("KetPlus"));
+}
+void SchemeLibraryTest::selectionSyncKeepsBuiltinsReadOnly() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    SchemeLibrary library(root.path());
+    QStringList protectedIds;
+    for (const auto& scheme : library.catalog().list())
+        protectedIds.append(scheme.id);
+    // A persisted ID from a newer release must stay read-only even when unavailable.
+    protectedIds.append(QStringLiteral("builtin.future-community-scheme"));
+    const auto copy =
+        library.catalog().duplicate(QStringLiteral("builtin-dark"), QStringLiteral("User copy"));
+    QVERIFY(copy.success);
+    ThemeManager theme(*qApp, nullptr, root.path());
+    SchemeLibraryPanel panel(root.path(), nullptr, &theme);
+    panel.resize(900, 700);
+    panel.show();
+    auto* remove = panel.findChild<ket::Button*>(QStringLiteral("deleteScheme"));
+    QVERIFY(remove);
+    for (const auto& id : protectedIds) {
+        auto selection = theme.schemeSelection();
+        selection.followSystem = false;
+        selection.schemeId = copy.scheme.id;
+        QVERIFY(theme.setSchemeSelection(selection));
+        QTRY_COMPARE(panel.selectedId(), copy.scheme.id);
+        QTRY_VERIFY(remove->isEnabled());
+        selection.schemeId = id;
+        QVERIFY(theme.setSchemeSelection(selection));
+        QTRY_COMPARE(panel.selectedId(), id);
+        QTRY_VERIFY(!remove->isEnabled());
+        // Appearance updates must not re-enable deletion after row rebuilding.
+        emit theme.themeChanged();
+        QCoreApplication::processEvents();
+        QVERIFY2(!remove->isEnabled(), qPrintable(id));
+    }
 }
 void SchemeLibraryTest::detectsFormatsAndRoundTrips() {
     QTemporaryDir root;
