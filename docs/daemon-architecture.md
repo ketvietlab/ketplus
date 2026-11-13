@@ -1086,3 +1086,49 @@ a replacement-version field. It cannot interrupt active turns or approvals.
 Upgrade continues to require a strictly newer `replacement_version`. An older
 daemon that lacks the stop operation refuses safely; the installer never sends
 a fake future version or kills an existing daemon as an uninstall fallback.
+
+## Scheduled runs (ADR 0126)
+
+The daemon owns schedules that send a prompt at a time or on a recurrence, including
+while the desktop window is closed. The feature name is `schedules/1`, but
+`daemon.hello` does not advertise it until the handlers below exist.
+The shared documents are `ketplus::schedule::Schedule` and `ScheduleRun` in
+`modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
+Wire names are snake_case. A schedule keeps its last 50 runs.
+
+`apps/daemon/src/protocol/ScheduleProtocol.h` validates the requests and events.
+Unknown fields, an empty prompt, a missing target and unknown enum values fail
+with a stable code (`unknown_field`, `empty_prompt`, `missing_target`,
+`invalid_enum`, and the codes in that header). The target is one of four kinds:
+
+- `conversation` — `{kind, session_id}`. The prompt is delivered into that conversation.
+- `new` — `{kind, workspace, provider, model, effort, isolated_worktree, title_template}`.
+  Each run creates a conversation. `workspace` is the repository path.
+- `team` — `{kind, team_id}`. The prompt is a work order for the team's leader. Any rule.
+- `team_start` — `{kind, team_id}`. No prompt, a `once` rule and `missed_policy` `run_once`.
+  This is the scheduled start of a team.
+
+`schedule.list` takes optional `target_kind`, `session_id` and `team_id` filters.
+The other requests are `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled`, `schedule.runNow` and `schedule.runs`
+(`id`, `limit` 1-50, `before_id`). Events are `schedule.changed`
+(`change`: `created`, `updated` or `deleted`, plus the schedule) and `schedule.run`
+(the run). `busy_policy` is `queue` or `skip`. `missed_policy` is `run_once` or `skip`.
+`rule` is an opaque JSON object string; the recurrence engine owns its schema, including
+daylight-saving behaviour (a skipped local time fires just after the gap; a repeated
+local time fires once, on the first occurrence). A team start's rule must say
+`"kind": "once"`.
+
+Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
+`has_more`, or `run`. `schedule.runNow` answers `not_implemented` until the runtime
+fires a schedule. A missing id is `schedule_not_found`.
+
+Schedules are created only from New conversation and New team. `created_by` is
+set by the daemon from the connection (`user`, or the agent conversation id);
+a create that sends it is `unknown_field`. Agent-created schedules wait on the
+limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
+Phone and cloud sync are out of scope for v1. Journal tables and the SessionHost
+handlers are a following change; they persist these documents and call this parser.
+Deleting a schedule deletes its runs, deleting a team deletes its `team` and
+`team_start` schedules, and deleting a conversation disables schedules that target
+it and records that status.
