@@ -24,6 +24,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Color-scheme selection now has revisioned persistence, one-time legacy migration,
+  local preview/commit/cancel, independent system preferences and asynchronous
+  snapshot preparation. Main-window editor/terminal/diff adapters preserve their
+  existing buffers and sessions. Pro chat/preview, standalone Terminal and native
+  DELL acceptance remain in progress (T-5); this is not a release acceptance claim.
+
 - VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
   includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
   approximations. Semantic colors remain metadata; extension code never runs.

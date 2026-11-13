@@ -5,6 +5,7 @@
 
 #include "editor/EditorWidget.h"
 #include "ui/Theme.h"
+#include "ui/theme/ColorScheme.h"
 
 #include <ScintillaMessages.h>
 #include <ScintillaStructures.h>
@@ -232,7 +233,7 @@ class GitDiffModel final : public QAbstractTableModel {
     }
 
     void applySyntax(const QString& filePath, EditorWidget& syntaxEngine,
-                     const ThemePalette& palette) {
+                     const ThemePalette& palette, const ColorScheme* scheme = nullptr) {
         struct SourceLocation final {
             qsizetype byteOffset{-1};
             bool fromNewText{false};
@@ -258,7 +259,10 @@ class GitDiffModel final : public QAbstractTableModel {
         const auto applyDocument = [&](const QByteArray& source, const bool newTextSource) {
             syntaxEngine.setText(source);
             syntaxEngine.configureLexerForPath(filePath);
-            syntaxEngine.applyTheme(palette);
+            if (scheme)
+                syntaxEngine.applyColorScheme(*scheme);
+            else
+                syntaxEngine.applyTheme(palette);
 
             QByteArray styledBytes(source.size() * 2 + 2, '\0');
             Scintilla::TextRangeFull styledRange{
@@ -303,6 +307,9 @@ class GitDiffModel final : public QAbstractTableModel {
                         format.setFontItalic(
                             syntaxEngine.send(message(Scintilla::Message::StyleGetItalic),
                                               static_cast<uptr_t>(style)) != 0);
+                        format.setFontUnderline(
+                            syntaxEngine.send(message(Scintilla::Message::StyleGetUnderline),
+                                              static_cast<uptr_t>(style)) != 0);
                         cachedFormat = formatsByStyle.insert(style, format);
                     }
                     const QTextCharFormat& format = cachedFormat.value();
@@ -330,7 +337,7 @@ class GitDiffModel final : public QAbstractTableModel {
         }
     }
 
-    void applyTheme(const ThemePalette& palette) {
+    void applyTheme(const ThemePalette& palette, const ColorScheme* scheme = nullptr) {
         palette_ = palette;
         recipe_ = ket::diffRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light);
         // A supplied theme may override semantic text/panel roles (installable themes).
@@ -343,6 +350,18 @@ class GitDiffModel final : public QAbstractTableModel {
                                     tint.greenF() * a + base.greenF() * (1 - a),
                                     tint.blueF() * a + base.blueF() * (1 - a));
         };
+        if (scheme) {
+            const auto base = builtinColorScheme(
+                scheme->extends == u"builtin-dark" ? SchemeKind::Dark : SchemeKind::Light);
+            // Canonical diff colors describe backgrounds (including imported
+            // alpha). Untouched built-ins retain the kit's original soft tints.
+            if (scheme->diff.value(QStringLiteral("added")) !=
+                base.diff.value(QStringLiteral("added")))
+                recipe_.addBackground = scheme->diff.value(QStringLiteral("added"));
+            if (scheme->diff.value(QStringLiteral("removed")) !=
+                base.diff.value(QStringLiteral("removed")))
+                recipe_.removeBackground = scheme->diff.value(QStringLiteral("removed"));
+        }
         recipe_.addBackground = opaque(recipe_.addBackground);
         recipe_.removeBackground = opaque(recipe_.removeBackground);
         recipe_.hunkBackground = opaque(recipe_.hunkBackground);
@@ -580,7 +599,7 @@ GitDiffView::GitDiffView(QWidget* parent)
     connect(contextButton_, &QAbstractButton::toggled, this, [this](const bool checked) {
         hideUnchangedRows_ = checked;
         model_->setHideUnchangedRows(hideUnchangedRows_);
-        model_->applySyntax(filePath_, *syntaxEngine_, palette_);
+        model_->applySyntax(filePath_, *syntaxEngine_, palette_, scheme_.get());
         updateLineNumberColumns();
         updateContextButton();
         updateSpans();
@@ -610,8 +629,8 @@ void GitDiffView::setDiff(const QString& filePath, const GitDiffMode mode, const
     openButton_->setEnabled(QFileInfo::exists(filePath_));
     model_->setHideUnchangedRows(hideUnchangedRows_);
     model_->setDiff(diff);
-    model_->applyTheme(palette);
-    model_->applySyntax(filePath, *syntaxEngine_, palette);
+    model_->applyTheme(palette, scheme_.get());
+    model_->applySyntax(filePath, *syntaxEngine_, palette, scheme_.get());
     updateLineNumberColumns();
     updateHeader();
     updateSpans();
@@ -631,12 +650,23 @@ void GitDiffView::applyEditorSettings(const EditorSettings& settings) {
 }
 
 void GitDiffView::applyTheme(const ThemePalette& palette) {
+    scheme_.reset();
     palette_ = palette;
     markdownModes_->configure(filePath_, palette,
                               QString::fromLatin1(syntaxDefinitionForPath(filePath_).name) ==
                                   "markdown");
-    model_->applyTheme(palette);
-    model_->applySyntax(filePath_, *syntaxEngine_, palette);
+    model_->applyTheme(palette, scheme_.get());
+    model_->applySyntax(filePath_, *syntaxEngine_, palette, scheme_.get());
+}
+
+void GitDiffView::applyColorScheme(const ColorScheme& scheme) {
+    scheme_ = std::make_shared<const ColorScheme>(resolveColorScheme(scheme));
+    palette_ = colorSchemePalette(*scheme_);
+    markdownModes_->configure(filePath_, palette_,
+                              QString::fromLatin1(syntaxDefinitionForPath(filePath_).name) ==
+                                  "markdown");
+    model_->applyTheme(palette_, scheme_.get());
+    model_->applySyntax(filePath_, *syntaxEngine_, palette_, scheme_.get());
 }
 
 void GitDiffView::updateHeader() {
