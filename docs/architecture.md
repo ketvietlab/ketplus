@@ -303,8 +303,9 @@ while the envelope major stays 0.
 ## Shared browser tools
 
 `modules/browser` resolves one host-controlled MCP launch for Codex, Claude and
-Cursor. The browser remains a separate stdio worker. Claude SDK receives the
-server map per query; Cursor ACP receives it on session creation and loading.
+Cursor and Copilot. The browser remains a separate stdio worker. Claude SDK receives the
+server map per query; ACP receives it on session creation and loading. Copilot
+keeps normal approvals until its structured MCP identity is verified (ADR 0120).
 The same local settings control origins and enablement for all providers;
 settings changes wait for the next Claude/Cursor turn. Source readiness probes
 share engine selection with the worker, and built-in skill discovery uses the

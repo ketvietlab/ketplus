@@ -122,6 +122,19 @@ interactive `/model` command [G2]; neither proves the availability of a
 `copilot models` subprocess API. Exact Copilot ACP catalog shapes and the
 permission needed to discover them remain unverified (see Verification).
 
+Implementation bounds: cache/coalesce setup-only probes for 60 seconds, cap their
+combined output at one MiB and their lifetime at eight seconds, and run them in a
+temporary directory without host MCP servers. Accept at most 256 models, with
+256-character ids and labels and 2,000-character descriptions. Cap the normalized
+catalog at 256 KiB of JSON to leave space in the daemon's one-MiB frame for
+metadata and other providers; excess returns the default-only fallback. Preserve
+grouped select values. Recheck selection against each real session's catalog and wait for
+the setter response before prompting; failed or unconfirmed selection is a turn
+error. An empty load response may reuse that ACP session's previously advertised
+catalog. Config-option updates replace its state. The default-only fallback means
+leave the current provider selection unchanged. Synthetic fixtures cover both
+catalog shapes and setters; they do not verify a particular live Copilot release.
+
 ### Permission requests
 
 Translate `session/request_permission` through KetPlus's existing authoritative
@@ -165,6 +178,24 @@ when a turn ends, fails or is cancelled, so the worker closes leftover browser
 sessions. Keep the origin proxy, absolute worker paths and isolated profiles;
 Copilot owns its child MCP workers. Routing instructions guide model behavior;
 the existing browser runtime enforces origins.
+
+### Permission and browser implementation boundary
+
+The daemon implementation retains normal approval for every Copilot permission
+request, including injected browser tools. No verified Copilot server/tool
+identity fixture is available, so the exemption above remains disabled. Cursor's
+`rawInput` fields, familiar titles and tool-name prefixes never establish identity.
+KetPlus's binary approval card selects only advertised `allow_once` / `reject_once`
+IDs. An `allow_always` option is not supported by this card and cannot substitute
+for one-time consent; absent applicable options cancel. Until provider permission
+modes are verified, even Full access does not bypass Copilot cards.
+
+Opaque host request IDs bind approvals to one active turn and process; interrupted,
+expired and abandoned requests cancel, and stale responses cannot answer a reused
+provider request ID. Host-owned browser configuration, separate routing blocks and
+turn-end cleanup use the shared ACP engine, including cleanup on process failure
+and shutdown. Deterministic fixtures verify configuration and canonical image
+content, not live Copilot metadata or guaranteed model browser routing.
 
 ## Verification and compatibility limits
 

@@ -8,6 +8,7 @@
 #include <QPair>
 #include <QSet>
 #include <optional>
+#include <utility>
 class QProcess;
 class QTimer;
 namespace ketplus::daemon {
@@ -31,6 +32,8 @@ class AcpAdapter : public ProviderAdapter {
     // Set process_ program/arguments; the engine owns channels, environment and signals.
     virtual void configureProcess() = 0;
     virtual QJsonObject clientCapabilities() const;
+    // Opt in to turn-bound permission IDs and strictly advertised one-time options.
+    virtual bool strictPermissionRequests() const { return false; }
     // rawInput is provider-owned data, not a portable authenticated MCP identity.
     virtual bool autoApprovePermission(const QString&, const QJsonObject&) const { return false; }
     virtual QString initializationError(const QJsonObject&) const { return {}; }
@@ -48,6 +51,11 @@ class AcpAdapter : public ProviderAdapter {
     virtual void applySessionModel(const QString&, const QString&, const QJsonObject&,
                                    std::function<void()> done) {
         done();
+    }
+    // Providers with strict selection must be able to fail before any prompt is sent.
+    virtual void prepareSessionModel(const QString& sessionId, const QString& model,
+                                     const QJsonObject& result, Callback done) {
+        applySessionModel(sessionId, model, result, [done = std::move(done)] { done({}, {}); });
     }
     // Translate host policy into the provider's advertised ACP mode identifier.
     virtual QString sessionPermissionMode(const QString&) const { return {}; }
@@ -95,6 +103,18 @@ class AcpAdapter : public ProviderAdapter {
     void consumeLine(const QByteArray& line);
     virtual void handleSessionUpdate(const QJsonObject& params);
     void handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params);
+    void handleStrictPermission(const QJsonValue& requestId, const QJsonObject& params);
+    void respondStrictPermission(const QJsonValue& requestId, const QJsonObject& result);
+    void cancelPermissions(const QString& sessionId = {});
+    void sendPermissionOutcome(const QJsonValue& requestId, const QString& optionId = {});
+    struct PermissionRequest {
+        QJsonValue providerId;
+        QString sessionId;
+        QString turnId;
+        QJsonArray options;
+    };
+    QHash<QString, PermissionRequest> permissions_;
+    quint64 nextPermissionNumber_{1};
     void failPending(const QString& reason);
     void setReady(bool ready);
     void noteUnexpectedStop();
