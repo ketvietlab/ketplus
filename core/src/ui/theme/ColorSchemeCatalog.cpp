@@ -78,7 +78,9 @@ ColorSchemeCatalogResult ColorSchemeCatalog::add(ColorScheme scheme) const {
             return result;
         }
     }
-    const auto bytes = ColorSchemeWriter::write(scheme);
+    const auto bytes = ColorSchemeWriter::write(scheme, &result.diagnostics);
+    if (bytes.isEmpty())
+        return result;
     const auto validated = ColorSchemeReader::read(bytes);
     result.diagnostics = validated.diagnostics;
     if (!validated.ok())
@@ -123,6 +125,8 @@ bool ColorSchemeCatalog::remove(const QString& id, QList<SchemeDiagnostic>* diag
     };
     if (!validUserId(id))
         return fail(QStringLiteral("Invalid or reserved scheme ID"));
+    if (!QDir(root_).exists())
+        return fail(QStringLiteral("Scheme catalog directory does not exist"));
     QLockFile lock(QDir(root_).filePath(QStringLiteral(".catalog.lock")));
     if (!lock.tryLock(0))
         return fail(QStringLiteral("Scheme catalog is busy"));

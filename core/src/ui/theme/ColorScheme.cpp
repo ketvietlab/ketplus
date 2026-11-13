@@ -247,7 +247,29 @@ ColorSchemeReadResult ColorSchemeReader::read(const QByteArray& json) {
         scheme.preserved.insert(it.key(), it.value());
     return result;
 }
-QByteArray ColorSchemeWriter::write(const ColorScheme& scheme) {
+QByteArray ColorSchemeWriter::write(const ColorScheme& scheme,
+                                    QList<SchemeDiagnostic>* diagnostics) {
+    bool supported = true;
+    const auto checkKeys = [&](const auto& values, const QStringList& keys, const QString& path) {
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            if (keys.contains(it.key()))
+                continue;
+            supported = false;
+            if (diagnostics)
+                diagnostics->append(
+                    {DiagnosticSeverity::Error, path + QLatin1Char('.') + it.key(),
+                     QStringLiteral(
+                         "Unknown typed token; retain extension data in preserved JSON")});
+        }
+    };
+    checkKeys(scheme.ui, scheme_detail::uiKeys, QStringLiteral("$.ui"));
+    checkKeys(scheme.editor, scheme_detail::editorKeys, QStringLiteral("$.editor"));
+    checkKeys(scheme.syntax, scheme_detail::syntaxKeys, QStringLiteral("$.syntax"));
+    checkKeys(scheme.terminal, scheme_detail::terminalKeys, QStringLiteral("$.terminal"));
+    checkKeys(scheme.diff, scheme_detail::diffKeys, QStringLiteral("$.diff"));
+    if (!supported)
+        return {};
+
     QJsonObject object = scheme.preserved;
     object.insert(QStringLiteral("schemaVersion"), scheme.schemaVersion);
     object.insert(QStringLiteral("id"), scheme.id);
@@ -342,9 +364,24 @@ ThemePalette colorSchemePalette(const ColorScheme& scheme) {
     palette.dark =
         resolved.kind == SchemeKind::Dark ||
         (resolved.kind == SchemeKind::HighContrast && resolved.extends == u"builtin-dark");
-    const auto hex = [](const QColor& color) { return color.name(QColor::HexRgb).toUpper(); };
+    const auto opaque = [](const QColor& color, const QColor& base) {
+        if (color.alpha() == 255)
+            return color;
+        const qreal alpha = color.alphaF();
+        return QColor::fromRgbF(color.redF() * alpha + base.redF() * (1 - alpha),
+                                color.greenF() * alpha + base.greenF() * (1 - alpha),
+                                color.blueF() * alpha + base.blueF() * (1 - alpha));
+    };
+    const auto base = builtinColorScheme(resolved.extends == u"builtin-dark" ? SchemeKind::Dark
+                                                                             : SchemeKind::Light);
+    const QColor panel = opaque(resolved.ui.value(QStringLiteral("chrome.panelBackground")),
+                                base.ui.value(QStringLiteral("chrome.panelBackground")));
+    const auto hex = [&](const QColor& color) {
+        return opaque(color, panel).name(QColor::HexRgb).toUpper();
+    };
     for (const auto& token : scheme_detail::paletteTokens)
         palette.*(token.member) = hex(resolved.ui.value(QString::fromLatin1(token.path)));
+    palette.panelBackground = panel.name(QColor::HexRgb).toUpper();
     palette.syntaxKeyword = hex(*resolved.syntax.value(QStringLiteral("keyword")).fg);
     palette.syntaxString = hex(*resolved.syntax.value(QStringLiteral("string")).fg);
     palette.syntaxNumber = hex(*resolved.syntax.value(QStringLiteral("number")).fg);
