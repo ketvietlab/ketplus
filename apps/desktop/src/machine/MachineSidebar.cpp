@@ -13,7 +13,7 @@ QVector<SidebarRepository> machineSidebarRepositories(const MachineCatalog& cata
     QHash<QString, qsizetype> indexById;
     for (const auto& repository : catalog.repositories()) {
         indexById.insert(repository.id, repositories.size());
-        repositories.append({repository.id, repository.label, false, {}, false, {}});
+        repositories.append({repository.id, repository.label, false, {}, {}});
     }
     for (const auto& conversation : catalog.conversations()) {
         QString repository = catalog.repositoryOf(conversation);
@@ -32,7 +32,6 @@ QVector<SidebarRepository> machineSidebarRepositories(const MachineCatalog& cata
                                          : conversation.worktreeLabel,
                                      false,
                                      {},
-                                     false,
                                      {}});
             }
         }

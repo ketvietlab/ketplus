@@ -25,6 +25,13 @@ Item {
     // sets its width (760 by default); 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
         ? KetTheme.px(agentHost.conversationWidth, KetTheme.zoom) : Number.POSITIVE_INFINITY
+    // The inset transcript rows keep from the pane's edges either side of that column. Rows,
+    // the day divider and the run line all start at transcriptRowX (T-88).
+    readonly property real transcriptRowInset: KetTheme.px(20, KetTheme.zoom)
+    function transcriptRowX(paneWidth) {
+        return (paneWidth - Math.min(paneWidth, conversationColumnWidth + 2 * transcriptRowInset)) / 2
+            + transcriptRowInset
+    }
     readonly property int messageCount: messages.count
     property string selectedModel: ""
     property string modelLabel: "Codex default"

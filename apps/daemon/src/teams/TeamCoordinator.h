@@ -215,6 +215,14 @@ class TeamHostPort {
         (void)integrationBranch;
         return {.repository = {}, .error = QStringLiteral("Repositories cannot be checked here.")};
     }
+    // T-93 (ADR 0123 §9): whether `branch` is already a local branch of `repository` or a
+    // branch of its origin (as last fetched). Nothing when git could not answer.
+    [[nodiscard]] virtual std::optional<bool> branchTaken(const QString& repository,
+                                                          const QString& branch) const {
+        (void)repository;
+        (void)branch;
+        return false;
+    }
     // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
     virtual std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                            QString* error) {
@@ -338,6 +346,10 @@ struct TaskDraft final {
     // branch (the team's when empty). Empty: the team's repository.
     QString repository;
     QString integrationBranch;
+    // T-93 (ADR 0123 §9): the type (feat, fix, chore, docs, refactor, test) and slug of the
+    // task's branch `<type>/<slug>-t<n>`; derived from the title when empty.
+    QString branchType;
+    QString branchSlug;
 };
 
 struct TeamResult final {
@@ -607,6 +619,12 @@ class TeamCoordinator : public QObject {
     // The repository a new task names, checked; empty values for the team's own.
     std::optional<TeamError> taskRepository(const Team& team, const TaskDraft& draft,
                                             Task& task) const;
+    // T-93 (ADR 0123 §9), in TeamCoordinatorBranchNames.cpp: names the branch of a task not
+    // started yet, `type`/`slug` or the title's when empty, refused when another branch or a
+    // task of a team in the same repository has that name or clashes with it as a folder.
+    // `unchecked` is set when the repository's own branches were not known yet.
+    std::optional<TeamError> nameTaskBranch(const Team& team, Task& task, const QString& type,
+                                            const QString& slug, bool* unchecked = nullptr) const;
     // Leaves the developer's open tasks unassigned, with an entry in their history.
     void unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                          const QString& reason, QList<Update>& updates);
