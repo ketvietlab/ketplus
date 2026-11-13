@@ -34,6 +34,7 @@ include(cmake/CompilerCache.cmake)
 include(cmake/Dependencies.cmake)
 include(cmake/KetFonts.cmake)
 include(cmake/Warnings.cmake)
+include(cmake/ThemeInput.cmake)
 
 add_library(ketplus_ui STATIC
     src/ui/ChromeGeometry.cpp
@@ -497,6 +498,12 @@ if(KETPLUS_CM_BUILD_TESTS)
             add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
         endif()
     endfunction()
+
+    add_executable(ketplus_theme_input_tests tests/ThemeInputTest.cpp)
+    target_link_libraries(ketplus_theme_input_tests PRIVATE Qt6::Test ketplus_theme_io ketplus_miniz)
+    ketplus_enable_warnings(ketplus_theme_input_tests)
+    ketplus_cm_add_test(ketplus_theme_input_tests ketplus_theme_input_tests)
+    set_tests_properties(ketplus_theme_input_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_tests tests/DocumentTest.cpp)
     target_link_libraries(ketplus_tests PRIVATE Qt6::Test ketplus_core)

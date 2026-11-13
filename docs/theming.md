@@ -90,10 +90,33 @@ First release:
 - Colors in VS Code's documented hex forms; parse alpha as RGBA, not Qt's
   eight-digit ARGB string convention.
 
-Use a maintained JSONC parser with comments/trailing commas, not regex stripping.
-Select a native parser/archive dependency in a small implementation spike after
-checking repository dependencies and licenses. XML parsing must disable external
-entities and network resolution. Unsupported formats produce an explicit error.
+Theme input infrastructure is exported as `KetPlusCM::theme_io`, with
+`ui/theme/io/ThemeInput.h` in namespace `ket::theme::io`. `parseJsonc` uses a
+string/escape-aware tokenizer to replace comments and trailing commas with spaces,
+then delegates JSON grammar validation to Qt. It preserves offsets and reports
+line/column errors. No regex stripping is used.
+
+`ZipArchive` uses pinned miniz 3.1.2 (MIT), reads ZIP metadata from an open file,
+and decompresses only explicitly requested entries into bounded memory. It rejects
+unsafe paths, special-file/link attributes, duplicate normalized names, Unicode
+normalization/case collisions, file/directory conflicts, encryption and unsupported
+compression. Declared expanded sizes are checked before allocation; requested
+payloads also undergo miniz output-size, stream and CRC validation. No extraction
+to disk occurs. ZIP entry names must be UTF-8. Limits apply to every entry,
+including unrequested entries.
+
+`parseXml` returns a small `XmlNode` tree using `QXmlStreamReader`. All DTDs
+(including the common plist DOCTYPE) and unresolved entities are rejected; no
+external resolver or network access is installed. Standard escaped XML characters
+remain supported. XML has additional 128-level/100,000-node bounds. A tmTheme
+with a DOCTYPE must have that declaration removed before importing.
+
+`IncludeResolver` reads from a caller-selected root directory or validated archive.
+It rejects remote/absolute references, root escapes and filesystem symlinks, and
+returns JSON documents parent first without merging them. The root counts as
+level one of the 16-level limit. Failed reads/parses leave outputs empty. Parsed
+files are limited to 5 MiB; include chains have a cumulative 100 MiB budget.
+Format-specific import and merge semantics remain the adapter's responsibility.
 
 Resolve includes relative to the declaring file, detect cycles, and enforce depth
 and byte limits. Parent colors are overridden by child keys; token rules retain
