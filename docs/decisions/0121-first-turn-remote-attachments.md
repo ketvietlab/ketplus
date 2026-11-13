@@ -1,4 +1,4 @@
-# 0120: Prepare a session before staging a conversation’s first attachment
+# 0121: Prepare a session before staging a conversation’s first attachment
 
 Status: accepted; additive Relay contract approved, implementation in progress
 Date: 2026-11-13

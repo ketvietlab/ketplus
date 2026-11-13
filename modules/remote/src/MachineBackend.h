@@ -74,7 +74,7 @@ class MachineBackend : public QObject {
     // with the `id` listWorktrees() or listRepositories() reported (the host path on the local
     // and SSH routes), plus "repository_id" on the Relay. The result names the new session_id.
     virtual void createSession(const QJsonObject& request, Callback callback) = 0;
-    // ADR 0120: inactive first-turn attachment scope. Requires an advertised capability;
+    // ADR 0121: inactive first-turn attachment scope. Requires an advertised capability;
     // request includes a stable client_request_id, worktree_id and initial options.
     virtual void prepareSession(const QJsonObject& request, Callback callback);
     virtual void cancelPreparedSession(const QString& sessionId, qint64 generation,
