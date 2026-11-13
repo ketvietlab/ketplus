@@ -2856,6 +2856,10 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
     // Claude and Cursor take answers as they are and decisions as allow/accepted.
     ProviderAdapter* const target = provider(adapterName);
     if (target != nullptr && target != adapter_) {
+        if (adapterName == QStringLiteral("copilot") && result.value("cancelled").toBool()) {
+            target->respond(requestId, result);
+            return;
+        }
         if (result.contains(QStringLiteral("answers"))) {
             target->respond(requestId, result);
             return;

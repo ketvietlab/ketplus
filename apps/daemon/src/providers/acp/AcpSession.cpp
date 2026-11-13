@@ -34,11 +34,15 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
                        computerInjected = computer.has_value(),
                        turnEndFile](const QJsonObject& result, const QString& error) {
         if (!error.isEmpty()) {
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
             callback({}, error);
             return;
         }
         const QString acpId = result.value(QStringLiteral("sessionId")).toString();
         if (acpId.isEmpty()) {
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
             callback({}, QStringLiteral("%1 ACP returned no session id.").arg(label_));
             return;
         }
@@ -58,19 +62,34 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
         else
             computerSessions_.remove(ketplusSessionId);
         ketplusByAcp_.insert(acpId, ketplusSessionId);
-        applySessionModel(acpId, model, result, [this, callback, acpId, ketplusSessionId] {
-            const QString mode =
-                sessionPermissionMode(permissionBySession_.value(ketplusSessionId));
-            if (mode.isEmpty()) {
-                callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
-                return;
-            }
-            sendCall(QStringLiteral("session/set_mode"),
-                     {{QStringLiteral("sessionId"), acpId}, {QStringLiteral("modeId"), mode}},
-                     [callback, acpId](const QJsonObject&, const QString&) {
-                         callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
-                     });
-        });
+        prepareSessionModel(
+            acpId, model, result,
+            [this, callback, acpId, ketplusSessionId, turnEndFile](const QJsonObject&,
+                                                                   const QString& error) {
+                if (!error.isEmpty()) {
+                    // Model setup can fail before a TurnState exists to finish. End
+                    // any browser work attached during session/new/load as well.
+                    // failPending also signals registered sessions after callbacks;
+                    // remove this one first so timeout/shutdown cannot signal it twice.
+                    browserSessions_.remove(ketplusSessionId);
+                    if (!turnEndFile.isEmpty() && !browser_tools::signalTurnEnd(turnEndFile))
+                        qWarning(
+                            "Unable to signal the browser server after ACP model setup failed");
+                    callback({}, error);
+                    return;
+                }
+                const QString mode =
+                    sessionPermissionMode(permissionBySession_.value(ketplusSessionId));
+                if (mode.isEmpty()) {
+                    callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
+                    return;
+                }
+                sendCall(QStringLiteral("session/set_mode"),
+                         {{QStringLiteral("sessionId"), acpId}, {QStringLiteral("modeId"), mode}},
+                         [callback, acpId](const QJsonObject&, const QString&) {
+                             callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
+                         });
+            });
     };
 
     const QString existing =
@@ -118,6 +137,10 @@ void AcpAdapter::applyConfigOptions(const QString& acpSessionId,
 }
 
 void AcpAdapter::handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params) {
+    if (strictPermissionRequests()) {
+        handleStrictPermission(requestId, params);
+        return;
+    }
     const QString acpId = params.value(QStringLiteral("sessionId")).toString();
     const QString sessionId = ketplusByAcp_.value(acpId);
     if (sessionId.isEmpty()) {

@@ -254,9 +254,44 @@ current-window value.
   session creation/loading allows 120 seconds for cold MCP workers. Prompts have
   no wall-clock deadline: long-running work and human approval must not kill the
   shared process or unrelated conversations. Process exit and explicit Stop
-  still end waiting turns. Streaming and cancellation use the
-  shared ACP engine. Model catalogs and provider-specific permission/browser
-  integration are separate work; this backend foundation advertises no model list.
+  still end waiting turns. Streaming and cancellation use the shared ACP engine.
+  The model picker receives Copilot's advertised ACP model selector from the
+  daemon. KetPlus prefers `configOptions` (including grouped choices), preserving
+  its model option id and value exactly. Older `models.availableModels` catalogs
+  use the compatibility `session/set_model` path only when offered by that session.
+  Discovery starts a disposable initialize/session-new probe in a temporary
+  directory with no host MCP servers and never sends a prompt. Concurrent requests
+  share a probe; its result is cached for 60 seconds. The probe has an eight-second
+  deadline and a one-MiB combined stdout/stderr budget. Catalogs are limited to 256
+  models and 256-character identifiers; display labels/descriptions are bounded
+  to 256/2,000 characters. The normalized catalog also has a 256-KiB JSON budget,
+  reserving room in daemon frames for metadata and other providers. No reasoning
+  levels or Cursor variants are invented.
+  If discovery fails, only **Copilot default** is offered with a catalog-unavailable
+  explanation. That choice leaves the provider's current session default unchanged.
+  Explicit model selections are checked against the conversation session's own
+  catalog and applied before a prompt. Switching between turns uses the advertised
+  config setter (or the legacy setter); a refusal, unsupported model or unconfirmed
+  config value fails the turn with an actionable error and sends no prompt.
+  Model rows carry the host **Ask for permission** profile for KetPlus approval
+  requests; this does not assert a Copilot sandbox or infer a provider mode.
+  Coverage uses fake ACP processes; live Copilot model behavior remains unverified.
+  Copilot tool requests use KetPlus approval cards. Allow and Refuse select the
+  CLI's advertised one-time option; missing options, expiry and cancellation
+  return `cancelled`. An approval never becomes an always rule. Pending requests
+  belong to one turn/process; an old card cannot authorize a replacement request.
+  Copilot permission modes are not yet verified, so even Full access does not
+  bypass these cards or claim to enforce a filesystem sandbox.
+  Browser MCP uses the same host Browser settings as Cursor: the daemon injects
+  the resolved stdio server on new/resumed sessions, adds routing instructions
+  separately from user text/images, and signals cleanup on completion, failure,
+  cancellation and shutdown. Disabled/invalid settings inject no browser server
+  and send unavailable guidance on the next turn. Tool images are preserved in
+  canonical transcript content for the existing gallery.
+  Copilot's authenticated MCP identity schema is unverified. Browser requests
+  therefore still ask for approval, including familiar titles and Cursor-shaped
+  `rawInput` identities. No project MCP file or turn-supplied server map overrides
+  the host Browser settings; no blanket allow-all CLI flags are added.
 
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and

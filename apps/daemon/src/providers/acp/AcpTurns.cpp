@@ -192,6 +192,7 @@ void AcpAdapter::interruptTurn(const QJsonObject& params, Callback callback) {
     auto turn = turns_.find(sessionId);
     if (turn != turns_.end())
         turn->interrupted = true;
+    cancelPermissions(sessionId);
     sendObject({{"jsonrpc", "2.0"},
                 {"method", "session/cancel"},
                 {"params", QJsonObject{{"sessionId", acpId}}}});
@@ -203,6 +204,7 @@ void AcpAdapter::finishTurn(const QString& ketplusSessionId, const QString& stat
     const auto it = turns_.find(ketplusSessionId);
     if (it == turns_.end())
         return;
+    cancelPermissions(ketplusSessionId);
     const TurnState turn = it.value();
     turns_.erase(it);
     if (const QString signal = browserSessions_.value(ketplusSessionId);
