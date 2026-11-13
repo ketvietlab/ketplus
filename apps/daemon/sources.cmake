@@ -74,6 +74,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/acp/AcpProcess.cpp
     src/providers/acp/AcpProtocol.cpp
     src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpPermissions.cpp
     src/providers/acp/AcpSession.cpp
     src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h

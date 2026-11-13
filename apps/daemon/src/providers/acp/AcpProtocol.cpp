@@ -177,6 +177,10 @@ void AcpAdapter::consumeLine(const QByteArray& line) {
 }
 
 void AcpAdapter::respond(const QJsonValue& requestId, const QJsonObject& result) {
+    if (strictPermissionRequests()) {
+        respondStrictPermission(requestId, result);
+        return;
+    }
     if (result.contains(QStringLiteral("outcome"))) {
         sendObject({{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
                     {QStringLiteral("id"), requestId},
@@ -209,6 +213,10 @@ void AcpAdapter::respond(const QJsonValue& requestId, const QJsonObject& result)
 
 void AcpAdapter::respondError(const QJsonValue& requestId, const QString& code,
                               const QString& message) {
+    if (strictPermissionRequests()) {
+        respondStrictPermission(requestId, {{QStringLiteral("cancelled"), true}});
+        return;
+    }
     permissionOptionsByRequest_.remove(requestKey(requestId));
     sendObject({{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
                 {QStringLiteral("id"), requestId},

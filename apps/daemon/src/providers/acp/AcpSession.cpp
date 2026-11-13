@@ -34,11 +34,15 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
                        computerInjected = computer.has_value(),
                        turnEndFile](const QJsonObject& result, const QString& error) {
         if (!error.isEmpty()) {
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
             callback({}, error);
             return;
         }
         const QString acpId = result.value(QStringLiteral("sessionId")).toString();
         if (acpId.isEmpty()) {
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
             callback({}, QStringLiteral("%1 ACP returned no session id.").arg(label_));
             return;
         }
@@ -118,6 +122,10 @@ void AcpAdapter::applyConfigOptions(const QString& acpSessionId,
 }
 
 void AcpAdapter::handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params) {
+    if (strictPermissionRequests()) {
+        handleStrictPermission(requestId, params);
+        return;
+    }
     const QString acpId = params.value(QStringLiteral("sessionId")).toString();
     const QString sessionId = ketplusByAcp_.value(acpId);
     if (sessionId.isEmpty()) {
