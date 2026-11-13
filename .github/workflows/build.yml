@@ -183,7 +183,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_TESTS=OFF
           -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
           -DKETPLUS_BUNDLE_BROWSER_RUNTIME=ON
-          -DKETPLUS_CONTROL_URL=https://ketplus.ketviet.vn
+          -DKETPLUS_PRODUCTION_RELEASE=ON
+          -DKETPLUS_CONTROL_URL=https://api.ketplus.app
       - name: Build unsigned DMG
         run: cmake --build build-release --target package --parallel 3
       - name: Verify packaged daemon and Node architecture
@@ -197,7 +198,7 @@ jobs:
           test "$(lipo -archs "$app/Contents/Helpers/ketplus_daemon")" = "$EXPECTED_ARCH"
           test "$(lipo -archs "$app/Contents/Resources/ketplus-browser/bin/node")" = "$EXPECTED_ARCH"
           "$app/Contents/Helpers/ketplus_daemon" --build-info > build-release/daemon-build-info.json
-          python3 -c 'import json; assert json.load(open("build-release/daemon-build-info.json"))["control_url"] == "https://ketplus.ketviet.vn"'
+          python3 -c 'import json; assert json.load(open("build-release/daemon-build-info.json"))["control_url"] == "https://api.ketplus.app"'
       # CI artifacts are unsigned handoff material, never a published release/feed.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

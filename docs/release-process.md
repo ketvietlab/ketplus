@@ -135,7 +135,7 @@ architecture mismatch instead of silently bundling host Node.
 cmake -S . -B "$BUILD_ROOT/arm64" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_TESTS=OFF \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DKETPLUS_BUNDLE_BROWSER_RUNTIME=ON \
-  -DKETPLUS_CONTROL_URL=https://ketplus.ketviet.vn
+  -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_CONTROL_URL=https://api.ketplus.app
 nice -n 10 cmake --build "$BUILD_ROOT/arm64" --target package --parallel 3
 ```
 
