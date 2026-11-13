@@ -188,6 +188,8 @@ QtObject {
           state: "replied", expectReply: true, text: "Is the stepped spinner fine at 20 steps a second?" },
         { type: "user", from: { number: "8941", title: "DS Icon", provider: "Claude" },
           text: "20 steps a second reads as smooth at 14 px. Keep 4 behind another app." },
+        { type: "user", from: { number: "", title: "Example team", provider: "" },
+          text: "You asked to check again: synthetic build status.\n" + "A completed check has no warnings; the remaining check is still running.\n".repeat(8) },
         { type: "event", text: "Context compacted", detail: "Older steps are summarised; the conversation continues." },
         { type: "steer", text: "Also check dark mode before you finish." },
         { type: "activity", summary: "Edited 2 files, ran tests", steps: [

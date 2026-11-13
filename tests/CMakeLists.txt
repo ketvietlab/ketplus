@@ -4,6 +4,10 @@ if(APPLE)
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_signing_cli.py")
 endif()
 
+if(APPLE AND KETPLUS_UPDATES_ENABLED)
+    add_subdirectory(updates)
+endif()
+
 function(ketplus_add_gui_test target)
     qt_add_executable(${target} ${ARGN})
     ketplus_enable_warnings(${target})
@@ -198,6 +202,9 @@ target_link_libraries(ketplus_machine_composition_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
+
+ketplus_add_gui_test(ketplus_machine_toast_tests MachineWorkspaceToastTest.cpp)
+target_link_libraries(ketplus_machine_toast_tests PRIVATE Qt6::Test ketplus_desktop_support)
 
 ketplus_add_gui_test(ketplus_machine_conversation_tests MachineConversationTest.cpp
     FakeMachineBackend.h MachineHosts.h)

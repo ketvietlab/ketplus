@@ -53,6 +53,9 @@ Item {
     readonly property string diskLevel: !storage ? ""
         : storage.free < Fixtures.diskStopGb ? "stop" : storage.free < Fixtures.diskWarnGb ? "low" : ""
     readonly property var doneWorktrees: storage ? storage.worktrees : []
+    // T-62: "Remove all…" is running, and what its last run did: { removed: [ids], kept: {id: reason} }.
+    property bool removingAll: false
+    property var removalOutcome: null
     function gb(value) { return value.toFixed(1) + " GB" }
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
@@ -153,20 +156,23 @@ Item {
         question: "The team used its " + turnBudget + " automatic turns. Continue?",
         detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
         askedBy: "", task: "", when: "Just now", options: ["Continue (" + turnBudget + " more turns)", "Stop"], recommended: 0 })
-    // T-40: how the team reviews. Rounds are one or two (the user's rule is at most two passes);
-    // the place is the board or the task's pull request. A change applies to tasks that enter
-    // review afterwards.
+    // T-40: how the team reviews. The review passes per PR are one to five (two by default),
+    // counting every reviewer's pass; the place is the board or the task's pull request. A
+    // change applies from the next review request: a task already past a lowered limit is
+    // blocked for the leader then, not at once.
     readonly property int reviewRounds: team && team.reviewRounds ? team.reviewRounds : 2
     readonly property string reviewPlace: team && team.reviewPlace ? team.reviewPlace : "board"
     function reviewText(rounds, place) {
-        return (rounds === 1 ? "One review round" : "Two review rounds")
+        return (rounds === 1 ? "1 review pass" : rounds + " review passes")
             + (place === "pull_request" ? " on the pull request" : " on the board")
     }
     function changeReview(rounds, place) {
         if (rounds === reviewRounds && place === reviewPlace)
             return
         change({ reviewRounds: rounds, reviewPlace: place,
-            updates: [{ icon: "eye", text: reviewText(rounds, place) + ", for tasks that enter review from now",
+            updates: [{ icon: "eye", text: "Max review passes: " + rounds
+                            + (place === "pull_request" ? ", on the pull request" : ", on the board")
+                            + ", from the next review request",
                         detail: "You · the team", when: "Just now" }].concat(team.updates) })
         window.notify(team.name + ": " + reviewText(rounds, place).toLowerCase())
     }
@@ -268,9 +274,15 @@ Item {
             if (name === "remove-worktree-note")
                 removeWorktreeDialog.note = Fixtures.unmovedConversationNote
         }
+        // T-62: the confirmation of Remove all…, and the page after a run that kept one
+        // worktree with git's reason.
+        else if (name === "remove-all" && doneWorktrees.length > 0)
+            removeAllDialog.open()
+        else if (name === "remove-all-kept" && doneWorktrees.length > 0)
+            removeAllWorktrees({ [doneWorktrees[0].id]: Fixtures.dirtyWorktreeRefusal })
     }
     function openEveryOverlay() {
-        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog, removeWorktreeDialog]) {
+        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog, removeWorktreeDialog, removeAllDialog]) {
             if (dialog === taskDialog || dialog === handoverDialog)
                 openTask = handover = Fixtures.teams[0].tasks[2]
             dialog.open()
@@ -320,7 +332,34 @@ Item {
             return false
         change({ storage: Object.assign({}, storage, { worktrees: doneWorktrees.filter(w => w.id !== id) }) })
         changeTask(id, { worktree: "" }, "You removed the worktree " + entry.path)
+        // A summary that still says this one was kept is not true any more.
+        if (!removingAll && removalOutcome && removalOutcome.kept[id] !== undefined)
+            removalOutcome = null
         return true
+    }
+
+    // T-62: every listed worktree through the same removal, one after another. `refused` maps
+    // a task id to the daemon's reason for keeping it, as a refusal would say it.
+    function removeAllWorktrees(refused) {
+        const outcome = { removed: [], kept: {} }
+        for (const entry of doneWorktrees.slice()) {
+            if (refused && refused[entry.id])
+                outcome.kept[entry.id] = refused[entry.id]
+            else if (removeWorktree(entry.id))
+                outcome.removed.push(entry.id)
+        }
+        removalOutcome = outcome
+        return outcome
+    }
+    function removalSummary(outcome) {
+        if (!outcome)
+            return ""
+        const kept = Object.keys(outcome.kept).length
+        const done = "Removed " + count(outcome.removed.length, "worktree", "worktrees") + "."
+        return kept === 0 ? done : done + " Kept " + kept + (kept === 1 ? " with its reason." : " with their reasons.")
+    }
+    function totalSize(entries) {
+        return entries.reduce((sum, e) => sum + parseFloat(e.size), 0).toFixed(1) + " GB"
     }
 
     // The sidebar's team folder opens its team.
@@ -437,7 +476,7 @@ Item {
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
     // `budget` is the team's own automatic turns; without one it takes Settings → Teams.
-    // `review` is { rounds, place }; without one, two rounds on the board.
+    // `review` is { rounds, place }; without one, two passes on the board.
     function createTeam(repository, name, goal, branch, leaderWrites, plan, merges, permission, budget, review) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
@@ -455,7 +494,7 @@ Item {
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
             paused: false, merges: merges || "leader", permission: permission || "Workspace",
             turnBudget: budget || Fixtures.turnBudget, automaticTurns: 0,
-            reviewRounds: review && review.rounds === 1 ? 1 : 2,
+            reviewRounds: review && review.rounds >= 1 && review.rounds <= 5 ? review.rounds : 2,
             reviewPlace: review && review.place === "pull_request" ? "pull_request" : "board",
             leaderWrites: leaderWrites, members: members,
             tasks: [], decisions: [], updates: [] }])
@@ -596,10 +635,13 @@ Item {
               "automatic turns are a whole number from 5 to 200")
         const own = createTeam(repository, "Check E", "", "develop", true, plan, "leader", "", 12)
         check(turnBudget === 12, "a team created with its own budget keeps it")
-        check(reviewRounds === 2 && reviewPlace === "board", "a new team reviews in two rounds on the board")
+        check(reviewRounds === 2 && reviewPlace === "board", "a new team reviews in two passes on the board")
         changeReview(1, "pull_request")
         check(reviewRounds === 1 && reviewPlace === "pull_request"
-              && team.updates[0].text.indexOf("enter review from now") > 0, "the team's review is a setting it changes")
+              && team.updates[0].text.indexOf("Max review passes: 1") === 0, "the team's review is a setting it changes")
+        changeReview(5, "board")
+        check(reviewRounds === 5 && team.updates[0].text.indexOf("Max review passes: 5") === 0,
+              "a team allows up to five review passes per PR")
         Fixtures.turnBudget = 70
         const taken = createTeam(repository, "Check F", "", "develop", true, plan)
         check(turnBudget === 70, "a team created without a budget takes Settings › Teams")
@@ -614,8 +656,8 @@ Item {
         check(!team.paused && !decisions.some(d => d.kind === "budget") && automaticTurns === 12
               && turnBudget === 20, "a budget that leaves turns resumes the team and keeps the turns used")
         const reviewed = createTeam(repository, "Check G", "", "develop", true, plan, "leader", "", 0,
-                                    { rounds: 1, place: "pull_request" })
-        check(reviewRounds === 1 && reviewPlace === "pull_request", "New team chooses the rounds and the place")
+                                    { rounds: 4, place: "pull_request" })
+        check(reviewRounds === 4 && reviewPlace === "pull_request", "New team chooses the passes and the place")
         for (const id of [b, c, far, own, taken, reviewed]) {
             showTeam(id)
             deleteTeam()
@@ -633,6 +675,21 @@ Item {
         check(removeWorktree("T-2") && doneWorktrees.length === kept.length - 1
               && tasks.find(t => t.id === "T-2").worktree === "", "a removed worktree leaves the offer and the task")
         check(!removeWorktree("T-2"), "a worktree is removed once")
+        change(before)
+        const all = doneWorktrees.length
+        const outcome = removeAllWorktrees({})
+        check(outcome.removed.length === all && doneWorktrees.length === 0, "Remove all removes every listed worktree")
+        change(before)
+        const mixed = removeAllWorktrees({ "T-2": Fixtures.dirtyWorktreeRefusal })
+        check(mixed.kept["T-2"] === Fixtures.dirtyWorktreeRefusal && doneWorktrees.some(w => w.id === "T-2"),
+              "a refused worktree stays listed with its reason")
+        removeWorktree("T-2")
+        check(removalOutcome === null, "removing a kept worktree by hand drops the old summary")
+        change(before)
+        removeAllWorktrees({})
+        check(removalOutcome !== null && doneWorktrees.length === 0,
+              "the summary stays after every worktree was removed")
+        removalOutcome = null
         change(before)
         // T-55: Other writes the answer; blank text is not sent; a refusal keeps the text.
         const asked = decisions.find(d => d.kind !== "merge" && d.kind !== "budget")
@@ -1214,13 +1271,34 @@ Item {
                 }
             }
 
-            Item { width: 1; height: screen.px(4); visible: screen.doneWorktrees.length > 0 }
+            Item { width: 1; height: screen.px(4); visible: screen.doneWorktrees.length > 0 || screen.removalOutcome !== null }
 
             // T-37: done tasks whose worktree is still on disk, each offered to the user.
+            // T-62: it stays for the summary after "Remove all…" removed every one.
             SectionTitle {
-                visible: screen.doneWorktrees.length > 0
+                visible: screen.doneWorktrees.length > 0 || screen.removalOutcome !== null
                 title: "Worktrees of done tasks"
-                count: screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+                count: screen.doneWorktrees.length > 0
+                       ? screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
+                       : "None left on disk"
+                // T-62: one confirmation for every listed worktree.
+                KetButton {
+                    objectName: "teamDoneWorktreesRemoveAll"
+                    visible: screen.doneWorktrees.length > 0
+                    text: "Remove all…"
+                    iconName: "trash"
+                    variant: KetTheme.ButtonVariant.Ghost
+                    enabled: !screen.removingAll
+                    onClicked: removeAllDialog.open()
+                }
+            }
+            KetBanner {
+                objectName: "teamDoneWorktreesSummary"
+                width: parent.width
+                visible: screen.removalOutcome !== null
+                tone: screen.removalOutcome && Object.keys(screen.removalOutcome.kept).length > 0
+                      ? KetTheme.BannerTone.Warning : KetTheme.BannerTone.Info
+                title: screen.removalSummary(screen.removalOutcome)
             }
             Panel {
                 objectName: "teamDoneWorktrees"
@@ -1261,12 +1339,22 @@ Item {
                                         elide: Text.ElideMiddle
                                         color: KetTheme.t.textMuted
                                     }
+                                    // T-62: why the last Remove all… kept it.
+                                    Label {
+                                        width: parent.width
+                                        visible: text !== ""
+                                        text: screen.removalOutcome ? (screen.removalOutcome.kept[worktreeRow.modelData.id] || "") : ""
+                                        color: KetTheme.t.danger
+                                        font.pixelSize: screen.px(12)
+                                        elide: Text.ElideRight
+                                    }
                                 }
                                 Label { text: worktreeRow.modelData.size; color: KetTheme.t.textSecondary }
                                 KetButton {
                                     text: "Remove…"
                                     iconName: "trash"
                                     variant: KetTheme.ButtonVariant.Ghost
+                                    enabled: !screen.removingAll
                                     onClicked: screen.startRemoveWorktree(worktreeRow.modelData)
                                 }
                             }
@@ -1668,6 +1756,48 @@ Item {
                     removeWorktreeDialog.accept()
                     if (screen.removeWorktree(id))
                         screen.window.notify("Removed the worktree of " + id)
+                }
+            }
+        ]
+    }
+
+    // T-62: Remove all… names how many worktrees and their size; nothing goes before Remove.
+    KetDialog {
+        id: removeAllDialog
+        objectName: "removeAllWorktreesDialog"
+        readonly property int total: screen.doneWorktrees.length
+        title: "Remove " + screen.count(total, "worktree", "worktrees") + "?"
+        Column {
+            width: removeAllDialog.availableWidth
+            spacing: screen.px(10)
+            Label {
+                width: parent.width
+                text: "The folders of " + screen.doneWorktrees.map(w => w.id).join(", ") + " are deleted from disk, freeing "
+                      + screen.totalSize(screen.doneWorktrees) + " in total. The tasks' branches and their commits stay."
+                color: KetTheme.t.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+            Label {
+                width: parent.width
+                text: "Each one goes through the same checks as Remove…, one after another: a worktree with uncommitted or untracked changes, with commits on no remote branch, or the folder of a conversation that is running or waits for you is kept with the reason, and the others are still removed."
+                color: KetTheme.t.textMuted
+                font.pixelSize: screen.px(12)
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeAllDialog.reject() },
+            KetButton {
+                text: removeAllDialog.total === 1 ? "Remove worktree" : "Remove " + removeAllDialog.total + " worktrees"
+                variant: KetTheme.ButtonVariant.Danger
+                onClicked: {
+                    removeAllDialog.accept()
+                    const outcome = screen.removeAllWorktrees({})
+                    screen.window.notify(screen.removalSummary(outcome))
                 }
             }
         ]

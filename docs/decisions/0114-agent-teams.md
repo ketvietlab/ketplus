@@ -108,12 +108,24 @@ with `team_member`. *Rejected*: a second review engine — it would drift from 0
 settings, chosen in New team and changed in the team's Review settings (`team.create` and
 `team.update` take `max_rounds` and `review_place`):
 
-- `max_rounds` is **1 or 2**, default 2. The user's rule is at most two review passes,
-  so nothing higher is offered or accepted; any other value is refused with
-  `invalid_payload` ("A team reviews a task in one or two rounds before the leader
-  decides."). A team stored when three were allowed reads as two. With one round, a
-  task whose only round ends with findings is `blocked` for the leader with the
-  `round_limit` update, exactly as the second round is with two.
+- `max_rounds` is **1 to 5**, default 2 (T-53, 2026-11-12: the user asked for "Max
+  review passes per PR" as a team setting; it was 1 or 2 under T-40). Any other value
+  is refused with `invalid_payload` ("A team reviews a task in one to five passes
+  before the leader decides."). A stored team with a value outside 1 to 5 reads as
+  two. A change is logged in Updates as "Max review passes: N". With N passes, a task
+  whose pass N ends with findings is `blocked` for the leader with the `round_limit`
+  update.
+- A lowered limit applies from the **next review request**, never retroactively: a
+  review in flight keeps its limit, and a task that already had as many passes as the
+  team now allows is `blocked` with an actionable `round_limit` update when it next
+  enters In review, or when a reviewer takes it from the queue if the limit was
+  lowered while it waited, instead of being reviewed. Its limit then becomes the
+  team's, so a leader who hands it to review again gets that pass. A raised limit gives
+  a task its new passes at its next request. Voiding a pass (`team_review_void`) after
+  the limit was lowered hands the task back to In review, so the same check applies:
+  it is blocked, and the leader hands it to review once more to get the voided pass
+  again. A team stored with `max_rounds: 3` before T-53, when three was out of range
+  and read as two, now reads as three.
 - `review_place` is `board` (default) or `pull_request`; anything else is refused in
   words.
 - A task takes both when it **enters a round** (`round_limit`, `review_place` on the
@@ -240,16 +252,49 @@ logged. Merging the integration branch onward always stays with the user.
 | assignment or handover | the new owner (`assignment` message) |
 | task enters `in_review` | the reviewer (`review`) |
 | review with findings | the owner (`review` reply) |
+| any review verdict | the leader, in its next `digest` (T-75) |
 | decision answered | the leader and the blocked owner (`decision`) |
 | actionable updates | the leader, once, as a `digest` |
 | a member's work left open, or the whole team idle with work left (§8) | that member (`nudge`), then the leader (`stall`) |
 | anything else | nobody |
 
-Actionable updates: a task became `ready`, `blocked` or `done`, a review hit its round
-limit, a path was flagged outside a lane, a developer has no task left, a developer's
-question. When the leader's turn ends with actionable updates waiting, or after a quiet
+Actionable updates: a task became `ready`, `blocked` or `done`, a review verdict, a
+review hit its round limit, a path was flagged outside a lane, a developer has no task
+left, a developer's question. When the leader's turn ends with actionable updates waiting, or after a quiet
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
+
+**Every verdict reaches the leader (T-75, decided 2026-11-13).** A findings verdict sends
+the task back to its developer, so before T-75 it moved no task to an actionable state, and
+the leader heard of it only with a later actionable update or its own wait. Now each
+verdict adds one actionable `verdict` update. That makes the leader's next digest due
+after the quiet period, or when its turn ends if it is busy. The update covers findings,
+no findings, and findings at the round limit. Its line names the task, the pull request
+when the task has one, the round of its limit, the reviewer and the verdict. For findings
+it adds the count by severity:
+
+- `Verdict on T-61 (PR https://…/pull/12), round 1 of 2 by Reviewer: findings (0 High,
+  0 Medium, 6 Low, 3 Nit). Back to its developer; decide on any finding outside the
+  task's scope.`
+- `… round 2 of 2 by Reviewer: no findings. Ready to merge.`
+- `… findings (1 High, …). The round limit is reached: you decide.`
+
+The severities come from the review reply. A finding is a line that starts with its id
+and severity, in the forms the team's reviewers write (`- **H1, High.** …`,
+`- **L1 (Low), file:4:** …`, `**M1 — Medium — …**`), or with its severity alone
+(``- **Low**, `file:4`: …``). An id is counted once, so a finding mentioned again in the
+prose is not counted twice. A finding marked as settled is not counted, as round 2 lists
+round 1's findings: ✅ or "đã sửa" anywhere on its line settles it
+(`- **L1 (Low), …:** ✅ **đã sửa.**`), and so does "fixed" where it reads as the mark (at
+the end, or before "in", punctuation or a dash: `L1 — Low — fixed in abc12`), not in a
+finding's own words ("fixed findings count"). A line also marked ❌ is open. A severity
+followed by a count (`- High: 0`) or by nothing (`none`, `không có`) is no finding. A reply
+without such lines counts each line that names a severity before a colon, but not a
+summary of counts (`High: 0, Medium: 1`). A reply that names no severity reads "severity not stated". At the
+round limit the verdict line is the `round_limit` warning itself, so the leader reads one
+line besides the task's blocked state. The same line is in the team page's Updates and in
+the phone's team payload, which both show the team's updates. No message from member to member is added. The developer still
+receives the findings as the `review` reply, and the leader reads only the line.
 
 **A wait alone sends no digest (decided 2026-11-12).** A `wait` entry is shown on the
 team page and in a digest that has something else in it, but it is never the reason for
@@ -429,6 +474,18 @@ is paused, stopped or removed on its own at any level.
   entry is written once every move has answered and names what happened to each one; a
   conversation that could not be moved is named with the reason, in the history and in
   the answer's `note`, which the dialog shows instead of closing.
+- **Remove all (T-62, 2026-11-13).** The section's header has "Remove all…" while at
+  least one worktree is listed. One confirmation names how many worktrees and their total
+  size ("at least" when a size is unknown); nothing is removed before it. The page then
+  sends `team.worktree.remove` for each listed worktree, one after the other answered, in
+  the list's order, so each goes through the same guards and the same git order as a
+  single Remove; there is no bulk request in the daemon. A refusal or a failure keeps that
+  worktree listed with its reason in the daemon's or git's words, and the others are still
+  removed. The dialog and the page show a summary (removed N, kept M with their reasons),
+  each removal adds `worktree_removed` to its task's history as before, and "Remove all…"
+  and every Remove… are disabled while the run lasts. The page's summary stays when the
+  run removed every worktree (the section then says none is left on disk), and goes once
+  a worktree it names as kept is no longer listed, such as after removing it by hand.
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
@@ -577,10 +634,11 @@ those conversations when the team starts them, at creation and for a developer a
 later; the user changes one member in its conversation. The reviewer is not in it: its
 review turns run under the verify profile whatever its conversation's policy is (ADR 0067).
 
-`team.create` and `team.update` take `max_rounds` (1 or 2; 2 when absent) and
+`team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document
 returns both (§2). These are local commands; the relay contract and the phone's
-`team.update` are unchanged, so a phone creates a team with two rounds on the board.
+`team.update` are unchanged, so a phone creates a team with two rounds on the board. The
+phone's team summary carries `max_rounds` read-only (T-53, ADR 0116).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
 `already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,

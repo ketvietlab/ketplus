@@ -1,5 +1,5 @@
-// T-40: a team's review rounds (one or two) and review place (the board or the pull
-// request), chosen in New team and changed in the team's Review settings, against a fake
+// T-40, T-53: a team's Max review passes per PR (one to five) and review place (the board or the
+// pull request), chosen in New team and changed in the team's Review settings, against a fake
 // daemon. Run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamReviewSettings.h"
 #include "KetAppearance.h"
@@ -8,6 +8,7 @@
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetProfile.h"
+#include "KetSelect.h"
 #include "KetStyle.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
@@ -67,6 +68,15 @@ void click(QWidget* root, const char* name) {
     radio->click();
 }
 
+// Chooses `rounds` in the Max review passes select, as a click on its item does.
+void choosePasses(QWidget* root, const int rounds) {
+    auto* select = root->findChild<ket::Select*>(QStringLiteral("teamReviewRounds"));
+    QVERIFY(select);
+    QCOMPARE(select->count(), 5);
+    select->setCurrentIndex(rounds - 1);
+    emit select->activated(rounds - 1);
+}
+
 // The row's help, as its note label shows it.
 QString help(QWidget* root, const char* row) {
     auto* field = root->findChild<ket::FieldRow*>(QLatin1String(row));
@@ -121,19 +131,25 @@ class TeamReviewSettingsTest final : public QObject {
 
     void theSummaryReadsTheTeam() {
         QCOMPARE(team_review::summary(QJsonObject{}),
-                 QStringLiteral("Two review rounds on the board"));
+                 QStringLiteral("2 review passes on the board"));
         QCOMPARE(team_review::summary(team(1, "pull_request")),
-                 QStringLiteral("One review round on the pull request"));
-        // An older daemon's three rounds read as the most there are now.
-        QCOMPARE(team_review::rounds(QJsonObject{{"max_rounds", 3}}), 2);
+                 QStringLiteral("1 review pass on the pull request"));
+        QCOMPARE(team_review::rounds(QJsonObject{{"max_rounds", 5}}), 5);
+        // A value outside one to five reads as the standard two.
+        QCOMPARE(team_review::rounds(QJsonObject{{"max_rounds", 6}}), 2);
+        QCOMPARE(team_review::rounds(QJsonObject{{"max_rounds", 0}}), 2);
     }
 
     void theHelpFollowsTheChoice() {
         TeamReviewFields fields(2, "board");
-        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("second go to the leader"));
-        click(&fields, "teamReviewRoundsOne");
+        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("Max review passes per PR"));
+        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("pass 2 go to the leader"));
+        choosePasses(&fields, 4);
+        QCOMPARE(fields.rounds(), 4);
+        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("until pass 4"));
+        choosePasses(&fields, 1);
         QCOMPARE(fields.rounds(), 1);
-        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("only round go to the leader"));
+        QVERIFY(help(&fields, "teamReviewRoundsRow").contains("only pass go to the leader"));
         click(&fields, "teamReviewPlacePullRequest");
         QCOMPARE(fields.place(), QStringLiteral("pull_request"));
         QVERIFY(help(&fields, "teamReviewPlaceRow")
@@ -145,7 +161,8 @@ class TeamReviewSettingsTest final : public QObject {
         QTest::addColumn<int>("rounds");
         QTest::addColumn<QString>("place");
         QTest::newRow("standard") << false << 2 << "board";
-        QTest::newRow("chosen") << true << 1 << "pull_request";
+        QTest::newRow("one") << true << 1 << "pull_request";
+        QTest::newRow("five") << true << 5 << "pull_request";
     }
     void newTeamSendsTwoRoundsOnTheBoardUnlessChosen() {
         QFETCH(bool, choose);
@@ -158,7 +175,7 @@ class TeamReviewSettingsTest final : public QObject {
         auto* form = dialog->findChild<NewTeamForm*>();
         form->nameField()->setText("Shop");
         if (choose) {
-            click(form, "teamReviewRoundsOne");
+            choosePasses(form, rounds);
             click(form, "teamReviewPlacePullRequest");
         }
         const QJsonObject payload = form->payload();
@@ -174,13 +191,13 @@ class TeamReviewSettingsTest final : public QObject {
         page.show();
         QTRY_VERIFY(page.findChild<QLabel*>("teamPageReview"));
         QCOMPARE(page.findChild<QLabel*>("teamPageReview")->text(),
-                 QStringLiteral("Two review rounds on the board"));
+                 QStringLiteral("2 review passes on the board"));
         QPointer<ket::Dialog> dialog = teamReviewSettings(&page, teams_.get(), team(2, "board"));
         auto* fields = dialog->findChild<TeamReviewFields*>();
         QCOMPARE(fields->rounds(), 2);
         QCOMPARE(fields->place(), QStringLiteral("board"));
-        QVERIFY(help(dialog, "teamReviewPlaceRow")
-                    .contains("Applies to tasks that enter review from now"));
+        QVERIFY(
+            help(dialog, "teamReviewPlaceRow").contains("Applies from the next review request"));
         // Nothing changed: Save closes without a request.
         dialog->findChild<ket::Button*>("teamReviewSave")->click();
         QTRY_VERIFY(!dialog);
@@ -190,20 +207,20 @@ class TeamReviewSettingsTest final : public QObject {
         answers_.insert("team.update",
                         {{"ok", false},
                          {"error_code", "invalid_payload"},
-                         {"error_message", "A team reviews a task in one or two rounds before "
+                         {"error_message", "A team reviews a task in one to five passes before "
                                            "the leader decides."}});
         dialog = teamReviewSettings(&page, teams_.get(), team(2, "board"));
         fields = dialog->findChild<TeamReviewFields*>();
-        click(fields, "teamReviewRoundsOne");
+        choosePasses(fields, 3);
         click(fields, "teamReviewPlacePullRequest");
         dialog->findChild<ket::Button*>("teamReviewSave")->click();
         const QJsonObject update = lastOf("team.update");
         QCOMPARE(update.value("team_id").toString(), QStringLiteral("7"));
-        QCOMPARE(update.value("max_rounds").toInt(), 1);
+        QCOMPARE(update.value("max_rounds").toInt(), 3);
         QCOMPARE(update.value("review_place").toString(), QStringLiteral("pull_request"));
         auto* refusal = dialog->findChild<ket::Banner*>("teamReviewRefusal");
         QTRY_VERIFY(!refusal->isHidden());
-        QVERIFY(refusal->message().contains("one or two rounds"));
+        QVERIFY(refusal->message().contains("one to five passes"));
         QVERIFY(dialog->isVisible());
 
         // Taken, the dialog closes.

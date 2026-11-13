@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QtTest>
 
 #include <functional>
@@ -47,7 +48,8 @@ QJsonObject team() {
         {"revision", 1}};
 }
 
-QJsonObject storage(const qint64 free, const QString& level, const bool worktree = true) {
+QJsonObject storage(const qint64 free, const QString& level, const bool worktree = true,
+                    const bool second = false) {
     QJsonArray worktrees;
     if (worktree)
         worktrees.append(QJsonObject{{"task_id", "T-2"},
@@ -55,6 +57,12 @@ QJsonObject storage(const qint64 free, const QString& level, const bool worktree
                                      {"branch", "team/7/T-2"},
                                      {"path", "/work/shop-quick-search"},
                                      {"size_bytes", 4'200'000'000LL}});
+    if (second)
+        worktrees.append(QJsonObject{{"task_id", "T-4"},
+                                     {"title", "Saved carts"},
+                                     {"branch", "team/7/T-4"},
+                                     {"path", "/work/shop-saved-carts"},
+                                     {"size_bytes", 1'800'000'000LL}});
     return {{"ok", true},
             {"storage", QJsonObject{{"free_bytes", free},
                                     {"level", level},
@@ -66,13 +74,40 @@ QJsonObject storage(const qint64 free, const QString& level, const bool worktree
 struct FakeDaemon {
     QList<QPair<QString, QJsonObject>> sent;
     QHash<QString, QJsonObject> answers;
+    // T-62: team.worktree.remove's answer for one task, before `answers`.
+    QHash<QString, QJsonObject> removals;
+    // While set, removals wait in `held` until release().
+    bool hold{false};
+    QList<std::function<void()>> held;
     TeamDirectory::Transport transport() {
         return [this](const QString& type, const QJsonObject& payload, TeamDirectory::Reply reply) {
             sent.append({type, payload});
-            const QJsonObject answer = answers.value(type, {{"ok", true}});
-            reply(answer, answer.value("ok").toBool() ? QString{}
-                                                      : answer.value("error_message").toString());
+            const QString task = payload.value("task_id").toString();
+            const QJsonObject answer = type == "team.worktree.remove" && removals.contains(task)
+                                           ? removals.value(task)
+                                           : answers.value(type, {{"ok", true}});
+            auto answerIt = [answer, reply] {
+                reply(answer, answer.value("ok").toBool()
+                                  ? QString{}
+                                  : answer.value("error_message").toString());
+            };
+            if (hold && type == "team.worktree.remove")
+                held.append(answerIt);
+            else
+                answerIt();
         };
+    }
+    void release() {
+        hold = false;
+        while (!held.isEmpty())
+            held.takeFirst()();
+    }
+    QStringList removed() const {
+        QStringList ids;
+        for (const auto& [type, payload] : sent)
+            if (type == "team.worktree.remove")
+                ids.append(payload.value("task_id").toString());
+        return ids;
     }
     int count(const QString& type) const {
         return static_cast<int>(std::count_if(
@@ -215,6 +250,118 @@ class TeamStoragePageTest final : public QObject {
         // are gone.
         QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
         QVERIFY(!page.findChild<ket::Banner*>("teamDiskBanner"));
+    }
+
+    // T-62: no worktree listed, no section and no Remove all….
+    void removeAllIsHiddenWithoutWorktrees() {
+        start(storage(64'200'000'000LL, "", false));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(daemon_.count("team.storage.get") >= 1);
+        QTest::qWait(50);
+        QVERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
+        QVERIFY(!page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll"));
+    }
+
+    // T-62: one confirmation names the count and the total size; Cancel sends nothing; Remove
+    // sends team.worktree.remove for each in the list's order, and the page sums it up.
+    void removeAllRemovesEveryListedWorktree() {
+        start(storage(18'400'000'000LL, "low", true, true));
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-4"));
+        auto* all = page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll");
+        QVERIFY(all && all->isVisible() && all->isEnabled());
+        all->click();
+        QPointer<ket::Dialog> dialog = page.findChild<ket::Dialog*>("teamWorktreeAllDialog");
+        QVERIFY(dialog);
+        QCOMPARE(dialog->title(), QStringLiteral("Remove 2 worktrees?"));
+        const QString consequence =
+            dialog->findChild<QLabel*>("teamWorktreeAllConsequence")->text();
+        QVERIFY2(consequence.contains("T-2, T-4") && consequence.contains("6.0 GB"),
+                 qPrintable(consequence));
+        dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->click();
+        QTRY_VERIFY(!dialog);
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+
+        daemon_.answers.insert("team.storage.get", storage(24'400'000'000LL, "", false));
+        page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->click();
+        dialog = page.findChild<ket::Dialog*>("teamWorktreeAllDialog");
+        dialog->findChild<ket::Button*>("teamWorktreeAllRemove")->click();
+        QCOMPARE(daemon_.removed(), (QStringList{"T-2", "T-4"}));
+        for (const auto& [type, payload] : daemon_.sent)
+            if (type == "team.worktree.remove")
+                QCOMPARE(payload.value("team_id").toString(), QStringLiteral("7"));
+        auto* result = dialog->findChild<ket::Banner*>("teamWorktreeAllResult");
+        QVERIFY(!result->isHidden());
+        QCOMPARE(result->title(), QStringLiteral("Removed 2 worktrees."));
+        QCOMPARE(static_cast<int>(result->tone()), static_cast<int>(ket::BannerTone::Info));
+        // Measured again: nothing left to offer, and the page still sums the run up.
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktrees"));
+        QVERIFY(!page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll"));
+        auto* summary = page.findChild<ket::Banner*>("teamDoneWorktreesSummary");
+        QVERIFY(summary);
+        QCOMPARE(summary->title(), QStringLiteral("Removed 2 worktrees."));
+        dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->click();
+        QTRY_VERIFY(!dialog);
+    }
+
+    // T-62: a refused worktree stays listed with its reason in the daemon's words; the other
+    // is still removed; both buttons wait while the run lasts.
+    void aRefusedWorktreeStaysWithItsReason() {
+        start(storage(18'400'000'000LL, "low", true, true));
+        const QString dirty = "The worktree has uncommitted or untracked changes (2 files).";
+        daemon_.removals.insert(
+            "T-2",
+            {{"ok", false}, {"error_code", "worktree_not_removed"}, {"error_message", dirty}});
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-4"));
+        page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->click();
+        QPointer<ket::Dialog> dialog = page.findChild<ket::Dialog*>("teamWorktreeAllDialog");
+        daemon_.hold = true;
+        dialog->findChild<ket::Button*>("teamWorktreeAllRemove")->click();
+        // The first removal waits: nothing else can start a removal.
+        QCOMPARE(daemon_.removed(), QStringList{"T-2"});
+        QTRY_VERIFY(!page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->isEnabled());
+        for (auto* remove : page.findChildren<ket::Button*>("teamDoneWorktreeRemove"))
+            QVERIFY(!remove->isEnabled());
+        QVERIFY(!dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->isEnabled());
+
+        daemon_.answers.insert("team.storage.get", storage(22'600'000'000LL, "", true, false));
+        daemon_.release();
+        QTRY_COMPARE(daemon_.removed(), (QStringList{"T-2", "T-4"}));
+        daemon_.release();
+        auto* result = dialog->findChild<ket::Banner*>("teamWorktreeAllResult");
+        QTRY_VERIFY(!result->isHidden());
+        QCOMPARE(result->title(), QStringLiteral("Removed 1 worktree. Kept 1 with its reason."));
+        QVERIFY(result->message().contains(QStringLiteral("T-2: ") + dirty));
+        QCOMPARE(static_cast<int>(result->tone()), static_cast<int>(ket::BannerTone::Warning));
+
+        // The page lists T-2 again from the daemon's measure, with the reason, and sums up.
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktree_T-4"));
+        QWidget* kept = page.findChild<QWidget*>("teamDoneWorktree_T-2");
+        QVERIFY(kept);
+        QTRY_VERIFY(kept->findChild<QLabel*>("teamDoneWorktreeReason"));
+        QCOMPARE(kept->findChild<QLabel*>("teamDoneWorktreeReason")->text(), dirty);
+        auto* summary = page.findChild<ket::Banner*>("teamDoneWorktreesSummary");
+        QVERIFY(summary);
+        QCOMPARE(summary->title(), QStringLiteral("Removed 1 worktree. Kept 1 with its reason."));
+        QVERIFY(page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->isEnabled());
+        dialog->findChild<ket::Button*>("teamWorktreeAllCancel")->click();
+        QTRY_VERIFY(!dialog);
+
+        // T-2 was removed since, by hand: "Kept 1" is not true any more, so the summary goes.
+        daemon_.answers.insert("team.storage.get", storage(25'000'000'000LL, "", false, false));
+        for (auto* timer : page.findChildren<QTimer*>())
+            if (timer->interval() == 60 * 1000)
+                timer->setInterval(1);
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktree_T-2"));
+        QTRY_VERIFY(!page.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktreesHeading"));
     }
 
     // With KETPLUS_TEAM_STORAGE_CAPTURE set to a folder, saves the page at both levels and the

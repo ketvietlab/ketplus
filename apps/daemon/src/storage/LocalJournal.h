@@ -467,6 +467,9 @@ class LocalJournal final {
     // The latest messages a conversation sent or received, newest first.
     [[nodiscard]] QList<AgentMessageRecord> agentMessagesOf(const QString& sessionId,
                                                             qint64 generation, int limit) const;
+    // Current-generation senders with at least one unexpired, unanswered expect-reply message.
+    [[nodiscard]] QSet<QString>
+    sessionsAwaitingAgentReply(const QDateTime& when = QDateTime::currentDateTimeUtc()) const;
     // Turns started automatically by messages of one chain, or for one receiver since a time.
     [[nodiscard]] int automaticAgentTurnsInChain(const QString& chainId) const;
     [[nodiscard]] int automaticAgentTurnsSince(const QString& sessionId, qint64 generation,
