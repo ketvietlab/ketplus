@@ -107,13 +107,32 @@ The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external
 integrations and are deliberately not copied into the application.
 
-Build an unsigned local DMG with:
+Build an unsigned production DMG with the `release` preset. This preset enables
+`KETPLUS_PRODUCTION_RELEASE=ON` and targets `https://api.ketplus.app`:
 
 ```sh
 cmake --preset release
 cmake --build --preset release
 cmake --build build/release --target package
 ```
+
+For a staging/QA DMG, use a new build directory and explicitly disable production
+mode and select the staging URL:
+
+```sh
+cmake --preset release -B build/staging-release \
+  -DKETPLUS_PRODUCTION_RELEASE=OFF \
+  -DKETPLUS_CONTROL_URL=https://ketplus-staging.ketviet.vn
+cmake --build build/staging-release
+cmake --build build/staging-release --target package
+```
+
+Do not reuse a production build directory for staging/QA. The control URL is
+cached: turning `KETPLUS_PRODUCTION_RELEASE` off does not reset the production URL
+already selected in that directory. Use a fresh directory and an explicit URL for
+each deployment, then verify the bundled daemon's `--build-info` before use.
+Any QA launch must also follow the native-settings isolation requirements in
+[`testing.md`](testing.md).
 
 For a macOS app-only build (no DMG), use
 `cmake --build --preset release --target ketplus_bundle_browser_runtime` so the app
