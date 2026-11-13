@@ -22,6 +22,9 @@ namespace ketplus::agent_message {
 //   groupSize     number of rows in the group, set on the leader
 //   groupRunning  whether any row in the group is still running, set on every row of the group
 //   groupFailed   number of failed rows, set on the leader
+//   groupTail     whether no row follows the group, set on the leader (and on a daemon group
+//                 row): while the turn runs, such a group has not ended even when none of its
+//                 rows is running, between two steps (T-91)
 [[nodiscard]] bool isGroupableActivity(const QVariantMap& row);
 // What a group's steps did, in first-seen order, so a local run and a daemon summary read
 // the same. Family ids: command, read, list, edit, search (the web), codeSearch, fileSearch,

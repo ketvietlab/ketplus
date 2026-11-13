@@ -15,6 +15,7 @@ const QString kGroupLatest = QStringLiteral("groupLatest");
 const QString kGroupSize = QStringLiteral("groupSize");
 const QString kGroupRunning = QStringLiteral("groupRunning");
 const QString kGroupFailed = QStringLiteral("groupFailed");
+const QString kGroupTail = QStringLiteral("groupTail");
 const QString kGroupLeaderKey = QStringLiteral("groupLeaderKey");
 
 // "a command" / "3 commands"
@@ -37,7 +38,7 @@ const QString& activityGroupLeaderKeyName() { return kGroupLeaderKey; }
 
 const QStringList& activityGroupRoleNames() {
     static const QStringList names{kGroupKey,  kGroupRole,    kGroupSummary, kGroupLatest,
-                                   kGroupSize, kGroupRunning, kGroupFailed};
+                                   kGroupSize, kGroupRunning, kGroupFailed,  kGroupTail};
     return names;
 }
 
@@ -312,7 +313,7 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
         ++last;
     const auto apply = [&](const int index, const QString& key, const QString& role,
                            const QString& summary, const int size, const bool running,
-                           const int failed, const QString& latest = {}) {
+                           const int failed, const QString& latest = {}, const bool tail = false) {
         QVariantMap& row = rows[index];
         bool rowChanged = setRole(row, kGroupKey, key);
         rowChanged = setRole(row, kGroupRole, role) || rowChanged;
@@ -321,6 +322,7 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
         rowChanged = setRole(row, kGroupSize, size) || rowChanged;
         rowChanged = setRole(row, kGroupRunning, running) || rowChanged;
         rowChanged = setRole(row, kGroupFailed, failed) || rowChanged;
+        rowChanged = setRole(row, kGroupTail, tail) || rowChanged;
         if (rowChanged)
             changed.append(index);
     };
@@ -328,7 +330,11 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
     qsizetype index = first;
     while (index <= last) {
         if (rows.at(index).value("subtype") == "daemonGroup") {
-            ++index; // Wire summary owns its roles; never merge it into a local group.
+            // Wire summary owns its roles; never merge it into a local group. Only whether it
+            // is the transcript's last row is local (T-91).
+            if (setRole(rows[index], kGroupTail, index + 1 == rows.size()))
+                changed.append(int(index));
+            ++index;
             continue;
         }
         if (!isGroupableActivity(rows.at(index))) {
@@ -370,8 +376,11 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
             key = rows.at(index).value(QStringLiteral("messageKey")).toString();
         usedKeys.insert(key);
         const QString leaderKey = rows.at(index).value(QStringLiteral("messageKey")).toString();
+        // T-91: nothing follows the group yet, so while its turn runs it is still open, even
+        // between two steps, when none of its rows is running.
         apply(int(index), key, QStringLiteral("leader"), activityGroupSummary(rows, index, size),
-              int(size), running, failed, activityGroupLatest(rows.at(end - 1)));
+              int(size), running, failed, activityGroupLatest(rows.at(end - 1)),
+              end == rows.size());
         rows[index].insert(kGroupLeaderKey, leaderKey);
         for (qsizetype member = index + 1; member < end; ++member) {
             apply(int(member), key, QStringLiteral("member"), {}, 0, running, 0);

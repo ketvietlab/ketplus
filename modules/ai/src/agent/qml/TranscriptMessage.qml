@@ -40,6 +40,10 @@ Item {
     required property int groupSize
     required property bool groupRunning
     required property string groupLatest
+    required property bool groupTail
+    // T-91: a group ends when text follows it, its turn stops, or it is closed. Until then it
+    // is open, also between two steps, when none of its rows is running.
+    readonly property bool groupOpen: groupRunning || (groupTail && agentHost.sessionRunning)
     required property int groupFailed
     readonly property bool groupLeader: groupRole === "leader"
     readonly property bool groupExpanded: groupRole.length > 0 && view.groupExpanded(groupKey)
@@ -210,7 +214,7 @@ Item {
     // Accessibility (U4).
     readonly property string accessibleExcerpt: {
         // Slice before normalizing: bodies can be megabytes and this runs for every row.
-        const text = (activityRow ? (groupLeader ? (groupRunning && groupLatest.length > 0 ? groupLatest : groupSummary) : (title.length > 0 ? title : command)) : body).slice(0, 400).replace(/\s+/g, " ").trim();
+        const text = (activityRow ? (groupLeader ? (groupOpen && groupLatest.length > 0 ? groupLatest : groupSummary) : (title.length > 0 ? title : command)) : body).slice(0, 400).replace(/\s+/g, " ").trim();
         return text.length > 120 ? text.slice(0, 117) + "…" : text;
     }
     Accessible.role: Accessible.ListItem
@@ -511,9 +515,9 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, parent.width - groupChevron.width - KetTheme.px(36, KetTheme.zoom))
                         // T-91: a running group names the step it is on; once it ends, all it did.
-                        text: messageDelegate.groupRunning && messageDelegate.groupLatest.length > 0
+                        text: messageDelegate.groupOpen && messageDelegate.groupLatest.length > 0
                             ? messageDelegate.groupLatest
-                            : messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
+                            : messageDelegate.groupSummary + (messageDelegate.groupOpen ? " · Running" : "")
                         // A failure shows on its own step, as in the mock; the summary stays quiet.
                         color: messageDelegate.groupRecipe.text
                         font.family: KetTheme.fontFamily

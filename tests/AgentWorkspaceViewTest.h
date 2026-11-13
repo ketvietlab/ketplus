@@ -148,6 +148,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void copiesConversationTranscript();
     void runningIndicatorDoesNotOverlapLastCommand();
     void runningGroupHeadingFollowsItsLatestStep();
+    void groupHeadingEndsWithTheTurnNotBetweenSteps();
     void streamingResponseStaysAnchoredAboveRunStatus();
     void restoresConversationScrollPosition();
     void boundsWarmConversationRenderCache();
