@@ -76,6 +76,7 @@ def validate_prefix(prefix):
                 "lib/libQt6Core5Compat.so.6", "libexec/QtWebEngineProcess",
                 "resources/qtwebengine_resources.pak", "qml/QtQuick/qmldir",
                 "plugins/platforms/libqoffscreen.so", "plugins/platforms/libqxcb.so",
+                "plugins/sqldrivers/libqsqlite.so",
                 "share/applications/ketplus-pro.desktop",
                 "share/icons/hicolor/512x512/apps/ketplus-pro.png",
                 "lib/ketplus/ketplus-browser/runtime.json",
@@ -93,6 +94,8 @@ def validate_prefix(prefix):
         raise ValueError("The native Claude sidecar executable is missing or not executable")
     if not list((prefix / "plugins/webview").glob("*.so")):
         raise ValueError("The WebView backend plugin was not deployed")
+    if any(path.name != "libqsqlite.so" for path in (prefix / "plugins/sqldrivers").glob("*.so")):
+        raise ValueError("Only the product's SQLite driver may be bundled")
     for path in prefix.rglob("*"):
         if path.is_symlink():
             try:

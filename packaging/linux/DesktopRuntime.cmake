@@ -8,6 +8,7 @@ if(NOT KETPLUS_PRODUCTION_RELEASE OR KETPLUS_ENABLE_REMOTE_DEMO)
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include("${PROJECT_SOURCE_DIR}/packaging/linux/RuntimePlugins.cmake")
 find_program(ketplus_linux_node NAMES node REQUIRED)
 set(ketplus_linux_browser_app "${PROJECT_SOURCE_DIR}/apps/browser")
 set(ketplus_linux_browser_stage "${CMAKE_CURRENT_BINARY_DIR}/linux-browser-runtime")
@@ -63,7 +64,8 @@ qt6_deploy_runtime_dependencies(
         \"$<TARGET_FILE:ketplus_daemon>\" \"$<TARGET_FILE:ketplusctl>\"
     ADDITIONAL_MODULES \${plugins_found}
     INCLUDE_PLUGIN_TYPES platforms webview imageformats iconengines sqldrivers tls
-    INCLUDE_PLUGINS qoffscreen qxcb
+    INCLUDE_PLUGINS qoffscreen qxcb qsqlite
+    EXCLUDE_PLUGINS ${ketplus_linux_excluded_runtime_plugins}
     GENERATE_QT_CONF NO_TRANSLATIONS)
 file(WRITE \"\${QT_DEPLOY_PREFIX}/bin/qt.conf\"
     \"[Paths]\\nPrefix=..\\nLibraries=lib\\nLibraryExecutables=libexec\\nPlugins=plugins\\nQmlImports=qml\\nData=.\\nTranslations=translations\\n\")

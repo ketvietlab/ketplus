@@ -57,6 +57,10 @@ WebEngine resources/locales, the browser helper's pinned Node runtime, the Claud
 sidecar, and license inventory. The browser engine follows the existing browser
 runtime's first-use installation policy; the package does not preinstall Chromium.
 Provider CLIs and provider authentication are user-managed.
+Only the product's SQLite driver is deployed. Optional vendor SQL drivers and
+serial/NMEA hardware positioning are excluded. X11/Wayland, GTK3, graphics and
+font system libraries are declared in `runtime-packages.txt` and deb dependencies;
+an AppImage still needs this supported desktop baseline, not just a bare kernel.
 
 The deb contains `ketplus-pro-daemon.service` as an **optional, disabled user
 unit**. It has no maintainer script and never starts a daemon at install time.

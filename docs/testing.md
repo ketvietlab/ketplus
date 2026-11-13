@@ -15,12 +15,13 @@ Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_test
 test's own environment and the shell's, so a test run never opens windows on the screen. A
 test binary run directly needs it exported. This override does not cover Lite tests in
 `core/`. The Pro desktop build and Release
-characterization run on macOS only; Pro desktop builds on Ubuntu are paused to
-cut CI cost and must be restored before a Linux release. The headless daemon,
+characterization run on macOS. Linux Pro desktop packaging is restored on native
+Ubuntu 24.04 amd64/arm64 through the shared package recipe. The headless daemon,
 browser regression and design evidence checks still run on Ubuntu. Pro Windows
 CI remains deferred until the required Qt 6.11 WebView development packages are
-available from Qt's public repository. Pull requests into `integration` and
-branch pushes run no CI; run the targets for the area you changed before pushing
+available from Qt's public repository. Integration PRs have the public-tree guard;
+Linux packaging PRs additionally run the native ARM build-only job. Other native
+integration builds and branch-push builds remain local; run the targets for the area you changed before pushing
 and list them in the pull request. CI runs on promotion pull requests into
 `develop`, on pull requests into `main` and on pushes to `main`; a newer commit
 cancels the obsolete run. See `docs/release-process.md`.

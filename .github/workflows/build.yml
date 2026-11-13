@@ -3,7 +3,8 @@ name: build
 permissions:
   contents: read
 
-# Integration has no native build CI: authors test changes locally. The separate
+# Integration authors test changes locally; Linux packaging has its own ARM-only
+# build-only PR caller. The separate
 # lightweight public-tree workflow checks publication boundaries on every PR.
 # The build runs on promotion pull requests into develop, on release pull
 # requests into main and on the production main commit. The promotion pull
