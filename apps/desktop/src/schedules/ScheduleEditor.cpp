@@ -3,6 +3,7 @@
 #include "schedules/ScheduleClient.h"
 #include "schedules/ScheduleRules.h"
 
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
@@ -11,9 +12,11 @@
 #include "KetTextArea.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "KetTokens.h"
 #include "Schedule.h"
 
 #include <QLabel>
+#include <QPalette>
 #include <QTextEdit>
 #include <QTimeZone>
 #include <QVBoxLayout>
@@ -303,8 +306,20 @@ void ScheduleEditor::showIssue(const QString& code, const QString& message) {
     ruleRow_->setError(field == QLatin1String("rule") ? message : QString{});
     busyRow_->setError(field == QLatin1String("busy_policy") ? message : QString{});
     missedRow_->setError(field == QLatin1String("missed_policy") ? message : QString{});
-    banner_->setText(field.isEmpty() ? message : QString{});
-    banner_->setVisible(field.isEmpty() && !message.isEmpty());
+    // The prompt's note sits under the native text editor, so the message also leads the card.
+    banner_->setText(message);
+    if (!message.isEmpty()) {
+        QPalette palette = banner_->palette();
+        const QColor danger = ket::Tokens::color(u"danger", ket::Appearance::instance().theme());
+        for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
+            palette.setColor(group, QPalette::WindowText, danger);
+        banner_->setPalette(palette);
+    }
+    const bool show = !message.isEmpty();
+    const bool moved = banner_->isVisible() != show;
+    banner_->setVisible(show);
+    if (moved)
+        dialog_->setCardWidth(560);
 }
 
 void ScheduleEditor::save() {
