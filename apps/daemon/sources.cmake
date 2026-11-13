@@ -155,6 +155,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/SessionHostPreparation.cpp
     src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
@@ -180,6 +181,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
     src/storage/LocalJournal.cpp
+    src/storage/LocalJournalPreparations.cpp
+    src/storage/SessionPreparation.h
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
     src/storage/LocalJournalHistoryPurge.cpp

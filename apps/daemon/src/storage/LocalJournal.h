@@ -6,6 +6,7 @@
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
 #include "storage/JournalStorageOptions.h"
+#include "storage/SessionPreparation.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -212,6 +213,17 @@ class LocalJournal final {
     [[nodiscard]] QString databasePath() const { return database_.databaseName(); }
 
     bool upsertSession(const StoredSession& session);
+    // Inactive allocations have no sessions/events row until activation.
+    bool prepareSession(SessionPreparation& preparation, QString* error = nullptr);
+    [[nodiscard]] std::optional<SessionPreparation>
+    sessionPreparation(const QString& sessionId) const;
+    [[nodiscard]] QList<SessionPreparation> sessionPreparations() const;
+    bool pruneSessionPreparations(qint64 nowMs, int limit = 128);
+    bool activatePreparedSession(const StoredSession& session, const QString& owner, qint64 nowMs,
+                                 QString* error = nullptr);
+    bool discardPreparedSession(const QString& sessionId, const QString& owner, qint64 nowMs,
+                                QString* error = nullptr);
+
     // Advances last_seen_cursor with MAX so stale callers cannot move it backwards.
     bool markSessionSeen(const QString& sessionId, qint64 generation, qint64 cursor);
     bool deleteSession(const QString& sessionId, qint64 generation, QString* error = nullptr);

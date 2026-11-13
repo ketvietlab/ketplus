@@ -32,7 +32,7 @@ class MachineBackend : public QObject {
 
     // Conversation operations a route may not carry yet. The UI offers each one everywhere and
     // disables it, with unsupportedReason(), where supports() is false (ADR 0119 "Parity").
-    enum class Feature { Rename, Fork, Archive, Attachments };
+    enum class Feature { Rename, Fork, Archive, Attachments, SessionPreparation };
     Q_ENUM(Feature)
 
     using QObject::QObject;
@@ -74,6 +74,11 @@ class MachineBackend : public QObject {
     // with the `id` listWorktrees() or listRepositories() reported (the host path on the local
     // and SSH routes), plus "repository_id" on the Relay. The result names the new session_id.
     virtual void createSession(const QJsonObject& request, Callback callback) = 0;
+    // ADR 0120: inactive first-turn attachment scope. Requires an advertised capability;
+    // request includes a stable client_request_id, worktree_id and initial options.
+    virtual void prepareSession(const QJsonObject& request, Callback callback);
+    virtual void cancelPreparedSession(const QString& sessionId, qint64 generation,
+                                       Callback callback);
 
     // The conversation is no longer open or selected: a route that follows its events stops.
     virtual void conversationClosed(const QString& sessionId) { Q_UNUSED(sessionId); }

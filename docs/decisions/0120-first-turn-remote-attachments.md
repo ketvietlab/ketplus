@@ -1,6 +1,6 @@
 # 0120: Prepare a session before staging a conversation’s first attachment
 
-Status: proposed; Relay protocol approval required before implementation
+Status: accepted; additive Relay contract approved, implementation in progress
 Date: 2026-11-13
 
 ## Context
@@ -29,8 +29,8 @@ work, create misleading transcript content and complicate cancellation.
 ## Decision
 
 Choose a pre-created inactive session, rather than a separate pending-file store.
-This is the chosen lifecycle design; its new wire operation remains a proposal,
-not an implemented or approved protocol change.
+The additive Relay operation and coordinated hosted support are approved. Shipping
+requires both sides to implement the lifecycle and advertise the capability.
 
 When the first file is attached, prepare a session for the selected enrolled
 worktree without starting a provider, recording a user message or charging a turn.
@@ -48,10 +48,27 @@ Use one backend preparation contract across the Machine workspace transports:
 | SSH Machine workspace | Carry the preparation operation through authenticated daemon IPC over SSH; keep files on the selected host. |
 | Relay Machine workspace | Add an explicit worktree-scoped `session.prepare` operation, then reuse session-key-protected staging and turn commands. |
 
-The Relay operation must have an advertised capability. A client must not infer
+The Relay operation uses the `session.prepare/1` capability. Preparation and its
+prepared-only cancellation are additive; normal session deletion must not be used
+to discard a draft that may have become active. Both the daemon and hosted Relay
+must advertise support before the client enables first-turn attachment. SSH needs
+the daemon capability alone. The Relay operation must have an advertised capability. A client must not infer
 support from existing-conversation attachment support or silently fall back to a
 dummy turn on older hosts. Unsupported hosts keep first-message attachment disabled
 with a clear explanation; existing-conversation uploads continue to work.
+
+The new operations are:
+
+- `session.prepare`, scoped to the verified worktree, with `client_request_id` and
+  initial provider `options`. It returns `session_id`, `session_generation` (1),
+  `state` (`prepared`) and `expires_at_ms`. Local IPC/SSH additionally supplies the
+  canonical `worktree_path`; Relay resolves the enrolled worktree on the host.
+- `session.prepare.cancel`, scoped to that session and generation. It discards only
+  an inactive allocation, is safe to retry, and refuses an activated conversation.
+
+The existing `attachment.stage.*` and `session.start_turn` commands retain their
+wire shapes. The first turn adopts the prepared worktree and options; a request
+that attempts to retarget them is rejected.
 
 ### Ownership, retries, cancellation and failure
 
@@ -72,16 +89,38 @@ preparation and all commits succeed. On preparation or upload failure, retain th
 draft and show retry/removal. A failed turn keeps ready attachment IDs, as existing
 conversation sends do. Do not consume them on a queued Relay acknowledgement.
 
-Removing a file or discarding the draft cancels outstanding staging, including a
-cancel that races a queued preparation result. Delete an empty prepared session
-only if an atomic guard proves it is still unstarted and owned by this draft;
-never delete a session another client has started. If cleanup cannot prove that,
-retain the empty conversation and report the cleanup result instead of risking
-user data. Existing staged-file expiry remains the backstop for abandoned uploads.
+Prepared sessions are private to the authenticated subject and creating device. They
+have no provider turn or transcript entry and are excluded from ordinary session,
+repository, team, phone and other-subject listings before the first real turn.
+Only the owner can stage, start the first turn, or discard a prepared session;
+knowing an ID or sharing the same workspace is insufficient. Routing metadata may
+identify this private scope, but attachment contents remain encrypted.
+
+Removing a file cancels its existing staging operation. Discarding the draft also
+cancels preparation/staging and removes the prepared session and staged bytes,
+including when a queued preparation completes late. Cancellation is atomic against
+activation: it cannot delete a session whose real first turn already started.
+
+An abandoned prepared session expires **24 hours after its original allocation**.
+Retries and heartbeat do not renew that deadline. The daemon cleans expired prepared
+sessions and staged files on startup and periodically while running. Persist the
+owner, request binding and deadline so daemon restarts do not bypass expiry or
+allocate duplicates. Retain terminal idempotency receipts under the existing command
+receipt policy; retrying an expired/discarded preparation within the retained retry
+window must not recreate it.
+Keep terminal receipts for at least seven days after the original preparation
+deadline, covering the command retry window. Each cleanup pass handles at most
+128 records. Bound allocations to 128 active drafts per owner and 2,048 per daemon,
+and retain at most 32,768 receipts; a capacity failure retains the client's draft.
+Preparation options are bounded to 8 KiB. These limits supplement the existing
+attachment byte quotas; they do not charge or start provider work.
+If expiry wins against Send, report the expired draft and retain local text/selected
+files for an explicit new preparation. Prepared sessions count toward existing
+ownership/workspace checks and normal resource quotas.
 
 ### Protocol and security impact
 
-**This requires a Relay wire-contract change and coordinated approval.** The new
+**This is an approved additive Relay wire-contract change.** The new
 worktree-scoped command kind, its authenticated/idempotent result and capability
 must be understood by the client, host and Relay allowlist/validation path. Reusing
 an optional field of `session.create` would still change its prompt-required
@@ -98,15 +137,16 @@ bytes or plaintext attachment paths belong in Relay routing metadata or logs.
 
 Preparation adds an inactive-session lifecycle and cancellation/retry states, but
 keeps one authorization/key scope and one attachment store. Existing-conversation
-uploads and their wire format remain unchanged. The visible empty-conversation
-cleanup behavior must be tested rather than hidden behind a fabricated turn.
+uploads and their wire format remain unchanged. The hidden prepared-session lifecycle, cleanup and activation must be tested rather
+than hidden behind a fabricated turn.
 
-After protocol approval, implement and verify backend and offscreen GUI coverage
+Implement and verify backend and offscreen GUI coverage
 for first-turn staging over local IPC, SSH and Relay; attachment-only Send; queued
 preparation completion; duplicate delivery; remove/discard during preparation and
 upload; stale scope/generation; denied or failed preparation; upload/commit failure;
 and a failed first turn retaining ready files. Re-run the existing attachment
-backend and panel suites. No runtime change is included with this ADR.
+backend and panel suites. The ADR alone does not establish runtime verification; the implementation and test
+results must accompany it before release.
 
 ## Alternatives considered
 

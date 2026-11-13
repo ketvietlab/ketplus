@@ -830,7 +830,8 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     QStringLiteral("question.answer"), QStringLiteral("attachment.stage.begin"),
                     QStringLiteral("attachment.stage.chunk"),
                     QStringLiteral("attachment.stage.commit"),
-                    QStringLiteral("attachment.stage.cancel")};
+                    QStringLiteral("attachment.stage.cancel"),
+                    QStringLiteral("session.prepare.cancel")};
                 if (!remoteOperations.contains(kind)) {
                     acknowledgeCommand(
                         command,
@@ -845,6 +846,7 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     {QStringLiteral("protocol_version"), 0},
                     {QStringLiteral("message_id"), command.value(QStringLiteral("id"))},
                     {QStringLiteral("message_type"), kind},
+                    {QStringLiteral("_verified_sender_device_id"), senderId},
                     {QStringLiteral("session_id"), sessionId},
                     {QStringLiteral("session_generation"), generation},
                     {QStringLiteral("sent_at"), protocol::timestamp()},
