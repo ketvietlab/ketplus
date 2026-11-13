@@ -77,6 +77,14 @@ qt_add_resources(ketplus_ui "color_schemes"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources/color-schemes"
     FILES resources/color-schemes/light.ketscheme.json resources/color-schemes/dark.ketscheme.json
           resources/color-schemes/KetDesignSystem-LICENSE.txt resources/color-schemes/SOURCE.json
+          resources/color-schemes/vscode-dark-plus.ketscheme.json
+          resources/color-schemes/vscode-light-plus.ketscheme.json
+          resources/color-schemes/darcula.ketscheme.json
+          resources/color-schemes/intellij-light.ketscheme.json
+          resources/color-schemes/dracula.ketscheme.json
+          resources/color-schemes/one-dark-pro.ketscheme.json
+          resources/color-schemes/nord.ketscheme.json
+          resources/color-schemes/solarized-dark.ketscheme.json
 )
 add_library(KetPlusCM::ui ALIAS ketplus_ui)
 
@@ -536,6 +544,9 @@ if(KETPLUS_CM_BUILD_BENCHMARKS)
 endif()
 
 if(KETPLUS_CM_BUILD_TESTS)
+    add_executable(ketplus_generate_builtin_schemes tools/color-schemes/GenerateBuiltinSchemes.cpp)
+    target_link_libraries(ketplus_generate_builtin_schemes PRIVATE ketplus_vscode_import ketplus_jetbrains_import)
+    ketplus_enable_warnings(ketplus_generate_builtin_schemes)
     enable_testing()
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
 
@@ -599,6 +610,13 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_vscode_import_tests)
     ketplus_cm_add_test(ketplus_vscode_import_tests ketplus_vscode_import_tests)
     set_tests_properties(ketplus_vscode_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_builtin_scheme_tests tests/BuiltinSchemeTest.cpp)
+    target_link_libraries(ketplus_builtin_scheme_tests PRIVATE Qt6::Test ketplus_ui)
+    target_compile_definitions(ketplus_builtin_scheme_tests PRIVATE KETPLUS_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+    ketplus_enable_warnings(ketplus_builtin_scheme_tests)
+    ketplus_cm_add_test(ketplus_builtin_scheme_tests ketplus_builtin_scheme_tests)
+    set_tests_properties(ketplus_builtin_scheme_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
     target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)

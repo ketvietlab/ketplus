@@ -50,6 +50,14 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## Bundled color-scheme fixtures
+
+Run `ketplus_builtin_scheme_tests`, `ketplus_color_scheme_tests`, and the two
+importer/common-input targets offscreen after changing bundled palettes or the
+catalog. These checks use embedded resources and committed import reports without
+network or provider access. Explicit source regeneration/byte verification is
+separate: follow `docs/color-schemes.md` with the locked upstream cache.
+
 ## JetBrains importer fixtures
 
 `ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`

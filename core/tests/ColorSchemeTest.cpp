@@ -203,7 +203,7 @@ class ColorSchemeTest : public QObject {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         ColorSchemeCatalog catalog(dir.path());
-        QCOMPARE(catalog.list().size(), 2);
+        QCOMPARE(catalog.list().size(), 10);
         auto scheme = ColorSchemeReader::read(sparse()).scheme;
         scheme.id.clear();
         const auto added = catalog.add(scheme);
@@ -212,7 +212,7 @@ class ColorSchemeTest : public QObject {
         ColorSchemeCatalog reopened(dir.path());
         QVERIFY(reopened.load(added.scheme.id).scheme == added.scheme);
         QVERIFY(!reopened.add(added.scheme).success);
-        QCOMPARE(reopened.list().size(), 3);
+        QCOMPARE(reopened.list().size(), 11);
         auto copy = reopened.duplicate(added.scheme.id, "Copy");
         QVERIFY(copy.success);
         QVERIFY(copy.scheme.id != added.scheme.id);
@@ -241,12 +241,12 @@ class ColorSchemeTest : public QObject {
         file.write("broken");
         file.close();
         QVERIFY(!catalog.load(scheme.id).success);
-        QCOMPARE(catalog.list().size(), 2);
+        QCOMPARE(catalog.list().size(), 10);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write(ColorSchemeWriter::write(builtinColorScheme(SchemeKind::Light)));
         file.close();
         QVERIFY(!catalog.load(scheme.id).success);
-        QCOMPARE(catalog.list().size(), 2);
+        QCOMPARE(catalog.list().size(), 10);
         ColorSchemeCatalog badRoot(file.fileName() + "/child");
         QVERIFY(!badRoot.add(scheme).success);
         scheme.id = "../escape";
@@ -264,7 +264,7 @@ class ColorSchemeTest : public QObject {
         scheme.editor.clear();
         scheme.ui["malformed"] = QColor(1, 2, 3);
         QVERIFY(!catalog.add(scheme).success);
-        QCOMPARE(catalog.list().size(), 2);
+        QCOMPARE(catalog.list().size(), 10);
     }
     void boundsAndSymlinks() {
         QVERIFY(
@@ -279,7 +279,7 @@ class ColorSchemeTest : public QObject {
         const auto link = dir.filePath("alias.ketscheme.json");
         if (QFile::link(original, link) && QFileInfo(link).isSymLink()) {
             QVERIFY(!catalog.load("alias").success);
-            QCOMPARE(catalog.list().size(), 3);
+            QCOMPARE(catalog.list().size(), 11);
             QVERIFY(!catalog.remove("alias"));
         }
     }
