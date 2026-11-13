@@ -1033,3 +1033,39 @@ manual UI acceptance remain separate checks.
 INI settings, in light/dark. It checks the exact recipe gap after growth and window
 resize, composer/view hide and restore, and preservation of another composer's
 reservation during hide and destruction. It uses no backend or provider.
+
+### Consented SSH daemon installation (ADR 0123)
+
+`ketplus_daemon_release_tests` verifies Ed25519 manifests and fail-closed build
+configuration. `ketplus_ssh_install_transaction_tests` exercises the actual
+Python transaction with disposable fixture runtimes: interrupted transfer,
+checksum/archive/runtime failures, decline/EOF rollback, ownership guards,
+busy stop refusal, downgrade refusal, upgrade rollback and data retention.
+`ketplus_daemon_upgrade_tests` covers the authenticated idle-only upgrade and
+`daemon.stop_if_idle` gates, including an active provider fixture.
+
+For the Linux Connections proof without the full editor's WebView/compat SDK,
+configure `KETPLUS_BUILD_DESKTOP=OFF`, `KETPLUS_BUILD_SSH_INSTALL_UI_TESTS=ON` and
+`KETPLUS_CONTROL_URL=http://127.0.0.1:9`. This optional test target compiles the
+actual Connections/controller/installer sources with Két Widgets. It needs Qt
+Widgets/Svg/Test, OpenSSL, Python 3.9+ and a non-root loopback sshd. Run ctest with
+`QT_QPA_PLATFORM=offscreen`; never run a real provider for this proof.
+
+The QA runtime must come from the task's complete `cmake --install` stage and
+have a clean exact build revision. Archive its top-level children directly
+(no `.` member/CPack wrapper; ADR 0123 layout v1). In a task-owned directory,
+generate an Ed25519 QA keypair, restrict the private file to 0600, and set:
+
+- `KETPLUS_T51_QA_KEY`: the QA private PEM file (outside the repository).
+- `KETPLUS_T51_QA_ARCHIVE`: the full staged runtime TGZ.
+- `KETPLUS_T51_QA_INFO`: JSON from that staged daemon's `--build-info`.
+- `KETPLUS_T51_QA_EVIDENCE`: an optional task-owned capture directory.
+- `TMPDIR`: a task-owned private temporary directory.
+
+Then run `ctest -R '^ketplus_ssh_install_ui_tests$' --output-on-failure` in the
+own build tree. Without the QA inputs this opt-in host proof reports a skip;
+a skip is not completion evidence. The test signs a local manifest, serves it
+on loopback, uses a fresh same-UID HOME/XDG profile through a loopback sshd,
+clicks the actual Connections controls, declines once, installs and verifies
+an authenticated `daemon.hello`, then uninstalls through the idle gate and
+checks that user data survives. It creates no OS user or real relay registration.

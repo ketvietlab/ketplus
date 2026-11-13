@@ -278,7 +278,7 @@ LinuxMachinesSection::~LinuxMachinesSection() {
 
 void LinuxMachinesSection::beginPairing() { openConnectCard({}); }
 
-void LinuxMachinesSection::openConnectCard(const QString& sshHost) {
+void LinuxMachinesSection::openConnectCard(const QString& sshHost, bool manageDaemon) {
     if (connectDialog_)
         return;
     // SSH needs no account, so the card opens signed out too; its Relay mode offers sign-in.
@@ -295,7 +295,7 @@ void LinuxMachinesSection::openConnectCard(const QString& sshHost) {
                                                  if (set)
                                                      set->refreshMachines();
                                              }},
-                                            LinuxConnectMode::Ssh, sshHost);
+                                            LinuxConnectMode::Ssh, sshHost, manageDaemon);
 }
 
 } // namespace ketplus

@@ -1,177 +1,182 @@
-# 0121: Consented user-space daemon installation over SSH
+# 0123: Consented user-space daemon installation over SSH
 
-Status: proposed — release trust/distribution decision required before installation
+Status: accepted; production installs remain disabled until the release owner supplies the public key
 Date: 2026-11-13
 
 Issue: [#666](https://github.com/ketvietlab/ketplus/issues/666), following #419.
 Extends [ADR 0119](0119-remote-machine-composition.md).
 
-## Context
+## Decision
 
-Connections verifies an SSH host and probes for the daemon socket and token.
-`SshTunnelBridge.cpp:13–35` reports a missing socket or token; the desktop maps
-that to `LinuxMachine::Error::DaemonNotInstalled` in
-`apps/desktop/src/remote/LinuxSshMachines.cpp:46–47`. This also includes an
-installed daemon that is stopped, so that result alone cannot authorize or
-select installation.
+Connections may install a complete matching Linux daemon runtime after two explicit
+steps: **Review signed install / upgrade** authorizes fetching release metadata;
+**Confirm daemon changes** authorizes downloading the selected archive and changing
+the named Linux account. Accepting an SSH host key, reconnecting or opening the
+Connections dialog never authorizes installation. Decline downloads no archive
+and changes no installation files.
 
-The Linux CPack branch in `packaging/CMakeLists.txt:1–8` stages a relocatable
-TGZ with the daemon, CLI and runtime. The Linux job in `.github/workflows/build.yml`
-builds/tests/stages it and uploads a CI artifact. At integration `305ac716` it
-publishes no signed Linux install manifest or release-signature trust key.
-The repository's GitHub release list was empty during this audit. CI artifacts
-and transport-level TLS are not an application release-signature contract.
+The review names the SSH destination and fingerprint, version, architecture,
+archive size, verification, user-space location, startup and rollback behavior.
+Consent is bound to the tunnel generation, verified identity, signed artifact,
+profile paths and existing installation receipt. Changed inputs require review
+again. No password field or storage, sudo, OS-user creation, system package
+installation, SSH configuration change or relay enrolment is included.
 
-## Decision proposed
+### Release channel and publisher contract
 
-### Consent and scope
+The release owner's decision is GitHub Releases in **ketvietlab/ketplus**, with a
+dedicated ketPlus Ed25519 release key. The owner holds the private key; a future
+Linux packaging/release job signs through repository secret
+`KETPLUS_RELEASE_SIGNING_KEY`. This task documents that contract only: it does
+not add a secret, publish a release or enable a signing workflow.
 
-Before any remote installation write, perform read-only preflight over the
-already verified SSH route: Linux/architecture/ABI, account ownership, required
-runtime dependencies, existing installation and process/service state. An
-installed-but-stopped daemon offers Start separately; it is not overwritten.
-Unknown existing binaries/paths require manual resolution. A changed SSH host
-key fails closed through the existing host-key verification flow.
+Desktop resolves its own product version, not `latest`, to tag `v<version>` and
+build-configured `KETPLUS_DAEMON_RELEASE_MANIFEST_URL` (default):
 
-Show an explicit confirmation naming the verified host/fingerprint, exact
-version/build/architecture, artifact size, user-space location, files/service
-changes, startup behavior and rollback. Install and Cancel are separate actions.
-A reconnect, background retry or initial host-key acceptance is not install
-consent. Consent is bound to the target, verified identity, selected artifact
-and connection generation; changed inputs require a new confirmation.
+```text
+https://github.com/ketvietlab/ketplus/releases/download/v<version>/ketplus-daemon-linux-manifest.json
+https://github.com/ketvietlab/ketplus/releases/download/v<version>/ketplus-daemon-linux-manifest.json.sig
+```
 
-No password field/storage, sudo, system package installation, system unit,
-firewall rule, SSH configuration edit or lingering change is included. Missing
-prerequisites are explained without modifying the host. Installing Node/provider
-CLIs and provider authentication remain separate user actions.
+`KETPLUS_DAEMON_RELEASE_PUBLIC_KEY` is one CMake cache constant containing exactly
+64 lowercase hex digits (32 raw Ed25519 public-key bytes). **Its default is empty.**
+An unset key or manifest URL yields **Install unavailable: no trusted release
+channel**, with no download. There is no environment override or trust-on-first-
+use for release keys. The artifact never supplies its own verification key.
+The owner must ship key rotation/revocation in an updated desktop; there is no
+network key-discovery mechanism.
 
-### Trusted artifact and verification
+The signature file is exactly **64 raw Ed25519 signature bytes**, over the exact
+UTF-8 bytes of the manifest file. Do not reserialize JSON, append a newline or
+base64-encode the signature after signing. A publisher can use:
 
-Use the complete matching Linux runtime, never a copied build-tree executable.
-A release descriptor must bind product, version, immutable source/build id,
-Linux architecture and supported ABI, control-environment identity, HTTPS
-artifact URL, byte length and SHA-256. Desktop rejects mismatches, unknown
-architectures, oversized input, redirects outside the approved release origins,
-downgrades and absent descriptors. It never substitutes the latest unrelated
-build or silently switches a staging client to a production daemon.
+```sh
+openssl pkeyutl -sign -rawin -inkey "$RELEASE_KEY_FILE" \
+  -in ketplus-daemon-linux-manifest.json \
+  -out ketplus-daemon-linux-manifest.json.sig
+```
 
-Proposal: a detached Ed25519 signature covers a versioned, domain-separated
-manifest byte sequence. Verify it with a release-owner-approved public key
-pinned in the shipped client, then verify the entire archive's signed length and
-SHA-256 before extraction or execution. The artifact does not supply its own
-trust key. Pin the metadata format, allowed signing keys/key ids, exact signature
-encoding and rotation/revocation policy in the release contract and verifier
-fixtures before enabling Install. Private keys stay with the release owner and
-never enter this repository, an SSH command, logs or the client.
+`RELEASE_KEY_FILE` is a permission-restricted temporary file populated by the
+release job from its secret, never a repository file or printed command value.
+The future job must delete that temporary file. The manifest schema is:
 
-Do not treat an adjacent unsigned checksum file, SSH host authentication, the
-relay's runtime identity key or the macOS Sparkle configuration as a substitute
-for this Linux release trust contract. No key is generated or selected by the
-installer. Test signatures use ephemeral test keys and cannot enable production
-installations.
+```json
+{
+  "schema": 1,
+  "product": "ketplus-daemon",
+  "version": "1.2.3",
+  "tag": "v1.2.3",
+  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "control_url": "https://control.example",
+  "artifacts": [{
+    "os": "linux",
+    "arch": "x86_64",
+    "layout": "ketplus-runtime-v1",
+    "url": "https://github.com/ketvietlab/ketplus/releases/download/v1.2.3/ketplus-daemon-linux-x86_64.tar.gz",
+    "bytes": 123456,
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }]
+}
+```
 
-### Location, transport and transaction
+Versions and control URLs must match the desktop; revision is the daemon's exact
+12–40 lowercase-hex `--build-info` revision (no dirty builds). Architectures are
+`x86_64` and `aarch64`, selected from the verified host's Linux preflight. Exactly
+one matching artifact is required. The manifest is limited to 64 KiB and eight
+artifacts; compressed archives to 512 MiB and expanded content to 2 GiB.
+Downloads use HTTPS, validate TLS normally, and allow at most five redirects,
+only to the matching GitHub release path or GitHub's release asset hosts
+`release-assets.githubusercontent.com` and `objects.githubusercontent.com`.
+No downgrade to HTTP, credential-bearing URL or redirect outside these hosts is
+accepted. QA-only constructor injection allows an HTTP server on `127.0.0.1`
+and its exact port; production never reads this setting from the environment.
 
-Versioned complete runtime: `~/.local/opt/ketplus/<version>-<build>-<arch>/`;
-`current` is the activation link used by the existing user unit. User unit:
-`~/.config/systemd/user/ketplus-daemon.service`. Runtime/data/token locations
-remain those documented in `linux-headless-daemon.md`. Installation files and
-receipts are owner-only; data and authentication material are never copied into
-Desktop logs or saved SSH-machine records.
+The package is the **entire `cmake --install` runtime**, including daemon, CLI,
+Qt libraries/plugins, sidecar and notices. `ketplus-runtime-v1` puts `bin/`,
+`lib/`, `plugins/`, etc. directly at the archive root, **without a CPack wrapper
+or `.` root member**. `bin/ketplus_daemon` and `bin/ketplusctl` are required.
+Reject traversal/absolute/duplicate names, hard links, special files, privileged
+mode bits and symbolic links escaping the runtime or used as entry ancestors.
+Safe internal runtime symlinks are preserved. The publisher must normalize CPack
+output to this layout before hashing/signing; it cannot publish an unmodified
+wrapper-directory CPack archive as layout v1.
 
-Use the existing strict verified SSH options and no-prompt environment for
-preflight, upload, activation and rollback. Every SSH call checks the pinned
-host identity; it must not use an independent permissive SSH invocation. Send
-binary/script input through stdin with bounded I/O and timeouts, not commands
-interpolated from host responses, paths or archive names. Revalidate the target
-and generation after each asynchronous step and before mutation.
+### Verified transport, ownership and startup
 
-Stage in a new random owner-only directory on the same filesystem. Extract only
-validated package entries into that empty directory: reject absolute/traversing
-paths, escaping symbolic/hard links, special devices and unexpected top-level
-layout; preserve only safe runtime links and executable permissions. Validate
-runtime dependencies and the verified daemon's build information before
-activation, without a provider turn or access to an existing user journal.
+Use the existing system-OpenSSH route and no-prompt environment. Every call
+rechecks an immutable private snapshot of the verified host key (or CA/revocation
+files for certificate authentication), with strict checking and no multiplexing,
+forwarding, password, askpass, tty or user RemoteCommand/LocalCommand. Never
+construct a second permissive SSH connection. Fixed Python source and base64 JSON
+arguments travel as quoted data; archive bytes travel through stdin. Python 3.9+
+on Linux is a prerequisite, not installed automatically.
 
-Serialize installation per account/location. Refuse to overwrite a different
-installation or race an active daemon. Record the pre-install state of every
-file/link/service setting that this transaction can change. Activate atomically
-only after verification; start the user service and verify the expected daemon
-hello/identity before reporting Connected. No user systemd manager means an
-actionable prerequisite failure, not an automatic privileged workaround.
+Preflight is read-only. Reject custom `daemon.env`, an existing user service,
+unmanaged installation or running daemon, foreign-owned/symlinked parent paths,
+and modified managed executables. Normal custom/manual installations retain the
+existing manual-management path; this installer does not adopt or overwrite them.
+An installed but stopped managed daemon offers **Start managed daemon** separately.
 
-Declining consent performs no remote writes. On verification, transfer,
-extraction, validation, activation or initial connection failure, stop only a
-process this transaction started, restore its previous link/unit/service state,
-and remove only its own staged files/new bootstrap data and newly-created empty
-directories. Never delete existing user data, credentials or another install.
-Test this invariant with before/after filesystem and service snapshots, including
-cancellation at each mutation boundary. Cleanup failures are reported precisely;
-they must not be presented as an unchanged machine or a successful install.
+Versioned complete runtime:
+`~/.local/opt/ketplus/<version>-<revision>-<arch>/`; `current` is an atomic relative
+activation symlink and `ssh-install.json` is the owner-only receipt. Data, socket
+and credential paths follow the existing SSH profile/environment defaults.
 
-### Upgrade and uninstall
+Startup is a detached **user process**, explicitly stated in consent. It does not
+create/enable a systemd unit, login service, lingering or automatic startup. This
+keeps the SSH operation independent of a user service manager and allows isolated
+same-UID testing without altering the account's real services. Reopening a stopped
+managed installation uses the explicit Start action. A future login-service
+feature would require separate consent and a separate decision.
 
-Upgrades require the same explicit artifact-bound consent and signature checks.
-Do not interrupt active turns, pending approvals or background work; defer until
-the host is idle and re-check immediately before replacement. Keep the previous
-complete runtime until the new version connects successfully; restore it if
-health/connection checks fail. No arbitrary downgrade or automatic journal-format
-rollback is allowed. An incompatible migration requires a separately approved
-backup/recovery policy before an upgrade can be offered.
+### Transaction, upgrade, rollback and uninstall
 
-Uninstall is a separate confirmation. Require idle state, stop only the managed
-user service, and remove only links, the unchanged managed unit and versioned
-files named in its installation receipt. Modified/unrecognized files require
-manual resolution. Keep journals, repositories, credentials and provider state
-by default. Erasing user data is a separate explicit destructive action, not
-part of this installer.
+Hold an exclusive nonblocking lock on the installation directory. Recheck the
+receipt/profile after acquiring it. Use a fresh owner-only staging directory on
+the same filesystem. Desktop verifies the manifest signature before trusting any
+field and checks the complete archive SHA-256/length before upload; the host checks
+length/hash again before extraction. Run the authenticated daemon's `--build-info`
+and `--check-runtime` before activation. Version, exact revision and control URL
+must agree with the signed descriptor.
 
-### State machine and validation
+Upgrade accepts only a strictly newer version. It uses the existing authenticated
+`daemon.prepare_upgrade` RPC, which atomically refuses active sessions/approvals
+before closing the listener; it never kills an existing daemon. After it stops,
+copy the existing data directory to a private rollback snapshot, activate the new
+complete runtime and start it. Old version directories are retained for recovery.
 
-`Disconnected -> Verified -> Preflight -> AwaitingConsent -> Fetching ->
-Verifying -> Staging -> Activating -> Connecting -> Connected`.
+The SSH transaction remains open after startup. Only a real authenticated
+`daemon.hello` through `SshMachineBackend` with the same verified SSH identity lets
+Desktop send `commit`. EOF, decline, cancellation, failed hello, disconnect or a
+90-second confirmation timeout rolls back the runtime link, receipt and data
+snapshot, stops only the newly started child, and restarts the previously running
+managed daemon. Interrupted upload or runtime validation changes no activation.
+The helper also handles SSH hangup/termination by running cleanup. Errors expose
+fixed messages, not subprocess stderr, tokens, journals or server banners.
+If SSH is lost during rollback or the host fails, Desktop reports that manual
+recovery may be required; it does not claim distributed atomicity across a host
+crash. The private staging directory retains recovery material if restoration
+cannot complete, rather than deleting the only snapshot.
 
-Cancel/failure before mutation returns without host changes; after mutation it
-must finish transaction rollback and report the exact result. No continuation
-from a stale connection generation can execute a later installation step.
+Uninstall requires its own review and confirmation. New authenticated
+`daemon.stop_if_idle` uses the same active-session gate as upgrade, without
+inventing a replacement version; older daemons without it refuse safely. Remove
+only the receipt-owned active runtime and activation link after confirmation.
+Conversations, credentials, provider configuration and previously retained runtime
+versions remain. Removing a machine from Connections is still only a local trust/
+connection operation and does not uninstall anything remotely.
 
-Offscreen tests cover decline, stale consent, host-key change, wrong version,
-architecture/environment, bad/missing signature, wrong digest/size, unsafe
-archive entry, interrupted transfer, cancellation/rollback, existing stopped or
-busy daemon, startup failure, upgrade rollback and uninstall ownership guards.
-Use the existing real-daemon/loopback-SSH fixture with FakeCodex, plus a clean
-Linux account/profile to prove consent-to-Connected and failure/decline snapshots.
-Never consume provider quota or modify an existing deployment for this proof.
+### Verification and production enablement
 
-## Decision needed before implementation
+Linux proofs use a task-owned QA keypair and local manifest/artifact server, plus
+an isolated **same-UID HOME/XDG profile**, not a newly created OS user. The private
+QA key stays outside the source tree. The full staged QA daemon is built with a
+loopback control URL and an empty isolated credential store; it must never enrol
+or connect as a real machine to any hosted relay. Stop only test-owned processes
+and delete only test-owned files.
 
-The release owner/leader must select and supply the authoritative Linux artifact
-channel plus the pinned release public key/provenance policy and matching signed
-manifest/encoding. Approve the exact descriptor/signature contract before its
-publisher and installer are implemented. Until then the production Install path
-remains disabled; no binary is downloaded, executed or installed by this task.
-A locally generated test signature is not evidence that a real release is trusted.
-
-Also identify an isolated Linux test account or approve a clearly labelled fresh
-user-space profile in the task-owned test directory. A profile under the existing
-UID is not reported as a separate fresh OS user. No sudo/account creation is
-assumed by the test harness.
-
-## Consequences
-
-Installation is explicit, account-scoped and auditable, preserves the verified
-SSH boundary, and shares no provider credentials. The extra release-trust
-contract is required to offer a safe one-click path; source/runtime packaging
-alone is insufficient. Connections keeps its existing missing-daemon explanation
-until the required release inputs and implementation/tests exist.
-
-## Alternatives considered
-
-- Manual installation: remains available while the signed release contract is
-  pending; does not meet the requested Connections flow on its own.
-- `curl | sh`, unsigned CI artifacts or checksums fetched beside a binary:
-  rejected because they do not establish release authenticity.
-- Copying Desktop's bundled daemon: rejected across OS/architecture and because
-  a raw executable omits the Linux runtime and sidecar.
-- Root/system-wide installation or automatic OS/provider setup: outside this
-  user-space consent and ownership boundary.
+Offscreen coverage includes real Connections controls, verified SSH, the release
+verifier/downloader, decline, complete runtime install and authenticated hello,
+idle-only uninstall, filesystem/transfer/archive failures and rollback. Runtime
+publisher signing/key provisioning remains the release owner's Linux packaging
+work; until the public key is supplied, production install remains disabled.

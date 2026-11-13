@@ -1,5 +1,6 @@
 #include "remote/LinuxSshMachines.h"
 
+#include "ssh/SshDaemonInstaller.h"
 #include "ssh/SshMachineBackend.h"
 
 #include <utility>
@@ -61,8 +62,9 @@ LinuxSshMachines::LinkFactory LinuxSshMachines::systemLinks() {
 }
 
 LinuxSshMachines::LinuxSshMachines(LinuxMachineModel* model, QString storePath, LinkFactory links,
-                                   QObject* parent)
-    : QObject(parent), model_(model), store_(std::move(storePath)), links_(std::move(links)) {
+                                   QObject* parent, remote::ssh::DaemonReleaseChannel channel)
+    : QObject(parent), model_(model), store_(std::move(storePath)), links_(std::move(links)),
+      releaseChannel_(std::move(channel)) {
     for (const auto& record : store_.machines())
         ensure(record.target);
     if (model_) {
@@ -71,6 +73,31 @@ LinuxSshMachines::LinuxSshMachines(LinuxMachineModel* model, QString storePath, 
         connect(model_, &LinuxMachineModel::hostKeyDecided, this, &LinuxSshMachines::decideHostKey);
         connect(model_, &LinuxMachineModel::sshConnectCancelled, this,
                 &LinuxSshMachines::cancelConnect);
+        connect(model_, &LinuxMachineModel::daemonReviewRequested, this,
+                &LinuxSshMachines::reviewInstall);
+        connect(model_, &LinuxMachineModel::daemonInstallDecided, this,
+                [this](const QString& host, bool accepted) {
+                    if (auto installer = installers_.value(pendingKey(host)))
+                        installer->confirm(accepted);
+                });
+        connect(model_, &LinuxMachineModel::daemonManagementRequested, this,
+                [this](const QString& host) {
+                    const auto target = remote::ssh::parseSshDestination(host);
+                    if (!target.isValid())
+                        return;
+                    const auto key = remote::ssh::sshTargetKey(target);
+                    if (!store_.contains(key)) {
+                        model_->reportSshFailure(host, LinuxMachine::Error::Other,
+                                                 tr("Connect and verify this SSH target first."));
+                        return;
+                    }
+                    auto* backend = ensure(target);
+                    pending_.insert(key, Pending{host, false, {}, {}, true, false});
+                    if (backend->connectionState() == MachineBackend::ConnectionState::Connected)
+                        offerInstall(key);
+                    else
+                        backend->connectToHost();
+                });
         // Connect and Disconnect act on the route the row shows: a row the Relay stands in for
         // is the Relay's, and Use SSH tries SSH again.
         connect(model_, &LinuxMachineModel::connectRequested, this, [this](const QString& id) {
@@ -221,7 +248,17 @@ void LinuxSshMachines::changed(const QString& targetKey) {
     const auto pending = pending_.constFind(targetKey);
     if (machine && pending != pending_.cend() && model_) {
         const Pending attempt = *pending;
+        if (auto installer = installers_.value(targetKey)) {
+            if (installer->state() == remote::ssh::SshDaemonInstaller::State::Connecting &&
+                machine->connectionState() == MachineBackend::ConnectionState::Connected)
+                installer->connectionResult(true);
+            return;
+        }
         if (machine->connectionState() == MachineBackend::ConnectionState::Connected) {
+            if (attempt.manage) {
+                offerInstall(targetKey);
+                return;
+            }
             pending_.remove(targetKey);
             publish();
             model_->reportSshConnected(attempt.host);
@@ -230,6 +267,13 @@ void LinuxSshMachines::changed(const QString& targetKey) {
         if (machine->connectionState() == MachineBackend::ConnectionState::Offline &&
             machine->tunnelState() != SshTunnel::State::Idle) {
             const LinuxMachine failed = machineFor(*machine);
+            if (failed.error == LinuxMachine::Error::DaemonNotInstalled &&
+                machine->installationTunnel() && !attempt.offered) {
+                offerInstall(targetKey);
+                return;
+            }
+            if (attempt.offered)
+                return;
             pending_.remove(targetKey);
             if (attempt.added) {
                 // Nothing of a machine that never connected is kept, its accepted key neither.
@@ -296,6 +340,12 @@ void LinuxSshMachines::cancelConnect(const QString& host) {
     if (key.isEmpty())
         return;
     const Pending attempt = pending_.take(key);
+    if (auto installer = installers_.value(key)) {
+        // Leave the backend and its verified channel alive until rollback finishes.
+        pending_.insert(key, attempt);
+        installer->cancel();
+        return;
+    }
     if (attempt.decide)
         attempt.decide(false);
     auto* machine = backends_.value(key);

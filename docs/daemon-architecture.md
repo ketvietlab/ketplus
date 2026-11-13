@@ -1076,3 +1076,13 @@ What clients read is bounded by the size of the team, never by its age (ADR 0115
 - History, older Updates and older decisions come page by page.
 - `LocalIpcServer::send` replaces any message too large for one frame with a failure of
   that request, or a `truncated` event, and never drops the client for it.
+
+### Consented SSH installer lifecycle
+
+ADR 0123 adds authenticated `daemon.stop_if_idle` for explicit uninstall of a
+receipt-owned SSH installation. It shares `daemon.prepare_upgrade`'s atomic
+`SessionHost::hasActiveSessions()` refusal and listener shutdown fence, without
+a replacement-version field. It cannot interrupt active turns or approvals.
+Upgrade continues to require a strictly newer `replacement_version`. An older
+daemon that lacks the stop operation refuses safely; the installer never sends
+a fake future version or kills an existing daemon as an uninstall fallback.

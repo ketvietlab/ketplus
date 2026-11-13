@@ -26,6 +26,11 @@ LinuxMachines::LinuxMachines(QObject* parent)
         if (auto* section = promptSection())
             section->openConnectCard(host);
     });
+    connect(model_, &LinuxMachineModel::daemonManagementPrompted, this,
+            [this](const QString& host) {
+                if (auto* section = promptSection())
+                    section->openConnectCard(host, true);
+            });
     connect(client_, &remote::ControlV2Client::signInFinished, this, [this](const QString& error) {
         syncEntitlement();
         emit notice(error.isEmpty() ? tr("Signed in. You can pair a Linux machine.") : error,

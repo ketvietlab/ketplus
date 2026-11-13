@@ -121,6 +121,7 @@ QByteArray SshTunnel::daemonCredential() const {
 }
 
 void SshTunnel::open() {
+    installationHeld_ = false;
     retry_->stop();
     ++generation_;
     teardown();
@@ -266,7 +267,7 @@ void SshTunnel::fail(State state, const QString& error) {
         hostKeyStatus_ = HostKeyStatus::Mismatch;
     lastError_ = error;
     setState(state);
-    if (state != State::Offline && state != State::DaemonSocketMissing)
+    if (installationHeld_ || (state != State::Offline && state != State::DaemonSocketMissing))
         return;
     // Bounded backoff: doubling from the initial delay up to the maximum.
     const auto shift = qMin(reconnects_, 16);

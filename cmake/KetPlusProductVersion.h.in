@@ -3,3 +3,7 @@
 #define KETPLUS_PRODUCT_VERSION "@PROJECT_VERSION@"
 // Empty when a build configures this header without the KETPLUS_CONTROL_URL cache entry.
 #define KETPLUS_DEFAULT_CONTROL_URL "@KETPLUS_CONTROL_URL@"
+
+// Unset until the release owner supplies the dedicated Linux release public key.
+#define KETPLUS_DAEMON_RELEASE_PUBLIC_KEY "@KETPLUS_DAEMON_RELEASE_PUBLIC_KEY@"
+#define KETPLUS_DAEMON_RELEASE_MANIFEST_URL "@KETPLUS_DAEMON_RELEASE_MANIFEST_URL@"

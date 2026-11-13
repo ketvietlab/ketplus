@@ -1,6 +1,7 @@
 #pragma once
 
 #include "remote/LinuxMachineModel.h"
+#include "ssh/DaemonRelease.h"
 #include "ssh/SshMachineStore.h"
 
 #include <QHash>
@@ -15,6 +16,7 @@
 namespace ketplus::remote::ssh {
 class SshLink;
 class SshMachineBackend;
+class SshDaemonInstaller;
 } // namespace ketplus::remote::ssh
 
 namespace ketplus {
@@ -37,7 +39,9 @@ class LinuxSshMachines final : public QObject {
 
     LinuxSshMachines(LinuxMachineModel* model,
                      QString storePath = remote::ssh::SshMachineStore::defaultPath(),
-                     LinkFactory links = systemLinks(), QObject* parent = nullptr);
+                     LinkFactory links = systemLinks(), QObject* parent = nullptr,
+                     remote::ssh::DaemonReleaseChannel channel =
+                         remote::ssh::DaemonReleaseChannel::production());
     ~LinuxSshMachines() override;
 
     // Opens every saved machine whose identity is trusted, as Connections opens.
@@ -61,6 +65,8 @@ class LinuxSshMachines final : public QObject {
         bool added{false};
         QString fingerprint;
         std::function<void(bool)> decide;
+        bool manage{false};
+        bool offered{false};
     };
 
     remote::ssh::SshMachineBackend* ensure(const remote::ssh::SshTarget& target);
@@ -77,6 +83,9 @@ class LinuxSshMachines final : public QObject {
     void remove(const QString& machineId);
     void forgetHostKey(const QString& machineId);
     void trustIdentity(const QString& machineId);
+    void offerInstall(const QString& key);
+    void reviewInstall(const QString& host, const QString& action);
+    void finishInstall(const QString& key, bool success, const QString& message);
 
     QPointer<LinuxMachineModel> model_;
     remote::ssh::SshMachineStore store_;
@@ -87,6 +96,8 @@ class LinuxSshMachines final : public QObject {
     QHash<QString, Pending> pending_;
     // Machine ids the user disconnected: connectSaved leaves them closed until they connect.
     QSet<QString> closedByUser_;
+    remote::ssh::DaemonReleaseChannel releaseChannel_;
+    QHash<QString, QPointer<remote::ssh::SshDaemonInstaller>> installers_;
 };
 
 } // namespace ketplus

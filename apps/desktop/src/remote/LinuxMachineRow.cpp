@@ -317,6 +317,15 @@ void showLinuxMachineDetails(const QString& id, LinuxMachineModel* model, QWidge
     auto* close = dialog->addButton(tr("Close"), ket::ButtonVariant::Ghost);
     QObject::connect(close, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     const QPointer<LinuxMachineModel> guard(model);
+    if (machine.route == LinuxMachine::Route::Ssh && model->backendsAttached()) {
+        auto* manage = dialog->addButton(tr("Manage daemon…"), ket::ButtonVariant::Ghost);
+        manage->setObjectName(QStringLiteral("linuxDetailsManageDaemon"));
+        QObject::connect(manage, &QAbstractButton::clicked, dialog, [guard, machine, dialog] {
+            if (guard)
+                guard->promptDaemonManagement(machine.sshTarget);
+            dialog->accept();
+        });
+    }
     ket::Button* disconnect = nullptr;
     ket::Button* connect = nullptr;
     ket::Button* forget = nullptr;

@@ -353,7 +353,8 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
             });
         return;
     }
-    if (type == QStringLiteral("daemon.prepare_upgrade")) {
+    if (type == QStringLiteral("daemon.prepare_upgrade") ||
+        type == QStringLiteral("daemon.stop_if_idle")) {
         const QVersionNumber current =
             QVersionNumber::fromString(QStringLiteral(KETPLUS_PRODUCT_VERSION));
         const QVersionNumber replacement =
@@ -361,7 +362,8 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                                            .toObject()
                                            .value(QStringLiteral("replacement_version"))
                                            .toString());
-        if (replacement.isNull() || QVersionNumber::compare(replacement, current) <= 0) {
+        if (type == QStringLiteral("daemon.prepare_upgrade") &&
+            (replacement.isNull() || QVersionNumber::compare(replacement, current) <= 0)) {
             send(socket, protocol::failure(
                              request, QStringLiteral("invalid_replacement_version"),
                              QStringLiteral("The replacement must be newer than this daemon.")));

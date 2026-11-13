@@ -71,6 +71,7 @@ struct SshFixture {
     HostKey ecdsaKey;
     QByteArray token{"fixture-local-token\n"};
     QString skip;
+    QString extraServerConfiguration;
 
     QString path(const QString& name) const { return dir.filePath(name); }
     QString knownName() const { return QStringLiteral("[127.0.0.1]:%1").arg(port); }
@@ -110,10 +111,11 @@ struct SshFixture {
                                  "PubkeyAuthentication yes\nAllowUsers %5\n"
                                  "SetEnv KETPLUS_DAEMON_SOCKET=%6 KETPLUS_DAEMON_TOKEN_FILE=%7\n"
                                  "LogLevel ERROR\nBanner %8\n")
-                      .arg(port)
-                      .arg(path("host"), path("sshd.pid"), path("authorized_keys"), user,
-                           path("daemon.sock"), path("local.token"), path("banner"))
-                      .toUtf8());
+                          .arg(port)
+                          .arg(path("host"), path("sshd.pid"), path("authorized_keys"), user,
+                               path("daemon.sock"), path("local.token"), path("banner"))
+                          .toUtf8() +
+                      extraServerConfiguration.toUtf8());
         writeFile(path("ssh_config"),
                   QStringLiteral("Host fixture\n  HostName 127.0.0.1\n  Port %1\n  User %2\n"
                                  "  IdentityFile %3\n  IdentitiesOnly yes\n  IdentityAgent none\n"
