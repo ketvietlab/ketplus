@@ -166,3 +166,19 @@ Previews belong in ThemeManager and must never call `commit` until confirmed.
 cross-instance commits, real child-process watcher propagation, lock contention,
 malformed/oversized/newer configurations and revision validation. It is a Qt Core
 only target and does not launch providers or native windows.
+
+## Consumer adapter foundation
+
+`EditorWidget::applyColorScheme` and `TerminalView::applyColorScheme` accept the
+canonical scheme without modifying buffers, selection or terminal process state.
+The explicit Lexilla adapter uses the pinned syntax library's lexer-style tables;
+keyword/string/number/type/comment/attribute roles carry color and bold/italic/
+underline independently of UI accent. Roles the lexer cannot distinguish retain
+plain-text fallback; semantic highlighting is not claimed. Embedded gutter and
+caret-line tokens retain legacy light/dark colors and caret-line alpha, with a
+Scintilla state-parity regression test. Terminal foreground,
+background, cursor, selection and all 16 ANSI slots come from the scheme; alpha
+for RGB-only Scintilla/vterm paths is composited onto the component background.
+These entry points are tested independently; ThemeManager/host wiring remains
+pending. The temporary ket-qt PR #57 pin must be replaced with its develop merge
+commit before this integration is handed to review.

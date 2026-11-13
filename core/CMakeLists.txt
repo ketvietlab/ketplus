@@ -147,6 +147,7 @@ add_library(ketplus_terminal_ui STATIC
     src/terminal/TerminalPanel.cpp
     src/terminal/TerminalPanel.h
     src/terminal/TerminalView.cpp
+    src/terminal/TerminalColorScheme.cpp
     src/terminal/TerminalView.h
 )
 target_link_libraries(ketplus_terminal_ui
@@ -202,6 +203,9 @@ add_library(ketplus_editor STATIC
     src/editor/EditorViewOptions.h
     src/editor/EditorWidgetChrome.cpp
     src/editor/EditorWidget.cpp
+    src/editor/EditorColorScheme.cpp
+    src/editor/SyntaxRoleAdapter.cpp
+    src/editor/SyntaxRoleAdapter.h
     src/editor/EditorFileRefresh.cpp
     src/editor/EditorMarkdown.cpp
     src/editor/EditorWidget.h
@@ -511,6 +515,12 @@ if(KETPLUS_CM_BUILD_TESTS)
             add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
         endif()
     endfunction()
+
+    add_executable(ketplus_scheme_consumer_tests tests/SchemeConsumerTest.cpp)
+    target_link_libraries(ketplus_scheme_consumer_tests PRIVATE Qt6::Test ketplus_editor ketplus_terminal_ui)
+    ketplus_enable_warnings(ketplus_scheme_consumer_tests)
+    ketplus_cm_add_test(ketplus_scheme_consumer_tests ketplus_scheme_consumer_tests)
+    set_tests_properties(ketplus_scheme_consumer_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_theme_selection_tests
         tests/ThemeSelectionTest.cpp src/ui/theme/ThemeSelection.cpp)
