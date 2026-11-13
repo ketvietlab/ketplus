@@ -118,7 +118,10 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "task to review (state in_review) once its "
                      "criteria are met and your work is committed on the task's branch. If "
                      "you worked in another worktree or repository, hand it to review with "
-                     "its pull_request and head_commit. Do not merge.");
+                     "its pull_request and head_commit, and name that worktree in the note. "
+                     "Work that belongs in another repository is a task of its own there: ask "
+                     "the leader for one (team_task_create with repository) instead of a "
+                     "worktree you make yourself. Do not merge.");
     } else {
         lines << QStringLiteral(
             "When a task enters review you receive its criteria and its diff. Review it "

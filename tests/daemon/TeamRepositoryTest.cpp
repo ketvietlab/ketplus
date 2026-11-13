@@ -281,6 +281,60 @@ class TeamRepositoryTest final : public QObject {
         QCOMPARE(host_.removals.first().first, QStringLiteral("/repo"));
     }
 
+    // Criterion 4: a task in progress that resumes (here an answered question) brings its
+    // owner's conversation back to its worktree, wherever it pointed meanwhile.
+    void aResumedTaskBringsItsOwnerBackToItsWorktree() {
+        const QString id = create({.title = "Cart", .lane = "Web"});
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        // The conversation was left on another worktree, such as a task merged since.
+        host_.conversations["dev1"].worktree = QStringLiteral("/wt/merged");
+        host_.pointed.clear();
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which currency?").ok());
+        QString raised;
+        QVERIFY(teams_
+                    ->raiseQuestion(team_,
+                                    {{"question", "Which currency?"},
+                                     {"choices", QJsonArray{"EUR", "USD"}},
+                                     {"recommended", "EUR"},
+                                     {"task_id", id}},
+                                    "lead", &raised)
+                    .ok());
+        QVERIFY(teams_->answerDecision(team_, raised, "EUR", "user").ok());
+        QCOMPARE(get(id).state, state::inProgress);
+        QCOMPARE(host_.pointed.value("dev1"), get(id).worktree);
+        QCOMPARE(host_.conversations.value("dev1").worktree, get(id).worktree);
+        bool told = false;
+        for (const TeamMessage& message : host_.messages)
+            told = told || (message.toSession == "dev1" && message.pointAt == get(id).worktree);
+        QVERIFY(told);
+    }
+
+    // Criterion 4: a done task does not leave its owner in its worktree: the owner moves to
+    // its other open task, and with none to the team's repository.
+    void aDoneTaskReleasesItsOwnersConversation() {
+        const QString first = create({.title = "Cart", .lane = "Web"});
+        const QString second = create({.title = "Search", .lane = "Web"});
+        QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, first, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
+        host_.conversations["dev1"].worktree = get(first).worktree;
+        QVERIFY(teams_->closeTask(team_, first, evidence, "Merged.", "lead").ok());
+        QTRY_COMPARE(host_.conversations.value("dev1").worktree, get(second).worktree);
+        QVERIFY(team().relocations.isEmpty());
+
+        QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->closeTask(team_, second, evidence, "Merged.", "lead").ok());
+        QTRY_COMPARE(host_.conversations.value("dev1").worktree, team().repository);
+        // A member that already left the worktree is not moved again.
+        const QString third = create({.title = "Pay", .lane = "Web"});
+        QVERIFY(teams_->assignTask(team_, third, "dev2", "lead").ok());
+        host_.conversations["dev2"].worktree = QStringLiteral("/somewhere");
+        QVERIFY(teams_->closeTask(team_, third, evidence, "Merged.", "lead").ok());
+        QTest::qWait(10);
+        QCOMPARE(host_.conversations.value("dev2").worktree, QStringLiteral("/somewhere"));
+    }
+
     // Criterion 2: git refuses what is not a repository's main checkout with origin's branch.
     void gitChecksTheRepository() {
         QTemporaryDir root;

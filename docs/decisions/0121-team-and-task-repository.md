@@ -50,8 +50,23 @@ repositories had the same problem for single tasks.
    `teams.repository` column follows the document, so the team is listed under its new
    repository.
 
-Members are not moved: a conversation that joins later must work in the team's current
-repository, as ADR 0114 requires, and a member's next task points it at that task's worktree.
+7. **A member's conversation follows its task.** Assigning a task already points the owner
+   at the task's worktree. A message that starts a developer's turn on its task in progress,
+   such as a review's findings or an answered question, now points it there as well, so
+   Source Control, Files and the worktree picker show the work in progress even when the
+   conversation was left on another worktree meanwhile. When a task becomes done, an owner
+   whose conversation stands in its worktree is moved out (the relocation of ADR 0114 §7):
+   to its task in progress, else another open task, else the team's repository, once its
+   turn allows.
+8. **Work in a second repository.** Work that belongs in another repository is a task of its
+   own there (`team_task_create` with `repository`), so the daemon makes and tracks its
+   worktree and the member is pointed at it. A developer that still had to change another
+   worktree hands the task to review with that `pull_request` and `head_commit` (ADR 0118)
+   and names the worktree in the note; the developer instructions say so.
+
+Members are not moved when the team moves: a conversation that joins later must work in the
+team's current repository, as ADR 0114 requires, and a member's next task points it at that
+task's worktree.
 
 ## Consequences
 
