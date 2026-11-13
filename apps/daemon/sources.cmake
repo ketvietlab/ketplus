@@ -201,6 +201,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/service/DaemonService.h
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
+    src/storage/LocalJournalActivityLatest.cpp
     src/storage/LocalJournal.cpp
     src/storage/LocalJournalPreparations.cpp
     src/storage/SessionPreparation.h

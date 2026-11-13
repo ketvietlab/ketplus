@@ -171,7 +171,13 @@ class DaemonActivityGroupsTest : public QObject {
         QVERIFY(first > 0);
         const auto summary = journal.activitySummaryEvent(last(journal, first));
         QCOMPARE(summary.value("event_type"), "activity.group.summary");
-        QVERIFY(!QJsonDocument(summary).toJson().contains("private command"));
+        // T-91: only the last step, as `latest`, names its command; nothing else does.
+        auto withoutLatest = summary.value("payload").toObject();
+        QCOMPARE(withoutLatest.value("latest").toObject().value("item").toObject().value("id"),
+                 "one");
+        QVERIFY(!withoutLatest.value("latest").toObject().value("completed").toBool());
+        withoutLatest.remove("latest");
+        QVERIFY(!QJsonDocument(withoutLatest).toJson().contains("private command"));
         const auto group = summary.value("payload").toObject().value("group_id").toString();
         const auto output = journal.appendEvent("session", 1, "command.output_delta",
                                                 {{"item_id", "one"}, {"delta", "private output"}});
@@ -191,6 +197,19 @@ class DaemonActivityGroupsTest : public QObject {
         QCOMPARE(incremental.value("events").toArray().size(), 1);
         QCOMPARE(incremental.value("events").toArray().first().toObject().value("event_type"),
                  "command.output_delta");
+        // The completed step is the group's latest; its output never rides along.
+        auto finished = command("one", "completed");
+        auto item = finished.value("item").toObject();
+        item.insert("aggregatedOutput", "private output");
+        item.insert("command", QString(2000, QLatin1Char('x')));
+        finished.insert("item", item);
+        const auto done = journal.appendEvent("session", 1, "item.completed", finished);
+        const auto settled =
+            journal.activitySummaryEvent(last(journal, done)).value("payload").toObject();
+        const auto latest = settled.value("latest").toObject();
+        QVERIFY(latest.value("completed").toBool());
+        QCOMPARE(latest.value("item").toObject().value("command").toString().size(), 512);
+        QVERIFY(!QJsonDocument(settled).toJson().contains("private output"));
     }
     void searchesReadsEditsAndCommandsShareOneTurnGroup() {
         QTemporaryDir dir;
