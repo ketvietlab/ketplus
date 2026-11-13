@@ -136,6 +136,10 @@ target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_
 
 ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
 target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-92: repository order (team recency, pins) and the group a conversation stays in.
+ketplus_add_gui_test(ketplus_sidebar_repository_order_tests SidebarRepositoryOrderTest.cpp)
+target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
+                      ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)

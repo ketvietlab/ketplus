@@ -70,6 +70,10 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarRepositoryListLayout.cpp
     src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
+    src/workspace/SidebarRepositoryPins.cpp
+    src/workspace/SidebarRepositoryPins.h
+    src/workspace/SidebarPinMark.cpp
+    src/workspace/SidebarPinMark.h
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h
     src/teams/TeamMenus.cpp
