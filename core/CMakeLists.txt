@@ -532,7 +532,8 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_theme_input_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_vscode_import_tests tests/VsCodeImportTest.cpp)
-    target_link_libraries(ketplus_vscode_import_tests PRIVATE Qt6::Test ketplus_vscode_import ketplus_miniz)
+    target_link_libraries(ketplus_vscode_import_tests PRIVATE Qt6::Test ketplus_vscode_import)
+    target_include_directories(ketplus_vscode_import_tests SYSTEM PRIVATE "${ketplus_miniz_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/miniz-include")
     target_compile_definitions(ketplus_vscode_import_tests PRIVATE
         VSCODE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vscode")
     ketplus_enable_warnings(ketplus_vscode_import_tests)
