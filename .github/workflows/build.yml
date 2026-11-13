@@ -192,7 +192,7 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          app="$PWD/build-release/apps/desktop/KetPlus.app"
+          app="$PWD/build-release/KetPlus.app"
           test "$(lipo -archs "$app/Contents/MacOS/KetPlus")" = "$EXPECTED_ARCH"
           test "$(lipo -archs "$app/Contents/Helpers/ketplus_daemon")" = "$EXPECTED_ARCH"
           test "$(lipo -archs "$app/Contents/Resources/ketplus-browser/bin/node")" = "$EXPECTED_ARCH"
