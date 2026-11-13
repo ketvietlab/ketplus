@@ -599,7 +599,7 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
     const qreal mermaidHeaderHeight = px(34);
     const QString monoFamily = monoFontFamily_;
     const QColor linkColor = recipe.link;
-    applyTranscriptSyntax(textDocument, theme);
+    applyTranscriptSyntax(textDocument, theme, colorScheme_.get());
     textDocument->setIndentWidth(px(recipe.listIndent));
     fileLinks_.setRoot(activePath_.isEmpty() ? QString{} : executionPath());
     styleTranscriptTables(textDocument, recipe, zoom, codePadding);

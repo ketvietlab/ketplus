@@ -29,6 +29,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Built-ins are read-only, have offline completeness/contrast tests and a
   reproducible importer command with saved reports. App-wide custom-color
   application remains part of the separate ThemeManager adapter work.
+- Color-scheme selection now has revisioned persistence, one-time legacy migration,
+  local preview/commit/cancel, independent system preferences and asynchronous
+  snapshot preparation. Main-window editor/terminal/diff adapters preserve their
+  existing buffers and sessions. Pro chat/preview and standalone Terminal consume
+  the same snapshots; Mermaid caches capture scheme colors without rebuilding
+  unchanged Markdown. Targeted offscreen checks and native DELL Light/Dark
+  comparisons cover this integration (T-5); broader release acceptance remains
+  separate.
 
 - JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
   and plugin JAR data into canonical variants with explicit approximation and

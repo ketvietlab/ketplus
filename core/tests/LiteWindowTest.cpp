@@ -1,6 +1,7 @@
 // The ketPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
+#include "git/GitDiffView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
@@ -89,6 +90,20 @@ class LiteWindowTest final : public QObject {
         QVERIFY(QDir(workspace_.path()).mkpath(QStringLiteral("docs")));
         write(workspace_.filePath(QStringLiteral("docs/guide.md")), "# Guide\n");
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
+    }
+
+    void themeChangeKeepsAnActiveDiffTab() {
+        QTemporaryDir selection;
+        ketplus::ThemeManager theme(*qApp, nullptr, selection.path());
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        ketplus::MainWindow window(theme);
+        auto* tabs = window.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        auto* diff = new ketplus::GitDiffView(tabs);
+        tabs->setCurrentIndex(tabs->addTab(diff, QStringLiteral("Diff")));
+        theme.setMode(ketplus::ThemeManager::Mode::Dark);
+        QCOMPARE(tabs->currentWidget(), diff);
+        QVERIFY(theme.palette().dark);
     }
 
     void openingAFolderDropsThePreviousSearch() {

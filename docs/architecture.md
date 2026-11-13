@@ -482,3 +482,13 @@ Machine Workspace registers its own QWidget composer using the same toast owners
 property. Its transcript-only Agent Workspace cannot clear the Machine reservation.
 Composer growth, visibility, ancestor movement and reparenting refresh the measured
 window-space top; teardown and hide clear only a reservation held by that view.
+
+### Color-scheme publication
+
+ThemeManager delegates canonical selection and snapshot preparation to
+`ThemeSchemeController` in `core/src/ui/theme/`. A revisioned selection store owns
+committed process-wide preferences; temporary previews never write it. User
+schemes are prepared on Qt Concurrent workers and generation-checked before one
+GUI-thread publication through ket-qt runtime color overrides. Consumers retain
+their existing documents and terminal sessions. See `color-schemes.md` for the
+current API and integration limits.

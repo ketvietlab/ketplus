@@ -51,7 +51,7 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         connect(splitPane_, &EditorSplitPane::currentSourceChanged, this,
                 [this](EditorWidget* current) {
                     splitSource_ = current;
-                    splitEditor_->applyTheme(theme_.palette());
+                    splitEditor_->applyColorScheme(theme_.colorScheme());
                     updateEditorActions();
                     updateDocumentState();
                 });

@@ -436,6 +436,8 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
     send(message(Scintilla::Message::Colourise), 0, -1);
     embeddedStyleDirty_ = true;
     updateEmbeddedStyleHighlight();
+    if (colorScheme_)
+        applyColorScheme(*colorScheme_);
     emit presentationChanged();
 }
 
@@ -601,6 +603,7 @@ void EditorWidget::shareDocumentWith(const EditorWidget& source) {
 }
 
 void EditorWidget::applyTheme(const ThemePalette& palette) {
+    colorScheme_.reset();
     presentationPalette_ = palette;
     if (markdownPresentation_)
         updateMarkdownPresentation();

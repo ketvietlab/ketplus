@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 
 class QQuickView;
 class QQuickItem;
@@ -363,6 +364,7 @@ class AgentWorkspaceView final : public QWidget {
     // Refresh renderer colours and editor mono preferences. Interface zoom is owned
     // by ket::Appearance; the legacy size argument is retained for shell callers.
     void applyTheme(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void applyColorScheme(const ColorScheme& scheme, int interfaceFontSizePixels = 14);
     void focusPrompt();
     void openModelPicker();
     void setAgentAvailable(bool available);
@@ -716,7 +718,9 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap historyState_;
     QQuickItem* transcriptPolish_{nullptr};
     MermaidRenderer* mermaidRenderer_{nullptr};
+    void applyDocumentPalette(const ThemePalette& palette, bool forceSyntax = false);
     ThemePalette mermaidPalette_;
+    std::shared_ptr<const ColorScheme> colorScheme_;
     QSet<QString> mermaidImages_;
     QString workingChangesRoot_;
     QSet<QString> workingChanges_;

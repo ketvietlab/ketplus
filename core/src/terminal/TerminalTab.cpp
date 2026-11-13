@@ -129,6 +129,9 @@ void TerminalTab::typePendingTextWhenReady() {
 }
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
+void TerminalTab::applyColorScheme(const ColorScheme& scheme) {
+    terminal_->applyColorScheme(scheme);
+}
 
 void TerminalTab::setTypography(const int fontSizePixels, const int lineHeightPixels,
                                 const QString& fontFamily) {

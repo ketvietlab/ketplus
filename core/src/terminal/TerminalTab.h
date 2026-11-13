@@ -10,6 +10,7 @@ namespace ketplus {
 
 class TerminalView;
 struct ThemePalette;
+struct ColorScheme;
 
 class TerminalTab final : public QWidget {
     Q_OBJECT
@@ -33,6 +34,7 @@ class TerminalTab final : public QWidget {
     // it and the shell's line editor then draws it again.
     void typeText(const QString& text);
     void applyTheme(const ThemePalette& palette);
+    void applyColorScheme(const ColorScheme& scheme);
     void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
 
   signals:
