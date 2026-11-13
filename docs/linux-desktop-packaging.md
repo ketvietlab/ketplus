@@ -45,6 +45,9 @@ commit. Package timestamps and ownership are normalized. Dependency downloads,
 the compiler image and generated code can still vary; this is a repeatable
 recipe, not a claim of bit-identical artifacts across arbitrary SDKs or hosts.
 Keep the Docker image identity, source commit, metadata and checksums with results.
+The staged browser import probe uses a private temporary home and a minimal
+environment, so numeric container users do not need a passwd entry and do not
+inherit the build user's browser settings, credentials or Node preloads.
 
 ## Installed layout and checks
 

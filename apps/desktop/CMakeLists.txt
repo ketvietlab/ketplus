@@ -477,6 +477,7 @@ if(APPLE)
                 COMMAND "${CMAKE_COMMAND}" -E touch "${ketplus_browser_runtime_stamp}"
                 DEPENDS
                     "${ketplus_browser_app_dir}/scripts/package-runtime.mjs"
+                    "${ketplus_browser_app_dir}/scripts/runtime-smoke.mjs"
                     "${ketplus_browser_app_dir}/runtime/node-runtime.json"
                     "${ketplus_browser_app_dir}/package.json"
                     "${ketplus_browser_app_dir}/package-lock.json"

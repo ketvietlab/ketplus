@@ -12,6 +12,7 @@ fi
 export SOURCE_DATE_EPOCH
 SOURCE_DATE_EPOCH=$(git -C "$source_dir" show -s --format=%ct HEAD)
 export QT_QPA_PLATFORM=offscreen LANG=C.UTF-8
+node --test "$source_dir/apps/browser/test/runtime-smoke.test.mjs"
 cmake -S "$source_dir" -B "$build_dir" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib \
   -DCMAKE_PREFIX_PATH="${QT_ROOT:-/opt/qt/current}" \
