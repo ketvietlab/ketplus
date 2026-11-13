@@ -50,6 +50,17 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
 ## Theme input security fixtures
 
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.

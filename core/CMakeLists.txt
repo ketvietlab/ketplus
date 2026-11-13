@@ -72,6 +72,20 @@ qt_add_resources(ketplus_ui "color_schemes"
 )
 add_library(KetPlusCM::ui ALIAS ketplus_ui)
 
+add_library(ketplus_jetbrains_import STATIC
+    src/ui/theme/import/JetBrainsImporter.h
+    src/ui/theme/import/JetBrainsImporter.cpp
+    src/ui/theme/import/JetBrainsImport_p.h
+    src/ui/theme/import/JetBrainsMapping.h
+    src/ui/theme/import/JetBrainsCommon.cpp
+    src/ui/theme/import/JetBrainsEditor.cpp
+    src/ui/theme/import/JetBrainsUi.cpp
+)
+target_link_libraries(ketplus_jetbrains_import PUBLIC ketplus_ui PRIVATE ketplus_theme_io)
+ketplus_enable_warnings(ketplus_jetbrains_import)
+add_library(KetPlusCM::jetbrains_import ALIAS ketplus_jetbrains_import)
+
+
 add_library(ketplus_core STATIC
     src/core/Document.cpp
     src/core/Document.h
@@ -515,6 +529,14 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_theme_input_tests)
     ketplus_cm_add_test(ketplus_theme_input_tests ketplus_theme_input_tests)
     set_tests_properties(ketplus_theme_input_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_jetbrains_import_tests tests/JetBrainsImportTest.cpp)
+    target_link_libraries(ketplus_jetbrains_import_tests PRIVATE Qt6::Test ketplus_jetbrains_import ketplus_miniz)
+    target_compile_definitions(ketplus_jetbrains_import_tests PRIVATE
+        JETBRAINS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/jetbrains")
+    ketplus_enable_warnings(ketplus_jetbrains_import_tests)
+    ketplus_cm_add_test(ketplus_jetbrains_import_tests ketplus_jetbrains_import_tests)
+    set_tests_properties(ketplus_jetbrains_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
     target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)

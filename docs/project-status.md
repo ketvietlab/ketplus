@@ -24,6 +24,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
 - Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
   diagnostics, unknown-data preservation, complete built-in inheritance, embedded
   light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
