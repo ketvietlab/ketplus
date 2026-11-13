@@ -45,7 +45,7 @@ jobs:
       - name: Install headless build dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
       - name: Configure independent daemon
-        run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
+        run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
       - name: Build and test without a display or provider quota
         run: |
           cmake --build build/daemon --parallel 4
@@ -144,7 +144,7 @@ jobs:
       test-runners: '["macos-15", "macos-26"]'
       qt-version: "6.11.1"
       qt-modules: qt5compat qtwebsockets qtwebview
-      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro
       node: true
       build-timeout: 60
       # One test at a time: the desktop/daemon integration tests time out when

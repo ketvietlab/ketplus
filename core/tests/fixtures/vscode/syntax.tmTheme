@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>name</key><string>Original Fixture Syntax</string>
+<key>settings</key><array>
+  <dict><key>settings</key><dict><key>foreground</key><string>#EEEEEE</string><key>background</key><string>#151515</string><key>caret</key><string>#FFAA11</string><key>selection</key><string>#334455</string><key>lineHighlight</key><string>#222233</string><key>gutterForeground</key><string>#667788</string><key>invisibles</key><string>#999999</string></dict></dict>
+  <dict><key>scope</key><string>string.quoted</string><key>settings</key><dict><key>foreground</key><string>#55AA66</string><key>fontStyle</key><string>italic underline</string></dict></dict>
+  <dict><key>scope</key><string>entity.name.function</string><key>settings</key><dict><key>foreground</key><string>#88AAFF</string></dict></dict>
+</array></dict></plist>

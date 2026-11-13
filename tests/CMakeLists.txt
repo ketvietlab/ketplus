@@ -4,6 +4,10 @@ if(APPLE)
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_signing_cli.py")
 endif()
 
+if(APPLE AND KETPLUS_UPDATES_ENABLED)
+    add_subdirectory(updates)
+endif()
+
 function(ketplus_add_gui_test target)
     qt_add_executable(${target} ${ARGN})
     ketplus_enable_warnings(${target})
@@ -60,6 +64,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptInteractionTest.cpp
     TranscriptFileStepsTest.cpp
     TranscriptAgentNoteTest.cpp
+    TranscriptInternalStepsTest.cpp
     TranscriptTeamBlockTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
@@ -93,6 +98,9 @@ target_link_libraries(ketplus_agent_shell_tests PRIVATE
     Qt6::Test
     ketplus_desktop_shell
 )
+
+ketplus_add_gui_test(ketplus_scheme_chat_tests SchemeChatTest.cpp)
+target_link_libraries(ketplus_scheme_chat_tests PRIVATE Qt6::Test Qt6::Quick ketplus_ai KetPlusCM::ui)
 
 ketplus_add_gui_test(ketplus_agent_streaming_tests AgentWorkspaceStreamingTest.cpp)
 target_link_libraries(ketplus_agent_streaming_tests PRIVATE Qt6::Test ketplus_ai)
@@ -131,9 +139,16 @@ target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_
 
 ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
 target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-92: repository order (team recency, pins) and the group a conversation stays in.
+ketplus_add_gui_test(ketplus_sidebar_repository_order_tests SidebarRepositoryOrderTest.cpp)
+target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
+                      ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.cpp)
+target_link_libraries(ketplus_copilot_presentation_tests PRIVATE
+    Qt6::Test Qt6::Quick ketplus_ai ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
 ketplus_add_gui_test(ketplus_team_goal_form_tests TeamGoalFormTest.cpp)
 target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_desktop_shell)
@@ -150,6 +165,10 @@ ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_review_settings_tests TeamReviewSettingsTest.cpp)
 target_link_libraries(ketplus_team_review_settings_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-90 (ADR 0123): the team's Repository settings.
+ketplus_add_gui_test(ketplus_team_repository_settings_tests TeamRepositorySettingsTest.cpp)
+target_link_libraries(ketplus_team_repository_settings_tests PRIVATE Qt6::Test
+                      ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_settings_integration_tests MainWindowSettingsTest.cpp)
 target_link_libraries(ketplus_settings_integration_tests PRIVATE
@@ -204,12 +223,22 @@ target_link_libraries(ketplus_machine_composition_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_machine_attachment_tests MachineAttachmentPanelTest.cpp)
+target_link_libraries(ketplus_machine_attachment_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_machine_toast_tests MachineWorkspaceToastTest.cpp)
+target_link_libraries(ketplus_machine_toast_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
 ketplus_add_gui_test(ketplus_machine_conversation_tests MachineConversationTest.cpp
     FakeMachineBackend.h MachineHosts.h)
 target_link_libraries(ketplus_machine_conversation_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
+ketplus_add_gui_test(ketplus_machine_preparation_tests MachinePreparationTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_preparation_tests PRIVATE
+    Qt6::Test ketplus_desktop_support)
 
 ketplus_add_gui_test(ketplus_machine_paging_tests MachineTranscriptPagingTest.cpp
     FakeMachineBackend.h MachineHosts.h)
@@ -288,6 +317,7 @@ if(APPLE)
             "-DKETPLUS_APP_BUNDLE=$<TARGET_BUNDLE_DIR:ketplus>"
             "-DKETPLUS_PRODUCT_VERSION=${PROJECT_VERSION}"
             "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/packaging/macos/VerifyBundle.cmake"
     )
 endif()

@@ -68,9 +68,7 @@ TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskI
         team = mutableTeam(teamId);
         task = team->task(taskId);
         member = team->member(owner);
-        task->branch = made.worktree->branch;
-        task->worktree = made.worktree->worktree;
-        task->baseCommit = made.worktree->baseCommit;
+        takeWorktree(*team, *task, *made.worktree);
     }
     task->owner = owner;
     addHistory(*task, actor, QStringLiteral("owner"),
@@ -140,9 +138,7 @@ TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& tas
         team = mutableTeam(teamId);
         task = team->task(taskId);
         member = team->member(owner);
-        task->branch = made.worktree->branch;
-        task->worktree = made.worktree->worktree;
-        task->baseCommit = made.worktree->baseCommit;
+        takeWorktree(*team, *task, *made.worktree);
     }
     // The previous owner must not stay in a worktree that is someone else's now. Only a
     // conversation that stands in it has to leave, and the move is stored with the handover:

@@ -52,6 +52,10 @@ Task taskFromJson(const QJsonObject& json) {
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
+    task.repository = json.value(QStringLiteral("repository")).toString();
+    task.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
+    task.branchType = json.value(QStringLiteral("branch_type")).toString();
+    task.branchSlug = json.value(QStringLiteral("branch_slug")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
@@ -326,6 +330,16 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("changed_revision"), task.changedRevision}};
     if (!task.allowedPaths.isEmpty())
         json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
+    // T-90: sent only when the task does not work in the team's repository.
+    if (!task.repository.isEmpty()) {
+        json.insert(QStringLiteral("repository"), task.repository);
+        json.insert(QStringLiteral("integration_branch"), task.integrationBranch);
+    }
+    // T-93: sent only for a task named the new way.
+    if (!task.branchSlug.isEmpty()) {
+        json.insert(QStringLiteral("branch_type"), task.branchType);
+        json.insert(QStringLiteral("branch_slug"), task.branchSlug);
+    }
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)
@@ -441,9 +455,9 @@ Team teamFromJson(const QJsonObject& json) {
     team.paused = json.value(QStringLiteral("paused")).toBool();
     team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
     team.sharedPaths = stringList(json.value(QStringLiteral("shared_paths")));
-    // A team saved when three rounds were allowed keeps the most there are now.
-    team.maxRounds = std::clamp(json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds),
-                                1, maximumReviewRounds);
+    // A saved value outside one to five is not a team's choice; it reads as the default.
+    const int rounds = json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds);
+    team.maxRounds = rounds >= 1 && rounds <= maximumReviewRounds ? rounds : defaultReviewRounds;
     team.reviewPlace = json.value(QStringLiteral("review_place")).toString() == place::pullRequest
                            ? place::pullRequest
                            : place::board;
@@ -505,6 +519,15 @@ Team teamFromJson(const QJsonObject& json) {
     team.createdAt = json.value(QStringLiteral("created_at")).toString();
     team.changedAt = json.value(QStringLiteral("changed_at")).toString();
     return team;
+}
+
+Team taskScope(const Team& team, const Task& task) {
+    Team scope = team;
+    if (!task.repository.isEmpty()) {
+        scope.repository = task.repository;
+        scope.integrationBranch = task.integrationBranch;
+    }
+    return scope;
 }
 
 } // namespace ketplus::daemon::teams

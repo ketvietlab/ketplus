@@ -69,8 +69,14 @@ class RelayMachineBackend final : public MachineBackend {
     void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                               const QJsonObject& request, Callback callback) override;
     void createSession(const QJsonObject& request, Callback callback) override;
+    void prepareSession(const QJsonObject& request, Callback callback) override;
+    void cancelPreparedSession(const QString& sessionId, qint64 generation,
+                               Callback callback) override;
     // Stops following the conversation's events until it is opened again.
     void conversationClosed(const QString& sessionId) override;
+    void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
+                           qint64 generation, const QJsonObject& request,
+                           Callback callback) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
@@ -99,6 +105,7 @@ class RelayMachineBackend final : public MachineBackend {
     using OutboxRoute = CommandOutbox::Route;
     void setState(ConnectionState state, const QString& reason);
     void probe();
+    void worktreeCommand(const QString& kind, const QJsonObject& request, Callback callback);
     void scheduleProbe();
     // Classifies a relay failure: a fatal one goes Offline, anything else reconnects.
     void failed(const QString& error);
@@ -132,6 +139,7 @@ class RelayMachineBackend final : public MachineBackend {
     void poll(const CommandOutbox::Entry& entry);
     void finish(const QString& id, const QJsonObject& command, const QString& error);
     void pollEvents();
+    void discardRecoveredPreparation(const QString& id, const QJsonObject& command);
 
     QPointer<ControlV2Client> client_;
     QString relayMachineId_;
@@ -148,6 +156,8 @@ class RelayMachineBackend final : public MachineBackend {
     QTimer* events_{nullptr};
     QHash<QString, Callback> callbacks_;
     QSet<QString> delivering_;
+    QSet<QString> recoveredPreparations_;
+    QSet<QString> recoveringPreparations_;
     // Completions not yet recorded in the outbox, by id: how often a record was retried.
     QHash<QString, int> recordAttempts_;
     // Outbox commands added by this process and never handed to the relay: only these can be
@@ -162,6 +172,9 @@ class RelayMachineBackend final : public MachineBackend {
     quint64 nextWaiter_{0};
     // The verified projection rows of this machine, by session id.
     QHash<QString, QJsonObject> sessions_;
+    // Host-signed preparation results, private to this backend and never projected as a chat.
+    QHash<QString, QJsonObject> prepared_;
+    bool preparationSupported_{false};
     QJsonArray repositories_;
     // Sessions whose events are followed, with the last cursor seen.
     QHash<QString, qint64> watched_;

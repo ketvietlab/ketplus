@@ -493,6 +493,48 @@ class TeamRemoteTest final : public QObject {
         QCOMPARE(phone(fixture, "team.list", {}).value("teams").toArray().size(), 0);
     }
 
+    // T-69: a full team (its leader, five developers and two reviewers) reaches the phone whole.
+    // The second reviewer joins last, so a cap below eight members cut it off the phone's Home.
+    void aFullTeamReachesThePhoneWithItsSecondReviewer() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        for (const QString& lane : QStringList{"api", "ios", "relay", "docs"}) {
+            const QJsonObject added = phone(fixture, "team.member.add",
+                                            {{"team_id", team.id},
+                                             {"name", lane},
+                                             {"paths", QJsonArray{lane}},
+                                             {"provider", "codex"},
+                                             {"expected_revision", revision(fixture, team.id)}});
+            QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        }
+        const QJsonObject second =
+            local(fixture, "team.member.add",
+                  {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}});
+        QVERIFY2(second.value("ok").toBool(), qPrintable(text(second)));
+
+        const auto members = [](const QJsonObject& team) {
+            QStringList roles;
+            for (const QJsonValue& member : team.value("members").toArray())
+                roles.append(member.toObject().value("role").toString());
+            return roles;
+        };
+        // The leader, the developers in the order they joined, then the reviewers.
+        const QStringList full{"leader",    "developer", "developer", "developer",
+                               "developer", "developer", "reviewer",  "reviewer"};
+        const QJsonObject list = phone(fixture, "team.list", {});
+        const QJsonObject entry = list.value("teams").toArray().first().toObject();
+        QCOMPARE(members(entry), full);
+        const QJsonObject snapshot =
+            phone(fixture, "team.get", {{"team_id", team.id}}).value("team").toObject();
+        QCOMPARE(members(snapshot), full);
+        QCOMPARE(snapshot.value("members").toArray().size(), remote::maximumMembers);
+        // The member who joined last is the second reviewer, a Claude conversation of its own.
+        const QJsonObject last = snapshot.value("members").toArray().last().toObject();
+        QVERIFY(!last.value("session_id").toString().isEmpty());
+        QVERIFY(last.value("session_id").toString() != team.reviewer);
+    }
+
     // §6: a result stays within 384 KiB; answered decisions, then Updates, then done tasks go.
     void aResultIsShedInOrderOrRefused() {
         const QString big(4000, QLatin1Char('x'));

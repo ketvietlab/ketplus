@@ -44,6 +44,7 @@ Features are gated by capability name, never by version number, as on local IPC:
 | `transport.webrtc/1` | Signals through `/v2/relay`, obtains TURN credentials and speaks the frames below. |
 | `events.forward_only/1` | Reads transcript events only from frames and host pages, never from stored events. |
 | `teams.remote/1` | Answers sealed `team.*` commands through the mailbox and adds `team` to session metadata (ADR 0116). |
+| `session.prepare/1` | Allocates a private inactive attachment scope before a conversation's first turn (ADR 0122). |
 
 Each party advertises its own set:
 
@@ -52,6 +53,14 @@ Each party advertises its own set:
   after an app update.
 - The relay answers each heartbeat with the names it enables for that machine
   (`compatibility.capabilities`) and shows clients the same set in each `/v2/machines` entry.
+
+The desktop offers first-turn attachments only when the target daemon and relay both
+advertise `session.prepare/1`. Preparation and its cancellation use the encrypted
+mailbox; existing-session attachment commands keep their current route and format.
+Before reporting preparation success, the host publishes private routing and a key
+wrap only for the creating device. The scope stays out of conversation lists until
+the first real turn. Cancel discards inactive files; abandoned scopes expire after
+a fixed 24 hours. See [ADR 0122](decisions/0122-first-turn-remote-attachments.md).
 
 The relay enables `transport.webrtc/1` for a machine when it and the host both support it. A client
 tries WebRTC only when it supports the name too.
@@ -249,6 +258,17 @@ Events are the `SessionEvent` envelopes the host uploads today, from the same cl
 (command output removed), encrypted under the session key and signed with the machine key. Clients
 verify and decrypt them the way they already do. `hello` and `welcome` carry capability names, so
 later frames are gated by name like everything else.
+
+The projection marks an event the transcript never shows with `transcript: "hidden"` in its
+payload (`modules/remote/src/TranscriptVisibility.h`): KetPlus's own agents tools
+(`ketplus_agents`, `mcp__ketplus_agents__*`, or Cursor's `providerIdentifier`), and the
+`tasks.changed` background task snapshot. Desktop applies the same rule to its live view, its
+history windows and the daemon's activity groups, and clients hide those rows. The events stay in
+the journal and in the stream: the task bar still reads `tasks.changed`, and an older client that
+ignores the marker draws them as before. A journal grouped before this rule existed is grouped
+again once on open, for each session where such a call had joined a group (`activity_rules` row
+`internal_steps_hidden`, run by the bounded passes after open of ADR 0097). A large item's stub
+carries no marker; the phone hides that call by its tool name once it fetches the item.
 
 ## Resume and retry
 

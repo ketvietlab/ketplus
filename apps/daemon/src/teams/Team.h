@@ -90,10 +90,10 @@ inline constexpr int maximumDevelopers = 5;
 // T-23: a team has one or two reviewers.
 inline constexpr int maximumReviewers = 2;
 inline constexpr int maximumCriteria = 20;
-// T-40: the review rounds a team gives a task before the leader decides. The user's rule is
-// at most two review passes, so a team chooses one or two.
+// T-40, T-53: the review passes a team gives a task before the leader decides, one to five
+// (Max review passes per PR). The default stays at the user's rule of two.
 inline constexpr int defaultReviewRounds = 2;
-inline constexpr int maximumReviewRounds = 2;
+inline constexpr int maximumReviewRounds = 5;
 // Automatic turns a team may start since the user last acted on it (ADR 0114, open point 2):
 // the daemon's global value until the user changes it (Settings → Teams), and the range a
 // team's own value and the global one keep.
@@ -164,6 +164,15 @@ struct Task final {
     QString baseCommit;
     QString headCommit;
     QString pullRequest;
+    // T-90 (ADR 0123): the repository and integration branch the task works in when they are
+    // not the team's: named when the task was created, or kept from before the team's
+    // repository changed. Empty: the team's. Read them through taskScope().
+    QString repository;
+    QString integrationBranch;
+    // T-93 (ADR 0123 §9): the branch the task's worktree gets, `<type>/<slug>-t<n>`, named or
+    // derived when it was created. Empty slug: a task from before, `team/<id>/t-<n>`.
+    QString branchType;
+    QString branchSlug;
     int round{0};
     // T-23: the reviewer of its last round, which reviews its next round while it is on the
     // team.
@@ -311,6 +320,11 @@ struct Team final {
 [[nodiscard]] QJsonObject toJson(const Team& team);
 [[nodiscard]] Team teamFromJson(const QJsonObject& json);
 [[nodiscard]] QJsonObject toJson(const Task& task, bool withHistory = true);
+
+// T-90 (ADR 0123): the team as the task sees it: its repository and integration branch are
+// the task's own when it has them. Git about a task (its worktree, branch, merge, diff and
+// cleanup) reads them from here, never from the team directly.
+[[nodiscard]] Team taskScope(const Team& team, const Task& task);
 
 // ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
 // The summary lists the first outside paths of a task and the newest answered decisions;

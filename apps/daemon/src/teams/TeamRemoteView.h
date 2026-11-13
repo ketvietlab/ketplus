@@ -1,5 +1,7 @@
 #pragma once
 
+#include "teams/Team.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
@@ -17,7 +19,9 @@ namespace ketplus::daemon::teams::remote {
 // The plaintext of one result; sealed, it stays within the mailbox's 512 KiB.
 inline constexpr qsizetype maximumResultBytes = 384 * 1024;
 inline constexpr qsizetype maximumDirectoryEntries = 100;
-inline constexpr qsizetype maximumMembers = 7;
+// Every member a team may have: its leader, five developers and two reviewers (T-23). A
+// smaller cap cut the member who joined last, such as a second reviewer, off the phone.
+inline constexpr qsizetype maximumMembers = 1 + maximumDevelopers + maximumReviewers;
 inline constexpr qsizetype maximumTasks = 200;
 inline constexpr qsizetype maximumOpenDecisions = 10;
 inline constexpr qsizetype maximumClosedDecisions = 10;

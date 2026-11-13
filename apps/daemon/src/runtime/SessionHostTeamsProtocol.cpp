@@ -25,7 +25,7 @@ QJsonObject failure(const teams::TeamError& error) { return failure(error.code, 
 
 bool knownProvider(const QString& provider) {
     return provider == QStringLiteral("codex") || provider == QStringLiteral("claude") ||
-           provider == QStringLiteral("cursor");
+           provider == QStringLiteral("cursor") || provider == QStringLiteral("copilot");
 }
 
 QStringList strings(const QJsonValue& value) {

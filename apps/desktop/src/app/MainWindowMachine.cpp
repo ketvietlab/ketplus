@@ -102,8 +102,8 @@ void MainWindow::setMachineWorkspaceVisible(const bool visible) {
     setRemoteWorkspaceVisible(false);
     hideUtilityWorkspaces();
     MachineWorkspaceView* view = machineComposition()->view(workspaceSplit_);
-    view->transcript()->view()->applyTheme(theme_.palette(),
-                                           appearanceSettings_.interfaceZoomPercent);
+    view->transcript()->view()->applyColorScheme(theme_.colorScheme(),
+                                                 appearanceSettings_.interfaceZoomPercent);
     if (workspaceSplit_->indexOf(view) < 0)
         workspaceSplit_->addWidget(view);
     if (explorer_ != nullptr)

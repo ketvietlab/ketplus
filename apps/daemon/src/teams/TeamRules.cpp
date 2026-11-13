@@ -117,7 +117,7 @@ std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds)
     if (!value.isDouble() || number != std::floor(number) || number < 1 ||
         number > maximumReviewRounds)
         return refusal(QStringLiteral("invalid_payload"),
-                       QStringLiteral("A team reviews a task in one or two rounds before the "
+                       QStringLiteral("A team reviews a task in one to five passes before the "
                                       "leader decides."));
     *rounds = static_cast<int>(number);
     return std::nullopt;

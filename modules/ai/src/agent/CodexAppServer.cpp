@@ -247,6 +247,8 @@ QVariantList CodexAppServer::permissionProfiles() {
 }
 
 QVariantList CodexAppServer::permissionProfilesFor(const QString& provider) {
+    if (provider == QStringLiteral("copilot"))
+        return {}; // Only daemon-advertised Copilot model permissions are supported.
     if (provider == QStringLiteral("claude")) {
         return {QVariantMap{{"id", "read-only"},
                             {"label", "Read only"},

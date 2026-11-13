@@ -1,5 +1,7 @@
 #include "git/GitDiffView.h"
 #include "ui/Theme.h"
+#include "ui/theme/ColorScheme.h"
+#include <QScrollBar>
 
 #include <QApplication>
 #include <QFontDatabase>
@@ -14,6 +16,7 @@ class GitDiffViewTest final : public QObject {
 
   private slots:
     void rendersStructuredInlineDiff();
+    void schemeUpdatePreservesModelAndSelection();
 };
 
 void GitDiffViewTest::rendersStructuredInlineDiff() {
@@ -127,6 +130,33 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged, diff,
                  palette);
     QVERIFY(table->columnWidth(0) < fourDigitGutter);
+}
+
+void GitDiffViewTest::schemeUpdatePreservesModelAndSelection() {
+    auto scheme = ketplus::builtinColorScheme(ketplus::SchemeKind::Light);
+    ketplus::GitDiffView view;
+    view.setDiff(QStringLiteral("example.cpp"), ketplus::GitDiffMode::Unstaged,
+                 QStringLiteral("@@ -1 +1 @@\n-int before = 1;\n+int after = 2;\n"),
+                 ketplus::colorSchemePalette(scheme));
+    auto* table = view.findChild<QTableView*>();
+    QVERIFY(table);
+    const auto* model = table->model();
+    table->setCurrentIndex(model->index(2, 3));
+    const auto selection = table->selectionModel()->selectedIndexes();
+    const auto scroll = table->verticalScrollBar()->value();
+    const auto original = model->index(2, 3).data(Qt::BackgroundRole).value<QColor>();
+    view.applyColorScheme(scheme);
+    QCOMPARE(model->index(2, 3).data(Qt::BackgroundRole).value<QColor>(), original);
+    scheme.ui[QStringLiteral("chrome.panelBackground")] = QColor(0, 0, 0);
+    scheme.diff[QStringLiteral("added")] = QColor(100, 120, 140, 128);
+    scheme.diff[QStringLiteral("removed")] = QColor(20, 40, 60);
+    view.applyColorScheme(scheme);
+    QCOMPARE(table->model(), model);
+    QCOMPARE(table->selectionModel()->selectedIndexes(), selection);
+    QCOMPARE(table->verticalScrollBar()->value(), scroll);
+    QCOMPARE(model->index(2, 3).data(Qt::BackgroundRole).value<QColor>().rgba(),
+             QColor(50, 60, 70).rgba());
+    QCOMPARE(model->index(1, 3).data(Qt::BackgroundRole).value<QColor>(), QColor(20, 40, 60));
 }
 
 QTEST_MAIN(GitDiffViewTest)

@@ -29,7 +29,7 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
                     .arg(task.id, task.title),
                 say(team.language,
                     QT_TRANSLATE_NOOP("Team", "Reviewed with no findings. Branch %1 into %2."))
-                    .arg(task.branch, team.integrationBranch),
+                    .arg(task.branch, taskScope(team, task).integrationBranch),
                 {say(team.language, QT_TRANSLATE_NOOP("Team", "I merge it myself")), leaderMerges},
                 leaderMerges, task.id, QStringLiteral("daemon"));
             addHistory(task, QStringLiteral("daemon"), QStringLiteral("merge"),
@@ -46,11 +46,11 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
             addHistory(task, QStringLiteral("daemon"), QStringLiteral("merge"),
                        say(team.language,
                            QT_TRANSLATE_NOOP("Team", "Ready for the leader to merge into %1."))
-                           .arg(team.integrationBranch));
+                           .arg(taskScope(team, task).integrationBranch));
             updates.append({.kind = QStringLiteral("merge_ready"),
                             .text = say(team.language,
                                         QT_TRANSLATE_NOOP("Team", "%1 can be merged into %2: %3."))
-                                        .arg(task.id, team.integrationBranch, task.branch),
+                                        .arg(task.id, taskScope(team, task).integrationBranch, task.branch),
                             .taskId = task.id,
                             .actionable = true});
         }
@@ -143,11 +143,12 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
     for (const QString& id : merged) {
         Task* task = team->task(id);
         const QString head = moved.take(id);
+        // T-90: the integration branch of the repository the task works in.
+        const QString integration = taskScope(*team, *task).integrationBranch;
         finishTask(*team, *task, QStringLiteral("daemon"),
-                   QStringLiteral("%1 contains it").arg(team->integrationBranch),
-                   QStringLiteral("merged"),
+                   QStringLiteral("%1 contains it").arg(integration), QStringLiteral("merged"),
                    {{QStringLiteral("branch"), task->branch},
-                    {QStringLiteral("integration_branch"), team->integrationBranch},
+                    {QStringLiteral("integration_branch"), integration},
                     {QStringLiteral("commit"), head.isEmpty() ? task->headCommit : head}},
                    updates);
         if (head.isEmpty())

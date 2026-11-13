@@ -91,6 +91,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceTranscriptOnly.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
+    src/agent/AgentWorkspaceToast.cpp
     src/agent/AgentWorkspaceViewTeams.cpp
     src/agent/AgentWorkspaceHeldMessages.cpp
     src/agent/AgentWorkspaceReviewers.cpp
@@ -111,6 +112,9 @@ add_library(ketplus_ai STATIC
     src/agent/ProviderRuntimeStatus.h
     src/agent/ProviderSetupGuide.cpp
     src/agent/ProviderSetupGuide.h
+    src/agent/ProviderDisplay.h
+    src/agent/CopilotSetupGuide.cpp
+    src/agent/CopilotSetupGuide.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp

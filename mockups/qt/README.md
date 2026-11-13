@@ -8,12 +8,31 @@ talks to the daemon, Git, a provider or the network.
 
 ## Build and run
 
-Qt 6.8 or later with Quick, QuickControls2 and Svg.
+Qt 6.8 or later with Core, Gui, Qml, Quick, QuickControls2, Svg, Test and
+Widgets. Tests are enabled by default (`BUILD_TESTING=ON`) and also require
+Qt's `qmltestrunner`, including its QtTest QML module. Install the Qt Quick Test
+tools with the SDK, or set `KETPLUS_MOCK_QMLTESTRUNNER` to the matching runner
+executable if it is not in the SDK bin directory or `PATH`.
 
 ```sh
 cmake -S mockups/qt -B build/mock -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build/mock
 build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock      # macOS
+```
+
+Run the two QML model suites and the screen smoke check offscreen:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
+```
+
+For an interactive-only build without `qmltestrunner`, disable test registration
+in a separate build directory:
+
+```sh
+cmake -S mockups/qt -B build/mock-interactive -G Ninja \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DBUILD_TESTING=OFF
+cmake --build build/mock-interactive
 ```
 
 The kit is pinned by commit in `CMakeLists.txt`. Use a local checkout with
@@ -344,3 +363,10 @@ stroke disables pixel alignment to preserve 1.5 px at 100% zoom. Jay’s direct
 review changed the original Black 900 requirement to Bold 700 and increased the
 mark relative to the wordmark. A further review tightened the icon-to-wordmark
 gap from 0.35× to 0.12× mark height. The unused Black face is no longer embedded.
+
+
+Agent message cards share the same bordered surface in both directions. Incoming
+headers use `From @agent/NNNN · Title · Provider`, or the system/team name;
+outgoing headers retain Message/Reply/Notice to. Bodies are selectable plain text,
+collapsed to four lines with explicit Expand/Collapse controls. Task links stay directly available in the collapsed card. Structured team
+details and task links appear on expansion. Owner input keeps its user bubble.

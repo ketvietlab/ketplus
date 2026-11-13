@@ -80,6 +80,29 @@ commit.
 
 ## Pro release
 
+Production Pro desktop DMGs and Linux daemon packages use
+`https://api.ketplus.app`. The `release` and `daemon-release` presets enable
+`KETPLUS_PRODUCTION_RELEASE=ON`; a manual configure must pass that flag explicitly.
+It selects the production URL and refuses a conflicting `KETPLUS_CONTROL_URL`.
+Bundle verification checks the daemon's `--build-info`, rejects another URL and
+rejects a runtime-overridable production daemon. For example:
+
+```sh
+cmake --preset release
+# Headless Linux package:
+cmake --preset daemon-release
+```
+
+Developer/QA configurations retain the staging default until the staging domain
+cutover is approved. A generic `CMAKE_BUILD_TYPE=Release` without the production
+flag remains available for explicitly configured staging and isolated local QA.
+Use a fresh build directory and explicitly pass both
+`-DKETPLUS_PRODUCTION_RELEASE=OFF` and the intended `-DKETPLUS_CONTROL_URL=...`;
+see the [staging/QA DMG commands](development.md#developer-packages).
+Turning production mode off in an existing production build does not reset its
+cached control URL. Never repurpose that directory for staging/QA; verify the
+resulting daemon's `--build-info` against the intended deployment before use.
+
 A production desktop release additionally requires:
 
 - a clean commit on `main` reached through the approved release flow;
@@ -95,6 +118,47 @@ Update preparation validates a filename-safe bundle version and readable HTML/Ma
 notes before creating an archive. Existing archive or notes destinations, including
 dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight
 does not make artifact generation transactional or safe for concurrent writers.
+
+### Preparing a scoped macOS update
+
+`publish-update.sh` defaults to `--mode release`: strict code-signature verification,
+a Developer ID Application authority and a valid stapled notarization ticket on the
+app are required before archiving. `--mode local-qa` explicitly permits an ad-hoc
+signed local fixture, but still requires a valid signature. Never publish QA output.
+Apple account use and notarization require the release owner's approval.
+
+Pass `--channel staging|production` and `--arch arm64|x86_64` explicitly. Use a
+separate output directory ending in `<channel>/<arch>` and an HTTPS download prefix
+ending in `/<channel>/<arch>/`. Local QA also accepts HTTP on a literal loopback
+address (for example `127.0.0.1` or `[::1]`); HTTP elsewhere and HTTP release output
+are refused. Channel/architecture scoping still applies to QA. The app's compiled feed must equal that prefix plus
+`appcast.xml`, and its main executable must have exactly the selected architecture.
+For example, with operator-supplied paths:
+
+```sh
+packaging/macos/publish-update.sh --app "$STAGED_APP" \
+  --updates-dir "$UPDATE_ROOT/production/arm64" \
+  --download-url-prefix https://updates.example.invalid/production/arm64/ \
+  --channel production --arch arm64 --sparkle-bin "$SPARKLE_BIN"
+```
+
+Substitute the approved distribution origin when configuring and preparing the app.
+The command only prepares files; it never uploads or authorizes publishing.
+Existing feeds must carry matching `urn:ketplus:release` channel and architecture
+metadata and scoped archive URLs. Legacy unscoped feeds require a clean scoped
+output directory and an explicit release migration; do not mix their archives.
+Identity metadata is created only for a new feed before Sparkle generation.
+Existing appcasts are validated without rewriting any bytes, preserving namespace
+prefixes, declarations and signatures. Legacy feeds without identity are refused. Exported signing-key paths are resolved through
+all symlinks before a filesystem-identity ancestry check (including case aliases) and before being passed to Sparkle.
+The app pins the compiled feed through its delegate: restoring an old `SUFeedURL`
+preference cannot switch the build's channel or redirect it to HTTP.
+
+For local update QA, follow the native-settings isolation procedure in
+[testing](testing.md#desktop-update-qa-isolation). Use only a throwaway key,
+a loopback feed and a disposable complete bundle. Never replace or relaunch the
+normal installed application. One manual update check on the real release build
+remains an owner-operated pre-release check.
 
 Packaging is not complete yet. Passing CI is necessary but does not by itself
 authorize distribution of an official binary.

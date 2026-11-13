@@ -1,4 +1,5 @@
 #include "preview/MermaidRenderer.h"
+#include "KetAppearance.h"
 
 #include "ui/Theme.h"
 
@@ -29,7 +30,7 @@ namespace {
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
 // v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
 // v8: Két Blue theme snapshots from design system 0.1.44 (v7: 12px diagram corners).
-constexpr auto cacheVersion = "ketplus-mermaid-v9";
+constexpr auto cacheVersion = "ketplus-mermaid-v10";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
@@ -70,6 +71,8 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
 
 MermaidRenderer::MermaidRenderer(QObject* parent)
     : QObject(parent), executablePath_(discoverExecutable()), process_(new QProcess(this)) {
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &MermaidRenderer::invalidateColors);
     cacheDirectory_ = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     if (cacheDirectory_.isEmpty()) {
         cacheDirectory_ = QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
@@ -271,9 +274,20 @@ bool MermaidRenderer::isAvailable() const noexcept { return !executablePath_.isE
 
 const QString& MermaidRenderer::executablePath() const noexcept { return executablePath_; }
 
+void MermaidRenderer::invalidateColors() {
+    lightConfiguration_.reset();
+    darkConfiguration_.reset();
+}
+
 MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bool darkTheme,
                                                  const bool raster) {
-    const QString cacheKey = keyFor(source, darkTheme, raster);
+    auto& cached = darkTheme ? darkConfiguration_ : lightConfiguration_;
+    if (!cached) {
+        const auto json = mermaidConfiguration(darkTheme);
+        cached = Configuration{json, QCryptographicHash::hash(json, QCryptographicHash::Sha256)};
+    }
+    const auto& configuration = cached->json;
+    const QString cacheKey = keyFor(source, darkTheme, raster, cached->fingerprint);
     const QString outputPath = outputPathFor(cacheKey, raster);
     if (!isAvailable()) {
         executablePath_ = discoverExecutable();
@@ -292,7 +306,7 @@ MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bo
         return {State::Pending, cacheKey, {}, {}};
     }
 
-    queue_.append({cacheKey, source, outputPath, darkTheme});
+    queue_.append({cacheKey, source, outputPath, darkTheme, configuration});
     queuedKeys_.insert(cacheKey);
     startNext();
     return {State::Pending, cacheKey, {}, {}};
@@ -337,12 +351,14 @@ QString MermaidRenderer::discoverExecutable() {
     return {};
 }
 
-QString MermaidRenderer::keyFor(const QString& source, const bool darkTheme, const bool raster) {
+QString MermaidRenderer::keyFor(const QString& source, const bool darkTheme, const bool raster,
+                                const QByteArray& fingerprint) {
     QCryptographicHash hash(QCryptographicHash::Sha256);
     hash.addData(cacheVersion);
     const char themeMarker = darkTheme ? '\1' : '\0';
     hash.addData(QByteArrayView(&themeMarker, 1));
     hash.addData(raster ? "png" : "svg");
+    hash.addData(fingerprint);
     hash.addData(source.toUtf8());
     return QString::fromLatin1(hash.result().toHex());
 }
@@ -377,7 +393,7 @@ void MermaidRenderer::startNext() {
 
     const QString configPath =
         QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".json"));
-    const QByteArray configuration = mermaidConfiguration(currentJob_->darkTheme);
+    const QByteArray configuration = currentJob_->configuration;
     if (configuration.isEmpty()) {
         finishCurrent(false, QStringLiteral("The bundled Mermaid theme is unavailable."));
         return;

@@ -78,7 +78,8 @@ Item {
     required property var teamBlockData
     // #468: a team's own message (assignment, digest, review, decision) is its block, not a bubble.
     readonly property bool teamBlock: kind === "user" && subtype === "teamMessage" && !!teamBlockData && !!teamBlockData.kind
-    readonly property bool userBubble: kind === "user" && !teamBlock
+    readonly property bool incomingCard: kind === "user" && ["agentMessage", "teamMessage"].indexOf(subtype) >= 0
+    readonly property bool userBubble: kind === "user" && !incomingCard
     // Only the failure that ended the latest turn shows the full guide; once the user writes
     // again, the row reads as the notice it was.
     readonly property var providerSetup: {
@@ -152,8 +153,8 @@ Item {
         userExpanded = view.activityState(userExpansionKey)?.expanded === true;
     }
     onUserExpansionKeyChanged: restoreUserExpansion()
-    // The reading column plus the 20 px inset each side that rows keep from the pane's edges.
-    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + KetTheme.px(40, KetTheme.zoom))
+    // The reading column plus the inset each side that rows keep from the pane's edges.
+    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + 2 * shell.transcriptRowInset)
     readonly property real contentColumnX: (width - contentColumnWidth) / 2
     // Like Claude: an agent turn has one copy action, under its last answer, for the text the
     // agent wrote (not its commands or files); a request keeps its own copy.
@@ -212,7 +213,7 @@ Item {
         return text.length > 120 ? text.slice(0, 117) + "…" : text;
     }
     Accessible.role: Accessible.ListItem
-    Accessible.name: kind === "user" ? (subtype === "agentMessage" ? meta + ": " : "You: ") + accessibleExcerpt : activityRow ? (groupLeader ? accessibleExcerpt : "Activity: " + accessibleExcerpt) : (kind === "assistant" ? "Codex: " : "") + accessibleExcerpt
+    Accessible.name: kind === "user" ? (incomingCard ? (meta || "From System") + ": " : "You: ") + accessibleExcerpt : activityRow ? (groupLeader ? accessibleExcerpt : "Activity: " + accessibleExcerpt) : (kind === "assistant" ? "Codex: " : "") + accessibleExcerpt
     Accessible.description: activityRow ? [groupLeader ? (groupExpanded ? "expanded" : "collapsed") : "", (groupLeader ? groupRunning : running) ? "running" : status, groupFailed > 0 ? groupFailed + " failed" : ""].filter(part => part && part.length > 0).join(", ") : (running ? "streaming" : "")
     function toggleActivityDetails() {
         if (transcriptActivityLoader.item)
@@ -278,8 +279,8 @@ Item {
     Kit.KetDayDivider {
         id: dayDivider
         objectName: "transcriptDayDivider"
-        width: messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
-        x: messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        width: messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset
+        x: messageDelegate.contentColumnX + shell.transcriptRowInset
         text: kind === "user" && !chunkContinuation ? view.dayLabel(index, timestamp, view.messageModel ? view.messageModel.count : 0) : ""
         visible: text.length > 0
         height: visible ? implicitHeight : 0
@@ -289,25 +290,12 @@ Item {
         id: userLead
         objectName: "userMessageLead"
         readonly property real gap: visible ? KetTheme.px(6, KetTheme.zoom) : 0
-        visible: kind === "user" && !messageDelegate.activityRow && (messageSurface.agentMessage || imageGallery.imageCount > 0)
+        visible: kind === "user" && !messageDelegate.activityRow && (imageGallery.imageCount > 0)
         width: messageSurface.userMaximumWidth
         height: visible ? implicitHeight : 0
-        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset
         y: messageDelegate.surfaceInset + messageDelegate.dayLead
         spacing: KetTheme.px(6, KetTheme.zoom)
-        Text {
-            id: agentOrigin
-            objectName: "agentMessageOrigin"
-            visible: messageSurface.agentMessage
-            width: parent.width
-            text: visible ? meta : ""
-            horizontalAlignment: Text.AlignRight
-            color: KetTheme.t.textMuted
-            font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
-            elide: Text.ElideRight
-            Accessible.name: text
-        }
         // Reparenting one gallery between the lead and the bubble stops its taps reaching the
         // thumbnails, so user rows and the rest each declare their own.
         TranscriptMessageImages {
@@ -321,9 +309,9 @@ Item {
         id: steerNotice
         objectName: "transcriptSteerNotice"
         visible: kind === "user" && eventType === "turn.steered"
-        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset
         y: messageSurface.y + messageSurface.height + KetTheme.px(6, KetTheme.zoom)
-        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom))
+        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset)
         height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
         text: "Sent while " + (provider ? shell.providerTitle(provider) : "the agent") + " was working · joined the running turn"
         color: KetTheme.t.textMuted
@@ -336,18 +324,18 @@ Item {
         id: messageSurface
         objectName: "messageSurface"
         // Banners and turn ends span the reading column, as the mock's KetBanner does.
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow || messageDelegate.teamBlock ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow || messageDelegate.incomingCard ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
-        x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset : messageDelegate.contentColumnX + shell.transcriptRowInset
         y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) - messageDelegate.firstRowLift
-        width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
         visible: !imagesOnly
-        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow || messageDelegate.teamBlock ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
+        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow || messageDelegate.incomingCard ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
         // A file edit read as an activity step is a line like any other step, as in the mock;
         // only a standalone file message keeps its raised card.
         readonly property bool fileCard: kind === "file" && !messageDelegate.activityRow
@@ -410,17 +398,45 @@ Item {
             }
             TranscriptAgentNote {
                 width: parent.width
-                visible: messageDelegate.subtype === "agentNote"
+                visible: messageDelegate.subtype === "agentNote" || messageDelegate.incomingCard
                 height: visible ? implicitHeight : 0
-                label: messageDelegate.title
-                details: messageDelegate.meta
+                label: messageDelegate.incomingCard ? (messageDelegate.meta || "From System") : messageDelegate.title
+                details: messageDelegate.incomingCard ? "" : messageDelegate.meta
                 message: messageDelegate.displayBody
                 state: messageDelegate.status
+                iconName: messageDelegate.incomingCard ? "arrow-down" : "send"
+                taskIds: {
+                    if (!messageDelegate.teamBlock)
+                        return [];
+                    const block = messageDelegate.teamBlockData;
+                    const ids = [block.taskId].concat((block.groups || []).map(group => group.taskId));
+                    return ids.filter((id, index) => id && ids.indexOf(id) === index);
+                }
+                onTaskRequested: taskId => agentHost.requestTeamTask(String(messageDelegate.teamBlockData.team || ""), taskId)
+                onCopyRequested: selection => host.copySelectedText(selection)
+                externallyManagedExpansion: true
+                expanded: messageDelegate.userExpanded
+                hasExtraContent: messageDelegate.teamBlock
+                expandBody: !messageDelegate.teamBlock
+                onToggleRequested: {
+                    // Expanding is reading intent, including while previously following Latest.
+                    shell.beginTranscriptInput();
+                    view.cancelFlick();
+                    view.followTail = false;
+                    view.streamingTailRequested = false;
+                    view.rememberReadingPosition();
+                    view.runAnchoredMutation(() => {
+                        messageDelegate.userExpanded = !messageDelegate.userExpanded;
+                        view.rememberActivityState(messageDelegate.userExpansionKey, {
+                            expanded: messageDelegate.userExpanded
+                        });
+                    });
+                }
             }
             Loader {
                 objectName: "transcriptTeamBlockLoader"
                 width: parent.width
-                active: messageDelegate.teamBlock
+                active: messageDelegate.teamBlock && messageDelegate.userExpanded
                 visible: active
                 height: active && item ? item.implicitHeight : 0
                 sourceComponent: TranscriptTeamBlock {
@@ -938,7 +954,7 @@ Item {
                             bodyText.refreshRenderedSource();
                     }
                 }
-                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.teamBlock && subtype !== "question" && subtype !== "approval" && kind !== "file"
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.incomingCard && subtype !== "question" && subtype !== "approval" && kind !== "file"
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true
@@ -1301,7 +1317,7 @@ Item {
             Basic.Button {
                 id: userMessageMore
                 objectName: "userMessageShowMore"
-                visible: bodyText.userOverlong
+                visible: messageDelegate.userBubble && bodyText.userOverlong
                 text: messageDelegate.userExpanded ? "Show less" : "Show more"
                 Accessible.name: text + " user message"
                 implicitHeight: visible ? KetTheme.px(26, KetTheme.zoom) : 0

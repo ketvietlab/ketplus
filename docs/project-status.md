@@ -24,6 +24,43 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- The color-scheme catalog embeds the original two Két defaults plus eight
+  attributed MIT/Apache-2.0 conversions from pinned official upstream sources.
+  Built-ins are read-only, have offline completeness/contrast tests and a
+  reproducible importer command with saved reports. App-wide custom-color
+  application uses the integrated ThemeManager adapters described below.
+
+- Color-scheme selection now has revisioned persistence, one-time legacy migration,
+  local preview/commit/cancel, independent system preferences and asynchronous
+  snapshot preparation. Main-window editor/terminal/diff adapters preserve their
+  existing buffers and sessions. Pro chat/preview and standalone Terminal consume
+  the same snapshots; Mermaid caches capture scheme colors without rebuilding
+  unchanged Markdown. Targeted offscreen checks and native DELL Light/Dark
+  comparisons cover this integration (T-5); broader release acceptance remains
+  separate.
+
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+
+- VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
+  includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
+  approximations. Semantic colors remain metadata; extension code never runs.
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
+- GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
+  `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
+  streamed turns, cancellation, bounded request deadlines and explicit sign-in
+  failures have deterministic fake-process coverage. Turn-bound one-time approvals
+  and host Browser MCP setup/routing/cleanup also have fake-process coverage;
+  unverified Copilot MCP identities still require approval. Model discovery uses
+  bounded, cached ACP session catalogs and a provider-default fallback; explicit
+  selections are confirmed before prompting. Authenticated Copilot behavior
+  remains unverified.
+
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a
     `truncated` event; the client keeps its connection.
@@ -97,6 +134,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
+  Repository ([ADR 0123](decisions/0123-team-and-task-repository.md)): the user (Team page,
+  Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
+  checked main checkout and integration branch; started tasks keep the repository they began
+  in, and `team_task_create` may name a task's own repository.
+  Branch names (ADR 0123 §9, T-93): a new task's branch is `<type>/<slug>-t<n>` and its
+  worktree `<repository>-<type>-<slug>-t<n>`, from `branch_type`/`branch_slug` or derived
+  from the title (Vietnamese diacritics removed), refused when taken, renamed by the leader
+  only before the worktree exists; older tasks keep `team/<id>/t-<n>`.
   Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
   a task that records a pull request is done once `gh` says it is merged, from any open
   state, checked at load, every 2 minutes and with the merge check (at most 20 pull
@@ -732,8 +777,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   route, fork where the daemon's hello offers `session.fork` and through the
   Relay, and archive where it offers `session.archive/1`. Not yet on remote
   machines, each shown disabled with its reason (ADR 0119, "Parity of
-  conversation operations"): archive through the Relay, attachments on every
-  route. Remote transcripts render through This Mac's rich renderer in
+  conversation operations"): archive through the Relay. Attachments stage through
+  SSH and the encrypted Relay outbox for existing conversations. Remote transcripts render through This Mac's rich renderer in
   transcript-only mode (ketplus#598); file actions that need this Mac's disk
   say why they are unavailable.
   `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
@@ -951,3 +996,13 @@ receipt identifies a linked artifact, not successful preview validation. Invalid
 missing, oversized or out-of-worktree manifests are unavailable; ambiguous
 relative links after a context change are blocked. No provider invocation is
 required to inspect a receipt.
+
+### Linux conversation attachments (#623)
+
+Remote conversations stage files and clipboard images through the machine-neutral
+backend over SSH and the encrypted Relay outbox. Uploads advance only after each
+begin/chunk/commit result is confirmed; Relay `queued` receipts wait for
+`commandCompleted`. Ready attachment IDs accompany start/steer, and failures remain
+visible in the draft. Per-file limits match the local workspace; daemon draft quotas
+remain authoritative. Attachments require an existing conversation/session. See ADR
+0119 for lifecycle and protocol details and ADR 0007 for staging limits.

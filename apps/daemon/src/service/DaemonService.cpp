@@ -8,6 +8,7 @@
 #include "ipc/LocalIpcServer.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
+#include "providers/CopilotAdapter.h"
 #include "providers/CursorAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
@@ -205,8 +206,10 @@ bool DaemonService::start() {
     claude_ = std::make_unique<ClaudeAdapter>(configuration_.claudeExecutable);
     claude_->setCredentials(claudeCredentials_.get());
     cursor_ = std::make_unique<CursorAdapter>(configuration_.cursorExecutable);
-    host_ =
-        std::make_unique<SessionHost>(journal_.get(), adapter_.get(), claude_.get(), cursor_.get());
+    copilot_ = std::make_unique<CopilotAdapter>(configuration_.copilotExecutable);
+    host_ = std::make_unique<SessionHost>(
+        journal_.get(), adapter_.get(),
+        QList<ProviderAdapter*>{claude_.get(), cursor_.get(), copilot_.get()});
     host_->setClaudeAccountUsage(accountUsage);
     connect(claudeCredentials_.get(), &ClaudeCredentials::changed, host_.get(),
             [host = host_.get()] { host->forgetProviderFailure(QStringLiteral("claude")); });
@@ -284,6 +287,7 @@ DaemonConfiguration DaemonService::defaultConfiguration() {
     return {remote::DaemonPaths::state(),
             remote::DaemonPaths::token(),
             remote::DaemonPaths::socket(),
+            {},
             {},
             {},
             {}};

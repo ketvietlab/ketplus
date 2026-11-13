@@ -3,6 +3,7 @@
 #include "KetDialog.h"
 #include "KetRecipes.h"
 #include "KetSelect.h"
+#include "KetToast.h"
 #include "KetTokens.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -39,6 +40,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPointer>
 #include <QProcess>
 #include <QPushButton>
@@ -58,6 +60,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
+#include <QVBoxLayout>
+#include <QtMath>
 #include <QtTest>
 
 #include <algorithm>
@@ -128,6 +132,119 @@ class AgentWorkspaceShellTest final : public QObject {
                     .filePath(QStringLiteral("conversation-worktrees.sqlite"))
                     .toUtf8());
     }
+    void windowToastsStayAboveTheRealComposer_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
+    void windowToastsStayAboveTheRealComposer() {
+        QFETCH(bool, dark);
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        QVERIFY(
+            QFileInfo(QSettings().fileName()).absoluteFilePath().startsWith(settings.path() + "/"));
+        ketplus::ThemeManager theme(*qApp);
+        const auto restoreTheme =
+            qScopeGuard([&] { theme.setMode(ketplus::ThemeManager::Mode::Light); });
+        theme.setMode(dark ? ketplus::ThemeManager::Mode::Dark
+                           : ketplus::ThemeManager::Mode::Light);
+        QVERIFY(!QSettings().contains(QStringLiteral("workspace/lastRoot")));
+        QWidget window;
+        window.resize(1000, 760);
+        auto* layout = new QVBoxLayout(&window);
+        layout->setContentsMargins(0, 0, 0, 0);
+        auto* workspace = new ketplus::AgentWorkspaceView(&window);
+        layout->addWidget(workspace);
+        window.show();
+        auto* composer = workspace->quickView()->rootObject()->findChild<QQuickItem*>(
+            QStringLiteral("agentBottomComposer"));
+        QVERIFY(composer);
+        ket::Toast toast(QStringLiteral("Files and Source Control"), &window,
+                         ket::ToastTone::Neutral);
+        toast.popup(0);
+        const auto composerTop = [&] {
+            return workspace->mapTo(&window, QPoint()).y() +
+                   qFloor(composer->mapToScene(QPointF()).y());
+        };
+        const int gap = qRound(ket::Appearance::instance().scaled(toast.recipe().bottomOffset));
+        // The native scene receives its viewport asynchronously. Do not use its
+        // pre-layout top (zero) as the baseline for the growth regression.
+        QTRY_VERIFY(composerTop() > window.height() / 2);
+        QTRY_VERIFY(composer->height() > 0);
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        const qreal initialHeight = composer->height();
+        const int initialToastY = toast.y();
+        auto* prompt =
+            workspace->quickView()->rootObject()->property("prompt").value<QQuickItem*>();
+        QVERIFY(prompt);
+        prompt->setProperty("text", QStringLiteral("One\nTwo\nThree\nFour\nFive"));
+        const QString attachment = QDir(settings.path()).filePath(QStringLiteral("fixture.txt"));
+        QFile file(attachment);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("synthetic attachment");
+        file.close();
+        workspace->addAttachments({attachment});
+        QTRY_VERIFY(composer->height() > initialHeight);
+        QTRY_VERIFY(toast.y() < initialToastY);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        const auto capture = [&](const QString& state) {
+            const QString directory = qEnvironmentVariable("KETPLUS_TOAST_CAPTURES");
+            if (!directory.isEmpty()) {
+                QVERIFY(QDir().mkpath(directory));
+                // QWidget::grab excludes embedded native QQuickView pixels. Compose
+                // the two actual rendered surfaces and the real toast at window coordinates.
+                const QImage scene = workspace->quickView()->grabWindow();
+                QVERIFY(!scene.isNull());
+                QPixmap frame = window.grab();
+                QPainter painter(&frame);
+                painter.drawImage(workspace->mapTo(&window, QPoint()), scene);
+                painter.drawPixmap(toast.pos(), toast.grab());
+                painter.end();
+                const QString name =
+                    QStringLiteral("composer-%1-%2").arg(dark ? "dark" : "light", state);
+                QVERIFY(frame.save(QDir(directory).filePath(name + ".png")));
+                QVERIFY(scene.save(QDir(directory).filePath(
+                    QStringLiteral("composer-%1-native-scene.png").arg(dark ? "dark" : "light"))));
+            }
+        };
+        const int reserved = window.height() - composerTop();
+        ket::Toast::setBottomAvoidance(&window, 0);
+        const int defaultYFromBottom = window.height() - toast.y();
+        capture(QStringLiteral("before"));
+        ket::Toast::setBottomAvoidance(&window, reserved);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        capture(QStringLiteral("after"));
+        window.resize(1100, 860);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        auto* inset = new QWidget(&window);
+        inset->setGeometry(0, 40, window.width(), window.height() - 80);
+        workspace->setParent(inset);
+        workspace->setGeometry(inset->rect());
+        inset->show();
+        workspace->show();
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        inset->move(0, 60);
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        layout->addWidget(workspace);
+        workspace->show();
+        delete inset;
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        workspace->setTranscriptOnly(QStringLiteral("Synthetic remote transcript"));
+        QTRY_VERIFY(!composer->isVisible());
+        QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
+        workspace->setTranscriptOnly(QString());
+        QTRY_VERIFY(composer->isVisible());
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        workspace->hide();
+        QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
+        ket::Toast baseline(QStringLiteral("Files and Source Control"), &window,
+                            ket::ToastTone::Neutral);
+        baseline.popup(0);
+        QTRY_COMPARE(toast.geometry(), baseline.geometry());
+    }
+
     void compactConversationWindowPreservesSessionAndDraft() {
         QTemporaryDir settings;
         QTemporaryDir workspace;

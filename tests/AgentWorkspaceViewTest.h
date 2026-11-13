@@ -47,6 +47,9 @@ class AgentWorkspaceViewTest final : public QObject {
     void fileStepsOpenTheirDiffInline();
     void claudeEditOpensItsDiffInline();
     void sentAgentMessageReadsAsTheMockNote();
+    void incomingAgentCardsClampAndExpand();
+    void internalStepsAreNotDrawn();
+    void agentCardEvidence();
     void teamMessagesReadAsTheirBlocks();
     void teamBlockOpensItsTask();
     void unknownTeamMessageStaysText();
@@ -228,6 +231,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void approvalCardStaysOutsideCommandGroup();
     void groupExpansionSurvivesPagingAndIsPruned();
     void expandedGroupHangsUnderRail();
+    void runningIndicatorLinesUpWithTheRows_data();
+    void runningIndicatorLinesUpWithTheRows();
     void activityStepsReadAsTheMock();
     void findIgnoresUnrelatedHistoryStateUpdates();
     void findGoesToLastResultWhenAnchorTrimmed();

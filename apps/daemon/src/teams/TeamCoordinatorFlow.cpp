@@ -73,8 +73,18 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 
 } // namespace
 
-void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
+void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     const qint64 teamId = snapshot.id;
+    // T-90: a turn a developer starts on its task in progress (a review's findings, an
+    // answered question) runs in that task's worktree, wherever the conversation pointed
+    // before: another task's worktree, or one merged since.
+    TeamMessage message = sent;
+    if (const Task* task = message.pointAt.isEmpty() && !message.taskId.isEmpty()
+                               ? snapshot.task(message.taskId)
+                               : nullptr;
+        task && task->owner == message.toSession && task->state == state::inProgress &&
+        !task->worktree.isEmpty())
+        message.pointAt = task->worktree;
     // A turn the team starts never runs in a worktree its member was handed out of. With the
     // outbox, that is settled when the message is sent; without it (the coordinator's own
     // tests), the host switches at once and this is settled before the lines below.

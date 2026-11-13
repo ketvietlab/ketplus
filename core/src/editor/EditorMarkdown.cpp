@@ -16,6 +16,8 @@ void EditorWidget::updateMarkdownPresentation(bool opened) {
     }
     if (markdownPresentation_) {
         markdownPresentation_->configure(document().filePath(), presentationPalette_, enabled);
+        if (colorScheme_)
+            markdownPresentation_->applyColorScheme(*colorScheme_);
         if (opened && enabled)
             markdownPresentation_->setMode("preview");
     }

@@ -85,6 +85,28 @@ bool CommandOutbox::withdraw(const QString& id, QString* error) {
     return false;
 }
 
+bool CommandOutbox::replace(const QString& id, Route route, const QJsonObject& envelope,
+                            QString* error) {
+    const auto next = envelope.value("id").toString();
+    if (!isPending(id) || next.isEmpty() || !envelope.value("content").isObject() ||
+        isPending(next) || isCompleted(next))
+        return fail(error, QStringLiteral("Unable to persist command cleanup."));
+    const auto pendingBefore = pending_;
+    const auto completedBefore = completed_;
+    pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                  [&id](const Entry& entry) { return entry.id() == id; }),
+                   pending_.end());
+    pending_.append({route, envelope, QDateTime::currentMSecsSinceEpoch()});
+    completed_.append(id);
+    while (completed_.size() > maximumCompleted)
+        completed_.removeFirst();
+    if (save(error))
+        return true;
+    pending_ = pendingBefore;
+    completed_ = completedBefore;
+    return false;
+}
+
 bool CommandOutbox::complete(const QString& id, QString* error) {
     const auto before = pending_;
     const auto completedBefore = completed_;

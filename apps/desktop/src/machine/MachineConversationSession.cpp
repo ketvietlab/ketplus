@@ -301,12 +301,27 @@ void MachineConversationSession::applyLive(const QJsonObject& event) {
         emit this->changed();
 }
 
-void MachineConversationSession::send(const QString& text) {
+void MachineConversationSession::send(const QString& text, const QJsonArray& attachmentIds) {
     const QString prompt = text.trimmed();
-    if (prompt.isEmpty() || !canAct())
+    if ((prompt.isEmpty() && attachmentIds.isEmpty()) || !canAct())
         return;
-    const QJsonObject request{{QStringLiteral("prompt"), prompt}};
-    const auto done = write({});
+    QJsonObject request{{QStringLiteral("prompt"), prompt}};
+    if (!attachmentIds.isEmpty())
+        request.insert(QStringLiteral("attachment_ids"), attachmentIds);
+    if (!attachmentIds.isEmpty())
+        ++attachmentSendCount_;
+    const auto update = write({});
+    const auto done =
+        guarded([this, attachmentIds, update](const QJsonObject& result, const QString& error) {
+            const QString commandId = remote::queuedCommandId(result);
+            if (error.isEmpty() && !commandId.isEmpty() && !attachmentIds.isEmpty())
+                attachmentSends_.insert(commandId, attachmentIds);
+            update(result, error);
+            if ((!error.isEmpty() || commandId.isEmpty()) && !attachmentIds.isEmpty()) {
+                --attachmentSendCount_;
+                emit attachmentsSent(attachmentIds, error);
+            }
+        });
     if (running_)
         backend_->steerTurn(sessionId_, generation_, request, done);
     else
@@ -360,6 +375,11 @@ void MachineConversationSession::commandCompleted(const QString& commandId, cons
     const QString approvalId = *it;
     queued_.erase(it);
     finishWrite(approvalId, error);
+    const auto attachments = attachmentSends_.take(commandId);
+    if (!attachments.isEmpty()) {
+        --attachmentSendCount_;
+        emit attachmentsSent(attachments, error);
+    }
 }
 
 void MachineConversationSession::finishWrite(const QString& approvalId, const QString& error) {

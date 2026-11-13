@@ -2321,7 +2321,7 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
     QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
                 (surface = bubbleOf(gallery)) && !surface->isVisible());
 
-    // Another agent's message names its sender above a plain bubble; a steer says so below.
+    // Incoming agents use the shared card; an owner steer stays a bubble.
     view.resetMessages({QVariantMap{{"kind", "user"},
                                     {"body", "Keep 4 behind another app."},
                                     {"messageKey", "reply"},
@@ -2345,19 +2345,14 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
     };
     QQuickItem* origin = nullptr;
     QQuickItem* steer = nullptr;
-    QTRY_VERIFY((origin = shown(shown, activeTranscript, "agentMessageOrigin")));
+    QTRY_VERIFY((origin = shown(shown, activeTranscript, "transcriptAgentNoteText")));
     QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")));
-    QCOMPARE(origin->property("text").toString(),
-             QString("Reply from @agent/8941 · DS Icon · Claude"));
-    QCOMPARE(origin->property("color").value<QColor>(), steer->property("color").value<QColor>());
+    QVERIFY(origin->property("text").toString().contains("Reply from @agent/8941"));
     auto* replyBubble = bubbleOf(origin);
     auto* steerBubble = bubbleOf(steer);
     QVERIFY(replyBubble && steerBubble);
-    QCOMPARE(QQmlProperty::read(replyBubble, "border.color").value<QColor>(),
-             QQmlProperty::read(steerBubble, "border.color").value<QColor>());
-    QCOMPARE(replyBubble->property("color"), steerBubble->property("color"));
-    QVERIFY(origin->mapToScene(QPointF(0, origin->height())).y() <=
-            replyBubble->mapToScene(QPointF()).y());
+    QCOMPARE(replyBubble->property("color").value<QColor>().alpha(), 0);
+    QVERIFY(steerBubble->property("color").value<QColor>().alpha() > 0);
     QVERIFY(steer->mapToScene(QPointF()).y() >=
             steerBubble->mapToScene(QPointF(0, steerBubble->height())).y());
     // The note names the provider of the steered turn; choosing another provider for the

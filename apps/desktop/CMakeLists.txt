@@ -4,6 +4,8 @@ if(APPLE)
 endif()
 
 add_library(ketplus_desktop_support STATIC
+    src/machine/MachineAttachmentPanel.cpp
+    src/machine/MachineAttachmentPanel.h
     src/machine/MachineApprovalCards.cpp
     src/machine/MachineApprovalCards.h
     src/machine/MachineCatalog.cpp
@@ -23,6 +25,8 @@ add_library(ketplus_desktop_support STATIC
     src/machine/MachineTranscript.cpp
     src/machine/MachineTranscript.h
     src/machine/MachineWorkspaceView.cpp
+    src/machine/MachineWorkspacePreparation.cpp
+    src/machine/MachineWorkspaceToast.cpp
     src/machine/MachineWorkspaceView.h
     src/remote/PairingQrCode.h
     ${ketplus_pairing_qr_source}
@@ -67,6 +71,10 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarRepositoryListLayout.cpp
     src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
+    src/workspace/SidebarRepositoryPins.cpp
+    src/workspace/SidebarRepositoryPins.h
+    src/workspace/SidebarPinMark.cpp
+    src/workspace/SidebarPinMark.h
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h
     src/teams/TeamMenus.cpp
@@ -86,11 +94,14 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageTasks.cpp
     src/teams/TeamPageStorage.cpp
     src/teams/TeamWorktreeDialog.cpp
+    src/teams/TeamWorktreeRemoveAll.cpp
     src/teams/TeamWorktreeDialog.h
     src/teams/TeamCommands.cpp
     src/teams/TeamTaskDialog.cpp
     src/teams/TeamTaskDialog.h
     src/teams/TeamTaskDialogActions.cpp
+    src/teams/TeamRepositorySettings.cpp
+    src/teams/TeamRepositorySettings.h
     src/teams/TeamReviewSettings.cpp
     src/teams/TeamReviewSettings.h
     src/teams/TeamTurnBudget.cpp

@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "repositories": [
+    {
+      "key": "vscode",
+      "repo": "microsoft/vscode",
+      "commit": "1b509615d9f84db862313485737c05e8b81d2977",
+      "license": "MIT",
+      "author": "Microsoft Corporation",
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/LICENSE.txt",
+          "sha256": "9480271317925265e806a9a196aaa33410a962fa9d4d1e248a4a5187bc8c9df9"
+        },
+        {
+          "path": "extensions/theme-defaults/themes/dark_plus.json",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_plus.json",
+          "sha256": "409f33088a5cfd6589384900ef80627787c568d367c25b12f31bc7940936e573"
+        },
+        {
+          "path": "extensions/theme-defaults/themes/dark_vs.json",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_vs.json",
+          "sha256": "9fc2c16761400632eac6166ff7bb0435c5190a94bffa51ec1ef19b2ce78576b2"
+        },
+        {
+          "path": "extensions/theme-defaults/themes/light_plus.json",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_plus.json",
+          "sha256": "26fbb053bec8ce2b65706d5fcb993da8c19174cfdbf35a49b465236b5ed26203"
+        },
+        {
+          "path": "extensions/theme-defaults/themes/light_vs.json",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_vs.json",
+          "sha256": "ce562a2ebec8c9a91021afb9ba7c9e8bcf4176df634fec8b77c748b42e3ce748"
+        },
+        {
+          "path": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+          "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+          "sha256": "920e68b8a62e3e6581cee8d7900af1772865e5fe2b9efe5904baa4a8a89bc445"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "LICENSE.txt",
+          "distributionFile": "VSCode-Themes-MIT.txt"
+        }
+      ]
+    },
+    {
+      "key": "jetbrains",
+      "repo": "JetBrains/intellij-community",
+      "commit": "417e214ea024cd783179244f51329df01277bb93",
+      "license": "Apache-2.0",
+      "author": "JetBrains s.r.o.",
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "NOTICE.txt",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/NOTICE.txt",
+          "sha256": "83903abdebe3b3dda1a178fb3f03ac71ef31c4503b79226b66ef27f1aa9d3993"
+        },
+        {
+          "path": "platform/platform-resources/src/DefaultColorSchemesManager.xml",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/DefaultColorSchemesManager.xml",
+          "sha256": "eee055857ac4df8fe4191d9dd2fca7a2b1df99f9e00dcf25f681d794658ffbb7"
+        },
+        {
+          "path": "platform/platform-resources/src/themes/darcula.theme.json",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/darcula.theme.json",
+          "sha256": "368368c5e0025246ad93e179db2441c47b902270a203dbed004a3c18e0a40360"
+        },
+        {
+          "path": "platform/platform-resources/src/themes/Light.theme.json",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/Light.theme.json",
+          "sha256": "fcb8a6711e686dd8bd8e1e53ef3eae8981b4452b62fef0d9571c97d2050dd069"
+        },
+        {
+          "path": "platform/platform-resources/src/themes/Light.xml",
+          "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/Light.xml",
+          "sha256": "ea2af41e12491f0681b4b5b3dcafe84245a2b56805f8d991b65df73c1a4b2dbb"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "LICENSE.txt",
+          "distributionFile": "JetBrains-Themes-Apache-2.0.txt"
+        },
+        {
+          "source": "NOTICE.txt",
+          "distributionFile": "JetBrains-Themes-NOTICE.txt"
+        }
+      ]
+    },
+    {
+      "key": "dracula",
+      "repo": "dracula/visual-studio-code",
+      "commit": "9726e1f6b51a4382334bc36e03128fcf02c3fb45",
+      "license": "MIT",
+      "author": "Dracula Theme",
+      "files": [
+        {
+          "path": "LICENSE",
+          "url": "https://raw.githubusercontent.com/dracula/visual-studio-code/9726e1f6b51a4382334bc36e03128fcf02c3fb45/LICENSE",
+          "sha256": "f08d0bba7f8906ed4e7a76d7e555a883968d83eb550ae298ce893a65aee15dff"
+        },
+        {
+          "path": "dracula.vsix",
+          "url": "https://github.com/dracula/visual-studio-code/releases/download/v2.24.3/dracula.vsix",
+          "sha256": "03f3b92496dd7f9983bbeed0864681e049d7a94e459430b299f47b3e2e8e3a75"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "LICENSE",
+          "distributionFile": "Dracula-MIT.txt"
+        }
+      ]
+    },
+    {
+      "key": "one-dark-pro",
+      "repo": "Binaryify/OneDark-Pro",
+      "commit": "75c80ab18d90655e05ad837bb8d89f5e68d5ce53",
+      "license": "MIT",
+      "author": "Binaryify",
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/Binaryify/OneDark-Pro/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/LICENSE.txt",
+          "sha256": "b4bdb28c670386f4fa093650b0bb8773714ce53171a2d1a9adb81756119200f1"
+        },
+        {
+          "path": "themes/OneDark-Pro.json",
+          "url": "https://raw.githubusercontent.com/Binaryify/OneDark-Pro/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/themes/OneDark-Pro.json",
+          "sha256": "bd098a63d2fdcb932ea67caaf66eb25a51cda1c2179ff37048fe1db7fe13461f"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "LICENSE.txt",
+          "distributionFile": "OneDarkPro-MIT.txt"
+        }
+      ]
+    },
+    {
+      "key": "nord",
+      "repo": "nordtheme/visual-studio-code",
+      "commit": "8ead09822c02d0d49d0f764104505e5a34d3689f",
+      "license": "MIT",
+      "author": "Arctic Ice Studio / Sven Greb",
+      "files": [
+        {
+          "path": "license",
+          "url": "https://raw.githubusercontent.com/nordtheme/visual-studio-code/8ead09822c02d0d49d0f764104505e5a34d3689f/license",
+          "sha256": "25ac8188d670bd2ad2ce2f4f55ab88573010ee9f7a4502543cb1eea1e2274f8a"
+        },
+        {
+          "path": "themes/nord-color-theme.json",
+          "url": "https://raw.githubusercontent.com/nordtheme/visual-studio-code/8ead09822c02d0d49d0f764104505e5a34d3689f/themes/nord-color-theme.json",
+          "sha256": "cd15e5a0c2edb2e373196ed2ab0f0d90c0eccc61f82c37131a4efc3be2ca8061"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "license",
+          "distributionFile": "Nord-MIT.txt"
+        }
+      ]
+    },
+    {
+      "key": "solarized",
+      "repo": "altercation/solarized",
+      "commit": "62f656a02f93c5190a8753159e34b385588d5ff3",
+      "license": "MIT",
+      "author": "Ethan Schoonover",
+      "files": [
+        {
+          "path": "LICENSE",
+          "url": "https://raw.githubusercontent.com/altercation/solarized/62f656a02f93c5190a8753159e34b385588d5ff3/LICENSE",
+          "sha256": "494aefdabf86acce06bd63001ad8aedad4ee38da23509d3f917d95aa3368b9a6"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "source": "LICENSE",
+          "distributionFile": "Solarized-MIT.txt"
+        }
+      ]
+    }
+  ],
+  "schemes": [
+    {
+      "slug": "vscode-dark-plus",
+      "name": "VS Code Dark+",
+      "kind": "dark",
+      "repository": "vscode",
+      "input": "extensions/theme-defaults/themes/dark_plus.json",
+      "sourceLabel": "VS Code",
+      "manualAdjustments": []
+    },
+    {
+      "slug": "vscode-light-plus",
+      "name": "VS Code Light+",
+      "kind": "light",
+      "repository": "vscode",
+      "input": "extensions/theme-defaults/themes/light_plus.json",
+      "sourceLabel": "VS Code",
+      "manualAdjustments": []
+    },
+    {
+      "slug": "darcula",
+      "name": "Darcula",
+      "kind": "dark",
+      "repository": "jetbrains",
+      "input": "_prepared/darcula.theme.json",
+      "sourceLabel": "JetBrains",
+      "manualAdjustments": [
+        "Input preparation only: extract the Darcula <scheme> from DefaultColorSchemesManager.xml, attach it as editorScheme to darcula.theme.json. No color/style edits. IDE parent scheme remains approximated by the importer."
+      ]
+    },
+    {
+      "slug": "intellij-light",
+      "name": "IntelliJ Light",
+      "kind": "light",
+      "repository": "jetbrains",
+      "input": "_prepared/intellij-light.theme.json",
+      "sourceLabel": "JetBrains",
+      "manualAdjustments": [
+        "Input preparation only: replace the IDE editorScheme name with the pinned Light.xml resource path. No color/style edits. IDE parent scheme/UI remain approximated by the importer."
+      ]
+    },
+    {
+      "slug": "dracula",
+      "name": "Dracula",
+      "kind": "dark",
+      "repository": "dracula",
+      "input": "dracula.vsix",
+      "sourceLabel": "Community",
+      "manualAdjustments": [],
+      "variantSource": "extension/theme/dracula.json"
+    },
+    {
+      "slug": "one-dark-pro",
+      "name": "One Dark Pro",
+      "kind": "dark",
+      "repository": "one-dark-pro",
+      "input": "themes/OneDark-Pro.json",
+      "sourceLabel": "Community",
+      "manualAdjustments": []
+    },
+    {
+      "slug": "nord",
+      "name": "Nord",
+      "kind": "dark",
+      "repository": "nord",
+      "input": "themes/nord-color-theme.json",
+      "sourceLabel": "Community",
+      "manualAdjustments": []
+    },
+    {
+      "slug": "solarized-dark",
+      "name": "Solarized Dark",
+      "kind": "dark",
+      "repository": "vscode",
+      "input": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+      "sourceLabel": "VS Code",
+      "manualAdjustments": [],
+      "additionalAttribution": [
+        "solarized"
+      ]
+    }
+  ]
+}

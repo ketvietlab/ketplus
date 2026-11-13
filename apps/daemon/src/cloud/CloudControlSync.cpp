@@ -66,6 +66,12 @@ void CloudControlClient::heartbeat() {
         const QList<StoredSession> stored = journal_->sessions();
         const QHash<QString, QString> repositories = resolveWorktreeRepositories(*journal_);
         QHash<QString, QJsonObject> agentMetadata;
+        // Only the sealed metadata carries this lifecycle hint. Explicit false clears a
+        // previous true on the next heartbeat; no message body or recipient is exported.
+        const QSet<QString> awaiting = journal_->sessionsAwaitingAgentReply();
+        for (const StoredSession& session : stored)
+            agentMetadata[session.id].insert(QStringLiteral("awaitingAgentReply"),
+                                             awaiting.contains(session.id));
         const QHash<QString, QString> numbers = journal_->conversationNumbers();
         for (auto it = numbers.cbegin(); it != numbers.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("number"), it.value());
@@ -149,7 +155,8 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         {QStringLiteral("machineId"), machineId},
         {QStringLiteral("controlProtocolVersion"), 2},
         // ADR 0116 §1: this daemon serves team commands and writes the `team` metadata.
-        {QStringLiteral("capabilities"), QJsonArray{"transport.webrtc/1", "teams.remote/1"}},
+        {QStringLiteral("capabilities"),
+         QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1"}},
         {QStringLiteral("localProtocolVersion"), 0},
         {QStringLiteral("daemonVersion"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
         {QStringLiteral("observedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},

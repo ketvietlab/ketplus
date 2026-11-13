@@ -138,6 +138,7 @@
         "turn_budget": 40,
         "automatic_turns": 12,
         "turns_left": 28,
+        "max_rounds": 2,
         "review": {
           "reviewing": "T-4",
           "queued": [],
@@ -502,6 +503,7 @@
         "turn_budget": 40,
         "automatic_turns": 12,
         "turns_left": 28,
+        "max_rounds": 2,
         "review": {
           "reviewing": "T-4",
           "queued": [],
@@ -764,6 +766,7 @@
         "turn_budget": 40,
         "automatic_turns": 12,
         "turns_left": 28,
+        "max_rounds": 2,
         "review": {
           "reviewing": "T-4",
           "queued": [],

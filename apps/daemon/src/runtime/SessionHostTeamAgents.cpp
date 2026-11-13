@@ -210,6 +210,19 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         return {{QStringLiteral("ok"), true}, {QStringLiteral("wakes_in_minutes"), minutes}};
     }
     if (operation == QStringLiteral("team_task_update")) {
+        // T-93: the leader renames the branch of a task not started yet, and nothing else.
+        if (role == teams::role::leader) {
+            QJsonObject changes;
+            for (const QString& key :
+                 {QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
+                if (payload.contains(key))
+                    changes.insert(key, payload.value(key));
+            if (changes.isEmpty())
+                return onlyFor(QStringLiteral("developers, on their own task, and the leader "
+                                              "renaming a branch"),
+                               operation);
+            return answer(teams_->updateTask(teamId, taskId, changes, sessionId), taskId);
+        }
         if (role != teams::role::developer)
             return onlyFor(QStringLiteral("developers, on their own task"), operation);
         const teams::Task* task = team->task(taskId);
@@ -220,8 +233,10 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             return refusal(QStringLiteral("not_owner"),
                            QStringLiteral("%1 is not your task.").arg(taskId));
         QJsonObject changes;
+        // A branch rename reaches the rules, which keep it for the leader.
         for (const QString& key :
-             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met")})
+             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met"),
+              QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
             if (payload.contains(key))
                 changes.insert(key, payload.value(key));
         if (!changes.isEmpty())
@@ -246,7 +261,11 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
              .description = payload.value(QStringLiteral("description")).toString(),
              .lane = payload.value(QStringLiteral("lane")).toString(),
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
-             .criteria = strings(payload.value(QStringLiteral("criteria")))},
+             .criteria = strings(payload.value(QStringLiteral("criteria"))),
+             .repository = payload.value(QStringLiteral("repository")).toString(),
+             .integrationBranch = payload.value(QStringLiteral("integration_branch")).toString(),
+             .branchType = payload.value(QStringLiteral("branch_type")).toString(),
+             .branchSlug = payload.value(QStringLiteral("branch_slug")).toString()},
             sessionId, &created);
         return answer(result, created);
     }
@@ -305,6 +324,19 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             teams_->allowPaths(teamId, taskId, strings(payload.value(QStringLiteral("paths"))),
                                payload.value(QStringLiteral("reason")).toString(), sessionId),
             taskId);
+    }
+    if (operation == QStringLiteral("team_repository_set")) {
+        // T-90 (ADR 0123): the leader names why, as for a lane change.
+        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
+            return refusal(QStringLiteral("invalid_payload"),
+                           QStringLiteral("Give the reason the repository changes."));
+        QJsonObject changes{
+            {QStringLiteral("repository"), payload.value(QStringLiteral("repository")).toString()},
+            {QStringLiteral("reason"), payload.value(QStringLiteral("reason")).toString()}};
+        if (payload.contains(QStringLiteral("integration_branch")))
+            changes.insert(QStringLiteral("integration_branch"),
+                           payload.value(QStringLiteral("integration_branch")).toString());
+        return answer(teams_->update(teamId, changes, sessionId), {});
     }
     return teamDecisionOperation(sessionId, operation, payload);
 }

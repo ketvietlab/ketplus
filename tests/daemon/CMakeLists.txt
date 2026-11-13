@@ -67,6 +67,10 @@ add_test(NAME ketplus_remote_ssh_daemon_integration_tests
 ketplus_add_daemon_test(ketplus_atlas_live_runtime_tests AtlasLiveRuntimeTest.cpp)
 ketplus_add_daemon_test(ketplus_atlas_live_tunnel_tests AtlasLiveTunnelTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_catalog_cache_tests ProviderCatalogCacheTest.cpp)
+ketplus_add_daemon_test(ketplus_copilot_cli_tests CopilotCliTest.cpp)
+target_compile_definitions(ketplus_copilot_cli_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
+add_dependencies(ketplus_copilot_cli_tests ketplus_daemon)
 ketplus_add_daemon_test(ketplus_daemon_protocol_tests DaemonProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_media_preview_tests McpMediaPreviewTest.cpp)
 ketplus_add_daemon_test(ketplus_context_harness_tests ContextHarnessTest.cpp)
@@ -97,6 +101,10 @@ ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cp
 ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
 ketplus_add_daemon_test(ketplus_computer_provider_integration_tests ComputerProviderIntegrationTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_handoff_tests ProviderHandoffTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_adapter_tests CopilotAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_tools_tests CopilotToolsTest.cpp)
+ketplus_add_daemon_test(ketplus_copilot_catalog_tests CopilotCatalogTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_acp_adapter_tests AcpAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
@@ -131,6 +139,9 @@ ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
 ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_daemon_test(ketplus_team_storage_tests TeamStorageTest.cpp)
+# T-90 (ADR 0123): the team's repository changes; a task works in a repository of its own.
+ketplus_add_daemon_test(ketplus_team_repository_tests TeamRepositoryTest.cpp)
+ketplus_add_daemon_test(ketplus_team_branch_name_tests TeamBranchNameTest.cpp)
 # T-38: tracked changes only, allowed paths, and a head only from the task's own branch.
 ketplus_add_daemon_test(ketplus_team_attribution_tests TeamAttributionTest.cpp)
 # ADR 0116: team commands from paired phones, checked against the contract's fixture.
@@ -200,6 +211,9 @@ add_dependencies(ketplus_desktop_daemon_client_tests ketplus_daemon)
 ketplus_add_daemon_test(ketplus_desktop_transcript_window_tests DesktopTranscriptWindowTest.cpp)
 target_link_libraries(ketplus_desktop_transcript_window_tests PRIVATE ketplus_ai)
 
+ketplus_add_daemon_test(ketplus_desktop_transcript_internal_steps_tests DesktopTranscriptInternalStepsTest.cpp)
+target_link_libraries(ketplus_desktop_transcript_internal_steps_tests PRIVATE ketplus_ai)
+
 ketplus_add_daemon_test(ketplus_conversation_attention_daemon_tests ConversationAttentionDaemonTest.cpp)
 target_link_libraries(ketplus_conversation_attention_daemon_tests PRIVATE ketplus_ai)
 
@@ -261,3 +275,11 @@ target_sources(ketplus_team_transcript_contract_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/ai/src/agent/TeamTranscriptBlocks.cpp)
 target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/ai/src)
+
+ketplus_add_daemon_test(ketplus_relay_attachment_host_tests RelayAttachmentHostTest.cpp)
+target_sources(ketplus_relay_attachment_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+
+ketplus_add_daemon_test(ketplus_session_preparation_store_tests SessionPreparationStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_session_preparation_host_tests SessionPreparationHostTest.cpp)
+ketplus_add_daemon_test(ketplus_relay_preparation_host_tests RelayPreparationHostTest.cpp)
+target_sources(ketplus_relay_preparation_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)

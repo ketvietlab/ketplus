@@ -25,6 +25,13 @@ Item {
     // sets its width (760 by default); 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
         ? KetTheme.px(agentHost.conversationWidth, KetTheme.zoom) : Number.POSITIVE_INFINITY
+    // The inset transcript rows keep from the pane's edges either side of that column. Rows,
+    // the day divider and the run line all start at transcriptRowX (T-88).
+    readonly property real transcriptRowInset: KetTheme.px(20, KetTheme.zoom)
+    function transcriptRowX(paneWidth) {
+        return (paneWidth - Math.min(paneWidth, conversationColumnWidth + 2 * transcriptRowInset)) / 2
+            + transcriptRowInset
+    }
     readonly property int messageCount: messages.count
     property string selectedModel: ""
     property string modelLabel: "Codex default"
@@ -45,6 +52,12 @@ Item {
     // guide holds the message, which sends once the provider is set up.
     readonly property var providerSetup: ((agentHost.providerRuntime || {}).setups || {})[selectedProvider] || null
     readonly property bool providerBlocked: !!providerSetup && providerSetup.blocking === true
+    readonly property bool copilotUnavailable: selectedProvider === "copilot"
+        && !agentHost.sessionRunning && !providerSetup
+        && !agentHost.models.some(function(model) {
+            return model.provider === "copilot" && !model.hidden
+                && model.permissions && model.permissions.length > 0
+        })
     // A provider that cannot start a turn shows its guide above the composer; one that ended a
     // turn shows it at the end of that turn, and the model button carries the warning.
     readonly property bool providerSetupShown: !!providerSetup && providerSetup.composer === true && !hiddenSetups[selectedProvider]
@@ -297,12 +310,13 @@ Item {
             if (preferred && candidate.provider === preferred) return candidate
             if (!anyMatch) anyMatch = candidate
         }
-        return anyMatch
+        return preferred === "copilot" ? null : anyMatch
     }
 
     function providerTitle(provider) {
         if (provider === "claude") return "Claude"
         if (provider === "cursor") return "Cursor"
+        if (provider === "copilot") return "GitHub Copilot"
         return "Codex"
     }
     function composerModelText() {
@@ -713,6 +727,18 @@ Item {
     Kit.KetToast {
         id: workspaceToast
         objectName: "workspaceToast"
+        bottomAvoidance: {
+            if (!composerArea.visible)
+                return 0
+            // mapToItem does not establish binding dependencies on ancestor geometry.
+            for (let item = composerArea; item; item = item.parent) {
+                item.y; item.height; item.scale; item.rotation
+            }
+            for (let item = parent; item; item = item.parent) {
+                item.y; item.height; item.scale; item.rotation
+            }
+            return Math.max(0, parent.height - composerArea.mapToItem(parent, 0, 0).y)
+        }
     }
 
     function openTranscriptFind() {
@@ -1326,7 +1352,7 @@ Item {
     }
 
     function submitCurrentPrompt() {
-        if (!agentHost.agentAvailable || agentHost.steeringPending)
+        if (!agentHost.agentAvailable || agentHost.steeringPending || root.copilotUnavailable)
             return
         const value = prompt.text.trim()
         if (value.length === 0 && agentHost.attachments.length === 0)
@@ -1656,6 +1682,7 @@ Item {
 
                 AgentComposer {
                     id: composerArea
+                    objectName: "agentBottomComposer"
                     workspace: root
                     // ketplus#598: a remote conversation keeps the machine view's own composer.
                     visible: !agentHost.transcriptOnly

@@ -3,6 +3,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QRegularExpression>
 #include <QTimer>
 
@@ -231,6 +232,21 @@ void TeamCoordinator::finishTask(Team& team, Task& task, const QString& actor,
     task.question.clear();
     applyMove(team, task, state::done, actor, reason, updates);
     addHistory(task, actor, kind, reason, data);
+    // T-90: the owner does not stay in the worktree of work that is in. It moves to its task
+    // in progress, another open task, or the team's repository (relocationHome), once the
+    // change is stored and its turn allows.
+    if (const auto conversation = task.owner.isEmpty() || task.worktree.isEmpty()
+                                      ? std::nullopt
+                                      : host_->teamConversation(task.owner);
+        conversation && team.member(task.owner) &&
+        QDir::cleanPath(conversation->worktree) == QDir::cleanPath(task.worktree)) {
+        const Relocation move{.session = task.owner, .from = task.worktree};
+        if (!team.relocations.contains(move))
+            team.relocations.append(move);
+        QTimer::singleShot(0, this, [this, teamId = team.id, session = task.owner] {
+            settleRelocations(teamId, session, {});
+        });
+    }
 }
 
 void TeamCoordinator::noteGoalReached(const Team& team, QList<Update>& updates) {

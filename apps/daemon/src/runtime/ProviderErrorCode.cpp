@@ -48,6 +48,8 @@ QString providerErrorCode(const QString& provider, const QJsonValue& providerInf
     if (provider == QStringLiteral("cursor") &&
         (CursorAdapter::looksLikePlanLimit(message) || opens(message, "cursor blocked this model")))
         return QStringLiteral("plan_blocked");
+    if (provider == QStringLiteral("copilot") && opens(message, "github copilot cli needs sign-in"))
+        return QStringLiteral("auth_required");
     // Codex named another kind of failure: its words are not about the account.
     if (!info.isEmpty())
         return {};

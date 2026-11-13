@@ -50,6 +50,8 @@ option(KETPLUS_ENABLE_REMOTE_DEMO "Enable Debug-only synthetic remote-control da
 # /v2/... at the root of its own host. Only a Debug build with the remote demo reads
 # KETPLUS_CONTROL_URL from the environment, so a Release build meant for any other relay must
 # name it here. `ketplus_daemon --build-info` and the bundle check report the one compiled in.
+include(cmake/KetPlusProductionControl.cmake)
+ketplus_configure_production_control()
 set(KETPLUS_CONTROL_URL "https://ketplus-staging.ketviet.vn" CACHE STRING
     "Relay (Control API) base URL compiled into the daemon")
 if(NOT KETPLUS_CONTROL_URL MATCHES "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~-]+)*$" AND
@@ -148,6 +150,15 @@ endif()
 
 if(KETPLUS_BUILD_TESTS)
     enable_testing()
+    add_test(NAME ketplus_production_control_tests
+        COMMAND "${CMAKE_COMMAND}" -P "${PROJECT_SOURCE_DIR}/tests/packaging/ProductionControlTest.cmake")
+    set_tests_properties(ketplus_production_control_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME ketplus_daemon_control_build_info_tests
+        COMMAND "${CMAKE_COMMAND}" "-DKETPLUS_DAEMON=$<TARGET_FILE:ketplus_daemon>"
+            "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
+            -P "${PROJECT_SOURCE_DIR}/tests/packaging/DaemonControlBuildInfoTest.cmake")
+    set_tests_properties(ketplus_daemon_control_build_info_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     find_package(Qt6 6.11 REQUIRED COMPONENTS Test)
     if(KETPLUS_BUILD_DESKTOP)
         add_subdirectory(tests)

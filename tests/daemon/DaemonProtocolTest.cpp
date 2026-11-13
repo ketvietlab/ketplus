@@ -1272,6 +1272,46 @@ class DaemonProtocolTest final : public QObject {
             QCOMPARE(blocks.at(1).toObject().contains("media_ref"), externalizedFirst);
         }
     }
+    // T-78: the phone hides what Desktop hides, told by a marker on the projected payload.
+    void cloudProjectionMarksTheStepsTheTranscriptHides() {
+        const auto marked = [](const QString& type, const QJsonObject& payload) {
+            return projectEventPayloadForCloud(type, payload).value("transcript").toString();
+        };
+        const auto call = [](const QJsonObject& item) {
+            return QJsonObject{
+                {"item_id", item.value("id")}, {"item_type", item.value("type")}, {"item", item}};
+        };
+        QCOMPARE(marked("tasks.changed", {{"tasks", QJsonArray{}}}), QStringLiteral("hidden"));
+        QCOMPARE(marked("item.started", call({{"id", "a"},
+                                              {"type", "dynamicToolCall"},
+                                              {"tool", "mcp__ketplus_agents__agents_send"}})),
+                 QStringLiteral("hidden"));
+        QCOMPARE(marked("item.completed", call({{"id", "b"},
+                                                {"type", "mcpToolCall"},
+                                                {"server", "ketplus_agents"},
+                                                {"tool", "team_tasks"}})),
+                 QStringLiteral("hidden"));
+        // Cursor names the server in the call's input.
+        QCOMPARE(
+            marked("item.completed",
+                   call({{"id", "c"},
+                         {"type", "dynamicToolCall"},
+                         {"tool", "Agents Send"},
+                         {"arguments", QJsonObject{{"providerIdentifier", "ketplus_agents"}}}})),
+            QStringLiteral("hidden"));
+        // Other servers, Claude's own tools and messages are shown.
+        for (const auto& shown :
+             {call({{"id", "d"},
+                    {"type", "dynamicToolCall"},
+                    {"tool", "mcp__ketplus_browser__browser_open"}}),
+              call({{"id", "e"}, {"type", "mcpToolCall"}, {"server", "node_repl"}, {"tool", "js"}}),
+              call({{"id", "f"}, {"type", "dynamicToolCall"}, {"tool", "ketplus_agents_notes"}}),
+              call({{"id", "g"}, {"type", "agentMessage"}, {"text", "mcp__ketplus_agents__x"}})})
+            QVERIFY(!projectEventPayloadForCloud("item.completed", shown).contains("transcript"));
+        QVERIFY(!projectEventPayloadForCloud("user.message", {{"text", "tasks.changed"}})
+                     .contains("transcript"));
+    }
+
     void cloudProjectionSaysWhatACommandDoesAndWhichFileAToolUsed() {
         const QJsonObject command = projectEventPayloadForCloud(
             QStringLiteral("item.started"),

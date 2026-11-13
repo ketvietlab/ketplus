@@ -1,14 +1,13 @@
 #include "BrowserToolLaunch.h"
 #include "ComputerToolLaunch.h"
-#include "providers/CursorAdapter.h"
+#include "providers/acp/AcpAdapter.h"
 
 #include <QCoreApplication>
 
 namespace ketplus::daemon {
 
-void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString& cwd,
-                                     const QString& resume, const QString& model,
-                                     Callback callback) {
+void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString& cwd,
+                                  const QString& resume, const QString& model, Callback callback) {
     auto launch =
         browser_tools::browserLaunchFromUserSettings(QCoreApplication::applicationDirPath());
     QString turnEndFile;
@@ -35,12 +34,16 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
                        computerInjected = computer.has_value(),
                        turnEndFile](const QJsonObject& result, const QString& error) {
         if (!error.isEmpty()) {
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
             callback({}, error);
             return;
         }
         const QString acpId = result.value(QStringLiteral("sessionId")).toString();
         if (acpId.isEmpty()) {
-            callback({}, QStringLiteral("Cursor ACP returned no session id."));
+            if (!turnEndFile.isEmpty())
+                browser_tools::signalTurnEnd(turnEndFile);
+            callback({}, QStringLiteral("%1 ACP returned no session id.").arg(label_));
             return;
         }
         if (!acpSessionByKetplus_.value(ketplusSessionId).isEmpty())
@@ -59,10 +62,28 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
         else
             computerSessions_.remove(ketplusSessionId);
         ketplusByAcp_.insert(acpId, ketplusSessionId);
-        applySessionModel(
-            acpId, model, result.value(QStringLiteral("configOptions")).toArray(),
-            [this, callback, acpId, ketplusSessionId] {
-                const QString mode = permissionMode(permissionBySession_.value(ketplusSessionId));
+        prepareSessionModel(
+            acpId, model, result,
+            [this, callback, acpId, ketplusSessionId, turnEndFile](const QJsonObject&,
+                                                                   const QString& error) {
+                if (!error.isEmpty()) {
+                    // Model setup can fail before a TurnState exists to finish. End
+                    // any browser work attached during session/new/load as well.
+                    // failPending also signals registered sessions after callbacks;
+                    // remove this one first so timeout/shutdown cannot signal it twice.
+                    browserSessions_.remove(ketplusSessionId);
+                    if (!turnEndFile.isEmpty() && !browser_tools::signalTurnEnd(turnEndFile))
+                        qWarning(
+                            "Unable to signal the browser server after ACP model setup failed");
+                    callback({}, error);
+                    return;
+                }
+                const QString mode =
+                    sessionPermissionMode(permissionBySession_.value(ketplusSessionId));
+                if (mode.isEmpty()) {
+                    callback(QJsonObject{{QStringLiteral("sessionId"), acpId}}, {});
+                    return;
+                }
                 sendCall(QStringLiteral("session/set_mode"),
                          {{QStringLiteral("sessionId"), acpId}, {QStringLiteral("modeId"), mode}},
                          [callback, acpId](const QJsonObject&, const QString&) {
@@ -95,6 +116,56 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
     }
     sendCall(QStringLiteral("session/new"),
              {{QStringLiteral("cwd"), cwd}, {QStringLiteral("mcpServers"), servers}}, bind);
+}
+
+void AcpAdapter::applyConfigOptions(const QString& acpSessionId,
+                                    QList<QPair<QString, QString>> options,
+                                    std::function<void()> done) {
+    if (options.isEmpty()) {
+        done();
+        return;
+    }
+    const QPair<QString, QString> next = options.takeFirst();
+    sendCall(
+        QStringLiteral("session/set_config_option"),
+        {{QStringLiteral("sessionId"), acpSessionId},
+         {QStringLiteral("configId"), next.first},
+         {QStringLiteral("value"), next.second}},
+        [this, acpSessionId, options, done = std::move(done)](const QJsonObject&, const QString&) {
+            applyConfigOptions(acpSessionId, options, done);
+        });
+}
+
+void AcpAdapter::handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params) {
+    if (strictPermissionRequests()) {
+        handleStrictPermission(requestId, params);
+        return;
+    }
+    const QString acpId = params.value(QStringLiteral("sessionId")).toString();
+    const QString sessionId = ketplusByAcp_.value(acpId);
+    if (sessionId.isEmpty()) {
+        respond(requestId, {{QStringLiteral("allow"), false}});
+        return;
+    }
+    permissionOptionsByRequest_.insert(requestKey(requestId), params.value("options").toArray());
+    if (permissionBySession_.value(sessionId) == QStringLiteral("danger-full-access")) {
+        respond(requestId, {{QStringLiteral("allow"), true}});
+        return;
+    }
+    const QJsonObject toolCall = params.value(QStringLiteral("toolCall")).toObject();
+    QJsonObject input = toolCall.value(QStringLiteral("rawInput")).toObject();
+    if (autoApprovePermission(sessionId, toolCall)) {
+        respond(requestId, {{QStringLiteral("allow"), true}});
+        return;
+    }
+    if (input.isEmpty())
+        input = toolCall;
+    emit requestReceived(
+        requestId, QStringLiteral("permission.request"),
+        {{QStringLiteral("sessionId"), sessionId},
+         {QStringLiteral("tool"), toolCall.value(QStringLiteral("title"))
+                                      .toString(toolCall.value(QStringLiteral("kind")).toString())},
+         {QStringLiteral("input"), input}});
 }
 
 } // namespace ketplus::daemon

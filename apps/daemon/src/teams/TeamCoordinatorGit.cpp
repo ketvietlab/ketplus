@@ -92,9 +92,7 @@ void TeamCoordinator::worktreeAnswered(const qint64 teamId, const QString& taskI
     // Git made the worktree and no command took it: each was refused by what the team became
     // meanwhile. The task keeps it, because the path and the branch are taken now and its next
     // assignment could not make them again.
-    task->branch = answer.worktree->branch;
-    task->worktree = answer.worktree->worktree;
-    task->baseCommit = answer.worktree->baseCommit;
+    takeWorktree(*team, *task, *answer.worktree);
     addHistory(
         *task, QStringLiteral("daemon"), QStringLiteral("worktree"),
         say(team->language,
@@ -102,6 +100,17 @@ void TeamCoordinator::worktreeAnswered(const qint64 teamId, const QString& taskI
                                       "meanwhile; the task keeps it."))
             .arg(task->worktree));
     (void)commit(*team, before, QStringLiteral("daemon"), {});
+}
+
+void takeWorktree(const Team& team, Task& task, const TaskWorktree& made) {
+    task.branch = made.branch;
+    task.worktree = made.worktree;
+    task.baseCommit = made.baseCommit;
+    if (task.repository.isEmpty() && !made.repository.isEmpty() &&
+        made.repository != team.repository) {
+        task.repository = made.repository;
+        task.integrationBranch = made.integrationBranch;
+    }
 }
 
 WorktreeAnswer TeamCoordinator::worktreeFor(const Team& team, const Task& task) {

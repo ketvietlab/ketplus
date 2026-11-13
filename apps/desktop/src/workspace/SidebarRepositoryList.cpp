@@ -4,9 +4,11 @@
 #include "KetSidebarTree.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
+#include "workspace/SidebarPinMark.h"
 #include "workspace/SidebarRepositoryListDetail.h"
 
 #include <QEvent>
+#include <QMenu>
 #include <QPushButton>
 #include <QSet>
 #include <QSettings>
@@ -29,7 +31,9 @@ QStringList structureOf(const QVector<SidebarRepository>& repositories) {
     QStringList structure;
     for (const SidebarRepository& repository : repositories) {
         // The active repository is state, not structure: switching repositories must not rebuild.
-        structure << repository.path << repository.name;
+        structure << repository.path << repository.name
+                  << (repository.pinnable ? QStringLiteral("pinnable") : QString())
+                  << QString::number(repository.pinOrder);
         for (const SidebarTeam& team : repository.teams) {
             structure << QStringLiteral("team:") + team.id << team.name;
             for (const QVariant& value : team.members) {
@@ -99,6 +103,16 @@ ket::SidebarTreeGuide* heldOf(QWidget* group) {
 
 } // namespace
 
+qint64 sidebarRepositoryRecency(const SidebarRepository& repository) {
+    qint64 latest = 0;
+    for (const QVariant& conversation : repository.conversations)
+        latest = std::max(latest, turnStartedAt(conversation));
+    for (const SidebarTeam& team : repository.teams)
+        for (const QVariant& member : team.members)
+            latest = std::max(latest, turnStartedAt(member));
+    return latest;
+}
+
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories) {
     // A repository merges its worktrees' conversations, so each worktree's own recency order is
     // not enough: the conversation whose turn started last leads the whole group.
@@ -118,21 +132,26 @@ void sortSidebarRepositories(QVector<SidebarRepository>& repositories) {
                              rightMap.value(QStringLiteral("id")).toString();
                   });
     }
-    // The first conversation is the newest now, so it dates its repository.
-    const auto latest = [](const SidebarRepository& repository) {
-        return repository.conversations.isEmpty() ? 0
-                                                  : turnStartedAt(repository.conversations.first());
-    };
-    std::sort(repositories.begin(), repositories.end(),
-              [&latest](const SidebarRepository& left, const SidebarRepository& right) {
-                  if (left.promoted != right.promoted)
-                      return left.promoted;
-                  if (latest(left) != latest(right))
-                      return latest(left) > latest(right);
-                  if (const int names = compareNames(left.name, right.name); names != 0)
-                      return names < 0;
-                  return left.path < right.path;
-              });
+    // T-92: a repository holding only team members dated as never active, because its
+    // members are in `teams`, not `conversations`; its own recency now reads both.
+    QHash<QString, qint64> recency;
+    for (const SidebarRepository& repository : std::as_const(repositories))
+        recency.insert(repository.path, sidebarRepositoryRecency(repository));
+    std::stable_sort(repositories.begin(), repositories.end(),
+                     [&recency](const SidebarRepository& left, const SidebarRepository& right) {
+                         const bool leftPinned = left.pinOrder >= 0;
+                         if (leftPinned != (right.pinOrder >= 0))
+                             return leftPinned;
+                         if (leftPinned && left.pinOrder != right.pinOrder)
+                             return left.pinOrder < right.pinOrder;
+                         const qint64 leftLatest = recency.value(left.path);
+                         const qint64 rightLatest = recency.value(right.path);
+                         if (leftLatest != rightLatest)
+                             return leftLatest > rightLatest;
+                         if (const int names = compareNames(left.name, right.name); names != 0)
+                             return names < 0;
+                         return left.path < right.path;
+                     });
 }
 
 SidebarRepositoryList::SidebarRepositoryList(QWidget* parent)
@@ -141,6 +160,7 @@ SidebarRepositoryList::SidebarRepositoryList(QWidget* parent)
     chrome_geometry::spacing(layout_, 0);
     const QStringList collapsed = QSettings().value(kCollapsedSetting).toStringList();
     collapsedPaths_ = QSet<QString>(collapsed.cbegin(), collapsed.cend());
+    pins_.load();
     // The parts follow the kit's zoom; the list's own height follows them.
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             [this] { applyPresentation(); });
@@ -148,6 +168,9 @@ SidebarRepositoryList::SidebarRepositoryList(QWidget* parent)
 
 void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& projected) {
     QVector<SidebarRepository> repositories = projected;
+    // T-92: the pins are this list's; a repository that cannot be pinned never sorts as one.
+    for (SidebarRepository& repository : repositories)
+        repository.pinOrder = repository.pinnable ? pins_.order(repository.path) : -1;
     sortSidebarRepositories(repositories);
     bool seenChanged = false;
     for (const SidebarRepository& repository : repositories) {
@@ -223,6 +246,18 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         create->setLabel(createText);
         connect(header, &ket::SidebarRepositoryHeader::actionTriggered, this,
                 [this, path = repository.path, create] { onRepositoryAction(path, create); });
+        if (repository.pinnable) {
+            header->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(header, &QWidget::customContextMenuRequested, this,
+                    [this, path = repository.path, header](const QPoint& at) {
+                        QMenu* menu = createRepositoryMenu(path, header);
+                        if (menu == nullptr)
+                            return;
+                        menu->setAttribute(Qt::WA_DeleteOnClose);
+                        menu->popup(header->mapToGlobal(at));
+                    });
+        }
+        presentPinMark(header, repository.pinOrder >= 0);
         headers_.append(header);
         groupLayout->addWidget(header);
 
@@ -397,6 +432,45 @@ void SidebarRepositoryList::onRepositoryHeaderClicked(const QString& path) {
     }
     persistCollapsedRepositories();
     applyPresentation();
+}
+
+void SidebarRepositoryList::setRepositoryPinned(const QString& path, const bool pinned) {
+    if (pinned)
+        pins_.pin(path);
+    else
+        pins_.unpin(path);
+    // The order and the pin marks are structure: rebuild from what was last shown.
+    if (built_)
+        setRepositories(repositories_);
+}
+
+QMenu* SidebarRepositoryList::createRepositoryMenu(const QString& path, QWidget* parent) {
+    const auto found = std::find_if(
+        repositories_.cbegin(), repositories_.cend(),
+        [&path](const SidebarRepository& repository) { return repository.path == path; });
+    if (found == repositories_.cend() || !found->pinnable)
+        return nullptr;
+    auto* menu = new QMenu(parent);
+    menu->setObjectName(QStringLiteral("productRepositoryMenu"));
+    const bool pinned = pins_.isPinned(path);
+    QAction* pin = menu->addAction(pinned ? tr("Unpin") : tr("Pin to top"));
+    pin->setObjectName(QStringLiteral("productRepositoryPinAction"));
+    connect(pin, &QAction::triggered, this,
+            [this, path, pinned] { setRepositoryPinned(path, !pinned); });
+    return menu;
+}
+
+void SidebarRepositoryList::presentPinMark(ket::SidebarRepositoryHeader* header,
+                                           const bool pinned) const {
+    if (!pinned)
+        return;
+    auto* mark = new SidebarPinMark(header);
+    mark->setObjectName(QStringLiteral("productRepositoryPinMark"));
+    mark->setToolTip(tr("Pinned to top"));
+    mark->setAccessibleName(tr("Pinned"));
+    mark->place();
+    header->installEventFilter(mark);
+    mark->show();
 }
 
 void SidebarRepositoryList::persistCollapsedRepositories() const {

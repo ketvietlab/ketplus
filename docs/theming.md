@@ -1,6 +1,9 @@
 # Installable themes
 
-Status: proposed architecture, not implemented.
+Status: proposed integration architecture. The canonical color-scheme data format,
+reader/writer, resolution and local catalog are implemented; see
+[color-schemes.md](color-schemes.md) and ADR 0121. The package/import and consumer
+integration sections below remain proposals.
 
 ## Goals and boundaries
 
@@ -15,29 +18,29 @@ File icon and product icon themes are separate future features.
 
 ## Current integration points
 
-- `core/src/ui/Theme.h/.cpp`: `ThemeManager` persists `appearance/theme`, drives
-  `ket::Appearance` for light/dark/system and interface zoom, and projects Két
-  tokens into the legacy `ThemePalette`/QSS. `ket::Style` owns the application
-  palette and shared control drawing; `ket::Profile::ketPlus()` supplies metrics.
+- `core/src/ui/Theme.h/.cpp` and `core/src/ui/theme/`: ThemeManager selects a
+  canonical scheme through a revisioned selection store, migrates `appearance/theme`
+  once, prepares user snapshots asynchronously, and publishes kit color overrides
+  with one complete palette notification. Interface zoom remains separate.
 - `apps/desktop/src/app/MainWindow.cpp`: appearance menu and `themeChanged` propagation.
-- `modules/ai/src/agent/AgentWorkspaceView.cpp`: palette-to-QML token mapping.
-- `core/src/editor/EditorWidget.cpp`: Lexilla styles use dedicated
-  `syntaxKeyword` / `syntaxString` / `syntaxNumber` / `syntaxType` /
-  `syntaxComment` / `syntaxAttribute` roles (with chrome-token fallbacks). Diff
-  added/removed lines still use semantic positive/danger.
-- `core/src/terminal/TerminalView.cpp`: default foreground/background/cursor colors;
-  imported themes also need a separate 16-color ANSI palette.
+- `modules/ai/src/agent/AgentWorkspaceView.cpp`: existing Quick roots and transcript
+  documents consume canonical colors/font flags without model or view resets.
+- `core/src/editor/SyntaxRoleAdapter.cpp`: explicit shared-token/Lexilla role mapping,
+  extended lexical function/operator/variable styles and reserved built-in font parity.
+- `core/src/terminal/TerminalColorScheme.cpp`: foreground/background/cursor, selection
+  and ANSI16; terminal tabs retain their sessions while colors change.
+- Diff and Markdown/Mermaid consumers update styles/resources in place; diagram
+  cache keys include the captured color configuration.
 
 Preserve these consumers while migrating them; do not replace the editor or
 recreate the chat view as part of theme support.
 
-An imported theme must eventually reach the Két token/recipe consumers as well
-as the legacy palette. Updating QPalette or QSS alone would leave kit Widgets and
-QML on the built-in colours. The current kit exposes built-in light/dark tokens;
-the importer needs a reviewed shared token-override API before it can promise
-consistent custom colours. Keep geometry, profile metrics and zoom outside
-that colour override. [design-system.md](design-system.md) lists the current
-semantic roles and migration boundaries.
+Imported themes reach Két Widgets and QML through the generic runtime color
+API merged in ket-qt #57. Geometry, profile metrics and zoom stay outside that
+color override. The canonical adapter maps existing kit tokens; recipe roles
+without a distinct token retain their shared semantics. See
+[color-schemes.md](color-schemes.md) for the implemented API and limits, and
+[design-system.md](design-system.md) for semantic roles and migration boundaries.
 
 ## Architecture
 
@@ -90,10 +93,39 @@ First release:
 - Colors in VS Code's documented hex forms; parse alpha as RGBA, not Qt's
   eight-digit ARGB string convention.
 
-Use a maintained JSONC parser with comments/trailing commas, not regex stripping.
-Select a native parser/archive dependency in a small implementation spike after
-checking repository dependencies and licenses. XML parsing must disable external
-entities and network resolution. Unsupported formats produce an explicit error.
+Theme input infrastructure is exported as `KetPlusCM::theme_io`, with
+`ui/theme/io/ThemeInput.h` in namespace `ket::theme::io`. `parseJsonc` uses a
+string/escape-aware tokenizer to replace comments and trailing commas with spaces,
+then delegates JSON grammar validation to Qt. It preserves offsets and reports
+line/column errors. No regex stripping is used.
+
+`ZipArchive` uses pinned miniz 3.1.2 (MIT), reads ZIP metadata from an open file,
+and decompresses only explicitly requested entries into bounded memory. It rejects
+unsafe paths, special-file/link attributes, duplicate normalized names, Unicode
+normalization/case collisions, file/directory conflicts, encryption and unsupported
+compression. Declared expanded sizes are checked before allocation; requested
+payloads also undergo miniz output-size, stream and CRC validation. No extraction
+to disk occurs. ZIP entry names must be UTF-8. Limits apply to every entry,
+including unrequested entries.
+
+`parseXml` returns a small `XmlNode` tree using `QXmlStreamReader`. External
+DOCTYPE identifiers, including the standard Apple plist header in `.tmTheme`,
+are accepted without fetching or validating their DTD. All internal subsets,
+entity declarations and unresolved entity references are rejected; no external
+resolver or network access is installed. Standard escaped XML characters remain
+supported. XML has additional 128-level/100,000-node bounds.
+
+`IncludeResolver` reads from a caller-selected root directory or validated archive.
+It rejects remote/absolute references, root escapes and filesystem symlinks, and
+returns JSON documents parent first without merging them. The root counts as
+level one of the 16-level limit. Failed reads/parses leave outputs empty. Parsed
+files are limited to 5 MiB; include chains have a cumulative 100 MiB budget.
+On Unix, directory-descriptor reads with `openat`/`O_NOFOLLOW` also prevent a
+checked path from being replaced by a symlink before opening. Non-Unix reads
+check path containment and symlinks before opening, but do not provide the same
+race protection against concurrent replacement of directories/junctions; import
+from a directory whose contents are not concurrently modified by another actor.
+Format-specific import and merge semantics remain the adapter's responsibility.
 
 Resolve includes relative to the declaring file, detect cycles, and enforce depth
 and byte limits. Parent colors are overridden by child keys; token rules retain
@@ -148,6 +180,9 @@ that mapping Lexilla styles implements semantic highlighting. Full TextMate
 compatibility is a separate tokenizer/editor project, not an install prerequisite.
 
 ## Installation and storage
+
+Canonical user schemes use `QStandardPaths::AppDataLocation/color-schemes/`
+(ADR 0121). The following external-package storage is a future proposal.
 
 Use `QStandardPaths::AppDataLocation/themes/` with immutable versioned packages,
 a catalog index, selection configuration, and a staging directory. Keep original

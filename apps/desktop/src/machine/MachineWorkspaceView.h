@@ -2,18 +2,25 @@
 
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QPointer>
 #include <QWidget>
 
 class QComboBox;
+class QStackedWidget;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
 class QToolButton;
+class QVBoxLayout;
+namespace ketplus::remote {
+class MachineBackend;
+}
 
 namespace ketplus {
 
 class MachineApprovalCards;
+class MachineAttachmentPanel;
 class MachineCatalog;
 class MachineConversationActions;
 class MachineConversationSession;
@@ -29,11 +36,14 @@ class MachineWorkspaceView final : public QWidget {
 
   public:
     explicit MachineWorkspaceView(MachineCatalog* catalog, QWidget* parent = nullptr);
+    ~MachineWorkspaceView() override;
 
     // Opens a conversation of the selected machine; it stays bound to that machine.
     void openConversation(const QString& sessionId);
     // Shows the new-conversation composer with its worktree picker.
     void startNewConversation(const QString& repositoryId = {});
+    // Uses the same file-validation/staging path as the Attach picker and drag/drop callers.
+    void attachFiles(const QStringList& paths);
     [[nodiscard]] MachineConversationSession* session() const;
     [[nodiscard]] QString openSessionId() const;
     // Rename, fork and archive of this machine's conversations (the sidebar menu uses it too).
@@ -47,18 +57,45 @@ class MachineWorkspaceView final : public QWidget {
     // A conversation was opened or created, for the sidebar's selection.
     void conversationOpened(const QString& machineId, const QString& sessionId);
 
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
   private:
+    void setupToastAvoidance();
+    void refreshToastAncestors();
+    void updateToastAvoidance();
+    void clearToastAvoidance();
+    QList<QPointer<QWidget>> toastAncestors_;
+    QPointer<QWidget> toastHost_;
+    bool toastTeardown_{false};
+
     void catalogChanged();
     void render();
     void renderWorktrees();
     void renderTranscript();
     void renderActions(bool newConversation);
+    void pruneAttachmentPanels();
     void submit();
     void createConversation(const QString& prompt);
     // `reload` reads the conversation again (and the route follows it) when it was not shown.
     void showSession(MachineConversationSession* session, bool reload);
     void bind(const QString& sessionId, qint64 generation, bool running);
     void finishCreate(const QString& machine, const QJsonObject& result, const QString& error);
+    void discardPreparation();
+    void renderPendingAttachments();
+    void preparedAttachments(const QJsonObject& result);
+    void sendPreparedAttachments(const QString& prompt);
+    QPointer<remote::MachineBackend> draftBackend_;
+    QPointer<MachineConversationSession> draftSession_;
+    QPointer<MachineAttachmentPanel> draftPanel_;
+    QString draftRequestId_;
+    QString draftWorktree_;
+    QString draftRepository_;
+    QStringList pendingAttachmentPaths_;
+    QWidget* pendingAttachments_{nullptr};
+    QVBoxLayout* pendingAttachmentLayout_{nullptr};
+    quint64 draftEpoch_{0};
+    bool preparing_{false};
 
     MachineCatalog* catalog_;
     QPointer<MachineConversationSession> session_;
@@ -84,6 +121,9 @@ class MachineWorkspaceView final : public QWidget {
     QComboBox* worktrees_{nullptr};
     MachineRichTranscript* transcript_{nullptr};
     MachineApprovalCards* approvals_{nullptr};
+    QStackedWidget* attachmentStack_{nullptr};
+    QHash<QString, MachineAttachmentPanel*> attachmentPanels_;
+    MachineAttachmentPanel* attachmentPanel_{nullptr};
     QPlainTextEdit* composer_{nullptr};
     QLabel* composerReason_{nullptr};
     QPushButton* attach_{nullptr};

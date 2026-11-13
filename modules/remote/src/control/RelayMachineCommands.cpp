@@ -56,7 +56,12 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
     }
     // A write follows its conversation's events; a read (pendingApprovals) does not, so it never
     // starts polling again for a conversation the UI has closed.
-    if (durable && !watched_.contains(sessionId))
+    if (prepared_.contains(sessionId) && kind != "session.prepare.cancel" &&
+        kind != "session.start_turn" && !kind.startsWith("attachment.stage.")) {
+        callback({}, QStringLiteral("This attachment draft is not an active conversation."));
+        return;
+    }
+    if (durable && !prepared_.contains(sessionId) && !watched_.contains(sessionId))
         watched_.insert(sessionId, row.value("lastEventCursor").toInteger());
     const auto token = QUuid::createUuid().toString(QUuid::Id128);
     const QJsonObject intent{{"id", "command_" + token},
@@ -253,6 +258,17 @@ void RelayMachineBackend::poll(const CommandOutbox::Entry& entry) {
 
 void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
                                  const QString& error) {
+    if (recoveredPreparations_.contains(id) && error.isEmpty() &&
+        command.value("status") == "completed" &&
+        command.value("result").toObject().value("ok").toBool() &&
+        !command.value("result").toObject().value("session_id").toString().isEmpty() &&
+        command.value("result").toObject().value("session_generation").toInteger() == 1 &&
+        command.value("result").toObject().value("expires_at_ms").toInteger() >
+            QDateTime::currentMSecsSinceEpoch()) {
+        if (!recoveringPreparations_.contains(id))
+            discardRecoveredPreparation(id, command);
+        return;
+    }
     delivering_.remove(id);
     // A command's result is applied once, however many times it is read back.
     if (outbox_.isCompleted(id) || !outbox_.isPending(id)) {
@@ -293,6 +309,29 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
                          : status == QLatin1String("completed")
                              ? QString{}
                              : command.value("resultCode").toString(QStringLiteral("failed"));
+    if (failure.isEmpty()) {
+        const auto session = command.value("sessionId").toString();
+        const auto kind = command.value("kind").toString();
+        if (kind == "session.prepare" && result.value("ok").toBool() &&
+            result.value("session_generation").toInteger() == 1 &&
+            result.value("expires_at_ms").toInteger() > QDateTime::currentMSecsSinceEpoch()) {
+            const auto preparedId = result.value("session_id").toString();
+            if (!preparedId.isEmpty())
+                prepared_.insert(preparedId, {{"id", preparedId},
+                                              {"sessionId", preparedId},
+                                              {"workspaceId", command.value("workspaceId")},
+                                              {"machineId", relayMachineId_},
+                                              {"generation", 1},
+                                              {"expires_at_ms", result.value("expires_at_ms")}});
+        }
+        if (kind == "session.prepare.cancel" && result.value("ok").toBool())
+            prepared_.remove(session);
+        if (kind == "session.start_turn" && prepared_.contains(session) &&
+            result.value("ok").toBool()) {
+            sessions_.insert(session, prepared_.take(session));
+            watched_.insert(session, 0);
+        }
+    }
     emit commandCompleted(id, result, failure);
     if (const auto callback = callbacks_.take(id))
         callback(result, failure);
@@ -341,51 +380,11 @@ void RelayMachineBackend::pollEvents() {
     }
 }
 
-void RelayMachineBackend::createSession(const QJsonObject& request, Callback callback) {
-    if (hold(callback,
-             [this, request](Callback again) { createSession(request, std::move(again)); }))
-        return;
-    const auto repository = request.value("repository_id").toString();
-    const auto worktreeId = request.value("worktree_id").toString();
-    QJsonObject worktree;
-    for (const auto& value : std::as_const(repositories_))
-        if (value.toObject().value("repositoryId").toString() == repository)
-            for (const auto& item : value.toObject().value("worktrees").toArray())
-                if (item.toObject().value("worktreeId").toString() == worktreeId)
-                    worktree = item.toObject();
-    // Only a worktree the host vouched for (a verified conversation or its signed read).
-    if (worktree.isEmpty() || worktree.value("workspaceId").toString().isEmpty() ||
-        request.value("prompt").toString().trimmed().isEmpty()) {
-        callback({}, QStringLiteral("Choose a verified worktree of this machine and a prompt."));
-        return;
-    }
-    QJsonObject plaintext{{"prompt", request.value("prompt")}};
-    for (const auto* key : {"options", "new_worktree"})
-        if (request.contains(QLatin1String(key)))
-            plaintext.insert(QLatin1String(key), request.value(QLatin1String(key)));
-    const QJsonObject intent{
-        {"kind", "session.create"},
-        {"workspaceId", worktree.value("workspaceId")},
-        {"machineId", relayMachineId_},
-        {"repositoryId", repository},
-        {"worktreeId", worktreeId},
-        {"expectedCatalogRevision", worktree.value("catalogRevision").toInteger(0)},
-        {"expectedLifecycleRevision", worktree.value("lifecycleRevision").toInteger(0)}};
-    const auto generation = generation_;
-    client_->prepareWorktreeCommand(
-        intent, plaintext,
-        guarded([this, generation, callback = std::move(callback)](const QJsonValue& value,
-                                                                   const QString& error) mutable {
-            if (generation != generation_) {
-                callback({}, reason_);
-                return;
-            }
-            if (!error.isEmpty()) {
-                callback({}, error);
-                return;
-            }
-            persistAndDeliver(OutboxRoute::Worktree, value.toObject(), std::move(callback));
-        }));
+void RelayMachineBackend::attachmentCommand(const AttachmentOperation operation,
+                                            const QString& sessionId, const qint64 generation,
+                                            const QJsonObject& request, Callback callback) {
+    sessionCommand(attachmentCommandKind(operation), sessionId, generation, request,
+                   std::move(callback));
 }
 
 void RelayMachineBackend::startTurn(const QString& sessionId, qint64 generation,
@@ -432,7 +431,9 @@ void RelayMachineBackend::answerQuestion(const QString& sessionId, qint64 genera
 
 bool RelayMachineBackend::supports(const Feature feature) const {
     return state_ == ConnectionState::Connected &&
-           (feature == Feature::Rename || feature == Feature::Fork);
+           (feature == Feature::Rename || feature == Feature::Fork ||
+            feature == Feature::Attachments ||
+            (feature == Feature::SessionPreparation && preparationSupported_));
 }
 
 QString RelayMachineBackend::unsupportedReason(const Feature feature) const {

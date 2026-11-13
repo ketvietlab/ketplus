@@ -4,6 +4,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include "agents/ReviewVerdict.h"
+#include "teams/TeamVerdictLine.h"
 
 #include <QDir>
 #include <QJsonObject>
@@ -53,9 +54,12 @@ int shownLimit(const int limit, const int round) { return std::max(limit, round)
 // T-40: a comment on a public pull request names no folder of this computer. The task's
 // worktree, the team's repository and the home folder are replaced, longest first.
 QString publicText(QString text, const Team& team, const Task& task) {
+    // T-90: the task's own repository too, when it has one.
     QList<std::pair<QString, QString>> paths{{task.worktree, QStringLiteral("<task worktree>")},
                                              {team.repository, QStringLiteral("<repository>")},
                                              {QDir::homePath(), QStringLiteral("~")}};
+    if (!task.repository.isEmpty())
+        paths.append({task.repository, QStringLiteral("<repository>")});
     std::sort(paths.begin(), paths.end(),
               [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
     for (const auto& [path, name] : paths) {
@@ -89,13 +93,13 @@ QString TeamCoordinator::roundLimitQuestion(const QString& language, const int r
 
 QString TeamCoordinator::reviewText(const Team& team, const Task& task,
                                     const std::optional<TaskDiff>& diff) {
-    QStringList lines{
-        QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
-            .arg(team.name, task.id, task.title)
-            .arg(task.round)
-            .arg(shownLimit(roundLimit(team, task), task.round)),
-        QStringLiteral("Branch: %1, against %2").arg(task.branch, team.integrationBranch),
-        QStringLiteral("Worktree: %1").arg(task.worktree)};
+    QStringList lines{QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
+                          .arg(team.name, task.id, task.title)
+                          .arg(task.round)
+                          .arg(shownLimit(roundLimit(team, task), task.round)),
+                      QStringLiteral("Branch: %1, against %2")
+                          .arg(task.branch, taskScope(team, task).integrationBranch),
+                      QStringLiteral("Worktree: %1").arg(task.worktree)};
     if (TeamCoordinator::recordsPullRequest(task))
         lines << QStringLiteral("Pull request: %1").arg(task.pullRequest);
     if (!task.headCommit.isEmpty())
@@ -182,16 +186,17 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
             continue;
         }
         reviewDiffs_.insert(diffKey(teamId, reviewer));
-        host_->askDiff(
-            *team, *next,
-            [self = QPointer<TeamCoordinator>(this), teamId, reviewer, asked = *next,
-             repository = team->repository,
-             integration = team->integrationBranch](const std::optional<TaskDiff>& diff) {
-                if (!self)
-                    return;
-                self->reviewDiffs_.remove(diffKey(teamId, reviewer));
-                self->startReview(teamId, reviewer, asked, repository, integration, diff);
-            });
+        host_->askDiff(*team, *next,
+                       [self = QPointer<TeamCoordinator>(this), teamId, reviewer, asked = *next,
+                        repository = taskScope(*team, *next).repository,
+                        integration = taskScope(*team, *next).integrationBranch](
+                           const std::optional<TaskDiff>& diff) {
+                           if (!self)
+                               return;
+                           self->reviewDiffs_.remove(diffKey(teamId, reviewer));
+                           self->startReview(teamId, reviewer, asked, repository, integration,
+                                             diff);
+                       });
     }
 }
 
@@ -212,8 +217,8 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     const Task* next = nextInReview(std::as_const(*team), *slot);
     if (!next || next->id != asked.id || next->branch != asked.branch ||
         next->worktree != asked.worktree || next->baseCommit != asked.baseCommit ||
-        next->headCommit != asked.headCommit || team->repository != repository ||
-        team->integrationBranch != integration) {
+        next->headCommit != asked.headCommit || taskScope(*team, *next).repository != repository ||
+        taskScope(*team, *next).integrationBranch != integration) {
         pumpReviews(teamId);
         return;
     }
@@ -226,6 +231,11 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     while (!taking->queue.isEmpty() && taking->queue.takeFirst() != taskId) {
     }
     Task* task = team->task(taskId);
+    // The limit was lowered while it waited: the leader decides, not another pass.
+    if (QList<Update> limited; blockAtLoweredLimit(*team, *task, limited)) {
+        commit(*team, before, QStringLiteral("daemon"), limited);
+        return;
+    }
     ++task->round;
     task->reviewer = reviewerSession;
     // T-40: the team's settings as the task enters this round; a change applies afterwards.
@@ -329,6 +339,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
     const Member* member = team->member(reviewerSession);
     if (!member || member->role != role::reviewer)
         return;
+    const QString reviewerName = member->name;
     const Team before = *team;
     ReviewSlot* answered = team->reviewSlot(reviewerSession);
     const QString taskId = answered->reviewing;
@@ -373,6 +384,27 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
         };
         if (failure.isEmpty() && !noVerdict)
             task->missingVerdicts = 0;
+        // T-75 (ADR 0114 §7): every verdict is a line for the leader, so its next digest is
+        // due without waiting for another update that needs it. At the round limit the same
+        // line is the `round_limit` warning, so the leader reads it once.
+        const auto told = [&](const bool withFindings, const bool atLimit) {
+            updates.append(
+                {.kind = atLimit ? QStringLiteral("round_limit") : QStringLiteral("verdict"),
+                 .text = verdict_line::text({.taskId = taskId,
+                                             .pullRequest = task->pullRequest,
+                                             .round = round,
+                                             .limit = shownLimit(limit, round),
+                                             .reviewer = reviewerName,
+                                             .findings = withFindings,
+                                             .atLimit = atLimit,
+                                             .reply = text}),
+                 .taskId = taskId,
+                 .actionable = true,
+                 .data = {{QStringLiteral("verdict"), withFindings ? QStringLiteral("findings")
+                                                                   : QStringLiteral("no_findings")},
+                          {QStringLiteral("round"), round},
+                          {QStringLiteral("reviewer"), reviewerName}}});
+        };
         if (!failure.isEmpty()) {
             task->resumeState = state::inProgress;
             task->question =
@@ -424,6 +456,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
                       say(team->language, QT_TRANSLATE_NOOP("Team", "reviewed, no findings")),
                       updates);
+            told(false, false);
             offerMerges(*team, updates);
         } else {
             addHistory(
@@ -440,17 +473,11 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                     task->question +=
                         say(team->language, QT_TRANSLATE_NOOP("Team", " The findings: %1"))
                             .arg(link);
+                told(true, true);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
-                updates.append({.kind = QStringLiteral("round_limit"),
-                                .text = say(team->language,
-                                            QT_TRANSLATE_NOOP(
-                                                "Team", "%1 still has findings after %2 rounds."))
-                                            .arg(taskId)
-                                            .arg(round),
-                                .taskId = taskId,
-                                .actionable = true});
             } else {
+                told(true, false);
                 applyMove(
                     *team, *task, state::inProgress, QStringLiteral("daemon"),
                     say(team->language, QT_TRANSLATE_NOOP("Team", "review round %1 found issues"))

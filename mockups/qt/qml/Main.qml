@@ -463,7 +463,7 @@ Basic.ApplicationWindow {
             currentIndex: ["workspace", "editor", "changes", "connections", "settings",
                            "atlas", "mobile-picker", "teams", "brand"].indexOf(app.screen)
 
-            WorkspaceScreen { id: workspace; window: app }
+            WorkspaceScreen { id: workspace; window: app; toastCoordinateSpace: toast.parent }
             EditorScreen { window: app }
             SourceControlScreen { window: app }
             ConnectionsScreen { id: connections; window: app }
@@ -640,5 +640,8 @@ Basic.ApplicationWindow {
         }
     }
 
-    KetToast { id: toast }
+    KetToast {
+        id: toast
+        bottomAvoidance: app.screen === "workspace" ? workspace.toastBottomAvoidance : 0
+    }
 }

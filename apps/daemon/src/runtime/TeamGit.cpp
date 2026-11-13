@@ -1,6 +1,8 @@
 // ADR 0114: the questions a team asks git. Nothing here reads the session runtime.
 #include "runtime/TeamGit.h"
 
+#include "teams/TeamBranchNames.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -8,6 +10,7 @@
 #include <QMutex>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QSet>
 
 namespace ketplus::daemon::team_git {
 
@@ -40,7 +43,9 @@ QString repositoryOf(const QString& worktreePath) {
                : common.canonicalFilePath();
 }
 
-QString taskCommit(const teams::Team& team, const teams::Task& task) {
+QString taskCommit(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     if (task.branch.isEmpty())
         return {};
     // The branch itself, not a worktree's HEAD: a worktree can be detached or on another
@@ -52,7 +57,9 @@ QString taskCommit(const teams::Team& team, const teams::Task& task) {
         .trimmed();
 }
 
-std::optional<QStringList> changedPaths(const teams::Team& team, const teams::Task& task) {
+std::optional<QStringList> changedPaths(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir() || task.branch.isEmpty())
         return std::nullopt;
     // T-38: only the task's own tracked changes. Committed: the task's branch (not whatever
@@ -158,7 +165,9 @@ void fetchIntegration(const teams::Team& team) {
 
 } // namespace
 
-std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
+std::optional<bool> isMerged(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     if (team.integrationBranch.isEmpty() || task.branch.isEmpty())
         return std::nullopt;
     const auto local = isAncestor(team.repository, task.branch, team.integrationBranch);
@@ -174,7 +183,9 @@ std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task) {
     return local;
 }
 
-std::optional<bool> branchExists(const teams::Team& team, const teams::Task& task) {
+std::optional<bool> branchExists(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     if (task.branch.isEmpty())
         return false;
     if (team.repository.isEmpty())
@@ -193,7 +204,9 @@ std::optional<bool> branchExists(const teams::Team& team, const teams::Task& tas
     return std::nullopt;
 }
 
-std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Task& task) {
+std::optional<teams::TaskDiff> taskDiff(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     const QString directory = task.worktree.isEmpty() ? team.repository : task.worktree;
     // T-38: a branch still at its base has nothing to show; the review reads the work where
     // the hand to review named it, never another commit the worktree has checked out.
@@ -220,9 +233,73 @@ std::optional<teams::TaskDiff> taskDiff(const teams::Team& team, const teams::Ta
                            .outsideBranch = false};
 }
 
-// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
-// worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
-teams::WorktreeAnswer createWorktree(const teams::Team& team, const teams::Task& task) {
+teams::RepositoryCheck checkRepository(const QString& path, const QString& integrationBranch) {
+    const auto refuse = [](const QString& error) {
+        return teams::RepositoryCheck{.repository = {}, .error = error};
+    };
+    if (!QDir::isAbsolutePath(path))
+        return refuse(QStringLiteral("Give the repository's full path, not %1.").arg(path));
+    const QFileInfo folder(QDir::cleanPath(path));
+    if (!folder.isDir())
+        return refuse(QStringLiteral("%1 is not a folder on this computer.").arg(path));
+    const QString canonical = folder.canonicalFilePath();
+    const QString main = repositoryOf(canonical);
+    if (main.isEmpty())
+        return refuse(QStringLiteral("%1 is not a Git repository.").arg(path));
+    if (main != canonical)
+        return refuse(QStringLiteral("%1 is inside the repository %2 or is one of its worktrees. "
+                                     "Choose its main checkout, %2.")
+                          .arg(path, main));
+    if (integrationBranch.isEmpty())
+        return {.repository = main, .error = {}};
+    if (!output(main,
+                {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")}))
+        return refuse(QStringLiteral("%1 has no remote named origin.").arg(main));
+    if (!output(main, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                       QStringLiteral("--quiet"), QStringLiteral("--end-of-options"),
+                       QStringLiteral("refs/remotes/origin/%1^{commit}").arg(integrationBranch)}))
+        return refuse(QStringLiteral("origin has no branch %1 in %2. Fetch it (git fetch origin "
+                                     "%1) or name another integration branch.")
+                          .arg(integrationBranch, main));
+    return {.repository = main, .error = {}};
+}
+
+std::optional<bool> branchTaken(const QString& repository, const QString& branch) {
+    if (repository.isEmpty() || branch.isEmpty())
+        return std::nullopt;
+    // One listing answers both the name and the folder clash git would refuse (`feat` against
+    // `feat/x-t1`).
+    const auto names = branchNames(repository);
+    if (!names)
+        return std::nullopt;
+    return teams::branch_names::clashesWithAny(branch, *names);
+}
+
+std::optional<QSet<QString>> branchNames(const QString& repository) {
+    if (repository.isEmpty())
+        return std::nullopt;
+    const auto listed =
+        output(repository, {QStringLiteral("for-each-ref"), QStringLiteral("--format=%(refname)"),
+                            QStringLiteral("refs/heads/"), QStringLiteral("refs/remotes/origin/")});
+    if (!listed)
+        return std::nullopt;
+    QSet<QString> names;
+    for (const QString& ref : listed->split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        for (const QString prefix :
+             {QStringLiteral("refs/heads/"), QStringLiteral("refs/remotes/origin/")})
+            if (ref.startsWith(prefix))
+                names.insert(ref.mid(prefix.size()));
+    }
+    return names;
+}
+
+// ADR 0114, open point 1: a worktree beside the repository, as the worktrees of ADR 0111 are,
+// from the integration branch. T-93 (ADR 0123 §9): `<repository>-<type>-<slug>-t<n>` on
+// `<type>/<slug>-t<n>`; a task from before keeps `<repository>-team-<id>-t-<n>` on
+// `team/<id>/t-<n>`.
+teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     const QString base =
         team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
     const auto commit = output(
@@ -232,14 +309,19 @@ teams::WorktreeAnswer createWorktree(const teams::Team& team, const teams::Task&
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The integration branch %1 does not exist in %2.")
                              .arg(base, team.repository)};
-    const QString slug = task.id.toLower();
-    const QString branch = QStringLiteral("team/%1/%2").arg(team.id).arg(slug);
+    const QString branch = teams::branch_names::plannedBranch(team.id, task);
     const QFileInfo repository(team.repository);
     const QString path = QDir::cleanPath(repository.dir().filePath(
-        QStringLiteral("%1-team-%2-%3").arg(repository.fileName()).arg(team.id).arg(slug)));
+        teams::branch_names::plannedWorktreeName(repository.fileName(), team.id, task)));
     if (QFileInfo::exists(path))
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The worktree path %1 already exists.").arg(path)};
+    // Made since the task was named: the leader renames it (team_task_update branch_slug).
+    if (branchTaken(team.repository, branch) == std::optional<bool>(true))
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("The branch %1 already exists in %2: rename the task's "
+                                        "branch with team_task_update (branch_slug).")
+                             .arg(branch, team.repository)};
     if (!output(team.repository,
                 {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
                  QStringLiteral("--"), path, commit->trimmed()}))
@@ -249,7 +331,9 @@ teams::WorktreeAnswer createWorktree(const teams::Team& team, const teams::Task&
                 QStringLiteral("git could not create the worktree %1 on %2.").arg(path, branch)};
     return {.worktree = teams::TaskWorktree{.branch = branch,
                                             .worktree = QFileInfo(path).canonicalFilePath(),
-                                            .baseCommit = commit->trimmed()},
+                                            .baseCommit = commit->trimmed(),
+                                            .repository = team.repository,
+                                            .integrationBranch = team.integrationBranch},
             .error = {}};
 }
 
@@ -260,7 +344,9 @@ std::optional<bool> hasUncommittedWork(const QString& worktree) {
     return !status->trimmed().isEmpty();
 }
 
-std::optional<QString> ownHead(const teams::Team& team, const teams::Task& task) {
+std::optional<QString> ownHead(const teams::Team& whole, const teams::Task& task) {
+    // T-90: the task's repository and integration branch, when it has its own.
+    const teams::Team team = teams::taskScope(whole, task);
     // A deleted or never made branch has no work of its own; only a git that cannot answer
     // is not known, and the caller says to try again.
     const auto exists = branchExists(team, task);
@@ -309,17 +395,25 @@ teams::HandoffFacts handoff(const teams::Team& team, const teams::Task& task) {
 QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<teams::Task>& tasks,
                                        const teams::TaskQuestion question) {
     QHash<QString, teams::TaskFacts> answers;
-    if (question == teams::TaskQuestion::Merge && !team.integrationBranch.isEmpty() &&
-        !tasks.isEmpty())
-        fetchIntegration(team);
-    for (const teams::Task& task : tasks)
+    // T-90: each repository and integration branch the tasks work in is fetched once.
+    QSet<QString> fetched;
+    for (const teams::Task& task : tasks) {
+        const teams::Team scope = teams::taskScope(team, task);
+        if (question == teams::TaskQuestion::Merge && !scope.integrationBranch.isEmpty()) {
+            const QString key = scope.repository + u'\n' + scope.integrationBranch;
+            if (!fetched.contains(key)) {
+                fetched.insert(key);
+                fetchIntegration(scope);
+            }
+        }
         answers.insert(task.id, question == teams::TaskQuestion::Merge
-                                    ? teams::TaskFacts{.head = taskCommit(team, task),
-                                                       .merged = isMerged(team, task),
+                                    ? teams::TaskFacts{.head = taskCommit(scope, task),
+                                                       .merged = isMerged(scope, task),
                                                        .changed = std::nullopt}
                                     : teams::TaskFacts{.head = {},
                                                        .merged = std::nullopt,
-                                                       .changed = changedPaths(team, task)});
+                                                       .changed = changedPaths(scope, task)});
+    }
     return answers;
 }
 

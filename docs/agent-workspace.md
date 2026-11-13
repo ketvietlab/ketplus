@@ -234,6 +234,65 @@ current-window value.
   is missing or its file has gone. A CLI installed while KetPlus runs, or moved
   by its own updater, is used on the next request or Retry without restarting
   the daemon (`ProviderExecutable`).
+- The daemon's GitHub Copilot adapter uses provider id `copilot` and the
+  user-installed [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+  It starts `copilot --acp --stdio`; KetPlus does not bundle or download the CLI.
+  Discovery checks the absolute daemon `--copilot <path>` option, then
+  `KETPLUS_COPILOT`, then `PATH`, then the platform locations in
+  [ADR 0120](decisions/0120-github-copilot-acp-provider.md#executable-discovery):
+  `~/.local/bin`, Homebrew and `/usr/local/bin` on macOS/Linux, plus `/usr/bin`
+  on Linux; `%APPDATA%\npm` and the WinGet links folder on Windows. An invalid
+  explicit override is an actionable error, rather than a fallback to another CLI.
+  Missing CLI errors link to the installation guide and explain the override.
+  Sign in with `copilot login` on the machine running the daemon, or configure
+  the CLI's supported headless authentication there. Authentication remains with
+  the CLI; KetPlus neither copies tokens into its journal nor calls ACP
+  `authenticate`. Token absence alone does not reject a BYOK session. An explicit
+  authentication failure ends the turn with login guidance; retry uses a fresh
+  process. Permission, network and usage failures retain separate, sanitized
+  explanations. Initialization and ordinary setup calls time out after 30 seconds;
+  session creation/loading allows 120 seconds for cold MCP workers. Prompts have
+  no wall-clock deadline: long-running work and human approval must not kill the
+  shared process or unrelated conversations. Process exit and explicit Stop
+  still end waiting turns. Streaming and cancellation use the shared ACP engine.
+  The model picker receives Copilot's advertised ACP model selector from the
+  daemon. KetPlus prefers `configOptions` (including grouped choices), preserving
+  its model option id and value exactly. Older `models.availableModels` catalogs
+  use the compatibility `session/set_model` path only when offered by that session.
+  Discovery starts a disposable initialize/session-new probe in a temporary
+  directory with no host MCP servers and never sends a prompt. Concurrent requests
+  share a probe; its result is cached for 60 seconds. The probe has an eight-second
+  deadline and a one-MiB combined stdout/stderr budget. Catalogs are limited to 256
+  models and 256-character identifiers; display labels/descriptions are bounded
+  to 256/2,000 characters. The normalized catalog also has a 256-KiB JSON budget,
+  reserving room in daemon frames for metadata and other providers. No reasoning
+  levels or Cursor variants are invented.
+  If discovery fails, only **Copilot default** is offered with a catalog-unavailable
+  explanation. That choice leaves the provider's current session default unchanged.
+  Explicit model selections are checked against the conversation session's own
+  catalog and applied before a prompt. Switching between turns uses the advertised
+  config setter (or the legacy setter); a refusal, unsupported model or unconfirmed
+  config value fails the turn with an actionable error and sends no prompt.
+  Model rows carry the host **Ask for permission** profile for KetPlus approval
+  requests; this does not assert a Copilot sandbox or infer a provider mode.
+  Coverage uses fake ACP processes; live Copilot model behavior remains unverified.
+  Copilot tool requests use KetPlus approval cards. Allow and Refuse select the
+  CLI's advertised one-time option; missing options, expiry and cancellation
+  return `cancelled`. An approval never becomes an always rule. Pending requests
+  belong to one turn/process; an old card cannot authorize a replacement request.
+  Copilot permission modes are not yet verified, so even Full access does not
+  bypass these cards or claim to enforce a filesystem sandbox.
+  Browser MCP uses the same host Browser settings as Cursor: the daemon injects
+  the resolved stdio server on new/resumed sessions, adds routing instructions
+  separately from user text/images, and signals cleanup on completion, failure,
+  cancellation and shutdown. Disabled/invalid settings inject no browser server
+  and send unavailable guidance on the next turn. Tool images are preserved in
+  canonical transcript content for the existing gallery.
+  Copilot's authenticated MCP identity schema is unverified. Browser requests
+  therefore still ask for approval, including familiar titles and Cursor-shaped
+  `rawInput` identities. No project MCP file or turn-supplied server map overrides
+  the host Browser settings; no blanket allow-all CLI flags are added.
+
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in
@@ -543,8 +602,21 @@ current-window value.
   repository's worktrees are ordered by when their latest turn started, so
   sending a message, from the desktop or a phone, moves that conversation to
   the top; ties and conversations that never started a turn follow by title.
-  Repositories are ordered by their newest conversation, then by name, so
-  opening or switching one never reorders the list. The start time
+  Repositories are ordered by the newest turn start of anything they show, their
+  own conversations and their teams' members alike (T-92), then by name, so
+  opening or switching one never reorders the list. Repositories the user pinned
+  (**Pin to top** in the repository header's context menu; **Unpin** to undo)
+  come first, in the order they were pinned, with a small pin after the name.
+  Pins are this Mac's: kept in `QSettings` (`sidebar/pinnedRepositories`) by
+  canonical path, a pin whose folder is gone is dropped silently, another
+  machine's repositories cannot be pinned, and phones do not receive them.
+  A conversation's group is fixed: it stays under the repository it was created
+  in (the daemon's `conversation_path`, written once), and a team member stays
+  under its team, whatever worktree or repository the conversation later runs
+  in. Switching worktree or repository, from the worktree picker or a team task
+  assignment, changes only the execution context (Source Control, Files and the
+  composer's repository and branch), never the row's group or the repository
+  order; the highlighted repository is the open conversation's group. The start time
   (`lastTurnStartedAt`) is the daemon's: the journal stamps it on the session
   with each `user.message`, `session.list` reports it, and the heartbeat seals
   it into the session metadata for phones, which apply the same order. Each expanded
@@ -835,6 +907,31 @@ KETPLUS_RUN_LIVE_AGENT_TEST=1 build/dev/ketplus_agent_tests liveCodexSmoke
 The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 
 ## Composer and provider capabilities
+
+Desktop recognizes daemon adapter `copilot` as **GitHub Copilot** in the model
+picker, composer, Teams and restored transcripts. Its tab follows the same
+setup-guide behavior as Cursor: when the daemon reports a missing CLI, the tab
+opens installation/sign-in steps while Apply stays disabled. An older daemon
+that supplies neither a Copilot catalog nor a setup guide leaves the tab disabled.
+An existing Copilot conversation keeps its provider and draft in that case;
+Send is disabled with guidance to choose another provider, even when a Codex
+model shares the saved model id.
+Copilot models are offered only with permission profiles supplied by the daemon;
+Desktop does not inherit Codex or Cursor modes for them. A blocking setup state
+also prevents applying a stale Copilot catalog.
+
+The setup guide uses Homebrew on macOS, npm on Linux (Node.js 22 or later), and
+WinGet on Windows. Commands run on the machine hosting the daemon. Sign in with
+`copilot login`, or configure the daemon's supported token environment as described
+in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
+[GitHub's installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+`--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
+paths do not install a CLI or run a provider prompt by themselves.
+
+History, notifications and local/ControlV2/relay transport retain `copilot` as the
+adapter id. Journal `cursor` fields remain event sequence numbers. No remote
+wire format or transcript cursor semantics change. Availability of actual turns,
+models and modes depends on the installed daemon's Copilot adapter.
 
 - The two-row composer includes attachment chips, permission selection, model and
   reasoning selection, and Send/Stop. Enter sends; Shift+Enter inserts a new line.

@@ -11,8 +11,8 @@
 
 namespace ketplus::daemon {
 
-// The surface SessionHost drives on every provider process: Codex, Claude and Cursor.
-// Claude and Cursor translate their protocol into canonical journal events in the adapter.
+// The surface SessionHost drives on every provider process: Codex, Claude, Cursor and Copilot.
+// ACP providers and Claude translate their protocol into canonical journal events in the adapter.
 // Codex forwards its app-server notifications (CodexAdapter::notificationReceived), which
 // SessionHost projects; that and its browser-settings reload stay Codex-specific.
 class ProviderAdapter : public QObject {
@@ -23,7 +23,7 @@ class ProviderAdapter : public QObject {
 
     using QObject::QObject;
 
-    // The adapter name stored on a session: "codex", "claude" or "cursor".
+    // The adapter name stored on a session: "codex", "claude", "cursor" or "copilot".
     [[nodiscard]] virtual QString name() const = 0;
     [[nodiscard]] virtual bool isAvailable() const = 0;
     [[nodiscard]] virtual bool isReady() const = 0;
@@ -40,7 +40,7 @@ class ProviderAdapter : public QObject {
     virtual void stop() = 0;
 
   signals:
-    // Claude and Cursor only.
+    // Providers that emit normalized transcript events (Claude and ACP).
     void canonicalEvent(const QString& sessionId, const QString& type, const QJsonObject& payload);
     void requestReceived(const QJsonValue& requestId, const QString& method,
                          const QJsonObject& params);

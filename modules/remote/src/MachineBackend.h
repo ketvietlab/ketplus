@@ -32,7 +32,7 @@ class MachineBackend : public QObject {
 
     // Conversation operations a route may not carry yet. The UI offers each one everywhere and
     // disables it, with unsupportedReason(), where supports() is false (ADR 0119 "Parity").
-    enum class Feature { Rename, Fork, Archive, Attachments };
+    enum class Feature { Rename, Fork, Archive, Attachments, SessionPreparation };
     Q_ENUM(Feature)
 
     using QObject::QObject;
@@ -74,6 +74,11 @@ class MachineBackend : public QObject {
     // with the `id` listWorktrees() or listRepositories() reported (the host path on the local
     // and SSH routes), plus "repository_id" on the Relay. The result names the new session_id.
     virtual void createSession(const QJsonObject& request, Callback callback) = 0;
+    // ADR 0122: inactive first-turn attachment scope. Requires an advertised capability;
+    // request includes a stable client_request_id, worktree_id and initial options.
+    virtual void prepareSession(const QJsonObject& request, Callback callback);
+    virtual void cancelPreparedSession(const QString& sessionId, qint64 generation,
+                                       Callback callback);
 
     // The conversation is no longer open or selected: a route that follows its events stops.
     virtual void conversationClosed(const QString& sessionId) { Q_UNUSED(sessionId); }
@@ -103,6 +108,14 @@ class MachineBackend : public QObject {
     }
     // Why a feature is disabled, for its tooltip.
     [[nodiscard]] virtual QString unsupportedReason(Feature feature) const;
+    // Existing attachment.stage protocol (ADR 0007). A queued response is not completion;
+    // consumers must wait for commandCompleted before advancing the upload sequence.
+    enum class AttachmentOperation { Begin, Chunk, Commit, Cancel };
+    virtual void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
+                                   qint64 generation, const QJsonObject& request,
+                                   Callback callback);
+    [[nodiscard]] static QString attachmentCommandKind(AttachmentOperation operation);
+
     // session.rename {title}.
     virtual void renameConversation(const QString& sessionId, qint64 generation,
                                     const QString& title, Callback callback);

@@ -2,6 +2,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
+#include "teams/TeamBranchNames.h"
 
 #include <QDir>
 
@@ -9,6 +10,12 @@
 
 namespace ketplus::daemon::teams {
 namespace {
+
+// T-93 (ADR 0123 §9, review L1): the repository's branches were not listed yet.
+QString uncheckedBranchText() {
+    return QStringLiteral(" The repository's branches were not listed yet; the name is checked "
+                          "against them when the worktree is made.");
+}
 
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
@@ -92,9 +99,27 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
     task.dependsOn = draft.dependsOn;
     for (const QString& criterion : draft.criteria)
         task.criteria.append({.text = criterion.trimmed()});
-    addHistory(task, actor, QStringLiteral("created"),
-               say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1."))
-                   .arg(actorName(*team, actor)));
+    if (auto invalid = taskRepository(*team, draft, task)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    // T-93: after the repository, whose branches the name must not take.
+    bool unchecked = false;
+    if (auto invalid = nameTaskBranch(*team, task, draft.branchType.trimmed(),
+                                      draft.branchSlug.trimmed(), &unchecked)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    const QString branch = branch_names::plannedBranch(team->id, task);
+    addHistory(
+        task, actor, QStringLiteral("created"),
+        (task.repository.isEmpty()
+             ? say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2.")).arg(actorName(*team, actor), branch)
+             : say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2 in %3 against %4."))
+                   .arg(actorName(*team, actor), branch, task.repository,
+                        task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                         : task.integrationBranch)) +
+            (unchecked ? uncheckedBranchText() : QString()));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
@@ -175,6 +200,33 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         }
         task = team->task(taskId);
         task->dependsOn = dependencies;
+    }
+    // T-93: the leader renames the branch while it does not exist yet.
+    if (changes.contains(QStringLiteral("branch_type")) ||
+        changes.contains(QStringLiteral("branch_slug"))) {
+        if (!leaderOrUser(role))
+            return restore(
+                forbidden(QStringLiteral("rename a task's branch"), QStringLiteral("the leader")));
+        if (!task->branch.isEmpty())
+            return restore(refusal(QStringLiteral("branch_started"),
+                                   QStringLiteral("%1 already works on %2; a started branch "
+                                                  "keeps its name.")
+                                       .arg(task->id, task->branch)));
+        const QString was = branch_names::plannedBranch(team->id, *task);
+        const QString type = changes.contains(QStringLiteral("branch_type"))
+                                 ? changes.value(QStringLiteral("branch_type")).toString().trimmed()
+                                 : task->branchType;
+        const QString slug = changes.contains(QStringLiteral("branch_slug"))
+                                 ? changes.value(QStringLiteral("branch_slug")).toString().trimmed()
+                                 : task->branchSlug;
+        bool unchecked = false;
+        if (auto invalid = nameTaskBranch(*team, *task, type, slug, &unchecked))
+            return restore(*invalid);
+        if (const QString now = branch_names::plannedBranch(team->id, *task); now != was)
+            addHistory(*task, actor, QStringLiteral("branch"),
+                       QStringLiteral("Branch %1 → %2.").arg(was, now) +
+                           (unchecked ? uncheckedBranchText() : QString()),
+                       {{QStringLiteral("from"), was}, {QStringLiteral("to"), now}});
     }
     if (changes.contains(QStringLiteral("pull_request")) ||
         changes.contains(QStringLiteral("note"))) {
@@ -285,6 +337,29 @@ TeamResult TeamCoordinator::setCriteria(const qint64 teamId, const QString& task
     return {.teamId = teamId};
 }
 
+// T-53: a lowered Max review passes applies from the next review request. A task that
+// already had as many passes as the team now allows goes to the leader instead of to review,
+// once: the limit it carries becomes the team's, so a leader who hands it to review again
+// gets the pass it asked for. Checked as the task enters review and again as a reviewer
+// takes it, since the limit can be lowered while it waits in the queue.
+bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates) {
+    if (task.round <= 0 || task.roundLimit <= team.maxRounds || task.round < team.maxRounds)
+        return false;
+    task.roundLimit = team.maxRounds;
+    task.resumeState = state::inProgress;
+    task.question = roundLimitQuestion(task.round, team.maxRounds) +
+                    QStringLiteral(" The team's Max review passes is now %1.").arg(team.maxRounds);
+    applyMove(team, task, state::blocked, QStringLiteral("daemon"), task.question, updates);
+    updates.append({.kind = QStringLiteral("round_limit"),
+                    .text = QStringLiteral("%1 had %2 review passes; the team now allows %3.")
+                                .arg(task.id)
+                                .arg(task.round)
+                                .arg(team.maxRounds),
+                    .taskId = task.id,
+                    .actionable = true});
+    return true;
+}
+
 void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
@@ -306,6 +381,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
     // T-19: a task handed to review again starts its replies without a verdict from zero.
     if (to == state::inReview)
         task.missingVerdicts = 0;
+    if (to == state::inReview && blockAtLoweredLimit(team, task, updates))
+        return;
     // ADR 0114 §2: a reviewer takes its tasks first in, first out; commit() sends the next.
     if (to == state::inReview)
         queueReview(team, task);

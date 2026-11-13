@@ -8,6 +8,8 @@ add_library(ketplus_remote STATIC
     src/DaemonMachineBackend.cpp
     src/DaemonMachineBackend.h
     src/MachineBackend.h
+    src/MachineAttachmentUpload.cpp
+    src/MachineAttachmentUpload.h
     src/MachineBackend.cpp
     src/MachineLargeEvents.cpp
     src/MachineLargeEvents.h
@@ -17,6 +19,8 @@ add_library(ketplus_remote STATIC
     src/SessionCatalogReader.h
     src/LargeEventReassembler.cpp
     src/LargeEventReassembler.h
+    src/TranscriptVisibility.cpp
+    src/TranscriptVisibility.h
 )
 target_compile_definitions(ketplus_remote PRIVATE
     KETPLUS_AUTO_UPGRADE_DAEMON=$<BOOL:${KETPLUS_AUTO_UPGRADE_DAEMON}>)
@@ -79,7 +83,7 @@ add_library(ketplus_remote_control STATIC
     src/control/ControlV2Worktrees.cpp
     src/control/CommandOutbox.h src/control/CommandOutbox.cpp
     src/control/RelayMachineBackend.h src/control/RelayMachineBackend.cpp
-    src/control/RelayMachineCommands.cpp)
+    src/control/RelayMachineCommands.cpp src/control/RelayMachinePreparation.cpp)
 target_link_libraries(ketplus_remote_control PUBLIC ketplus_control_crypto Qt6::Network)
 target_include_directories(ketplus_remote_control PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_remote_control)
