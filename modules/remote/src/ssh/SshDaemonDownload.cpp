@@ -36,7 +36,11 @@ void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void
             return;
         // Redirect/error bodies are not release bytes and are never executed or presented.
         if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
-            reply->readAll();
+            *count += reply->readAll().size();
+            if (*count > daemonManifestLimit) {
+                reply->abort();
+                fail(tr("The release redirect or error response exceeded its size limit."));
+            }
             return;
         }
         const auto chunk = reply->readAll();

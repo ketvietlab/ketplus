@@ -58,12 +58,13 @@ def safe_extract(archive, destination):
     # Validate the complete table before creating any extracted entry. The publisher puts
     # bin/, lib/, plugins/, etc. directly at the archive root (no CPack wrapper directory).
     with tarfile.open(archive, 'r:gz') as package:
-        entries = package.getmembers()
-        require(len(entries) <= 50000, 'The runtime archive has too many entries.')
+        entries = []
         names = set()
         total = 0
         links = set()
-        for item in entries:
+        for item in package:
+            entries.append(item)
+            require(len(entries) <= 50000, 'The runtime archive has too many entries.')
             name = PurePosixPath(item.name)
             require(not name.is_absolute() and '..' not in name.parts and
                     str(name) not in ('', '.') and str(name) not in names,

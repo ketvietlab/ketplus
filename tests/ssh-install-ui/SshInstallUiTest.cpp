@@ -5,6 +5,7 @@
 #include "remote/LinuxMachineModel.h"
 #include "remote/LinuxSshMachines.h"
 #include "ssh/SshDaemonInstaller.h"
+#include "ssh/SshMachineBackend.h"
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCryptographicHash>
