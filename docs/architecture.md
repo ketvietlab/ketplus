@@ -224,6 +224,14 @@ tree); there is no option to leave it out, and the bundle check fails without it
 bundle and replaces the installed copies, so neither keeps files from the tree
 the bundle was last built with (#124), as for the browser runtime (#94).
 
+ACP providers share `providers/acp/AcpAdapter`: it owns stdio process lifetime,
+bounded JSON-RPC framing and response correlation, initialization, session
+creation/loading with host-supplied MCP servers, prompt/cancel, permission
+responses and canonical transcript events. CLI discovery, launch/version policy,
+model catalogs and provider extensions stay in each concrete adapter. Cursor's
+`cursor/*` requests and account/model error explanations remain Cursor-specific;
+the shared engine has no provider names or installation paths.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows

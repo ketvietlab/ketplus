@@ -1,19 +1,17 @@
 #pragma once
 
-#include "providers/ProviderAdapter.h"
 #include "providers/ProviderExecutable.h"
+#include "providers/acp/AcpAdapter.h"
 
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
 
-#include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
-#include <QPair>
 #include <QSet>
 #include <QStringList>
 
@@ -30,7 +28,7 @@ class ProviderVersionProbe;
 
 // Cursor CLI ACP client (`agent acp`). The binary is discovered on PATH and is
 // never bundled. Auth stays with the CLI (`agent login` or CURSOR_API_KEY).
-class CursorAdapter final : public ProviderAdapter {
+class CursorAdapter final : public AcpAdapter {
     Q_OBJECT
     friend class ProviderStderrFloodTest;
 
@@ -41,7 +39,6 @@ class CursorAdapter final : public ProviderAdapter {
     [[nodiscard]] QString name() const override { return QStringLiteral("cursor"); }
     [[nodiscard]] QString missingMessage() const override;
     [[nodiscard]] bool isAvailable() const override;
-    [[nodiscard]] bool isReady() const override;
     [[nodiscard]] QString executable() const override;
 
     void call(const QString& method, const QJsonObject& params, Callback callback) override;
@@ -54,7 +51,6 @@ class CursorAdapter final : public ProviderAdapter {
     void respond(const QJsonValue& requestId, const QJsonObject& result) override;
     void respondError(const QJsonValue& requestId, const QString& code,
                       const QString& message) override;
-    void stop() override;
 
     [[nodiscard]] static QJsonArray modelCatalog();
     [[nodiscard]] static QJsonArray parseModelList(const QString& output);
@@ -99,103 +95,37 @@ class CursorAdapter final : public ProviderAdapter {
     [[nodiscard]] static ProcessInvocation versionInvocation(const QString& executable);
 
   private:
-    struct QueuedCall final {
-        QString method;
-        QJsonObject params;
-        Callback callback;
-    };
-
-    struct TurnState final {
-        QString ketplusSessionId;
-        QString acpSessionId;
-        QString turnId;
-        QString itemId;
-        QString assistantText;
-        QString permission;
-        bool heldAssistant{false};
-        bool interrupted{false};
-        QHash<QString, QJsonObject> toolItems;
-    };
-
-    void ensureStarted();
-    void configureProcess();
-    void initialize();
-    void startTurn(const QJsonObject& params, Callback callback);
-    void interruptTurn(const QJsonObject& params, Callback callback);
-    void ensureAcpSession(const QString& ketplusSessionId, const QString& cwd,
-                          const QString& resume, const QString& model, Callback callback);
+    void configureProcess() override;
+    void checkLaunch(std::function<void(const QString&)> done) override;
+    void stopAuxiliaryProcesses() override;
+    void resetProviderState() override;
+    bool handleExtensionRequest(const QJsonObject& object) override;
+    QString sessionPermissionMode(const QString& profile) const override;
+    QString sessionError(const QString& error) const override;
+    QString turnFailureMessage(const QString& error) const override;
+    bool isFailureText(const QString& text) const override;
+    bool holdAssistantText(const QString& text) const override;
+    qint64 failureResetsAt(const QString& error) const override;
     void applySessionModel(const QString& acpSessionId, const QString& model,
-                           const QJsonArray& advertisedOptions, std::function<void()> done);
-    void applyConfigOptions(const QString& acpSessionId, QList<QPair<QString, QString>> options,
-                            std::function<void()> done);
+                           const QJsonObject& sessionResult, std::function<void()> done) override;
     void listCliModels(Callback callback);
     void startCatalogProcess();
     void finishCatalog(const QJsonArray& models);
-    void sendPrompt(TurnState& turn, const QJsonObject& params);
-    void emitContextUsage(const QString& sessionId, const QJsonObject& source);
-    void finishTurn(const QString& ketplusSessionId, const QString& status,
-                    const QString& errorMessage = {});
-    void sendCall(const QString& method, const QJsonObject& params, Callback callback);
-    void sendObject(const QJsonObject& object);
-    void consumeStdout();
-    void consumeLine(const QByteArray& line);
-    void handleSessionUpdate(const QJsonObject& params);
-    void handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params);
-    void failPending(const QString& reason);
-    void setReady(bool ready);
-    void noteUnexpectedStop();
     // Ends an idle process that was started with `--model`, so the next turn starts one without.
     void restartUnpinned();
     [[nodiscard]] static QString findExecutable();
     [[nodiscard]] static bool looksLikeAuthError(const QString& message);
-    // The tail of the CLI's stderr, appended to failures so the user sees why it died.
-    [[nodiscard]] QString stderrTail() const;
-    [[nodiscard]] QJsonArray promptContent(const QJsonObject& params) const;
-
     ProviderExecutable executable_;
     QString pendingSpawnModel_;
     QString spawnModel_;
-    QProcess* process_{nullptr};
     QProcess* catalogProcess_{nullptr};
     QTimer* catalogTimer_{nullptr};
     QList<Callback> catalogWaiters_;
     QJsonArray cachedCatalog_;
     QElapsedTimer catalogFetchedAt_;
-    QByteArray stdoutBuffer_;
-    QByteArray stderrBuffer_;
-    QHash<quint64, Callback> pending_;
-    QHash<quint64, QString> pendingMethods_;
-    compat::CapabilityNarrowing narrowing_;
-    QList<QueuedCall> queued_;
-    QHash<QString, QString> acpSessionByKetplus_;
-    QHash<QString, QString> ketplusByAcp_;
-    QHash<QString, TurnState> turns_;
     QHash<QString, QJsonArray> questionOptionsByRequest_;
-    QHash<QString, QJsonArray> permissionOptionsByRequest_;
     QSet<QString> planRequests_;
-    QHash<QString, QString> permissionBySession_;
-    QSet<QString> startingSessions_;
-    // Sessions given the KetPlus browser server, with the file that signals their turn ends.
-    QHash<QString, QString> browserSessions_;
-    // ADR 0027: each conversation's ketplus_agents server and routing as SessionHost supplied
-    // them, and the sessions whose ACP session received that server.
-    QHash<QString, QJsonObject> agentServers_;
-    QHash<QString, QString> agentInstructions_;
-    QSet<QString> agentSessions_;
-    // Sessions given the KetPlus Computer server (ADR 0030).
-    QSet<QString> computerSessions_;
-    quint64 nextRequestId_{1};
-    quint64 nextTurnNumber_{1};
-    bool starting_{false};
-    bool ready_{false};
-    bool stopping_{false};
-    bool malformedOutput_{false};
-    QTimer* restartTimer_{nullptr};
-    QDeadlineTimer restartNotBefore_;
-    int restartDelayMs_{0};
     compat::ProviderVersionProbe* versionProbe_{nullptr};
-    bool checkingVersion_{false};
-    bool versionCleared_{false};
 };
 
 } // namespace ketplus::daemon
