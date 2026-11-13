@@ -203,6 +203,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             });
     connect(activityBar_, &ActivityBar::settingsRequested, this, &MainWindow::showSettings);
     setupTeams();
+    setupSchedules();
     // The status bar shows only with the editor; elsewhere its messages show as the mock's
     // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
