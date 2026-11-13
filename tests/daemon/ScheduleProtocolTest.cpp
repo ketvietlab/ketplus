@@ -118,10 +118,8 @@ class ScheduleProtocolTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void featureWaitsForHandlers() {
-        // Advertising schedules/1 before a handler exists makes every schedule.*
-        // request unsupported. The handler change adds the feature with the routes.
-        QVERIFY(!protocol::features(1).contains(QString(protocol::schedulesFeature)));
+    void featureIsAdvertised() {
+        QVERIFY(protocol::features(1).contains(QString(protocol::schedulesFeature)));
         QVERIFY(!protocol::features(0).contains(QString(protocol::schedulesFeature)));
         QCOMPARE(maximumRetainedRuns, 50);
     }
