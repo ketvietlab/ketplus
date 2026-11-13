@@ -365,3 +365,26 @@ for RGB-only Scintilla/vterm paths is composited onto the component background.
 These entry points are tested independently; ThemeManager/host wiring remains
 pending. The temporary ket-qt PR #57 pin must be replaced with its develop merge
 commit before this integration is handed to review.
+
+## Management UI integration status
+
+The management components in `app/theme/SchemeLibraryPanel` are being integrated
+into Settings > Appearance. They provide catalog search and source labels,
+scheme-color swatches, local file detection, variant selection and a detailed
+mapped/approximated/skipped report before any catalog write. Parsing runs off the
+GUI thread. Closing or cancelling review does not install a scheme; successful
+imports receive fresh local IDs. A failed multi-variant save attempts to remove
+only the IDs created by that operation and reports any rollback failure.
+
+Export uses an atomic write to `.ketscheme.json`. Built-ins cannot be deleted;
+duplication creates an independent file with a new name and identity. To change
+color values, export, edit the JSON and re-import it as a new immutable scheme.
+The selection controls consume `ThemeSelectionStore`, including separate light
+and dark preferences. A selected scheme is switched to an appropriate built-in
+before its file is removed; a locked or unwritable selection prevents removal.
+
+These components are not yet mounted in Settings: full-application activation,
+import preview restoration and the command picker await the T-5 theme application
+API. The existing Appearance controls remain the active application UI until
+that binding and its integration tests are complete. Native light/dark/report
+screenshots are still pending that integration.

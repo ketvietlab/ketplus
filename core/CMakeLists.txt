@@ -295,6 +295,13 @@ add_library(ketplus_settings_ui STATIC
     src/app/AppearanceSettings.h
     src/app/SettingsDialog.cpp
     src/app/SettingsDialogAppearance.cpp
+    src/app/theme/SchemeLibrary.h
+    src/app/theme/SchemeLibrary.cpp
+    src/app/theme/SchemeLibraryPanel.h
+    src/app/theme/SchemeLibraryPanel.cpp
+    src/app/theme/SchemeImportDialog.cpp
+    src/app/theme/SchemeLibraryActions.cpp
+    src/app/theme/SchemePreferences.cpp
     src/app/SettingsDialogTypography.cpp
     src/app/PixelSelect.cpp
     src/app/PixelSelect.h
@@ -305,7 +312,8 @@ add_library(ketplus_settings_ui STATIC
     src/app/SettingsWorkspace.h
     src/app/SettingsFontNames.h
 )
-target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)
+target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui
+    PRIVATE ketplus_vscode_import ketplus_jetbrains_import)
 target_include_directories(ketplus_settings_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -628,6 +636,15 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_symbol_index_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    add_executable(ketplus_scheme_library_tests tests/SchemeLibraryTest.cpp)
+    target_link_libraries(ketplus_scheme_library_tests PRIVATE Qt6::Test KetPlusCM::settings_ui)
+    target_compile_definitions(ketplus_scheme_library_tests PRIVATE
+        SCHEME_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+    ketplus_cm_add_ket_fonts(ketplus_scheme_library_tests ketplus_ket_fonts)
+    ketplus_enable_warnings(ketplus_scheme_library_tests)
+    ketplus_cm_add_test(ketplus_scheme_library_tests ketplus_scheme_library_tests)
+    set_tests_properties(ketplus_scheme_library_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_settings_tests
         tests/SettingsDialogTest.cpp

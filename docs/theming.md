@@ -213,6 +213,13 @@ the Microsoft Marketplace or depend on undocumented download endpoints.
 
 ## Theme selection and multiple processes
 
+Implementation status: the format, safe readers and importers are implemented.
+The catalog/report management widgets are under integration in
+`core/src/app/theme/`; they are not yet mounted in Appearance. Theme activation,
+preview/restore and command registration require the theme application API.
+The interaction described below is the target behavior until that binding lands.
+
+
 Settings > Appearance contains installed-theme search, swatches, variant selection,
 Install from VSIX/File, and uninstall/update actions. A keyboard theme picker uses
 arrows for temporary preview, Enter to commit, and Escape to restore. Future
