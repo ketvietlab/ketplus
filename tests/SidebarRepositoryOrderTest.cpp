@@ -16,6 +16,7 @@
 #include <QAction>
 #include <QDateTime>
 #include <QDir>
+#include <QEnterEvent>
 #include <QJsonObject>
 #include <QMenu>
 #include <QProcess>
@@ -258,6 +259,63 @@ class SidebarRepositoryOrderTest final : public QObject {
         QCOMPARE(QSettings().value("sidebar/pinnedRepositories").toStringList(), QStringList{kept});
     }
 
+    // Round 1 L1: the pin stays clear of the count and the hover action, at any name length;
+    // a long name is shortened to make room, and the header keeps the full accessible name.
+    void thePinMarkNeverMeetsTheCountOrTheAction() {
+        const QString shortName = folder("shop");
+        const QString longName = folder("long");
+        const QString full = QStringLiteral("a-repository-name-far-too-long-for-the-sidebar-row");
+        const QVector<SidebarRepository> repositories{
+            {.path = shortName,
+             .name = "shop",
+             .conversations = {conversation("shop-1", 900)},
+             .pinnable = true},
+            {.path = longName,
+             .name = full,
+             .conversations = {conversation("long-1", 800), conversation("long-2", 700)},
+             .pinnable = true}};
+        ketplus::SidebarRepositoryList list;
+        list.resize(260, 600);
+        list.setRepositories(repositories);
+        list.setRepositoryPinned(shortName, true);
+        list.setRepositoryPinned(longName, true);
+        list.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&list));
+        const auto clear = [&](const QString& path, const char* state) {
+            QCoreApplication::processEvents();
+            ket::SidebarRepositoryHeader* header = headerOf(list, path);
+            QVERIFY(header != nullptr);
+            auto* mark = header->findChild<QWidget*>("productRepositoryPinMark");
+            QVERIFY2(mark != nullptr, state);
+            QVERIFY2(header->rect().contains(mark->geometry()), state);
+            QVERIFY2(mark->geometry().right() <= header->nameRect().right(), state);
+            for (QWidget* part : header->findChildren<QWidget*>(Qt::FindDirectChildrenOnly)) {
+                if (part == mark || part->isHidden())
+                    continue;
+                QVERIFY2(!part->geometry().intersects(mark->geometry()),
+                         qPrintable(QStringLiteral("%1: pin %2 meets %3 %4")
+                                        .arg(QString::fromLatin1(state))
+                                        .arg(QDebug::toString(mark->geometry()))
+                                        .arg(QString::fromLatin1(part->metaObject()->className()))
+                                        .arg(QDebug::toString(part->geometry()))));
+            }
+        };
+        clear(shortName, "short name");
+        clear(longName, "long name");
+        ket::SidebarRepositoryHeader* header = headerOf(list, longName);
+        QVERIFY(header->text() != full);
+        QCOMPARE(header->accessibleName(), full);
+        header->setExpanded(!header->isExpanded());
+        QCOMPARE(header->accessibleName(), full);
+        // Hovered, the header shows its action where the name area ends.
+        QEnterEvent enter(QPointF(10, 10), QPointF(10, 10), QPointF(10, 10));
+        QCoreApplication::sendEvent(header, &enter);
+        clear(longName, "long name, hovered");
+        QEvent leave(QEvent::Leave);
+        QCoreApplication::sendEvent(header, &leave);
+        clear(longName, "long name, left");
+    }
+
     // Evidence for the pull request, only when KETPLUS_SIDEBAR_CAPTURE names a folder: the
     // sidebar of the report (idle repositories, then one whose conversations are all team
     // members), with one repository pinned when KETPLUS_SIDEBAR_CAPTURE_PIN is set.
@@ -266,8 +324,7 @@ class SidebarRepositoryOrderTest final : public QObject {
         if (target.isEmpty())
             QSKIP("Set KETPLUS_SIDEBAR_CAPTURE to a folder to write the captures.");
         QVector<SidebarRepository> repositories;
-        for (const QString& name :
-             {"kajima-php", "ket-ai-foundation", "ketatlas", "ketplus", "ketplus-app"})
+        for (const QString& name : {"api-server", "atlas", "design-kit", "docs-site", "ketplus"})
             repositories.append({.path = folder(name), .name = name, .pinnable = true});
         SidebarTeam golive{.id = "5", .name = "Go Live"};
         golive.members = {member("lead", "leader", 1700), member("dev-4", "developer", 1900),

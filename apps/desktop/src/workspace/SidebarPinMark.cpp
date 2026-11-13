@@ -5,6 +5,8 @@
 #include "KetTokens.h"
 
 #include <QEvent>
+#include <QFontMetrics>
+#include <QMetaObject>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -14,28 +16,74 @@ namespace {
 // Logical pixels at 100% zoom.
 constexpr qreal kMarkSize = 11;
 
+// The header's name font: its recipe's size, weight and spacing, in capitals.
+QFont nameFontOf(const ket::SidebarRepositoryHeader& header) {
+    const ket::SidebarRepositoryRecipe r = header.recipe();
+    const ket::Appearance& appearance = ket::Appearance::instance();
+    QFont font = header.font();
+    font.setPixelSize(qRound(appearance.scaled(r.namePixels)));
+    font.setWeight(QFont::Weight(r.nameWeight));
+    font.setCapitalization(QFont::AllUppercase);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, r.letterSpacing * appearance.zoom());
+    return font;
+}
+
 } // namespace
 
 SidebarPinMark::SidebarPinMark(ket::SidebarRepositoryHeader* header)
-    : QWidget(header), header_(header) {
+    : QWidget(header), header_(header), fullName_(header->text()) {
     setAttribute(Qt::WA_TransparentForMouseEvents);
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, [this] { place(); });
+    // The header names itself again when it folds or unfolds; it keeps the full name.
+    connect(header, &QAbstractButton::toggled, this,
+            [this] { header_->setAccessibleName(fullName_); });
 }
 
 void SidebarPinMark::place() {
-    const int side = qRound(kMarkSize * ket::Appearance::instance().zoom());
+    if (placing_)
+        return;
+    placing_ = true;
+    const qreal zoom = ket::Appearance::instance().zoom();
+    const int side = qRound(kMarkSize * zoom);
+    const int gap = qRound(3 * zoom);
     const QRect name = header_->nameRect();
+    const QFontMetrics metrics(nameFontOf(*header_));
+    // Room for the name once the pin and its gap are kept free at the end of the name area.
+    const int room = qMax(0, name.width() - side - gap);
+    const QString shown = metrics.horizontalAdvance(fullName_) <= room
+                              ? fullName_
+                              : metrics.elidedText(fullName_, Qt::ElideMiddle, room);
+    if (header_->text() != shown)
+        header_->setText(shown);
+    header_->setAccessibleName(fullName_);
+    const int textRight = name.left() + qMin(metrics.horizontalAdvance(shown), room);
     setFixedSize(side, side);
-    // Just past the name's area, before the count: an elided name never runs under it.
-    move(name.right() + qRound(3 * ket::Appearance::instance().zoom()),
-         name.center().y() - side / 2);
+    move(textRight + gap, name.center().y() - side / 2);
     update();
+    placing_ = false;
+}
+
+void SidebarPinMark::placeLater() {
+    // The header lays out its count and action in a queued call after focus and hover changes.
+    QMetaObject::invokeMethod(this, &SidebarPinMark::place, Qt::QueuedConnection);
 }
 
 bool SidebarPinMark::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == header_ && (event->type() == QEvent::Resize || event->type() == QEvent::Show ||
-                               event->type() == QEvent::LayoutRequest))
-        place();
+    if (watched == header_) {
+        switch (event->type()) {
+        case QEvent::Resize:
+        case QEvent::Show:
+        case QEvent::LayoutRequest:
+        case QEvent::Enter:
+        case QEvent::Leave:
+        case QEvent::FocusIn:
+        case QEvent::FocusOut:
+            placeLater();
+            break;
+        default:
+            break;
+        }
+    }
     return QWidget::eventFilter(watched, event);
 }
 
