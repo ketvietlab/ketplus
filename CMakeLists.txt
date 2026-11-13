@@ -95,6 +95,22 @@ endif()
 include(cmake/Warnings.cmake)
 include(cmake/OffscreenTests.cmake)
 
+set(KETPLUS_DAEMON_RELEASE_MANIFEST_URL
+    "https://github.com/ketvietlab/ketplus/releases/download/v${PROJECT_VERSION}/ketplus-daemon-linux-manifest.json"
+    CACHE STRING "Version-matched GitHub Releases manifest URL; empty disables daemon installation")
+if(NOT KETPLUS_DAEMON_RELEASE_MANIFEST_URL STREQUAL "" AND
+   NOT KETPLUS_DAEMON_RELEASE_MANIFEST_URL STREQUAL
+       "https://github.com/ketvietlab/ketplus/releases/download/v${PROJECT_VERSION}/ketplus-daemon-linux-manifest.json")
+    message(FATAL_ERROR "Daemon release manifest must use the matching ketvietlab/ketplus GitHub release")
+endif()
+set(KETPLUS_DAEMON_RELEASE_PUBLIC_KEY "" CACHE STRING
+    "Pinned Ed25519 public key for ketPlus Linux release manifests (64 hex digits; empty disables installs)")
+if(NOT KETPLUS_DAEMON_RELEASE_PUBLIC_KEY STREQUAL "")
+    string(LENGTH "${KETPLUS_DAEMON_RELEASE_PUBLIC_KEY}" key_length)
+    if(NOT key_length EQUAL 64 OR NOT KETPLUS_DAEMON_RELEASE_PUBLIC_KEY MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "KETPLUS_DAEMON_RELEASE_PUBLIC_KEY must be 64 lowercase hex digits or empty")
+    endif()
+endif()
 configure_file(
     cmake/KetPlusProductVersion.h.in
     "${CMAKE_CURRENT_BINARY_DIR}/generated/KetPlusProductVersion.h"
@@ -138,6 +154,11 @@ if(KETPLUS_BUILD_DESKTOP)
     add_subdirectory(modules/ai)
     add_subdirectory(modules/atlas)
     add_subdirectory(apps/desktop)
+endif()
+option(KETPLUS_BUILD_SSH_INSTALL_UI_TESTS "Also build Connections installer tests without the desktop" OFF)
+if(KETPLUS_BUILD_TESTS AND (KETPLUS_BUILD_DESKTOP OR KETPLUS_BUILD_SSH_INSTALL_UI_TESTS))
+    enable_testing()
+    add_subdirectory(tests/ssh-install-ui)
 endif()
 add_subdirectory(packaging)
 

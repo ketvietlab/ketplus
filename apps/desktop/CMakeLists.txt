@@ -45,6 +45,9 @@ add_library(ketplus_desktop_support STATIC
     src/remote/LinuxMachinesSection.h
     src/remote/LinuxRelayMachines.cpp
     src/remote/LinuxRelayMachines.h
+    src/remote/LinuxSshInstall.cpp
+    src/remote/LinuxDaemonInstallCard.cpp
+    src/remote/LinuxDaemonInstallCard.h
     src/remote/LinuxSshMachines.cpp
     src/remote/LinuxSshMachines.h
     src/remote/RemoteActivitySection.cpp

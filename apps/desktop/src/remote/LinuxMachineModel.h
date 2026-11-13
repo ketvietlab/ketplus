@@ -130,6 +130,14 @@ class LinuxMachineModel : public QObject {
         emit hostKeyDecided(host, fingerprint, accepted);
     }
     void cancelSshConnect(const QString& host) { emit sshConnectCancelled(host); }
+    void requestDaemonReview(const QString& host, const QString& action) {
+        emit daemonReviewRequested(host, action);
+    }
+    void decideDaemonInstall(const QString& host, bool accepted) {
+        emit daemonInstallDecided(host, accepted);
+    }
+    void requestDaemonManagement(const QString& host) { emit daemonManagementRequested(host); }
+    void promptDaemonManagement(const QString& host) { emit daemonManagementPrompted(host); }
     void requestRemove(const QString& id) { emit removeRequested(id); }
     // After a host key mismatch: forget the old key ketPlus accepted, then ask for the new one.
     void requestForgetHostKey(const QString& id) { emit forgetHostKeyRequested(id); }
@@ -174,6 +182,14 @@ class LinuxMachineModel : public QObject {
     void hostKeyPresented(const QString& host, const QString& fingerprint);
     void sshFailed(const QString& host, ketplus::LinuxMachine::Error error, const QString& text);
     void sshConnected(const QString& host);
+    void daemonInstallOffered(const QString& host, bool trustedReleaseConfigured);
+    void daemonConsentRequested(const QString& host, const QString& description);
+    void daemonInstallProgress(const QString& host, const QString& message);
+    void daemonOperationFinished(const QString& host, const QString& message);
+    void daemonReviewRequested(const QString& host, const QString& action);
+    void daemonInstallDecided(const QString& host, bool accepted);
+    void daemonManagementRequested(const QString& host);
+    void daemonManagementPrompted(const QString& host);
 
     void connectRequested(const QString& id);
     void disconnectRequested(const QString& id);

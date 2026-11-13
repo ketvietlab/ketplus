@@ -1,0 +1,4 @@
+macOS offscreen CTest; production test registration module, no native compilation:
+1: SKIP: SSH install transactions require Linux /proc, fcntl and SO_PEERCRED.
+1/1 Test #1: ketplus_ssh_install_transaction_tests ...***Skipped   0.38 sec
+100% tests passed out of 1

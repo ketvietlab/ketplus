@@ -40,6 +40,6 @@ enum class LinuxConnectMode { Ssh, Relay };
 ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                                     remote::ControlV2Client* client, LinuxConnectHooks hooks,
                                     LinuxConnectMode mode = LinuxConnectMode::Ssh,
-                                    const QString& sshHost = {});
+                                    const QString& sshHost = {}, bool manageDaemon = false);
 
 } // namespace ketplus

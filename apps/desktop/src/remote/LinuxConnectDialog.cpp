@@ -1,11 +1,14 @@
 #include "remote/LinuxConnectDialog.h"
+#include "remote/LinuxDaemonInstallCard.h"
 
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
 #include "KetProfile.h"
 #include "KetSegmentedControl.h"
 #include "KetTextField.h"
+#include "KetTokens.h"
 #include "control/ControlV2Client.h"
 #include "remote/LinuxMachineModel.h"
 
@@ -30,6 +33,10 @@ QString tr(const char* text) { return QCoreApplication::translate("LinuxConnectD
 
 void showFeedback(QLabel* feedback, const QString& text, const bool error = false) {
     feedback->setText(text);
+    auto palette = feedback->palette();
+    palette.setColor(QPalette::WindowText,
+                     ket::Tokens::color(u"text-main", ket::Appearance::instance().theme()));
+    feedback->setPalette(palette);
     feedback->setProperty("remoteTone", error ? QStringLiteral("danger") : QString());
     feedback->style()->unpolish(feedback);
     feedback->style()->polish(feedback);
@@ -40,8 +47,14 @@ QLabel* feedbackLabel(const char* objectName, QWidget* parent) {
     auto* feedback = new QLabel(parent);
     feedback->setObjectName(QString::fromLatin1(objectName));
     feedback->setWordWrap(true);
+    feedback->setTextFormat(Qt::PlainText);
     feedback->setTextInteractionFlags(Qt::TextSelectableByMouse);
     feedback->hide(); // no gap under the field until there is something to say
+    QObject::connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, feedback,
+                     [feedback] {
+                         showFeedback(feedback, feedback->text(),
+                                      feedback->property("remoteTone").toString() == "danger");
+                     });
     return feedback;
 }
 
@@ -169,7 +182,8 @@ RelayPage makeRelayPage(QWidget* parent) {
 
 ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                                     remote::ControlV2Client* client, LinuxConnectHooks hooks,
-                                    const LinuxConnectMode initialMode, const QString& sshHost) {
+                                    const LinuxConnectMode initialMode, const QString& sshHost,
+                                    bool manageDaemon) {
     // An in-window card like the other dialogs (#422); it goes once it finishes.
     auto* dialog = new ket::Dialog(tr("Connect a Linux machine"), anchor);
     dialog->setObjectName(QStringLiteral("linuxPairingDialog"));
@@ -245,7 +259,10 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
     });
 
     // SSH: Connect, then maybe a host key, then connected or a failure.
+    static_cast<QVBoxLayout*>(ssh.page->layout())
+        ->addWidget(makeLinuxDaemonInstallCard(model, pendingHost, ssh.page));
     const auto resetSsh = [ssh, sshConnect, pendingHost] {
+        sshConnect->show();
         pendingHost->clear();
         ssh.hostKey->hide();
         ssh.host->setEnabled(true);
@@ -258,7 +275,7 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
             sshConnect->click();
     });
     QObject::connect(sshConnect, &QAbstractButton::clicked, dialog,
-                     [ssh, sshConnect, cancel, pendingHost, modelGuard] {
+                     [ssh, sshConnect, cancel, pendingHost, modelGuard, manageDaemon] {
                          const QString host = ssh.host->text().trimmed();
                          if (const QString problem = validateSshHost(host); !problem.isEmpty()) {
                              showFeedback(ssh.feedback, problem, true);
@@ -271,10 +288,21 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                          // Keep the keyboard in the card: Cancel ends the attempt.
                          cancel->setFocus();
                          showFeedback(ssh.feedback, tr("Connecting to %1…").arg(host));
-                         if (modelGuard)
-                             modelGuard->requestSshConnect(host);
+                         if (modelGuard) {
+                             if (manageDaemon)
+                                 modelGuard->requestDaemonManagement(host);
+                             else
+                                 modelGuard->requestSshConnect(host);
+                         }
                      });
     if (model) {
+        QObject::connect(model, &LinuxMachineModel::daemonInstallOffered, dialog,
+                         [ssh, pendingHost, sshConnect](const QString& host, bool) {
+                             if (host == *pendingHost) {
+                                 showFeedback(ssh.feedback, {});
+                                 sshConnect->hide();
+                             }
+                         });
         QObject::connect(
             model, &LinuxMachineModel::hostKeyPresented, dialog,
             [ssh, pendingHost](const QString& host, const QString& fingerprint) {
@@ -313,6 +341,16 @@ ket::Dialog* openLinuxConnectDialog(QWidget* anchor, LinuxMachineModel* model,
                                  shared->finished(tr("%1 connected over SSH.").arg(host));
                              dialog->accept();
                          });
+        QObject::connect(
+            model, &LinuxMachineModel::daemonOperationFinished, dialog,
+            [dialog, pendingHost, shared](const QString& host, const QString& message) {
+                if (host != *pendingHost)
+                    return;
+                pendingHost->clear();
+                if (shared->finished)
+                    shared->finished(message);
+                dialog->accept();
+            });
     }
     const auto decide = [ssh, pendingHost, modelGuard, resetSsh](const bool accepted) {
         const QString host = *pendingHost;

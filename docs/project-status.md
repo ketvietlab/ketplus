@@ -204,6 +204,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   (assignment, digest, review request, verdict, decision) with Open T-n; a digest of many
   changes is one card. Anything it cannot read stays the message's text.
 
+- SSH daemon installer consumer (#666, ADR 0124): Connections separates metadata review
+  from explicit install consent; verifies an Ed25519-signed version-matched GitHub
+  release manifest and artifact SHA-256; installs the complete user-space runtime over
+  the verified SSH route; commits after daemon hello, with rollback, managed upgrades,
+  start and idle-only uninstall. Production remains disabled until the release owner
+  configures the pinned public key. Startup is a user process, with no automatic
+  login service. QA uses an isolated same-UID Linux profile and loopback-only runtime.
+
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues

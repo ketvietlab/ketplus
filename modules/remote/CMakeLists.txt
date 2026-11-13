@@ -93,8 +93,15 @@ add_library(ketplus_remote_ssh STATIC
     src/ssh/KnownHostsFile.cpp src/ssh/KnownHostsFile.h
     src/ssh/SshHostKeys.cpp src/ssh/SshHostKeys.h
     src/ssh/SshProcess.h src/ssh/SshTunnel.cpp src/ssh/SshTunnel.h
-    src/ssh/SshTunnelBridge.cpp src/ssh/SshTunnelHostKey.cpp)
-target_link_libraries(ketplus_remote_ssh PUBLIC Qt6::Core Qt6::Network)
+    src/ssh/SshTunnelBridge.cpp src/ssh/SshTunnelHostKey.cpp
+    src/ssh/SshInstallChannel.cpp
+    src/ssh/DaemonRelease.cpp src/ssh/DaemonRelease.h
+    src/ssh/SshDaemonInstaller.cpp src/ssh/SshDaemonInstaller.h
+    src/ssh/SshDaemonDownload.cpp)
+qt_add_resources(ketplus_remote_ssh "DaemonInstaller"
+    PREFIX "/ketplus/ssh-install" BASE "src/ssh/install"
+    FILES src/ssh/install/transaction.py)
+target_link_libraries(ketplus_remote_ssh PUBLIC Qt6::Core Qt6::Network ketplus_product_version OpenSSL::Crypto)
 target_include_directories(ketplus_remote_ssh PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_remote_ssh)
 

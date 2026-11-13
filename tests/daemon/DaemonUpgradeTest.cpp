@@ -106,7 +106,13 @@ class DaemonUpgradeTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void idleDaemonAdvertisesVersionAndAllowsReplacement_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::newRow("upgrade") << QStringLiteral("daemon.prepare_upgrade");
+        QTest::newRow("consented-uninstall") << QStringLiteral("daemon.stop_if_idle");
+    }
     void idleDaemonAdvertisesVersionAndAllowsReplacement() {
+        QFETCH(QString, operation);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -137,7 +143,7 @@ class DaemonUpgradeTest final : public QObject {
                  QStringLiteral("invalid_replacement_version"));
         QCOMPARE(shutdown.size(), 0);
 
-        client.send(request(QStringLiteral("daemon.prepare_upgrade"), QStringLiteral("replace"),
+        client.send(request(operation, QStringLiteral("replace"),
                             {{QStringLiteral("replacement_version"), QStringLiteral("999.0.0")}}));
         QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse(QStringLiteral("replace")), 1000);
         QVERIFY(client.takeResponse(QStringLiteral("replace"))
@@ -160,7 +166,13 @@ class DaemonUpgradeTest final : public QObject {
         QVERIFY(!host.hasActiveSessions());
     }
 
+    void activeTurnDefersReplacement_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::newRow("upgrade") << QStringLiteral("daemon.prepare_upgrade");
+        QTest::newRow("consented-uninstall") << QStringLiteral("daemon.stop_if_idle");
+    }
     void activeTurnDefersReplacement() {
+        QFETCH(QString, operation);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("worktree"))));
@@ -184,7 +196,7 @@ class DaemonUpgradeTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse(QStringLiteral("turn")), 2000);
         QVERIFY(host.hasActiveSessions());
 
-        client.send(request(QStringLiteral("daemon.prepare_upgrade"), QStringLiteral("replace"),
+        client.send(request(operation, QStringLiteral("replace"),
                             {{QStringLiteral("replacement_version"), QStringLiteral("999.0.0")}}));
         QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse(QStringLiteral("replace")), 1000);
         const QJsonObject payload = client.takeResponse(QStringLiteral("replace"))

@@ -41,6 +41,7 @@ class SshLink : public QObject {
     [[nodiscard]] virtual QString knownHostsFile() const { return {}; }
     // Asked once per unknown host key, as SshTunnel::setHostKeyPrompt().
     virtual void setHostKeyPrompt(SshTunnel::HostKeyPrompt prompt) { Q_UNUSED(prompt) }
+    [[nodiscard]] virtual SshTunnel* installationTunnel() const { return nullptr; }
 
   signals:
     void stateChanged(ketplus::remote::ssh::SshTunnel::State state);
@@ -55,6 +56,7 @@ class SshTunnelLink final : public SshLink {
     SshTunnelLink(SshTarget target, SshTunnelOptions options, QObject* parent = nullptr);
 
     [[nodiscard]] SshTunnel* tunnel() const { return tunnel_; }
+    [[nodiscard]] SshTunnel* installationTunnel() const override { return tunnel_; }
     void open() override { tunnel_->open(); }
     void close() override { tunnel_->close(); }
     [[nodiscard]] SshTunnel::State state() const override { return tunnel_->state(); }
@@ -94,6 +96,7 @@ class SshMachineBackend final : public MachineBackend {
     // For Connections Details.
     [[nodiscard]] static QString routeLabel() { return QStringLiteral("SSH"); }
     [[nodiscard]] SshTarget target() const { return target_; }
+    [[nodiscard]] SshTunnel* installationTunnel() const { return link_->installationTunnel(); }
     [[nodiscard]] QString targetKey() const;
     [[nodiscard]] SshTunnel::State tunnelState() const { return link_->state(); }
     // The verified SSH host key; empty unless the tunnel verified it.
