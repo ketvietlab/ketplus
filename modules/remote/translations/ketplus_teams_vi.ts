@@ -4,12 +4,48 @@
     <context>
         <name>Team</name>
         <message>
+            <source> %1 started task(s) keep the old one.</source>
+            <translation> %1 task đã bắt đầu giữ nguyên kho mã cũ.</translation>
+        </message>
+        <message>
+            <source> (PR %1)</source>
+            <translation> (PR %1)</translation>
+        </message>
+        <message>
+            <source> Back to its developer; decide on any finding outside the task's scope.</source>
+            <translation> Chuyển lại developer; bạn quyết định các lỗi ngoài phạm vi task.</translation>
+        </message>
+        <message>
+            <source> On the pull request: %1</source>
+            <translation> Trên pull request: %1</translation>
+        </message>
+        <message>
             <source> Reason: </source>
             <translation> Lý do: </translation>
         </message>
         <message>
+            <source> Reason: %1</source>
+            <translation> Lý do: %1</translation>
+        </message>
+        <message>
+            <source> The comment could not be posted on the pull request (%1), so the findings are kept on the board.</source>
+            <translation> Không đăng được nhận xét lên pull request (%1), nên các lỗi được giữ trên bảng công việc.</translation>
+        </message>
+        <message>
             <source> The findings: %1</source>
             <translation> Các lỗi tìm thấy: %1</translation>
+        </message>
+        <message>
+            <source> The repository's branches were not listed yet; the name is checked against them when the worktree is made.</source>
+            <translation> Chưa lấy được danh sách nhánh của kho mã; tên sẽ được kiểm tra khi tạo worktree.</translation>
+        </message>
+        <message>
+            <source> The round limit is reached: you decide.</source>
+            <translation> Đã tới giới hạn số vòng: bạn quyết định.</translation>
+        </message>
+        <message>
+            <source> The team's Max review passes is now %1.</source>
+            <translation> Số vòng review tối đa của team hiện là %1.</translation>
         </message>
         <message>
             <source> · Outside its lane</source>
@@ -94,6 +130,10 @@ Lane nào cũng được: %2</translation>
             <translation>%1 GB</translation>
         </message>
         <message>
+            <source>%1 had %2 review passes; the team now allows %3.</source>
+            <translation>%1 đã qua %2 vòng review; team hiện cho phép %3 vòng.</translation>
+        </message>
+        <message>
             <source>%1 handed over to %2: %3</source>
             <translation>Đã chuyển %1 cho %2: %3</translation>
         </message>
@@ -104,6 +144,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>%1 has no task left.</source>
             <translation>%1 không còn task nào.</translation>
+        </message>
+        <message>
+            <source>%1 High, %2 Medium, %3 Low, %4 Nit</source>
+            <translation>%1 lỗi cao, %2 lỗi trung bình, %3 lỗi thấp, %4 lỗi nhỏ</translation>
         </message>
         <message>
             <source>%1 is back inside %2's lane (%3).</source>
@@ -166,8 +210,16 @@ Lane nào cũng được: %2</translation>
             <translation>Xong %1 trên %2 task</translation>
         </message>
         <message>
-            <source>%1 still has findings after %2 rounds.</source>
-            <translation>%1 vẫn còn lỗi sau %2 vòng.</translation>
+            <source>%1 on the board</source>
+            <translation>%1 trên bảng công việc</translation>
+        </message>
+        <message>
+            <source>%1 on the pull request</source>
+            <translation>%1 trên pull request</translation>
+        </message>
+        <message>
+            <source>%1 review passes</source>
+            <translation>%1 vòng review</translation>
         </message>
         <message>
             <source>%1 The leader and the developers start with this; change it for one member in its conversation. The reviewer stays read-only.</source>
@@ -226,6 +278,10 @@ Lane nào cũng được: %2</translation>
             <translation>(không có)</translation>
         </message>
         <message>
+            <source>, round %1 of %2 by %3: </source>
+            <translation>, vòng %1 trên %2 do %3 review: </translation>
+        </message>
+        <message>
             <source>.</source>
             <translation>.</translation>
         </message>
@@ -244,6 +300,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>1 more task waits for this reviewer.</source>
             <translation>Còn 1 task chờ reviewer này.</translation>
+        </message>
+        <message>
+            <source>1 review pass</source>
+            <translation>1 vòng review</translation>
         </message>
         <message>
             <source>1 reviewer</source>
@@ -382,8 +442,8 @@ Lane nào cũng được: %2</translation>
             <translation>Áp dụng từ lượt tự động tiếp theo. 1 lượt đã dùng vẫn được tính</translation>
         </message>
         <message>
-            <source>Applies to tasks that enter review from now; a review in progress keeps its rounds and place.</source>
-            <translation>Áp dụng cho task vào review từ bây giờ; review đang diễn ra giữ nguyên số vòng và nơi review.</translation>
+            <source>Applies from the next review request; a review in progress keeps its passes and place. A task that already had more passes goes to the leader.</source>
+            <translation>Áp dụng từ yêu cầu review tiếp theo; lượt đang review giữ nguyên số vòng và nơi review. Task đã vượt số vòng được chuyển cho leader.</translation>
         </message>
         <message>
             <source>Assign</source>
@@ -404,6 +464,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Assign…</source>
             <translation>Giao…</translation>
+        </message>
+        <message>
+            <source>at least %1</source>
+            <translation>ít nhất %1</translation>
         </message>
         <message>
             <source>Automatic turns</source>
@@ -502,6 +566,14 @@ Lane nào cũng được: %2</translation>
             <translation>Chọn người nhận mới.</translation>
         </message>
         <message>
+            <source>Choose the repository</source>
+            <translation>Chọn kho mã</translation>
+        </message>
+        <message>
+            <source>Choose…</source>
+            <translation>Chọn…</translation>
+        </message>
+        <message>
             <source>Close</source>
             <translation>Đóng</translation>
         </message>
@@ -514,8 +586,12 @@ Lane nào cũng được: %2</translation>
             <translation>Tạo với %1 thành viên</translation>
         </message>
         <message>
-            <source>Created by %1.</source>
-            <translation>Được tạo bởi %1.</translation>
+            <source>Created by %1, branch %2 in %3 against %4.</source>
+            <translation>Được tạo bởi %1, nhánh %2 trong %3 so với %4.</translation>
+        </message>
+        <message>
+            <source>Created by %1, branch %2.</source>
+            <translation>Được tạo bởi %1, nhánh %2.</translation>
         </message>
         <message>
             <source>Criteria</source>
@@ -574,6 +650,10 @@ Lane nào cũng được: %2</translation>
             <translation>Xong</translation>
         </message>
         <message>
+            <source>Each one goes through the same checks as Remove…, one after another: a worktree with uncommitted or untracked changes, with commits on no remote branch, or the folder of a conversation that is running or waits for you is kept with the reason, and the others are still removed.</source>
+            <translation>Mỗi worktree lần lượt qua cùng các kiểm tra như Xoá…: worktree có thay đổi chưa commit hoặc chưa theo dõi, có commit chưa lên nhánh từ xa, hoặc là thư mục của cuộc hội thoại đang chạy hay chờ bạn sẽ được giữ lại kèm lý do; các worktree khác vẫn được xoá.</translation>
+        </message>
+        <message>
             <source>Edit project files; asks before commands.</source>
             <translation>Sửa file dự án; hỏi trước khi chạy lệnh.</translation>
         </message>
@@ -598,12 +678,16 @@ Lane nào cũng được: %2</translation>
             <translation>có lỗi</translation>
         </message>
         <message>
-            <source>Findings in the first round go back to the developer; findings in the second go to the leader.</source>
-            <translation>Lỗi ở vòng đầu quay về developer; lỗi ở vòng hai chuyển cho leader.</translation>
+            <source>findings (%1).</source>
+            <translation>có lỗi (%1).</translation>
         </message>
         <message>
-            <source>Findings in the only round go to the leader, who decides.</source>
-            <translation>Lỗi ở vòng duy nhất chuyển cho leader quyết định.</translation>
+            <source>Findings go back to the developer until pass %1; findings in pass %1 go to the leader, who decides.</source>
+            <translation>Các lỗi được gửi lại developer trước vòng %1; lỗi ở vòng %1 được chuyển cho leader quyết định.</translation>
+        </message>
+        <message>
+            <source>Findings in the only pass go to the leader, who decides.</source>
+            <translation>Các lỗi ở vòng duy nhất được chuyển cho leader quyết định.</translation>
         </message>
         <message>
             <source>Full access</source>
@@ -694,6 +778,22 @@ Lane nào cũng được: %2</translation>
             <translation>Thư mục của nó bị xoá khỏi ổ đĩa. Branch của task và các commit vẫn còn.</translation>
         </message>
         <message>
+            <source>Its origin must have this branch. Fetch it first if it is new.</source>
+            <translation>Origin phải có nhánh này. Hãy fetch trước nếu đây là nhánh mới.</translation>
+        </message>
+        <message>
+            <source>Keeps working in %1 against %2: the team moved to %3.</source>
+            <translation>Tiếp tục làm trong %1 so với %2: team đã chuyển sang %3.</translation>
+        </message>
+        <message>
+            <source>Kept %1 with their reasons.</source>
+            <translation>Đã giữ lại %1 worktree kèm lý do.</translation>
+        </message>
+        <message>
+            <source>Kept 1 with its reason.</source>
+            <translation>Đã giữ lại 1 worktree kèm lý do.</translation>
+        </message>
+        <message>
             <source>ketPlus</source>
             <translation>ketPlus</translation>
         </message>
@@ -732,6 +832,14 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Let the leader merge this one</source>
             <translation>Để leader merge task này</translation>
+        </message>
+        <message>
+            <source>Max review passes per PR</source>
+            <translation>Số vòng review tối đa mỗi PR</translation>
+        </message>
+        <message>
+            <source>Max review passes: %1</source>
+            <translation>Số vòng review tối đa: %1</translation>
         </message>
         <message>
             <source>Me</source>
@@ -802,6 +910,10 @@ Lane nào cũng được: %2</translation>
             <translation>không có lỗi</translation>
         </message>
         <message>
+            <source>no findings. Ready to merge.</source>
+            <translation>không có lỗi. Sẵn sàng merge.</translation>
+        </message>
+        <message>
             <source>No lane yet</source>
             <translation>Chưa có lane</translation>
         </message>
@@ -824,6 +936,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>none</source>
             <translation>không có</translation>
+        </message>
+        <message>
+            <source>None left on disk</source>
+            <translation>Không còn worktree nào trên đĩa</translation>
         </message>
         <message>
             <source>None yet</source>
@@ -862,18 +978,6 @@ Lane nào cũng được: %2</translation>
             <translation>Trên %1</translation>
         </message>
         <message>
-            <source>One</source>
-            <translation>Một</translation>
-        </message>
-        <message>
-            <source>One review round on the board</source>
-            <translation>Một vòng review trên board</translation>
-        </message>
-        <message>
-            <source>One review round on the pull request</source>
-            <translation>Một vòng review trên pull request</translation>
-        </message>
-        <message>
             <source>Only the leader changes these. The reviewer checks the pull request against them.</source>
             <translation>Chỉ leader sửa các tiêu chí này. Reviewer đối chiếu pull request với chúng.</translation>
         </message>
@@ -892,6 +996,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Open the owner</source>
             <translation>Mở người nhận</translation>
+        </message>
+        <message>
+            <source>Optional, shown in Updates</source>
+            <translation>Không bắt buộc, hiển thị trong Cập nhật</translation>
         </message>
         <message>
             <source>Other…</source>
@@ -982,8 +1090,24 @@ Lane nào cũng được: %2</translation>
             <translation>Bỏ %1 khỏi %2?</translation>
         </message>
         <message>
+            <source>Remove %1 worktrees</source>
+            <translation>Xoá %1 worktree</translation>
+        </message>
+        <message>
+            <source>Remove %1 worktrees?</source>
+            <translation>Xoá %1 worktree?</translation>
+        </message>
+        <message>
             <source>Remove %1…</source>
             <translation>Bỏ %1…</translation>
+        </message>
+        <message>
+            <source>Remove 1 worktree?</source>
+            <translation>Xoá 1 worktree?</translation>
+        </message>
+        <message>
+            <source>Remove all…</source>
+            <translation>Xoá tất cả…</translation>
         </message>
         <message>
             <source>Remove from %1…</source>
@@ -1002,12 +1126,40 @@ Lane nào cũng được: %2</translation>
             <translation>Xoá worktree</translation>
         </message>
         <message>
+            <source>Removed %1 worktrees.</source>
+            <translation>Đã xoá %1 worktree.</translation>
+        </message>
+        <message>
+            <source>Removed 1 worktree.</source>
+            <translation>Đã xoá 1 worktree.</translation>
+        </message>
+        <message>
             <source>Removed, but a conversation stayed</source>
             <translation>Đã xoá, nhưng một conversation vẫn ở lại</translation>
         </message>
         <message>
             <source>Remove…</source>
             <translation>Bỏ…</translation>
+        </message>
+        <message>
+            <source>Repository</source>
+            <translation>Kho mã</translation>
+        </message>
+        <message>
+            <source>Repository folder</source>
+            <translation>Thư mục kho mã</translation>
+        </message>
+        <message>
+            <source>Repository for %1</source>
+            <translation>Kho mã cho %1</translation>
+        </message>
+        <message>
+            <source>Repository: %1 against %2 (was %3 against %4).</source>
+            <translation>Kho mã: %1 so với %2 (trước đó là %3 so với %4).</translation>
+        </message>
+        <message>
+            <source>Repository…</source>
+            <translation>Kho mã…</translation>
         </message>
         <message>
             <source>Resume</source>
@@ -1044,10 +1196,6 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Review round limit reached (%1 of %2) with findings.</source>
             <translation>Đã tới giới hạn vòng review (%1 trên %2) mà vẫn còn lỗi.</translation>
-        </message>
-        <message>
-            <source>Review rounds</source>
-            <translation>Số vòng review</translation>
         </message>
         <message>
             <source>Reviewed with no findings. Branch %1 into %2.</source>
@@ -1138,6 +1286,10 @@ Lane nào cũng được: %2</translation>
             <translation>Đang gửi…</translation>
         </message>
         <message>
+            <source>severity not stated</source>
+            <translation>chưa nêu mức độ lỗi</translation>
+        </message>
+        <message>
             <source>Shared paths: %1 → %2.</source>
             <translation>Đường dẫn dùng chung: %1 → %2.</translation>
         </message>
@@ -1226,14 +1378,6 @@ Lane nào cũng được: %2</translation>
             <translation>Task</translation>
         </message>
         <message>
-            <source>Tasks get %1 review rounds before the leader decides.</source>
-            <translation>Task có %1 vòng review trước khi leader quyết định.</translation>
-        </message>
-        <message>
-            <source>Tasks get one review round before the leader decides.</source>
-            <translation>Task có một vòng review trước khi leader quyết định.</translation>
-        </message>
-        <message>
             <source>TEAM</source>
             <translation>TEAM</translation>
         </message>
@@ -1282,6 +1426,10 @@ Lane nào cũng được: %2</translation>
             <translation>Ổ đĩa chứa worktree của team này còn trống chưa tới %1 GB. Hãy xoá worktree của các task đã xong bên dưới, hoặc giải phóng dung lượng, trước khi build làm đầy nó.</translation>
         </message>
         <message>
+            <source>The folders of %1 are deleted from disk, freeing %2 in total. The tasks' branches and their commits stay.</source>
+            <translation>Các thư mục của %1 sẽ được xoá khỏi đĩa, giải phóng tổng cộng %2. Nhánh và commit của các task được giữ lại.</translation>
+        </message>
+        <message>
             <source>The goal has %L1 characters; a team keeps at most %L2. Shorten it, or link to the details instead.</source>
             <translation>Mục tiêu có %L1 ký tự; một team giữ tối đa %L2. Hãy rút gọn, hoặc dẫn link tới chi tiết.</translation>
         </message>
@@ -1314,6 +1462,10 @@ Lane nào cũng được: %2</translation>
             <translation>Leader merge task</translation>
         </message>
         <message>
+            <source>The main checkout of a Git repository. New tasks and tasks not started yet work there. Started tasks keep the repository, branch and worktree they began in; nothing on disk moves.</source>
+            <translation>Bản checkout chính của kho Git. Task mới và task chưa bắt đầu sẽ làm việc tại đó. Task đã bắt đầu giữ nguyên kho mã, nhánh và worktree ban đầu; không có gì trên đĩa bị di chuyển.</translation>
+        </message>
+        <message>
             <source>The new conversation's provider, model and effort.</source>
             <translation>Provider, model và effort của conversation mới.</translation>
         </message>
@@ -1332,6 +1484,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>The review of round %1 did not finish (%2). Hand the task to review again, or hand it over.</source>
             <translation>Review vòng %1 chưa xong (%2). Hãy gửi review lại task, hoặc chuyển giao nó.</translation>
+        </message>
+        <message>
+            <source>The review of round %1 has no verdict after %2 replies. Accept it with team_review_accept, or hand the task to review again.</source>
+            <translation>Vòng review %1 chưa có kết luận sau %2 câu trả lời. Chấp nhận bằng team_review_accept, hoặc chuyển task sang review lại.</translation>
         </message>
         <message>
             <source>The reviewer is the queue</source>
@@ -1422,18 +1578,6 @@ Lane nào cũng được: %2</translation>
             <translation>Số lượt thành viên tự bắt đầu trước khi team hỏi bạn có tiếp tục không. Team mới lấy mức từ Settings → Teams.</translation>
         </message>
         <message>
-            <source>Two</source>
-            <translation>Hai</translation>
-        </message>
-        <message>
-            <source>Two review rounds on the board</source>
-            <translation>Hai vòng review trên board</translation>
-        </message>
-        <message>
-            <source>Two review rounds on the pull request</source>
-            <translation>Hai vòng review trên pull request</translation>
-        </message>
-        <message>
             <source>Unassigned</source>
             <translation>Chưa giao</translation>
         </message>
@@ -1452,6 +1596,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Use</source>
             <translation>Dùng</translation>
+        </message>
+        <message>
+            <source>Verdict on %1</source>
+            <translation>Kết luận về %1</translation>
         </message>
         <message>
             <source>Waiting for you</source>

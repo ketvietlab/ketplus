@@ -36,7 +36,8 @@ inline const QString done = QStringLiteral("done");
 
 // The choice of a "Merge T-n?" decision that lets the leader merge that task (ADR 0114 §5).
 // T-56: the daemon's fixed choices are shown in the team's language (say()); an answer is
-// matched by its place among the decision's choices, so either language answers it.
+// matched by its place among the decision's choices, so the answer must match the stored choice at
+// that position, even after a language change.
 inline constexpr const char* leaderMergesSource =
     QT_TRANSLATE_NOOP("Team", "Let the leader merge this one");
 inline const QString leaderMergesChoice = QString::fromLatin1(leaderMergesSource);
@@ -159,6 +160,8 @@ struct Task final {
     // The state a blocked task returns to when its question is answered.
     QString resumeState;
     QString question;
+    // Protocol reason, never inferred from the localized question.
+    QString reviewBlock;
     QString branch;
     QString worktree;
     QString baseCommit;

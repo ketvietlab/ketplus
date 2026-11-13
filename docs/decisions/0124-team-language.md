@@ -1,4 +1,4 @@
-# ADR 0120: A team works in its leader's language
+# ADR 0124: A team works in its leader's language
 
 Status: accepted (2026-11-13). Amends ADR 0114 (team record, Updates, decisions).
 
@@ -17,7 +17,10 @@ kind.
    added). It is part of the team record, the team JSON the desktop reads and the relay
    `teams.remote/1` payload. A team saved before this field, or created by a client that sends
    none, is English. Any other value is refused with `invalid_payload`.
-2. **Set at creation, changed in settings.** New Team has a Language field. It starts from the
+2. **Set at creation, changed in settings.** New Team has a Language field.
+   The explicit user selection wins, followed by a Vietnamese goal, then the system locale.
+   Review L2 asked for the existing leader conversation language; the leader accepted this
+   creation-time interpretation because that conversation does not exist until creation. It starts from the
    system's language and follows the goal while the user has not picked one: a goal written
    with Vietnamese letters selects Vietnamese. The leader is a new conversation, so there is no
    leader conversation whose language could be read; the goal is the user's first words to the
@@ -34,8 +37,9 @@ kind.
    answers only for team contexts (`Team*`, `ketplus::Team*`, `ketplus::team_page::*`,
    `NewTeamForm`, `AddMemberForm`) and only in a team's language: inside a
    `team_language::Scope`, which the team page opens while it builds, or, on the GUI thread,
-   in the language of the team page that is shown, so menus and dialogs opened from it and the
-   texts they change later follow it. The rest of the application is unaffected.
+   in the language of the most recently shown team page still visible, so menus and dialogs opened from it and the
+   texts they change later follow it. Each page owns its ambient entry, so hiding or destroying
+   one cannot clear another visible page. The rest of the application is unaffected.
 5. **The daemon writes in the team's language.** Updates, task history entries, the
    decisions the daemon raises (budget, stall, merge, first plan, empty role), the round-limit
    question and the digest sent to the leader use `say(team.language, QT_TRANSLATE_NOOP("Team",
@@ -43,7 +47,8 @@ kind.
    the stored words (`in_progress`) exactly as before.
 6. **Choices are known by place.** A fixed choice of a daemon decision is matched by its
    position among the decision's choices, not by its English text, so a decision raised in
-   one language is answered after the team changed to the other.
+   one language can still be answered after the team changes language. An answer must match
+   the original stored choice text at that position; typing its translation is not accepted.
 7. **The leader writes in the team's language.** For a Vietnamese team the team instructions
    tell the leader to write task titles, criteria, notes, lanes, decisions and what it tells
    the user in Vietnamese, and the developers and the reviewer their task notes and
@@ -69,3 +74,10 @@ kind.
   a second mechanism; Qt Linguist is already part of Qt and gives plurals and tooling.
 - **Translating on the desktop only.** The daemon's Updates and decisions are what the user
   reads most, and the phone shows them too; they must be written in the team's language.
+
+## Review blocking reasons
+
+Tasks persist `review_block` (`round_limit` or `no_verdict`) independently of
+the localized question. Leaving the blocked state clears it. Acceptance uses
+this reason; older documents fall back to structured daemon state/verdict
+history, never English or Vietnamese question prefixes.

@@ -8,6 +8,7 @@
 #include "storage/LocalJournal.h"
 #include "teams/TeamRules.h"
 
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -62,7 +63,12 @@ class TeamLanguageTest final : public QObject {
     }
 
   private slots:
-    void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void initTestCase() {
+        QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(directory_.isValid());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, directory_.path());
+    }
 
     void init() {
         teams_.reset();
@@ -170,6 +176,63 @@ class TeamLanguageTest final : public QObject {
         QVERIFY(teams_->update(team_, {{"language", "vi"}}, "user").ok());
         QVERIFY(teams_->answerDecision(team_, asked.id, asked.choices.first(), "user").ok());
         QVERIFY(!team().paused);
+    }
+
+    void reviewBlocksRemainAcceptableInEitherLanguage_data() {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<bool>("noVerdict");
+        for (const QString& language : {QStringLiteral("en"), QStringLiteral("vi")}) {
+            QTest::newRow(qPrintable(language + "-limit")) << language << false;
+            QTest::newRow(qPrintable(language + "-missing")) << language << true;
+        }
+    }
+
+    void reviewBlocksRemainAcceptableInEitherLanguage() {
+        QFETCH(QString, language);
+        QFETCH(bool, noVerdict);
+        start(language);
+        QVERIFY(teams_->update(team_, {{"max_rounds", 1}}, "user").ok());
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, "in_review", "dev1").ok());
+        if (noVerdict) {
+            for (int reply = 0; reply < 2; ++reply)
+                finishReview(*teams_, "rev", "Still checking", false);
+        } else {
+            finishReview(*teams_, "rev", "Verdict: findings", false);
+        }
+        QCOMPARE(team().task(id)->state, state::blocked);
+        QCOMPARE(team().task(id)->reviewBlock,
+                 noVerdict ? QStringLiteral("no_verdict") : QStringLiteral("round_limit"));
+        if (language == "vi") {
+            QVERIFY(!team().task(id)->question.startsWith("The review"));
+            QVERIFY(!team().task(id)->question.startsWith("Review round"));
+        }
+        if (!noVerdict && language == "vi")
+            QVERIFY(updates("round_limit").first().text.startsWith(QStringLiteral("Kết luận về")));
+        // Persist the protocol reason across restart and a display-language change.
+        teams_.reset();
+        open();
+        QVERIFY(teams_->update(team_, {{"language", language == "vi" ? "en" : "vi"}}, "user").ok());
+        QVERIFY(teams_->acceptReview(team_, id, "Local fixture review", "Checked by hand", "lead")
+                    .ok());
+        QCOMPARE(team().task(id)->state, state::ready);
+        QVERIFY(team().task(id)->reviewBlock.isEmpty());
+    }
+
+    void ordinaryBlocksCannotMasqueradeAsReviewBlocks() {
+        start("vi");
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, id, state::blocked, "dev1",
+                               "Review round limit reached (1 of 1) with findings.")
+                    .ok());
+        const auto answer =
+            teams_->acceptReview(team_, id, "Local fixture review", "Checked", "lead");
+        QVERIFY(!answer.ok());
+        QCOMPARE(answer.error->code, QStringLiteral("invalid_transition"));
     }
 
     // English is the source text: an English team keeps every word as before T-56.

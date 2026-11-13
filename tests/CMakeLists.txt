@@ -160,6 +160,12 @@ ketplus_add_gui_test(ketplus_team_page_language_tests TeamPageLanguageTest.cpp)
 target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 target_compile_definitions(ketplus_team_page_language_tests PRIVATE
     KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+# Refresh source extraction in memory: a new tr()/QT_TRANSLATE_NOOP cannot hide behind an old catalog.
+add_test(NAME ketplus_team_translation_catalog_tests
+    COMMAND Python3::Interpreter
+        "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
+        --check "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
+        "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)

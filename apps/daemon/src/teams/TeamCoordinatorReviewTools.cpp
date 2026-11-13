@@ -3,6 +3,8 @@
 // accepted. Both leave a task blocked by its review without a new commit.
 #include "teams/TeamCoordinator.h"
 
+#include <iterator>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -38,10 +40,32 @@ void withdrawMerges(Team& team, const QString& taskId, const QString& reason) {
 } // namespace
 
 bool TeamCoordinator::blockedByReview(const Task& task) {
-    return task.state == state::blocked &&
-           (task.question.startsWith(QStringLiteral("Review round limit reached (")) ||
-            (task.question.startsWith(QStringLiteral("The review of round ")) &&
-             task.question.contains(QStringLiteral(" has no verdict after "))));
+    if (task.state != state::blocked)
+        return false;
+    if (!task.reviewBlock.isEmpty())
+        return task.reviewBlock == QStringLiteral("round_limit") ||
+               task.reviewBlock == QStringLiteral("no_verdict");
+    // Older documents predate review_block. Recover only from the structured transition
+    // and verdict, never from either language's display text.
+    for (auto entry = task.history.crbegin(); entry != task.history.crend(); ++entry) {
+        if (entry->kind != QStringLiteral("state"))
+            continue;
+        if (entry->actor != QStringLiteral("daemon") ||
+            entry->data.value(QStringLiteral("from")).toString() != state::inReview ||
+            entry->data.value(QStringLiteral("to")).toString() != state::blocked)
+            return false;
+        for (auto verdict = std::next(entry); verdict != task.history.crend(); ++verdict) {
+            if (verdict->kind == QStringLiteral("verdict_voided"))
+                return false;
+            if (verdict->kind != QStringLiteral("verdict"))
+                continue;
+            const QString outcome = verdict->data.value(QStringLiteral("verdict")).toString();
+            return outcome == QStringLiteral("findings") ||
+                   (outcome == QStringLiteral("no_verdict") && task.missingVerdicts > 0);
+        }
+        return false;
+    }
+    return false;
 }
 
 TeamResult TeamCoordinator::voidReview(const qint64 teamId, const QString& taskId,

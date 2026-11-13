@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Refreshes the team translations from the team sources (T-56, ADR 0120, docs/development.md).
+"""Refreshes the team translations from the team sources (T-56, ADR 0124, docs/development.md).
 
 lupdate finds every team text, but it guesses a context per class, and the desktop's
 free tr() helpers translate under contexts lupdate cannot see. A team text means the same
 wherever the team shows it, so this keeps one context, "Team", which is the context the
 translator looks up (modules/remote/src/TeamLanguage.cpp):
 
-    update_team_translations.py <lupdate> <repository root> <file.ts>...
+    update_team_translations.py [--check] <lupdate> <repository root> <file.ts>...
 
 A translation already written for a text is kept; a text no source uses any more is dropped.
+With --check the catalog is not rewritten; missing translations and stale entries fail.
 """
 
 import subprocess
@@ -75,11 +76,29 @@ def write(ts: Path, language: str, all_texts: list[str], translated: dict[str, s
 
 
 def main() -> int:
-    if len(sys.argv) < 4:
+    args = sys.argv[1:]
+    checking = "--check" in args
+    if checking:
+        args.remove("--check")
+    if len(args) < 3:
         print(__doc__.strip(), file=sys.stderr)
         return 2
-    lupdate, root, files = sys.argv[1], Path(sys.argv[2]), [Path(p) for p in sys.argv[3:]]
+    lupdate, root, files = args[0], Path(args[1]), [Path(p) for p in args[2:]]
     all_texts = texts(lupdate, sources(root))
+    if checking:
+        failed = False
+        for ts in files:
+            translated = written(ts)
+            recorded = {message.findtext("source") or "" for message in ET.parse(ts).getroot().iter("message")}
+            missing = sorted(set(all_texts) - translated.keys())
+            stale = sorted(recorded - set(all_texts))
+            for source in missing:
+                print(f"{ts.name}: missing translation: {source}", file=sys.stderr)
+            for source in stale:
+                print(f"{ts.name}: stale source: {source}", file=sys.stderr)
+            failed |= bool(missing or stale)
+            print(f"{ts.name}: {len(all_texts)} current source texts checked")
+        return int(failed)
     for ts in files:
         language = ts.stem.rsplit("_", 1)[-1]
         missing = write(ts, {"vi": "vi_VN"}.get(language, language), all_texts, written(ts))

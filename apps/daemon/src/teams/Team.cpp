@@ -47,6 +47,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.state = json.value(QStringLiteral("state")).toString(state::todo);
     task.resumeState = json.value(QStringLiteral("resume_state")).toString();
     task.question = json.value(QStringLiteral("question")).toString();
+    task.reviewBlock = json.value(QStringLiteral("review_block")).toString();
     task.branch = json.value(QStringLiteral("branch")).toString();
     task.worktree = json.value(QStringLiteral("worktree")).toString();
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
@@ -312,6 +313,7 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("state"), task.state},
                      {QStringLiteral("resume_state"), task.resumeState},
                      {QStringLiteral("question"), task.question},
+                     {QStringLiteral("review_block"), task.reviewBlock},
                      {QStringLiteral("branch"), task.branch},
                      {QStringLiteral("worktree"), task.worktree},
                      {QStringLiteral("base_commit"), task.baseCommit},

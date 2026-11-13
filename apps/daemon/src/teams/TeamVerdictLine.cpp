@@ -1,4 +1,5 @@
 #include "teams/TeamVerdictLine.h"
+#include "teams/Team.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -99,10 +100,10 @@ Severities count(const QString& reply) {
     return found;
 }
 
-QString counts(const Severities& severities) {
+QString counts(const Severities& severities, const QString& language) {
     if (!severities.stated)
-        return QStringLiteral("severity not stated");
-    return QStringLiteral("%1 High, %2 Medium, %3 Low, %4 Nit")
+        return say(language, QT_TRANSLATE_NOOP("Team", "severity not stated"));
+    return say(language, QT_TRANSLATE_NOOP("Team", "%1 High, %2 Medium, %3 Low, %4 Nit"))
         .arg(severities.high)
         .arg(severities.medium)
         .arg(severities.low)
@@ -110,20 +111,27 @@ QString counts(const Severities& severities) {
 }
 
 QString text(const Verdict& verdict) {
-    QString line = QStringLiteral("Verdict on %1").arg(verdict.taskId);
+    QString line =
+        say(verdict.language, QT_TRANSLATE_NOOP("Team", "Verdict on %1")).arg(verdict.taskId);
     if (!verdict.pullRequest.isEmpty())
-        line += QStringLiteral(" (PR %1)").arg(verdict.pullRequest);
-    line += QStringLiteral(", round %1 of %2 by %3: ")
+        line +=
+            say(verdict.language, QT_TRANSLATE_NOOP("Team", " (PR %1)")).arg(verdict.pullRequest);
+    line += say(verdict.language, QT_TRANSLATE_NOOP("Team", ", round %1 of %2 by %3: "))
                 .arg(verdict.round)
                 .arg(verdict.limit)
                 .arg(verdict.reviewer);
     if (!verdict.findings)
-        return line + QStringLiteral("no findings. Ready to merge.");
-    line += QStringLiteral("findings (%1).").arg(counts(count(verdict.reply)));
+        return line +
+               say(verdict.language, QT_TRANSLATE_NOOP("Team", "no findings. Ready to merge."));
+    line += say(verdict.language, QT_TRANSLATE_NOOP("Team", "findings (%1)."))
+                .arg(counts(count(verdict.reply), verdict.language));
     line += verdict.atLimit
-                ? QStringLiteral(" The round limit is reached: you decide.")
-                : QStringLiteral(" Back to its developer; decide on any finding outside the "
-                                 "task's scope.");
+                ? say(verdict.language,
+                      QT_TRANSLATE_NOOP("Team", " The round limit is reached: you decide."))
+                : say(verdict.language,
+                      QT_TRANSLATE_NOOP("Team",
+                                        " Back to its developer; decide on any finding outside the "
+                                        "task's scope."));
     return line;
 }
 

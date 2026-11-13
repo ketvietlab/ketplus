@@ -478,10 +478,12 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             return {.error = invalid};
         }
         if (rounds != team->maxRounds)
-            updates.append({.kind = QStringLiteral("review_rounds"),
-                            .text = say(team->language, QT_TRANSLATE_NOOP("Team", "Max review passes: %1")).arg(rounds),
-                            .data = {{QStringLiteral("from"), team->maxRounds},
-                                     {QStringLiteral("to"), rounds}}});
+            updates.append(
+                {.kind = QStringLiteral("review_rounds"),
+                 .text = say(team->language, QT_TRANSLATE_NOOP("Team", "Max review passes: %1"))
+                             .arg(rounds),
+                 .data = {{QStringLiteral("from"), team->maxRounds},
+                          {QStringLiteral("to"), rounds}}});
         team->maxRounds = rounds;
     }
     if (changes.contains(QStringLiteral("review_place"))) {

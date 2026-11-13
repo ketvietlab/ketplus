@@ -21,8 +21,10 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTableWidget>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include <QtTest>
 
@@ -200,6 +202,7 @@ class TeamPageLanguageTest final : public QObject {
     Q_OBJECT
 
   private:
+    QTemporaryDir settings_;
     FakeDaemon daemon_;
     std::unique_ptr<TeamDirectory> teams_;
 
@@ -220,8 +223,26 @@ class TeamPageLanguageTest final : public QObject {
   private slots:
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(settings_.isValid());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
         ket::Style::install(*qApp);
         QVERIFY2(catalog().size() > 300, "the Vietnamese team catalog is read");
+    }
+
+    void hidingOneTeamPageKeepsTheOtherPagesLanguage() {
+        namespace language = ketplus::remote::team_language;
+        start(fixture("vi"), "Đã giao T-1 cho Dev 1.");
+        TeamPage first(teams_.get(), "7", "/work/shop");
+        TeamPage second(teams_.get(), "7", "/work/shop");
+        first.show();
+        second.show();
+        QTRY_COMPARE(language::current(), QStringLiteral("vi"));
+        second.hide();
+        QCOMPARE(language::current(), QStringLiteral("vi"));
+        QCOMPARE(QCoreApplication::translate("Team", "Members"), QStringLiteral("Thành viên"));
+        first.hide();
+        QCOMPARE(language::current(), QStringLiteral("en"));
     }
 
     void aVietnameseTeamShowsNoEnglishFixedText() {

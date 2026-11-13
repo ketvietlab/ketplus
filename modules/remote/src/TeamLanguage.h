@@ -12,6 +12,8 @@
 
 #include <QString>
 
+class QObject;
+
 namespace ketplus::remote::team_language {
 
 inline const QString english = QStringLiteral("en");
@@ -55,7 +57,8 @@ class Scope final {
 // On the GUI thread, tr() outside a Scope answers in it, so a menu or a dialog opened from a
 // team page, and the texts it changes later, speak the team's language too. Only the team
 // contexts are translated, so the rest of the application is unaffected.
-void setAmbient(const QString& language);
+void setAmbient(const QString& language, QObject* owner = nullptr);
+void clearAmbient(QObject* owner);
 
 // The language of the innermost Scope on this thread, else the ambient one on the GUI thread;
 // English without either.

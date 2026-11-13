@@ -76,9 +76,12 @@ int TeamCoordinator::roundLimit(const Team& team, const Task& task) {
     return task.roundLimit > 0 ? task.roundLimit : team.maxRounds;
 }
 
-QString TeamCoordinator::noVerdictQuestion(const int round, const int replies) {
-    return QStringLiteral("The review of round %1 has no verdict after %2 replies. Accept it "
-                          "with team_review_accept, or hand the task to review again.")
+QString TeamCoordinator::noVerdictQuestion(const QString& language, const int round,
+                                           const int replies) {
+    return say(language,
+               QT_TRANSLATE_NOOP(
+                   "Team", "The review of round %1 has no verdict after %2 replies. Accept it "
+                           "with team_review_accept, or hand the task to review again."))
         .arg(round)
         .arg(replies);
 }
@@ -377,10 +380,13 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             if (!comment)
                 return QString{};
             return link.isEmpty()
-                       ? QStringLiteral(" The comment could not be posted on the pull request "
-                                        "(%1), so the findings are kept on the board.")
+                       ? say(team->language,
+                             QT_TRANSLATE_NOOP(
+                                 "Team", " The comment could not be posted on the pull request "
+                                         "(%1), so the findings are kept on the board."))
                              .arg(comment->error)
-                       : QStringLiteral(" On the pull request: %1").arg(link);
+                       : say(team->language, QT_TRANSLATE_NOOP("Team", " On the pull request: %1"))
+                             .arg(link);
         };
         if (failure.isEmpty() && !noVerdict)
             task->missingVerdicts = 0;
@@ -397,7 +403,8 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                                              .reviewer = reviewerName,
                                              .findings = withFindings,
                                              .atLimit = atLimit,
-                                             .reply = text}),
+                                             .reply = text,
+                                             .language = team->language}),
                  .taskId = taskId,
                  .actionable = true,
                  .data = {{QStringLiteral("verdict"), withFindings ? QStringLiteral("findings")
@@ -443,7 +450,8 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             } else {
                 // One line for the leader: the blocked task says why.
                 task->resumeState = state::inProgress;
-                task->question = noVerdictQuestion(round, task->missingVerdicts);
+                task->reviewBlock = QStringLiteral("no_verdict");
+                task->question = noVerdictQuestion(team->language, round, task->missingVerdicts);
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
             }
@@ -467,6 +475,7 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             if (round >= limit) {
                 // Past the limit the leader decides (ADR 0114 §2); with one round, after it.
                 task->resumeState = state::inProgress;
+                task->reviewBlock = QStringLiteral("round_limit");
                 task->question =
                     roundLimitQuestion(team->language, round, shownLimit(limit, round));
                 if (!link.isEmpty())

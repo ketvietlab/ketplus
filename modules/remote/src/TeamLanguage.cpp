@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QThread>
 #include <QTranslator>
@@ -14,12 +15,22 @@ namespace {
 thread_local QString scoped;
 // Read and written on the GUI thread only.
 QString ambient;
+struct VisiblePage {
+    QPointer<QObject> owner;
+    QString language;
+};
+QList<VisiblePage> pages;
 
 QString active() {
     if (!scoped.isEmpty())
         return scoped;
     const auto* application = QCoreApplication::instance();
-    return application && QThread::currentThread() == application->thread() ? ambient : QString{};
+    if (!application || QThread::currentThread() != application->thread())
+        return {};
+    for (auto page = pages.crbegin(); page != pages.crend(); ++page)
+        if (page->owner)
+            return page->language;
+    return ambient;
 }
 
 // The compiled translations, one per translated language, loaded on first use.
@@ -126,9 +137,20 @@ Scope::Scope(const QString& language) : previous_(scoped) {
 
 Scope::~Scope() { scoped = previous_; }
 
-void setAmbient(const QString& language) {
-    ambient = language.isEmpty() ? QString{} : orEnglish(language);
-    if (ambient != english && !ambient.isEmpty() && QCoreApplication::instance())
+void clearAmbient(QObject* owner) {
+    pages.removeIf([owner](const VisiblePage& page) { return !page.owner || page.owner == owner; });
+}
+
+void setAmbient(const QString& language, QObject* owner) {
+    const QString selected = language.isEmpty() ? QString{} : orEnglish(language);
+    if (owner) {
+        clearAmbient(owner);
+        if (!selected.isEmpty())
+            pages.append({owner, selected});
+    } else {
+        ambient = selected;
+    }
+    if (selected != english && !selected.isEmpty() && QCoreApplication::instance())
         install();
 }
 

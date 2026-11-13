@@ -703,7 +703,7 @@ class TeamCoordinator : public QObject {
     static void reviewerJoined(Team& team, const QString& sessionId);
     static void reviewerLeft(Team& team, const QString& sessionId);
     // The questions of a task the review blocked.
-    [[nodiscard]] static QString noVerdictQuestion(int round, int replies);
+    [[nodiscard]] static QString noVerdictQuestion(const QString& language, int round, int replies);
     [[nodiscard]] static QString roundLimitQuestion(const QString& language, int round,
                                                     int maxRounds);
     [[nodiscard]] static bool blockedByReview(const Task& task);

@@ -260,12 +260,12 @@ QString TeamPage::teamLanguage() const {
 
 void TeamPage::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-    team_language::setAmbient(teamLanguage());
+    team_language::setAmbient(teamLanguage(), this);
 }
 
 void TeamPage::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
-    team_language::setAmbient({});
+    team_language::clearAmbient(this);
 }
 
 void TeamPage::rebuild() {
@@ -283,7 +283,7 @@ void TeamPage::rebuild() {
     const QString language = teamLanguage();
     const team_language::Scope speaking(language);
     if (isVisible())
-        team_language::setAmbient(language);
+        team_language::setAmbient(language, this);
     const int position = scroll_->verticalScrollBar()->value();
     const FocusPlace focus = focusPlace();
     const QString currentTask =

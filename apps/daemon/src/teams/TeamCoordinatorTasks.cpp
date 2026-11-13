@@ -12,9 +12,11 @@ namespace ketplus::daemon::teams {
 namespace {
 
 // T-93 (ADR 0123 §9, review L1): the repository's branches were not listed yet.
-QString uncheckedBranchText() {
-    return QStringLiteral(" The repository's branches were not listed yet; the name is checked "
-                          "against them when the worktree is made.");
+QString uncheckedBranchText(const QString& language) {
+    return say(language,
+               QT_TRANSLATE_NOOP(
+                   "Team", " The repository's branches were not listed yet; the name is checked "
+                           "against them when the worktree is made."));
 }
 
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
@@ -111,15 +113,16 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
         return {.error = invalid};
     }
     const QString branch = branch_names::plannedBranch(team->id, task);
-    addHistory(
-        task, actor, QStringLiteral("created"),
-        (task.repository.isEmpty()
-             ? say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2.")).arg(actorName(*team, actor), branch)
-             : say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2 in %3 against %4."))
-                   .arg(actorName(*team, actor), branch, task.repository,
-                        task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
-                                                         : task.integrationBranch)) +
-            (unchecked ? uncheckedBranchText() : QString()));
+    addHistory(task, actor, QStringLiteral("created"),
+               (task.repository.isEmpty()
+                    ? say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2."))
+                          .arg(actorName(*team, actor), branch)
+                    : say(team->language,
+                          QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2 in %3 against %4."))
+                          .arg(actorName(*team, actor), branch, task.repository,
+                               task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                                : task.integrationBranch)) +
+                   (unchecked ? uncheckedBranchText(team->language) : QString()));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
@@ -225,7 +228,7 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         if (const QString now = branch_names::plannedBranch(team->id, *task); now != was)
             addHistory(*task, actor, QStringLiteral("branch"),
                        QStringLiteral("Branch %1 → %2.").arg(was, now) +
-                           (unchecked ? uncheckedBranchText() : QString()),
+                           (unchecked ? uncheckedBranchText(team->language) : QString()),
                        {{QStringLiteral("from"), was}, {QStringLiteral("to"), now}});
     }
     if (changes.contains(QStringLiteral("pull_request")) ||
@@ -347,16 +350,21 @@ bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>&
         return false;
     task.roundLimit = team.maxRounds;
     task.resumeState = state::inProgress;
-    task.question = roundLimitQuestion(task.round, team.maxRounds) +
-                    QStringLiteral(" The team's Max review passes is now %1.").arg(team.maxRounds);
+    task.reviewBlock = QStringLiteral("round_limit");
+    task.question =
+        roundLimitQuestion(team.language, task.round, team.maxRounds) +
+        say(team.language, QT_TRANSLATE_NOOP("Team", " The team's Max review passes is now %1."))
+            .arg(team.maxRounds);
     applyMove(team, task, state::blocked, QStringLiteral("daemon"), task.question, updates);
-    updates.append({.kind = QStringLiteral("round_limit"),
-                    .text = QStringLiteral("%1 had %2 review passes; the team now allows %3.")
-                                .arg(task.id)
-                                .arg(task.round)
-                                .arg(team.maxRounds),
-                    .taskId = task.id,
-                    .actionable = true});
+    updates.append(
+        {.kind = QStringLiteral("round_limit"),
+         .text = say(team.language,
+                     QT_TRANSLATE_NOOP("Team", "%1 had %2 review passes; the team now allows %3."))
+                     .arg(task.id)
+                     .arg(task.round)
+                     .arg(team.maxRounds),
+         .taskId = task.id,
+         .actionable = true});
     return true;
 }
 
@@ -364,6 +372,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
     task.state = to;
+    if (to != state::blocked)
+        task.reviewBlock.clear();
     addHistory(task, actor, QStringLiteral("state"),
                QStringLiteral("%1 → %2%3")
                    .arg(stateName(team.language, from), stateName(team.language, to),
@@ -487,6 +497,7 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                                     "the leader."))};
         task->resumeState = from == state::inReview ? state::inProgress : from;
         // The actionable state update carries the question to the leader's digest.
+        task->reviewBlock.clear();
         task->question = reason.left(4000);
     } else if (to == state::todo) {
         if (!leaderOrUser(role) && !daemon)
