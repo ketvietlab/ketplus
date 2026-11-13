@@ -97,6 +97,7 @@ Run sampleRun(const RunStatus status) {
 QJsonObject createPayload(const Schedule& schedule) {
     QJsonObject payload = toJson(schedule);
     payload.remove(QStringLiteral("id"));
+    payload.remove(QStringLiteral("created_by"));
     payload.remove(QStringLiteral("created_at"));
     payload.remove(QStringLiteral("updated_at"));
     payload.remove(QStringLiteral("next_run_at"));
@@ -117,8 +118,10 @@ class ScheduleProtocolTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void featureIsAdvertised() {
-        QVERIFY(protocol::features(1).contains(QString(protocol::schedulesFeature)));
+    void featureWaitsForHandlers() {
+        // Advertising schedules/1 before a handler exists makes every schedule.*
+        // request unsupported. The handler change adds the feature with the routes.
+        QVERIFY(!protocol::features(1).contains(QString(protocol::schedulesFeature)));
         QVERIFY(!protocol::features(0).contains(QString(protocol::schedulesFeature)));
         QCOMPARE(maximumRetainedRuns, 50);
     }
@@ -148,6 +151,11 @@ class ScheduleProtocolTest final : public QObject {
         document.insert(QStringLiteral("note"), QStringLiteral("nope"));
         QVERIFY(!scheduleFromJson(document, &failure));
         QCOMPARE(failure.code, QString(unknownFieldCode));
+
+        document = toJson(conversationSchedule());
+        document.insert(QStringLiteral("created_at"), QStringLiteral("2026-11-13T10:00:00"));
+        QVERIFY(!scheduleFromJson(document, &failure));
+        QCOMPARE(failure.code, QString(invalidPayloadCode));
 
         document = toJson(conversationSchedule());
         document.insert(QStringLiteral("prompt"), QString{});
@@ -280,6 +288,11 @@ class ScheduleProtocolTest final : public QObject {
             QString(missingTargetCode));
         create = createPayload(conversationSchedule());
         create.insert(QStringLiteral("id"), QStringLiteral("sched-1"));
+        QCOMPARE(
+            protocol::validateScheduleRequest(QString(protocol::scheduleCreateType), create).code,
+            QString(unknownFieldCode));
+        create = createPayload(conversationSchedule());
+        create.insert(QStringLiteral("created_by"), QStringLiteral("user"));
         QCOMPARE(
             protocol::validateScheduleRequest(QString(protocol::scheduleCreateType), create).code,
             QString(unknownFieldCode));

@@ -17,7 +17,9 @@ manages; it does not create.
 
 1. **The daemon owns scheduling.** It is the only process that stores a schedule,
    decides the next fire time and delivers the prompt. Desktop and agents talk to
-   it through the `schedules/1` feature (`daemon.hello` minor 1). Phone and cloud
+   it through the `schedules/1` feature. That name is not advertised in
+   `daemon.hello` until the handlers that answer `schedule.*` are registered;
+   advertising it earlier would make every request `unsupported`. Phone and cloud
    sync are out of scope for v1: nothing in this feature is projected to the relay.
 
 2. **Two records.** Field names on the wire are snake_case.
@@ -76,7 +78,7 @@ manages; it does not create.
    | --- | --- |
    | `schedule.list` | optional `target_kind`, `session_id`, `team_id` |
    | `schedule.get` | `id` |
-   | `schedule.create` | `name`, `enabled`, `prompt`, `target`, `rule`, `busy_policy`, `missed_policy`, `created_by` |
+   | `schedule.create` | `name`, `enabled`, `prompt`, `target`, `rule`, `busy_policy`, `missed_policy` |
    | `schedule.update` | `id` and at least one of those writable fields |
    | `schedule.delete` | `id` |
    | `schedule.setEnabled` | `id`, `enabled` |
@@ -85,12 +87,16 @@ manages; it does not create.
    | `schedule.changed` | `change` (`created` \| `updated` \| `deleted`) and the `schedule` |
    | `schedule.run` | `run` |
 
-   `id`, `created_at`, `updated_at`, `next_run_at` and `last_run_at` are
-   server-owned. A create that sends them is `unknown_field`. An update is a
-   patch. After the patch is merged, the stored document is parsed again with
-   `scheduleFromJson`, so a team start cannot be left with a prompt, a repeating
-   rule or `missed_policy` `skip`. Clearing a prompt in a patch requires the
-   `team_start` target in the same request.
+   `id`, `created_by`, `created_at`, `updated_at`, `next_run_at` and `last_run_at`
+   are server-owned. The handler sets `created_by` from the connection: `user`
+   for a person, or the agent conversation id. A client cannot claim either.
+   A create that sends any of these fields is `unknown_field`. Every stored
+   timestamp is ISO-8601 with `Z` or a numeric offset; a value with no zone is
+   `invalid_payload`, so two processes cannot read it as different local times.
+   An update is a patch. After the patch is merged, the stored document is parsed
+   again with `scheduleFromJson`, so a team start cannot be left with a prompt, a
+   repeating rule or `missed_policy` `skip`. Clearing a prompt in a patch requires
+   the `team_start` target in the same request.
 
    Success payloads include `ok: true`. List returns `schedules`. Get, create,
    update and setEnabled return `schedule`. Delete returns `id`. Runs returns
@@ -104,8 +110,8 @@ manages; it does not create.
 
 7. **Who may create one.** The product creates a schedule only from New
    conversation and New team (mock pull request #681). Agent-created schedules
-   are accepted on the wire (`created_by` is a conversation id) but their limits
-   are pending decision D-2 and are not part of this contract.
+   are the documents whose server-assigned `created_by` is a conversation id.
+   Their limits are pending decision D-2 and are not part of this contract.
 
 8. **Journal.** A following change stores the documents above: deleting a schedule
    deletes its runs; deleting a team deletes its `team` and `team_start`
@@ -119,8 +125,8 @@ manages; it does not create.
   invent a second shape.
 - The recurrence engine can change DST and timezone behaviour without a protocol
   revision, as long as `rule` stays a JSON object string with the v1 kinds.
-- A client that does not know `schedules/1` ignores the feature. Older daemons
-  do not advertise it.
+- A client that does not know `schedules/1` ignores the feature. This daemon
+  does not advertise it until the handlers exist, and older daemons never do.
 - Run now is part of the contract now and returns `not_implemented` until the
   runtime handles it.
 

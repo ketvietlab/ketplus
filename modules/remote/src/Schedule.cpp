@@ -30,6 +30,11 @@ bool validId(const QString& value) {
 }
 
 bool timestamp(const QString& value) {
+    // A zone-less value is local time for Qt, so two processes would disagree.
+    // Require Z or a numeric offset (2026-11-13T10:00:00Z, ...+07:00, ...+0700).
+    static const QRegularExpression zone(QStringLiteral(R"((?:[Zz]|[+-]\d{2}:?\d{2})$)"));
+    if (!zone.match(value).hasMatch())
+        return false;
     return QDateTime::fromString(value, Qt::ISODateWithMs).isValid() ||
            QDateTime::fromString(value, Qt::ISODate).isValid();
 }
@@ -89,7 +94,7 @@ std::optional<QString> timeField(const QJsonObject& object, const QString& key, 
     }
     if (!timestamp(*text)) {
         fail(failure, invalidPayloadCode,
-             QStringLiteral("%1 must be an ISO-8601 timestamp.").arg(key));
+             QStringLiteral("%1 must be an ISO-8601 timestamp with a UTC offset.").arg(key));
         return std::nullopt;
     }
     return text;

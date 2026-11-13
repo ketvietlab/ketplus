@@ -70,8 +70,7 @@ QJsonObject createPayload(const schedule::Schedule& schedule) {
             {QStringLiteral("target"), schedule::toJson(schedule.target)},
             {QStringLiteral("rule"), schedule.rule},
             {QStringLiteral("busy_policy"), schedule::nameOf(schedule.busyPolicy)},
-            {QStringLiteral("missed_policy"), schedule::nameOf(schedule.missedPolicy)},
-            {QStringLiteral("created_by"), schedule.createdBy}};
+            {QStringLiteral("missed_policy"), schedule::nameOf(schedule.missedPolicy)}};
 }
 
 QJsonObject updatePayload(const ScheduleUpdate& update) {
@@ -214,10 +213,12 @@ std::optional<QString> parseScheduleId(const QJsonObject& payload, Failure* fail
 
 std::optional<schedule::Schedule> parseScheduleCreate(const QJsonObject& payload,
                                                       Failure* failure) {
-    const QStringList allowed{QStringLiteral("name"),          QStringLiteral("enabled"),
-                              QStringLiteral("prompt"),        QStringLiteral("target"),
-                              QStringLiteral("rule"),          QStringLiteral("busy_policy"),
-                              QStringLiteral("missed_policy"), QStringLiteral("created_by")};
+    // created_by is server-owned, like id and the timestamps. The handler sets it
+    // from the connection, so a client that sends it is rejected.
+    const QStringList allowed{QStringLiteral("name"),         QStringLiteral("enabled"),
+                              QStringLiteral("prompt"),       QStringLiteral("target"),
+                              QStringLiteral("rule"),         QStringLiteral("busy_policy"),
+                              QStringLiteral("missed_policy")};
     if (!onlyKeys(payload, allowed, failure))
         return std::nullopt;
     if (!payload.contains(QStringLiteral("target"))) {
@@ -294,15 +295,6 @@ std::optional<schedule::Schedule> parseScheduleCreate(const QJsonObject& payload
              QStringLiteral("A team start uses missed policy run_once."));
         return std::nullopt;
     }
-    const auto createdBy = requiredString(payload, QStringLiteral("created_by"), failure);
-    if (!createdBy)
-        return std::nullopt;
-    if (const Failure createdByError = schedule::validateCreatedBy(*createdBy);
-        !createdByError.ok()) {
-        if (failure)
-            *failure = createdByError;
-        return std::nullopt;
-    }
     schedule::Schedule schedule;
     schedule.name = *name;
     schedule.enabled = payload.value(QStringLiteral("enabled")).toBool();
@@ -311,7 +303,6 @@ std::optional<schedule::Schedule> parseScheduleCreate(const QJsonObject& payload
     schedule.rule = *rule;
     schedule.busyPolicy = *busy;
     schedule.missedPolicy = *missed;
-    schedule.createdBy = *createdBy;
     accept(failure);
     return schedule;
 }

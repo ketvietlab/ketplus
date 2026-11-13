@@ -1090,7 +1090,8 @@ a fake future version or kills an existing daemon as an uninstall fallback.
 ## Scheduled runs (ADR 0126)
 
 The daemon owns schedules that send a prompt at a time or on a recurrence, including
-while the desktop window is closed. `daemon.hello` minor 1 advertises `schedules/1`.
+while the desktop window is closed. The feature name is `schedules/1`, but
+`daemon.hello` does not advertise it until the handlers below exist.
 The shared documents are `ketplus::schedule::Schedule` and `ScheduleRun` in
 `modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
 Wire names are snake_case. A schedule keeps its last 50 runs.
@@ -1122,8 +1123,10 @@ Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
 `has_more`, or `run`. `schedule.runNow` answers `not_implemented` until the runtime
 fires a schedule. A missing id is `schedule_not_found`.
 
-Schedules are created only from New conversation and New team. Agent-created
-schedules (`created_by` is a conversation id) wait on the limits in decision D-2.
+Schedules are created only from New conversation and New team. `created_by` is
+set by the daemon from the connection (`user`, or the agent conversation id);
+a create that sends it is `unknown_field`. Agent-created schedules wait on the
+limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
 Phone and cloud sync are out of scope for v1. Journal tables and the SessionHost
 handlers are a following change; they persist these documents and call this parser.
 Deleting a schedule deletes its runs, deleting a team deletes its `team` and
