@@ -24,6 +24,21 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
+- GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
+  `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
+  streamed turns, cancellation, bounded request deadlines and explicit sign-in
+  failures have deterministic fake-process coverage. Turn-bound one-time approvals
+  and host Browser MCP setup/routing/cleanup also have fake-process coverage;
+  unverified Copilot MCP identities still require approval. Model discovery uses
+  bounded, cached ACP session catalogs and a provider-default fallback; explicit
+  selections are confirmed before prompting. Authenticated Copilot behavior
+  remains unverified.
+
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a
     `truncated` event; the client keeps its connection.

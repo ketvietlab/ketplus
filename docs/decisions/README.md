@@ -23,4 +23,6 @@ decision, retain the old record and link both documents.
 
 - [0120: GitHub Copilot through a shared ACP adapter](0120-github-copilot-acp-provider.md)
 
-- [0121: Consented user-space daemon installation over SSH](0121-consented-ssh-daemon-installation.md) (proposed)
+- [0121: Canonical KetPlus color scheme format](0121-canonical-color-scheme-format.md)
+
+- [0123: Consented user-space daemon installation over SSH](0123-consented-ssh-daemon-installation.md)

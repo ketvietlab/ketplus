@@ -7,6 +7,8 @@
 #include <QList>
 #include <QPair>
 #include <QSet>
+#include <optional>
+#include <utility>
 class QProcess;
 class QTimer;
 namespace ketplus::daemon {
@@ -30,8 +32,15 @@ class AcpAdapter : public ProviderAdapter {
     // Set process_ program/arguments; the engine owns channels, environment and signals.
     virtual void configureProcess() = 0;
     virtual QJsonObject clientCapabilities() const;
+    // Opt in to turn-bound permission IDs and strictly advertised one-time options.
+    virtual bool strictPermissionRequests() const { return false; }
     // rawInput is provider-owned data, not a portable authenticated MCP identity.
     virtual bool autoApprovePermission(const QString&, const QJsonObject&) const { return false; }
+    virtual QString initializationError(const QJsonObject&) const { return {}; }
+    virtual QString responseError(const QJsonObject& error);
+    virtual QString processFailure(const QString& fallback, std::optional<int>) { return fallback; }
+    // Zero keeps the existing provider policy. The engine owns timeout settlement/cleanup.
+    virtual int requestTimeoutMs(const QString&) const { return 0; }
     // The callback reports an empty error when launching is allowed.
     virtual void checkLaunch(std::function<void(const QString&)> done) { done({}); }
     // Called while the concrete adapter is alive by its explicit stop()/destructor.
@@ -42,6 +51,11 @@ class AcpAdapter : public ProviderAdapter {
     virtual void applySessionModel(const QString&, const QString&, const QJsonObject&,
                                    std::function<void()> done) {
         done();
+    }
+    // Providers with strict selection must be able to fail before any prompt is sent.
+    virtual void prepareSessionModel(const QString& sessionId, const QString& model,
+                                     const QJsonObject& result, Callback done) {
+        applySessionModel(sessionId, model, result, [done = std::move(done)] { done({}, {}); });
     }
     // Translate host policy into the provider's advertised ACP mode identifier.
     virtual QString sessionPermissionMode(const QString&) const { return {}; }
@@ -89,6 +103,18 @@ class AcpAdapter : public ProviderAdapter {
     void consumeLine(const QByteArray& line);
     virtual void handleSessionUpdate(const QJsonObject& params);
     void handlePermissionRequest(const QJsonValue& requestId, const QJsonObject& params);
+    void handleStrictPermission(const QJsonValue& requestId, const QJsonObject& params);
+    void respondStrictPermission(const QJsonValue& requestId, const QJsonObject& result);
+    void cancelPermissions(const QString& sessionId = {});
+    void sendPermissionOutcome(const QJsonValue& requestId, const QString& optionId = {});
+    struct PermissionRequest {
+        QJsonValue providerId;
+        QString sessionId;
+        QString turnId;
+        QJsonArray options;
+    };
+    QHash<QString, PermissionRequest> permissions_;
+    quint64 nextPermissionNumber_{1};
     void failPending(const QString& reason);
     void setReady(bool ready);
     void noteUnexpectedStop();
@@ -101,6 +127,7 @@ class AcpAdapter : public ProviderAdapter {
     QByteArray stdoutBuffer_;
     QByteArray stderrBuffer_;
     QHash<quint64, Callback> pending_;
+    QHash<quint64, QTimer*> pendingTimers_;
     QHash<quint64, QString> pendingMethods_;
     compat::CapabilityNarrowing narrowing_;
     QList<QueuedCall> queued_;

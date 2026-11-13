@@ -50,6 +50,14 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## Theme input security fixtures
+
+`ketplus_theme_input_tests` runs headlessly with no provider or network access.
+It constructs small ZIP fixtures in memory, including patched hostile metadata,
+and tests JSONC comment/string boundaries and error locations, ZIP traversal,
+links/collisions/CRC failure, all four archive budgets, standard plist DOCTYPE acceptance without external resolution, internal DTD/entity rejection,
+and local/archive includes with cycles, escapes and the 16-level boundary.
+
 ## Target map
 
 | Area | Build/test target | Primary coverage |
@@ -59,6 +67,7 @@ version for the same reason. No job in the matrix uses provider quota.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, Remove clears an unreadable or invalid API or Admin entry but not a locked one, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
@@ -96,6 +105,9 @@ version for the same reason. No job in the matrix uses provider quota.
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
 | Claude/Cursor framing | `ketplus_provider_framing_tests` | Coalesced real QProcess output, 16-MiB per-line boundary, aggregate valid frames, oversized complete/partial suffixes, failure drain and fresh-generation recovery; fixture process only |
 | Malformed provider frames | `ketplus_provider_malformed_frame_tests` | Fake Codex/Claude/Cursor processes: initialize and pending calls, UTF-8/binary/control/JSON failures, suffix quarantine, once-only error callbacks, payload-free diagnostics and fresh-generation recovery; an oversized Claude or Cursor line, in the initialize response or a later call, publishes one stop and one crash backoff; POSIX process fixtures skip on Windows |
+| Copilot adapter | `ketplus_daemon_copilot_adapter_tests`, `ketplus_copilot_cli_tests` | Discovery/overrides, Windows wrapper policy, fake ACP stream/cancel, explicit/nested/exit authentication failures, sanitized unrelated errors, fresh-process retry, startup deadline and host routing; no provider quota |
+| Copilot permissions/browser | `ketplus_daemon_copilot_tools_tests` | Fake ACP permission option IDs, no promotion to always, absent options, expiry/cancel, stale turn/process answers, forged browser identity, host approval cards, MCP setup/resume/disable, routing, image content and completion/failure/shutdown cleanup; no provider quota |
+| Copilot models | `ketplus_copilot_catalog_tests` | Config/grouped and advertised legacy catalogs, model/string/output bounds, fallback, cache/coalescing/expiry, timeout/stop cleanup, host model discovery, selected model before prompt, switches across turns, empty load state and explicit setter failures; native fixture executable only, no provider quota |
 | Shared ACP engine | `ketplus_daemon_acp_adapter_tests` | Provider-independent fake stdio process: initialize, MCP session creation/load fallback, assistant/tool/usage events, permission option IDs and forged MCP identity refusal, cancellation, pending-call shutdown and malformed-output restart |
 | ACP capability defaults | `ketplus_provider_compatibility_tests`, `ketplus_daemon_cursor_adapter_tests` | Missing/null/wrong-type capability fields, boolean controls/reset and actual session/load suppression; fake Cursor explicitly advertises implemented features |
 | Provider line scanning | `ketplus_provider_line_reader_tests` | Deep array/object streams, chunk/depth bounds, JSON escapes/Unicode, invalid metadata, dotted-key isolation, next-line/reset recovery and a fresh-child POSIX peak-memory bound; no live provider |
