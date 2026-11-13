@@ -64,6 +64,8 @@ Only the product's SQLite driver is deployed. Optional vendor SQL drivers and
 serial/NMEA hardware positioning are excluded. X11/Wayland, GTK3, graphics and
 font system libraries are declared in `runtime-packages.txt` and deb dependencies;
 an AppImage still needs this supported desktop baseline, not just a bare kernel.
+The ARM Qt WebEngine SDK additionally uses the distribution's Snappy, Opus,
+WebP demux/mux and MiniZip libraries; the common baseline declares these too.
 
 The deb contains `ketplus-pro-daemon.service` as an **optional, disabled user
 unit**. It has no maintainer script and never starts a daemon at install time.
@@ -100,6 +102,9 @@ for both architectures; a build-only integration PR workflow calls it for arm64
 when packaging changes. amd64 uses Ubuntu 24.04; arm64 uses the native
 `ubuntu-24.04-arm` runner with the same recipe. Read-only repository permissions
 and a seven-day workflow artifact upload retain packages/checksums for QA.
+Artifacts are retained after successful assembly, before the clean smoke, so
+failures can be diagnosed. Artifact existence alone is not a pass: the native
+job and both clean-format smokes must finish green before release acceptance.
 There is no release upload, feed update, production secret or signing step.
 No manual release workflow dispatch is needed. Native ARM CI is the selected
 execution route; never enable host emulation as a fallback.

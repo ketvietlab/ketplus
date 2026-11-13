@@ -26,6 +26,11 @@ libxcb-xkb1
 libxcb-shape0
 libnss3
 libasound2t64
+libsnappy1v5
+libopus0
+libwebpdemux2
+libwebpmux3
+libminizip1t64
 libxcomposite1
 libxcursor1
 libxdamage1

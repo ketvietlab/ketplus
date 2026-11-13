@@ -34,18 +34,21 @@ assert info['control_url'] == sys.argv[2], info
 assert info['control_url_overridable'] is False, info
 print('Production build-info policy passed')
 PY
+linkage_ok=1
+check_linkage() {
+  if ! LD_LIBRARY_PATH="$prefix/lib" ldd "$1" > "$work/ldd.log" 2>&1 || grep -q 'not found' "$work/ldd.log"; then
+    printf 'Unresolved executable, plugin or library: %s\n' "$1"
+    cat "$work/ldd.log"
+    linkage_ok=0
+  fi
+}
 for executable in "$prefix/bin/KetPlus" "$prefix/bin/ketplus_daemon" "$prefix/libexec/QtWebEngineProcess"; do
-  LD_LIBRARY_PATH="$prefix/lib" ldd "$executable" > "$work/ldd.log"
-  if grep -q 'not found' "$work/ldd.log"; then cat "$work/ldd.log"; exit 1; fi
+  check_linkage "$executable"
 done
 while IFS= read -r library; do
-  LD_LIBRARY_PATH="$prefix/lib" ldd "$library" > "$work/ldd.log"
-  if grep -q 'not found' "$work/ldd.log"; then
-    printf 'Unresolved plugin or library: %s\n' "$library"
-    cat "$work/ldd.log"
-    exit 1
-  fi
+  check_linkage "$library"
 done < <(find "$prefix/lib" "$prefix/plugins" "$prefix/qml" -type f \( -name '*.so' -o -name '*.so.[0-9]*' \))
+test "$linkage_ok" = 1
 "$prefix/lib/ketplus/ketplus-browser/bin/node" --version
 export KETPLUS_DAEMON_DATA_DIR="$work/daemon-data" KETPLUS_DAEMON_SOCKET="$work/daemon.sock"
 daemon_pid=
