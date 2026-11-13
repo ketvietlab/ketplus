@@ -22,12 +22,21 @@ github · list_issues"). `latest` is `{item, completed}`: the newest state of th
 member, the one that joined it last and has not left it. Its `item` drops `aggregatedOutput`,
 `output`, `formattedOutput`, `result`, `contentItems`, `content`, `stdout`, `stderr`, `diff` and
 `unified_diff`, keeps at most 512 characters of any string and 20 entries of any list, and is
-cut 6 levels deep. It does carry that one step's command, tool name and arguments, which the
-rule above otherwise keeps out. The summary still never carries output or a result body. It
-reaches only an opted-in local Desktop connection, which may already read every step through
-`session.activity_group_page`. The relay and mobile protocol do not carry it. A Desktop that
-predates the field ignores it, and a daemon that predates it sends none, so the heading keeps
-"<summary> · Running".
+cut 6 levels deep.
+
+This is an accepted exception to the rule above (leader decision, 2026-11-13), and it holds
+only while all of the following stay true:
+
+- `latest` is a single step's command or tool label, with the arguments that label needs,
+  truncated as above. It never carries output, a result body, stdout, stderr or a diff.
+- It travels over local IPC only: an authenticated `daemon.hello` on the daemon's local socket
+  that opted in with `transcript_activity_groups`. The relay and mobile protocol do not carry
+  summaries, and an SSH machine's `DaemonClient` (`SshMachineBackend`) does not opt in, so
+  neither Relay nor SSH sends `latest` to another device.
+- Neither the daemon nor the Desktop logs it.
+
+A Desktop that predates the field ignores it, and a daemon that predates it sends none, so the
+heading keeps "<summary> · Running".
 
 Since 2026-11-09 a summary also carries `files`, so the Desktop can show a turn's changed-files
 card without opening its groups. `files` lists the files the group's completed `fileChange`
