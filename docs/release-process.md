@@ -112,9 +112,9 @@ nice -n 10 cmake --build "$BUILD_ROOT/arm64" --target package --parallel 3
 ```
 
 Repeat with a separate `x86_64` build directory and architecture-compatible SDKs.
-Before each local build, count exact `ninja` and `xcodebuild` processes; start only
-below three and with at least 15 GiB free. Recheck disk between stages and remove
-only this task's intermediate artifacts. Verify `lipo -archs` on the app, daemon
+Builds may run in parallel without a resource or build-slot gate. Keep a dedicated
+worktree and build directory per task, outside temporary directories; remove only
+that task's intermediate artifacts after verification. Verify `lipo -archs` on the app, daemon
 and bundled browser Node, and run each daemon's `--build-info`: `control_url` must
 be the intended production URL above. Do not launch an app until native settings
 isolation is proved as described in testing.md.
