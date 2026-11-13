@@ -68,6 +68,19 @@ const QStringList& names() {
 
 QJsonArray teamTools() {
     const QJsonObject taskId = text(QStringLiteral("The task id, such as T-3."));
+    // T-93 (ADR 0121 §9): the branch `<type>/<slug>-t<n>` a task's worktree gets.
+    const QJsonObject branchType{
+        {QStringLiteral("type"), QStringLiteral("string")},
+        {QStringLiteral("enum"),
+         QJsonArray{QStringLiteral("feat"), QStringLiteral("fix"), QStringLiteral("chore"),
+                    QStringLiteral("docs"), QStringLiteral("refactor"), QStringLiteral("test")}},
+        {QStringLiteral("description"),
+         QStringLiteral("Leader, optional: the branch's type. Default: read from the title, "
+                        "else feat.")}};
+    const QJsonObject branchSlug =
+        text(QStringLiteral("Leader, optional: the branch's slug, lower-case words joined by "
+                            "hyphens, at most 40 characters (the branch is <type>/<slug>-t<n>). "
+                            "Default: from the title."));
     const QJsonObject member = text(QStringLiteral("The member's conversation number."));
     return {
         tool(QStringLiteral("team_get"),
@@ -96,7 +109,9 @@ QJsonArray teamTools() {
         tool(QStringLiteral("team_task_update"),
              QStringLiteral("Developers, on their own task: move it (in_progress, in_review once "
                             "committed, blocked with a question), add a note, mark criteria or "
-                            "set the pull request. Starts no turn of anybody."),
+                            "set the pull request. Leader: rename a task's branch with "
+                            "branch_type/branch_slug before its worktree exists. Starts no turn "
+                            "of anybody."),
              {{QStringLiteral("task_id"), taskId},
               {QStringLiteral("state"),
                QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
@@ -125,7 +140,9 @@ QJsonArray teamTools() {
                                                       QJsonObject{{QStringLiteral("type"),
                                                                    QStringLiteral("boolean")}}}}}}},
                            {QStringLiteral("description"),
-                            QStringLiteral("Criteria marks by zero-based index.")}}}},
+                            QStringLiteral("Criteria marks by zero-based index.")}}},
+              {QStringLiteral("branch_type"), branchType},
+              {QStringLiteral("branch_slug"), branchSlug}},
              {QStringLiteral("task_id")}),
         tool(QStringLiteral("team_wait"),
              QStringLiteral("Leader and developers: you wait for something outside the team (a "
@@ -157,7 +174,9 @@ QJsonArray teamTools() {
                                    "check and cleanup use it. Default: the team's."))},
               {QStringLiteral("integration_branch"),
                text(QStringLiteral("Optional, with repository: its integration branch, which "
-                                   "origin must have. Default: the team's."))}},
+                                   "origin must have. Default: the team's."))},
+              {QStringLiteral("branch_type"), branchType},
+              {QStringLiteral("branch_slug"), branchSlug}},
              {QStringLiteral("title")}),
         tool(QStringLiteral("team_task_assign"),
              QStringLiteral("Leader: assign a To do task to a developer. Starts the owner's turn."),

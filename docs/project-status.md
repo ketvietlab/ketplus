@@ -101,6 +101,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
   checked main checkout and integration branch; started tasks keep the repository they began
   in, and `team_task_create` may name a task's own repository.
+  Branch names (ADR 0121 §9, T-93): a new task's branch is `<type>/<slug>-t<n>` and its
+  worktree `<repository>-<type>-<slug>-t<n>`, from `branch_type`/`branch_slug` or derived
+  from the title (Vietnamese diacritics removed), refused when taken, renamed by the leader
+  only before the worktree exists; older tasks keep `team/<id>/t-<n>`.
   Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
   a task that records a pull request is done once `gh` says it is merged, from any open
   state, checked at load, every 2 minutes and with the merge check (at most 20 pull

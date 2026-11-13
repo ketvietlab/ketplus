@@ -44,6 +44,42 @@ teams::RepositoryCheck SessionHost::checkRepository(const QString& path,
     return team_git::checkRepository(path, integrationBranch);
 }
 
+// T-93: answered from the last listing of the repository's branches, never by git on the
+// event loop (a slow git would hold every reply). The listing is asked again on its own
+// thread when
+// it is missing or old; until the first one arrives the answer is unknown and the worktree's
+// creation, which runs git off this thread anyway, checks the name for good.
+std::optional<bool> SessionHost::branchTaken(const QString& repository,
+                                             const QString& branch) const {
+    if (repository.isEmpty())
+        return std::nullopt;
+    BranchNames& known = branchNames_[repository];
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    if (!known.reading && (!known.read.isValid() || known.read.msecsTo(now) > branchNamesAgeMs)) {
+        known.reading = true;
+        auto* self = const_cast<SessionHost*>(this);
+        self->teamBranchNames_.start([guard = QPointer<SessionHost>(self), repository]() {
+            const auto names = team_git::branchNames(repository);
+            QMetaObject::invokeMethod(
+                guard,
+                [guard, repository, names] {
+                    if (!guard)
+                        return;
+                    BranchNames& entry = guard->branchNames_[repository];
+                    entry.reading = false;
+                    if (!names)
+                        return;
+                    entry.names = *names;
+                    entry.read = QDateTime::currentDateTimeUtc();
+                },
+                Qt::QueuedConnection);
+        });
+    }
+    if (!known.read.isValid())
+        return std::nullopt;
+    return known.names.contains(branch);
+}
+
 // A prepared command's git runs on the thread of the team's other questions, in their order.
 void SessionHost::askWorktree(const teams::Team& team, const teams::Task& task,
                               teams::WorktreeDone done) {
@@ -355,7 +391,10 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
              .description = payload.value(QStringLiteral("description")).toString(),
              .lane = payload.value(QStringLiteral("lane")).toString(),
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
-             .criteria = strings(payload.value(QStringLiteral("criteria")))},
+             .criteria = strings(payload.value(QStringLiteral("criteria"))),
+             // T-93: optional, as on the leader's team_task_create.
+             .branchType = payload.value(QStringLiteral("branch_type")).toString(),
+             .branchSlug = payload.value(QStringLiteral("branch_slug")).toString()},
             user, &created);
         return answer(result, created);
     }

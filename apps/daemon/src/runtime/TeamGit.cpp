@@ -1,6 +1,8 @@
 // ADR 0114: the questions a team asks git. Nothing here reads the session runtime.
 #include "runtime/TeamGit.h"
 
+#include "teams/TeamBranchNames.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -262,8 +264,49 @@ teams::RepositoryCheck checkRepository(const QString& path, const QString& integ
     return {.repository = main, .error = {}};
 }
 
-// ADR 0114, open point 1: `<repository>-team-<id>-t-<n>` beside the repository, as the
-// worktrees of ADR 0111 are, on branch `team/<id>/t-<n>` from the integration branch.
+std::optional<bool> branchTaken(const QString& repository, const QString& branch) {
+    if (repository.isEmpty() || branch.isEmpty())
+        return std::nullopt;
+    for (const QString& ref : {QStringLiteral("refs/heads/%1").arg(branch),
+                               QStringLiteral("refs/remotes/origin/%1").arg(branch)}) {
+        QProcess process;
+        process.setWorkingDirectory(repository);
+        process.start(QStringLiteral("git"),
+                      {QStringLiteral("--no-optional-locks"), QStringLiteral("show-ref"),
+                       QStringLiteral("--verify"), QStringLiteral("--quiet"), ref});
+        if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
+            return std::nullopt;
+        // 0: there; 1: git answered and there is no such ref; anything else: git failed.
+        if (process.exitCode() == 0)
+            return true;
+        if (process.exitCode() != 1)
+            return std::nullopt;
+    }
+    return false;
+}
+
+std::optional<QSet<QString>> branchNames(const QString& repository) {
+    if (repository.isEmpty())
+        return std::nullopt;
+    const auto listed =
+        output(repository, {QStringLiteral("for-each-ref"), QStringLiteral("--format=%(refname)"),
+                            QStringLiteral("refs/heads/"), QStringLiteral("refs/remotes/origin/")});
+    if (!listed)
+        return std::nullopt;
+    QSet<QString> names;
+    for (const QString& ref : listed->split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        for (const QString prefix :
+             {QStringLiteral("refs/heads/"), QStringLiteral("refs/remotes/origin/")})
+            if (ref.startsWith(prefix))
+                names.insert(ref.mid(prefix.size()));
+    }
+    return names;
+}
+
+// ADR 0114, open point 1: a worktree beside the repository, as the worktrees of ADR 0111 are,
+// from the integration branch. T-93 (ADR 0121 §9): `<repository>-<type>-<slug>-t<n>` on
+// `<type>/<slug>-t<n>`; a task from before keeps `<repository>-team-<id>-t-<n>` on
+// `team/<id>/t-<n>`.
 teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task& task) {
     // T-90: the task's repository and integration branch, when it has its own.
     const teams::Team team = teams::taskScope(whole, task);
@@ -276,14 +319,19 @@ teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The integration branch %1 does not exist in %2.")
                              .arg(base, team.repository)};
-    const QString slug = task.id.toLower();
-    const QString branch = QStringLiteral("team/%1/%2").arg(team.id).arg(slug);
+    const QString branch = teams::branch_names::plannedBranch(team.id, task);
     const QFileInfo repository(team.repository);
     const QString path = QDir::cleanPath(repository.dir().filePath(
-        QStringLiteral("%1-team-%2-%3").arg(repository.fileName()).arg(team.id).arg(slug)));
+        teams::branch_names::plannedWorktreeName(repository.fileName(), team.id, task)));
     if (QFileInfo::exists(path))
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The worktree path %1 already exists.").arg(path)};
+    // Made since the task was named: the leader renames it (team_task_update branch_slug).
+    if (branchTaken(team.repository, branch) == std::optional<bool>(true))
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("The branch %1 already exists in %2: rename the task's "
+                                        "branch with team_task_update (branch_slug).")
+                             .arg(branch, team.repository)};
     if (!output(team.repository,
                 {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
                  QStringLiteral("--"), path, commit->trimmed()}))

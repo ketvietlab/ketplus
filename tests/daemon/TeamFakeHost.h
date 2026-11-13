@@ -53,6 +53,11 @@ class FakeHost final : public TeamHostPort {
             return {.repository = {}, .error = error};
         return {.repository = QDir::cleanPath(path), .error = {}};
     }
+    // T-93: the branches git already has, by repository and name.
+    std::optional<bool> branchTaken(const QString& repository,
+                                    const QString& branch) const override {
+        return takenBranches.contains(repository + QLatin1Char('|') + branch);
+    }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
         if (const QString error = pointErrors.value(sessionId); !error.isEmpty())
             return error;
@@ -261,6 +266,8 @@ class FakeHost final : public TeamHostPort {
     QStringList madeIn;
     mutable QList<std::pair<QString, QString>> repositoryChecks;
     QHash<QString, QString> repositoryErrors;
+    // T-93: "<repository>|<branch>" of branches git has.
+    QSet<QString> takenBranches;
     StorageFacts storageFacts;
     QList<std::pair<QString, QStringList>> storageAsks;
     QList<std::pair<QString, QString>> removals;

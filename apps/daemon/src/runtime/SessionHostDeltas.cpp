@@ -44,6 +44,7 @@ SessionHost::~SessionHost() {
     // Questions to git nobody will read: the ones not started are dropped; the pool's own
     // destructor waits for the one that runs.
     teamGit_.clear();
+    teamBranchNames_.clear();
     teamRemote_.clear();
     teamRemoteStopping_->store(true);
     // The journal outlives this host and its media store.
