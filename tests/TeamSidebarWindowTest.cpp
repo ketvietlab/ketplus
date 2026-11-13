@@ -3,6 +3,7 @@
 // QT_QPA_PLATFORM=offscreen.
 #include "KetProfile.h"
 #include "KetStyle.h"
+#include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
 #include "ui/Theme.h"
@@ -164,8 +165,17 @@ class TeamSidebarWindowTest final : public QObject {
         QEnterEvent enter(QPointF(4, 4), QPointF(4, 4), branch->mapToGlobal(QPointF(4, 4)));
         QApplication::sendEvent(branch, &enter);
         QTRY_VERIFY(add->isVisible());
+        auto* editor = window.findChild<QWidget*>(QStringLiteral("editorSplit"));
+        QVERIFY(editor && editor->isVisible());
+        const int editorWidth = editor->width();
         add->click();
         QTRY_VERIFY(ketplus::agentDialogOpen(&window, QStringLiteral("addMemberDialog")));
+        // Only the dialog opens: the agent pane stays closed and the editor keeps its width.
+        QApplication::processEvents();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(agent == nullptr || !agent->isVisible());
+        QVERIFY(editor->isVisible());
+        QCOMPARE(editor->width(), editorWidth);
     }
 };
 
