@@ -1,5 +1,7 @@
 #include "remote/LinuxDaemonInstallCard.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetTokens.h"
 #include "remote/LinuxMachineModel.h"
 #include <QCoreApplication>
 #include <QLabel>
@@ -22,6 +24,14 @@ QWidget* makeLinuxDaemonInstallCard(LinuxMachineModel* model, std::shared_ptr<QS
     copy->setWordWrap(true);
     copy->setTextFormat(Qt::PlainText);
     copy->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    const auto applyText = [copy] {
+        auto palette = copy->palette();
+        palette.setColor(QPalette::WindowText,
+                         ket::Tokens::color(u"text-main", ket::Appearance::instance().theme()));
+        copy->setPalette(palette);
+    };
+    QObject::connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, copy, applyText);
+    applyText();
     layout->addWidget(copy);
     auto* review =
         new ket::Button(tr("Review signed install / upgrade"), ket::ButtonVariant::Ghost, card);
@@ -42,10 +52,17 @@ QWidget* makeLinuxDaemonInstallCard(LinuxMachineModel* model, std::shared_ptr<QS
     decline->hide();
     card->hide();
     const QPointer<LinuxMachineModel> guard(model);
-    const auto begin = [guard, pendingHost, review, start, uninstall](const QString& action) {
+    const auto begin = [guard, pendingHost, review, start, uninstall,
+                        confirm](const QString& action) {
+        confirm->setText(action == "install" ? tr("Install / upgrade daemon")
+                         : action == "start" ? tr("Start daemon")
+                                             : tr("Uninstall daemon"));
         review->setEnabled(false);
         start->setEnabled(false);
         uninstall->setEnabled(false);
+        review->hide();
+        start->hide();
+        uninstall->hide();
         if (guard)
             guard->requestDaemonReview(*pendingHost, action);
     };
@@ -67,7 +84,8 @@ QWidget* makeLinuxDaemonInstallCard(LinuxMachineModel* model, std::shared_ptr<QS
         return card;
     QObject::connect(
         model, &LinuxMachineModel::daemonInstallOffered, card,
-        [pendingHost, card, copy, review, start, uninstall](const QString& host, bool configured) {
+        [pendingHost, card, copy, review, start, uninstall, confirm, decline](const QString& host,
+                                                                              bool configured) {
             if (host != *pendingHost)
                 return;
             copy->setText(configured
@@ -79,6 +97,11 @@ QWidget* makeLinuxDaemonInstallCard(LinuxMachineModel* model, std::shared_ptr<QS
             review->setEnabled(configured);
             start->setEnabled(true);
             uninstall->setEnabled(true);
+            review->show();
+            start->show();
+            uninstall->show();
+            confirm->hide();
+            decline->hide();
             card->show();
         });
     QObject::connect(
@@ -98,7 +121,10 @@ QWidget* makeLinuxDaemonInstallCard(LinuxMachineModel* model, std::shared_ptr<QS
                              copy->setText(message);
                      });
     QObject::connect(model, &LinuxMachineModel::sshFailed, card,
-                     [card](const QString&, LinuxMachine::Error, const QString&) { card->hide(); });
+                     [card, pendingHost](const QString& host, LinuxMachine::Error, const QString&) {
+                         if (host == *pendingHost)
+                             card->hide();
+                     });
     return card;
 }
 } // namespace ketplus

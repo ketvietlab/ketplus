@@ -14,6 +14,7 @@ qt_add_executable(ketplus_ssh_install_ui_tests
     SshInstallUiTest.cpp
     ../../apps/desktop/src/remote/LinuxConnectDialog.cpp
     ../../apps/desktop/src/remote/LinuxDaemonInstallCard.cpp
+    ../../apps/desktop/src/remote/LinuxMachineRow.cpp
     ../../apps/desktop/src/remote/LinuxMachineModel.cpp
     ../../apps/desktop/src/remote/LinuxSshMachines.cpp
     ../../apps/desktop/src/remote/LinuxSshInstall.cpp)

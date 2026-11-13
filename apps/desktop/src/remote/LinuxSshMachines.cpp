@@ -86,6 +86,8 @@ LinuxSshMachines::LinuxSshMachines(LinuxMachineModel* model, QString storePath, 
                     if (!target.isValid())
                         return;
                     const auto key = remote::ssh::sshTargetKey(target);
+                    if (installationBusy(key))
+                        return;
                     if (!store_.contains(key)) {
                         model_->reportSshFailure(host, LinuxMachine::Error::Other,
                                                  tr("Connect and verify this SSH target first."));
@@ -101,18 +103,27 @@ LinuxSshMachines::LinuxSshMachines(LinuxMachineModel* model, QString storePath, 
         // Connect and Disconnect act on the route the row shows: a row the Relay stands in for
         // is the Relay's, and Use SSH tries SSH again.
         connect(model_, &LinuxMachineModel::connectRequested, this, [this](const QString& id) {
+            if (installationBusy(keyFor(id)))
+                return;
             if (auto* machine = shownBackend(id)) {
                 closedByUser_.remove(id);
                 machine->connectToHost();
             }
         });
         connect(model_, &LinuxMachineModel::disconnectRequested, this, [this](const QString& id) {
+            if (auto installer = installers_.value(keyFor(id))) {
+                closedByUser_.insert(id);
+                installer->cancel();
+                return;
+            }
             if (auto* machine = shownBackend(id)) {
                 closedByUser_.insert(id);
                 machine->disconnectFromHost();
             }
         });
         connect(model_, &LinuxMachineModel::sshRouteRequested, this, [this](const QString& id) {
+            if (installationBusy(keyFor(id)))
+                return;
             if (auto* machine = backend(id)) {
                 closedByUser_.remove(id);
                 machine->connectToHost();
@@ -305,6 +316,8 @@ void LinuxSshMachines::startConnect(const QString& host) {
     }
     const QString key = remote::ssh::sshTargetKey(target);
     const bool added = !store_.contains(key);
+    if (installationBusy(key))
+        return;
     if (added && !store_.add(target, &error)) {
         model_->reportSshFailure(host, LinuxMachine::Error::Other, error);
         return;
@@ -363,6 +376,8 @@ void LinuxSshMachines::cancelConnect(const QString& host) {
 
 void LinuxSshMachines::remove(const QString& machineId) {
     const QString key = keyFor(machineId);
+    if (installationBusy(key))
+        return;
     auto* machine = backends_.value(key);
     if (!machine)
         return;
@@ -380,6 +395,8 @@ void LinuxSshMachines::remove(const QString& machineId) {
 
 void LinuxSshMachines::forgetHostKey(const QString& machineId) {
     const QString key = keyFor(machineId);
+    if (installationBusy(key))
+        return;
     auto* machine = backends_.value(key);
     if (!machine)
         return;
@@ -403,6 +420,8 @@ void LinuxSshMachines::forgetHostKey(const QString& machineId) {
 }
 
 void LinuxSshMachines::trustIdentity(const QString& machineId) {
+    if (installationBusy(keyFor(machineId)))
+        return;
     auto* machine = backends_.value(keyFor(machineId));
     if (!machine)
         return;

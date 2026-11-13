@@ -86,6 +86,7 @@ class LinuxSshMachines final : public QObject {
     void offerInstall(const QString& key);
     void reviewInstall(const QString& host, const QString& action);
     void finishInstall(const QString& key, bool success, const QString& message);
+    bool installationBusy(const QString& key);
 
     QPointer<LinuxMachineModel> model_;
     remote::ssh::SshMachineStore store_;

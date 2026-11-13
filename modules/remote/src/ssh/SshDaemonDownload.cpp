@@ -1,4 +1,5 @@
 #include "ssh/SshDaemonInstaller.h"
+#include <QCryptographicHash>
 #include <QFile>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -9,6 +10,8 @@
 namespace ketplus::remote::ssh {
 void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void(QByteArray)> done,
                                bool archive, int redirects) {
+    if (terminal_ || cancelled_)
+        return;
     if (!channel_.configured() || !channel_.permits(url) || redirects > 5) {
         fail(tr("The release download URL or redirect is not trusted."));
         return;
@@ -23,6 +26,7 @@ void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void
     const int generation = generation_;
     auto bytes = std::make_shared<QByteArray>();
     auto count = std::make_shared<qint64>(0);
+    auto hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256);
     auto file = std::make_shared<QFile>(work_->filePath("runtime.tar.gz"));
     if (archive && (!file->open(QIODevice::WriteOnly | QIODevice::Truncate) ||
                     !file->setPermissions(QFile::ReadOwner | QFile::WriteOwner))) {
@@ -31,7 +35,7 @@ void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void
         fail(tr("Unable to create the private release download."));
         return;
     }
-    const auto drain = [this, reply, generation, limit, bytes, count, file, archive] {
+    const auto drain = [this, reply, generation, limit, bytes, count, file, hash, archive] {
         if (generation != generation_)
             return;
         // Redirect/error bodies are not release bytes and are never executed or presented.
@@ -52,11 +56,13 @@ void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void
         }
         if (!archive)
             bytes->append(chunk);
+        else
+            hash->addData(chunk);
     };
     connect(reply, &QNetworkReply::readyRead, this, drain);
     connect(reply, &QNetworkReply::finished, this,
             [this, reply, generation, limit, url, done = std::move(done), archive, redirects, bytes,
-             file, drain] {
+             file, hash, drain] {
                 reply->deleteLater();
                 if (generation != generation_ || terminal_ || cancelled_)
                     return;
@@ -76,7 +82,7 @@ void SshDaemonInstaller::fetch(const QUrl& url, qint64 limit, std::function<void
                     fail(tr("Unable to download the trusted release. Nothing was installed."));
                     return;
                 }
-                done(*bytes);
+                done(archive ? hash->result() : *bytes);
             });
 }
 } // namespace ketplus::remote::ssh

@@ -10,7 +10,9 @@ import platform
 import select
 import shutil
 import signal
+import socket
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -31,6 +33,7 @@ def owned(path, directory=False):
     info = path.lstat()
     require(info.st_uid == os.getuid() and not stat.S_ISLNK(info.st_mode),
             'An installation path is not owned by this account or is a symbolic link.')
+    require(not info.st_mode & 0o022, 'An installation path is writable by another account.')
     require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode),
             'An installation path has an unexpected type.')
 
@@ -52,6 +55,32 @@ def version(value):
     parts = value.split('.')
     require(len(parts) == 3 and all(x.isdigit() for x in parts), 'Unsupported release version.')
     return tuple(int(x) for x in parts)
+
+
+def file_hash(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as source:
+        for chunk in iter(lambda: source.read(65536), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def inventory(directory):
+    result = {}
+    for path in sorted(directory.rglob('*')):
+        require(len(result) < 50000, 'The managed runtime has too many entries.')
+        info = path.lstat()
+        require(info.st_uid == os.getuid(), 'A managed runtime entry changed ownership.')
+        name = str(path.relative_to(directory))
+        if stat.S_ISLNK(info.st_mode):
+            require(path.resolve().is_relative_to(directory.resolve()), 'A managed runtime link escapes.')
+            result[name] = ['link', os.readlink(path)]
+        elif stat.S_ISDIR(info.st_mode):
+            result[name] = ['directory', stat.S_IMODE(info.st_mode)]
+        else:
+            require(stat.S_ISREG(info.st_mode), 'A managed runtime entry changed type.')
+            result[name] = ['file', stat.S_IMODE(info.st_mode), file_hash(path)]
+    return result
 
 
 def safe_extract(archive, destination):
@@ -151,8 +180,12 @@ class Transaction:
         self.activated = False
         self.stopped = False
         self.old = None
+        self.old_pid = None
         self.new = None
         self.lock = None
+        self.created_token = False
+        require(self.state.is_relative_to(self.data),
+                'State files outside the daemon data directory must be managed manually.')
 
     def check_parents(self, path):
         require(path.is_absolute(), 'The account profile contains a relative path.')
@@ -185,6 +218,7 @@ class Transaction:
             owned(self.root, True)
             if self.receipt.exists():
                 owned(self.receipt)
+                require(self.receipt.stat().st_size <= 16 * 1024 ** 2, 'The install receipt is oversized.')
                 self.old = json.loads(self.receipt.read_text())
                 require(self.old.get('schema') == 1 and self.old.get('profile') == self.profile,
                         'The existing installer receipt does not match this profile.')
@@ -201,13 +235,24 @@ class Transaction:
             info = self.socket.lstat()
             require(stat.S_ISSOCK(info.st_mode) and info.st_uid == os.getuid(),
                     'The daemon socket is not owned by this account.')
+            with socket.socket(socket.AF_UNIX) as peer:
+                peer.settimeout(5)
+                peer.connect(str(self.socket))
+                pid, uid, _ = struct.unpack('3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+            command = Path('/proc') / str(pid) / 'cmdline'
+            require(uid == os.getuid() and
+                    str(self.previous / 'bin/ketplus_daemon').encode() in command.read_bytes().split(b'\0')[:2],
+                    'The socket belongs to a different daemon. Nothing was changed.')
+            self.old_pid = pid
         require(not self.socket.is_symlink(), 'The daemon socket is a symbolic link.')
         if self.old:
+            require(inventory(self.previous) == self.old.get('inventory'),
+                    'The managed runtime contains changed or unrecognised files. Resolve it manually.')
             # Detect an external change to either executable before calling or starting it.
             for binary, expected in self.old['binaries'].items():
                 path = self.previous / 'bin' / binary
                 owned(path)
-                require(hashlib.sha256(path.read_bytes()).hexdigest() == expected,
+                require(file_hash(path) == expected,
                         'The managed daemon runtime was modified. Resolve it manually.')
         return {'arch': arch, 'profile': self.profile, 'installed': self.old is not None,
                 'version': self.old['version'] if self.old else '',
@@ -222,16 +267,22 @@ class Transaction:
         owned(path, True)
 
     def stop_old(self, replacement=None):
-        if not self.socket.exists():
+        if not self.socket.exists() and self.old_pid is None:
             return
-        cli = str(self.previous / 'bin/ketplusctl')
-        operation = 'daemon.prepare_upgrade' if replacement else 'daemon.stop_if_idle'
-        payload = json.dumps({'replacement_version': replacement}) if replacement else '{}'
-        result = json.loads(run([cli, '--timeout', '20', 'call', operation, payload], self.env))
-        require(result.get('ok') is True, 'The daemon refused to stop while busy.')
+        if self.socket.exists():
+            cli = str(self.previous / 'bin/ketplusctl')
+            operation = 'daemon.prepare_upgrade' if replacement else 'daemon.stop_if_idle'
+            payload = json.dumps({'replacement_version': replacement}) if replacement else '{}'
+            result = json.loads(run([cli, '--timeout', '20', 'call', operation, payload], self.env))
+            require(result.get('ok') is True, 'The daemon refused to stop while busy.')
         self.stopped = True
         for _ in range(100):
-            if not self.socket.exists():
+            try:
+                status = (Path('/proc') / str(self.old_pid) / 'stat').read_text()
+                exited = status.rpartition(') ')[2].split()[0] == 'Z'
+            except FileNotFoundError:
+                exited = True
+            if not self.socket.exists() and exited:
                 return
             time.sleep(0.1)
         raise Refused('The idle daemon did not stop in time.')
@@ -241,6 +292,11 @@ class Transaction:
         self.mkdir(self.token.parent)
         self.mkdir(self.state.parent)
         self.mkdir(self.socket.parent)
+        if not self.token.exists():
+            with self.token.open('xb') as token:
+                self.created_token = True
+                value = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=')
+                require(token.write(value) == len(value), 'Unable to initialise the private local credential.')
         # No service manager, shell, login, provider invocation or remote enrolment is involved.
         # Existing user data is kept in place; no credentials cross this SSH channel.
         child = subprocess.Popen([str(directory / 'bin/ketplus_daemon'), '--socket', str(self.socket),
@@ -294,6 +350,8 @@ class Transaction:
             runtime = self.stage / 'runtime'
             runtime.mkdir(mode=0o700)
             safe_extract(archive, runtime)
+            owned(runtime / 'bin/ketplus_daemon')
+            owned(runtime / 'bin/ketplusctl')
             info = json.loads(run([str(runtime / 'bin/ketplus_daemon'), '--build-info'], self.env))
             require(info.get('product_version') == artifact['version'] and
                     info.get('build_revision') == artifact['revision'] and
@@ -302,6 +360,12 @@ class Transaction:
             candidate = self.root / (artifact['version'] + '-' + artifact['revision'] + '-' + artifact['architecture'])
             require(not candidate.exists() and not candidate.is_symlink(),
                     'This runtime directory already exists; nothing was overwritten.')
+            receipt = {'schema': 1, 'profile': self.profile, 'version': artifact['version'],
+                       'inventory': inventory(runtime), 'directory': candidate.name,
+                       'binaries': {name: file_hash(runtime / 'bin' / name)
+                                    for name in ('ketplus_daemon', 'ketplusctl')}}
+            encoded_receipt = json.dumps(receipt)
+            require(len(encoded_receipt.encode()) <= 16 * 1024 ** 2, 'The runtime inventory is too large.')
             self.stop_old(artifact['version'])
             if self.data.exists():
                 self.snapshot = self.stage / 'previous-data'
@@ -313,11 +377,7 @@ class Transaction:
             self.activated = True
             link.replace(self.current)
             self.child = self.start(self.new)
-            receipt = {'schema': 1, 'profile': self.profile, 'version': artifact['version'],
-                       'directory': self.new.name, 'binaries': {name: hashlib.sha256(
-                           (self.new / 'bin' / name).read_bytes()).hexdigest()
-                           for name in ('ketplus_daemon', 'ketplusctl')}}
-            self.receipt.write_text(json.dumps(receipt))
+            self.receipt.write_text(encoded_receipt)
             self.receipt.chmod(0o600)
         elif action == 'start':
             require(not self.socket.exists(), 'The managed daemon is already running.')
@@ -368,6 +428,8 @@ class Transaction:
                     shutil.rmtree(self.data, ignore_errors=True)
             if self.new and self.new.exists():
                 shutil.rmtree(self.new)
+            if self.created_token:
+                self.token.unlink(missing_ok=True)
             if self.stopped and self.previous:
                 self.start(self.previous)
         if self.stage and self.stage.exists():
@@ -406,6 +468,8 @@ def main():
     finally:
         if transaction:
             transaction.cleanup()
+            if description['action'] != 'preflight' and not transaction.committed:
+                emit({'phase': 'rolled_back'})
     return 0
 
 

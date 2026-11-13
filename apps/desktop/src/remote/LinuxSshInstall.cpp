@@ -4,6 +4,14 @@
 
 namespace ketplus {
 using remote::MachineBackend;
+
+bool LinuxSshMachines::installationBusy(const QString& key) {
+    if (!installers_.value(key) && !pending_.value(key).offered)
+        return false;
+    emit notice(tr("Finish or cancel daemon management in the open connection dialog first."),
+                true);
+    return true;
+}
 using remote::ssh::SshDaemonInstaller;
 
 void LinuxSshMachines::offerInstall(const QString& key) {
@@ -55,6 +63,9 @@ void LinuxSshMachines::finishInstall(const QString& key, bool success, const QSt
         return;
     const auto attempt = *pending;
     pending_.erase(pending);
+    if (!success)
+        emit notice(message,
+                    !installer || installer->state() != SshDaemonInstaller::State::Cancelled);
     if (success && backend->connectionState() == MachineBackend::ConnectionState::Connected) {
         publish();
         model_->reportSshConnected(attempt.host);

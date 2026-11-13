@@ -78,9 +78,12 @@ class SshDaemonInstaller final : public QObject {
     QString action_;
     QString fingerprint_;
     QString socket_;
+    QString failureMessage_;
     bool cancelled_{false};
     bool transaction_{false};
     bool terminal_{false};
+    bool commitSent_{false};
+    bool rolledBack_{false};
     int generation_{0};
     quint64 sshGeneration_{0};
 };

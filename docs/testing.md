@@ -1066,6 +1066,7 @@ Then run `ctest -R '^ketplus_ssh_install_ui_tests$' --output-on-failure` in the
 own build tree. Without the QA inputs this opt-in host proof reports a skip;
 a skip is not completion evidence. The test signs a local manifest, serves it
 on loopback, uses a fresh same-UID HOME/XDG profile through a loopback sshd,
-clicks the actual Connections controls, declines once, installs and verifies
-an authenticated `daemon.hello`, then uninstalls through the idle gate and
+clicks the actual Connections controls, checks missing-key/signature failures and
+cancellation at runtime-ready, declines once, installs and verifies an authenticated
+`daemon.hello`, restarts without downloading again, then uninstalls through the idle gate and
 checks that user data survives. It creates no OS user or real relay registration.

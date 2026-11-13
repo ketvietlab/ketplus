@@ -113,7 +113,7 @@ on Linux is a prerequisite, not installed automatically.
 
 Preflight is read-only. Reject custom `daemon.env`, an existing user service,
 unmanaged installation or running daemon, foreign-owned/symlinked parent paths,
-and modified managed executables. Normal custom/manual installations retain the
+and modified or additional files in the managed runtime inventory. State files outside the daemon data directory require manual management. Normal custom/manual installations retain the
 existing manual-management path; this installer does not adopt or overwrite them.
 An installed but stopped managed daemon offers **Start managed daemon** separately.
 
@@ -145,9 +145,15 @@ before closing the listener; it never kills an existing daemon. After it stops,
 copy the existing data directory to a private rollback snapshot, activate the new
 complete runtime and start it. Old version directories are retained for recovery.
 
+A missing local IPC credential is initialised with the daemon's existing 32-byte
+CSPRNG/base64url format in an exclusive owner-only file. Rollback removes it only
+if this transaction created it; existing credentials are retained, including a
+configured token path outside the data directory. No token enters the manifest,
+process arguments, logs or the repository.
+
 The SSH transaction remains open after startup. Only a real authenticated
 `daemon.hello` through `SshMachineBackend` with the same verified SSH identity lets
-Desktop send `commit`. EOF, decline, cancellation, failed hello, disconnect or a
+Desktop send `commit`. Cancellation is honoured until this commit decision; once sent, the transaction finishes rather than claiming it can undo an acknowledged commit. EOF, decline, cancellation, failed hello, disconnect or a
 90-second confirmation timeout rolls back the runtime link, receipt and data
 snapshot, stops only the newly started child, and restarts the previously running
 managed daemon. Interrupted upload or runtime validation changes no activation.

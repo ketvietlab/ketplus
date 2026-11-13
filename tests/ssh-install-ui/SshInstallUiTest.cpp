@@ -1,20 +1,26 @@
+#include "KetAppearance.h"
 #include "KetDialog.h"
 #include "KetPlusProductVersion.h"
 #include "SshFixture.h"
 #include "remote/LinuxConnectDialog.h"
 #include "remote/LinuxMachineModel.h"
+#include "remote/LinuxMachineRow.h"
 #include "remote/LinuxSshMachines.h"
 #include "ssh/SshDaemonInstaller.h"
 #include "ssh/SshMachineBackend.h"
+#include "ssh/SshProcess.h"
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLabel>
 #include <QLineEdit>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTimer>
+#include <algorithm>
+#include <cmath>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 
@@ -140,17 +146,101 @@ QAbstractButton* button(QWidget* dialog, const char* name) {
 void isolate(SshFixture& fixture) {
     // sshd overrides HOME/XDG for this QA connection only; no OS user, sudo, real account
     // directory or shared daemon is touched. Every child uses a loopback-only runtime.
-    fixture.extraServerConfiguration =
-        QStringLiteral("SetEnv HOME=%1 XDG_CONFIG_HOME=%1/config XDG_DATA_HOME=%1/data "
+    fixture.extraServerEnvironment =
+        QStringLiteral(" HOME=%1 XDG_CONFIG_HOME=%1/config XDG_DATA_HOME=%1/data "
                        "XDG_RUNTIME_DIR=%1/runtime "
-                       "KETPLUS_DAEMON_DATA_DIR=%1/data/Ketsuite/KetPlus\n")
+                       "KETPLUS_DAEMON_DATA_DIR=%1/data/Ketsuite/KetPlus "
+                       "KETPLUS_CONTROL_URL=http://127.0.0.1:9")
             .arg(fixture.dir.path());
 }
 } // namespace
 
 class SshInstallUiTest final : public QObject {
     Q_OBJECT
+    void rejectedRelease(bool missingKey) {
+        if (qEnvironmentVariableIsEmpty("KETPLUS_T51_QA_KEY"))
+            QSKIP("Set task-local QA inputs for the Linux-host proof.");
+        ReleaseServer server;
+        QVERIFY(server.start());
+        SshFixture fixture;
+        isolate(fixture);
+        QVERIFY2(fixture.start(true, false), qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        auto channel = server.channel;
+        if (missingKey)
+            channel.publicKey.clear();
+        else
+            server.signature[0] = char(server.signature[0] ^ 1);
+        const auto options = fixture.options();
+        LinuxMachineModel model;
+        LinuxSshMachines machines(
+            &model, fixture.path("machines.json"),
+            [options](const SshTarget& target) -> std::unique_ptr<SshLink> {
+                return std::make_unique<SshTunnelLink>(target, options);
+            },
+            nullptr, channel);
+        QWidget anchor;
+        anchor.resize(900, 900);
+        anchor.show();
+        QSignalSpy offered(&model, &LinuxMachineModel::daemonInstallOffered);
+        QSignalSpy failed(&model, &LinuxMachineModel::sshFailed);
+        QSignalSpy consent(&model, &LinuxMachineModel::daemonConsentRequested);
+        auto* dialog = openLinuxConnectDialog(&anchor, &model, nullptr, {});
+        dialog->findChild<QLineEdit*>("linuxSshHost")->setText("fixture");
+        button(dialog, "linuxSshConnect")->click();
+        QTRY_COMPARE_WITH_TIMEOUT(offered.size(), 1, patience);
+        QCOMPARE(button(dialog, "linuxDaemonReviewInstall")->isEnabled(), !missingKey);
+        // Also call the controller intent directly: disabling a button is not a trust gate.
+        model.requestDaemonReview("fixture", "install");
+        QTRY_COMPARE_WITH_TIMEOUT(failed.size(), 1, patience);
+        QCOMPARE(consent.size(), 0);
+        QCOMPARE(server.requests, missingKey ? 0 : 2);
+        QVERIFY(!QFileInfo::exists(fixture.path(".local/opt/ketplus")));
+        QVERIFY(!QFileInfo::exists(fixture.path("daemon.sock")));
+        const auto message = failed.first().at(2).toString();
+        QVERIFY(message.contains(missingKey ? "no trusted release channel" : "signature"));
+        dialog->reject();
+        QTest::qWait(100);
+    }
   private slots:
+    void missingKeyNeverDownloads() { rejectedRelease(true); }
+    void tamperedManifestNeverInstalls() { rejectedRelease(false); }
+
+    void cancelAtReadyRollsBackWithoutRequestingAConnection() {
+        if (qEnvironmentVariableIsEmpty("KETPLUS_T51_QA_KEY"))
+            QSKIP("Set task-local QA inputs for the Linux-host proof.");
+        ReleaseServer server;
+        QVERIFY(server.start());
+        SshFixture fixture;
+        isolate(fixture);
+        QVERIFY2(fixture.start(true, false), qPrintable(fixture.skip));
+        fixture.trust(fixture.hostKey);
+        QFile::remove(fixture.path("local.token"));
+        SshTunnel tunnel({"fixture", {}, 0}, fixture.options());
+        tunnel.open();
+        QTRY_COMPARE_WITH_TIMEOUT(tunnel.state(), SshTunnel::State::DaemonSocketMissing, patience);
+        SshDaemonInstaller installer(&tunnel, server.channel);
+        QSignalSpy consent(&installer, &SshDaemonInstaller::consentRequested);
+        QSignalSpy finished(&installer, &SshDaemonInstaller::finished);
+        QSignalSpy connection(&installer, &SshDaemonInstaller::connectionRequested);
+        connect(&installer, &SshDaemonInstaller::progress, this, [&](const QString&) {
+            if (installer.state() == SshDaemonInstaller::State::Connecting)
+                installer.cancel();
+        });
+        installer.review();
+        QTRY_COMPARE_WITH_TIMEOUT(consent.size(), 1, patience);
+        installer.confirm(true);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 120000);
+        QCOMPARE(finished.first().first().toBool(), false);
+        QCOMPARE(installer.state(), SshDaemonInstaller::State::Cancelled);
+        QCOMPARE(connection.size(), 0);
+        QVERIFY(!QFileInfo::exists(fixture.path(".local/opt/ketplus")));
+        QVERIFY(!QFileInfo::exists(fixture.path("data")));
+        QVERIFY(!QFileInfo::exists(fixture.path("local.token")));
+        QVERIFY(!QFileInfo::exists(fixture.path("daemon.sock")));
+        tunnel.close();
+        QTest::qWait(100);
+    }
     void signedInstallDeclineConnectAndUninstallOnIsolatedProfile() {
         if (qEnvironmentVariableIsEmpty("KETPLUS_T51_QA_KEY"))
             QSKIP("Set the documented task-local QA key/archive/info to run the Linux-host proof.");
@@ -161,6 +251,12 @@ class SshInstallUiTest final : public QObject {
         isolate(fixture);
         QVERIFY2(fixture.start(true, false), qPrintable(fixture.skip));
         fixture.trust(fixture.hostKey);
+        const auto qaHome = runTool(
+            "ssh", fixture.options().sshArguments + batchOptions(10) +
+                       QStringList{"-o", "UserKnownHostsFile=" + fixture.path("user_known_hosts"),
+                                   "fixture", "printf '%s' \"$HOME\""});
+        QVERIFY2(qaHome == fixture.dir.path().toUtf8(),
+                 "QA SSH HOME was not isolated; refusing to run the installation proof.");
         QFile::remove(fixture.path("local.token"));
         const auto stopOwnedDaemon = qScopeGuard([&fixture] {
             if (!QFileInfo::exists(fixture.path("daemon.sock")))
@@ -192,6 +288,12 @@ class SshInstallUiTest final : public QObject {
         QSignalSpy consent(&model, &LinuxMachineModel::daemonConsentRequested);
         QSignalSpy failed(&model, &LinuxMachineModel::sshFailed);
         QSignalSpy connected(&model, &LinuxMachineModel::sshConnected);
+        QSignalSpy uninstalled(&model, &LinuxMachineModel::daemonOperationFinished);
+        QSignalSpy notices(&machines, &LinuxSshMachines::notice);
+        connect(&model, &LinuxMachineModel::sshFailed, this,
+                [](const QString&, LinuxMachine::Error, const QString& message) {
+                    qInfo().noquote() << "QA installer failure:" << message;
+                });
         const auto open = [&](bool manage = false) {
             auto* dialog = openLinuxConnectDialog(&anchor, &model, nullptr, {},
                                                   LinuxConnectMode::Ssh, {}, manage);
@@ -204,8 +306,12 @@ class SshInstallUiTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(offered.size(), 1, patience);
         QVERIFY(!QFileInfo::exists(root));
         button(decline, "linuxDaemonReviewInstall")->click();
-        QTRY_COMPARE_WITH_TIMEOUT(consent.size(), 1, patience);
+        QTRY_VERIFY_WITH_TIMEOUT(consent.size() == 1 || !failed.isEmpty(), patience);
+        QCOMPARE(consent.size(), 1);
         QVERIFY(!QFileInfo::exists(root)); // Review performs no installation writes.
+        model.requestRemove("ssh:fixture");
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(machines.backend("ssh:fixture"));
         button(decline, "linuxDaemonDecline")->click();
         QTRY_COMPARE_WITH_TIMEOUT(failed.size(), 1, patience);
         QVERIFY(!QFileInfo::exists(root));
@@ -220,7 +326,38 @@ class SshInstallUiTest final : public QObject {
         const auto evidence = qEnvironmentVariable("KETPLUS_T51_QA_EVIDENCE");
         if (!evidence.isEmpty()) {
             QDir().mkpath(evidence);
-            QVERIFY(install->grab().save(QDir(evidence).filePath("install-consent.png")));
+            for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
+                ket::Appearance::instance().setMode(mode);
+                QTest::qWait(100);
+                const auto* label = install->findChild<QLabel*>("linuxDaemonInstallDescription");
+                QVERIFY(label);
+                const auto needed = label->fontMetrics().boundingRect(
+                    QRect(0, 0, label->width(), 10000), Qt::TextWordWrap, label->text());
+                QVERIFY(label->height() >= needed.height());
+                const auto capture = install->grab();
+                const auto point = label->mapTo(install, QPoint(-2, label->height() / 2));
+                const auto background =
+                    capture.toImage().pixelColor(qRound(point.x() * capture.devicePixelRatio()),
+                                                 qRound(point.y() * capture.devicePixelRatio()));
+                const auto luminance = [](const QColor& color) {
+                    const auto linear = [](double value) {
+                        return value <= .04045 ? value / 12.92
+                                               : std::pow((value + .055) / 1.055, 2.4);
+                    };
+                    return .2126 * linear(color.redF()) + .7152 * linear(color.greenF()) +
+                           .0722 * linear(color.blueF());
+                };
+                const auto foreground = luminance(label->palette().color(QPalette::WindowText));
+                const auto surface = luminance(background);
+                QVERIFY((std::max(foreground, surface) + .05) /
+                            (std::min(foreground, surface) + .05) >=
+                        4.5);
+                const auto filename = mode == ket::Appearance::Mode::Dark
+                                          ? "install-consent-dark.png"
+                                          : "install-consent-light.png";
+                QVERIFY(capture.save(QDir(evidence).filePath(filename)));
+            }
+            ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
         }
         button(install, "linuxDaemonConfirm")->click();
         QTRY_COMPARE_WITH_TIMEOUT(connected.size(), 1, 120000);
@@ -232,11 +369,51 @@ class SshInstallUiTest final : public QObject {
               "Connected; same UID, isolated HOME/XDG, loopback-only control URL.");
         QVERIFY(fixture.unhijacked());
 
-        auto uninstall = open(true);
+        // A stopped managed runtime starts without downloading a release again.
+        const auto requestsBeforeStart = server.requests;
+        QProcess stop;
+        auto stopEnvironment = QProcessEnvironment::systemEnvironment();
+        stopEnvironment.insert("KETPLUS_DAEMON_DATA_DIR", fixture.path("data/Ketsuite/KetPlus"));
+        stop.setProcessEnvironment(stopEnvironment);
+        stop.start(KETPLUS_TEST_CTL, {"--socket", fixture.path("daemon.sock"), "--token-file",
+                                      fixture.path("local.token"), "--timeout", "5", "call",
+                                      "daemon.stop_if_idle", "{}"});
+        QVERIFY(stop.waitForFinished(10000));
+        QCOMPARE(stop.exitCode(), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(fixture.path("daemon.sock")), patience);
+        auto* stoppedBackend = machines.backend(model.machines().first().id);
+        QVERIFY(stoppedBackend);
+        QTRY_VERIFY_WITH_TIMEOUT(stoppedBackend->connectionState() !=
+                                     remote::MachineBackend::ConnectionState::Connected,
+                                 patience);
+        stoppedBackend->disconnectFromHost();
+        auto restart = open(true);
         QTRY_COMPARE_WITH_TIMEOUT(offered.size(), 3, patience);
-        button(uninstall, "linuxDaemonUninstall")->click();
+        button(restart, "linuxDaemonStart")->click();
         QTRY_COMPARE_WITH_TIMEOUT(consent.size(), 3, patience);
+        button(restart, "linuxDaemonConfirm")->click();
+        QTRY_VERIFY_WITH_TIMEOUT(connected.size() == 2 || failed.size() > 1, patience);
+        QCOMPARE(connected.size(), 2);
+        QCOMPARE(server.requests, requestsBeforeStart);
+
+        QPointer<ket::Dialog> uninstall;
+        connect(&model, &LinuxMachineModel::daemonManagementPrompted, this,
+                [&](const QString& host) {
+                    if (host == "fixture")
+                        uninstall = open(true);
+                });
+        showLinuxMachineDetails(model.machines().first().id, &model, &anchor);
+        auto* details = anchor.findChild<ket::Dialog*>("linuxMachineDetailsDialog");
+        QVERIFY(details);
+        auto* manage = button(details, "linuxDetailsManageDaemon");
+        QVERIFY(manage);
+        manage->click();
+        QTRY_COMPARE_WITH_TIMEOUT(offered.size(), 4, patience);
+        QVERIFY(uninstall);
+        button(uninstall, "linuxDaemonUninstall")->click();
+        QTRY_COMPARE_WITH_TIMEOUT(consent.size(), 4, patience);
         button(uninstall, "linuxDaemonConfirm")->click();
+        QTRY_COMPARE_WITH_TIMEOUT(uninstalled.size(), 1, patience);
         QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo(root + "/current").isSymLink(), patience);
         QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(root + "/ssh-install.json"), patience);
         QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(fixture.path("daemon.sock")), patience);
@@ -245,6 +422,17 @@ class SshInstallUiTest final : public QObject {
               "user data retained. No OS user, sudo, service or relay registration.");
         if (uninstall)
             uninstall->reject();
+        auto* keptBackend = machines.backend(model.machines().first().id);
+        QVERIFY(keptBackend);
+        keptBackend->disconnectFromHost();
+        const auto sshStopped = [keptBackend] {
+            for (auto* process : keptBackend->installationTunnel()->findChildren<QProcess*>())
+                if (process->state() != QProcess::NotRunning)
+                    return false;
+            return true;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sshStopped(), 5000);
+        QTest::qWait(20); // Drain deleteLater before fixture removal.
     }
 };
 QTEST_MAIN(SshInstallUiTest)

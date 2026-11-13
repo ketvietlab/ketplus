@@ -1,16 +1,77 @@
 # SSH installer verification
 
-Scope: issue [#666](https://github.com/ketvietlab/ketplus/issues/666), ADR 0123.
-Production installation is disabled until the release owner supplies the dedicated
-Ed25519 public key. No production key, release publication, CI secret, sudo,
-OS-user creation or hosted relay enrolment is part of this change.
+Issue [#666](https://github.com/ketvietlab/ketplus/issues/666), ADR 0123.
+Production installation remains disabled until the release owner supplies the
+dedicated Ed25519 public key. No release, signing secret or production key was
+created or published by this change.
 
-The Linux host proof uses an isolated **same-UID** HOME/XDG profile, task-owned
-QA keypair and loopback manifest server. Its runtime is a complete `cmake --install`
-stage with `control_url=http://127.0.0.1:9`, not a copied build-tree executable.
-The private QA key is outside the repository and is never printed or committed.
+## Linux proof
 
-Verification in progress; final native/GUI totals and captures are recorded here
-only after the corresponding test run succeeds. The initial Linux filesystem
-transaction suite passed 13 tests. The initial headless C++ targets compiled.
-These facts alone do not establish UI install/Connected proof.
+The offscreen test compiles the production Connections dialog, machine row,
+model/controller, network verifier/downloader and SSH installer with Két Widgets.
+It uses a fresh **same-UID HOME/XDG profile**, not a newly created OS user, and a
+non-root loopback sshd with throwaway host/user keys. The release QA keypair is
+outside the source tree; its private key is never logged or committed.
+
+The daemon payload is the complete `cmake --install` stage from public revision
+`d076210e516d` (the same daemon source as this PR), including Qt libraries/plugins,
+sidecar, skills and licence notices. Its verified identity is `0.1.52`, control URL
+`http://127.0.0.1:9`, runtime URL overrides disabled. It passes `--check-runtime`
+without SDK library/plugin environment overrides; its installed RUNPATH is
+`$ORIGIN/../lib`. No existing deployment, provider turn, real relay enrolment,
+sudo or OS-user creation was used.
+
+The final QA archive contains 6,858 entries, 266,230,813 compressed bytes and
+579,604,673 expanded bytes. SHA-256:
+`5007343450f719f0d7a807a4e881a88a3828b491eda072649791d98a257d5ec6`.
+The test generates a signed local manifest for this archive and verifies it with
+an explicitly injected QA public key. This proves the consumer protocol; it is
+not evidence that a production release/key exists.
+
+Verified transitions:
+
+- Missing public key: disabled install control and **zero HTTP requests**, including
+  a direct controller request that bypasses the disabled button.
+- Modified manifest signature: no consent, archive download, remote runtime or daemon.
+- Decline after signed metadata review: no archive download or remote installation.
+- Cancel immediately at runtime-ready: confirmed rollback, **zero connection requests**,
+  no activation, data, socket or newly created external credential retained.
+- Confirm install: signed full runtime → verified SSH → authenticated `daemon.hello`
+  → Connected. An overlapping Remove request is refused while management is open.
+- Stop the managed daemon, review and Start: Connected again, with **no further HTTP**.
+- Details → Manage daemon → idle-only Uninstall: wait for the remote transaction to
+  finish; active runtime and receipt removed, user data/credential retained.
+
+## Final checks
+
+All six focused suites pass on Linux, offscreen; no test is skipped:
+
+| Suite | Result |
+| --- | --- |
+| `ketplus_ssh_install_ui_tests` | 6 passed, 0 failed, 0 skipped |
+| `ketplus_remote_ssh_tunnel_tests` | 21 passed, 0 failed, 0 skipped |
+| `ketplus_remote_ssh_backend_tests` | 17 passed, 0 failed, 0 skipped |
+| `ketplus_daemon_upgrade_tests` | 6 passed, 0 failed, 0 skipped |
+| `ketplus_daemon_release_tests` | 17 passed, 0 failed, 0 skipped |
+| `ketplus_ssh_install_transaction_tests` | 20 passed |
+
+The transaction suite uses disposable fixture runtimes to cover committed upgrade,
+rollback after upgrade/uninstall/startup, interrupted uploads, checksum/runtime/
+archive failures, busy refusal, downgrade refusal, writable parents, unknown or
+modified runtime files, and preservation/removal of existing/new external tokens.
+These fixture tests are distinct from the real-daemon Connections proof above.
+
+Public-tree hygiene: **4/4 pass**. Changed C++ files are clang-formatted and
+`git diff --check` passes. The ordinary full Pro application was not built on
+Linux: that host lacks the editor's Qt Core5Compat/WebView SDK. The optional
+standalone target tests the actual changed Connections surface without those
+unrelated editor modules; it does not replace a full platform release build.
+
+## Rendered consent
+
+[Light](install-consent-light.png) · [Dark](install-consent-dark.png).
+Both captures are from the final QA fixture, with synthetic host/key data. The
+rendered description fits without clipping and its normal-text contrast is at
+least 4.5:1 in both themes. The images were inspected. Only the two confirmation
+actions remain during consent; the connection action and obsolete choices are
+hidden. See `docs/testing.md` for the reproducible opt-in QA configuration.
