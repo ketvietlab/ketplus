@@ -11,6 +11,17 @@ file(GLOB deployed_frameworks LIST_DIRECTORIES true
     "${KETPLUS_APP_BUNDLE}/Contents/Frameworks/*.framework"
     "${KETPLUS_APP_BUNDLE}/Contents/Frameworks/*.dylib"
 )
+# Intel linkers can leave helper executables entirely unsigned. Seal these nested
+# Mach-O files before sealing the outer app; leave scripts and nested app bundles
+# to their existing staging/signing rules.
+file(GLOB deployed_helpers LIST_DIRECTORIES false
+    "${KETPLUS_APP_BUNDLE}/Contents/Helpers/*")
+foreach(helper IN LISTS deployed_helpers)
+    file(READ "${helper}" helper_magic LIMIT 4 HEX)
+    if(helper_magic MATCHES "^(cffaedfe|feedfacf|cefaedfe|feedface|cafebabe|bebafeca|cafebabf|bfbafeca)$")
+        list(APPEND deployed_frameworks "${helper}")
+    endif()
+endforeach()
 set(resigned FALSE)
 foreach(framework IN LISTS deployed_frameworks)
     execute_process(
@@ -34,7 +45,10 @@ foreach(framework IN LISTS deployed_frameworks)
     set(resigned TRUE)
 endforeach()
 
-if(resigned)
+execute_process(
+    COMMAND /usr/bin/codesign --verify --strict "${KETPLUS_APP_BUNDLE}"
+    RESULT_VARIABLE app_verify_result OUTPUT_QUIET ERROR_QUIET)
+if(resigned OR NOT app_verify_result EQUAL 0)
     execute_process(
         COMMAND /usr/bin/codesign --force --sign - "${KETPLUS_APP_BUNDLE}"
         RESULT_VARIABLE sign_result
