@@ -234,6 +234,27 @@ current-window value.
   is missing or its file has gone. A CLI installed while KetPlus runs, or moved
   by its own updater, is used on the next request or Retry without restarting
   the daemon (`ProviderExecutable`).
+- The daemon's GitHub Copilot adapter uses provider id `copilot` and the
+  user-installed [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+  It starts `copilot --acp --stdio`; KetPlus does not bundle or download the CLI.
+  Discovery checks the absolute daemon `--copilot <path>` option, then
+  `KETPLUS_COPILOT`, then `PATH`, then the platform locations in
+  [ADR 0120](decisions/0120-github-copilot-acp-provider.md#executable-discovery):
+  `~/.local/bin`, Homebrew and `/usr/local/bin` on macOS/Linux, plus `/usr/bin`
+  on Linux; `%APPDATA%\npm` and the WinGet links folder on Windows. An invalid
+  explicit override is an actionable error, rather than a fallback to another CLI.
+  Missing CLI errors link to the installation guide and explain the override.
+  Sign in with `copilot login` on the machine running the daemon, or configure
+  the CLI's supported headless authentication there. Authentication remains with
+  the CLI; KetPlus neither copies tokens into its journal nor calls ACP
+  `authenticate`. Token absence alone does not reject a BYOK session. An explicit
+  authentication failure ends the turn with login guidance; retry uses a fresh
+  process. Permission, network and usage failures retain separate, sanitized
+  explanations. Initialization and session requests time out after 30 seconds;
+  a prompt request has a 30-minute deadline. Streaming and cancellation use the
+  shared ACP engine. Model catalogs and provider-specific permission/browser
+  integration are separate work; this backend foundation advertises no model list.
+
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in

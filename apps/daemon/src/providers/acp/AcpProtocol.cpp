@@ -9,7 +9,11 @@
 #include <utility>
 namespace {
 constexpr qsizetype maximumProviderMessageBytes = 16 * 1024 * 1024;
-QString errorText(const QJsonObject& error) {
+
+} // namespace
+
+namespace ketplus::daemon {
+QString AcpAdapter::responseError(const QJsonObject& error) {
     const QString message = error.value(QStringLiteral("message")).toString();
     if (!message.isEmpty())
         return message;
@@ -20,9 +24,6 @@ QString errorText(const QJsonObject& error) {
     return QString::fromUtf8(QJsonDocument(error).toJson(QJsonDocument::Compact));
 }
 
-} // namespace
-
-namespace ketplus::daemon {
 QString AcpAdapter::requestKey(const QJsonValue& id) {
     return id.isString() ? id.toString() : QString::number(id.toVariant().toLongLong());
 }
@@ -31,6 +32,28 @@ void AcpAdapter::sendCall(const QString& method, const QJsonObject& params, Call
     const quint64 id = nextRequestId_++;
     pending_.insert(id, std::move(callback));
     pendingMethods_.insert(id, method);
+    if (const int timeout = requestTimeoutMs(method); timeout > 0) {
+        auto* timer = new QTimer(this);
+        timer->setSingleShot(true);
+        pendingTimers_.insert(id, timer);
+        connect(timer, &QTimer::timeout, this, [this, id, method, timer] {
+            pendingTimers_.remove(id);
+            timer->deleteLater();
+            if (!pending_.contains(id))
+                return;
+            const QString reason = processFailure(
+                QStringLiteral("%1 ACP request %2 timed out.").arg(label_, method), std::nullopt);
+            setReady(false);
+            failPending(reason);
+            if (!stopping_) {
+                noteUnexpectedStop();
+                emit stopped(reason);
+                stopping_ = true;
+            }
+            process_->kill();
+        });
+        timer->start(timeout);
+    }
     sendObject({{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
                 {QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},
@@ -135,6 +158,10 @@ void AcpAdapter::consumeLine(const QByteArray& line) {
         return;
     const quint64 id = *responseId;
     const auto callback = pending_.take(id);
+    if (auto* timer = pendingTimers_.take(id)) {
+        timer->stop();
+        timer->deleteLater();
+    }
     const QString requestMethod = pendingMethods_.take(id);
     if (!callback)
         return;
@@ -144,7 +171,7 @@ void AcpAdapter::consumeLine(const QByteArray& line) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(requestMethod);
-        callback({}, errorText(error));
+        callback({}, responseError(error));
     } else
         callback(object.value(QStringLiteral("result")).toObject(), {});
 }
