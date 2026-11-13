@@ -64,6 +64,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
+    src/providers/CopilotAdapter.cpp
+    src/providers/CopilotAdapter.h
+    src/providers/CopilotCatalog.cpp
+    src/providers/CopilotCatalog.h
     src/providers/CursorAdapter.cpp
     src/providers/CursorModelCatalog.cpp
     src/providers/CursorModelConfig.cpp
@@ -73,6 +77,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/acp/AcpProcess.cpp
     src/providers/acp/AcpProtocol.cpp
     src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpPermissions.cpp
     src/providers/acp/AcpSession.cpp
     src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h

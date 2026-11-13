@@ -218,7 +218,7 @@ void appendModelLists(QList<ProviderAdapter*> providers, QJsonArray merged,
 
 bool isCanonicalAdapter(const QString& adapter) {
     return adapter == QStringLiteral("codex") || adapter == QStringLiteral("claude") ||
-           adapter == QStringLiteral("cursor");
+           adapter == QStringLiteral("cursor") || adapter == QStringLiteral("copilot");
 }
 
 // What a tool call will run or touch, for its approval card.
@@ -321,6 +321,10 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
 
 SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAdapter* claude,
                          CursorAdapter* cursor, QObject* parent)
+    : SessionHost(journal, adapter, QList<ProviderAdapter*>{claude, cursor}, parent) {}
+
+SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
+                         QList<ProviderAdapter*> additionalProviders, QObject* parent)
     : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
@@ -345,10 +349,9 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);
-    for (ProviderAdapter* provider :
-         {static_cast<ProviderAdapter*>(adapter), static_cast<ProviderAdapter*>(claude),
-          static_cast<ProviderAdapter*>(cursor)})
-        if (provider != nullptr)
+    providers_.append(adapter);
+    for (ProviderAdapter* provider : additionalProviders)
+        if (provider != nullptr && !providers_.contains(provider))
             providers_.append(provider);
     QSet<QString> liveSessions;
     for (ProviderAdapter* provider : std::as_const(providers_))
@@ -364,9 +367,10 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
-    if (claude != nullptr)
-        connect(claude, &ClaudeAdapter::authenticationObserved, this,
-                [this](const QString& source) { readiness_.observeClaudeSource(source); });
+    for (ProviderAdapter* provider : additionalProviders)
+        if (auto* claude = qobject_cast<ClaudeAdapter*>(provider))
+            connect(claude, &ClaudeAdapter::authenticationObserved, this,
+                    [this](const QString& source) { readiness_.observeClaudeSource(source); });
     for (const StoredSession& stored : journal_->sessions()) {
         liveSessions.insert(stored.id);
         Session session;
@@ -1924,7 +1928,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
         approvals_->cancelPending(sessionId, generation);
     });
     if (session->stored.adapter == QStringLiteral("claude") ||
-        session->stored.adapter == QStringLiteral("cursor")) {
+        session->stored.adapter == QStringLiteral("cursor") ||
+        session->stored.adapter == QStringLiteral("copilot")) {
         if (!session->startingTurn && session->stored.turnId.isEmpty() &&
             session->stored.state != QStringLiteral("running")) {
             return error(QStringLiteral("turn_not_running"),
@@ -1935,8 +1940,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
             return error(QStringLiteral("provider_unavailable"),
                          missingProviderMessage(session->stored.adapter));
         }
-        // Claude and Cursor first create a provider-native session.  There is no native turn to
-        // cancel during that short interval, so remember Stop and send it just after the adapter
+        // Claude and ACP providers first create a provider-native session.  There is no native turn
+        // to cancel during that short interval, so remember Stop and send it just after the adapter
         // announces turn.started.  Returning accepted keeps the Desktop control responsive.
         if (session->startingTurn) {
             session->interruptPending = true;
@@ -2870,8 +2875,10 @@ void SessionHost::handleCanonicalPermission(const QString& adapterName, const QJ
         return;
     }
     const QString tool = params.value(QStringLiteral("tool")).toString();
-    const QString label = adapterName == QStringLiteral("cursor") ? QStringLiteral("Cursor")
-                                                                  : QStringLiteral("Claude");
+    const QString label = adapterName == QStringLiteral("copilot")
+                              ? QStringLiteral("GitHub Copilot")
+                          : adapterName == QStringLiteral("cursor") ? QStringLiteral("Cursor")
+                                                                    : QStringLiteral("Claude");
     (void)approvals_->request(
         it->stored.id, it->stored.generation, taggedRequestId(adapterName, requestId),
         QStringLiteral("approval"),
@@ -2908,6 +2915,10 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
     // Claude and Cursor take answers as they are and decisions as allow/accepted.
     ProviderAdapter* const target = provider(adapterName);
     if (target != nullptr && target != adapter_) {
+        if (adapterName == QStringLiteral("copilot") && result.value("cancelled").toBool()) {
+            target->respond(requestId, result);
+            return;
+        }
         if (result.contains(QStringLiteral("answers"))) {
             target->respond(requestId, result);
             return;

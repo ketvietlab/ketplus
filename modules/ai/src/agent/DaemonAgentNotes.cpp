@@ -1,5 +1,6 @@
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ProviderDisplay.h"
 
 namespace ketplus::agent_message {
 namespace {
@@ -38,7 +39,7 @@ void describe(QVariantMap& note) {
     if (const auto title = note.value("agentPeerTitle").toString(); !title.isEmpty())
         parts.append(title);
     if (const auto provider = note.value("agentPeerProvider").toString(); !provider.isEmpty())
-        parts.append(provider.left(1).toUpper() + provider.mid(1));
+        parts.append(provider_display::name(provider));
     const auto state = note.value("status").toString();
     parts.append(stateLabel(state, note.value("agentDelivery").toString(),
                             note.value("agentReason").toString()));

@@ -37,7 +37,8 @@ bool providerTurnAllowed(const QString& provider, const bool usesDaemon) {
     if (provider.isEmpty() || provider == QStringLiteral("codex"))
         return true;
     return usesDaemon &&
-           (provider == QStringLiteral("claude") || provider == QStringLiteral("cursor"));
+           (provider == QStringLiteral("claude") || provider == QStringLiteral("cursor") ||
+            provider == QStringLiteral("copilot"));
 }
 
 QString turnStartStatus(const QString& provider, const bool resume) {
@@ -45,6 +46,9 @@ QString turnStartStatus(const QString& provider, const bool resume) {
         return resume ? QStringLiteral("Resuming Claude…") : QStringLiteral("Starting Claude…");
     if (provider == QStringLiteral("cursor"))
         return resume ? QStringLiteral("Resuming Cursor…") : QStringLiteral("Starting Cursor…");
+    if (provider == QStringLiteral("copilot"))
+        return resume ? QStringLiteral("Resuming GitHub Copilot…")
+                      : QStringLiteral("Starting GitHub Copilot…");
     return resume ? QStringLiteral("Resuming Codex…") : QStringLiteral("Starting Codex…");
 }
 
@@ -593,6 +597,10 @@ void AgentSessionManager::loadModels(const QString& cursor) {
                                                    model.value("provider").toString()));
                               if (!model.contains("defaultPermission"))
                                   model.insert("defaultPermission", "workspace-write");
+                              // Copilot permission modes must come from its daemon adapter.
+                              if (model.value("provider") == "copilot" &&
+                                  model.value("permissions").toList().isEmpty())
+                                  continue;
                               models_.append(model);
                           }
                       }
@@ -771,13 +779,27 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
         readOnlyMode ? QStringLiteral("read-only")
                      : options.value("permission", "workspace-write").toString();
     bool permissionValid = false;
-    for (const auto& profile : CodexAppServer::permissionProfilesFor(provider))
+    QVariantList profiles = CodexAppServer::permissionProfilesFor(provider);
+    if (provider == "copilot") {
+        const auto modelId = options.value("model").toString().trimmed();
+        for (const auto& value : models_) {
+            const auto model = value.toMap();
+            if (model.value("provider") == provider &&
+                (model.value("model") == modelId || model.value("id") == modelId)) {
+                profiles = model.value("permissions").toList();
+                break;
+            }
+        }
+    }
+    for (const auto& profile : profiles)
         if (profile.toMap().value("id").toString() == requestedPermission)
             permissionValid = true;
     if (!permissionValid) {
         const QString name = provider == QStringLiteral("claude")   ? QStringLiteral("Claude")
                              : provider == QStringLiteral("cursor") ? QStringLiteral("Cursor")
-                                                                    : QStringLiteral("Codex");
+                             : provider == QStringLiteral("copilot")
+                                 ? QStringLiteral("GitHub Copilot")
+                                 : QStringLiteral("Codex");
         emit errorOccurred(QStringLiteral("Unsupported permission for %1.").arg(name));
         return;
     }
@@ -801,7 +823,9 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
     const QVariant savedCompact = session->options.value("compactWindow");
     session->options = options;
     if (compactSaved && !options.contains("compactWindow")) {
-        session->options.insert("compactWindow", provider == "cursor" ? QVariant{} : savedCompact);
+        session->options.insert("compactWindow", provider == "cursor" || provider == "copilot"
+                                                     ? QVariant{}
+                                                     : savedCompact);
     }
     session->options.remove(QStringLiteral("skills"));
     session->options.remove(QStringLiteral("mode"));
