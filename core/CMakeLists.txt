@@ -49,6 +49,8 @@ add_library(ketplus_ui STATIC
     src/ui/theme/ColorSchemeTokens.h
     src/ui/theme/ColorSchemeCatalog.cpp
     src/ui/theme/ColorSchemeCatalog.h
+    src/ui/theme/ThemeSelection.cpp
+    src/ui/theme/ThemeSelection.h
     src/ui/InterfaceZoom.h
     src/ui/TypeScale.h
     src/ui/KetFonts.cpp
@@ -508,6 +510,14 @@ if(KETPLUS_CM_BUILD_TESTS)
             add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
         endif()
     endfunction()
+
+    add_executable(ketplus_theme_selection_tests
+        tests/ThemeSelectionTest.cpp src/ui/theme/ThemeSelection.cpp)
+    target_include_directories(ketplus_theme_selection_tests PRIVATE src)
+    target_link_libraries(ketplus_theme_selection_tests PRIVATE Qt6::Test Qt6::Core)
+    ketplus_enable_warnings(ketplus_theme_selection_tests)
+    ketplus_cm_add_test(ketplus_theme_selection_tests ketplus_theme_selection_tests)
+    set_tests_properties(ketplus_theme_selection_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
     target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)

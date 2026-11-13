@@ -126,3 +126,40 @@ Build `ketplus_color_scheme_tests` and run it with `QT_QPA_PLATFORM=offscreen`.
 It covers alpha parsing, unknown-data round trips, diagnostics, inheritance and
 explicit false flags, built-in palette parity, catalog reopen/identity/duplicate/
 remove/fallback, lock contention and failed writes. No provider is invoked.
+
+## Theme selection persistence foundation
+
+`ThemeSelectionStore` owns committed selection independently of catalog contents.
+It is a persistence foundation; ThemeManager and component integration are still
+pending. Its default file is `AppDataLocation/color-schemes/selection.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "revision": "1",
+  "followSystem": true,
+  "schemeId": "builtin-light",
+  "lightSchemeId": "builtin-light",
+  "darkSchemeId": "builtin-dark"
+}
+```
+
+Revision is an unsigned 64-bit decimal string, avoiding JSON number precision
+loss. Locked atomic commits advance it monotonically, while identical commits
+are idempotent. Unknown scheme IDs are valid selection identities; the consumer
+resolves catalog absence with a built-in fallback. Invalid identities, malformed
+or newer config schemas, symlinks and lock/write errors leave the last known
+in-memory selection intact and are exposed through `lastError()` and `failed`.
+
+The constructor accepts a legacy `appearance/theme` value. It migrates
+System/Light/Dark only when the file is absent and rechecks under the write lock
+so concurrent startup cannot overwrite another process's migration. Existing
+selection files always win over legacy settings. The store watches the directory,
+surviving atomic replacement of the file; consumers call `refresh()` on focus to
+recover missed notifications. `changed` fires once per newly observed revision.
+Previews belong in ThemeManager and must never call `commit` until confirmed.
+
+`ketplus_theme_selection_tests` exercises migration, reopen, idempotent and
+cross-instance commits, real child-process watcher propagation, lock contention,
+malformed/oversized/newer configurations and revision validation. It is a Qt Core
+only target and does not launch providers or native windows.
