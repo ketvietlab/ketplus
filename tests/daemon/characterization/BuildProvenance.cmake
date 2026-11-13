@@ -10,6 +10,7 @@ set(FILES
   apps/daemon/src/cloud/CloudEventProjection.cpp apps/daemon/src/cloud/CloudEventProjection.h
   apps/daemon/src/storage/LocalJournal.cpp apps/daemon/src/storage/LocalJournal.h
   apps/daemon/src/storage/LocalJournalActivityGroups.cpp
+  apps/daemon/src/storage/LocalJournalActivityLatest.cpp
   apps/daemon/src/storage/LocalJournalLargeEvents.cpp
   apps/daemon/src/protocol/DaemonProtocol.cpp apps/daemon/src/protocol/DaemonProtocol.h)
 file(GLOB TEST_FILES RELATIVE "${REPO}" "${REPO}/tests/daemon/characterization/*")

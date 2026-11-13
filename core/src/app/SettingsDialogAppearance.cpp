@@ -1,4 +1,5 @@
 #include "app/SettingsDialog.h"
+#include "app/theme/SchemeLibraryPanel.h"
 
 #include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
@@ -7,10 +8,12 @@
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
 #include "KetToggle.h"
+#include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollArea>
+#include <QStyleHints>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -88,11 +91,12 @@ QWidget* SettingsDialog::createThemeCard() {
                 [this, mode] { selectThemeMode(static_cast<int>(mode)); });
     }
     layout->addLayout(themes);
+    layout->addWidget(new SchemeLibraryPanel({}, card, theme_));
     auto* accent = new QWidget(card);
     auto* accentRow = new QHBoxLayout(accent);
     accentRow->setContentsMargins(0, 0, 0, 0);
     accentRow->addWidget(new ket::AccentSwatch(accent));
-    accentRow->addWidget(new QLabel(tr("Indigo"), accent));
+    accentRow->addWidget(new QLabel(tr("Scheme accent"), accent));
     accentRow->addStretch();
     layout->addWidget(new ket::FieldRow(tr("Accent"), accent, {}, card));
     QStringList zoomSteps;
@@ -103,17 +107,25 @@ QWidget* SettingsDialog::createThemeCard() {
     zoomControl_->setAccessibleName(tr("Interface zoom"));
     zoomControl_->setCurrentIndex(
         int(InterfaceZoomMetrics::steps().indexOf(InterfaceZoomMetrics::defaultPercent)));
-    layout->addWidget(new ket::FieldRow(tr("Interface zoom"), zoomControl_, {}, card));
+    auto* zoomRow = new ket::FieldRow(tr("Interface zoom"), zoomControl_, {}, card);
+    zoomRow->setStacked(true);
+    layout->addWidget(zoomRow);
     connect(zoomControl_, &ket::SegmentedControl::currentChanged, this, [this] {
         updatePreview();
         applyChanges();
     });
 
     connect(followSystem_, &QAbstractButton::toggled, this, [this](bool checked) {
-        selectThemeMode(
-            static_cast<int>(checked ? ThemeManager::Mode::System
-                                     : (currentThemePalette().dark ? ThemeManager::Mode::Dark
-                                                                   : ThemeManager::Mode::Light)));
+        if (!theme_)
+            return;
+        auto wanted = theme_->schemeSelection();
+        if (!checked && wanted.followSystem)
+            wanted.schemeId = qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark
+                                  ? wanted.darkSchemeId
+                                  : wanted.lightSchemeId;
+        wanted.followSystem = checked;
+        if (!theme_->setSchemeSelection(wanted))
+            updateThemeCards();
     });
     return card;
 }

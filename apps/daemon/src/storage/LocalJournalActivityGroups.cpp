@@ -665,6 +665,11 @@ QJsonObject LocalJournal::activityGroupSummary(const QJsonObject& event, qint64 
                                             {"families", families},
                                             {"files", listed},
                                             {"files_total", int(files.size())}});
+    if (const auto latest = activityGroupLatest(event, group); !latest.isEmpty()) {
+        auto payload = projected.value("payload").toObject();
+        payload.insert("latest", latest);
+        projected.insert("payload", payload);
+    }
     return projected;
 }
 

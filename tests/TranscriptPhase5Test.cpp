@@ -5,6 +5,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/DaemonTranscriptProjection.h"
 
 #include <QAccessible>
 #include <QClipboard>
@@ -1721,4 +1722,124 @@ void AgentWorkspaceViewTest::copiesMouseSelectionWithShortcut() {
     body->forceActiveFocus();
     QTest::keySequence(window, QKeySequence::Copy);
     QCOMPARE(QGuiApplication::clipboard()->text(), indented);
+}
+
+// T-91: a running group's heading is its latest step, live; once the agent writes, it is the
+// whole group.
+void AgentWorkspaceViewTest::runningGroupHeadingFollowsItsLatestStep() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.setSessionState("Heading", "Working…", true);
+    auto command = [](const QString& key, const QString& title, const bool running) {
+        QVariantMap row = readRow(key, title, running);
+        row.insert("subtype", "command");
+        row.insert("title", title);
+        return row;
+    };
+    view.resetMessages({textRow("u", "user", "Check the tree"),
+                        command("c1", "Ran git fetch", false), readRow("r1", "AGENTS.md"),
+                        command("c2", "Running git status --short --branch", true)},
+                       "workspace:heading");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QQuickItem* heading = nullptr;
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    const QString capture = qEnvironmentVariable("KETPLUS_GROUP_HEADING_CAPTURE");
+    const auto grab = [&](const QString& state) {
+        if (capture.isEmpty())
+            return;
+        auto& mode = ket::Appearance::instance();
+        const auto previous = mode.mode();
+        mode.setMode(ket::Appearance::Mode::Dark);
+        view.applyTheme(ketplus::currentThemePalette());
+        QTest::qWait(200);
+        QVERIFY(view.quickView()->grabWindow().save(capture + "-" + state + ".png"));
+        mode.setMode(previous);
+        view.applyTheme(ketplus::currentThemePalette());
+    };
+    grab("running");
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Running git status --short --branch"));
+
+    // A step joins: the heading follows it.
+    view.appendMessage(readRow("r2", "README.md", true));
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("README.md"));
+
+    // Between two steps none runs, but the group has not ended: the turn runs and nothing
+    // follows it. The heading keeps naming the last step (T-91 round 1, M1).
+    view.updateMessage(3, command("c2", "Ran git status --short --branch", false));
+    view.updateMessage(4, readRow("r2", "README.md", false));
+    QTest::qWait(100);
+    QCOMPARE(heading->property("text").toString(), QStringLiteral("README.md"));
+    view.appendMessage(command("c3", "Running git diff --stat", true));
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Running git diff --stat"));
+    view.updateMessage(5, command("c3", "Ran git diff --stat", false));
+    QTest::qWait(100);
+    QCOMPARE(heading->property("text").toString(), QStringLiteral("Ran git diff --stat"));
+
+    // The agent writes: the group has ended, and the heading counts all of it.
+    view.appendMessage(textRow("a", "assistant", "The tree is clean."));
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Ran 3 commands, explored 2 files"));
+    grab("ended");
+}
+
+// T-91 round 1, M1: a group the turn stops on ends there, local or daemon, and a daemon group
+// between two steps keeps naming its last step as a local one does.
+void AgentWorkspaceViewTest::groupHeadingEndsWithTheTurnNotBetweenSteps() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.setSessionState("Heading", "Working…", true);
+    // A daemon group whose last step finished while the model thinks about the next one.
+    const QJsonObject between{
+        {"item_id", "activity-group:4"},
+        {"group_id", "4"},
+        {"count", 2},
+        {"running_count", 0},
+        {"families", QJsonArray{QJsonObject{{"family", "command"}, {"count", 2}}}},
+        {"latest", QJsonObject{{"item", QJsonObject{{"type", "commandExecution"},
+                                                    {"id", "cmd-2"},
+                                                    {"command", "git status --short --branch"},
+                                                    {"status", "completed"},
+                                                    {"exitCode", 0}}},
+                               {"completed", true}}}};
+    QVariantMap daemon = ketplus::agent_message::daemonActivityGroupMessage(between, 2);
+    daemon.insert("turnId", "t2");
+    const QString latest = daemon.value("groupLatest").toString();
+    QVERIFY(!latest.isEmpty());
+    QVERIFY(!daemon.value("groupRunning").toBool());
+    view.resetMessages({textRow("u", "user", "Check the tree"), daemon}, "workspace:daemon");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QQuickItem* heading = nullptr;
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QTRY_COMPARE(heading->property("text").toString(), latest);
+
+    // The turn stops on it: the group has ended, and the heading counts it.
+    view.setSessionState("Heading", QString{}, false);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran 2 commands"));
+
+    // A local group the turn stops on ends the same way.
+    view.setSessionState("Heading", "Working…", true);
+    auto command = [](const QString& key, const QString& title) {
+        QVariantMap row = readRow(key, title, false);
+        row.insert("subtype", "command");
+        row.insert("title", title);
+        return row;
+    };
+    view.resetMessages({textRow("u2", "user", "Again"), command("c1", "Ran git fetch"),
+                        command("c2", "Ran git pull")},
+                       "workspace:local");
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran git pull"));
+    view.setSessionState("Heading", QString{}, false);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran 2 commands"));
 }

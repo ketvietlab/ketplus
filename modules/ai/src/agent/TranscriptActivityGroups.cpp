@@ -11,9 +11,11 @@ namespace {
 const QString kGroupKey = QStringLiteral("groupKey");
 const QString kGroupRole = QStringLiteral("groupRole");
 const QString kGroupSummary = QStringLiteral("groupSummary");
+const QString kGroupLatest = QStringLiteral("groupLatest");
 const QString kGroupSize = QStringLiteral("groupSize");
 const QString kGroupRunning = QStringLiteral("groupRunning");
 const QString kGroupFailed = QStringLiteral("groupFailed");
+const QString kGroupTail = QStringLiteral("groupTail");
 const QString kGroupLeaderKey = QStringLiteral("groupLeaderKey");
 
 // "a command" / "3 commands"
@@ -35,8 +37,8 @@ bool setRole(QVariantMap& row, const QString& key, const QVariant& value) {
 const QString& activityGroupLeaderKeyName() { return kGroupLeaderKey; }
 
 const QStringList& activityGroupRoleNames() {
-    static const QStringList names{kGroupKey,  kGroupRole,    kGroupSummary,
-                                   kGroupSize, kGroupRunning, kGroupFailed};
+    static const QStringList names{kGroupKey,  kGroupRole,    kGroupSummary, kGroupLatest,
+                                   kGroupSize, kGroupRunning, kGroupFailed,  kGroupTail};
     return names;
 }
 
@@ -84,9 +86,25 @@ void ActivityTally::add(const QString& id, const int amount) {
 
 void ActivityTally::addServer(const QString& server, const int steps) {
     add(QStringLiteral("server"), steps);
-    serverSteps += steps;
-    if (!server.isEmpty() && !servers.contains(server))
-        servers.append(server);
+    if (server.isEmpty())
+        return;
+    for (Family& known : servers) {
+        if (known.id == server) {
+            known.count += steps;
+            return;
+        }
+    }
+    servers.append({server, steps});
+}
+
+QString activityGroupLatest(const QVariantMap& row) {
+    QString title = row.value(QStringLiteral("title")).toString().trimmed();
+    if (title.isEmpty())
+        title = row.value(QStringLiteral("summary")).toString().trimmed();
+    if (title.isEmpty())
+        title = row.value(QStringLiteral("body")).toString().trimmed();
+    // One line: the heading elides what is left.
+    return title.section(QLatin1Char('\n'), 0, 0).simplified();
 }
 
 QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype first,
@@ -174,8 +192,15 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
 
 QString activityTallySummary(const ActivityTally& tally) {
     const auto& families = tally.families;
+    // Thoughts are not steps the user counts; a group of thoughts alone still says so.
+    const bool onlyThoughts =
+        std::all_of(families.cbegin(), families.cend(), [](const ActivityTally::Family& family) {
+            return family.id == QStringLiteral("thought");
+        });
     QStringList phrases;
     for (const ActivityTally::Family& family : families) {
+        if (family.id == QStringLiteral("thought") && !onlyThoughts)
+            continue;
         QString phrase;
         if (family.id == QStringLiteral("command")) {
             phrase = QStringLiteral("ran %1").arg(
@@ -223,14 +248,21 @@ QString activityTallySummary(const ActivityTally& tally) {
                          ? QStringLiteral("searched files")
                          : QStringLiteral("searched files %1 times").arg(family.count);
         } else if (family.id == QStringLiteral("server")) {
-            phrase = tally.servers.isEmpty()
-                         ? QStringLiteral("used %1").arg(counted(
-                               family.count, QStringLiteral("tool"), QStringLiteral("tools")))
-                         : QStringLiteral("used ") + tally.servers.join(QStringLiteral(", "));
-            // Only a group of tool calls alone counts its steps; a mixed line stays a list.
-            if (families.size() == 1 && !tally.servers.isEmpty() &&
-                tally.serverSteps > tally.servers.size())
-                phrase += QStringLiteral(" · %1 steps").arg(tally.serverSteps);
+            // Each server by name with its own count: "used ketplus_browser 4 times".
+            QStringList named;
+            int namedSteps = 0;
+            for (const ActivityTally::Family& server : tally.servers) {
+                named.append(
+                    server.count == 1
+                        ? QStringLiteral("used %1").arg(server.id)
+                        : QStringLiteral("used %1 %2 times").arg(server.id).arg(server.count));
+                namedSteps += server.count;
+            }
+            // Steps whose server is unknown keep the plain count.
+            if (family.count > namedSteps)
+                named.append(QStringLiteral("used %1").arg(counted(
+                    family.count - namedSteps, QStringLiteral("tool"), QStringLiteral("tools"))));
+            phrase = named.join(QStringLiteral(", "));
         } else if (family.id == QStringLiteral("subagent")) {
             const int count = std::max(1, tally.subagents);
             phrase = QStringLiteral("used %1").arg(
@@ -281,14 +313,16 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
         ++last;
     const auto apply = [&](const int index, const QString& key, const QString& role,
                            const QString& summary, const int size, const bool running,
-                           const int failed) {
+                           const int failed, const QString& latest = {}, const bool tail = false) {
         QVariantMap& row = rows[index];
         bool rowChanged = setRole(row, kGroupKey, key);
         rowChanged = setRole(row, kGroupRole, role) || rowChanged;
         rowChanged = setRole(row, kGroupSummary, summary) || rowChanged;
+        rowChanged = setRole(row, kGroupLatest, latest) || rowChanged;
         rowChanged = setRole(row, kGroupSize, size) || rowChanged;
         rowChanged = setRole(row, kGroupRunning, running) || rowChanged;
         rowChanged = setRole(row, kGroupFailed, failed) || rowChanged;
+        rowChanged = setRole(row, kGroupTail, tail) || rowChanged;
         if (rowChanged)
             changed.append(index);
     };
@@ -296,7 +330,11 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
     qsizetype index = first;
     while (index <= last) {
         if (rows.at(index).value("subtype") == "daemonGroup") {
-            ++index; // Wire summary owns its roles; never merge it into a local group.
+            // Wire summary owns its roles; never merge it into a local group. Only whether it
+            // is the transcript's last row is local (T-91).
+            if (setRole(rows[index], kGroupTail, index + 1 == rows.size()))
+                changed.append(int(index));
+            ++index;
             continue;
         }
         if (!isGroupableActivity(rows.at(index))) {
@@ -338,8 +376,11 @@ QList<int> assignActivityGroups(QList<QVariantMap>& rows, int first, int last) {
             key = rows.at(index).value(QStringLiteral("messageKey")).toString();
         usedKeys.insert(key);
         const QString leaderKey = rows.at(index).value(QStringLiteral("messageKey")).toString();
+        // T-91: nothing follows the group yet, so while its turn runs it is still open, even
+        // between two steps, when none of its rows is running.
         apply(int(index), key, QStringLiteral("leader"), activityGroupSummary(rows, index, size),
-              int(size), running, failed);
+              int(size), running, failed, activityGroupLatest(rows.at(end - 1)),
+              end == rows.size());
         rows[index].insert(kGroupLeaderKey, leaderKey);
         for (qsizetype member = index + 1; member < end; ++member) {
             apply(int(member), key, QStringLiteral("member"), {}, 0, running, 0);

@@ -167,7 +167,7 @@ QtObject {
         ] },
         { type: "question", header: "Spinner", state: "answered", question: "How should a working row animate?",
           answer: "Step on a shared clock (Recommended)" },
-        { type: "activity", summary: "Used browser · 6 steps", steps: [
+        { type: "activity", summary: "Used browser 6 times", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/sidebar" },
             { kind: "browser", title: "Observed the page", detail: "142 nodes · 3 running rows" },
             { kind: "browser", title: "Clicked", detail: "“Review the startup flow”" },
@@ -210,7 +210,7 @@ QtObject {
     readonly property var codex: [
         { type: "event", text: "Switched from Claude to Codex", detail: "GPT-5.6 Luna · High · the conversation history comes along" },
         { type: "user", text: "Add a journal size warning to the daemon status and the sidebar." },
-        { type: "activity", summary: "Thought, explored 4 files, listed 1 folder", steps: [
+        { type: "activity", summary: "Explored 4 files, listed 1 folder", steps: [
             { kind: "thinking", title: "Thought", detail: "14 s" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.cpp" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.h" },
@@ -235,7 +235,7 @@ QtObject {
             { kind: "move", title: "Moved", detail: "docs/journal.md → docs/daemon-journal.md" },
             { kind: "delete", title: "Deleted", detail: "apps/daemon/src/storage/OldRetention.cpp  −120" }
         ] },
-        { type: "activity", summary: "Used ketplus_browser, node_repl · 5 steps", steps: [
+        { type: "activity", summary: "Used ketplus_browser 3 times, used node_repl, used ketplus_agents", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/settings/storage" },
             { kind: "browser", title: "Observed the page", detail: "Storage · 4 meters" },
             { kind: "browser", title: "Captured", detail: "1440 × 900", images: [shot("settings")], expanded: true },

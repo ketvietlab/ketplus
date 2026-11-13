@@ -456,6 +456,45 @@ functions/constants remain deterministic lexical fallbacks, without semantic
 inference. Standalone Terminal preserves its historical page background only for
 reserved built-ins; custom schemes use their canonical terminal background.
 
+## Managing schemes in Settings
+
+Settings > Appearance mounts `app/theme/SchemeLibraryPanel`. It provides catalog
+search and source labels (`metadata.sourceLabel` takes precedence over the input
+format in `sourceApp`, including community attribution),
+scheme-color swatches, local file detection, variant selection and a detailed
+mapped/approximated/skipped report before any catalog write. Parsing runs off the
+GUI thread. Closing or cancelling review does not install a scheme; successful
+imports receive fresh local IDs. A failed multi-variant save attempts to remove
+only the IDs created by that operation and reports any rollback failure.
+
+Export uses an atomic write to `.ketscheme.json`. Both reserved `builtin-*` and
+`builtin.*` ID namespaces disable deletion without a hardcoded theme list;
+duplication creates an independent file with a new name and identity. To change
+color values, export, edit the JSON and re-import it as a new immutable scheme.
+The selection controls use the public ThemeManager API and its revisioned
+`ThemeSelectionStore`, including separate light and dark preferences. A selected scheme is switched to an appropriate built-in
+before its file is removed; a locked or unwritable selection prevents removal.
+
+Selecting a row commits its ID immediately. The system appearance checkbox uses
+independent preferred light/dark variants; leaving system mode keeps the scheme
+currently shown. After variant selection, import review shows mapped,
+approximated and skipped counts with per-key reasons. “Preview on app” temporarily
+hides the report and shows a return banner. Return to the report to accept or
+cancel, or press Escape while previewing to cancel without writing. Acceptance
+installs fresh local IDs before committing the selected installed scheme. A
+selection-write failure is reported separately from a successful catalog save.
+
+View > Appearance > Color Scheme… is also available in the command palette in
+Lite and Pro. The shared KetQt picker previews with Up/Down, commits with Enter,
+and restores committed state with Escape or backdrop dismissal. A newer external
+selection dismisses the picker and retains that committed state.
+
+Native review screenshots of the Appearance list in light/dark and the import
+report are in `docs/images/color-schemes/`. The capture harness requires the
+secondary DELL screen before showing a native window. Focused UI tests cover the
+760×650 and 1100×900 layouts at every supported zoom step in light/dark, including
+selection, preview cancellation, keyboard commit and selection-lock failures.
+
 ## Live selection API
 
 `ThemeManager::schemeSelection()` exposes the committed `ThemeSelection`.
