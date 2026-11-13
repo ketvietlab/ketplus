@@ -17,6 +17,8 @@ add_library(ketplus_remote STATIC
     src/SessionCatalogReader.h
     src/LargeEventReassembler.cpp
     src/LargeEventReassembler.h
+    src/TranscriptVisibility.cpp
+    src/TranscriptVisibility.h
 )
 target_compile_definitions(ketplus_remote PRIVATE
     KETPLUS_AUTO_UPGRADE_DAEMON=$<BOOL:${KETPLUS_AUTO_UPGRADE_DAEMON}>)

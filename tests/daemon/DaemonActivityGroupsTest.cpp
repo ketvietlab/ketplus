@@ -261,21 +261,22 @@ class DaemonActivityGroupsTest : public QObject {
         }
         const auto summary =
             journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
-        QCOMPARE(summary.value("count").toInt(), 7);
+        // KetPlus's own agents tools are not steps of the transcript (T-78): never counted.
+        QCOMPARE(summary.value("count").toInt(), 5);
         QStringList families;
         for (const auto& value : summary.value("families").toArray())
             families.append(QStringLiteral("%1=%2")
                                 .arg(value.toObject().value("family").toString())
                                 .arg(value.toObject().value("count").toInt()));
-        QCOMPARE(families, (QStringList{"command=1", "tool:ketplus_agents=2", "browser=1",
-                                        "subagent=1", "subagent.step=1", "wait=1"}));
+        QCOMPARE(families, (QStringList{"command=1", "browser=1", "subagent=1", "subagent.step=1",
+                                        "wait=1"}));
         // Any server's text step joins the open group: "Used screen_tools", as Claude names it.
         const auto joined =
             journal.appendEvent("session", 1, "item.completed",
                                 item("screen", "dynamicToolCall", "mcp__screen_tools__describe"));
         const auto widened =
             journal.activitySummaryEvent(last(journal, joined)).value("payload").toObject();
-        QCOMPARE(widened.value("count").toInt(), 8);
+        QCOMPARE(widened.value("count").toInt(), 6);
         QCOMPARE(widened.value("families").toArray().last().toObject().value("family").toString(),
                  "tool:screen_tools");
         // A tool without a server keeps its own row, as it may carry edits the summary would
@@ -326,6 +327,44 @@ class DaemonActivityGroupsTest : public QObject {
         QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
                  "item.completed");
     }
+    // T-78: KetPlus's own agents tools, in Codex's and Claude's naming, neither open, join nor
+    // end a group, so a turn of only such calls has no group and a read around them stays one.
+    void internalAgentToolsAreNotSteps() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto item = [](const QString& id, const QString& type, const QString& tool,
+                             const QString& server = {}) {
+            QJsonObject body{{"id", id}, {"type", type}, {"tool", tool}, {"status", "completed"}};
+            if (!server.isEmpty())
+                body.insert("server", server);
+            return QJsonObject{{"item", body}};
+        };
+        for (const auto& hidden :
+             {item("send", "dynamicToolCall", "mcp__ketplus_agents__agents_send"),
+              item("tasks", "mcpToolCall", "team_tasks", "ketplus_agents")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", hidden);
+            QVERIFY(cursor > 0);
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+        }
+        const auto read = journal.appendEvent("session", 1, "item.completed",
+                                              item("read-1", "dynamicToolCall", "Read"));
+        QVERIFY(read > 0);
+        QVERIFY(journal.appendEvent(
+                    "session", 1, "item.completed",
+                    item("report", "dynamicToolCall", "mcp__ketplus_agents__work_report")) > 0);
+        const auto second =
+            journal.appendEvent("session", 1, "item.completed", command("build", "completed"));
+        const auto first =
+            journal.activitySummaryEvent(last(journal, read)).value("payload").toObject();
+        const auto widened =
+            journal.activitySummaryEvent(last(journal, second)).value("payload").toObject();
+        QCOMPARE(widened.value("group_id"), first.value("group_id"));
+        QCOMPARE(widened.value("count").toInt(), 2);
+    }
+
     void serverStepsLeaveTheirGroupWhenTheyReturnImages() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite3"));
@@ -700,6 +739,56 @@ class DaemonActivityGroupsTest : public QObject {
         QVERIFY(deleted.deleteSession("session", 1));
         QVERIFY(!deleted.hasPendingActivityBackfill());
     }
+    // T-78: a journal grouped by an older daemon counted an agents tool call in its group. The
+    // session is grouped again once after open; the group then counts only its real steps.
+    void aJournalThatGroupedInternalStepsIsGroupedAgainOnce() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        qint64 read = 0;
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, dir.path()));
+            read = journal.appendEvent("session", 1, "item.completed", command("one", "completed"));
+            QVERIFY(read > 0);
+            QVERIFY(journal.appendEvent(
+                        "session", 1, "item.completed",
+                        {{"item", QJsonObject{{"id", "send"},
+                                              {"type", "dynamicToolCall"},
+                                              {"tool", "mcp__ketplus_agents__agents_send"},
+                                              {"status", "completed"}}}}) > 0);
+            QCOMPARE(journal.activitySummaryEvent(last(journal, read))
+                         .value("payload")
+                         .toObject()
+                         .value("count")
+                         .toInt(),
+                     1);
+        }
+        // As the older daemon left it: the call joined the group and no rule was applied.
+        QVERIFY(sqlite(
+            path,
+            {QString("INSERT INTO activity_items SELECT session_id,generation,turn_sequence,'send',"
+                     "first_cursor+1,last_cursor+1,group_cursor,family,0,0 FROM activity_items "
+                     "WHERE item_id='one'"),
+             "UPDATE activity_summaries SET count=count+1", "DELETE FROM activity_rules"}));
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(journal.hasPendingActivityBackfill());
+            QVERIFY(drain(journal));
+            const auto summary =
+                journal.activitySummaryEvent(last(journal, read)).value("payload").toObject();
+            QCOMPARE(summary.value("count").toInt(), 1);
+            QCOMPARE(journal.activityGroupPage("session", 1, {{"group_id", QString::number(read)}})
+                         .value("events")
+                         .toArray()
+                         .size(),
+                     1);
+        }
+        LocalJournal again(path);
+        QVERIFY(again.isOpen());
+        QVERIFY(!again.hasPendingActivityBackfill());
+    }
+
     void existingJournalBackfillsOnceWithoutChangingCanonicalEvents() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");

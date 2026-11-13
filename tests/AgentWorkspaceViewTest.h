@@ -48,6 +48,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void claudeEditOpensItsDiffInline();
     void sentAgentMessageReadsAsTheMockNote();
     void incomingAgentCardsClampAndExpand();
+    void internalStepsAreNotDrawn();
     void agentCardEvidence();
     void teamMessagesReadAsTheirBlocks();
     void teamBlockOpensItsTask();

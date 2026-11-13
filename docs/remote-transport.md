@@ -250,6 +250,17 @@ Events are the `SessionEvent` envelopes the host uploads today, from the same cl
 verify and decrypt them the way they already do. `hello` and `welcome` carry capability names, so
 later frames are gated by name like everything else.
 
+The projection marks an event the transcript never shows with `transcript: "hidden"` in its
+payload (`modules/remote/src/TranscriptVisibility.h`): KetPlus's own agents tools
+(`ketplus_agents`, `mcp__ketplus_agents__*`, or Cursor's `providerIdentifier`), and the
+`tasks.changed` background task snapshot. Desktop applies the same rule to its live view, its
+history windows and the daemon's activity groups, and clients hide those rows. The events stay in
+the journal and in the stream: the task bar still reads `tasks.changed`, and an older client that
+ignores the marker draws them as before. A journal grouped before this rule existed is grouped
+again once on open, for each session where such a call had joined a group (`activity_rules` row
+`internal_steps_hidden`, run by the bounded passes after open of ADR 0097). A large item's stub
+carries no marker; the phone hides that call by its tool name once it fetches the item.
+
 ## Resume and retry
 
 - **Events.** A client keeps a durable cursor per conversation in its cache and subscribes after it
