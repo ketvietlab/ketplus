@@ -559,6 +559,8 @@ ParseResult parseRule(const QJsonObject& object) {
                                    QStringLiteral("days lists a weekday more than once."));
                 rule.days.append(*day);
             }
+            // Monday through Sunday, so ["fri","mon"] and ["mon","fri"] are one rule.
+            std::sort(rule.days.begin(), rule.days.end());
         }
         break;
     }
@@ -664,6 +666,8 @@ QString summary(const ScheduleRule& rule) {
                                            formatClock(rule.time));
     }
     case Kind::Interval:
+        if (rule.everyHours == 1)
+            return QStringLiteral("Every hour");
         return QStringLiteral("Every %1 hours").arg(rule.everyHours);
     }
     return {};

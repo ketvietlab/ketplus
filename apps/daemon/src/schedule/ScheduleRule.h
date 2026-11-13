@@ -29,7 +29,7 @@ namespace ketplus::daemon::schedule {
 // Interval fires begin at the anchor and then every N elapsed hours; nothing before
 // the anchor is a fire. Clock times are minute precision.
 //
-// Daylight-saving gaps and folds, for ADR 0124:
+// Daylight-saving gaps and folds, for ADR 0126:
 // A civil time skipped by a spring-forward gap fires at the first valid instant
 // after the gap, the zone transition itself (02:30 in a 02:00–03:00 gap fires at
 // 03:00 local). A civil time repeated by a fall-back fold fires once, at the first
@@ -68,7 +68,7 @@ struct ScheduleRule final {
     // Clock time for daily, weekdays and weekly. For once and interval, the clock
     // half of `at` / `anchor`.
     QTime time;
-    // weekly only, Qt::DayOfWeek values (Monday = 1 … Sunday = 7), in the stored order.
+    // weekly only, Qt::DayOfWeek values (Monday = 1 … Sunday = 7), sorted Monday through Sunday.
     QList<int> days;
     // interval only. Zero on every other kind.
     int everyHours{0};
@@ -104,7 +104,8 @@ struct ParseResult final {
 [[nodiscard]] int missedRuns(const ScheduleRule& rule, const QDateTime& from, const QDateTime& to);
 
 // Short label, matching the schedules mock: "Daily 08:00", "Weekdays 09:00",
-// "Mon, Fri 17:00", "Every 4 hours", "Once · 2026-11-14 08:00".
+// "Mon, Fri 17:00", "Every 4 hours", "Once · 2026-11-14 08:00". One hour is
+// "Every hour"; every other interval stays "Every N hours".
 [[nodiscard]] QString summary(const ScheduleRule& rule);
 // The mock's live line: summary, the zone's offset at `now`, and the next fire.
 // "Daily 08:00 (GMT+7) · next: tomorrow 08:00". A rule with no next fire says

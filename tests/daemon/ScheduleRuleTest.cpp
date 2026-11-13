@@ -68,7 +68,7 @@ void ScheduleRuleTest::roundTripsEveryKind() {
     CHECK_ROUND_TRIP(R"({"kind":"weekdays","time":"09:00","time_zone":"Asia/Ho_Chi_Minh"})",
                      R"({"kind":"weekdays","time":"09:00","time_zone":"Asia/Ho_Chi_Minh"})");
     CHECK_ROUND_TRIP(R"({"kind":"weekly","days":["fri","mon"],"time":"08:00","time_zone":"UTC"})",
-                     R"({"days":["fri","mon"],"kind":"weekly","time":"08:00","time_zone":"UTC"})");
+                     R"({"days":["mon","fri"],"kind":"weekly","time":"08:00","time_zone":"UTC"})");
     CHECK_ROUND_TRIP(
         R"({"kind":"interval","every_hours":4.0,"anchor":"2026-11-13T08:00","time_zone":"UTC"})",
         R"({"anchor":"2026-11-13T08:00","every_hours":4,"kind":"interval","time_zone":"UTC"})");
@@ -91,7 +91,7 @@ void ScheduleRuleTest::roundTripsEveryKind() {
     const auto weekly =
         parsed(R"({"kind":"weekly","days":["fri","mon"],"time":"08:00","time_zone":"UTC"})");
     QVERIFY(weekly);
-    QCOMPARE(weekly->days, QList<int>({Qt::Friday, Qt::Monday}));
+    QCOMPARE(weekly->days, QList<int>({Qt::Monday, Qt::Friday}));
 }
 
 void ScheduleRuleTest::rejectsInvalidInput_data() {
@@ -435,6 +435,10 @@ void ScheduleRuleTest::summariesMatchTheMock() {
         R"({"kind":"weekly","time":"17:00","time_zone":"Asia/Ho_Chi_Minh","days":["mon","fri"]})");
     QVERIFY(weekly);
     QCOMPARE(schedule::summary(*weekly), QStringLiteral("Mon, Fri 17:00"));
+    const auto reversed = parsed(
+        R"({"kind":"weekly","time":"17:00","time_zone":"Asia/Ho_Chi_Minh","days":["fri","mon"]})");
+    QVERIFY(reversed);
+    QCOMPARE(schedule::summary(*reversed), QStringLiteral("Mon, Fri 17:00"));
     QCOMPARE(schedule::liveSummary(*weekly, clock),
              QStringLiteral("Mon, Fri 17:00 (GMT+7) · next: today 17:00"));
 
@@ -448,7 +452,7 @@ void ScheduleRuleTest::summariesMatchTheMock() {
     const auto oneHour = parsed(
         R"({"kind":"interval","every_hours":1,"anchor":"2026-11-13T08:00","time_zone":"UTC"})");
     QVERIFY(oneHour);
-    QCOMPARE(schedule::summary(*oneHour), QStringLiteral("Every 1 hours"));
+    QCOMPARE(schedule::summary(*oneHour), QStringLiteral("Every hour"));
 
     const auto once =
         parsed(R"({"kind":"once","time_zone":"Asia/Ho_Chi_Minh","at":"2026-11-14T08:00"})");
