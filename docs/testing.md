@@ -60,6 +60,24 @@ include cycles and shared byte/canonical-output limits. Fixture provenance is in
 `core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
 targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
 
+## Color scheme management UI
+
+`ketplus_scheme_library_tests` covers format dispatch, multi-variant choice,
+review-before-write and cancellation, native round-trip/export errors, catalog
+search, protected built-ins, duplication/deletion, active and preferred fallback,
+selection locks, live selection, in-memory import preview restoration and the
+shared keyboard picker. It checks both minimum/large Appearance layouts at every
+supported zoom in light/dark. `ketplus_settings_tests` retains existing settings
+contracts; `ketplus_lite_window_tests` checks command registration.
+
+For native review, run only `appearanceLayoutAndReviewCaptures` with
+`KETPLUS_SCHEME_CAPTURE_NATIVE=1` and `KETPLUS_SCHEME_CAPTURE_DIR=<output directory>`
+on the scheme library test executable (without the offscreen QPA override).
+The harness refuses to show a native window unless the secondary DELL display is
+present, sets that screen before showing, captures light/dark/report, and removes
+its isolated test profile. The normal ctest path uses offscreen rendering and does
+not open a native window.
+
 ## JetBrains importer fixtures
 
 `ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`

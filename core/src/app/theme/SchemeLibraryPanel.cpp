@@ -6,7 +6,7 @@
 #include "KetChoice.h"
 #include "KetEmptyState.h"
 #include "KetTextField.h"
-#include "ui/theme/ThemeSelection.h"
+#include "ui/Theme.h"
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -52,9 +52,8 @@ class SchemeSwatch final : public QWidget {
     QList<QColor> colors_;
 };
 } // namespace
-SchemeLibraryPanel::SchemeLibraryPanel(QString directory, QWidget* parent,
-                                       ThemeSelectionStore* selection)
-    : QWidget(parent), library_(std::move(directory)), selection_(selection) {
+SchemeLibraryPanel::SchemeLibraryPanel(QString directory, QWidget* parent, ThemeManager* theme)
+    : QWidget(parent), library_(std::move(directory)), theme_(theme) {
     setObjectName(QStringLiteral("schemeLibrary"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -101,17 +100,20 @@ SchemeLibraryPanel::SchemeLibraryPanel(QString directory, QWidget* parent,
     connect(export_, &QAbstractButton::clicked, this, &SchemeLibraryPanel::exportSelected);
     connect(duplicate_, &QAbstractButton::clicked, this, &SchemeLibraryPanel::duplicateSelected);
     connect(remove_, &QAbstractButton::clicked, this, &SchemeLibraryPanel::deleteSelected);
-    if (selection_) {
+    if (theme_) {
         preferences_ = new QWidget(this);
         layout->insertWidget(0, preferences_);
-        connect(selection_, &ThemeSelectionStore::changed, this, &SchemeLibraryPanel::syncSelection,
+        connect(theme_, &ThemeManager::themeChanged, this, &SchemeLibraryPanel::syncSelection,
                 Qt::QueuedConnection);
-        connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-                &SchemeLibraryPanel::syncSelection, Qt::QueuedConnection);
-        connect(selection_, &ThemeSelectionStore::failed, this, &SchemeLibraryPanel::showError);
-        connect(selection_, &ThemeSelectionStore::failed, this, &SchemeLibraryPanel::syncSelection,
+
+        connect(theme_, &ThemeManager::schemeFailed, this, &SchemeLibraryPanel::showError);
+        connect(theme_, &ThemeManager::schemeFailed, this, &SchemeLibraryPanel::syncSelection,
                 Qt::QueuedConnection);
-        selectedId_ = selection_->selection().schemeId;
+        selectedId_ = theme_->schemeSelection().schemeId;
+        connect(this, &SchemeLibraryPanel::previewRequested, theme_,
+                &ThemeManager::previewColorScheme);
+        connect(this, &SchemeLibraryPanel::previewFinished, theme_, &ThemeManager::cancelPreview);
+        connect(this, &QObject::destroyed, theme_, &ThemeManager::cancelPreview);
     }
     const auto resizeMetrics = [layout, toolbar, actions, scroll, this] {
         const auto& appearance = ket::Appearance::instance();
@@ -124,6 +126,8 @@ SchemeLibraryPanel::SchemeLibraryPanel(QString directory, QWidget* parent,
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, resizeMetrics);
     resizeMetrics();
     reload();
+    if (theme_)
+        syncSelection();
 }
 void SchemeLibraryPanel::reload() {
     schemes_ = library_.catalog().list();
@@ -186,7 +190,6 @@ void SchemeLibraryPanel::rebuildRows() {
     duplicate_->setEnabled(!selectedId_.isEmpty());
     remove_->setEnabled(!selectedId_.isEmpty() && !selectedId_.startsWith(u"builtin-"));
 }
-void SchemeLibraryPanel::setPreviewAvailable(bool available) { previewAvailable_ = available; }
 void SchemeLibraryPanel::showError(const QString& message) {
     notice_->setTone(ket::BannerTone::Danger);
     notice_->setTitle(tr("Color scheme error"));

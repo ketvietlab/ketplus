@@ -9,18 +9,17 @@ class Button;
 class TextField;
 } // namespace ket
 namespace ketplus {
-class ThemeSelectionStore;
+class ThemeManager;
 // Catalog management is independent of the host's committed/preview theme state.
 class SchemeLibraryPanel final : public QWidget {
     Q_OBJECT
   public:
     explicit SchemeLibraryPanel(QString directory = {}, QWidget* parent = nullptr,
-                                ThemeSelectionStore* selection = nullptr);
+                                ThemeManager* theme = nullptr);
     [[nodiscard]] QString selectedId() const { return selectedId_; }
     void reload();
     // Parses and opens review; useful for drag/drop and the native file chooser alike.
     void inspectFile(const QString& path);
-    void setPreviewAvailable(bool available);
   signals:
     void schemeActivated(const QString& id);
     void previewRequested(const ketplus::ColorScheme& scheme);
@@ -42,7 +41,7 @@ class SchemeLibraryPanel final : public QWidget {
     void deleteSelected();
     void showError(const QString& message);
     SchemeLibrary library_;
-    ThemeSelectionStore* selection_;
+    ThemeManager* theme_;
     QWidget* preferences_{nullptr};
     QList<ColorScheme> schemes_;
     QString selectedId_;
@@ -53,7 +52,6 @@ class SchemeLibraryPanel final : public QWidget {
     ket::Button* export_;
     ket::Button* duplicate_;
     ket::Button* remove_;
-    bool previewAvailable_{false};
     quint64 inspectionGeneration_{0};
 };
 } // namespace ketplus

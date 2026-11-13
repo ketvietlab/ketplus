@@ -1,18 +1,98 @@
+#include "KetAppearance.h"
 #include "KetBadge.h"
+#include "KetBanner.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetSelect.h"
 #include "KetTextArea.h"
 #include "KetToggle.h"
 #include "app/theme/SchemeLibraryPanel.h"
-#include "ui/theme/ThemeSelection.h"
+#include "ui/Theme.h"
+#include <QEvent>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QPointer>
 #include <QScrollArea>
+#include <QShortcut>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
 namespace ketplus {
 namespace {
+// A local preview exposes the app instead of leaving a cached native-window
+// snapshot under the report. The report continues to own both acceptance and cancellation.
+class ImportPreviewNotice final : public QObject {
+  public:
+    explicit ImportPreviewNotice(ket::Dialog* dialog)
+        : QObject(dialog), dialog_(dialog),
+          banner_(new ket::Banner(
+              ket::BannerTone::Info, {},
+              tr("Preview only. Return to the report to accept or cancel the import."),
+              dialog->parentWidget())) {
+        banner_->setObjectName(QStringLiteral("schemePreviewBanner"));
+        auto* back = banner_->setAction(tr("Return to report"));
+        connect(back, &QAbstractButton::clicked, this, [this] {
+            banner_->hide();
+            escape_->setEnabled(false);
+            dialog_->setProperty("importPreviewActive", false);
+            dialog_->open();
+        });
+        escape_ = new QShortcut(QKeySequence(Qt::Key_Escape), banner_);
+        escape_->setContext(Qt::WindowShortcut);
+        escape_->setEnabled(false);
+        connect(escape_, &QShortcut::activated, this, [this] { cancel(); });
+        back->installEventFilter(this);
+        dialog->parentWidget()->installEventFilter(this);
+        connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
+                [this] { place(); });
+        banner_->hide();
+    }
+    ~ImportPreviewNotice() override { delete banner_.data(); }
+    void show(const QString& name) {
+        dialog_->setProperty("importPreviewActive", true);
+        dialog_->hide();
+        banner_->setTitle(tr("Preview: %1").arg(name));
+        place();
+        banner_->show();
+        banner_->raise();
+        banner_->action()->setFocus();
+        escape_->setEnabled(true);
+    }
+
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (banner_ && watched == banner_->action() && event->type() == QEvent::KeyPress &&
+            static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+            cancel();
+            return true;
+        }
+        if (dialog_ && watched == dialog_->parentWidget() && event->type() == QEvent::Resize)
+            place();
+        return QObject::eventFilter(watched, event);
+    }
+
+  private:
+    void cancel() {
+        banner_->hide();
+        escape_->setEnabled(false);
+        dialog_->setProperty("importPreviewActive", false);
+        dialog_->show();
+        dialog_->reject();
+    }
+    void place() {
+        if (!dialog_ || !banner_ || !dialog_->parentWidget())
+            return;
+        const int inset = qRound(ket::Appearance::instance().scaled(16));
+        auto* window = dialog_->parentWidget();
+        const int width = qMax(0, window->width() - 2 * inset);
+        const int height = banner_->hasHeightForWidth() ? banner_->heightForWidth(width)
+                                                        : banner_->sizeHint().height();
+        banner_->setGeometry(inset, qMax(inset, window->height() - height - inset), width, height);
+    }
+    QPointer<ket::Dialog> dialog_;
+    QPointer<ket::Banner> banner_;
+    QShortcut* escape_;
+};
 QString dispositionLabel(ImportDisposition disposition) {
     switch (disposition) {
     case ImportDisposition::Mapped:
@@ -27,7 +107,11 @@ QString dispositionLabel(ImportDisposition disposition) {
 } // namespace
 void SchemeLibraryPanel::chooseVariants(const SchemeImportBatch& batch) {
     auto* dialog = new ket::Dialog(tr("Choose theme variants"), this);
-    connect(this, &QObject::destroyed, dialog, &ket::Dialog::reject);
+    connect(this, &QObject::destroyed, dialog, [dialog] {
+        if (dialog->property("importPreviewActive").toBool())
+            dialog->show();
+        dialog->reject();
+    });
     dialog->setObjectName(QStringLiteral("schemeVariants"));
     auto* body = new QWidget;
     auto* layout = new QVBoxLayout(body);
@@ -76,7 +160,11 @@ void SchemeLibraryPanel::reviewCandidates(const QList<SchemeImportCandidate>& ca
     if (candidates.isEmpty())
         return;
     auto* dialog = new ket::Dialog(tr("Review color scheme import"), this);
-    connect(this, &QObject::destroyed, dialog, &ket::Dialog::reject);
+    connect(this, &QObject::destroyed, dialog, [dialog] {
+        if (dialog->property("importPreviewActive").toBool())
+            dialog->show();
+        dialog->reject();
+    });
     dialog->setObjectName(QStringLiteral("schemeImportReport"));
     dialog->setCardWidth(640);
     auto* body = new QWidget;
@@ -86,7 +174,7 @@ void SchemeLibraryPanel::reviewCandidates(const QList<SchemeImportCandidate>& ca
     qsizetype mapped = 0, approximated = 0, skipped = 0;
     QStringList details;
     for (const auto& candidate : candidates) {
-        details.append(candidate.scheme.name);
+        details.append(candidate.scheme.name + u'\n');
         for (const auto& item : candidate.report.items) {
             if (item.disposition == ImportDisposition::Mapped)
                 ++mapped;
@@ -97,7 +185,7 @@ void SchemeLibraryPanel::reviewCandidates(const QList<SchemeImportCandidate>& ca
             details.append(
                 dispositionLabel(item.disposition) + QStringLiteral(" · ") + item.sourcePath +
                 (item.targetPath.isEmpty() ? QString{} : QStringLiteral(" → ") + item.targetPath) +
-                QStringLiteral("\n") + item.reason);
+                QStringLiteral("\n") + item.reason + u'\n');
         }
         for (const auto& diagnostic : candidate.report.diagnostics)
             details.append(diagnostic.path + QStringLiteral(": ") + diagnostic.message);
@@ -121,16 +209,20 @@ void SchemeLibraryPanel::reviewCandidates(const QList<SchemeImportCandidate>& ca
     report->setText(details.join(u'\n'));
     report->editor()->setReadOnly(true);
     layout->addWidget(report);
-    if (previewAvailable_) {
+    if (theme_) {
         auto* preview = new ket::Select(body);
         preview->setAccessibleName(tr("Preview variant"));
         for (const auto& candidate : candidates)
             preview->addItem(candidate.scheme.name);
         layout->addWidget(preview);
         auto* show = new ket::Button(tr("Preview on app"), ket::ButtonVariant::Secondary, body);
+        show->setObjectName(QStringLiteral("previewImportedScheme"));
+        auto* notice = new ImportPreviewNotice(dialog);
         layout->addWidget(show);
-        connect(show, &QAbstractButton::clicked, this, [this, candidates, preview] {
-            emit previewRequested(candidates[preview->currentIndex()].scheme);
+        connect(show, &QAbstractButton::clicked, this, [this, candidates, preview, notice] {
+            const auto& scheme = candidates[preview->currentIndex()].scheme;
+            emit previewRequested(scheme);
+            notice->show(scheme.name);
         });
     }
     dialog->setBody(body);
@@ -166,7 +258,7 @@ void SchemeLibraryPanel::reviewCandidates(const QList<SchemeImportCandidate>& ca
         dialog->accept();
         if (!selected)
             showError(tr("The schemes were imported, but could not be selected: ") +
-                      selection_->lastError());
+                      theme_->schemeError());
     });
     connect(dialog, &ket::Dialog::finished, this, [this] { emit previewFinished(); });
     connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);

@@ -3,7 +3,7 @@
 #include "KetFieldRow.h"
 #include "KetTextField.h"
 #include "app/theme/SchemeLibraryPanel.h"
-#include "ui/theme/ThemeSelection.h"
+#include "ui/Theme.h"
 #include <QFileDialog>
 #include <QLabel>
 #include <QVBoxLayout>
@@ -51,7 +51,7 @@ void SchemeLibraryPanel::duplicateSelected() {
         dialog->accept();
         if (!selected)
             showError(tr("The copy was saved, but could not be selected: ") +
-                      selection_->lastError());
+                      theme_->schemeError());
     });
     connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
     dialog->open();

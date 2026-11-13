@@ -370,14 +370,14 @@ caret-line tokens retain legacy light/dark colors and caret-line alpha, with a
 Scintilla state-parity regression test. Terminal foreground,
 background, cursor, selection and all 16 ANSI slots come from the scheme; alpha
 for RGB-only Scintilla/vterm paths is composited onto the component background.
-These entry points are tested independently; ThemeManager/host wiring remains
-pending. The temporary ket-qt PR #57 pin must be replaced with its develop merge
-commit before this integration is handed to review.
+ThemeManager publishes these complete snapshots to host adapters. Native host
+acceptance remains tracked separately. The ket-qt pin includes the develop merge
+of runtime color overrides (PR #57).
 
-## Management UI integration status
+## Managing schemes in Settings
 
-The management components in `app/theme/SchemeLibraryPanel` are being integrated
-into Settings > Appearance. They provide catalog search and source labels,
+Settings > Appearance mounts `app/theme/SchemeLibraryPanel`. It provides catalog
+search and source labels,
 scheme-color swatches, local file detection, variant selection and a detailed
 mapped/approximated/skipped report before any catalog write. Parsing runs off the
 GUI thread. Closing or cancelling review does not install a scheme; successful
@@ -387,15 +387,29 @@ only the IDs created by that operation and reports any rollback failure.
 Export uses an atomic write to `.ketscheme.json`. Built-ins cannot be deleted;
 duplication creates an independent file with a new name and identity. To change
 color values, export, edit the JSON and re-import it as a new immutable scheme.
-The selection controls consume `ThemeSelectionStore`, including separate light
-and dark preferences. A selected scheme is switched to an appropriate built-in
+The selection controls use the public ThemeManager API and its revisioned
+`ThemeSelectionStore`, including separate light and dark preferences. A selected scheme is switched to an appropriate built-in
 before its file is removed; a locked or unwritable selection prevents removal.
 
-These components are not yet mounted in Settings: full-application activation,
-import preview restoration and the command picker await the T-5 theme application
-API. The existing Appearance controls remain the active application UI until
-that binding and its integration tests are complete. Native light/dark/report
-screenshots are still pending that integration.
+Selecting a row commits its ID immediately. The system appearance checkbox uses
+independent preferred light/dark variants; leaving system mode keeps the scheme
+currently shown. After variant selection, import review shows mapped,
+approximated and skipped counts with per-key reasons. “Preview on app” temporarily
+hides the report and shows a return banner. Return to the report to accept or
+cancel, or press Escape while previewing to cancel without writing. Acceptance
+installs fresh local IDs before committing the selected installed scheme. A
+selection-write failure is reported separately from a successful catalog save.
+
+View > Appearance > Color Scheme… is also available in the command palette in
+Lite and Pro. The shared KetQt picker previews with Up/Down, commits with Enter,
+and restores committed state with Escape or backdrop dismissal. A newer external
+selection dismisses the picker and retains that committed state.
+
+Native review screenshots of the Appearance list in light/dark and the import
+report are in `docs/images/color-schemes/`. The capture harness requires the
+secondary DELL screen before showing a native window. Focused UI tests cover the
+760×650 and 1100×900 layouts at every supported zoom step in light/dark, including
+selection, preview cancellation, keyboard commit and selection-lock failures.
 
 ## Live selection API (T-5 integration in progress)
 

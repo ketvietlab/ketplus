@@ -306,6 +306,8 @@ add_library(ketplus_settings_ui STATIC
     src/app/theme/SchemeImportDialog.cpp
     src/app/theme/SchemeLibraryActions.cpp
     src/app/theme/SchemePreferences.cpp
+    src/app/theme/SchemeQuickPicker.h
+    src/app/theme/SchemeQuickPicker.cpp
     src/app/SettingsDialogTypography.cpp
     src/app/PixelSelect.cpp
     src/app/PixelSelect.h

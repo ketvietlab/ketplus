@@ -24,6 +24,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Appearance mounts a searchable canonical scheme library with source labels and
+  swatches, local import variant/review/preview, export, duplication and deletion.
+  Preferred system variants and the Lite/Pro keyboard picker use the live selection
+  API. This team branch is pending review; it is not a released acceptance claim.
+
 - Color-scheme selection now has revisioned persistence, one-time legacy migration,
   local preview/commit/cancel, independent system preferences and asynchronous
   snapshot preparation. Main-window editor/terminal/diff adapters preserve their
