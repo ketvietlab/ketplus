@@ -1092,7 +1092,7 @@ a fake future version or kills an existing daemon as an uninstall fallback.
 The daemon owns schedules that send a prompt at a time or on a recurrence, including
 while the desktop window is closed. The feature name is `schedules/1`, but
 `daemon.hello` does not advertise it until the handlers below exist.
-The shared documents are `ketplus::schedule::Schedule` and `ScheduleRun` in
+The shared documents are `ketplus::schedule::Schedule` and `Run` in
 `modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
 Wire names are snake_case. A schedule keeps its last 50 runs.
 
@@ -1120,8 +1120,47 @@ local time fires once, on the first occurrence). A team start's rule must say
 `"kind": "once"`.
 
 Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
-`has_more`, or `run`. `schedule.runNow` answers `not_implemented` until the runtime
-fires a schedule. A missing id is `schedule_not_found`.
+`has_more`, or `run`. A missing id is `schedule_not_found`. The protocol handler
+still answers `not_implemented` for `schedule.runNow` until SessionHost calls the
+runner below.
+
+### Runner
+
+`ScheduleRunner` (`apps/daemon/src/schedule/ScheduleRunner.h`) arms one timer for the
+earliest enabled `nextRunAt`. It re-arms when a schedule is created, updated, deleted
+or enabled, when a run completes, and when the clock jumps. It does not poll. The
+production alarm is a single one-shot `QTimer` capped at 60 minutes; a fire that is
+not yet due only re-arms the remainder. Tests inject the clock and the alarm.
+
+A fire within 60 seconds of `nextRunAt` is on time. On daemon start or after a wake,
+anything later follows `missed_policy`: `run_once` delivers one catch-up and `skip`
+records one run with status `missed` and error `missed`. Intermediate slots are not
+replayed. `nextRunAt` then becomes the next fire after now.
+
+Before delivery the runner asks `ScheduleRuntime` whether the target is idle.
+`busy_policy` `queue` keeps one queued run and starts it when that turn ends
+(`turnFinished` or `runFinished`). A second fire while a run is already queued does
+not add another; the slot is still consumed. `skip` records status `skipped` and
+error `busy`.
+
+The runtime seam delivers the prompt. A `conversation` target uses the stored session.
+A `new` target creates a conversation from the stored workspace, provider, model,
+effort and worktree settings. The user message the host journals is
+`scheduledUserMessage`: `text`, `schedule_id` and `run_id`. `team` and `team_start`
+use the same seam. The runner does not open the journal or call SessionHost. Storage
+and `SessionHostSchedules` plug in behind `ScheduleStore` and `ScheduleRuntime`.
+
+Provider not ready, signed out, a deleted target and a missing workspace record a
+`failed` run with `provider_not_ready`, `signed_out`, `target_deleted` or
+`workspace_missing`, and emit `schedule.run`. An unreadable rule records `invalid_rule`
+and disables the schedule so the timer cannot spin. A `once` schedule disables itself
+after a scheduled fire is consumed, including skip, miss and failure. `runNow` is an
+extra run: it ignores the rule, still honours `busy_policy`, returns the run id, and
+does not move `nextRunAt` or disable a once schedule. Every transition persists
+`nextRunAt` and `lastRunAt`.
+
+An enabled schedule with an empty `nextRunAt` gets the next future fire, or is
+disabled when a once rule has none.
 
 Schedules are created only from New conversation and New team. `created_by` is
 set by the daemon from the connection (`user`, or the agent conversation id);

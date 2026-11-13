@@ -242,4 +242,6 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/McpMediaStore.h
     src/schedule/ScheduleRule.cpp
     src/schedule/ScheduleRule.h
+    src/schedule/ScheduleRunner.cpp
+    src/schedule/ScheduleRunner.h
 )

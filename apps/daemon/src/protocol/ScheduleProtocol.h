@@ -10,6 +10,10 @@
 
 namespace ketplus::daemon::protocol {
 
+// The recurrence engine occupies ketplus::daemon::schedule, so an unqualified
+// schedule:: here would miss the documents. Pin them.
+namespace schedule = ::ketplus::schedule;
+
 // ADR 0126. Request and event names of the `schedules/1` feature. Validation
 // rejects unknown fields, an empty prompt, a missing target and unknown enum
 // values with the stable codes in ketplus::schedule. Storage and SessionHost
