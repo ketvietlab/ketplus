@@ -739,6 +739,56 @@ class DaemonActivityGroupsTest : public QObject {
         QVERIFY(deleted.deleteSession("session", 1));
         QVERIFY(!deleted.hasPendingActivityBackfill());
     }
+    // T-78: a journal grouped by an older daemon counted an agents tool call in its group. The
+    // session is grouped again once after open; the group then counts only its real steps.
+    void aJournalThatGroupedInternalStepsIsGroupedAgainOnce() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        qint64 read = 0;
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, dir.path()));
+            read = journal.appendEvent("session", 1, "item.completed", command("one", "completed"));
+            QVERIFY(read > 0);
+            QVERIFY(journal.appendEvent(
+                        "session", 1, "item.completed",
+                        {{"item", QJsonObject{{"id", "send"},
+                                              {"type", "dynamicToolCall"},
+                                              {"tool", "mcp__ketplus_agents__agents_send"},
+                                              {"status", "completed"}}}}) > 0);
+            QCOMPARE(journal.activitySummaryEvent(last(journal, read))
+                         .value("payload")
+                         .toObject()
+                         .value("count")
+                         .toInt(),
+                     1);
+        }
+        // As the older daemon left it: the call joined the group and no rule was applied.
+        QVERIFY(sqlite(
+            path,
+            {QString("INSERT INTO activity_items SELECT session_id,generation,turn_sequence,'send',"
+                     "first_cursor+1,last_cursor+1,group_cursor,family,0,0 FROM activity_items "
+                     "WHERE item_id='one'"),
+             "UPDATE activity_summaries SET count=count+1", "DELETE FROM activity_rules"}));
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(journal.hasPendingActivityBackfill());
+            QVERIFY(drain(journal));
+            const auto summary =
+                journal.activitySummaryEvent(last(journal, read)).value("payload").toObject();
+            QCOMPARE(summary.value("count").toInt(), 1);
+            QCOMPARE(journal.activityGroupPage("session", 1, {{"group_id", QString::number(read)}})
+                         .value("events")
+                         .toArray()
+                         .size(),
+                     1);
+        }
+        LocalJournal again(path);
+        QVERIFY(again.isOpen());
+        QVERIFY(!again.hasPendingActivityBackfill());
+    }
+
     void existingJournalBackfillsOnceWithoutChangingCanonicalEvents() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");

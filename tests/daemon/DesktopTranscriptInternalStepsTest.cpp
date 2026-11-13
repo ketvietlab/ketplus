@@ -62,6 +62,15 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
                                   {"tool", "mcp__ketplus_browser__browser_open"},
                                   {"status", "completed"},
                                   {"arguments", QJsonObject{{"url", "https://example.test/"}}}};
+        const QJsonObject report{
+            {"title", "Hide the steps"},
+            {"turn", 2},
+            {"version", 1},
+            {"items", QJsonArray{QJsonObject{
+                          {"key", "t-78"},
+                          {"title", "Hide the steps"},
+                          {"status", "active"},
+                          {"next", QJsonObject{{"action", "Review"}, {"owner", "user"}}}}}}};
         const QJsonArray history{
             windowEvent(id, "user.message", {{"text", "Ask the reviewer"}}, 1, 1),
             windowEvent(id, "tasks.changed", {{"tasks", QJsonArray{}}}, 2, 1),
@@ -81,13 +90,26 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
                                                                    {"from_title", "Reviewer"},
                                                                    {"body", "Looks good."}}}}},
                         8, 2),
+            // A decision card and the work report stay: they are not team plumbing.
+            windowEvent(id, "approval.requested",
+                        {{"approval_id", "a1"},
+                         {"kind", "approval"},
+                         {"request_type", "command"},
+                         {"reason", "Codex wants network access."},
+                         {"command", "curl https://example.test"},
+                         {"revision", 1}},
+                        9, 2),
+            windowEvent(id, "approval.resolved",
+                        {{"approval_id", "a1"}, {"answers", QJsonObject{{"decision", "accept"}}}},
+                        10, 2),
+            windowEvent(id, "work_report.updated", report, 11, 2),
             windowEvent(id, "item.completed",
                         {{"item", QJsonObject{{"id", "answer"},
                                               {"type", "agentMessage"},
                                               {"phase", "final_answer"},
                                               {"text", "The reviewer agreed."}}}},
-                        9, 2),
-            windowEvent(id, "turn.completed", {{"status", "completed"}}, 10, 2)};
+                        12, 2),
+            windowEvent(id, "turn.completed", {{"status", "completed"}}, 13, 2)};
         FakeDaemon daemon(
             env.directory.filePath("daemon.sock"),
             [&](const QString& type, const QJsonObject& envelope) -> QJsonObject {
@@ -98,14 +120,14 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
                                                                 {"worktree_path", path},
                                                                 {"session_generation", 1},
                                                                 {"state", "ready"},
-                                                                {"last_event_cursor", 10}}}}};
+                                                                {"last_event_cursor", 13}}}}};
                 if (type != "session.transcript_window")
                     return {};
                 Q_UNUSED(envelope);
                 return {{"transcript_window_version", 1},
                         {"session_id", id},
                         {"session_generation", 1},
-                        {"snapshot_cursor", 10},
+                        {"snapshot_cursor", 13},
                         {"projection_revision", 1},
                         {"current_turn_sequence", 2},
                         {"state", "ready"},
@@ -125,6 +147,8 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
             QStringList seen;
             bool browserRow = false;
             bool agentCard = false;
+            bool approvalCard = false;
+            bool reportCard = false;
             for (const auto& row : desktop.messages(path)) {
                 const QString text = rowText(row);
                 if (text.contains("ketplus_agents") || text.contains("agents_send") ||
@@ -134,6 +158,10 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
                 const auto map = row.toMap();
                 browserRow = browserRow || map.value("eventType") == "browser.open";
                 agentCard = agentCard || map.value("subtype") == "agentMessage";
+                approvalCard = approvalCard || (map.value("subtype") == "approval" &&
+                                                map.value("status") == "approved");
+                reportCard = reportCard ||
+                             !map.value("workReport").toMap().value("items").toList().isEmpty();
                 if (map.value("kind") == "assistant" || map.value("kind") == "user")
                     seen.append(map.value("body").toString());
             }
@@ -141,6 +169,10 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
                 return QStringLiteral("the browser step is missing");
             if (!agentCard)
                 return QStringLiteral("the agent message card is missing");
+            if (!approvalCard)
+                return QStringLiteral("the decided approval card is missing");
+            if (!reportCard)
+                return QStringLiteral("the work report card is missing");
             for (const auto& body : bodies)
                 if (!seen.contains(body))
                     return QStringLiteral("missing text: ") + body;
@@ -151,20 +183,20 @@ class DesktopTranscriptInternalStepsTest final : public QObject {
 
         // Live: a turn of internal calls around the agent's words adds only the words.
         const int before = desktop.messages(path).size();
-        daemon.push(liveEvent(id, "user.message", {{"text", "Tell the team"}}, 11, 3));
-        daemon.push(liveEvent(id, "tasks.changed", {{"tasks", QJsonArray{}}}, 12, 3));
-        daemon.push(liveEvent(id, "item.started", {{"item", sendStarted}}, 13, 3));
-        daemon.push(liveEvent(id, "item.completed", {{"item", send}}, 14, 3));
+        daemon.push(liveEvent(id, "user.message", {{"text", "Tell the team"}}, 14, 3));
+        daemon.push(liveEvent(id, "tasks.changed", {{"tasks", QJsonArray{}}}, 15, 3));
+        daemon.push(liveEvent(id, "item.started", {{"item", sendStarted}}, 16, 3));
+        daemon.push(liveEvent(id, "item.completed", {{"item", send}}, 17, 3));
         daemon.push(liveEvent(
             id, "item.completed",
-            {{"item", tool("report", "dynamicToolCall", "mcp__ketplus_agents__work_report")}}, 15,
+            {{"item", tool("report", "dynamicToolCall", "mcp__ketplus_agents__work_report")}}, 18,
             3));
         daemon.push(liveEvent(id, "item.completed",
                               {{"item", QJsonObject{{"id", "live-answer"},
                                                     {"type", "agentMessage"},
                                                     {"phase", "final_answer"},
                                                     {"text", "Sent to the team."}}}},
-                              16, 3));
+                              19, 3));
         QTRY_VERIFY(rowText(desktop.messages(path).last()).contains("Sent to the team."));
         problem = check({"Tell the team", "Sent to the team."});
         QVERIFY2(problem.isEmpty(), qPrintable(problem));
