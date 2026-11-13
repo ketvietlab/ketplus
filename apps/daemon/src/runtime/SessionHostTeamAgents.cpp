@@ -209,6 +209,19 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         return {{QStringLiteral("ok"), true}, {QStringLiteral("wakes_in_minutes"), minutes}};
     }
     if (operation == QStringLiteral("team_task_update")) {
+        // T-93: the leader renames the branch of a task not started yet, and nothing else.
+        if (role == teams::role::leader) {
+            QJsonObject changes;
+            for (const QString& key :
+                 {QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
+                if (payload.contains(key))
+                    changes.insert(key, payload.value(key));
+            if (changes.isEmpty())
+                return onlyFor(QStringLiteral("developers, on their own task, and the leader "
+                                              "renaming a branch"),
+                               operation);
+            return answer(teams_->updateTask(teamId, taskId, changes, sessionId), taskId);
+        }
         if (role != teams::role::developer)
             return onlyFor(QStringLiteral("developers, on their own task"), operation);
         const teams::Task* task = team->task(taskId);
@@ -219,8 +232,10 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             return refusal(QStringLiteral("not_owner"),
                            QStringLiteral("%1 is not your task.").arg(taskId));
         QJsonObject changes;
+        // A branch rename reaches the rules, which keep it for the leader.
         for (const QString& key :
-             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met")})
+             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met"),
+              QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
             if (payload.contains(key))
                 changes.insert(key, payload.value(key));
         if (!changes.isEmpty())
@@ -247,7 +262,9 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
              .criteria = strings(payload.value(QStringLiteral("criteria"))),
              .repository = payload.value(QStringLiteral("repository")).toString(),
-             .integrationBranch = payload.value(QStringLiteral("integration_branch")).toString()},
+             .integrationBranch = payload.value(QStringLiteral("integration_branch")).toString(),
+             .branchType = payload.value(QStringLiteral("branch_type")).toString(),
+             .branchSlug = payload.value(QStringLiteral("branch_slug")).toString()},
             sessionId, &created);
         return answer(result, created);
     }

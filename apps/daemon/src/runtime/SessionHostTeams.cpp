@@ -171,6 +171,10 @@ void SessionHost::loadTeams() {
     teams_->load();
     if (!teams_->isLoaded())
         return;
+    // T-93 (review L1): list each team's branches now, so a new task's name is checked against
+    // them from its first creation.
+    for (const teams::Team* team : teams_->teams())
+        (void)branchTaken(team->repository, QString());
     // T-26: earlier builds titled a member from its first agent message, so the conversation
     // read "[KetPlus agent message]". Only that shape is repaired; a user's rename stays.
     for (const teams::Team* team : teams_->teams()) {

@@ -331,6 +331,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
+    teamBranchNames_.setMaxThreadCount(1);
     teamRemote_.setMaxThreadCount(1);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {

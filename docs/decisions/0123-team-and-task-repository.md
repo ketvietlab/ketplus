@@ -1,6 +1,7 @@
 # ADR 0123: A team's repository can change, and a task can work in its own
 
-Status: accepted (2026-11-13). Amends ADR 0114 (open point 1, §6 and §10) and ADR 0118.
+Status: accepted (2026-11-13), §9 added by T-93 the same day. Amends ADR 0114 (open point 1,
+§6 and §10) and ADR 0118.
 
 ## Context
 
@@ -63,6 +64,39 @@ repositories had the same problem for single tasks.
    worktree and the member is pointed at it. A developer that still had to change another
    worktree hands the task to review with that `pull_request` and `head_commit` (ADR 0118)
    and names the worktree in the note; the developer instructions say so.
+9. **A task's branch says what it is (T-93).** A new task's branch is `<type>/<slug>-t<n>`
+   and its worktree `<repository>-<type>-<slug>-t<n>` beside the repository, where `<n>` is
+   the task's number and `<type>` one of `feat`, `fix`, `chore`, `docs`, `refactor` and
+   `test`. `team_task_create` (and the desktop's `team.task.create`) take optional
+   `branch_type` and `branch_slug`; what is not given is read from the title: the type from
+   its first word (`fix`, `docs`, `sửa`, `lỗi`, ...) or a word that names a defect (`bug`,
+   `crash`, ...), else `feat`; the slug from its words with Vietnamese diacritics removed
+   (`đ` is `d`), lower case, joined by `-`, without stop words (English, and Vietnamese
+   matched with their diacritics so `đăng` is not `đang`), numbers, task ids, a leading type
+   word and bracketed asides, cut at a word boundary to 40 characters, `task` when nothing is
+   left. A named slug is lower-case letters and digits in words joined by single hyphens, at
+   most 40 characters; the whole name must pass the rules of `git check-ref-format`. A name
+   that is a local branch or a remote-tracking branch of origin in the task's repository, or
+   the branch (made or planned) of any team's task in that repository, or that clashes with
+   one of those as a folder (`feat` against `feat/cart-t1`, which git refuses), is refused with
+   `branch_taken`. Nothing is fetched, and no git runs on the event loop: the runtime checks
+   against its last listing of the repository's branches (one `git for-each-ref` on a thread
+   of its own, asked again when older than 30 seconds while the old listing still answers).
+   Each team's repository is listed when the teams load. A repository not listed yet (a task's
+   own repository, or the team's right after it moves) cannot be checked at once: the name is
+   accepted and the task's history says it was not checked yet. The worktree's creation always
+   checks git again and says how to rename. The slug is read from the title in the title's
+   language, so a Vietnamese title gives a Vietnamese slug without diacritics
+   (`fix/dang-nhap-ios-t1`); a leader who wants English branch names gives `branch_slug`, and
+   the leader's instructions ask for that when the title is not English. The task stores `branch_type` and `branch_slug`; its `branch` is still empty
+   until the worktree is made and is what desktop and phone show, as before. The leader (or
+   the user, through `team.task.update`) renames it with `team_task_update {branch_type,
+   branch_slug}` only while the task has no branch (`branch_started` after); a rename is a
+   `branch` entry in the task's history. A title change does not rename it. Tasks created
+   before keep no slug and the old `team/<id>/t-<n>` and `<repository>-team-<id>-t-<n>`;
+   pull request detection reads the task's pull request URL and the merge check, auto-close,
+   merge and cleanup read the task's stored `branch` and `worktree`, so both names go through
+   the same lifecycle.
 
 Members are not moved when the team moves: a conversation that joins later must work in the
 team's current repository, as ADR 0114 requires, and a member's next task points it at that
@@ -79,6 +113,11 @@ task's worktree.
   `conversationRepository` does when a member joins.
 
 ## Alternatives considered
+
+- **Renaming a started branch (T-93).** Rejected: the branch is pushed and named by its pull
+  request; a rename there is a git and GitHub operation the developer owns.
+- **Keeping `team/<id>/t-<n>` (T-93).** Rejected: a list of pull requests and branches across
+  teams said nothing about the work, and the same task numbers repeated between teams.
 
 - **Moving open tasks with the team.** Rejected: their worktrees and branches live in the old
   repository; moving them means recreating branches or force-resetting, which loses work and

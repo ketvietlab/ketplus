@@ -54,6 +54,8 @@ Task taskFromJson(const QJsonObject& json) {
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
     task.repository = json.value(QStringLiteral("repository")).toString();
     task.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
+    task.branchType = json.value(QStringLiteral("branch_type")).toString();
+    task.branchSlug = json.value(QStringLiteral("branch_slug")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
@@ -332,6 +334,11 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
     if (!task.repository.isEmpty()) {
         json.insert(QStringLiteral("repository"), task.repository);
         json.insert(QStringLiteral("integration_branch"), task.integrationBranch);
+    }
+    // T-93: sent only for a task named the new way.
+    if (!task.branchSlug.isEmpty()) {
+        json.insert(QStringLiteral("branch_type"), task.branchType);
+        json.insert(QStringLiteral("branch_slug"), task.branchSlug);
     }
     if (withHistory) {
         QJsonArray history;
