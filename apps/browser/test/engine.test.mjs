@@ -204,3 +204,27 @@ test("Settings probe follows engine selection and never installs a browser", asy
   assert.equal((await probeEngine({ env: { KETPLUS_BROWSER_ENGINE: "invalid" }, probes })).available, false);
   assert.ok(!probes.calls.some((call) => call.startsWith("install:")));
 });
+
+test("package-runtime rejects a different target architecture before staging", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ketplus-cross-runtime-"));
+  try {
+    const out = path.join(root, "runtime");
+    const target = `darwin-${process.arch === "arm64" ? "x64" : "arm64"}`;
+    const result = spawnSync(process.execPath, [path.join(appDir, "scripts/package-runtime.mjs"),
+      "--out", out, "--platform", target, "--offline"], {
+      encoding: "utf8", timeout: 10000,
+      env: { PATH: process.env.PATH, HOME: os.homedir() },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Cross-staging is not supported/);
+    assert.equal(fs.existsSync(out), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

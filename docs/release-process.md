@@ -119,6 +119,79 @@ notes before creating an archive. Existing archive or notes destinations, includ
 dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight
 does not make artifact generation transactional or safe for concurrent writers.
 
+### Two-architecture Pro macOS release
+
+Produce separate arm64 and x86_64 DMGs, never combine a single-architecture Node
+runtime into a universal app. Each architecture has its own worktree-owned build
+and staging directory. Use a Qt SDK and OpenSSL with the requested architecture;
+Apple Silicon Homebrew libraries alone cannot satisfy an Intel link. Browser
+runtime staging executes the target Node and npm; a cross-build must use a
+build-host Node of the target architecture (for example x64 Node under Rosetta
+via `KETPLUS_NODE_EXECUTABLE`) or a matching `KETPLUS_BROWSER_RUNTIME_DIR`.
+The staging command passes the target platform explicitly and refuses a host
+architecture mismatch instead of silently bundling host Node.
+
+```sh
+cmake -S . -B "$BUILD_ROOT/arm64" -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_TESTS=OFF \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 -DKETPLUS_BUNDLE_BROWSER_RUNTIME=ON \
+  -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_CONTROL_URL=https://api.ketplus.app
+nice -n 10 cmake --build "$BUILD_ROOT/arm64" --target package --parallel 3
+```
+
+Repeat with a separate `x86_64` build directory and architecture-compatible SDKs.
+Builds may run in parallel without a resource or build-slot gate. Keep a dedicated
+worktree and build directory per task, outside temporary directories; remove only
+that task's intermediate artifacts after verification. Verify `lipo -archs` on the app, daemon
+and bundled browser Node, and run each daemon's `--build-info`: `control_url` must
+be the intended production URL above. Do not launch an app until native settings
+isolation is proved as described in testing.md.
+
+The `pro-macos-release` CI matrix builds unsigned artifacts on native `macos-15`
+(arm64) and `macos-15-intel` (x86_64). Native Intel avoids cross-linking arm64
+Homebrew OpenSSL; macOS 13 is retired. Both use Qt 6.11.1 and explicit CMake
+architectures, with the browser runtime enabled. CI produces per-arch unsigned
+handoff artifacts only, never signed distributions or published feeds. The runner
+labels are documented in the [official runner image table](https://github.com/actions/runner-images/blob/main/README.md).
+
+Signing is an owner-controlled local stage. All input/output paths must be absolute;
+the signing script refuses relative paths before creating output. Select an existing
+Developer ID Application identity for team `J9MRAQR8W3`. If the notary profile or
+credentials are absent, stop and ask the release owner; never create or enter Apple
+credentials. After explicit owner authorization, the absolute-path command is:
+
+```sh
+packaging/macos/sign-notarize-dmg.sh --app "$ABSOLUTE_STAGED_APP" \
+  --output "$ABSOLUTE_SIGNED_APP" \
+  --identity "Developer ID Application: <owner> (J9MRAQR8W3)" \
+  --notary-profile "$EXISTING_NOTARY_PROFILE"
+```
+
+For each final app/DMG, verify `codesign -dv` reports the intended TeamIdentifier,
+`codesign --verify --deep --strict`, `spctl -a -vv` and `xcrun stapler validate`.
+Launch only disposable QA copies with an IniFormat hook or a separate OS user;
+verify Intel on Rosetta or Intel hardware, or explicitly record the limitation.
+Never replace the installed app or write its real preference domain.
+
+Updates use separate `<channel>/arm64/appcast.xml` and
+`<channel>/x86_64/appcast.xml` directories and matching download prefixes. Test both
+with a throwaway QA EdDSA key and localhost feeds, including wrong-architecture
+refusal, before any production-key operation. Keep QA keys outside the checkout,
+never publish QA artifacts, and never upload a release or feed without the owner's
+separate go-ahead. A successful local build is not signing, notarization or release
+approval; record those gates independently.
+
+`python3 tests/packaging/test_qa_arch_feeds.py` exercises real throwaway Ed25519
+signatures over synthetic archive bytes for both scoped feeds, checks cross-arch
+feed refusal and tampered/unsigned/wrong-key refusal. It invokes OpenSSL and the
+release policy only, without a server or client. This is a producer/crypto fixture,
+not evidence of a complete Sparkle N-to-N+1 update or a signed/notarized DMG.
+The real isolated localhost client QA remains a separate release gate.
+If a QA entry point or driver stands in for the UI, record how that binary differs
+from the shipping app. Verify the deployed production bundle independently; the
+owner still performs a manual Check for Updates on the signed Pro build before
+distribution.
+
 ### Preparing a scoped macOS update
 
 `publish-update.sh` defaults to `--mode release`: strict code-signature verification,
@@ -163,6 +236,10 @@ remains an owner-operated pre-release check.
 Packaging is not complete yet. Passing CI is necessary but does not by itself
 authorize distribution of an official binary.
 
+The DMG filename follows `CMAKE_OSX_ARCHITECTURES`, including when the build host
+has a different architecture. Verify the filename against the app, daemon and
+browser Node slices; the host processor is not evidence of the target slice.
+
 The unsigned package layout is available through the CMake `package` target as
 a branded drag-to-Applications DMG with a deterministic Finder layout that does
 not require Automation permission during packaging. It installs the per-user
@@ -184,9 +261,10 @@ the first launch waits on an online lookup and a scan of every bundled file
 enough to be reported as not responding.
 
 ```bash
-packaging/macos/sign-notarize-dmg.sh --dmg build/release/KetPlus-<version>-arm64.dmg \
-    --identity "Developer ID Application: <team name> (<team id>)" \
-    --notary-profile ketplus-notary
+packaging/macos/sign-notarize-dmg.sh --dmg "$ABSOLUTE_UNSIGNED_DMG" \
+    --output "$ABSOLUTE_SIGNED_DMG" \
+    --identity "Developer ID Application: <team name> (J9MRAQR8W3)" \
+    --notary-profile "$EXISTING_NOTARY_PROFILE"
 ```
 
 The same tool accepts `--app <staged>/KetPlus.app --output <signed>/KetPlus.app`

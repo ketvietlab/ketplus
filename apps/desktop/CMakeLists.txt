@@ -466,7 +466,8 @@ if(APPLE)
                 OUTPUT "${ketplus_browser_runtime_stamp}" "${ketplus_browser_runtime_stage}/runtime.json"
                 COMMAND "${KETPLUS_NODE_EXECUTABLE}"
                     "${ketplus_browser_app_dir}/scripts/package-runtime.mjs"
-                    --out "${ketplus_browser_runtime_stage}" ${ketplus_node_cache_argument}
+                    --out "${ketplus_browser_runtime_stage}"
+                    --platform "${ketplus_browser_runtime_platform}" ${ketplus_node_cache_argument}
                 COMMAND "${CMAKE_COMMAND}" -E touch "${ketplus_browser_runtime_stamp}"
                 DEPENDS
                     "${ketplus_browser_app_dir}/scripts/package-runtime.mjs"

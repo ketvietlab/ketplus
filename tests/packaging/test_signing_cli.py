@@ -1,6 +1,8 @@
 """Exercise replacement signing without certificates, Apple services or provider calls."""
 import json
 import os
+import plistlib
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -80,6 +82,18 @@ elif "--entitlements" in args:
         self.assertEqual((self.source / "Contents/MacOS/KetPlus").read_bytes(),
                          (self.output / "Contents/MacOS/KetPlus").read_bytes())
 
+    def test_rejects_relative_app_before_copying(self):
+        result = self.run_sign(extra=("--app", "relative.app"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("absolute paths", result.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_rejects_relative_output_before_copying(self):
+        result = self.run_sign(extra=("--output", "relative.app"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("absolute paths", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_rejects_ad_hoc_identity_before_copying(self):
         result = self.run_sign(identity="-")
         self.assertNotEqual(result.returncode, 0)
@@ -141,6 +155,42 @@ elif args[0] == "detach":
         self.assertEqual(calls[-1][-1], str(output))
         self.assertIn("--timestamp", calls[-1])
         self.assertEqual(calls[-1][calls[-1].index("--sign") + 1], IDENTITY)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "ad-hoc Mach-O signing requires macOS")
+class DeployedAdhocSigningTest(unittest.TestCase):
+    def test_unsigned_intel_helper_is_sealed_before_outer_bundle(self):
+        with tempfile.TemporaryDirectory(prefix="ketplus-adhoc-test-") as directory:
+            root = Path(directory)
+            app = root / "Fixture.app"
+            contents = app / "Contents"
+            (contents / "MacOS").mkdir(parents=True)
+            (contents / "Helpers").mkdir()
+            (contents / "Info.plist").write_bytes(plistlib.dumps({
+                "CFBundleExecutable": "Fixture", "CFBundleIdentifier": "dev.ketplus.tests.adhoc",
+                "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
+            }))
+            source = root / "fixture.c"
+            source.write_text("int main(void) { return 0; }\n")
+            binary = contents / "MacOS/Fixture"
+            result = subprocess.run(["/usr/bin/clang", "-arch", "x86_64",
+                                     "-Wl,-no_adhoc_codesign", str(source), "-o", str(binary)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            helper = contents / "Helpers/ketplus_daemon"
+            shutil.copy2(binary, helper)
+            self.assertNotEqual(subprocess.run(["/usr/bin/codesign", "--verify", str(helper)],
+                                               capture_output=True).returncode, 0)
+            script = SCRIPT.parent / "SignDeployedFrameworks.cmake"
+            for _ in range(2):
+                result = subprocess.run(["cmake", "-DKETPLUS_APP_BUNDLE=" + str(app), "-P", str(script)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                result = subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run(["/usr/bin/codesign", "-dv", str(app)], capture_output=True, text=True)
+            self.assertIn("Signature=adhoc", result.stderr)
 
 
 if __name__ == "__main__":
