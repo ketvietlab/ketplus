@@ -374,3 +374,21 @@ conversations, completes an approval round-trip, pages a transcript,
 reconnects after a Desktop restart as the same machine, and reports a host
 without the daemon. Like the tunnel tests, it skips where `sshd` cannot run as
 the user.
+
+## Consented installation
+
+Connections handles a verified missing daemon through ADR 0124. Review of a
+signed release is separate from consent to install; neither host-key acceptance
+nor a retry installs software. The release is pinned to the desktop version,
+verified with a build-pinned Ed25519 public key, then checked by SHA-256 before
+upload through an immutable SSH trust snapshot. The default release key is
+unset, so production shows **no trusted release channel** and downloads nothing.
+
+Managed runtime, activation and receipt live under `~/.local/opt/ketplus`.
+Startup is an explicitly consented user process, with no sudo or automatic
+login service. Details → Manage daemon offers a signed newer upgrade, an
+explicit Start for a stopped managed daemon, and an idle-only Uninstall that
+retains user data. Custom/manual daemons or user services are not adopted.
+The remote transaction commits only after the authenticated daemon connection;
+otherwise it rolls back. See ADR 0124 for the publisher and recovery contract,
+and `testing.md` for the isolated Linux proof.

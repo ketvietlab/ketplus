@@ -101,6 +101,16 @@ class SshTunnel : public QObject {
     // Reconnects scheduled since the last Connected state.
     [[nodiscard]] int reconnectAttempts() const { return reconnects_; }
 
+    // ADR 0124: installer calls retain the verified destination and an immutable trust
+    // snapshot. No caller can request a permissive SSH invocation. `trustFile` is in the
+    // installer's private temporary directory and must outlive the returned process args.
+    [[nodiscard]] QStringList installationArguments(const QString& command,
+                                                    const QString& trustFile);
+    [[nodiscard]] QString sshProgram() const { return options_.sshProgram; }
+    [[nodiscard]] QString targetAlias() const { return target_.alias; }
+    [[nodiscard]] quint64 connectionGeneration() const { return generation_; }
+    void holdForInstallation();
+
   signals:
     void stateChanged(ketplus::remote::ssh::SshTunnel::State state);
 
@@ -145,6 +155,7 @@ class SshTunnel : public QObject {
     int reconnects_{0};
     // The forwarder has passed daemon bytes in this attempt.
     bool carried_{false};
+    bool installationHeld_{false};
     std::unique_ptr<QTemporaryDir> work_;
     QPointer<QProcess> step_;
     QPointer<QProcess> forwarder_;

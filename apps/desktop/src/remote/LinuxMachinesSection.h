@@ -59,7 +59,7 @@ class LinuxMachinesSection final : public QWidget {
     friend class LinuxMachines;
     void render();
     void setNotice(const QString& message, bool error = false);
-    void openConnectCard(const QString& sshHost);
+    void openConnectCard(const QString& sshHost, bool manageDaemon = false);
     void connectMachines();
     void showEvent(QShowEvent* event) override;
 
