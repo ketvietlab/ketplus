@@ -13,6 +13,7 @@
 #include "KetStyle.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "app/AgentWorktreeDialog.h"
 #include "teams/TeamAgentDialog.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
@@ -590,6 +591,24 @@ class TeamDialogsTest final : public QObject {
         QVERIFY(!dialog->findChild<ket::Button*>("addMemberButton")->isEnabled());
         QVERIFY(form5->hint().contains("five"));
         dialog->reject();
+    }
+
+    // T-89: the window lets one Add member dialog open at a time; closing it lets the next open.
+    void aClosedAddMemberDialogDoesNotHoldTheNextOne() {
+        const QVariantList& models = bothProviders;
+        QWidget window;
+        window.resize(1024, 640);
+        window.show();
+        QVERIFY(!agentDialogOpen(&window, QStringLiteral("addMemberDialog")));
+        auto* first = AddMemberForm::present(&window, teams_.get(), team(1), models);
+        QVERIFY(first);
+        QVERIFY(agentDialogOpen(&window, QStringLiteral("addMemberDialog")));
+        first->reject();
+        QTRY_VERIFY(!agentDialogOpen(&window, QStringLiteral("addMemberDialog")));
+        auto* second = AddMemberForm::present(&window, teams_.get(), team(1), models);
+        QVERIFY(second);
+        QVERIFY(agentDialogOpen(&window, QStringLiteral("addMemberDialog")));
+        second->reject();
     }
 
     void deletingATeamCanDeleteItsConversations() {

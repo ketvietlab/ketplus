@@ -27,6 +27,8 @@ struct SidebarTeam final {
     QString name;
     int openDecisions{0};
     bool full{false};
+    // T-89: why the branch's + takes no member (team_roles::fullReason), or empty when it can.
+    QString addRefusal;
     QVariantList members;
 
     friend bool operator==(const SidebarTeam&, const SidebarTeam&) = default;
@@ -97,6 +99,8 @@ class SidebarRepositoryList final : public QWidget {
     void newTeamRequested(const QString& repositoryPath);
     void teamRequested(const QString& teamId);
     void teamMenuRequested(const QString& teamId);
+    // T-89: the team branch's + was pressed, by mouse or keyboard, on a team with room.
+    void teamAddMemberRequested(const QString& teamId);
     void teamJoinRequested(const QString& teamId, const QString& sessionId);
 
   protected:

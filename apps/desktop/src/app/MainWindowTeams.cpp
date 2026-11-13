@@ -58,6 +58,8 @@ void MainWindow::setupTeams() {
     connect(teams_, &TeamDirectory::changed, this, [this] { scheduleSidebarRefresh(); });
     connect(list, &SidebarRepositoryList::teamRequested, this, &MainWindow::openTeam);
     connect(list, &SidebarRepositoryList::teamMenuRequested, this, &MainWindow::showTeamMenu);
+    connect(list, &SidebarRepositoryList::teamAddMemberRequested, this,
+            &MainWindow::showAddTeamMemberDialog);
     connect(list, &SidebarRepositoryList::teamJoinRequested, this, &MainWindow::joinTeam);
     connect(list, &SidebarRepositoryList::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     update();
@@ -75,6 +77,7 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
             .openDecisions = team.value(QStringLiteral("open_decisions")).toInt(),
             .full = TeamDirectory::count(team, QStringLiteral("developer")) >=
                     team_roles::maximumDevelopers,
+            .addRefusal = team_roles::fullReason(team),
         };
         QJsonArray members = team.value(QStringLiteral("members")).toArray();
         QList<QJsonObject> ordered;
