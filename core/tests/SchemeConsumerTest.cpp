@@ -3,10 +3,15 @@
 #include "terminal/TerminalSession.h"
 #include "terminal/TerminalView.h"
 #include "ui/theme/ColorScheme.h"
+#include <QDir>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QScreen>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QVBoxLayout>
 #include <QtTest>
 #include <SciLexer.h>
 #include <Scintilla.h>
@@ -29,6 +34,68 @@ class SchemeConsumerTest final : public QObject {
         QVERIFY(settings_.isValid());
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
     }
+    void nativeBuiltinComparisonOnDell() {
+        if (!qEnvironmentVariableIsSet("KETPLUS_NATIVE_SCHEME_CAPTURE_DIR"))
+            QSKIP("Explicit native DELL capture only");
+        QScreen* dell = nullptr;
+        for (auto* screen : qApp->screens())
+            if ((screen->name() + screen->model())
+                    .contains(QStringLiteral("DELL"), Qt::CaseInsensitive))
+                dell = screen;
+        QVERIFY2(dell, "A DELL display is required; no window was opened");
+        QTemporaryDir directory;
+        ThemeManager theme(*qApp, nullptr, directory.path());
+        QWidget window;
+        window.setWindowTitle(QStringLiteral("Color scheme native comparison"));
+        window.setScreen(dell);
+        window.setGeometry(
+            QRect(dell->availableGeometry().topLeft() + QPoint(50, 60), QSize(1100, 700)));
+        auto* layout = new QHBoxLayout(&window);
+        auto* left = new QVBoxLayout;
+        auto* right = new QVBoxLayout;
+        layout->addLayout(left);
+        layout->addLayout(right);
+        left->addWidget(new QLabel(QStringLiteral("Legacy baseline")));
+        right->addWidget(new QLabel(QStringLiteral("Canonical scheme")));
+        EditorWidget legacy, canonical;
+        TerminalSession first, second;
+        TerminalView oldTerminal(first), newTerminal(second);
+        left->addWidget(&legacy, 3);
+        right->addWidget(&canonical, 3);
+        left->addWidget(&oldTerminal, 1);
+        right->addWidget(&newTerminal, 1);
+        const auto code =
+            QByteArray("// Native comment and keyword parity\n#include <string>\nint main() {\n    "
+                       "const std::string name = \"ketPlus\";\n    return 42;\n}\n");
+        for (auto* editor : {&legacy, &canonical}) {
+            editor->setText(code);
+            editor->configureLexerForPath(QStringLiteral("example.cpp"));
+        }
+        first.feedOutput("\x1b[31mred\x1b[0m  \x1b[32mgreen\x1b[0m  "
+                         "\x1b[34mblue\x1b[0m\r\nterminal buffer retained");
+        second.feedOutput("\x1b[31mred\x1b[0m  \x1b[32mgreen\x1b[0m  "
+                          "\x1b[34mblue\x1b[0m\r\nterminal buffer retained");
+        const auto output = qEnvironmentVariable("KETPLUS_NATIVE_SCHEME_CAPTURE_DIR");
+        QVERIFY(QDir().mkpath(output));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCOMPARE(window.screen(), dell);
+        for (auto kind : {SchemeKind::Light, SchemeKind::Dark}) {
+            theme.setMode(kind == SchemeKind::Light ? ThemeManager::Mode::Light
+                                                    : ThemeManager::Mode::Dark);
+            const auto scheme = builtinColorScheme(kind);
+            legacy.applyTheme(theme.palette());
+            canonical.applyColorScheme(scheme);
+            oldTerminal.applyTheme(theme.palette());
+            newTerminal.applyColorScheme(scheme);
+            QTest::qWait(700);
+            const auto name =
+                kind == SchemeKind::Light ? QStringLiteral("light") : QStringLiteral("dark");
+            QVERIFY(window.grab().save(
+                QDir(output).filePath(name + QStringLiteral("-native-widgets.png"))));
+        }
+        qInfo() << "Native display" << dell->name() << dell->model();
+    }
     void roleMapping_data() {
         QTest::addColumn<QByteArray>("lexer");
         QTest::addColumn<int>("style");
@@ -39,6 +106,12 @@ class SchemeConsumerTest final : public QObject {
             << QByteArray("python") << SCE_P_COMMENTLINE << QStringLiteral("comment");
         QTest::newRow("json-string")
             << QByteArray("json") << SCE_JSON_STRING << QStringLiteral("string");
+        QTest::newRow("python-function")
+            << QByteArray("python") << SCE_P_DEFNAME << QStringLiteral("function");
+        QTest::newRow("cpp-operator")
+            << QByteArray("cpp") << SCE_C_OPERATOR << QStringLiteral("operator");
+        QTest::newRow("bash-variable")
+            << QByteArray("bash") << SCE_SH_SCALAR << QStringLiteral("variable");
     }
     void roleMapping() {
         QFETCH(QByteArray, lexer);
@@ -73,6 +146,17 @@ class SchemeConsumerTest final : public QObject {
             const auto legacy = state();
             editor.applyColorScheme(scheme);
             QCOMPARE(state(), legacy);
+        }
+    }
+    void builtinsRetainLexerFontDefaults() {
+        for (const auto kind : {SchemeKind::Light, SchemeKind::Dark}) {
+            const auto scheme = builtinColorScheme(kind);
+            const auto cpp = lexillaSchemeStyles("cpp", scheme);
+            const auto python = lexillaSchemeStyles("python", scheme);
+            QVERIFY(cpp[SCE_C_WORD].bold);
+            QVERIFY(cpp[SCE_C_COMMENT].italic);
+            QVERIFY(python[SCE_P_DEFNAME].bold);
+            QVERIFY(python[SCE_P_COMMENTLINE].italic);
         }
     }
     void editorPreservesDocumentAndUndo() {

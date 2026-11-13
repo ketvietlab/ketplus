@@ -56,6 +56,8 @@ add_library(ketplus_ui STATIC
     src/ui/theme/ThemeSchemeController.h
     src/ui/theme/ColorSchemeKitAdapter.cpp
     src/ui/theme/ColorSchemeKitAdapter.h
+    src/ui/theme/SchemeDocumentSyntax.cpp
+    src/ui/theme/SchemeDocumentSyntax.h
     src/ui/InterfaceZoom.h
     src/ui/TypeScale.h
     src/ui/KetFonts.cpp
@@ -534,6 +536,12 @@ if(KETPLUS_CM_BUILD_TESTS)
             add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
         endif()
     endfunction()
+
+    add_executable(ketplus_scheme_rendering_tests tests/SchemeRenderingTest.cpp)
+    target_link_libraries(ketplus_scheme_rendering_tests PRIVATE Qt6::Test ketplus_preview)
+    ketplus_enable_warnings(ketplus_scheme_rendering_tests)
+    ketplus_cm_add_test(ketplus_scheme_rendering_tests ketplus_scheme_rendering_tests)
+    set_tests_properties(ketplus_scheme_rendering_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_scheme_manager_tests tests/SchemeManagerTest.cpp)
     target_link_libraries(ketplus_scheme_manager_tests PRIVATE Qt6::Test ketplus_ui)

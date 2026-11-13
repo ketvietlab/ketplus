@@ -2,6 +2,8 @@
 
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
+#include "ui/theme/SchemeDocumentSyntax.h"
+#include <QCryptographicHash>
 
 #include "KetButton.h"
 #include "KetChrome.h"
@@ -280,12 +282,27 @@ void MarkdownPreviewPane::setSource(const QString& markdown, const QString& file
     renderTimer_->start();
 }
 
+void MarkdownPreviewPane::applyColorScheme(const ColorScheme& scheme) {
+    const auto resolved = resolveColorScheme(scheme);
+    if (scheme_ && *scheme_ == resolved)
+        return;
+    scheme_ = std::make_shared<const ColorScheme>(resolved);
+    mermaidRenderer_->invalidateColors();
+    palette_ = colorSchemePalette(resolved);
+    if (hasSource_)
+        renderTimer_->start(0);
+    else
+        applyDocumentStyle();
+}
+
 void MarkdownPreviewPane::setEmbedded(const bool embedded) { header_->setVisible(!embedded); }
 
 void MarkdownPreviewPane::showEmpty(const ThemePalette& palette) {
     renderTimer_->stop();
     palette_ = palette;
     hasSource_ = false;
+    renderedMarkdown_.clear();
+    renderedFilePath_.clear();
     markdown_.clear();
     filePath_.clear();
     browser_->setImages({});
@@ -323,7 +340,10 @@ void MarkdownPreviewPane::renderNow() {
     const int oldValue = browser_->verticalScrollBar()->value();
     const double scrollRatio = oldMaximum > 0 ? static_cast<double>(oldValue) / oldMaximum : 0.0;
 
+    const auto cursor = browser_->textCursor();
     PreparedDocument prepared = prepareDocument();
+    for (auto it = prepared.images.cbegin(); it != prepared.images.cend(); ++it)
+        browser_->document()->addResource(QTextDocument::ImageResource, it.key(), it.value());
     browser_->setImages(std::move(prepared.images));
     diagramFiles_ = std::move(prepared.diagramFiles);
     browser_->document()->setBaseUrl(
@@ -334,11 +354,27 @@ void MarkdownPreviewPane::renderNow() {
     applyDocumentStyle();
     auto markdownFeatures = QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub);
     markdownFeatures.setFlag(QTextDocument::MarkdownNoHTML);
-    browser_->document()->setMarkdown(prepared.markdown, markdownFeatures);
+    const bool rebuild = renderedMarkdown_ != prepared.markdown || renderedFilePath_ != filePath_;
+    if (rebuild) {
+        browser_->document()->setMarkdown(prepared.markdown, markdownFeatures);
+        renderedMarkdown_ = prepared.markdown;
+        renderedFilePath_ = filePath_;
+    }
     applyBlockTypography();
     linkMermaidImages();
+    if (scheme_) {
+        const auto base = builtinColorScheme(
+            scheme_->extends == u"builtin-dark" ? SchemeKind::Dark : SchemeKind::Light);
+        // Existing built-in previews were plain monospace. Enable code-role
+        // formatting only when a custom syntax set actually differs.
+        applySchemeDocumentSyntax(browser_->document(), *scheme_, scheme_->syntax != base.syntax);
+    }
     updateDocumentMargin();
     browser_->document()->setLayoutEnabled(true);
+    if (!rebuild) {
+        browser_->setTextCursor(cursor);
+        browser_->document()->markContentsDirty(0, browser_->document()->characterCount());
+    }
 
     if (prepared.rendererUnavailable) {
         setNotice(QStringLiteral("Mermaid preview needs mmdc. Install it with: "
@@ -383,14 +419,19 @@ MarkdownPreviewPane::PreparedDocument MarkdownPreviewPane::prepareDocument() {
         const QString source =
             lines.mid(lineIndex + 1, closingLine - lineIndex - 1).join(QLatin1Char('\n'));
         const MermaidRenderer::Result result = mermaidRenderer_->request(source, palette_.dark);
-        if (result.state == MermaidRenderer::State::Ready) {
-            const QUrl url = diagramUrl(result.cacheKey);
-            const QImage image = renderSvg(result.filePath);
+        const auto logicalKey = QString::fromLatin1(
+            QCryptographicHash::hash(source.toUtf8(), QCryptographicHash::Sha256).toHex());
+        const auto file = result.state == MermaidRenderer::State::Ready
+                              ? result.filePath
+                              : diagramFiles_.value(logicalKey);
+        if (!file.isEmpty()) {
+            const QUrl url = diagramUrl(logicalKey);
+            const QImage image = renderSvg(file);
             if (!image.isNull()) {
                 prepared.images.insert(url, image);
-                prepared.diagramFiles.insert(result.cacheKey, result.filePath);
+                prepared.diagramFiles.insert(logicalKey, file);
                 output.append(QStringLiteral("[![Mermaid diagram](<%1>)](<%2>)")
-                                  .arg(url.toString(), diagramOpenUrl(result.cacheKey).toString()));
+                                  .arg(url.toString(), diagramOpenUrl(logicalKey).toString()));
             } else {
                 prepared.rendererError = QStringLiteral("mmdc produced an unreadable SVG");
                 output.append(lines.mid(lineIndex, closingLine - lineIndex + 1));

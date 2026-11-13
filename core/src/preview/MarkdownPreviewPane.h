@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QUrl>
 #include <QWidget>
+#include <memory>
 
 class QLabel;
 class QResizeEvent;
@@ -24,6 +25,7 @@ class MarkdownPreviewPane final : public QWidget {
 
     void setSource(const QString& markdown, const QString& filePath, const ThemePalette& palette);
     void setEmbedded(bool embedded);
+    void applyColorScheme(const ColorScheme& scheme);
     void showEmpty(const ThemePalette& palette);
     void setTypography(int fontSizePixels, int lineHeightPixels);
 
@@ -62,6 +64,9 @@ class MarkdownPreviewPane final : public QWidget {
     QString filePath_;
     QString lastStatusMessage_;
     ThemePalette palette_;
+    std::shared_ptr<const ColorScheme> scheme_;
+    QString renderedMarkdown_;
+    QString renderedFilePath_;
     QHash<QString, QString> diagramFiles_;
     bool hasSource_{false};
     int fontSizePixels_{15};

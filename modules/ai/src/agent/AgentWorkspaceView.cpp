@@ -3,6 +3,7 @@
 #include "KetTokens.h"
 #include "agent/AgentMessageFormatter.h"
 #include "preview/MermaidRenderer.h"
+#include "ui/theme/ColorScheme.h"
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -157,8 +158,10 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-            [this] { applyTheme(currentThemePalette()); });
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this, [this] {
+        if (!colorScheme_)
+            applyTheme(currentThemePalette());
+    });
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             &AgentWorkspaceView::documentStyleChanged);
     // Bootstrap from the same semantic palette as Widgets; no second hard-coded theme.
@@ -281,21 +284,37 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
 
 void AgentWorkspaceView::applyTheme(const ThemePalette& palette,
                                     const int /*interfaceFontSizePixels*/) {
+    colorScheme_.reset();
+    applyDocumentPalette(palette);
+}
+
+void AgentWorkspaceView::applyDocumentPalette(const ThemePalette& palette, bool forceSyntax) {
     // Appearance owns theme/zoom for both Widgets and Quick. The host retains only
     // user font preferences and the palette needed by the HTML/Mermaid renderer.
     const QString family = configuredMonoFontFamily();
-    if (themeApplied_ && palette == mermaidPalette_ && family == monoFontFamily_)
+    if (!forceSyntax && themeApplied_ && palette == mermaidPalette_ && family == monoFontFamily_)
         return;
     themeApplied_ = true;
     const bool fontChanged = family != monoFontFamily_;
     monoFontFamily_ = family;
     mermaidPalette_ = palette;
+    mermaidRenderer_->invalidateColors();
     ++mermaidRevision_;
     emit mermaidChanged();
     view_->setColor(ket::Tokens::color(u"page-bg", ket::Appearance::instance().theme()));
     if (fontChanged)
         emit monoFontFamilyChanged();
     emit documentStyleChanged();
+}
+
+void AgentWorkspaceView::applyColorScheme(const ColorScheme& scheme,
+                                          const int interfaceFontSizePixels) {
+    const auto resolved = resolveColorScheme(scheme);
+    const bool syntaxChanged = !colorScheme_ || colorScheme_->syntax != resolved.syntax ||
+                               colorScheme_->editor != resolved.editor;
+    Q_UNUSED(interfaceFontSizePixels);
+    colorScheme_ = std::make_shared<const ColorScheme>(resolved);
+    applyDocumentPalette(colorSchemePalette(resolved), syntaxChanged);
 }
 
 void AgentWorkspaceView::focusPrompt() {

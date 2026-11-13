@@ -226,11 +226,10 @@ It covers alpha parsing, unknown-data round trips, diagnostics, inheritance and
 explicit false flags, built-in palette parity, catalog reopen/identity/duplicate/
 remove/fallback, lock contention and failed writes. No provider is invoked.
 
-## Theme selection persistence foundation
+## Theme selection persistence
 
 `ThemeSelectionStore` owns committed selection independently of catalog contents.
-ThemeManager consumes it through a snapshot controller; remaining consumer
-integration and native acceptance are tracked in T-5. Its default file is `AppDataLocation/color-schemes/selection.json`:
+ThemeManager consumes it through a snapshot controller. Its default file is `AppDataLocation/color-schemes/selection.json`:
 
 ```json
 {
@@ -263,7 +262,7 @@ cross-instance commits, real child-process watcher propagation, lock contention,
 malformed/oversized/newer configurations and revision validation. It is a Qt Core
 only target and does not launch providers or native windows.
 
-## Consumer adapter foundation
+## Consumer adapters
 
 `EditorWidget::applyColorScheme` and `TerminalView::applyColorScheme` accept the
 canonical scheme without modifying buffers, selection or terminal process state.
@@ -275,11 +274,15 @@ caret-line tokens retain legacy light/dark colors and caret-line alpha, with a
 Scintilla state-parity regression test. Terminal foreground,
 background, cursor, selection and all 16 ANSI slots come from the scheme; alpha
 for RGB-only Scintilla/vterm paths is composited onto the component background.
-These entry points are tested independently; ThemeManager/host wiring remains
-pending. The temporary ket-qt PR #57 pin must be replaced with its develop merge
-commit before this integration is handed to review.
+The main-window hosts pass canonical snapshots to these consumers. Reserved
+built-ins retain legacy per-lexer bold/italic defaults; imported/custom schemes
+honor explicit role flags. Python definition names, lexical operators and shell/
+CSS variables use dedicated roles where the lexer exposes distinct styles. Other
+functions/constants remain deterministic lexical fallbacks, without semantic
+inference. Standalone Terminal preserves its historical page background only for
+reserved built-ins; custom schemes use their canonical terminal background.
 
-## Live selection API (T-5 integration in progress)
+## Live selection API
 
 `ThemeManager::schemeSelection()` exposes the committed `ThemeSelection`.
 `setSchemeSelection()` commits a selection through the locked, revisioned store;
@@ -313,5 +316,19 @@ sidebar/list/tab colors solely through this override table.
 Main-window editor, terminal and diff consumers use canonical snapshots in place.
 Terminal panels retain the snapshot for subsequently opened tabs. Diff background
 colors preserve imported alpha by compositing over the panel; unchanged built-ins
-keep the kit's original soft tints. Pro chat/Markdown/Mermaid and standalone
-Terminal integration, native DELL acceptance remain open. The kit is pinned to PR #57’s develop merge.
+keep the kit's original soft tints. Pro chat, Markdown/Mermaid and standalone Terminal consume live snapshots too.
+The kit is pinned to PR #57's develop merge. Fenced-code formatting shares a
+canonical document highlighter; it compares cached styles on ordinary text
+updates and rehighlights only when the scheme changes. Existing Quick roots,
+transcript models, documents and text selections remain in place.
+
+Mermaid jobs capture the full color configuration when requested; the cache key
+includes its fingerprint. Configuration JSON is prepared once per actual theme
+change, avoiding work on streaming deltas. Queued diagrams keep their captured
+colors even if a later selection is published. Markdown preview uses stable
+source-based image URLs and replaces cached image resources without rebuilding
+unchanged Markdown, preserving selection and scroll while new colors render.
+
+Native comparison on DELL P2219H covered Light/Dark editor and terminal widgets
+and Qt Quick chat. The legacy/scheme chat captures were pixel-identical in both
+modes. These are targeted color/state checks, not broader release acceptance.

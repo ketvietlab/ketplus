@@ -1,5 +1,6 @@
 #include "editor/EditorWidget.h"
 #include "editor/SyntaxRoleAdapter.h"
+#include "preview/MarkdownModeController.h"
 #include "ui/theme/ColorScheme.h"
 #include <Scintilla.h>
 #include <ScintillaMessages.h>
@@ -33,6 +34,8 @@ void EditorWidget::applyColorScheme(const ColorScheme& scheme) {
     palette.accentMuted = hex(resolved.editor.value(QStringLiteral("selection")));
     applyTheme(palette);
     colorScheme_ = std::make_shared<const ColorScheme>(resolved);
+    if (markdownPresentation_)
+        markdownPresentation_->applyColorScheme(resolved);
     const auto styles = lexillaSchemeStyles(lexerName_.toStdString(), resolved);
     for (std::size_t i = 0; i < styles.size(); ++i) {
         // Scintilla reserves these for margins, brace matching and UI, not lexer tokens.

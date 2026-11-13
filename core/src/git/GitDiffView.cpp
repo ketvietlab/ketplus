@@ -665,6 +665,7 @@ void GitDiffView::applyColorScheme(const ColorScheme& scheme) {
     markdownModes_->configure(filePath_, palette_,
                               QString::fromLatin1(syntaxDefinitionForPath(filePath_).name) ==
                                   "markdown");
+    markdownModes_->applyColorScheme(*scheme_);
     model_->applyTheme(palette_, scheme_.get());
     model_->applySyntax(filePath_, *syntaxEngine_, palette_, scheme_.get());
 }

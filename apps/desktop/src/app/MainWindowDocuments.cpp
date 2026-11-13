@@ -1113,11 +1113,12 @@ void MainWindow::applyThemeToEditors() {
         }
     }
     if (agentWorkspace_ != nullptr) {
-        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
+        agentWorkspace_->applyColorScheme(theme_.colorScheme(),
+                                          appearanceSettings_.interfaceZoomPercent);
     }
     if (MachineWorkspaceView* machine = machines_ != nullptr ? machines_->existingView() : nullptr)
-        machine->transcript()->view()->applyTheme(theme_.palette(),
-                                                  appearanceSettings_.interfaceZoomPercent);
+        machine->transcript()->view()->applyColorScheme(theme_.colorScheme(),
+                                                        appearanceSettings_.interfaceZoomPercent);
     if (conversationAtlasPanel_ != nullptr)
         conversationAtlasPanel_->applyPalette(QApplication::palette());
     if (atlasTabs_ != nullptr) {
@@ -1128,8 +1129,8 @@ void MainWindow::applyThemeToEditors() {
             } else if (auto* builder = qobject_cast<AtlasBuilderTab*>(atlasTabs_->widget(index))) {
                 builder->applyPalette(QApplication::palette(),
                                       appearanceSettings_.interfaceZoomPercent);
-                builder->chatView()->applyTheme(theme_.palette(),
-                                                appearanceSettings_.interfaceZoomPercent);
+                builder->chatView()->applyColorScheme(theme_.colorScheme(),
+                                                      appearanceSettings_.interfaceZoomPercent);
             }
         }
     }
