@@ -24,9 +24,13 @@ void SessionHost::providerRuntimeStatus(
     struct Pending final {
         QJsonObject codex;
         QJsonObject cursor;
+        QJsonObject copilot;
         int remaining{2};
     };
     auto pending = std::make_shared<Pending>();
+    ProviderAdapter* const copilot = provider(QStringLiteral("copilot"));
+    if (copilot != nullptr)
+        ++pending->remaining;
     const QPointer<SessionHost> self(this);
     const auto finish = [self, pending, callback = std::move(callback)] {
         if (--pending->remaining > 0 || self.isNull())
@@ -39,11 +43,20 @@ void SessionHost::providerRuntimeStatus(
         // Code's credentials.
         claudeJson.insert(QStringLiteral("readiness"),
                           self->readiness_.compose(claude, {}, QDateTime::currentSecsSinceEpoch()));
-        callback({{QStringLiteral("ok"), true},
-                  {QStringLiteral("providers"),
-                   QJsonArray{pending->codex, claudeJson, pending->cursor}}},
-                 {});
+        QJsonArray providers{pending->codex, claudeJson, pending->cursor};
+        if (!pending->copilot.isEmpty())
+            providers.append(pending->copilot);
+        callback({{QStringLiteral("ok"), true}, {QStringLiteral("providers"), providers}}, {});
     };
+    if (copilot != nullptr)
+        copilot->runtimeStatus([self, pending, finish](const compat::Runtime& runtime) {
+            pending->copilot = runtime.toJson();
+            if (!self.isNull())
+                pending->copilot.insert(
+                    QStringLiteral("readiness"),
+                    self->readiness_.compose(runtime, {}, QDateTime::currentSecsSinceEpoch()));
+            finish();
+        });
     adapter_->runtimeStatus([self, pending, finish](const compat::Runtime& runtime) {
         pending->codex = runtime.toJson();
         if (self.isNull()) {

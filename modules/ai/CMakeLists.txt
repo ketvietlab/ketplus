@@ -112,6 +112,9 @@ add_library(ketplus_ai STATIC
     src/agent/ProviderRuntimeStatus.h
     src/agent/ProviderSetupGuide.cpp
     src/agent/ProviderSetupGuide.h
+    src/agent/ProviderDisplay.h
+    src/agent/CopilotSetupGuide.cpp
+    src/agent/CopilotSetupGuide.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp

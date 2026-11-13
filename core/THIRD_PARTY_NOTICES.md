@@ -13,6 +13,7 @@ not covered by any licence listed here; see `TRADEMARKS.md` at the repository ro
 | Lexilla | `rel-5-5-2` | `third_party/licenses/Lexilla.txt` |
 | KetPlus Syntax | `cb7435c1e9237ee32d3459a58917b0e84b8b6025` — https://github.com/ketvietlab/ketplus-syntax | `third_party/licenses/KetPlus-Syntax-MPL-2.0.txt` |
 | libvterm | `v0.3.3` | `third_party/licenses/libvterm-MIT.txt` |
+| miniz | 3.1.2 (`77d0dce8627735138c51770d1799a1ef48f2117d`) — https://github.com/richgel999/miniz | `third_party/licenses/miniz-MIT.txt` |
 | KÉT Sans | 1.1.0 | `third_party/licenses/KET-Sans-OFL-1.1.txt` |
 | KÉT Sans Mono | 0.10.4 Medium | `third_party/licenses/KET-Sans-Mono-OFL-1.1.txt` |
 | KetQt | `d47638214f80695524cd2724996674da7afdbb6a` — https://github.com/ketvietlab/ket-qt | `third_party/licenses/KetQt-MPL-2.0.txt` |

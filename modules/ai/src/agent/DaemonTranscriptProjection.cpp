@@ -4,6 +4,7 @@
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/ProviderDisplay.h"
 #include "agent/TeamTranscriptBlocks.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptNormalizer.h"
@@ -108,6 +109,8 @@ QString approvalToolLabel(const QJsonObject& details) {
         return QStringLiteral("Claude tool");
     if (type == "cursor_tool")
         return QStringLiteral("Cursor tool");
+    if (type == "copilot_tool")
+        return QStringLiteral("GitHub Copilot tool");
     return QStringLiteral("Tool");
 }
 
@@ -149,7 +152,8 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
     // A provider that went quiet: "<Provider> did not answer for 60 seconds…", as the mock's
     // workspace/error titles it.
     static const QRegularExpression silent(
-        QStringLiteral("^(Codex|Claude|Claude Code|Cursor) did not answer for \\d+ seconds\\b"));
+        QStringLiteral("^(Codex|Claude|Claude Code|Cursor|GitHub Copilot|Copilot) did not answer "
+                       "for \\d+ seconds\\b"));
     if (silent.match(message).hasMatch()) {
         entry.insert(QStringLiteral("title"), QStringLiteral("The provider stopped responding"));
         return;
@@ -160,6 +164,9 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
          QStringLiteral("Codex CLI exited")},
         {QRegularExpression(QStringLiteral("^The Cursor ACP process exited unexpectedly")),
          QStringLiteral("Cursor CLI exited")},
+        {QRegularExpression(
+             QStringLiteral("^The (GitHub )?Copilot ACP process exited unexpectedly")),
+         QStringLiteral("GitHub Copilot CLI exited")},
         {QRegularExpression(QStringLiteral("^The Claude sidecar exited unexpectedly")),
          QStringLiteral("Claude Code exited")}};
     for (const auto& [pattern, title] : exits) {
@@ -223,7 +230,7 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
         if (const QString provider = first.value("from_provider").toString(); !provider.isEmpty())
-            label += QStringLiteral(" · ") + provider.left(1).toUpper() + provider.mid(1);
+            label += QStringLiteral(" · ") + provider_display::name(provider);
     }
     if (first.value("kind").toString() == QStringLiteral("review"))
         label += QStringLiteral(" · Review request");
@@ -370,9 +377,9 @@ void labelProvider(QVariantMap& entry, const QString& provider) {
     const QString meta = entry.value(QStringLiteral("meta")).toString();
     if (!meta.startsWith(QStringLiteral("Codex")))
         return;
-    const QString name = provider == QStringLiteral("claude")
-                             ? QStringLiteral("Claude")
-                             : provider.left(1).toUpper() + provider.mid(1);
+    const QString name = provider == QStringLiteral("copilot")  ? QStringLiteral("GitHub Copilot")
+                         : provider == QStringLiteral("claude") ? QStringLiteral("Claude")
+                                                                : provider_display::name(provider);
     entry.insert(QStringLiteral("meta"), name + meta.mid(5));
 }
 
