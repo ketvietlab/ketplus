@@ -101,6 +101,98 @@ compares every legacy `ThemePalette` field with the actual `ThemeManager` palett
 This task introduces the data contract; ThemeManager selection and component
 adapters integrate it separately.
 
+## VS Code import
+
+`KetPlusCM::vscode_import` exports `ui/theme/vscode/VsCodeImporter.h`.
+`importFile(path, rootDirectory)` accepts a local JSON/JSONC theme or `.vsix`;
+`importVsix(path)` reads `extension/package.json` and its `contributes.themes`.
+The result contains per-variant `ColorScheme`/`ImportReport` values and an aggregate
+report. `ok()` requires variants and no error diagnostics; successful variants
+may remain inspectable if another variant failed. Callers must check `ok()` before
+installing a package. The importer only converts data, and each returned variant
+passes canonical write/read validation, including copied manifest license data.
+Use `ColorSchemeWriter::write` to produce `.ketscheme.json`.
+
+Includes are loaded through the common root-bound `IncludeResolver` with cycle
+checks and a maximum of 16 levels. Keys in a child `colors` object override parent
+keys; explicit null removes an inherited color. Invalid values are reported and
+leave the prior/default color. Token rules retain parent-then-child order, with
+later explicit properties overriding the same shared role. Relative `tokenColors`
+strings resolve from the file that declared them and read an XML `.tmTheme`
+plist, including standard Apple DOCTYPE headers without external DTD resolution.
+The optional source root defaults to the selected file's directory. Directory and
+archive root escapes, network references and symlinks remain forbidden by common
+I/O. Repeated variant/include/tmTheme reads share a 100 MiB cumulative budget.
+`IncludeResolver::loadJsonChain` accepts an optional remaining-byte budget for
+this purpose; it is consumed across calls, including unsuccessful parses.
+
+`VsCodeMapping.h` defines ordered workbench fallback chains. For each target the
+first authored, valid source color wins; absent chains inherit the KetPlus base.
+For example:
+
+| Target | Source IDs, highest priority first |
+| --- | --- |
+| `editor.fg` | editor.foreground → foreground |
+| `sidebar.bg` | sideBar.background → editor.background |
+| `input.fg` | input.foreground → foreground → editor.foreground |
+| `list.selection` | list.activeSelectionBackground → list.inactiveSelectionBackground → editor.selectionBackground |
+| `tab.activeFg` | tab.activeForeground → foreground → editor.foreground |
+| `terminal.bg` / `fg` | terminal.background/foreground → editor.background/foreground |
+| `terminal.cursor` | terminalCursor.foreground → editorCursor.foreground → terminal.foreground |
+| `diff.added` / `removed` | diffEditor.inserted/removedTextBackground → inserted/removedLineBackground |
+
+The table also covers chrome, sidebar borders, inputs, lists, tabs, focus,
+buttons, editor selection/caret/gutter and all 16 `terminal.ansi*` colors. ANSI
+Black through White map to `ansi0`–`ansi7`; BrightBlack through BrightWhite map to
+`ansi8`–`ansi15`. Missing colors retain the selected base. Hex forms `#RGB`,
+`#RGBA`, `#RRGGBB` and `#RRGGBBAA` are accepted and normalized to canonical RGBA.
+Fallback selections are reported as approximations; unsupported IDs are listed
+as skipped. An available but superseded chain candidate is reported separately.
+
+Supported TextMate selectors are single dotted scope atoms matching these prefixes
+(and dotted suffixes). More specific prefixes are checked first:
+
+| Prefix | Shared role |
+| --- | --- |
+| keyword.operator | operator |
+| constant.numeric | number |
+| entity.name.type, entity.name.class, support.type, support.class, storage.type | type |
+| entity.name.function, support.function | function |
+| entity.other.attribute-name, meta.annotation | attribute |
+| keyword, storage.modifier | keyword |
+| string, comment, variable, constant | same-named role |
+
+Comma alternatives and arrays of strings are supported. Whitespace is allowed
+around an atom, but selectors containing ancestry/context, exclusions, unions,
+parentheses, wildcards or unrecognized scope families are skipped and listed.
+No TextMate grammar, extension JavaScript, semantic provider or scope stack runs.
+Scope-to-role conversion is always an approximation because Lexilla shares a
+small set of roles across languages. Later rules win per explicitly authored
+property, rather than reproducing TextMate specificity ranking.
+
+`fontStyle` supports bold, italic and underline. An empty string explicitly resets
+all three flags; omitted style properties inherit earlier rules/base values.
+Strikethrough, syntax backgrounds and other settings are reported as skipped.
+Unscoped rule foreground/background supplies missing workbench editor defaults;
+later unscoped defaults override earlier defaults. Global typography is skipped.
+`semanticTokenColors` is merged parent-first into inert
+`metadata.vscodeSemanticTokenColors`, and semanticHighlighting is retained as
+metadata only; neither changes applied syntax styles.
+
+Manifest `uiTheme` (`vs-dark`, `vs`, `hc-black`, `hc-light`) takes precedence over
+JSON type. Standalone light/dark/hcDark/hcLight declarations are supported;
+otherwise opaque background brightness determines kind, with dark as the final
+fallback. High contrast remains a distinct kind with an explicit light/dark base.
+UI localization, executable extension behavior and unsupported theme properties
+are omitted with reasons. Each report has at most 4,096 details plus a truncation
+notice. Declared license metadata is copied without verifying a license grant.
+
+Original synthetic MPL-2.0 fixtures and their provenance are under
+`core/tests/fixtures/vscode`. Format references are the official
+[color-theme guide](https://code.visualstudio.com/api/extension-guides/color-theme),
+[color ID reference](https://code.visualstudio.com/api/references/theme-color), and
+[syntax-highlighting guide](https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide).
+
 ## Catalog
 
 `ColorSchemeCatalog` defaults to `QStandardPaths::AppDataLocation/color-schemes/`.

@@ -1,0 +1,13 @@
+{
+  // Original synthetic fixture, MPL-2.0
+  "name":"Parent", "type":"dark",
+  "colors": {"editor.background":"#101820", "editor.foreground":"#DDEEFF", "sideBar.background":"#203040", "button.background":"#234567", "unknown.widget":"#112233"},
+  "tokenColors": [
+    {"scope":"keyword", "settings":{"foreground":"#BB88FF", "fontStyle":"bold italic"}},
+    {"scope":"string", "settings":{"foreground":"#88DD99"}},
+    {"scope":"constant.numeric", "settings":{"foreground":"#EEAA77"}},
+    {"scope":"comment", "settings":{"foreground":"#778899", "fontStyle":"italic"}},
+    {"scope":"entity.name.function", "settings":{"foreground":"#77BBFF", "fontStyle":"underline"}},
+  ],
+  "semanticTokenColors":{"variable.readonly":"#FF0000"}
+}
