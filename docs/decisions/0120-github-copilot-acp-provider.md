@@ -166,6 +166,24 @@ sessions. Keep the origin proxy, absolute worker paths and isolated profiles;
 Copilot owns its child MCP workers. Routing instructions guide model behavior;
 the existing browser runtime enforces origins.
 
+### Permission and browser implementation boundary
+
+The daemon implementation retains normal approval for every Copilot permission
+request, including injected browser tools. No verified Copilot server/tool
+identity fixture is available, so the exemption above remains disabled. Cursor's
+`rawInput` fields, familiar titles and tool-name prefixes never establish identity.
+KetPlus's binary approval card selects only advertised `allow_once` / `reject_once`
+IDs. An `allow_always` option is not supported by this card and cannot substitute
+for one-time consent; absent applicable options cancel. Until provider permission
+modes are verified, even Full access does not bypass Copilot cards.
+
+Opaque host request IDs bind approvals to one active turn and process; interrupted,
+expired and abandoned requests cancel, and stale responses cannot answer a reused
+provider request ID. Host-owned browser configuration, separate routing blocks and
+turn-end cleanup use the shared ACP engine, including cleanup on process failure
+and shutdown. Deterministic fixtures verify configuration and canonical image
+content, not live Copilot metadata or guaranteed model browser routing.
+
 ## Verification and compatibility limits
 
 On 2026-11-13, no `copilot` was available on the shell's `PATH`. A temporary npm

@@ -26,6 +26,11 @@ QJsonObject approvalProviderResult(const QJsonObject& details, const bool accept
 }
 
 namespace {
+QJsonObject cancelledApprovalResult(const QJsonObject& details) {
+    if (details.value(QStringLiteral("request_type")) == QStringLiteral("copilot_tool"))
+        return {{QStringLiteral("cancelled"), true}};
+    return approvalProviderResult(details, false);
+}
 
 QString stableOptionId(const QString& questionId, const int index, const QString& label) {
     return QStringLiteral("option_%1")
@@ -370,7 +375,7 @@ void ApprovalBroker::expireRequests() {
         rememberResolved(approvalId, pending.kind);
         const QJsonObject result = pending.kind == QStringLiteral("input")
                                        ? QJsonObject{{QStringLiteral("answers"), QJsonObject{}}}
-                                       : approvalProviderResult(pending.details, false);
+                                       : cancelledApprovalResult(pending.details);
         emit providerResolutionReady(pending.providerRequestId, result);
         emit expired(approvalId, pending.sessionId, pending.generation, pending.kind,
                      pending.revision);
@@ -395,7 +400,7 @@ void ApprovalBroker::cancelPending(const QString& sessionId, const qint64 genera
         emit providerResolutionReady(it->providerRequestId,
                                      it->kind == QStringLiteral("input")
                                          ? QJsonObject{{"answers", QJsonObject{}}}
-                                         : approvalProviderResult(it->details, false));
+                                         : cancelledApprovalResult(it->details));
         emit expired(it.key(), it->sessionId, it->generation, it->kind, it->revision);
     }
 }

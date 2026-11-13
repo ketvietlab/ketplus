@@ -1,3 +1,4 @@
+#include "BrowserToolLaunch.h"
 #include "providers/acp/AcpAdapter.h"
 #include <QJsonDocument>
 #include <QProcess>
@@ -206,7 +207,12 @@ void AcpAdapter::failPending(const QString& reason) {
         call.callback({}, reason);
     // The next process numbers its requests from the start again; an answer to one of them
     // must not take the shape of an unanswered request this process left behind.
+    cancelPermissions();
     permissionOptionsByRequest_.clear();
+    // Failure and shutdown must signal workers too, before dropping captured injection state.
+    for (auto it = browserSessions_.cbegin(); it != browserSessions_.cend(); ++it)
+        if (!it.value().isEmpty())
+            browser_tools::signalTurnEnd(it.value());
     startingSessions_.clear();
     browserSessions_.clear();
     agentSessions_.clear();
