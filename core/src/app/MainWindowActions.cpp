@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/theme/SchemeQuickPicker.h"
 #include "ui/AboutDialog.h"
 
 #include "editor/DocumentFormatControls.h"
@@ -519,6 +520,11 @@ void MainWindow::createActions() {
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
+    auto* schemeAction = appearanceMenu->addAction(tr("Color Scheme…"));
+    schemeAction->setObjectName(QStringLiteral("selectColorScheme"));
+    connect(schemeAction, &QAction::triggered, this,
+            [this] { showColorSchemePicker(theme_, this); });
+    appearanceMenu->addSeparator();
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
 

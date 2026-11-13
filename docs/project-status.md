@@ -24,6 +24,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Appearance mounts a searchable canonical scheme library with source labels and
+  swatches, local import variant/review/preview, export, duplication and deletion.
+  Preferred system variants and the Lite/Pro keyboard picker use the live selection
+  API. This team branch is pending review; it is not a released acceptance claim.
+
 - The color-scheme catalog embeds the original two Két defaults plus eight
   attributed MIT/Apache-2.0 conversions from pinned official upstream sources.
   Built-ins are read-only, have offline completeness/contrast tests and a
@@ -46,6 +51,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 - VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
   includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
   approximations. Semantic colors remain metadata; extension code never runs.
+
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
 - Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
   diagnostics, unknown-data preservation, complete built-in inheritance, embedded
   light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,

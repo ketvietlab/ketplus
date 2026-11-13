@@ -138,7 +138,10 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     connect(navigation_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
     connect(resetButton_, &QAbstractButton::clicked, this, [this] {
         setAppearanceSettings(AppearanceSettings::defaults());
-        selectThemeMode(static_cast<int>(ThemeManager::Mode::System));
+        if (theme_)
+            (void)theme_->setSchemeSelection(ThemeSelection{});
+        selectedThemeMode_ = static_cast<int>(theme_ ? theme_->mode() : ThemeManager::Mode::System);
+        updateThemeCards();
         for (SettingsPage* page : std::as_const(extensionPages_)) {
             page->resetToDefaults();
         }
