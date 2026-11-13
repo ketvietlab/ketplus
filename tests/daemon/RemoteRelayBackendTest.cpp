@@ -77,7 +77,11 @@ class RemoteRelayBackendTest final : public QObject {
     void init() { r03::resetCredentials(); }
 
     void attachmentUploadResumesQueuedStepsAndRejectsFailedChunks() {
-        for (bool rejectChunk : {false, true}) {
+        const QList<QPair<QString, bool>> scenarios{
+            {"text/plain", false}, {"image/png", false}, {"text/plain", true}};
+        for (const auto& scenario : scenarios) {
+            const QString mediaType = scenario.first;
+            const bool rejectChunk = scenario.second;
             r03::resetCredentials();
             QTemporaryDir dir;
             FixtureTransport network;
@@ -96,6 +100,8 @@ class RemoteRelayBackendTest final : public QObject {
             QString digest;
             relay.results = [&](const QString& kind, const QJsonObject& payload) -> QJsonObject {
                 if (kind == "attachment.stage.begin") {
+                    if (payload.value("media_type").toString() != mediaType)
+                        return {{"ok", false}, {"error_message", "Media type changed"}};
                     digest = payload.value("digest_sha256").toString();
                     return {{"revision", 1}};
                 }
@@ -118,8 +124,13 @@ class RemoteRelayBackendTest final : public QObject {
             relay.hostPaused = true;
             ketplus::remote::MachineAttachmentUpload upload(&backend, "opaque-session", 3);
             QSignalSpy finished(&upload, &ketplus::remote::MachineAttachmentUpload::finished);
-            const QByteArray bytes(40 * 1024, 't');
-            upload.start("synthetic-note.txt", "text/plain", bytes);
+            const QByteArray bytes =
+                mediaType == "text/plain"
+                    ? QByteArray(40 * 1024, 't')
+                    : QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ"
+                                             "VR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII=");
+            upload.start(mediaType == "text/plain" ? "synthetic-note.txt" : "synthetic-note.png",
+                         mediaType, bytes);
             QTRY_COMPARE(readsOf(relay, "attachment.stage.begin"), 1);
             QCOMPARE(finished.size(), 0);
             QVERIFY(received.isEmpty());
@@ -137,7 +148,7 @@ class RemoteRelayBackendTest final : public QObject {
             else
                 QCOMPARE(received, bytes);
             for (const auto& body : std::as_const(network.bodies)) {
-                QVERIFY(!body.contains("synthetic-note.txt"));
+                QVERIFY(!body.contains("synthetic-note"));
                 QVERIFY(!body.contains(QByteArray(128, 't')));
             }
         }
