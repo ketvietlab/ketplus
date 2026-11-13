@@ -588,7 +588,8 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_vscode_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_jetbrains_import_tests tests/JetBrainsImportTest.cpp)
-    target_link_libraries(ketplus_jetbrains_import_tests PRIVATE Qt6::Test ketplus_jetbrains_import ketplus_miniz)
+    target_link_libraries(ketplus_jetbrains_import_tests PRIVATE Qt6::Test ketplus_jetbrains_import)
+    target_include_directories(ketplus_jetbrains_import_tests SYSTEM PRIVATE "${ketplus_miniz_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/miniz-include")
     target_compile_definitions(ketplus_jetbrains_import_tests PRIVATE
         JETBRAINS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/jetbrains")
     ketplus_enable_warnings(ketplus_jetbrains_import_tests)

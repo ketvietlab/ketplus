@@ -13,3 +13,7 @@ Format references (not fixture sources):
 - IntelliJ serialization reference at commit
   `09f03735d4674eea9f112165fe45744a25fbdd56`:
   https://github.com/JetBrains/intellij-community/blob/09f03735d4674eea9f112165fe45744a25fbdd56/platform/core-api/src/com/intellij/openapi/editor/markup/AttributesFlyweightSerDe.java
+
+Alphabetically sorted/reversed attribute and effect-color regression inputs are
+original synthetic data authored inline in `JetBrainsImportTest.cpp` under the
+same MPL-2.0 license. They contain no IDE-exported or downloaded theme content.

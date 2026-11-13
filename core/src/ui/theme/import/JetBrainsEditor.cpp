@@ -1,6 +1,5 @@
 #include "JetBrainsImport_p.h"
 #include "JetBrainsMapping.h"
-#include <QSet>
 
 namespace ketplus::jetbrains_detail {
 using ket::theme::io::XmlNode;
@@ -35,17 +34,14 @@ void attribute(JetBrainsImportedScheme& output, const XmlNode& node, const QStri
     const auto source = path + QStringLiteral("/attributes/") + name;
     const auto* mapping = syntaxMapping(name);
     const auto role = mapping ? QLatin1String(mapping->role) : QString();
-    if (mapping && mapping->languageSpecific) {
-        if (output.scheme.syntax.contains(role)) {
-            item(output.report, ImportDisposition::Skipped, source,
-                 QStringLiteral("syntax.") + role,
-                 QStringLiteral(
-                     "Language-specific override omitted because a shared role already exists"));
-            return;
-        }
-        item(output.report, ImportDisposition::Approximated, source,
-             QStringLiteral("syntax.") + role,
-             QStringLiteral("Language-specific styling collapsed into a shared syntax role"));
+    if (mapping && output.scheme.syntax.contains(role)) {
+        item(output.report, ImportDisposition::Skipped, source, QStringLiteral("syntax.") + role,
+             mapping->languageSpecific
+                 ? QStringLiteral(
+                       "Language-specific override omitted because a shared role already exists")
+                 : QStringLiteral("Preferred or earlier authored attribute already supplies this "
+                                  "role; secondary/duplicate styling omitted"));
+        return;
     }
     const XmlNode* value = nullptr;
     for (const auto& child : node.children)
@@ -57,6 +53,18 @@ void attribute(JetBrainsImportedScheme& output, const XmlNode& node, const QStri
                             "KetPlus base retained"));
         return;
     }
+    if (mapping && (mapping->languageSpecific || !mapping->primary))
+        item(
+            output.report, ImportDisposition::Approximated, source,
+            QStringLiteral("syntax.") + role,
+            mapping->languageSpecific
+                ? QStringLiteral("Language-specific styling collapsed into a shared syntax role")
+                : QStringLiteral(
+                      "Secondary IDE attribute supplies a role without an authored primary value"));
+    bool effectColor = false;
+    for (const auto& field : value->children)
+        if (optionName(field) == u"EFFECT_COLOR")
+            effectColor = color(field.attributes.value(QStringLiteral("value")), true).has_value();
     SyntaxStyle style;
     if (mapping) {
         style.bold = false;
@@ -97,13 +105,18 @@ void attribute(JetBrainsImportedScheme& output, const XmlNode& node, const QStri
         } else if (mapping && key == u"EFFECT_TYPE") {
             bool valid = false;
             const int effect = text.toInt(&valid);
-            if (valid && (effect == 1 || effect == 2 || effect == 4 || effect == 5)) {
+            const bool underlineEffect =
+                valid && (effect == 1 || effect == 2 || effect == 4 || effect == 5);
+            if (underlineEffect && effectColor) {
                 style.underline = true;
                 item(output.report,
                      effect == 1 ? ImportDisposition::Mapped : ImportDisposition::Approximated,
                      fieldSource, QStringLiteral("syntax.") + role + QStringLiteral(".underline"),
                      QStringLiteral(
                          "Line/wave/bold/dotted effect represented by a plain underline"));
+            } else if (underlineEffect) {
+                item(output.report, ImportDisposition::Skipped, fieldSource, {},
+                     QStringLiteral("Effect omitted because EFFECT_COLOR is missing or invalid"));
             } else if (valid && effect == -1) {
                 item(output.report, ImportDisposition::Mapped, fieldSource,
                      QStringLiteral("syntax.") + role + QStringLiteral(".underline"),
@@ -123,19 +136,8 @@ void attribute(JetBrainsImportedScheme& output, const XmlNode& node, const QStri
             item(output.report, ImportDisposition::Skipped, fieldSource, {}, reason);
         }
     }
-    if (mapping) {
-        auto& existing = output.scheme.syntax[role];
-        if (existing.fg || existing.bold || existing.italic || existing.underline)
-            item(output.report, ImportDisposition::Approximated, source,
-                 QStringLiteral("syntax.") + role,
-                 QStringLiteral(
-                     "Multiple IDE attributes share one role; later authored fields override"));
-        if (style.fg)
-            existing.fg = style.fg;
-        existing.bold = style.bold;
-        existing.italic = style.italic;
-        existing.underline = style.underline;
-    }
+    if (mapping)
+        output.scheme.syntax.insert(role, style);
     if (!recognized)
         item(output.report, ImportDisposition::Skipped, source, {},
              QStringLiteral("IDE/language-specific key has no explicit shared mapping"));
@@ -200,11 +202,17 @@ bool parseEditor(const QByteArray& bytes, const QString& path, JetBrainsImported
                            "Scheme font/size and IDE options are ignored; user typography retained")
                      : QStringLiteral("IDE metadata/section is not applied"));
     }
-    // Shared DEFAULT_* roles take precedence over language-specific fallbacks.
-    for (bool languageSpecific : {false, true})
+    // Canonical DEFAULT_* keys, then shared aliases, then language fallbacks.
+    // A value block owns the whole role (including explicit plain flags), so
+    // alphabetically ordered IDE exports cannot let method/field aliases replace it.
+    for (int priority : {0, 1, 2})
         for (const auto& entry : attributes) {
             const auto* mapping = syntaxMapping(optionName(entry));
-            if (bool(mapping && mapping->languageSpecific) == languageSpecific)
+            const int rank = !mapping                    ? 0
+                             : mapping->languageSpecific ? 2
+                             : mapping->primary          ? 0
+                                                         : 1;
+            if (rank == priority)
                 attribute(output, entry, path);
         }
     const auto background = output.scheme.editor.constFind(QStringLiteral("bg"));

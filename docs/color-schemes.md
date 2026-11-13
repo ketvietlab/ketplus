@@ -280,13 +280,21 @@ Compatibility limits are deliberate and appear in `ImportReport`:
 - Java/Kotlin keys map only through a short explicit alias table into shared
   roles. Generic DEFAULT roles take precedence. Other language-specific keys and
   `baseAttributes` inheritance without an authored value are skipped. Several IDE
-  attributes can share one KetPlus role; later authored shared fields win and the
-  collision is reported.
+  attributes can share one KetPlus role. Its primary DEFAULT key wins regardless
+  of XML order: FUNCTION_DECLARATION for `function`, LOCAL_VARIABLE for `variable`,
+  CLASS_NAME for `type`, LINE_COMMENT for `comment`, and the matching KEYWORD,
+  STRING, NUMBER, METADATA, CONSTANT or OPERATION_SIGN key for the other roles.
+  Secondary shared keys fill only a role with no authored primary value; language
+  aliases are the final fallback. Among aliases in the same tier, the first
+  authored value wins. Omitted collisions and fallback approximations are reported.
+  A primary with only `baseAttributes` and no value block cannot supply a role.
 - `FONT_TYPE` bits 1/2 map to bold/italic. Authored value blocks default to plain
   flags, including explicit false resets. Font family and size are ignored so
   user typography stays in control. Syntax backgrounds have no shared role slot.
 - Numeric effect 1 maps to a plain underline; wave/bold/dotted effects 2/4/5 are
-  approximated by it. Border, strikeout and unknown effects are skipped; effect
+  approximated by it. Underline effects require a valid authored EFFECT_COLOR,
+  regardless of option order; missing/invalid effect colors retain underline=false.
+  Border, strikeout and unknown effects are skipped; effect
   colors and geometry are omitted. The importer does not reproduce IDE rendering.
 - Only UI keys with corresponding KetPlus components are applied. Wildcards,
   platform rules, icon substitution, background images, fonts, metrics and plugin
