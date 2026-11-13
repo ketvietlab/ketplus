@@ -13,6 +13,14 @@ Item {
     id: bar
 
     required property var window
+    property string pendingScheduledDraft: ""
+    Connections {
+        target: bar.window
+        function onScheduledDraftSaved() {
+            if (composer.text === bar.pendingScheduledDraft) composer.text = ""
+            bar.pendingScheduledDraft = ""
+        }
+    }
     property bool busy: false
     signal stopRequested()
     // The provider cannot start a turn yet: Send keeps the draft and says why.
@@ -43,7 +51,11 @@ Item {
     // Review evidence: --open=model|mode|limits; limits-cost opens Cost details and
     // limits-api-key shows a conversation on an API key, which has no such row.
     function openPanel(name) {
-        if (name === "model")
+        if (name === "schedule-send") {
+            composer.text = "Summarize failing CI workflows and suggest next steps."
+            scheduleButton.clicked()
+        }
+        else if (name === "model")
             modelDialog.open()
         else if (name === "mode")
             permissionButton.clicked()
@@ -56,7 +68,7 @@ Item {
             composer.focusInput()
         // The suggestion popovers, for the side by side with the app's composer.
         else if (["mention", "agent-mention", "skill", "slash"].includes(name)) {
-            composer.text = ({ "mention": "look at @mai", "agent-mention": "ask @agent/82", "skill": "use $rev", "slash": "/" })[name]
+            composer.text = ({ "mention": "look at @tomorrow", "agent-mention": "ask @agent/82", "skill": "use $rev", "slash": "/" })[name]
             suggestions.suggestions = ({
                 "mention": [{ kind: "file", path: "src/app/main.cpp" }, { kind: "file", path: "src/app/MainWindow.cpp" }, { kind: "file", path: "src/main", directory: true }],
                 "agent-mention": [{ kind: "conversation", mention: "@agent/8213", description: "Finish the repository picker", detail: "Claude · ketplus-desktop" }, { kind: "conversation", mention: "@agent/8215", description: "Follow up on the new UI", detail: "Codex · ketplus-desktop" }],
@@ -75,7 +87,7 @@ Item {
 
     KetComposer {
         id: composer
-        width: parent.width
+        width: parent.width - scheduleButton.width - bar.px(6)
         busy: bar.busy
         placeholderText: bar.placeholder
         onSubmitted: text => {
@@ -90,6 +102,24 @@ Item {
             composer.text = ""
         }
         onStopRequested: { bar.stopRequested(); bar.window.notify("Stopped the turn") }
+    }
+
+    // Compose beside the kit's public actionButton geometry, without changing the kit's
+    // input or moving its toolbar. The product owns the gap between these sibling controls.
+    KetButton {
+        id: scheduleButton
+        x: composer.width + bar.px(6)
+        y: {
+            // mapToItem alone does not subscribe to ancestor geometry changes.
+            for (let item = composer.actionButton; item && item !== bar; item = item.parent) {
+                item.y; item.height; item.scale; item.rotation
+            }
+            return composer.actionButton.mapToItem(bar, 0, composer.actionButton.height / 2).y - height / 2
+        }
+        text: "▾"; iconName: "clock"
+        variant: KetTheme.ButtonVariant.Ghost
+        Accessible.name: "Schedule send"
+        onClicked: sendScheduleMenu.popup(scheduleButton, -sendScheduleMenu.width + scheduleButton.width, -sendScheduleMenu.height - bar.px(6))
     }
 
     ComposerSuggestions {
@@ -156,6 +186,23 @@ Item {
         }
     }
 
+    function scheduleDraft(minutes) {
+        if (!composer.text.trim()) { composer.focusInput(); return }
+        const id = bar.window.scheduleStore.save({ name: "Send message · #" + bar.window.conversation.number,
+            prompt: composer.text, target: 0, conversation: bar.window.conversation.number, rule: 0,
+            date: minutes === 1080 ? "2026-11-14" : "2026-11-13", time: minutes === 30 ? "15:30" : minutes === 60 ? "16:00" : "09:00",
+            zone: "Asia/Ho_Chi_Minh", days: [], hours: "4", busy: 0, missed: 0, creator: "You" })
+        if (id) { composer.text = ""; bar.window.openSchedules(id) }
+    }
+    KetMenu {
+        id: sendScheduleMenu
+        KetMenuSection { text: "Schedule send" }
+        KetMenuItem { text: "In 30 minutes"; description: "Today at 15:30"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(30) }
+        KetMenuItem { text: "In 1 hour"; description: "Today at 16:00"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(60) }
+        KetMenuItem { text: "Tomorrow at 09:00"; description: "14/11 · Asia/Ho_Chi_Minh"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(1080) }
+        KetMenuSeparator {}
+        KetMenuItem { text: "Custom…"; iconName: "clock"; onTriggered: { bar.pendingScheduledDraft = composer.text; bar.window.editSchedule(0, true, composer.text) } }
+    }
     KetMenu {
         id: attachMenu
         KetMenuItem { text: "Attach files…"; iconName: "attachment"; onTriggered: bar.window.notify("Attached design-system.md") }

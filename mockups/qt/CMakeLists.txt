@@ -47,7 +47,7 @@ qt_add_executable(ketplus_qt_mock MACOSX_BUNDLE src/main.cpp src/MockController.
                   src/MockController.cpp)
 set_target_properties(ketplus_qt_mock PROPERTIES OUTPUT_NAME "KetPlusMock")
 
-file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml)
+file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml qml/*.js)
 set_source_files_properties(qml/Fixtures.qml qml/TranscriptFixtures.qml PROPERTIES
                             QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(ketplus_qt_mock
@@ -101,7 +101,7 @@ include(CTest)
 if(BUILD_TESTING)
     find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
                  HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
-    foreach(suite ContentTabsModel PlanRunModel)
+    foreach(suite ContentTabsModel PlanRunModel ScheduleRules)
         add_test(NAME mock_${suite}
                  COMMAND "${KETPLUS_MOCK_QMLTESTRUNNER}" -input
                          "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_${suite}.qml")

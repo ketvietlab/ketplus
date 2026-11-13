@@ -110,6 +110,43 @@ switched from the conversation. App-wide: Quick search (⌘K), the repository an
 context menu (rename, fork, change worktree, archive, delete), compact window (⇧⌘M),
 update notice and toasts. Conversations carry no user tags (ADR 0117).
 
+## Scheduling design prototype
+
+Schedules are a separate, reusable **non-modal window**, opened from **View → Schedules…**
+(⇧⌘J / Ctrl+Shift+J), the conversation menu or the team menu. There is no new sidebar
+navigation entry. Existing team/conversation rows may carry a passive clock with a next-run
+hint. All scheduling UI and sample content are English, per the updated design request.
+
+`--screen=schedules` opens the list and detail pane. States: `empty`, `failure`, `team`,
+`new`, `edit`, `weekly`, `new-conversation`, `validation`, `policies` and `delete`.
+`workspace/scheduled`, `workspace/schedule-send` and `workspace/schedule-failure` show the
+message marker, composer picker and failure notification. `--open=conversation-menu` shows
+the header menu. `teams/scheduled` shows the waiting team and its recurring schedules;
+`--open=new-team-scheduled` and `--open=new-team-start-invalid` show scheduled creation and
+its validation. The existing New team fields, locked roles and per-role model picker remain.
+
+The mock clock is fixed at **13 November 2026, 15:00 Asia/Ho_Chi_Minh**. Three fixed-offset
+zones (Asia/Ho_Chi_Minh, UTC, Asia/Tokyo) make the preview reproducible. Creating, editing,
+enabling, pausing, searching and deleting schedules change memory only. Preset sends clear
+the draft after saving; cancelling a custom schedule preserves it. Run now simulates success,
+Codex sign-in failure or a busy-conversation skip. This is a UI prototype: it has no persistent
+schedules, daemon integration, background execution, provider access or team wake-up.
+
+Run checks with no visible windows:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
+QT_QPA_PLATFORM=offscreen build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock --edition=lite --smoke
+```
+
+Every native review run must pass `--display=secondary`. The mock places its owned windows
+before showing them and refuses an unavailable requested display. `--screenshot` captures
+the schedule window when it is open, and `--size` also sizes that evidence window. The
+minimum main window remains 1024 × 640; Schedules supports 900 × 600.
+
+See [the scheduling evidence index](evidence/schedules/README.md) for the eight surfaces,
+English light/dark captures, minimum-size views and reproducible commands.
+
 ## Transcript content types
 
 The `claude`, `codex` and `cursor` transcripts follow the shapes in a six-week daemon

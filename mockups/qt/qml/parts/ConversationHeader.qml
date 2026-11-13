@@ -36,6 +36,7 @@ Rectangle {
 
     signal toggleDetails(string tab)
 
+    function openConversationMenu() { conversationMenu.popup(scheduleActions, scheduleActions.width - conversationMenu.width, scheduleActions.height) }
     function openReviewerMenu() { reviewerMenu.popup(reviewerButton, 0, reviewerButton.height) }
     function chooseReviewer(name) {
         const next = Object.assign({}, reviewers)
@@ -79,7 +80,7 @@ Rectangle {
     readonly property real room: width - px(16) - actions.width - px(10) - px(24)
     readonly property real minimumTitle: px(80)
     // Measured from the buttons, not the row, so hiding the global pair cannot feed back.
-    readonly property int iconActions: 2 + (window.compact ? 0 : 1) + 3
+    readonly property int iconActions: 3 + (window.compact ? 0 : 1) + 3
     readonly property real fullActionsWidth: iconActions * compactButton.implicitWidth
         + (planButton.visible ? planButton.implicitWidth + actions.spacing : 0)
         + (iconActions - 1) * actions.spacing
@@ -93,6 +94,7 @@ Rectangle {
                                        + compactWorktreeProbe.implicitWidth + minimumTitle
                                        + compactReviewerProbe.implicitWidth + 4 * gap <= room
     readonly property real fixedWidth: (numberLabel.visible ? numberLabel.implicitWidth + gap : 0)
+                                       + (scheduleClock.visible ? scheduleClock.width + gap : 0)
                                        + statusBadge.implicitWidth
                                        + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + gap
     // A team's member is reviewed by its team's reviewer, so it has no Reviewer choice.
@@ -144,6 +146,14 @@ Rectangle {
             font.pixelSize: header.px(14)
         }
 
+        Item {
+            id: scheduleClock
+            visible: header.window.scheduleHint(header.conversation.number) !== ""
+            width: visible ? header.px(16) : 0; height: header.px(20); anchors.verticalCenter: parent.verticalCenter
+            KetIcon { anchors.centerIn: parent; name: "clock"; box: header.px(12); color: KetTheme.t.textMuted }
+            HoverHandler { id: headerClockHover }
+            KetToolTip { visible: headerClockHover.hovered; text: header.window.scheduleHint(header.conversation.number) }
+        }
         Basic.AbstractButton {
             id: titleButton
             anchors.verticalCenter: parent.verticalCenter
@@ -228,6 +238,11 @@ Rectangle {
         spacing: header.px(2)
 
         KetIconButton {
+            id: scheduleActions
+            iconName: "more"; text: "Conversation actions"
+            onClicked: header.openConversationMenu()
+        }
+        KetIconButton {
             id: compactButton
             visible: header.globalActions
             iconName: header.window.compact ? "fullscreen" : "panel-left"
@@ -272,6 +287,13 @@ Rectangle {
         }
     }
 
+    KetMenu {
+        id: conversationMenu
+        KetMenuItem { text: "Schedule send…"; iconName: "clock"; onTriggered: header.window.editSchedule(0, true, "", header.conversation.number) }
+        KetMenuItem { text: "Repeat…"; iconName: "clock"; onTriggered: header.window.editSchedule(0, false, "", header.conversation.number) }
+        KetMenuSeparator {}
+        KetMenuItem { text: "Conversation schedules…"; onTriggered: header.window.openSchedules() }
+    }
     KetMenu {
         id: reviewerMenu
         KetMenuItem {

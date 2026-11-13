@@ -100,7 +100,8 @@ Item {
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
-        if (name === "content-tabs") detailsPane.openTabMenu()
+        if (name === "conversation-menu") conversationHeader.openConversationMenu()
+        else if (name === "content-tabs") detailsPane.openTabMenu()
         // The header's Plan ring, and the Atlas action pressed twice (it closes the pane again).
         else if (name === "plan") toggleContent("plan")
         else if (name === "atlas-toggle") { toggleContent("atlas"); toggleContent("atlas") }
@@ -155,8 +156,15 @@ Item {
                             run: screen.planRun
                         }
                     }
+                    Loader {
+                        active: screen.window.scheduledTranscript
+                        visible: active
+                        width: Math.min(parent.width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(760, KetTheme.zoom))
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        sourceComponent: ScheduleRunMessage { window: screen.window }
+                    }
                     Transcript {
-                        visible: !screen.planRun || !screen.planRun.presented
+                        visible: !screen.window.scheduledTranscript && (!screen.planRun || !screen.planRun.presented)
                         width: parent.width
                         window: screen.window
                         kind: screen.kind

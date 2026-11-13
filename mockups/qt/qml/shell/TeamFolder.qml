@@ -201,6 +201,13 @@ Column {
                 text: "Team actions"
                 onClicked: folder.menuRequested(menuButton)
             }
+            Item {
+                visible: folder.window.scheduleStore.forTeam(folder.team.id).some(e => e.enabled)
+                width: folder.px(16); height: folder.px(20); anchors.verticalCenter: parent.verticalCenter
+                KetIcon { anchors.centerIn: parent; name: "clock"; box: folder.px(12); color: KetTheme.t.textMuted }
+                HoverHandler { id: clockHover }
+                KetToolTip { visible: clockHover.hovered; text: folder.window.teamScheduleHint(folder.team.id) }
+            }
             KetIcon {
                 id: waitsMark
                 objectName: "team-waits"
@@ -243,6 +250,7 @@ Column {
                     objectName: "member-" + modelData.number
                     required property var modelData
                     readonly property var item: folder.conversation(modelData.number)
+                    scheduleHint: folder.window.scheduleHint(item.number)
                     unread: !!item.unread
                     detail: item.from ? "from " + item.from : ""
                     width: folder.width
