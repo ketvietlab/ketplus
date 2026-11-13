@@ -44,6 +44,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                 QObject* parent = nullptr);
     SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAdapter* claude,
                 CursorAdapter* cursor, QObject* parent = nullptr);
+    SessionHost(LocalJournal* journal, CodexAdapter* adapter,
+                QList<ProviderAdapter*> additionalProviders, QObject* parent = nullptr);
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
@@ -102,7 +104,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // the task_id its latest tasks.changed event listed. Answers once the provider has replied.
     void backgroundTaskCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] static bool isBackgroundTaskCommand(const QString& type);
-    // ADR 0015 capability of the provider behind `adapter` ("codex", "claude" or "cursor").
+    // ADR 0015 capability of the provider behind `adapter` ("codex", "claude", "cursor" or
+    // "copilot").
     [[nodiscard]] bool providerSupports(const QString& adapter, const QString& capability) const;
     // The provider for a session's adapter name, or nullptr when it is not installed.
     [[nodiscard]] ProviderAdapter* provider(const QString& adapter) const;
@@ -440,8 +443,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                    const QJsonObject& options);
     void beginClaudeTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
                          const QJsonObject& options);
-    void beginCursorTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
-                         const QJsonObject& options);
+    void beginAcpTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
+                      const QJsonObject& options);
     void handleProviderNotification(const QString& method, const QJsonObject& params);
     // ADR 0015 §5: false when a Codex notification must not be handled. Methods KetPlus does
     // not act on are counted; known ones missing a required field journal

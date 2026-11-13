@@ -7,6 +7,7 @@
 #include <QList>
 #include <QPair>
 #include <QSet>
+#include <optional>
 class QProcess;
 class QTimer;
 namespace ketplus::daemon {
@@ -32,6 +33,11 @@ class AcpAdapter : public ProviderAdapter {
     virtual QJsonObject clientCapabilities() const;
     // rawInput is provider-owned data, not a portable authenticated MCP identity.
     virtual bool autoApprovePermission(const QString&, const QJsonObject&) const { return false; }
+    virtual QString initializationError(const QJsonObject&) const { return {}; }
+    virtual QString responseError(const QJsonObject& error);
+    virtual QString processFailure(const QString& fallback, std::optional<int>) { return fallback; }
+    // Zero keeps the existing provider policy. The engine owns timeout settlement/cleanup.
+    virtual int requestTimeoutMs(const QString&) const { return 0; }
     // The callback reports an empty error when launching is allowed.
     virtual void checkLaunch(std::function<void(const QString&)> done) { done({}); }
     // Called while the concrete adapter is alive by its explicit stop()/destructor.
@@ -101,6 +107,7 @@ class AcpAdapter : public ProviderAdapter {
     QByteArray stdoutBuffer_;
     QByteArray stderrBuffer_;
     QHash<quint64, Callback> pending_;
+    QHash<quint64, QTimer*> pendingTimers_;
     QHash<quint64, QString> pendingMethods_;
     compat::CapabilityNarrowing narrowing_;
     QList<QueuedCall> queued_;
