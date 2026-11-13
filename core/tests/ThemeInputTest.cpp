@@ -78,10 +78,23 @@ class ThemeInputTest : public QObject {
                          &root, &error));
         QCOMPARE(root.name, QStringLiteral("scheme"));
         QCOMPARE(root.children.first().attributes["value"], QStringLiteral("&"));
+        QVERIFY(parseXml(
+            "<?xml version=\"1.0\"?>"
+            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+            "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"
+            "<plist version=\"1.0\"><dict><key>name</key><string>Theme</string></dict></plist>",
+            &root, &error));
+        QCOMPARE(root.name, QStringLiteral("plist"));
+        QVERIFY(parseXml("<!DOCTYPE plist SYSTEM 'https://example.test/never-load.dtd'><plist/>",
+                         &root, &error));
+        QVERIFY(parseXml("<!DOCTYPE plist SYSTEM 'file:///does-not-exist.dtd'><plist/>", &root,
+                         &error));
         for (auto input :
-             {"<!DOCTYPE plist SYSTEM 'https://example.test/test.dtd'><plist/>",
-              "<!DOCTYPE a [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><a>&x;</a>",
-              "<!DOCTYPE a [<!ENTITY x 'expanded'>]><a>&x;</a>", "<a>&external;</a>", "<a>"}) {
+             {"<!DOCTYPE a [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><a>&x;</a>",
+              "<!DOCTYPE a [<!ENTITY x 'expanded'>]><a>&x;</a>",
+              "<!DOCTYPE a [<!ATTLIST a x CDATA 'injected'>]><a/>",
+              "<!DOCTYPE a SYSTEM 'https://example.test/external.dtd'><a>&external;</a>",
+              "<a>&external;</a>", "<a>"}) {
             QVERIFY(!parseXml(input, &root, &error));
             QVERIFY(!error.message.isEmpty());
             QVERIFY(error.line > 0);

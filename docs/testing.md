@@ -55,7 +55,7 @@ version for the same reason. No job in the matrix uses provider quota.
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
 It constructs small ZIP fixtures in memory, including patched hostile metadata,
 and tests JSONC comment/string boundaries and error locations, ZIP traversal,
-links/collisions/CRC failure, all four archive budgets, XML DTD/entity rejection,
+links/collisions/CRC failure, all four archive budgets, standard plist DOCTYPE acceptance without external resolution, internal DTD/entity rejection,
 and local/archive includes with cycles, escapes and the 16-level boundary.
 
 ## Target map
