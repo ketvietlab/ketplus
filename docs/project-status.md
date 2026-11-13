@@ -24,6 +24,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a
     `truncated` event; the client keeps its connection.

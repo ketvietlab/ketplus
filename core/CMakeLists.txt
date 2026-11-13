@@ -45,6 +45,11 @@ add_library(ketplus_ui STATIC
     src/ui/FindReplaceBar.h
     src/ui/Theme.cpp
     src/ui/Theme.h
+    src/ui/theme/ColorScheme.cpp
+    src/ui/theme/ColorScheme.h
+    src/ui/theme/ColorSchemeTokens.h
+    src/ui/theme/ColorSchemeCatalog.cpp
+    src/ui/theme/ColorSchemeCatalog.h
     src/ui/InterfaceZoom.h
     src/ui/TypeScale.h
     src/ui/KetFonts.cpp
@@ -59,6 +64,12 @@ target_include_directories(ketplus_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 ketplus_enable_warnings(ketplus_ui)
+qt_add_resources(ketplus_ui "color_schemes"
+    PREFIX "/color-schemes"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources/color-schemes"
+    FILES resources/color-schemes/light.ketscheme.json resources/color-schemes/dark.ketscheme.json
+          resources/color-schemes/KetDesignSystem-LICENSE.txt resources/color-schemes/SOURCE.json
+)
 add_library(KetPlusCM::ui ALIAS ketplus_ui)
 
 add_library(ketplus_core STATIC
@@ -504,6 +515,12 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_theme_input_tests)
     ketplus_cm_add_test(ketplus_theme_input_tests ketplus_theme_input_tests)
     set_tests_properties(ketplus_theme_input_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
+    target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)
+    ketplus_enable_warnings(ketplus_color_scheme_tests)
+    ketplus_cm_add_test(ketplus_color_scheme_tests ketplus_color_scheme_tests)
+    set_tests_properties(ketplus_color_scheme_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_tests tests/DocumentTest.cpp)
     target_link_libraries(ketplus_tests PRIVATE Qt6::Test ketplus_core)
