@@ -14,16 +14,16 @@ non-root loopback sshd with throwaway host/user keys. The release QA keypair is
 outside the source tree; its private key is never logged or committed.
 
 The daemon payload is the complete `cmake --install` stage from public revision
-`d076210e516d` (the same daemon source as this PR), including Qt libraries/plugins,
+`3e61b29314df` (the same daemon source as this PR), including Qt libraries/plugins,
 sidecar, skills and licence notices. Its verified identity is `0.1.52`, control URL
 `http://127.0.0.1:9`, runtime URL overrides disabled. It passes `--check-runtime`
 without SDK library/plugin environment overrides; its installed RUNPATH is
 `$ORIGIN/../lib`. No existing deployment, provider turn, real relay enrolment,
 sudo or OS-user creation was used.
 
-The final QA archive contains 6,858 entries, 266,230,813 compressed bytes and
-579,604,673 expanded bytes. SHA-256:
-`5007343450f719f0d7a807a4e881a88a3828b491eda072649791d98a257d5ec6`.
+The final QA archive contains 6,858 entries, 267,220,682 compressed bytes and
+581,745,817 expanded bytes. SHA-256:
+`f2fbfc52a0b8454e4009c03035b3c88b1621f92f5ee13272c9089a646b30ec9f`.
 The test generates a signed local manifest for this archive and verifies it with
 an explicitly injected QA public key. This proves the consumer protocol; it is
 not evidence that a production release/key exists.

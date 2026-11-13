@@ -38,6 +38,15 @@ ketplus_add_daemon_test(ketplus_remote_relay_backend_tests RemoteRelayBackendTes
 target_sources(ketplus_remote_relay_backend_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_link_libraries(ketplus_remote_relay_backend_tests PRIVATE ketplus_remote_control)
 
+# ADR 0124 release trust and installer state machine; no provider traffic.
+qt_add_executable(ketplus_daemon_release_tests DaemonReleaseTest.cpp)
+target_link_libraries(ketplus_daemon_release_tests PRIVATE Qt6::Test ketplus_remote_ssh)
+ketplus_enable_warnings(ketplus_daemon_release_tests)
+add_test(NAME ketplus_daemon_release_tests COMMAND ketplus_daemon_release_tests)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME ketplus_ssh_install_transaction_tests
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ssh_install_transaction.py)
+
 qt_add_executable(ketplus_remote_ssh_tunnel_tests SshTunnelTest.cpp)
 ketplus_enable_warnings(ketplus_remote_ssh_tunnel_tests)
 target_link_libraries(ketplus_remote_ssh_tunnel_tests PRIVATE Qt6::Test ketplus_remote_ssh)
@@ -275,15 +284,6 @@ target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
 
 ketplus_add_daemon_test(ketplus_relay_attachment_host_tests RelayAttachmentHostTest.cpp)
 target_sources(ketplus_relay_attachment_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
-
-# ADR 0124 release trust and installer state machine; no provider traffic.
-qt_add_executable(ketplus_daemon_release_tests DaemonReleaseTest.cpp)
-target_link_libraries(ketplus_daemon_release_tests PRIVATE Qt6::Test ketplus_remote_ssh)
-ketplus_enable_warnings(ketplus_daemon_release_tests)
-add_test(NAME ketplus_daemon_release_tests COMMAND ketplus_daemon_release_tests)
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-add_test(NAME ketplus_ssh_install_transaction_tests
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ssh_install_transaction.py)
 
 ketplus_add_daemon_test(ketplus_session_preparation_store_tests SessionPreparationStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_session_preparation_host_tests SessionPreparationHostTest.cpp)
