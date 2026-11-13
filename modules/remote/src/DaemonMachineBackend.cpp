@@ -182,6 +182,17 @@ void DaemonMachineBackend::createSession(const QJsonObject& request, Callback ca
     this->request(QStringLiteral("session.start_turn"), payload, {}, 0, std::move(callback));
 }
 
+void DaemonMachineBackend::attachmentCommand(const AttachmentOperation operation,
+                                             const QString& sessionId, const qint64 generation,
+                                             const QJsonObject& request, Callback callback) {
+    if (!supports(Feature::Attachments)) {
+        callback({}, unsupportedReason(Feature::Attachments));
+        return;
+    }
+    this->request(attachmentCommandKind(operation), request, sessionId, generation,
+                  std::move(callback));
+}
+
 void DaemonMachineBackend::startTurn(const QString& sessionId, const qint64 generation,
                                      const QJsonObject& request, Callback callback) {
     this->request(QStringLiteral("session.start_turn"), request, sessionId, generation,
@@ -233,8 +244,6 @@ void DaemonMachineBackend::setFeatureSource(DaemonClient* client) {
 }
 
 bool DaemonMachineBackend::supports(const Feature feature) const {
-    if (feature == Feature::Attachments)
-        return false; // staging files on the machine is not part of MachineBackend yet
     if (!knowsFeatures_)
         return true;
     if (client_ == nullptr || !client_->isReady())
@@ -247,7 +256,10 @@ bool DaemonMachineBackend::supports(const Feature feature) const {
     case Feature::Archive:
         return client_->hasFeature(QStringLiteral("session.archive/1"));
     case Feature::Attachments:
-        break;
+        return client_->hasCapability(QStringLiteral("attachment.stage.begin")) &&
+               client_->hasCapability(QStringLiteral("attachment.stage.chunk")) &&
+               client_->hasCapability(QStringLiteral("attachment.stage.commit")) &&
+               client_->hasCapability(QStringLiteral("attachment.stage.cancel"));
     }
     return false;
 }

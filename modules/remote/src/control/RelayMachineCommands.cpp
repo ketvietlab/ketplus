@@ -388,6 +388,13 @@ void RelayMachineBackend::createSession(const QJsonObject& request, Callback cal
         }));
 }
 
+void RelayMachineBackend::attachmentCommand(const AttachmentOperation operation,
+                                            const QString& sessionId, const qint64 generation,
+                                            const QJsonObject& request, Callback callback) {
+    sessionCommand(attachmentCommandKind(operation), sessionId, generation, request,
+                   std::move(callback));
+}
+
 void RelayMachineBackend::startTurn(const QString& sessionId, qint64 generation,
                                     const QJsonObject& request, Callback callback) {
     sessionCommand(QStringLiteral("session.start_turn"), sessionId, generation, request,
@@ -432,7 +439,8 @@ void RelayMachineBackend::answerQuestion(const QString& sessionId, qint64 genera
 
 bool RelayMachineBackend::supports(const Feature feature) const {
     return state_ == ConnectionState::Connected &&
-           (feature == Feature::Rename || feature == Feature::Fork);
+           (feature == Feature::Rename || feature == Feature::Fork ||
+            feature == Feature::Attachments);
 }
 
 QString RelayMachineBackend::unsupportedReason(const Feature feature) const {

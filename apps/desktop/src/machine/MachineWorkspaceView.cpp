@@ -2,6 +2,7 @@
 
 #include "agent/AgentWorkspaceView.h"
 #include "machine/MachineApprovalCards.h"
+#include "machine/MachineAttachmentPanel.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationActions.h"
 #include "machine/MachineConversationSession.h"
@@ -9,10 +10,13 @@
 
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QStackedWidget>
 #include <QStandardItemModel>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -86,7 +90,14 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     layout->addWidget(worktrees_);
     layout->addWidget(transcript_->view(), 1);
     layout->addWidget(approvals_);
+    attachmentStack_ = new QStackedWidget(this);
+    layout->addWidget(attachmentStack_);
     layout->addWidget(composer_);
+    composer_->installEventFilter(this);
+    connect(attach_, &QPushButton::clicked, this, [this] {
+        if (attachmentPanel_)
+            attachmentPanel_->chooseFiles();
+    });
     layout->addLayout(actions);
     setupToastAvoidance();
     connect(send_, &QPushButton::clicked, this, &MachineWorkspaceView::submit);
@@ -200,8 +211,14 @@ void MachineWorkspaceView::bind(const QString& sessionId, const qint64 generatio
     auto* session =
         new MachineConversationSession(catalog_->backend(), sessionId, generation, this);
     session->setRunning(running);
-    if (auto previous = lastByMachine_.value(machine); previous != nullptr)
-        previous->deleteLater();
+    if (auto previous = lastByMachine_.value(machine); previous != nullptr) {
+        if (previous->hasAttachmentSend()) {
+            previous->close();
+            connect(previous, &MachineConversationSession::attachmentsSent, previous,
+                    &QObject::deleteLater);
+        } else
+            previous->deleteLater();
+    }
     lastByMachine_.insert(machine, session);
     showSession(session, true);
     emit conversationOpened(machine, sessionId);
@@ -212,13 +229,45 @@ void MachineWorkspaceView::startNewConversation(const QString& repositoryId) {
     pendingFork_.clear();
     forkOrigins_.clear();
     const QString machine = catalog_->machineId();
-    if (auto previous = lastByMachine_.take(machine); previous != nullptr)
-        previous->deleteLater();
+    if (auto previous = lastByMachine_.take(machine); previous != nullptr) {
+        if (previous->hasAttachmentSend()) {
+            previous->close();
+            connect(previous, &MachineConversationSession::attachmentsSent, previous,
+                    &QObject::deleteLater);
+        } else
+            previous->deleteLater();
+    }
     showSession(nullptr, false);
     composer_->setFocus();
 }
 
 void MachineWorkspaceView::showSession(MachineConversationSession* session, const bool reload) {
+    attachmentPanel_ = nullptr;
+    if (session != nullptr) {
+        const QString key = catalog_->machineId() + QLatin1Char('/') + session->sessionId() +
+                            QLatin1Char('/') + QString::number(session->generation()) +
+                            QLatin1Char('/') +
+                            QString::number(reinterpret_cast<quintptr>(catalog_->backend()), 16);
+        auto* panel = attachmentPanels_.value(key);
+        if (!panel) {
+            panel = new MachineAttachmentPanel(catalog_->backend(), session->sessionId(),
+                                               session->generation(), attachmentStack_);
+            attachmentPanels_.insert(key, panel);
+            attachmentStack_->addWidget(panel);
+            connect(panel, &MachineAttachmentPanel::changed, this, [this] {
+                render();
+                pruneAttachmentPanels();
+            });
+        }
+        attachmentPanel_ = panel;
+        attachmentStack_->setCurrentWidget(panel);
+        disconnect(session, &MachineConversationSession::attachmentsSent, panel, nullptr);
+        connect(session, &MachineConversationSession::attachmentsSent, panel,
+                [panel](const QJsonArray&, const QString& error) { panel->sent(error.isEmpty()); });
+    }
+    attachmentStack_->setVisible(attachmentPanel_ != nullptr);
+    pruneAttachmentPanels();
+
     if (session_ != nullptr && session_ != session) {
         disconnect(session_, nullptr, this, nullptr);
         // Deselected or its machine switched away: the route stops following it, and its
@@ -282,7 +331,7 @@ void MachineWorkspaceView::render() {
     composer_->setReadOnly(!canAct);
     composer_->setEnabled(canAct);
     composerReason_->setText(reason);
-    send_->setEnabled(canAct);
+    send_->setEnabled(canAct && (!attachmentPanel_ || attachmentPanel_->allReady()));
     stop_->setVisible(session_ != nullptr && session_->running());
     stop_->setEnabled(canAct);
 }
@@ -293,13 +342,25 @@ void MachineWorkspaceView::renderTranscript() {
     transcript_->show(session_);
 }
 
+void MachineWorkspaceView::pruneAttachmentPanels() {
+    for (auto it = attachmentPanels_.begin(); it != attachmentPanels_.end();) {
+        auto* panel = it.value();
+        if (panel != attachmentPanel_ && panel->discardable()) {
+            attachmentStack_->removeWidget(panel);
+            panel->deleteLater();
+            it = attachmentPanels_.erase(it);
+        } else
+            ++it;
+    }
+}
+
 void MachineWorkspaceView::renderActions(const bool newConversation) {
     more_->setVisible(!newConversation);
     // Attachments are offered on every route and say why they cannot be used yet.
     QString reason;
     attach_->setEnabled(
-        actions_->available(MachineConversationActions::Feature::Attachments, &reason));
-    attach_->setToolTip(reason);
+        session_ && actions_->available(MachineConversationActions::Feature::Attachments, &reason));
+    attach_->setToolTip(session_ ? reason : tr("Open a conversation before attaching files."));
 }
 
 void MachineWorkspaceView::renderWorktrees() {
@@ -342,12 +403,17 @@ void MachineWorkspaceView::renderWorktrees() {
 
 void MachineWorkspaceView::submit() {
     const QString prompt = composer_->toPlainText().trimmed();
-    if (prompt.isEmpty())
+    if (prompt.isEmpty() && (!attachmentPanel_ || !attachmentPanel_->hasAttachments()))
+        return;
+    if (attachmentPanel_ && !attachmentPanel_->allReady())
         return;
     if (session_ != nullptr) {
         if (!session_->canAct())
             return;
-        session_->send(prompt);
+        const QJsonArray ids = attachmentPanel_ ? attachmentPanel_->attachmentIds() : QJsonArray{};
+        if (!ids.isEmpty())
+            attachmentPanel_->setSending(true);
+        session_->send(prompt, ids);
         composer_->clear();
         return;
     }

@@ -67,6 +67,7 @@ class CloudPrivacyTestAccess {
                                       const QString& key = "session-synthetic:1") {
         return client.knownUploadedCursors_.value(key, -1);
     }
+    static void publishHeartbeat(CloudControlClient& client) { client.heartbeat(); }
     // Sends one heartbeat batch per entry, as the heartbeat timer does after its snapshot.
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;

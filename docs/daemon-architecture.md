@@ -704,8 +704,10 @@ contract and compatibility rules. This documents client behavior, not relay depl
 
 ### Relay address and sign-in
 
-The relay is the standalone KétPlus runtime (`https://ketplus-staging.ketviet.vn`
-by default), which serves `/v2/...` at the root of its host. A base URL may still
+Production packages compile `https://api.ketplus.app` into the desktop and daemon
+(`KETPLUS_PRODUCTION_RELEASE=ON`). Developer/staging defaults remain
+`https://ketplus-staging.ketviet.vn` until the separately approved staging cutover.
+The relay is the standalone KétPlus runtime, which serves `/v2/...` at the root of its host. A base URL may still
 carry a path, as the tenant gateway's `/native/ketplus` did before the staging
 cutover: every request and the `/v2/relay` socket append their path to that base
 (`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
@@ -962,7 +964,11 @@ reports a message the conversation sent (`sent`, with its delivery) or answered
 with its final message (`replied`), and held, failed and expired messages. While
 an automatic turn runs, the broker keeps its sender in memory: `session.list`
 adds it as `agent_turn` (`number`, `title`, `kind`) and the heartbeat seals it
-into the phone's session metadata as `agentTurn`, beside `number`.
+into the phone's session metadata as `agentTurn`, beside `number`. The sealed
+`awaitingAgentReply` Boolean reports current-generation, unexpired outbound
+`expect_reply` requests; the next heartbeat explicitly sends false after the
+last request is answered, fails or expires. It is distinct from `awaitingReply`
+(user input) and never appears in plaintext snapshots.
 
 The work report (ADR 0106) travels the same authenticated path:
 - the ketplus_agents server's `work_report` tool calls `agents.work_report`;

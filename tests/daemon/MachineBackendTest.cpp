@@ -1,5 +1,6 @@
 #include "DaemonClient.h"
 #include "DaemonMachineBackend.h"
+#include "MachineAttachmentUpload.h"
 
 #include <QDir>
 #include <QJsonArray>
@@ -36,6 +37,106 @@ class MachineBackendTest final : public QObject {
         qputenv("KETPLUS_DAEMON_TOKEN_FILE", directory_.filePath(QStringLiteral("token")).toUtf8());
         qputenv("KETPLUS_DAEMON_STATE", directory_.filePath(QStringLiteral("state")).toUtf8());
         qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+    }
+
+    void relayUploadWaitsForEachCompletedCommand() {
+        QList<RecordedCall> calls;
+        DaemonMachineBackend backend(
+            "host", MachineBackend::Route::Relay,
+            [&calls](const QString& type, const QJsonObject& payload, const QString& session,
+                     qint64 generation, MachineBackend::Callback callback) {
+                calls.append({type, payload, session, generation});
+                callback({{"status", "queued"}, {"command_id", QString::number(calls.size())}}, {});
+            });
+        ketplus::remote::MachineAttachmentUpload upload(&backend, "s1", 7);
+        QSignalSpy finished(&upload, &ketplus::remote::MachineAttachmentUpload::finished);
+        const QByteArray bytes(40 * 1024, 'a');
+        upload.start("note.txt", "text/plain", bytes);
+        QCOMPARE(calls.size(), 1);
+        QCOMPARE(calls[0].type, QStringLiteral("attachment.stage.begin"));
+        QCOMPARE(calls[0].payload.value("total_bytes").toInteger(), bytes.size());
+        QCoreApplication::processEvents();
+        QCOMPARE(calls.size(), 1); // queued does not mean begin finished
+        emit backend.commandCompleted("unrelated", {{"revision", 1}}, {});
+        QCOMPARE(calls.size(), 1);
+        emit backend.commandCompleted("1", {{"revision", 1}}, {});
+        QTRY_COMPARE(calls.size(), 2);
+        QCOMPARE(calls[1].type, QStringLiteral("attachment.stage.chunk"));
+        QCOMPARE(QByteArray::fromBase64(calls[1].payload.value("data").toString().toLatin1(),
+                                        QByteArray::Base64UrlEncoding),
+                 bytes.left(32768));
+        emit backend.commandCompleted("2", {{"accepted", true}}, {});
+        QTRY_COMPARE(calls.size(), 3);
+        emit backend.commandCompleted("3", {{"accepted", true}}, {});
+        QTRY_COMPARE(calls.size(), 4);
+        QCOMPARE(calls[3].type, QStringLiteral("attachment.stage.commit"));
+        QCOMPARE(finished.size(), 0);
+        emit backend.commandCompleted("4", {{"status", "ready"}}, {});
+        QCOMPARE(finished.size(), 1);
+        QVERIFY(upload.ready());
+        for (const auto& call : calls) {
+            QCOMPARE(call.sessionId, QStringLiteral("s1"));
+            QCOMPARE(call.generation, 7);
+        }
+    }
+
+    void cancellationWaitsForPendingBeginThenCancels() {
+        QList<RecordedCall> calls;
+        DaemonMachineBackend backend(
+            "host", MachineBackend::Route::Relay,
+            [&calls](const QString& type, const QJsonObject& payload, const QString& session,
+                     qint64 generation, MachineBackend::Callback callback) {
+                calls.append({type, payload, session, generation});
+                callback({{"status", "queued"}, {"command_id", QString::number(calls.size())}}, {});
+            });
+        ketplus::remote::MachineAttachmentUpload upload(&backend, "s1", 7);
+        QSignalSpy finished(&upload, &ketplus::remote::MachineAttachmentUpload::finished);
+        upload.start("note.txt", "text/plain", "hello");
+        upload.cancel();
+        QCOMPARE(calls.size(), 1);
+        emit backend.commandCompleted("1", {{"revision", 1}}, {});
+        QTRY_COMPARE(calls.size(), 2);
+        QCOMPARE(calls[1].type, QStringLiteral("attachment.stage.cancel"));
+        QCOMPARE(calls[1].payload.value("expected_revision").toInt(), 1);
+        QCOMPARE(finished.size(), 0);
+        emit backend.commandCompleted("2", {{"status", "cancelled"}}, {});
+        QCOMPARE(finished.size(), 1);
+        QVERIFY(!upload.ready());
+    }
+
+    void attachmentCommandsPreserveSessionFenceAndPayload() {
+        QList<RecordedCall> calls;
+        DaemonMachineBackend backend(QStringLiteral("host"), MachineBackend::Route::Ssh,
+                                     [&calls](const QString& type, const QJsonObject& payload,
+                                              const QString& sessionId, qint64 generation,
+                                              MachineBackend::Callback callback) {
+                                         calls.append({type, payload, sessionId, generation});
+                                         callback({{"status", "ready"}}, {});
+                                     });
+        const QJsonObject payload{{"attachment_id", "upload-1"}, {"expected_revision", 4}};
+        const QList<MachineBackend::AttachmentOperation> operations{
+            MachineBackend::AttachmentOperation::Begin, MachineBackend::AttachmentOperation::Chunk,
+            MachineBackend::AttachmentOperation::Commit,
+            MachineBackend::AttachmentOperation::Cancel};
+        const QStringList kinds{"attachment.stage.begin", "attachment.stage.chunk",
+                                "attachment.stage.commit", "attachment.stage.cancel"};
+        int completed = 0;
+        for (auto operation : operations)
+            backend.attachmentCommand(
+                operation, QStringLiteral("session-1"), 7, payload,
+                [&completed](const QJsonObject& result, const QString& error) {
+                    QVERIFY(error.isEmpty());
+                    QCOMPARE(result.value("status").toString(), QStringLiteral("ready"));
+                    ++completed;
+                });
+        QCOMPARE(completed, 4);
+        QCOMPARE(calls.size(), 4);
+        for (int i = 0; i < calls.size(); ++i) {
+            QCOMPARE(calls[i].type, kinds[i]);
+            QCOMPARE(calls[i].sessionId, QStringLiteral("session-1"));
+            QCOMPARE(calls[i].generation, 7);
+            QCOMPARE(calls[i].payload, payload);
+        }
     }
 
     void mapsEveryOperationToTheLocalProtocol() {
@@ -148,7 +249,7 @@ class MachineBackendTest final : public QObject {
         QVERIFY(backend.supports(Feature::Rename));
         QVERIFY(backend.supports(Feature::Fork));
         QVERIFY(backend.supports(Feature::Archive));
-        QVERIFY(!backend.supports(Feature::Attachments));
+        QVERIFY(backend.supports(Feature::Attachments));
         const auto ignore = [](const QJsonObject&, const QString& error) {
             QVERIFY(error.isEmpty());
         };

@@ -4,6 +4,8 @@ if(APPLE)
 endif()
 
 add_library(ketplus_desktop_support STATIC
+    src/machine/MachineAttachmentPanel.cpp
+    src/machine/MachineAttachmentPanel.h
     src/machine/MachineApprovalCards.cpp
     src/machine/MachineApprovalCards.h
     src/machine/MachineCatalog.cpp
@@ -83,6 +85,7 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageParts.cpp
     src/teams/TeamPageParts.h
     src/teams/TeamPageSections.cpp
+    src/teams/TeamDecisionOther.cpp
     src/teams/TeamPageTasks.cpp
     src/teams/TeamPageStorage.cpp
     src/teams/TeamWorktreeDialog.cpp

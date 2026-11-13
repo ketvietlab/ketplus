@@ -28,13 +28,6 @@ using team_page::Text;
 constexpr int kButtonChoiceLength = 28;
 constexpr int kUpdateLines = 3;
 
-QString leaderOf(const QJsonObject& team) {
-    for (const auto& value : team.value(QStringLiteral("members")).toArray())
-        if (value.toObject().value(QStringLiteral("role")).toString() == QStringLiteral("leader"))
-            return value.toObject().value(QStringLiteral("session_id")).toString();
-    return {};
-}
-
 // Today's time alone; an earlier day with its date.
 QString when(const QString& iso) {
     const QDateTime at = QDateTime::fromString(iso, Qt::ISODateWithMs).toLocalTime();
@@ -72,6 +65,14 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
     for (const auto& value : team.value(QStringLiteral("decisions")).toArray())
         if (value.toObject().value(QStringLiteral("state")).toString() == QStringLiteral("open"))
             open.append(value.toObject());
+    // A written answer is kept only while its decision is open.
+    for (auto it = decisionDrafts_.begin(); it != decisionDrafts_.end();)
+        it = std::any_of(open.cbegin(), open.cend(),
+                         [&](const QJsonObject& decision) {
+                             return decision.value(QStringLiteral("id")).toString() == it.key();
+                         })
+                 ? std::next(it)
+                 : decisionDrafts_.erase(it);
     // Absent when nothing waits.
     if (open.isEmpty())
         return;
@@ -143,12 +144,16 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
             answers(button, choice);
             flow->addWidget(button);
         }
-        auto* elsewhere =
-            new ket::Button(tr("Answer in the conversation"), ket::ButtonVariant::Ghost, actions);
-        elsewhere->setObjectName(QStringLiteral("teamDecisionInConversation"));
-        connect(elsewhere, &QAbstractButton::clicked, this,
-                [this, leader = leaderOf(team)] { emit conversationRequested(leader); });
-        flow->addWidget(elsewhere);
+        // T-55: the last choice is the user's own words, written on the card.
+        const bool writing = decisionDrafts_.contains(id);
+        if (!writing) {
+            QWidget* other = decisionOther(sentences ? static_cast<QWidget*>(card) : actions, id,
+                                           what, sentences);
+            if (sentences)
+                column->addWidget(other);
+            else
+                flow->addWidget(other);
+        }
 
         // Beside the choices: who asked, when, and what the answer unblocks.
         const QString raisedBy = decision.value(QStringLiteral("raised_by")).toString();
@@ -173,6 +178,8 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
             column->addLayout(foot);
             column->addWidget(meta);
         }
+        if (writing)
+            column->addWidget(decisionDraft(card, id, what));
         column->addWidget(error);
         layout_->addWidget(card);
     }

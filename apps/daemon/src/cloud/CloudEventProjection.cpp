@@ -1,4 +1,5 @@
 #include "cloud/CloudEventProjection.h"
+#include "TranscriptVisibility.h"
 #include "agents/WorkReport.h"
 #include "storage/TranscriptItemSnapshot.h"
 
@@ -301,9 +302,7 @@ QJsonObject mcpToolCallProjection(const QJsonObject& payload) {
     return projected;
 }
 
-} // namespace
-
-QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObject& payload) {
+QJsonObject projectedPayload(const QString& eventType, const QJsonObject& payload) {
     const QJsonObject item = payload.value(QStringLiteral("item")).toObject();
     const QString itemType =
         payload.value(QStringLiteral("item_type"))
@@ -339,6 +338,17 @@ QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObj
         return payload;
     }
     return commandProjection(payload);
+}
+
+} // namespace
+
+QJsonObject projectEventPayloadForCloud(const QString& eventType, const QJsonObject& payload) {
+    QJsonObject projected = projectedPayload(eventType, payload);
+    // The phone leaves these out of its transcript as Desktop does (TranscriptVisibility.h).
+    if (remote::transcript_visibility::hidden(eventType, payload))
+        projected.insert(QLatin1String(remote::transcript_visibility::markerKey),
+                         QLatin1String(remote::transcript_visibility::hiddenMarker));
+    return projected;
 }
 
 QJsonObject cloudItemMetadata(const QString& sessionId, const qint64 generation,
@@ -410,6 +420,9 @@ QJsonObject projectTranscriptWindowForCloud(const QJsonObject& page,
                 transferId.isEmpty() ? std::optional<QJsonObject>{QJsonObject{
                                            {QStringLiteral("cloud_omitted"), true}}}
                                      : decide(transferId, manifest);
+            // A large item's stub carries no transcript marker. A hidden agents tool call is
+            // still left out on the phone, which applies the same rule by tool name to the item
+            // it fetches (T-78, the phone's TranscriptVisibility).
             if (decision.has_value())
                 event.insert(QStringLiteral("payload"), *decision);
             events.append(event);

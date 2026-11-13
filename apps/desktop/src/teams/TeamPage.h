@@ -3,6 +3,7 @@
 #include "teams/TeamGoal.h"
 #include "teams/TeamWorktreeDialog.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
@@ -85,6 +86,10 @@ class TeamPage final : public QWidget {
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
+    // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
+    [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
+                                         bool sentences);
+    [[nodiscard]] QWidget* decisionDraft(QWidget* card, const QString& id, const QString& what);
     void buildTasks(const QJsonObject& team);
     void buildMembers(const QJsonObject& team);
     // ADR 0114 §10 (TeamPageStorage.cpp): the disk under the team's worktrees and the worktrees
@@ -137,6 +142,20 @@ class TeamPage final : public QWidget {
     bool roomy_{false};
     // The goal stays open across rebuilds once the user opened it.
     bool goalExpanded_{false};
+    // T-55: the written answers being typed, by decision id, and the one to focus once built.
+    // The cursor and the selection are kept with the text: a rebuild makes a new field.
+    struct DecisionDraft {
+        QString text;
+        int anchor{-1};
+        int position{-1};
+    };
+    QHash<QString, DecisionDraft> decisionDrafts_;
+    // A rebuild waits while a written answer is mid-composition in an input method.
+    bool rebuildDeferred_{false};
+    [[nodiscard]] bool composingDraft() const;
+    QString focusDraft_;
+    // The written answer just opened: it takes the keyboard when the rebuild ends.
+    QPointer<QWidget> draftFocus_;
     team_goal::ConversationDirectory conversations_;
     bool compact_{false};
     bool segmented_{true};

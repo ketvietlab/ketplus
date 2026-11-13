@@ -24,6 +24,9 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTableWidget>
+#include <QTextBlock>
+#include <QTextEdit>
+#include <QTextLayout>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -236,7 +239,28 @@ void TeamPage::restoreFocus(const FocusPlace& place) {
     target->setFocus(Qt::OtherFocusReason);
 }
 
+// A word the input method is still composing in a written answer lives only in its field: a
+// rebuild would drop it, so it waits until the word is committed.
+bool TeamPage::composingDraft() const {
+    const auto* editor = content_ ? qobject_cast<QTextEdit*>(window()->focusWidget()) : nullptr;
+    if (!editor || !content_->isAncestorOf(editor) || !editor->parentWidget() ||
+        editor->parentWidget()->objectName() != QStringLiteral("teamDecisionOtherText"))
+        return false;
+    const QTextLayout* layout = editor->textCursor().block().layout();
+    return layout && !layout->preeditAreaText().isEmpty();
+}
+
 void TeamPage::rebuild() {
+    if (composingDraft()) {
+        if (!rebuildDeferred_) {
+            rebuildDeferred_ = true;
+            QTimer::singleShot(200, this, [this] {
+                rebuildDeferred_ = false;
+                rebuild();
+            });
+        }
+        return;
+    }
     const int position = scroll_->verticalScrollBar()->value();
     const FocusPlace focus = focusPlace();
     const QString currentTask =
@@ -288,7 +312,13 @@ void TeamPage::rebuild() {
                 tasks_->setCurrentCell(row, 0);
                 break;
             }
-    restoreFocus(focus);
+    // A written answer just opened takes the keyboard from Other, which is gone.
+    if (draftFocus_) {
+        draftFocus_->setFocus(Qt::OtherFocusReason);
+        draftFocus_.clear();
+    } else {
+        restoreFocus(focus);
+    }
 }
 
 // A section's title, what it counts, and at the right what acts on the whole section.

@@ -61,13 +61,15 @@ class MachineConversationSession final : public QObject {
     // (MachineBackend::conversationClosed). The cached transcript stays.
     void close();
     // A prompt: a new turn, or a steer of the running one.
-    void send(const QString& text);
+    void send(const QString& text, const QJsonArray& attachmentIds = {});
+    [[nodiscard]] bool hasAttachmentSend() const { return attachmentSendCount_ > 0; }
     void stop();
     void resolveApproval(const QString& approvalId, bool accept);
     void answerQuestion(const QString& questionId, const QJsonObject& resolution);
 
   signals:
     void changed();
+    void attachmentsSent(const QJsonArray& ids, const QString& error);
 
   private:
     void loadApprovals();
@@ -92,6 +94,8 @@ class MachineConversationSession final : public QObject {
     QPointer<remote::MachineBackend> backend_;
     QString machineId_;
     QString sessionId_;
+    int attachmentSendCount_{0};
+    QHash<QString, QJsonArray> attachmentSends_;
     qint64 generation_{0};
     MachineTranscript transcript_;
     QVector<QJsonObject> approvals_;

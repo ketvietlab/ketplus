@@ -37,7 +37,7 @@ endif()
 
 # A Release daemon cannot be pointed elsewhere at run time, so the relay compiled into the
 # bundle must be the one this build was configured for.
-if(DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL "")
+if(KETPLUS_PRODUCTION_RELEASE OR (DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL ""))
     execute_process(
         COMMAND "${daemon}" --build-info
         RESULT_VARIABLE build_info_result
@@ -48,18 +48,9 @@ if(DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL "")
     if(NOT build_info_result EQUAL 0)
         message(FATAL_ERROR "Bundled daemon cannot report its build: ${build_info_error}")
     endif()
-    string(JSON bundled_control_url ERROR_VARIABLE build_info_json_error
-        GET "${build_info}" control_url)
-    if(build_info_json_error)
-        message(FATAL_ERROR "Unreadable daemon build info: ${build_info}")
-    endif()
-    # A Debug remote-demo daemon reports the relay its environment chose instead.
-    string(JSON overridable ERROR_VARIABLE build_info_json_error
-        GET "${build_info}" control_url_overridable)
-    if(NOT overridable AND NOT bundled_control_url STREQUAL KETPLUS_CONTROL_URL)
-        message(FATAL_ERROR
-            "Bundled daemon talks to ${bundled_control_url}, expected ${KETPLUS_CONTROL_URL}")
-    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/KetPlusProductionControl.cmake")
+    ketplus_verify_control_build_info("${build_info}" "${KETPLUS_CONTROL_URL}"
+        "${KETPLUS_PRODUCTION_RELEASE}")
 endif()
 
 execute_process(

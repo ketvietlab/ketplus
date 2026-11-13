@@ -58,6 +58,9 @@ class DaemonMachineBackend final : public MachineBackend {
     void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                               const QJsonObject& request, Callback callback) override;
     void createSession(const QJsonObject& request, Callback callback) override;
+    void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
+                           qint64 generation, const QJsonObject& request,
+                           Callback callback) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,

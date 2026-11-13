@@ -312,6 +312,22 @@ QList<AgentMessageRecord> LocalJournal::agentMessagesOf(const QString& sessionId
     return readMessages(query);
 }
 
+QSet<QString> LocalJournal::sessionsAwaitingAgentReply(const QDateTime& when) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT s.id FROM sessions s WHERE EXISTS (SELECT 1 FROM agent_messages m "
+        "WHERE m.from_session = s.id AND m.from_generation = s.generation "
+        "AND m.expect_reply = 1 AND m.state IN ('queued', 'held', 'releasing', 'delivered') "
+        "AND (m.expires_at = '' OR m.expires_at > ?))"));
+    query.addBindValue(when.toUTC().toString(Qt::ISODateWithMs));
+    QSet<QString> result;
+    if (!query.exec())
+        return result;
+    while (query.next())
+        result.insert(query.value(0).toString());
+    return result;
+}
+
 int LocalJournal::automaticAgentTurnsInChain(const QString& chainId) const {
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(
@@ -392,7 +408,7 @@ bool LocalJournal::releaseAgentState(const QString& sessionId, const qint64 gene
     reviewers.addBindValue(sessionId);
     if (!release.exec() || !expire.exec() || !reviewers.exec()) {
         if (error)
-            *error = !release.lastError().text().isEmpty() ? release.lastError().text()
+            *error = !release.lastError().text().isEmpty()  ? release.lastError().text()
                      : !expire.lastError().text().isEmpty() ? expire.lastError().text()
                                                             : reviewers.lastError().text();
         return false;

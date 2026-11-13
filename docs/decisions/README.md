@@ -20,3 +20,5 @@ Date: YYYY-MM-DD
 
 Do not use an ADR for routine implementation detail. When superseding a
 decision, retain the old record and link both documents.
+
+- [0120: GitHub Copilot through a shared ACP adapter](0120-github-copilot-acp-provider.md)

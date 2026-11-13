@@ -1,4 +1,6 @@
+#include "MachineAttachmentUpload.h"
 #include "SyntheticRelay.h"
+#include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -73,6 +75,84 @@ class RemoteRelayBackendTest final : public QObject {
 
   private slots:
     void init() { r03::resetCredentials(); }
+
+    void attachmentUploadResumesQueuedStepsAndRejectsFailedChunks() {
+        const QList<QPair<QString, bool>> scenarios{
+            {"text/plain", false}, {"image/png", false}, {"text/plain", true}};
+        for (const auto& scenario : scenarios) {
+            const QString mediaType = scenario.first;
+            const bool rejectChunk = scenario.second;
+            r03::resetCredentials();
+            QTemporaryDir dir;
+            FixtureTransport network;
+            ControlV2Client client(QUrl{origin});
+            EncryptedFixture fixture(client, network);
+            SyntheticRelay relay(network, fixture, client);
+            RelayMachineBackend backend(&client, "linux-host",
+                                        fastOptions(dir.filePath("outbox.json")));
+            connectAndWait(backend);
+            QVERIFY(backend.supports(MachineBackend::Feature::Attachments));
+            Answer listing;
+            backend.listConversations({}, listing.callback());
+            QTRY_VERIFY(listing.done);
+            QVERIFY2(listing.error.isEmpty(), qPrintable(listing.error));
+            QByteArray received;
+            QString digest;
+            relay.results = [&](const QString& kind, const QJsonObject& payload) -> QJsonObject {
+                if (kind == "attachment.stage.begin") {
+                    if (payload.value("media_type").toString() != mediaType)
+                        return {{"ok", false}, {"error_message", "Media type changed"}};
+                    digest = payload.value("digest_sha256").toString();
+                    return {{"revision", 1}};
+                }
+                if (kind == "attachment.stage.chunk") {
+                    if (rejectChunk)
+                        return {{"ok", false}, {"error_message", "Chunk refused"}};
+                    received += QByteArray::fromBase64(payload.value("data").toString().toLatin1(),
+                                                       QByteArray::Base64UrlEncoding);
+                    return {{"accepted", true}};
+                }
+                if (kind == "attachment.stage.commit") {
+                    if (QString::fromLatin1(
+                            QCryptographicHash::hash(received, QCryptographicHash::Sha256)
+                                .toHex()) != digest)
+                        return {{"ok", false}, {"error_message", "Digest mismatch"}};
+                    return {{"status", "ready"}};
+                }
+                return {};
+            };
+            relay.hostPaused = true;
+            ketplus::remote::MachineAttachmentUpload upload(&backend, "opaque-session", 3);
+            QSignalSpy finished(&upload, &ketplus::remote::MachineAttachmentUpload::finished);
+            const QByteArray bytes =
+                mediaType == "text/plain"
+                    ? QByteArray(40 * 1024, 't')
+                    : QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ"
+                                             "VR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII=");
+            upload.start(mediaType == "text/plain" ? "synthetic-note.txt" : "synthetic-note.png",
+                         mediaType, bytes);
+            QTRY_COMPARE(readsOf(relay, "attachment.stage.begin"), 1);
+            QCOMPARE(finished.size(), 0);
+            QVERIFY(received.isEmpty());
+            // A link fence returns the durable command as queued; completion must
+            // still arrive through commandCompleted after reconnect, not advance early.
+            backend.disconnectFromRelay();
+            QCOMPARE(finished.size(), 0);
+            QVERIFY(received.isEmpty());
+            relay.hostPaused = false;
+            connectAndWait(backend);
+            QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+            QVERIFY2(upload.ready() == !rejectChunk, qPrintable(finished[0][1].toString()));
+            if (rejectChunk)
+                QVERIFY(!finished[0][1].toString().isEmpty());
+            else
+                QCOMPARE(received, bytes);
+            for (const auto& body : std::as_const(network.bodies)) {
+                QVERIFY(!body.contains("synthetic-note"));
+                QVERIFY(!body.contains(QByteArray(128, 't')));
+            }
+        }
+    }
 
     void aFullTurnWithAnApprovalAndAQuestionAppliesHostSignedResults() {
         QTemporaryDir dir;
@@ -181,7 +261,7 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY(backend.supports(Feature::Rename));
         QVERIFY(backend.supports(Feature::Fork));
         QVERIFY(!backend.supports(Feature::Archive));
-        QVERIFY(!backend.supports(Feature::Attachments));
+        QVERIFY(backend.supports(Feature::Attachments));
         QCOMPARE(backend.unsupportedReason(Feature::Archive),
                  QStringLiteral("Not available through the Relay yet."));
 

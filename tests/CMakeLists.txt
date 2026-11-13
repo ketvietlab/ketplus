@@ -66,6 +66,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptInteractionTest.cpp
     TranscriptFileStepsTest.cpp
     TranscriptAgentNoteTest.cpp
+    TranscriptInternalStepsTest.cpp
     TranscriptTeamBlockTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
@@ -205,6 +206,9 @@ target_link_libraries(ketplus_machine_composition_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_machine_attachment_tests MachineAttachmentPanelTest.cpp)
+target_link_libraries(ketplus_machine_attachment_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
 ketplus_add_gui_test(ketplus_machine_toast_tests MachineWorkspaceToastTest.cpp)
 target_link_libraries(ketplus_machine_toast_tests PRIVATE Qt6::Test ketplus_desktop_support)
 
@@ -292,6 +296,7 @@ if(APPLE)
             "-DKETPLUS_APP_BUNDLE=$<TARGET_BUNDLE_DIR:ketplus>"
             "-DKETPLUS_PRODUCT_VERSION=${PROJECT_VERSION}"
             "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/packaging/macos/VerifyBundle.cmake"
     )
 endif()

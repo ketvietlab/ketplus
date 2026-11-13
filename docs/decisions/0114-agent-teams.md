@@ -175,6 +175,16 @@ message. The team page shows it first; the team's folder shows the count; the le
 row shows the "Waiting for you" status of #125. *Rejected*: an app-wide inbox — a
 second place to look for the same question.
 
+*Amended (T-55, 2026-11-13)*: the card's last choice is **Other…**, the user's own words.
+It opens a multi-line field on the card: Enter sends, Shift+Enter adds a line, Esc or
+Cancel puts the card back, and Send waits while the text is blank. The text is the
+`choice` of `team.decision.answer`, which the daemon trims to 4,000 characters and
+refuses when empty. A refusal (`decision_closed`, `invalid_payload`) shows on the card
+and keeps what was typed, because the page keeps the text across its rebuilds. The answer
+goes to Updates as "D-N answered: <text>", as a choice does. The card no longer has
+"Answer in the conversation"; a decision is answered on its card. The phone sends choices only
+for now; the phone app tracks a written answer as a follow-up.
+
 ### 4. Lane changes by the leader are logged (decided)
 
 The leader changes a lane itself with `team_lane_set` (the user can from the team page).

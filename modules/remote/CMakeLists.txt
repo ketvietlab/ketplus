@@ -8,6 +8,8 @@ add_library(ketplus_remote STATIC
     src/DaemonMachineBackend.cpp
     src/DaemonMachineBackend.h
     src/MachineBackend.h
+    src/MachineAttachmentUpload.cpp
+    src/MachineAttachmentUpload.h
     src/MachineBackend.cpp
     src/MachineLargeEvents.cpp
     src/MachineLargeEvents.h
@@ -17,6 +19,8 @@ add_library(ketplus_remote STATIC
     src/SessionCatalogReader.h
     src/LargeEventReassembler.cpp
     src/LargeEventReassembler.h
+    src/TranscriptVisibility.cpp
+    src/TranscriptVisibility.h
 )
 target_compile_definitions(ketplus_remote PRIVATE
     KETPLUS_AUTO_UPGRADE_DAEMON=$<BOOL:${KETPLUS_AUTO_UPGRADE_DAEMON}>)
