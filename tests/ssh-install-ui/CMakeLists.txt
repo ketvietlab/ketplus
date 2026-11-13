@@ -8,7 +8,7 @@ set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(KETQT_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 652685a8e36e95823011b93eb1f24113e41be7fa)
+    GIT_TAG cf3ac4e97b1db4566568887e02bdf681012373d5)
 FetchContent_MakeAvailable(ketqt)
 qt_add_executable(ketplus_ssh_install_ui_tests
     SshInstallUiTest.cpp

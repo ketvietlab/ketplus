@@ -2,6 +2,7 @@
 
 #include "ui/Theme.h"
 #include <QWidget>
+#include <memory>
 
 class QTabWidget;
 class QAbstractButton;
@@ -21,6 +22,7 @@ class TerminalPanel final : public QWidget {
     void start(const QString& workingDirectory);
     void focusTerminal();
     void applyTheme(const ThemePalette& palette);
+    void applyColorScheme(const ColorScheme& scheme);
     void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
     [[nodiscard]] bool isSessionRunning() const;
     // Types `text` into the current tab without running it (TerminalTab::typeText).
@@ -45,6 +47,7 @@ class TerminalPanel final : public QWidget {
     QWidget* actions_{nullptr};
     bool singleSession_{false};
     ThemePalette palette_;
+    std::shared_ptr<const ColorScheme> scheme_;
     int fontSizePixels_{14};
     int lineHeightPixels_{22};
     QString fontFamily_;

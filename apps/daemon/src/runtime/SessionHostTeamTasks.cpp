@@ -5,6 +5,7 @@
 #include "protocol/DaemonProtocol.h"
 #include "runtime/TeamGit.h"
 #include "runtime/TeamPullRequests.h"
+#include "teams/TeamBranchNames.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -42,6 +43,43 @@ SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task
 teams::RepositoryCheck SessionHost::checkRepository(const QString& path,
                                                     const QString& integrationBranch) const {
     return team_git::checkRepository(path, integrationBranch);
+}
+
+// T-93: answered from the last listing of the repository's branches, never by git on the
+// event loop (a slow git would hold every reply). The listing is asked again on its own thread
+// when it is missing or old, and an old one still answers meanwhile. Teams' repositories are
+// listed when the teams load; until a repository's first listing arrives the answer is unknown,
+// the task's history says so, and the worktree's creation, which runs git off this thread
+// anyway, checks the name for good. An empty `branch` only asks for the listing.
+std::optional<bool> SessionHost::branchTaken(const QString& repository,
+                                             const QString& branch) const {
+    if (repository.isEmpty())
+        return std::nullopt;
+    BranchNames& known = branchNames_[repository];
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    if (!known.reading && (!known.read.isValid() || known.read.msecsTo(now) > branchNamesAgeMs)) {
+        known.reading = true;
+        auto* self = const_cast<SessionHost*>(this);
+        self->teamBranchNames_.start([guard = QPointer<SessionHost>(self), repository]() {
+            const auto names = team_git::branchNames(repository);
+            QMetaObject::invokeMethod(
+                guard,
+                [guard, repository, names] {
+                    if (!guard)
+                        return;
+                    BranchNames& entry = guard->branchNames_[repository];
+                    entry.reading = false;
+                    if (!names)
+                        return;
+                    entry.names = *names;
+                    entry.read = QDateTime::currentDateTimeUtc();
+                },
+                Qt::QueuedConnection);
+        });
+    }
+    if (!known.read.isValid() || branch.isEmpty())
+        return std::nullopt;
+    return teams::branch_names::clashesWithAny(branch, known.names);
 }
 
 // A prepared command's git runs on the thread of the team's other questions, in their order.
@@ -355,7 +393,10 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
              .description = payload.value(QStringLiteral("description")).toString(),
              .lane = payload.value(QStringLiteral("lane")).toString(),
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
-             .criteria = strings(payload.value(QStringLiteral("criteria")))},
+             .criteria = strings(payload.value(QStringLiteral("criteria"))),
+             // T-93: optional, as on the leader's team_task_create.
+             .branchType = payload.value(QStringLiteral("branch_type")).toString(),
+             .branchSlug = payload.value(QStringLiteral("branch_slug")).toString()},
             user, &created);
         return answer(result, created);
     }

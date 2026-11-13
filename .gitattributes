@@ -1,0 +1,3 @@
+# Preserve these upstream MIT license copies byte-for-byte, including their final blank line.
+/third_party/licenses/Solarized-MIT.txt whitespace=-blank-at-eof
+/core/third_party/licenses/Solarized-MIT.txt whitespace=-blank-at-eof

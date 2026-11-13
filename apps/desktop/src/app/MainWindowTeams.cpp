@@ -88,7 +88,7 @@ MainWindow::takeSidebarTeams(const QString& repository,
         for (const QJsonObject& member : std::as_const(ordered)) {
             const QString sessionId = member.value(QStringLiteral("session_id")).toString();
             // T-92: the member's row from the group it was created in, which is this
-            // repository unless the team moved (ADR 0121); its own repository first.
+            // repository unless the team moved (ADR 0123); its own repository first.
             QVariantList* holder = nullptr;
             QVariantList::iterator found;
             const auto findIn = [&](QVariantList& conversations) {

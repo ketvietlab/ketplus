@@ -51,7 +51,7 @@ application.
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
 | miniz | 3.1.2, commit `77d0dce8627735138c51770d1799a1ef48f2117d` | Compiled statically for bounded ZIP theme reads; no executable or network transport | MIT | Ship `miniz-MIT.txt` complete with Lite and Pro |
 | KetPlus Syntax | commit `cb7435c1e9237ee32d3459a58917b0e84b8b6025` | Compiled statically; brings Lexilla as its submodule | MPL 2.0 | Ship the license text; publish source for any modified file |
-| KetQt | commit `d6e77e26a70f14bf22d7eafdaad5e842fae20458` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
+| KetQt | commit `cf3ac4e97b1db4566568887e02bdf681012373d5` (develop merge of PR #57) | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Qt resources of KétPlus, KétPlus Terminal and KétPlus Pro | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | Ship the copyright and complete OFL text; a modified font must not use the reserved names |
@@ -292,3 +292,32 @@ own Anthropic account and keeps the upstream CLI binary unmodified. It does not
 resell Claude Code usage or change the existing runtime authentication options.
 Review Anthropic's current [integration conditions](https://code.claude.com/docs/en/legal-and-compliance)
 before release; SDK cost estimates must not be used to bill KétPlus users.
+
+## Bundled color-scheme data
+
+Eight third-party palette conversions are embedded as data alongside the two
+existing Két Design System bases. Licenses were verified at the exact official
+repository revisions below; complete unmodified notices ship with Lite and Pro.
+No upstream extension/plugin implementation is distributed or executed. Generated
+files preserve authors, source URLs, commit IDs, SHA-256 hashes, import reports
+and input-preparation notes. See `docs/color-schemes.md` and the reproducible lock
+at `core/tools/color-schemes/sources.lock.json`.
+
+| Theme data | Pinned revision | Author | Verified license | Distributed text |
+| --- | --- | --- | --- | --- |
+| VS Code Dark+, VS Code Light+, Solarized Dark | [`1b509615d9f84db862313485737c05e8b81d2977`](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) | Microsoft Corporation | [MIT](https://github.com/microsoft/vscode/blob/1b509615d9f84db862313485737c05e8b81d2977/LICENSE.txt) | `VSCode-Themes-MIT.txt` |
+| Darcula, IntelliJ Light | [`417e214ea024cd783179244f51329df01277bb93`](https://github.com/JetBrains/intellij-community/tree/417e214ea024cd783179244f51329df01277bb93) | JetBrains s.r.o. | [Apache-2.0](https://github.com/JetBrains/intellij-community/blob/417e214ea024cd783179244f51329df01277bb93/LICENSE.txt) | `JetBrains-Themes-Apache-2.0.txt` |
+| Dracula | [`9726e1f6b51a4382334bc36e03128fcf02c3fb45`](https://github.com/dracula/visual-studio-code/tree/9726e1f6b51a4382334bc36e03128fcf02c3fb45) | Dracula Theme | [MIT](https://github.com/dracula/visual-studio-code/blob/9726e1f6b51a4382334bc36e03128fcf02c3fb45/LICENSE) | `Dracula-MIT.txt` |
+| One Dark Pro | [`75c80ab18d90655e05ad837bb8d89f5e68d5ce53`](https://github.com/Binaryify/OneDark-Pro/tree/75c80ab18d90655e05ad837bb8d89f5e68d5ce53) | Binaryify | [MIT](https://github.com/Binaryify/OneDark-Pro/blob/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/LICENSE.txt) | `OneDarkPro-MIT.txt` |
+| Nord | [`8ead09822c02d0d49d0f764104505e5a34d3689f`](https://github.com/nordtheme/visual-studio-code/tree/8ead09822c02d0d49d0f764104505e5a34d3689f) | Arctic Ice Studio / Sven Greb | [MIT](https://github.com/nordtheme/visual-studio-code/blob/8ead09822c02d0d49d0f764104505e5a34d3689f/license) | `Nord-MIT.txt` |
+
+JetBrains' `JetBrains-Themes-NOTICE.txt` also accompanies its Apache-2.0 license.
+The selected 2024 snapshot predates later IDE open-source-build terms; no newer
+IDE-build agreement is used as the redistribution grant. Dracula's official
+v2.24.3 VSIX is a hash-locked developer input only. Solarized is credited to Ethan
+Schoonover through Microsoft's MIT port. Theme names credit their respective
+authors and do not imply endorsement. No palettes are recolored after import.
+
+Solarized original palette notice: Ethan Schoonover, MIT; pinned official source
+[`62f656a02f93c5190a8753159e34b385588d5ff3`](https://github.com/altercation/solarized/blob/62f656a02f93c5190a8753159e34b385588d5ff3/LICENSE),
+complete text in `third_party/licenses/Solarized-MIT.txt`.

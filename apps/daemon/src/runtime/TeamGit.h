@@ -4,6 +4,8 @@
 // thread other than the session runtime's can run them.
 #include "teams/TeamCoordinator.h"
 
+#include <QSet>
+
 #include <optional>
 
 namespace ketplus::daemon::team_git {
@@ -40,6 +42,12 @@ namespace ketplus::daemon::team_git {
 // branch (nothing is fetched). The canonical path, or why not.
 [[nodiscard]] teams::RepositoryCheck checkRepository(const QString& path,
                                                      const QString& integrationBranch);
+// T-93 (ADR 0123 §9): whether `branch` is, or clashes as a folder with, a local branch of
+// `repository` or one of origin's remote-tracking branches. Nothing when git could not answer.
+[[nodiscard]] std::optional<bool> branchTaken(const QString& repository, const QString& branch);
+// The names of `repository`'s local branches and origin's remote-tracking branches, in one
+// git call. Nothing when git could not answer.
+[[nodiscard]] std::optional<QSet<QString>> branchNames(const QString& repository);
 // Creates the task's branch and worktree beside the repository (ADR 0114, open point 1).
 [[nodiscard]] teams::WorktreeAnswer createWorktree(const teams::Team& team,
                                                    const teams::Task& task);

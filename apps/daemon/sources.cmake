@@ -126,6 +126,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalTeams.cpp
     src/teams/Team.cpp
     src/teams/Team.h
+    src/teams/TeamBranchNames.cpp
+    src/teams/TeamBranchNames.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
     src/teams/TeamAgentTasks.cpp
@@ -150,6 +152,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorSettings.cpp
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
+    src/teams/TeamCoordinatorBranchNames.cpp
     src/teams/TeamCoordinatorRepository.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorReviewTools.cpp

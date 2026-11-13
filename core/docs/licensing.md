@@ -72,3 +72,32 @@ audit; KetPlus CM currently does not depend on Qt WebEngine.
 - [ ] License files are reachable from the package and About dialog.
 - [ ] The proprietary desktop identifies its pinned CM source revision.
 - [ ] A final legal review is completed before the first official release.
+
+## Bundled color-scheme data
+
+Eight third-party palette conversions are embedded as data alongside the two
+existing Két Design System bases. Licenses were verified at the exact official
+repository revisions below; complete unmodified notices ship with Lite and Pro.
+No upstream extension/plugin implementation is distributed or executed. Generated
+files preserve authors, source URLs, commit IDs, SHA-256 hashes, import reports
+and input-preparation notes. See `docs/color-schemes.md` and the reproducible lock
+at `core/tools/color-schemes/sources.lock.json`.
+
+| Theme data | Pinned revision | Author | Verified license | Distributed text |
+| --- | --- | --- | --- | --- |
+| VS Code Dark+, VS Code Light+, Solarized Dark | [`1b509615d9f84db862313485737c05e8b81d2977`](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) | Microsoft Corporation | [MIT](https://github.com/microsoft/vscode/blob/1b509615d9f84db862313485737c05e8b81d2977/LICENSE.txt) | `VSCode-Themes-MIT.txt` |
+| Darcula, IntelliJ Light | [`417e214ea024cd783179244f51329df01277bb93`](https://github.com/JetBrains/intellij-community/tree/417e214ea024cd783179244f51329df01277bb93) | JetBrains s.r.o. | [Apache-2.0](https://github.com/JetBrains/intellij-community/blob/417e214ea024cd783179244f51329df01277bb93/LICENSE.txt) | `JetBrains-Themes-Apache-2.0.txt` |
+| Dracula | [`9726e1f6b51a4382334bc36e03128fcf02c3fb45`](https://github.com/dracula/visual-studio-code/tree/9726e1f6b51a4382334bc36e03128fcf02c3fb45) | Dracula Theme | [MIT](https://github.com/dracula/visual-studio-code/blob/9726e1f6b51a4382334bc36e03128fcf02c3fb45/LICENSE) | `Dracula-MIT.txt` |
+| One Dark Pro | [`75c80ab18d90655e05ad837bb8d89f5e68d5ce53`](https://github.com/Binaryify/OneDark-Pro/tree/75c80ab18d90655e05ad837bb8d89f5e68d5ce53) | Binaryify | [MIT](https://github.com/Binaryify/OneDark-Pro/blob/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/LICENSE.txt) | `OneDarkPro-MIT.txt` |
+| Nord | [`8ead09822c02d0d49d0f764104505e5a34d3689f`](https://github.com/nordtheme/visual-studio-code/tree/8ead09822c02d0d49d0f764104505e5a34d3689f) | Arctic Ice Studio / Sven Greb | [MIT](https://github.com/nordtheme/visual-studio-code/blob/8ead09822c02d0d49d0f764104505e5a34d3689f/license) | `Nord-MIT.txt` |
+
+JetBrains' `JetBrains-Themes-NOTICE.txt` also accompanies its Apache-2.0 license.
+The selected 2024 snapshot predates later IDE open-source-build terms; no newer
+IDE-build agreement is used as the redistribution grant. Dracula's official
+v2.24.3 VSIX is a hash-locked developer input only. Solarized is credited to Ethan
+Schoonover through Microsoft's MIT port. Theme names credit their respective
+authors and do not imply endorsement. No palettes are recolored after import.
+
+Solarized original palette notice: Ethan Schoonover, MIT; pinned official source
+[`62f656a02f93c5190a8753159e34b385588d5ff3`](https://github.com/altercation/solarized/blob/62f656a02f93c5190a8753159e34b385588d5ff3/LICENSE),
+complete text in `third_party/licenses/Solarized-MIT.txt`.
