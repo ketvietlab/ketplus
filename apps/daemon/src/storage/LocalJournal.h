@@ -6,6 +6,7 @@
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
 #include "storage/JournalStorageOptions.h"
+#include "storage/ScheduleRecord.h"
 #include "storage/SessionPreparation.h"
 
 #include <QDateTime>
@@ -536,7 +537,34 @@ class LocalJournal final {
     bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
                          QString* error = nullptr);
 
+    // Scheduled runs. The tables are created on open. A journal from before them gains empty
+    // tables; existing rows stay. The format version stays put: an older daemon ignores the
+    // new tables (ADR 0095).
+    static constexpr int maximumScheduleRuns = 50;
+    bool createSchedule(const ScheduleRecord& schedule, QString* error = nullptr);
+    // No row and a failed read are both empty; errorString() is set only when the read failed.
+    [[nodiscard]] std::optional<ScheduleRecord> schedule(const QString& id) const;
+    [[nodiscard]] std::optional<QList<ScheduleRecord>>
+    schedules(const ScheduleFilter& filter) const;
+    bool updateSchedule(const ScheduleRecord& schedule, QString* error = nullptr);
+    bool deleteSchedule(const QString& id, QString* error = nullptr);
+    // Flips enabled. Refuses to enable a schedule whose conversation was deleted.
+    bool setScheduleEnabled(const QString& id, bool enabled, QString* error = nullptr);
+    // Deletes team and team_start schedules for this team id, and their runs. deleteTeam does
+    // this for the journal's decimal team id.
+    bool deleteSchedulesForTeam(const QString& teamId, QString* error = nullptr);
+    // Disables conversation schedules that target this session and records status
+    // target_deleted. The rows stay. deleteSession does this in its own transaction.
+    bool disableSchedulesForSession(const QString& sessionId, QString* error = nullptr);
+    bool appendScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
+    bool updateScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
+    // `limit` above maximumScheduleRuns is clamped to it. `beforeId` empty reads the newest page.
+    [[nodiscard]] std::optional<ScheduleRunPage> scheduleRuns(const QString& scheduleId, int limit,
+                                                              const QString& beforeId = {}) const;
+
   private:
+    bool initializeSchedules();
+    bool removeSchedulesForTeam(const QString& teamId, QString* error);
     bool initializeAgents();
     bool initializeTeams();
     bool writeTeamMembers(qint64 teamId, const QStringList& sessions, QString* error);

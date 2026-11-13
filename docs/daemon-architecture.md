@@ -1007,6 +1007,43 @@ tool call so idle servers do not hold connection slots. Codex receives the
 server as dotted per-thread `config` keys on start, resume and fork; Claude and
 Cursor receive it beside `ketplus_browser`.
 
+## Scheduled runs
+
+The daemon stores schedules that send a prompt on a rule. The `schedule.*` request
+contract is specified separately; this section is the journal that contract reads.
+
+### Storage
+
+`LocalJournalSchedules.cpp` creates `schedules` and `schedule_runs` on open with
+`CREATE TABLE IF NOT EXISTS`. A journal written before schedules gains the empty
+tables, and the rows it already had stay as they were. The tables are additive, so
+`journal_format::current` stays 1: an older daemon ignores them and does not rewrite
+them (ADR 0095). Open creates the tables before it records the format marker. A
+failure closes the journal, and the next open tries again.
+
+A schedule row stores its id, name, enabled flag, prompt, and one target:
+`conversation` (a session id), `new` (workspace and repository paths, provider, model,
+effort, isolated-worktree flag, title template), `team` (a team id) or `team_start`
+(a team id, prompt optional). The recurrence rule is opaque JSON. `busy_policy` is
+`queue` or `skip`, `missed_policy` is `run_once` or `skip`. The row also stores who
+created it, the created and updated times, `next_run_at` and `last_run_at`. List
+filters by target kind, session id and team id, together.
+
+`status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
+disables every `conversation` schedule that names that session and sets
+`target_deleted`. The rows and their runs stay, so the disable is visible rather than
+a silent drop. Enabling such a schedule is refused until an update clears the status.
+Deleting a schedule deletes its runs in the same transaction. Deleting a team
+(`deleteTeam`) deletes `team` and `team_start` schedules whose team id is that team's
+decimal id, and their runs. Other schedules are left alone.
+
+`schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
+`skipped` or `missed`), when it was due, when it started and finished, the session
+and turn it used, and any error. Runs are listed newest first, in pages. After each
+append the journal keeps the last 50 runs of that schedule
+(`LocalJournal::maximumScheduleRuns`) and deletes the older ones. Updating a run's
+status does not change that order.
+
 ## Returning to a previous provider
 
 A -> B -> A starts a new native thread on the return to A. The handoff transcript
