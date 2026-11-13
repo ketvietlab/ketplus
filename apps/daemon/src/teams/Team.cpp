@@ -47,6 +47,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.state = json.value(QStringLiteral("state")).toString(state::todo);
     task.resumeState = json.value(QStringLiteral("resume_state")).toString();
     task.question = json.value(QStringLiteral("question")).toString();
+    task.reviewBlock = json.value(QStringLiteral("review_block")).toString();
     task.branch = json.value(QStringLiteral("branch")).toString();
     task.worktree = json.value(QStringLiteral("worktree")).toString();
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
@@ -312,6 +313,7 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("state"), task.state},
                      {QStringLiteral("resume_state"), task.resumeState},
                      {QStringLiteral("question"), task.question},
+                     {QStringLiteral("review_block"), task.reviewBlock},
                      {QStringLiteral("branch"), task.branch},
                      {QStringLiteral("worktree"), task.worktree},
                      {QStringLiteral("base_commit"), task.baseCommit},
@@ -402,6 +404,7 @@ QJsonObject toJson(const Team& team) {
             {QStringLiteral("integration_branch"), team.integrationBranch},
             {QStringLiteral("merge_policy"), team.mergePolicy},
             {QStringLiteral("execution_policy"), team.executionPolicy},
+            {QStringLiteral("language"), team.language},
             {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
             {QStringLiteral("paused"), team.paused},
             {QStringLiteral("paused_reason"), team.pausedReason},
@@ -446,6 +449,9 @@ Team teamFromJson(const QJsonObject& json) {
     team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
     team.executionPolicy =
         json.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
+    // A team saved before T-56 is English.
+    team.language = ::ketplus::remote::team_language::orEnglish(
+        json.value(QStringLiteral("language")).toString());
     team.leaderWritesRequirements =
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();

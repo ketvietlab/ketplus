@@ -277,6 +277,7 @@ QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     json.insert(QStringLiteral("leader_writes_requirements"),
                 team.value(QStringLiteral("leader_writes_requirements")).toBool(true));
     json.insert(QStringLiteral("execution_policy"), team.value(QStringLiteral("execution_policy")));
+    json.insert(QStringLiteral("language"), team.value(QStringLiteral("language")));
     json.insert(QStringLiteral("plan_approved"),
                 team.value(QStringLiteral("plan_approved")).toBool());
     json.insert(QStringLiteral("held_count"), team.value(QStringLiteral("held_count")).toInt());

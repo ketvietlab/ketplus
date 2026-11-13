@@ -1,5 +1,7 @@
 #pragma once
 
+#include "TeamLanguage.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
@@ -9,6 +11,12 @@
 #include <optional>
 
 namespace ketplus::daemon::teams {
+
+// T-56: a fixed text the daemon writes for a team, in the team's language. The source is
+// marked QT_TRANSLATE_NOOP("Team", ...), so lupdate finds it (modules/remote/translations).
+[[nodiscard]] inline QString say(const QString& language, const char* source) {
+    return ::ketplus::remote::team_language::text(language, "Team", source);
+}
 
 // ADR 0114. Role, state and policy names are the protocol's strings.
 namespace role {
@@ -27,11 +35,49 @@ inline const QString done = QStringLiteral("done");
 } // namespace state
 
 // The choice of a "Merge T-n?" decision that lets the leader merge that task (ADR 0114 §5).
-inline const QString leaderMergesChoice = QStringLiteral("Let the leader merge this one");
+// T-56: the daemon's fixed choices are shown in the team's language (say()); an answer is
+// matched by its place among the decision's choices, so the answer must match the stored choice at
+// that position, even after a language change.
+inline constexpr const char* leaderMergesSource =
+    QT_TRANSLATE_NOOP("Team", "Let the leader merge this one");
+inline const QString leaderMergesChoice = QString::fromLatin1(leaderMergesSource);
 
 // The choices of the "stalled" decision the watchdog raises (ADR 0114 §8).
-inline const QString wakeLeaderChoice = QStringLiteral("Wake the leader again");
-inline const QString pauseTeamChoice = QStringLiteral("Pause the team");
+inline constexpr const char* wakeLeaderSource = QT_TRANSLATE_NOOP("Team", "Wake the leader again");
+inline constexpr const char* pauseTeamSource = QT_TRANSLATE_NOOP("Team", "Pause the team");
+inline const QString wakeLeaderChoice = QString::fromLatin1(wakeLeaderSource);
+inline const QString pauseTeamChoice = QString::fromLatin1(pauseTeamSource);
+
+// T-56: a task state or a role as a person reads it, in the team's language.
+// English keeps the stored word ("in_progress"), as before T-56.
+[[nodiscard]] inline QString stateName(const QString& language, const QString& value) {
+    if (::ketplus::remote::team_language::orEnglish(language) ==
+        ::ketplus::remote::team_language::english)
+        return value;
+    if (value == state::todo)
+        return say(language, QT_TRANSLATE_NOOP("Team", "todo"));
+    if (value == state::inProgress)
+        return say(language, QT_TRANSLATE_NOOP("Team", "in progress"));
+    if (value == state::inReview)
+        return say(language, QT_TRANSLATE_NOOP("Team", "in review"));
+    if (value == state::ready)
+        return say(language, QT_TRANSLATE_NOOP("Team", "ready"));
+    if (value == state::blocked)
+        return say(language, QT_TRANSLATE_NOOP("Team", "blocked"));
+    if (value == state::done)
+        return say(language, QT_TRANSLATE_NOOP("Team", "done"));
+    return value;
+}
+
+[[nodiscard]] inline QString roleName(const QString& language, const QString& value) {
+    if (value == role::leader)
+        return say(language, QT_TRANSLATE_NOOP("Team", "leader"));
+    if (value == role::developer)
+        return say(language, QT_TRANSLATE_NOOP("Team", "developer"));
+    if (value == role::reviewer)
+        return say(language, QT_TRANSLATE_NOOP("Team", "reviewer"));
+    return value;
+}
 
 // T-40: where a team's reviews happen: on the board (the reviewer's reply is the record) or
 // on the task's pull request (the findings become a comment there, and the board keeps the
@@ -114,6 +160,8 @@ struct Task final {
     // The state a blocked task returns to when its question is answered.
     QString resumeState;
     QString question;
+    // Protocol reason, never inferred from the localized question.
+    QString reviewBlock;
     QString branch;
     QString worktree;
     QString baseCommit;
@@ -210,6 +258,9 @@ struct Team final {
     // policy ("read-only", "ask" or "full"), given to every such member the team starts.
     // The reviewer is not in it: a review turn is always read-only (ADR 0067).
     QString executionPolicy{QStringLiteral("ask")};
+    // T-56: the language the leader works in, "en" or "vi" (team_language). The team's fixed
+    // texts, its Updates and the daemon's decisions and messages for it follow it.
+    QString language{QStringLiteral("en")};
     bool leaderWritesRequirements{true};
     bool paused{false};
     QString pausedReason;

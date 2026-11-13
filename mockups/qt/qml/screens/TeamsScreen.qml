@@ -45,6 +45,9 @@ Item {
     })
 
     readonly property var members: team ? team.members : []
+    // T-56 (ADR 0125): a team works in English or Vietnamese; a team without one is English.
+    readonly property var languages: [{ code: "en", name: "English" }, { code: "vi", name: "Tiếng Việt" }]
+    readonly property string teamLanguage: team && team.language ? team.language : "en"
     readonly property var tasks: team ? team.tasks : []
     // T-37 (ADR 0114 §10): the disk that holds the team's worktrees, as the daemon measures it.
     // Below Fixtures.diskWarnGb it warns, below Fixtures.diskStopGb builds should stop; nothing
@@ -1634,6 +1637,25 @@ Item {
                 screen.window.notify(mine ? "The leader merges reviewed tasks" : "Reviewed tasks wait for you to merge")
             }
         }
+        // T-56 (ADR 0125): the language the team page, its updates and decisions use.
+        KetMenuItem {
+            text: "English"
+            description: screen.teamLanguage === "en" ? "The team works in it" : ""
+            iconName: screen.teamLanguage === "en" ? "check" : ""
+            onTriggered: if (screen.teamLanguage !== "en") {
+                screen.change({ language: "en" })
+                screen.window.notify("The team now works in English")
+            }
+        }
+        KetMenuItem {
+            text: "Tiếng Việt"
+            description: screen.teamLanguage === "vi" ? "The team works in it" : ""
+            iconName: screen.teamLanguage === "vi" ? "check" : ""
+            onTriggered: if (screen.teamLanguage !== "vi") {
+                screen.change({ language: "vi" })
+                screen.window.notify("The team now works in Tiếng Việt")
+            }
+        }
         KetMenuSeparator {}
         KetMenuItem { text: "Delete team…"; iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
     }
@@ -2188,6 +2210,8 @@ Item {
         property var plan: defaults
         // Who merges a reviewed task into the integration branch: "leader" or "user".
         property string merges: "leader"
+        // T-56 (ADR 0125): the team's language follows the goal's letters until it is picked.
+        property bool languagePicked: false
         readonly property var roles: [
             { role: "leader", label: "Leader" },
             { role: "developer", label: "Developers" },
@@ -2233,6 +2257,24 @@ Item {
                 label: "Integration branch"
                 help: "Reviewed tasks merge here. Merging this branch onward always stays with you."
                 KetSelect { id: teamBranch; width: parent.width; model: ["develop", "integration", "release/1.4"] }
+            }
+            KetFieldRow {
+                width: parent.width
+                label: "Language"
+                help: "The team page, its updates and the leader's decisions use it."
+                KetSelect {
+                    id: teamLanguage
+                    width: parent.width
+                    model: screen.languages.map(language => language.name)
+                    onActivated: newTeamDialog.languagePicked = true
+                    Connections {
+                        target: teamGoal
+                        function onTextChanged() {
+                            if (!newTeamDialog.languagePicked && /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịĩọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹ]/i.test(teamGoal.text))
+                                teamLanguage.currentIndex = 1
+                        }
+                    }
+                }
             }
             KetFieldRow {
                 width: parent.width

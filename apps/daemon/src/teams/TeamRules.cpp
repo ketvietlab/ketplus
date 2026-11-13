@@ -123,6 +123,13 @@ std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds)
     return std::nullopt;
 }
 
+std::optional<TeamError> validLanguage(const QString& language) {
+    if (!::ketplus::remote::team_language::isSupported(language))
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("A team works in English (\"en\") or Vietnamese (\"vi\")."));
+    return std::nullopt;
+}
+
 std::optional<TeamError> validReviewPlace(const QJsonValue& value, QString* place) {
     const QString text = value.toString();
     if (text != place::board && text != place::pullRequest)

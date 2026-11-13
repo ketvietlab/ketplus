@@ -284,6 +284,30 @@ git diff --check
 Do not mechanically format vendored files or unrelated source. Check the final
 diff for generated data, absolute paths, and credentials.
 
+## Team translations
+
+A team works in English or Vietnamese (ADR 0125). English is the source text; the
+Vietnamese text is `modules/remote/translations/ketplus_teams_vi.ts`, which `lrelease`
+compiles into the build (Qt `LinguistTools`). After adding or changing a team text, in
+`apps/desktop/src/teams` (`tr()`) or `apps/daemon/src/teams`
+(`say(team.language, QT_TRANSLATE_NOOP("Team", "..."))`), refresh the catalog:
+
+```sh
+cmake --build <build-dir> --target ketplus_team_language_lupdate
+```
+
+It keeps every translation already written, drops texts no source uses, and prints how many
+texts have none. Write those in the `.ts` file (Qt Linguist or an editor), then run
+`ketplus_team_page_language_tests` and `ketplus_team_language_tests` offscreen.
+The source-freshness check extracts the texts again without rewriting the catalog:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir <build-dir> -R ketplus_team_translation_catalog_tests --output-on-failure
+```
+
+It fails for a newly added source text without a finished translation, even if the
+checked-in catalog has not been refreshed, or for a stale catalog entry.
+
 ## External tools
 
 The regular build does not require an authenticated provider call. Codex CLI,

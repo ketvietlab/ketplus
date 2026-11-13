@@ -9,6 +9,7 @@
 #include "KetIcons.h"
 #include "KetStyle.h"
 #include "KetTokens.h"
+#include "TeamLanguage.h"
 #include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
@@ -34,6 +35,7 @@
 #include <algorithm>
 
 namespace ketplus {
+namespace team_language = remote::team_language;
 namespace {
 
 using team_page::px;
@@ -251,6 +253,21 @@ bool TeamPage::composingDraft() const {
     return layout && !layout->preeditAreaText().isEmpty();
 }
 
+QString TeamPage::teamLanguage() const {
+    const auto team = teams_->team(teamId_);
+    return team ? team->value(QStringLiteral("language")).toString() : QString{};
+}
+
+void TeamPage::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    team_language::setAmbient(teamLanguage(), this);
+}
+
+void TeamPage::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    team_language::clearAmbient(this);
+}
+
 void TeamPage::rebuild() {
     if (composingDraft()) {
         if (!rebuildDeferred_) {
@@ -262,6 +279,11 @@ void TeamPage::rebuild() {
         }
         return;
     }
+    // T-56: the page speaks its team's language, and so do the menus and dialogs it opens.
+    const QString language = teamLanguage();
+    const team_language::Scope speaking(language);
+    if (isVisible())
+        team_language::setAmbient(language, this);
     const int position = scroll_->verticalScrollBar()->value();
     const FocusPlace focus = focusPlace();
     const QString currentTask =
@@ -476,6 +498,18 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
     reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
     reviewer->setEnabled(TeamDirectory::count(team, QStringLiteral("reviewer")) < 2);
+    // T-56: the team's language, as the leader works in it.
+    QMenu* languages = menu.addMenu(tr("Language"));
+    languages->setObjectName(QStringLiteral("teamPageLanguage"));
+    const QString language =
+        team_language::orEnglish(team.value(QStringLiteral("language")).toString());
+    for (const QString& code : team_language::supported()) {
+        QAction* choice = languages->addAction(team_language::nativeName(code));
+        choice->setObjectName(QStringLiteral("teamPageLanguage_") + code);
+        choice->setData(code);
+        choice->setCheckable(true);
+        choice->setChecked(code == language);
+    }
     menu.addSeparator();
     auto* remove = menu.addAction(ket::Icons::icon(u"trash"), tr("Delete team…"));
     remove->setProperty(ket::Style::kDangerProperty, true);
@@ -490,6 +524,7 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     commands->bind(review, commandKey(QStringLiteral("review")));
     commands->bind(repository, commandKey(QStringLiteral("repository")));
     commands->bind(remove, commandKey(QStringLiteral("delete")));
+    commands->bind(languages->menuAction(), commandKey(QStringLiteral("language")));
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
     if (chosen == create)
         afterMenuCloses(this,
@@ -513,6 +548,9 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)
         afterMenuCloses(this, [this, id = teamId_] { emit deleteRequested(id); });
+    else if (chosen && chosen->parent() == languages && chosen->data().toString() != language)
+        send(QStringLiteral("language"), {}, QStringLiteral("team.update"),
+             {{QStringLiteral("language"), chosen->data().toString()}});
 }
 
 void TeamPage::buildBanners(const QJsonObject& team) {

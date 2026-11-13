@@ -88,7 +88,8 @@ QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
          .mergePolicy = team->mergePolicy,
          .integrationBranch =
              team->integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team->integrationBranch,
-         .leaderWritesRequirements = team->leaderWritesRequirements});
+         .leaderWritesRequirements = team->leaderWritesRequirements,
+         .language = team->language});
 }
 
 QString SessionHost::teamMemberByNumber(const teams::Team& team, const QString& number) const {

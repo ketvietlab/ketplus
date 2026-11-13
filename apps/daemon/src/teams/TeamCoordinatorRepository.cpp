@@ -56,19 +56,23 @@ std::optional<TeamError> TeamCoordinator::changeRepository(Team& team, const QJs
         task.integrationBranch = team.integrationBranch;
         addHistory(
             task, actor, QStringLiteral("repository"),
-            QStringLiteral("Keeps working in %1 against %2: the team moved to %3.")
+            say(team.language,
+                QT_TRANSLATE_NOOP("Team", "Keeps working in %1 against %2: the team moved to %3."))
                 .arg(task.repository, branchName(task.integrationBranch), checked.repository),
             {{QStringLiteral("repository"), task.repository},
              {QStringLiteral("integration_branch"), task.integrationBranch}});
         kept.append(task.id);
     }
-    QString text = QStringLiteral("Repository: %1 against %2 (was %3 against %4).")
+    QString text = say(team.language,
+                       QT_TRANSLATE_NOOP("Team", "Repository: %1 against %2 (was %3 against %4)."))
                        .arg(checked.repository, branchName(branch), team.repository,
                             branchName(team.integrationBranch));
     if (!kept.isEmpty())
-        text += QStringLiteral(" %1 started task(s) keep the old one.").arg(kept.size());
+        text +=
+            say(team.language, QT_TRANSLATE_NOOP("Team", " %1 started task(s) keep the old one."))
+                .arg(kept.size());
     if (!reason.isEmpty())
-        text += QStringLiteral(" Reason: %1").arg(reason);
+        text += say(team.language, QT_TRANSLATE_NOOP("Team", " Reason: %1")).arg(reason);
     updates.append({.kind = QStringLiteral("repository"),
                     .text = text,
                     .data = {{QStringLiteral("from"), team.repository},

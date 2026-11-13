@@ -78,6 +78,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 find_package(Qt6 6.11 REQUIRED COMPONENTS
     Concurrent Core Gui Network Sql WebSockets
 )
+# T-56: lrelease compiles the team translations (modules/remote/translations).
+find_package(Qt6 6.11 REQUIRED COMPONENTS LinguistTools)
 if(KETPLUS_BUILD_DESKTOP)
     find_package(Qt6 6.11 REQUIRED COMPONENTS
         Core5Compat Qml Quick QuickControls2 Svg SvgWidgets WebView Widgets

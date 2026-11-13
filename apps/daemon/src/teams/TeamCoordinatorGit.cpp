@@ -93,10 +93,12 @@ void TeamCoordinator::worktreeAnswered(const qint64 teamId, const QString& taskI
     // meanwhile. The task keeps it, because the path and the branch are taken now and its next
     // assignment could not make them again.
     takeWorktree(*team, *task, *answer.worktree);
-    addHistory(*task, QStringLiteral("daemon"), QStringLiteral("worktree"),
-               QStringLiteral("The worktree %1 was made for an assignment that was refused "
-                              "meanwhile; the task keeps it.")
-                   .arg(task->worktree));
+    addHistory(
+        *task, QStringLiteral("daemon"), QStringLiteral("worktree"),
+        say(team->language,
+            QT_TRANSLATE_NOOP("Team", "The worktree %1 was made for an assignment that was refused "
+                                      "meanwhile; the task keeps it."))
+            .arg(task->worktree));
     (void)commit(*team, before, QStringLiteral("daemon"), {});
 }
 

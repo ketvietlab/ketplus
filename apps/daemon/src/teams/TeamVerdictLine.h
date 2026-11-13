@@ -29,7 +29,8 @@ struct Severities final {
 [[nodiscard]] Severities count(const QString& reply);
 
 // "0 High, 0 Medium, 6 Low, 3 Nit", or "severity not stated" when the reply named none.
-[[nodiscard]] QString counts(const Severities& severities);
+[[nodiscard]] QString counts(const Severities& severities,
+                             const QString& language = QStringLiteral("en"));
 
 struct Verdict final {
     QString taskId;
@@ -41,6 +42,7 @@ struct Verdict final {
     // The leader decides next: the round limit was reached with findings.
     bool atLimit{false};
     QString reply;
+    QString language{QStringLiteral("en")};
 };
 
 // "Verdict on T-61 (PR https://…/pull/12), round 1 of 2 by Reviewer: findings (0 High,

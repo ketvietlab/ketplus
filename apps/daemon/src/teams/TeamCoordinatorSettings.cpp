@@ -50,8 +50,9 @@ std::optional<TeamError> TeamCoordinator::changeTurnBudget(Team& team, const QJs
         return std::nullopt;
     updates.append(
         {.kind = QStringLiteral("turn_budget"),
-         .text =
-             QStringLiteral("Automatic turns: %1, %2 used.").arg(budget).arg(team.automaticTurns),
+         .text = say(team.language, QT_TRANSLATE_NOOP("Team", "Automatic turns: %1, %2 used."))
+                     .arg(budget)
+                     .arg(team.automaticTurns),
          .data = {{QStringLiteral("from"), team.turnBudget}, {QStringLiteral("to"), budget}}});
     team.turnBudget = budget;
     // The question "used its N automatic turns" no longer holds when turns are left: the team
@@ -65,13 +66,17 @@ std::optional<TeamError> TeamCoordinator::changeTurnBudget(Team& team, const QJs
                 decision.state == QStringLiteral("open")) {
                 decision.state = QStringLiteral("withdrawn");
                 decision.reason =
-                    QStringLiteral("The budget is now %1 automatic turns.").arg(budget);
+                    say(team.language,
+                        QT_TRANSLATE_NOOP("Team", "The budget is now %1 automatic turns."))
+                        .arg(budget);
                 decision.answeredAt = nowIso();
             }
-        updates.append({.kind = QStringLiteral("resumed"),
-                        .text = QStringLiteral("Automatic turns resumed: %1 of %2 used.")
-                                    .arg(team.automaticTurns)
-                                    .arg(budget)});
+        updates.append(
+            {.kind = QStringLiteral("resumed"),
+             .text = say(team.language,
+                         QT_TRANSLATE_NOOP("Team", "Automatic turns resumed: %1 of %2 used."))
+                         .arg(team.automaticTurns)
+                         .arg(budget)});
     }
     return std::nullopt;
 }

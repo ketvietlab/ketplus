@@ -36,7 +36,10 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
     if (auto failed =
             commit(*team, before, sessionId,
                    {{.kind = QStringLiteral("wait"),
-                     .text = QStringLiteral("%1 waits %2 min: %3").arg(name).arg(minutes).arg(why),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 waits %2 min: %3"))
+                                 .arg(name)
+                                 .arg(minutes)
+                                 .arg(why),
                      .taskId = taskId}}))
         return {.error = failed};
 

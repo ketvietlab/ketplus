@@ -172,13 +172,17 @@ void TeamCoordinator::checkStall(const qint64 teamId) {
     if (!stuck)
         return;
     const Team before = *stuck;
+    const QString wakeLeader = say(stuck->language, wakeLeaderSource);
     raiseDecision(
-        *stuck, QStringLiteral("stalled"), QStringLiteral("The team has stopped. Move it on?"),
+        *stuck, QStringLiteral("stalled"),
+        say(stuck->language, QT_TRANSLATE_NOOP("Team", "The team has stopped. Move it on?")),
         (QStringList{summary} << lines).join(QLatin1Char('\n')),
-        {wakeLeaderChoice, pauseTeamChoice}, wakeLeaderChoice, {}, QStringLiteral("daemon"));
+        {wakeLeader, say(stuck->language, pauseTeamSource)}, wakeLeader, {},
+        QStringLiteral("daemon"));
     if (commit(*stuck, before, QStringLiteral("daemon"),
                {{.kind = QStringLiteral("stalled"),
-                 .text = QStringLiteral("Stopped: %1").arg(summary)}}))
+                 .text =
+                     say(stuck->language, QT_TRANSLATE_NOOP("Team", "Stopped: %1")).arg(summary)}}))
         qWarning("Unable to record that team %lld has stopped.", static_cast<long long>(teamId));
 }
 

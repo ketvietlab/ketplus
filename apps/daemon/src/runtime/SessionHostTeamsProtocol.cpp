@@ -404,6 +404,12 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                        QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
+    // T-56: the leader's language; a client that sends none (an older phone) gets English.
+    if (payload.contains(QStringLiteral("language"))) {
+        draft.language = payload.value(QStringLiteral("language")).toString();
+        if (const auto invalid = teams::rules::validLanguage(draft.language))
+            return failure(invalid->code, invalid->message);
+    }
     // A team's own budget, or the global one for a client that sends none (an older phone).
     draft.turnBudget = teams_->turnBudgetSetting();
     if (payload.contains(QStringLiteral("turn_budget")))
