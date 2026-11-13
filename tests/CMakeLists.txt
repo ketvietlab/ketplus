@@ -219,6 +219,10 @@ target_link_libraries(ketplus_machine_conversation_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
+ketplus_add_gui_test(ketplus_machine_preparation_tests MachinePreparationTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_preparation_tests PRIVATE
+    Qt6::Test ketplus_desktop_support)
 
 ketplus_add_gui_test(ketplus_machine_paging_tests MachineTranscriptPagingTest.cpp
     FakeMachineBackend.h MachineHosts.h)

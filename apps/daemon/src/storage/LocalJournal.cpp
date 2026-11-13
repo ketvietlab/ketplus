@@ -139,6 +139,13 @@ bool LocalJournal::initialize() {
             "CREATE TABLE IF NOT EXISTS journal_metadata_gc ("
             "table_name TEXT PRIMARY KEY, age_row INTEGER NOT NULL DEFAULT 0 CHECK(age_row>=0), "
             "cap_row INTEGER NOT NULL DEFAULT 0 CHECK(cap_row>=0))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS session_preparations ("
+            "session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, request_id TEXT NOT NULL, "
+            "worktree_path TEXT NOT NULL, options TEXT NOT NULL, expires_at INTEGER NOT NULL, "
+            "state TEXT NOT NULL, UNIQUE(owner,request_id))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_preparations_expiry "
+                       "ON session_preparations(state,expires_at)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "

@@ -38,6 +38,9 @@ class CommandOutbox final {
     bool withdraw(const QString& id, QString* error = nullptr);
     // Removes the entry and remembers its id (the most recent 1024 ids are kept).
     bool complete(const QString& id, QString* error = nullptr);
+    // Atomically retire a pending command and persist its cleanup before it can be sent.
+    bool replace(const QString& id, Route route, const QJsonObject& envelope,
+                 QString* error = nullptr);
 
   private:
     bool save(QString* error);
