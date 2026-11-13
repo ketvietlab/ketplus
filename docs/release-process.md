@@ -101,7 +101,12 @@ does not make artifact generation transactional or safe for concurrent writers.
 Produce separate arm64 and x86_64 DMGs, never combine a single-architecture Node
 runtime into a universal app. Each architecture has its own worktree-owned build
 and staging directory. Use a Qt SDK and OpenSSL with the requested architecture;
-Apple Silicon Homebrew libraries alone cannot satisfy an Intel link.
+Apple Silicon Homebrew libraries alone cannot satisfy an Intel link. Browser
+runtime staging executes the target Node and npm; a cross-build must use a
+build-host Node of the target architecture (for example x64 Node under Rosetta
+via `KETPLUS_NODE_EXECUTABLE`) or a matching `KETPLUS_BROWSER_RUNTIME_DIR`.
+The staging command passes the target platform explicitly and refuses a host
+architecture mismatch instead of silently bundling host Node.
 
 ```sh
 cmake -S . -B "$BUILD_ROOT/arm64" -G Ninja \
