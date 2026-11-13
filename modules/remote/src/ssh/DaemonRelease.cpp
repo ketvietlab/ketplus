@@ -18,6 +18,9 @@ bool DaemonReleaseChannel::permits(const QUrl& url) const {
     if (!url.isValid() || !url.userInfo().isEmpty() || url.hasFragment() || url.isRelative() ||
         url.host().isEmpty())
         return false;
+    const auto segments = url.path(QUrl::FullyDecoded).split('/');
+    if (segments.contains(".") || segments.contains(".."))
+        return false;
     if (loopbackQA)
         return url.scheme() == "http" && url.host() == "127.0.0.1" &&
                url.port() == manifestUrl.port();

@@ -1,15 +1,18 @@
 # Focused offscreen Connections proof without the full editor's WebView/compat modules.
 # Uses the same kit revision as core/cmake/Dependencies.cmake, and the actual production files.
 find_package(Qt6 6.11 REQUIRED COMPONENTS Widgets Svg SvgWidgets Test)
-include(FetchContent)
-set(KETQT_BUILD_QUICK OFF CACHE BOOL "" FORCE)
-set(KETQT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(KETQT_INSTALL OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(ketqt
-    GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG cf3ac4e97b1db4566568887e02bdf681012373d5)
-FetchContent_MakeAvailable(ketqt)
+# Desktop builds reuse the already configured kit; only headless builds fetch it.
+if(NOT TARGET KetQt::Widgets)
+    include(FetchContent)
+    set(KETQT_BUILD_QUICK OFF CACHE BOOL "" FORCE)
+    set(KETQT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(KETQT_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(ketqt
+        GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
+        GIT_TAG cf3ac4e97b1db4566568887e02bdf681012373d5)
+    FetchContent_MakeAvailable(ketqt)
+endif()
 qt_add_executable(ketplus_ssh_install_ui_tests
     SshInstallUiTest.cpp
     ../../apps/desktop/src/remote/LinuxConnectDialog.cpp

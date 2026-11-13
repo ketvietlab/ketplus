@@ -83,6 +83,12 @@ def inventory(directory):
     return result
 
 
+def filesystem_device(path):
+    while not path.exists():
+        path = path.parent
+    return path.stat().st_dev
+
+
 def peer_pid(path, timeout=5):
     with socket.socket(socket.AF_UNIX) as peer:
         peer.settimeout(timeout)
@@ -223,6 +229,8 @@ class Transaction:
         require(arch in ('x86_64', 'aarch64'), 'Unsupported Linux architecture.')
         for path in (self.root, self.data, self.state.parent, self.token.parent, self.socket.parent):
             self.check_parents(path)
+        require(filesystem_device(self.root) == filesystem_device(self.data),
+                'Runtime and daemon data must use the same filesystem for safe rollback.')
         for path in (self.token, self.state):
             if path.exists() or path.is_symlink():
                 owned(path)
@@ -429,6 +437,8 @@ class Transaction:
                     self.receipt.write_bytes(self.previous_receipt)
                     self.receipt.chmod(0o600)
                 if self.snapshot:
+                    require(filesystem_device(self.snapshot) == filesystem_device(self.data),
+                            'The data filesystem changed; rollback data is retained for manual recovery.')
                     if self.data.exists():
                         shutil.rmtree(self.data)
                     self.snapshot.rename(self.data)

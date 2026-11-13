@@ -13,6 +13,11 @@ import time
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
+
+if not sys.platform.startswith('linux'):
+    print('SKIP: SSH install transactions require Linux /proc, fcntl and SO_PEERCRED.')
+    raise SystemExit(77)
 
 SOURCE = Path(__file__).resolve().parents[2] / 'modules/remote/src/ssh/install/transaction.py'
 spec = importlib.util.spec_from_file_location('transaction', SOURCE)
@@ -146,6 +151,13 @@ class InstallerTransactionTests(unittest.TestCase):
         self.assertIn('unrecognised files', rows[0]['error'])
         self.assertEqual(marker.read_text(), 'must survive')
         self.assertTrue((self.home / 'daemon.sock').exists())
+
+    def test_cross_filesystem_data_is_refused_before_writes(self):
+        with patch.dict(os.environ, self.env), \
+                patch.object(transaction, 'filesystem_device', side_effect=[1, 2]):
+            with self.assertRaisesRegex(transaction.Refused, 'same filesystem'):
+                transaction.Transaction({'action': 'preflight', 'socket': self.env['KETPLUS_DAEMON_SOCKET']}).preflight()
+        self.assertEqual(list(self.home.iterdir()), [])
 
     def test_parent_traversal_in_state_path_is_refused(self):
         self.env['KETPLUS_DAEMON_STATE'] = str(self.home / 'data/Ketsuite/KetPlus/../outside.sqlite')

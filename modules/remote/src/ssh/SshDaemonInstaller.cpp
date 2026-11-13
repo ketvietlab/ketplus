@@ -13,6 +13,13 @@
 
 static void initializeInstallerResource() { Q_INIT_RESOURCE(DaemonInstaller); }
 namespace ketplus::remote::ssh {
+int daemonInstallTimeoutMs(qint64 archiveBytes) {
+    constexpr qint64 uploadBytesPerSecond = 64 * 1024;
+    const auto bytes = qBound<qint64>(0, archiveBytes, daemonArchiveLimit);
+    const auto seconds = (bytes + uploadBytesPerSecond - 1) / uploadBytesPerSecond;
+    return int(300000 + seconds * 1000);
+}
+
 SshDaemonInstaller::SshDaemonInstaller(SshTunnel* tunnel, DaemonReleaseChannel channel,
                                        QObject* parent)
     : QObject(parent), tunnel_(tunnel), channel_(std::move(channel)),
@@ -192,12 +199,13 @@ void SshDaemonInstaller::command(const QJsonObject& description, bool transactio
         });
     process->setProcessEnvironment(sshEnvironment());
     process->start(tunnel_->sshProgram(), arguments);
-    QTimer::singleShot(300000, process, [this, process] {
-        if (process->state() == QProcess::NotRunning)
-            return;
-        process->closeWriteChannel();
-        fail(tr("The daemon installation timed out."));
-    });
+    QTimer::singleShot(daemonInstallTimeoutMs(transaction && artifact_ ? artifact_->bytes : 0),
+                       process, [this, process] {
+                           if (process->state() == QProcess::NotRunning)
+                               return;
+                           process->closeWriteChannel();
+                           fail(tr("The daemon installation timed out."));
+                       });
 }
 void SshDaemonInstaller::readProcess() {
     if (!process_)

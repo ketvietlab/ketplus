@@ -203,6 +203,41 @@ class SshInstallUiTest final : public QObject {
         QTest::qWait(100);
     }
   private slots:
+    void explicitConsentRouting_data() {
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("decline") << false;
+        QTest::newRow("confirm") << true;
+    }
+    void explicitConsentRouting() {
+        QFETCH(bool, accepted);
+        // Always-on production dialog wiring, no sshd, release key or QA artifact needed.
+        LinuxMachineModel model;
+        model.setBackendsAttached(true);
+        QWidget anchor;
+        anchor.resize(900, 900);
+        anchor.show();
+        auto* dialog = openLinuxConnectDialog(&anchor, &model, nullptr, {});
+        QSignalSpy review(&model, &LinuxMachineModel::daemonReviewRequested);
+        QSignalSpy decisions(&model, &LinuxMachineModel::daemonInstallDecided);
+        dialog->findChild<QLineEdit*>("linuxSshHost")->setText("fixture");
+        button(dialog, "linuxSshConnect")->click();
+        emit model.daemonInstallOffered("fixture", true);
+        QVERIFY(button(dialog, "linuxDaemonConfirm")->isHidden());
+        button(dialog, "linuxDaemonReviewInstall")->click();
+        QCOMPARE(review.size(), 1);
+        QCOMPARE(review.first().at(0).toString(), QString("fixture"));
+        QCOMPARE(decisions.size(), 0);
+        emit model.daemonConsentRequested("another-host", "Not this account");
+        QVERIFY(button(dialog, "linuxDaemonConfirm")->isHidden());
+        emit model.daemonConsentRequested("fixture", "Verified release; confirm account changes");
+        QVERIFY(button(dialog, "linuxDaemonConfirm")->isVisible());
+        QVERIFY(button(dialog, "linuxSshConnect")->isHidden());
+        button(dialog, accepted ? "linuxDaemonConfirm" : "linuxDaemonDecline")->click();
+        QCOMPARE(decisions.size(), 1);
+        QCOMPARE(decisions.first().at(0).toString(), QString("fixture"));
+        QCOMPARE(decisions.first().at(1).toBool(), accepted);
+        dialog->reject();
+    }
     void missingKeyNeverDownloads() { rejectedRelease(true); }
     void tamperedManifestNeverInstalls() { rejectedRelease(false); }
 

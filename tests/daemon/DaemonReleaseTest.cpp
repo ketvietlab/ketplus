@@ -103,6 +103,23 @@ class DaemonReleaseTest final : public QObject {
         QString error;
         QVERIFY(!verifyDaemonRelease(channel_, bytes, sign(bytes), "x86_64", &error));
     }
+    void uploadBudgetScalesWithVerifiedArchiveSize() {
+        QCOMPARE(daemonInstallTimeoutMs(0), 300000);
+        QCOMPARE(daemonInstallTimeoutMs(-1), 300000);
+        QCOMPARE(daemonInstallTimeoutMs(1), 301000);
+        QCOMPARE(daemonInstallTimeoutMs(267220682), 4378000);
+        QCOMPARE(daemonInstallTimeoutMs(daemonArchiveLimit), 8492000);
+        QCOMPARE(daemonInstallTimeoutMs(daemonArchiveLimit + 1), 8492000);
+    }
+    void releasePathsCannotEscapeTheVersionDirectory() {
+        auto channel = channel_;
+        channel.loopbackQA = false;
+        const QByteArray prefix = "https://github.com/ketvietlab/ketplus/releases/download/v1.2.3/";
+        QVERIFY(channel.permits(QUrl::fromEncoded(prefix + "daemon.tar.gz")));
+        for (const auto* path : {"../daemon.tar.gz", "./daemon.tar.gz", "a/../../daemon.tar.gz",
+                                 "%2e%2e/daemon.tar.gz", "a%2f..%2fdaemon.tar.gz"})
+            QVERIFY2(!channel.permits(QUrl::fromEncoded(prefix + path)), path);
+    }
     void noHostOrKeyNeverStartsAnInstall() {
         SshDaemonInstaller installer(nullptr);
         QSignalSpy finished(&installer, &SshDaemonInstaller::finished);

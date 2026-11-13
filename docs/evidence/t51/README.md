@@ -45,16 +45,17 @@ Verified transitions:
 
 ## Final checks
 
-All six focused suites pass on Linux, offscreen; no test is skipped:
+With the explicit QA inputs, all six focused suites pass on Linux, offscreen;
+no test is skipped in that proof:
 
 | Suite | Result |
 | --- | --- |
-| `ketplus_ssh_install_ui_tests` | 6 passed, 0 failed, 0 skipped |
+| `ketplus_ssh_install_ui_tests` | 8 passed, 0 failed, 0 skipped |
 | `ketplus_remote_ssh_tunnel_tests` | 21 passed, 0 failed, 0 skipped |
 | `ketplus_remote_ssh_backend_tests` | 18 passed, 0 failed, 0 skipped |
 | `ketplus_daemon_upgrade_tests` | 6 passed, 0 failed, 0 skipped |
-| `ketplus_daemon_release_tests` | 17 passed, 0 failed, 0 skipped |
-| `ketplus_ssh_install_transaction_tests` | 21 passed |
+| `ketplus_daemon_release_tests` | 19 passed, 0 failed, 0 skipped |
+| `ketplus_ssh_install_transaction_tests` | 22 passed |
 
 The transaction suite uses disposable fixture runtimes to cover committed upgrade,
 rollback after upgrade/uninstall/startup, interrupted uploads, checksum/runtime/
@@ -73,9 +74,45 @@ unrelated editor modules; it does not replace a full platform release build.
 
 ## Rendered consent
 
-[Light](install-consent-light.png) · [Dark](install-consent-dark.png).
+Light/dark captures are linked in [PR #667](https://github.com/ketvietlab/ketplus/pull/667)
+using the earlier evidence commit; no PNG assets remain in this change's final tree.
 Both captures are from the final QA fixture, with synthetic host/key data. The
 rendered description fits without clipping and its normal-text contrast is at
-least 4.5:1 in both themes. The images were inspected. Only the two confirmation
+least 4.5:1 in both themes. The images were inspected; the consent UI is unchanged by the review fixes. Only the two confirmation
 actions remain during consent; the connection action and obsolete choices are
 hidden. See `docs/testing.md` for the reproducible opt-in QA configuration.
+
+## Review constraints and retained output
+
+The leader explicitly prohibited OS-user creation and sudo on the QA host and
+approved fresh same-UID HOME/XDG isolation instead. The proof uses the actual
+production Connections widgets/controller offscreen, not a separate OS account.
+[Sanitized Linux output](linux-proof.txt) retains actual test output without
+private paths, keys, hostnames or account details.
+
+The Connections target is now registered in normal desktop builds/ctest and
+reuses the desktop's kit target, with no second FetchContent pin in that mode.
+Two consent-routing cases need no QA artifact or SSH server and run normally.
+The full Linux host proof still requires a local signed fixture/runtime as
+documented; it is not claimed to run without those opt-in QA inputs.
+
+[macOS CTest output](macos-transaction.txt) proves the Python target skips cleanly
+before Linux-only imports. This invokes the production registration module from
+a minimal CMake/CTest project on macOS; no native build is needed for that target.
+Python is found quietly outside Linux, so this addition imposes no new Python
+requirement on other hosts.
+
+The review-fix validation ran the five non-UI suites successfully on merged
+integration, then reran the UI suite after correcting the new routing fixture
+to attach the SSH backend and select the host. The final UI rerun is 8/8, no
+failures/skips. No product code changed between those checks. A separate normal
+invocation without QA inputs passes both routing cases (4 Qt passes including
+init/cleanup); the four full-host cases explicitly skip without their inputs.
+That no-QA invocation is not counted as the full Linux proof.
+
+Additional regressions cover the archive-size timeout budget (including the
+267,220,682-byte fixture and 512 MiB cap), decoded URL dot segments, and refusal
+of runtime/data on different filesystems before writes. ADR 0124 documents the
+SSH/logind `KillUserProcesses=yes` lifetime limitation; no service/linger change
+is made. Windows was not run locally; it follows the same pre-import platform
+skip branch proved on macOS.

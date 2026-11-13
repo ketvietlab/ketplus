@@ -43,9 +43,7 @@ qt_add_executable(ketplus_daemon_release_tests DaemonReleaseTest.cpp)
 target_link_libraries(ketplus_daemon_release_tests PRIVATE Qt6::Test ketplus_remote_ssh)
 ketplus_enable_warnings(ketplus_daemon_release_tests)
 add_test(NAME ketplus_daemon_release_tests COMMAND ketplus_daemon_release_tests)
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-add_test(NAME ketplus_ssh_install_transaction_tests
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_ssh_install_transaction.py)
+include(${CMAKE_CURRENT_SOURCE_DIR}/SshInstallTransactionTest.cmake)
 
 qt_add_executable(ketplus_remote_ssh_tunnel_tests SshTunnelTest.cpp)
 ketplus_enable_warnings(ketplus_remote_ssh_tunnel_tests)

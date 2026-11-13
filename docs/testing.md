@@ -1104,6 +1104,9 @@ busy stop refusal, downgrade refusal, upgrade rollback and data retention.
 `ketplus_daemon_upgrade_tests` covers the authenticated idle-only upgrade and
 `daemon.stop_if_idle` gates, including an active provider fixture.
 
+The Connections target is part of normal desktop test builds/ctest and reuses
+`KetQt::Widgets` from the desktop. Its consent/decline routing tests always run;
+the full host proof additionally needs the explicit QA inputs below.
 For the Linux Connections proof without the full editor's WebView/compat SDK,
 configure `KETPLUS_BUILD_DESKTOP=OFF`, `KETPLUS_BUILD_SSH_INSTALL_UI_TESTS=ON` and
 `KETPLUS_CONTROL_URL=http://127.0.0.1:9`. This optional test target compiles the

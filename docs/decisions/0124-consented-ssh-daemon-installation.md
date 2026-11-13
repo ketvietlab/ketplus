@@ -109,7 +109,9 @@ files for certificate authentication), with strict checking and no multiplexing,
 forwarding, password, askpass, tty or user RemoteCommand/LocalCommand. Never
 construct a second permissive SSH connection. Fixed Python source and base64 JSON
 arguments travel as quoted data; archive bytes travel through stdin. Python 3.9+
-on Linux is a prerequisite, not installed automatically.
+on Linux is a prerequisite, not installed automatically. The Linux transaction tests
+return the CTest skip code on other operating systems before importing Linux-only
+modules; Python is required for these tests only on Linux.
 
 Preflight is read-only. Reject custom `daemon.env`, an existing user service,
 unmanaged installation or running daemon, foreign-owned/symlinked parent paths,
@@ -136,9 +138,17 @@ Hold an exclusive nonblocking lock on the installation directory. Recheck the
 receipt/profile after acquiring it. Use a fresh owner-only staging directory on
 the same filesystem. Desktop verifies the manifest signature before trusting any
 field and checks the complete archive SHA-256/length before upload; the host checks
-length/hash again before extraction. Run the authenticated daemon's `--build-info`
+length/hash again before extraction. The SSH transaction budget is five minutes
+for validation/startup plus the verified archive size at 64 KiB/s (rounded up);
+preflight/start/uninstall retain five minutes. The maximum 512 MiB archive therefore
+has an 8,492-second budget, rather than the same five-minute upload ceiling. Run the authenticated daemon's `--build-info`
 and `--check-runtime` before activation. Version, exact revision and control URL
 must agree with the signed descriptor.
+
+Runtime staging and daemon data must reside on the same filesystem. Read-only
+preflight checks the nearest existing ancestors before changing anything; rollback
+rechecks this before replacing data and retains the snapshot if the filesystem
+changed. Profiles with separate data mounts require manual installation.
 
 Upgrade accepts only a strictly newer version. It uses the existing authenticated
 `daemon.prepare_upgrade` RPC, which atomically refuses active sessions/approvals
@@ -168,6 +178,12 @@ If SSH is lost during rollback or the host fails, Desktop reports that manual
 recovery may be required; it does not claim distributed atomicity across a host
 crash. The private staging directory retains recovery material if restoration
 cannot complete, rather than deleting the only snapshot.
+
+The detached process does not escape its SSH logind session scope. On hosts with
+`KillUserProcesses=yes`, logind may stop it when that session closes, even after
+a successful commit. Such hosts require a manually managed user service/approved
+linger policy; this installer neither enables linger nor changes logind or systemd
+configuration. Connected at commit is not a promise of persistence across logout.
 
 Uninstall requires its own review and confirmation. New authenticated
 `daemon.stop_if_idle` uses the same active-session gate as upgrade, without

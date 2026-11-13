@@ -14,6 +14,9 @@ class QFile;
 namespace ketplus::remote::ssh {
 class SshTunnel;
 
+// Five minutes for validation/startup plus upload time at a conservative 64 KiB/s.
+[[nodiscard]] int daemonInstallTimeoutMs(qint64 archiveBytes);
+
 // One explicit operation bound to a verified host identity. The UI asks to review metadata,
 // then separately confirms the complete signed artifact and remote changes. ADR 0124.
 class SshDaemonInstaller final : public QObject {
