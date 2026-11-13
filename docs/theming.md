@@ -1,6 +1,9 @@
 # Installable themes
 
-Status: proposed architecture, not implemented.
+Status: proposed integration architecture. The canonical color-scheme data format,
+reader/writer, resolution and local catalog are implemented; see
+[color-schemes.md](color-schemes.md) and ADR 0121. The package/import and consumer
+integration sections below remain proposals.
 
 ## Goals and boundaries
 
@@ -177,6 +180,9 @@ that mapping Lexilla styles implements semantic highlighting. Full TextMate
 compatibility is a separate tokenizer/editor project, not an install prerequisite.
 
 ## Installation and storage
+
+Canonical user schemes use `QStandardPaths::AppDataLocation/color-schemes/`
+(ADR 0121). The following external-package storage is a future proposal.
 
 Use `QStandardPaths::AppDataLocation/themes/` with immutable versioned packages,
 a catalog index, selection configuration, and a staging directory. Keep original

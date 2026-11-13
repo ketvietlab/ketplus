@@ -24,6 +24,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
 - GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
   `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
   streamed turns, cancellation, bounded request deadlines and explicit sign-in
