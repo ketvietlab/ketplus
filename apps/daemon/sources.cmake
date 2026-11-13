@@ -150,6 +150,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorSettings.cpp
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
+    src/teams/TeamCoordinatorRepository.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorReviewTools.cpp
     src/teams/TeamCoordinatorReviewers.cpp

@@ -52,6 +52,8 @@ Task taskFromJson(const QJsonObject& json) {
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
+    task.repository = json.value(QStringLiteral("repository")).toString();
+    task.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
     task.round = json.value(QStringLiteral("round")).toInt();
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
@@ -326,6 +328,11 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("changed_revision"), task.changedRevision}};
     if (!task.allowedPaths.isEmpty())
         json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
+    // T-90: sent only when the task does not work in the team's repository.
+    if (!task.repository.isEmpty()) {
+        json.insert(QStringLiteral("repository"), task.repository);
+        json.insert(QStringLiteral("integration_branch"), task.integrationBranch);
+    }
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)
@@ -501,6 +508,15 @@ Team teamFromJson(const QJsonObject& json) {
     team.createdAt = json.value(QStringLiteral("created_at")).toString();
     team.changedAt = json.value(QStringLiteral("changed_at")).toString();
     return team;
+}
+
+Team taskScope(const Team& team, const Task& task) {
+    Team scope = team;
+    if (!task.repository.isEmpty()) {
+        scope.repository = task.repository;
+        scope.integrationBranch = task.integrationBranch;
+    }
+    return scope;
 }
 
 } // namespace ketplus::daemon::teams

@@ -38,6 +38,12 @@ SessionHost::createTaskWorktree(const teams::Team& team, const teams::Task& task
     return answer.worktree;
 }
 
+// T-90: a short local git check (no fetch), on the caller's thread like conversationRepository.
+teams::RepositoryCheck SessionHost::checkRepository(const QString& path,
+                                                    const QString& integrationBranch) const {
+    return team_git::checkRepository(path, integrationBranch);
+}
+
 // A prepared command's git runs on the thread of the team's other questions, in their order.
 void SessionHost::askWorktree(const teams::Team& team, const teams::Task& task,
                               teams::WorktreeDone done) {
@@ -215,9 +221,9 @@ void SessionHost::askPullRequests(const teams::Team& team, const QStringList& ur
 // question to git and no client.
 void SessionHost::askPostReviewComment(const teams::Team& team, const teams::Task& task,
                                        const QString& body, teams::ReviewCommentDone done) {
-    teamRemote_.start([guard = QPointer<SessionHost>(this), directory = team.repository,
-                       url = task.pullRequest, body, stopping = teamRemoteStopping_,
-                       done = std::move(done)]() mutable {
+    teamRemote_.start([guard = QPointer<SessionHost>(this),
+                       directory = teams::taskScope(team, task).repository, url = task.pullRequest,
+                       body, stopping = teamRemoteStopping_, done = std::move(done)]() mutable {
         teams::ReviewComment posted =
             team_pull_requests::comment(directory, url, body, {}, 30000, stopping.get());
         QMetaObject::invokeMethod(
