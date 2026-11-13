@@ -836,6 +836,31 @@ The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 
 ## Composer and provider capabilities
 
+Desktop recognizes daemon adapter `copilot` as **GitHub Copilot** in the model
+picker, composer, Teams and restored transcripts. Its tab follows the same
+setup-guide behavior as Cursor: when the daemon reports a missing CLI, the tab
+opens installation/sign-in steps while Apply stays disabled. An older daemon
+that supplies neither a Copilot catalog nor a setup guide leaves the tab disabled.
+An existing Copilot conversation keeps its provider and draft in that case;
+Send is disabled with guidance to choose another provider, even when a Codex
+model shares the saved model id.
+Copilot models are offered only with permission profiles supplied by the daemon;
+Desktop does not inherit Codex or Cursor modes for them. A blocking setup state
+also prevents applying a stale Copilot catalog.
+
+The setup guide uses Homebrew on macOS, npm on Linux (Node.js 22 or later), and
+WinGet on Windows. Commands run on the machine hosting the daemon. Sign in with
+`copilot login`, or configure the daemon's supported token environment as described
+in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
+[GitHub's installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+`--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
+paths do not install a CLI or run a provider prompt by themselves.
+
+History, notifications and local/ControlV2/relay transport retain `copilot` as the
+adapter id. Journal `cursor` fields remain event sequence numbers. No remote
+wire format or transcript cursor semantics change. Availability of actual turns,
+models and modes depends on the installed daemon's Copilot adapter.
+
 - The two-row composer includes attachment chips, permission selection, model and
   reasoning selection, and Send/Stop. Enter sends; Shift+Enter inserts a new line.
 - `model/list` is requested as soon as the daemon or Codex transport is ready,
