@@ -24,6 +24,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
+  includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
+  approximations. Semantic colors remain metadata; extension code never runs.
 - Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
   diagnostics, unknown-data preservation, complete built-in inheritance, embedded
   light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
