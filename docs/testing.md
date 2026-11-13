@@ -1075,36 +1075,7 @@ suppression and external revision cancellation. `ketplus_git_diff_view_tests`
 also verifies model/selection identity and alpha-composited canonical diff colors.
 These offscreen checks do not replace native DELL or Pro chat acceptance.
 
-## Color-scheme rendering and native comparison
-
-`ketplus_scheme_rendering_tests` covers same-mode fenced-code color/font updates,
-Mermaid configuration cache invalidation and Markdown document/selection/scroll
-preservation. `ketplus_scheme_chat_tests` checks canonical syntax on an existing
-Quick text document and retains the Quick root, transcript model and selection.
-The related Pro streaming, shell and Mermaid targets exercise live updates with
-fake/local fixtures; they do not invoke providers.
-
-Native evidence is opt-in and refuses to show a window unless a DELL screen is
-found. Ordinary offscreen runs skip these two manual cases:
-
-```sh
-QT_QPA_PLATFORM=cocoa KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
-  build/lite-dev/core/ketplus_scheme_consumer_tests nativeBuiltinComparisonOnDell
-QT_QPA_PLATFORM=cocoa QSG_RHI_BACKEND=metal KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
-  KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
-  build/dev/ketplus_scheme_chat_tests nativeBuiltinComparisonOnDell
-```
-
-Review the widget pair captures and the legacy/canonical chat captures in both
-modes. The targeted macOS/Qt 6.11 check used DELL P2219H; both chat pairs had zero
-changed pixels. The captures contain synthetic test messages only.
-
-If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
-can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
-application's scheme persistence or publication. See Qt's [disk-cache
-configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).
-
-### Consented SSH daemon installation (ADR 0124)
+## Consented SSH daemon installation (ADR 0124)
 
 `ketplus_daemon_release_tests` verifies Ed25519 manifests and fail-closed build
 configuration. `ketplus_ssh_install_transaction_tests` exercises the actual
@@ -1140,3 +1111,32 @@ clicks the actual Connections controls, checks missing-key/signature failures an
 cancellation at runtime-ready, declines once, installs and verifies an authenticated
 `daemon.hello`, restarts without downloading again, then uninstalls through the idle gate and
 checks that user data survives. It creates no OS user or real relay registration.
+
+## Color-scheme rendering and native comparison
+
+`ketplus_scheme_rendering_tests` covers same-mode fenced-code color/font updates,
+Mermaid configuration cache invalidation and Markdown document/selection/scroll
+preservation. `ketplus_scheme_chat_tests` checks canonical syntax on an existing
+Quick text document and retains the Quick root, transcript model and selection.
+The related Pro streaming, shell and Mermaid targets exercise live updates with
+fake/local fixtures; they do not invoke providers.
+
+Native evidence is opt-in and refuses to show a window unless a DELL screen is
+found. Ordinary offscreen runs skip these two manual cases:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/lite-dev/core/ketplus_scheme_consumer_tests nativeBuiltinComparisonOnDell
+QT_QPA_PLATFORM=cocoa QSG_RHI_BACKEND=metal KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+  KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/dev/ketplus_scheme_chat_tests nativeBuiltinComparisonOnDell
+```
+
+Review the widget pair captures and the legacy/canonical chat captures in both
+modes. The targeted macOS/Qt 6.11 check used DELL P2219H; both chat pairs had zero
+changed pixels. The captures contain synthetic test messages only.
+
+If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
+can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
+application's scheme persistence or publication. See Qt's [disk-cache
+configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).
