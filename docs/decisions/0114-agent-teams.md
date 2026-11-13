@@ -175,6 +175,16 @@ message. The team page shows it first; the team's folder shows the count; the le
 row shows the "Waiting for you" status of #125. *Rejected*: an app-wide inbox — a
 second place to look for the same question.
 
+*Amended (T-55, 2026-11-13)*: the card's last choice is **Other…**, the user's own words.
+It opens a multi-line field on the card: Enter sends, Shift+Enter adds a line, Esc or
+Cancel puts the card back, and Send waits while the text is blank. The text is the
+`choice` of `team.decision.answer`, which the daemon trims to 4,000 characters and
+refuses when empty. A refusal (`decision_closed`, `invalid_payload`) shows on the card
+and keeps what was typed, because the page keeps the text across its rebuilds. The answer
+goes to Updates as "D-N answered: <text>", as a choice does. The card no longer has
+"Answer in the conversation"; a decision is answered on its card. The phone sends choices only
+for now; the phone app tracks a written answer as a follow-up.
+
 ### 4. Lane changes by the leader are logged (decided)
 
 The leader changes a lane itself with `team_lane_set` (the user can from the team page).
@@ -242,16 +252,49 @@ logged. Merging the integration branch onward always stays with the user.
 | assignment or handover | the new owner (`assignment` message) |
 | task enters `in_review` | the reviewer (`review`) |
 | review with findings | the owner (`review` reply) |
+| any review verdict | the leader, in its next `digest` (T-75) |
 | decision answered | the leader and the blocked owner (`decision`) |
 | actionable updates | the leader, once, as a `digest` |
 | a member's work left open, or the whole team idle with work left (§8) | that member (`nudge`), then the leader (`stall`) |
 | anything else | nobody |
 
-Actionable updates: a task became `ready`, `blocked` or `done`, a review hit its round
-limit, a path was flagged outside a lane, a developer has no task left, a developer's
-question. When the leader's turn ends with actionable updates waiting, or after a quiet
+Actionable updates: a task became `ready`, `blocked` or `done`, a review verdict, a
+review hit its round limit, a path was flagged outside a lane, a developer has no task
+left, a developer's question. When the leader's turn ends with actionable updates waiting, or after a quiet
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
+
+**Every verdict reaches the leader (T-75, decided 2026-11-13).** A findings verdict sends
+the task back to its developer, so before T-75 it moved no task to an actionable state, and
+the leader heard of it only with a later actionable update or its own wait. Now each
+verdict adds one actionable `verdict` update. That makes the leader's next digest due
+after the quiet period, or when its turn ends if it is busy. The update covers findings,
+no findings, and findings at the round limit. Its line names the task, the pull request
+when the task has one, the round of its limit, the reviewer and the verdict. For findings
+it adds the count by severity:
+
+- `Verdict on T-61 (PR https://…/pull/12), round 1 of 2 by Reviewer: findings (0 High,
+  0 Medium, 6 Low, 3 Nit). Back to its developer; decide on any finding outside the
+  task's scope.`
+- `… round 2 of 2 by Reviewer: no findings. Ready to merge.`
+- `… findings (1 High, …). The round limit is reached: you decide.`
+
+The severities come from the review reply. A finding is a line that starts with its id
+and severity, in the forms the team's reviewers write (`- **H1, High.** …`,
+`- **L1 (Low), file:4:** …`, `**M1 — Medium — …**`), or with its severity alone
+(``- **Low**, `file:4`: …``). An id is counted once, so a finding mentioned again in the
+prose is not counted twice. A finding marked as settled is not counted, as round 2 lists
+round 1's findings: ✅ or "đã sửa" anywhere on its line settles it
+(`- **L1 (Low), …:** ✅ **đã sửa.**`), and so does "fixed" where it reads as the mark (at
+the end, or before "in", punctuation or a dash: `L1 — Low — fixed in abc12`), not in a
+finding's own words ("fixed findings count"). A line also marked ❌ is open. A severity
+followed by a count (`- High: 0`) or by nothing (`none`, `không có`) is no finding. A reply
+without such lines counts each line that names a severity before a colon, but not a
+summary of counts (`High: 0, Medium: 1`). A reply that names no severity reads "severity not stated". At the
+round limit the verdict line is the `round_limit` warning itself, so the leader reads one
+line besides the task's blocked state. The same line is in the team page's Updates and in
+the phone's team payload, which both show the team's updates. No message from member to member is added. The developer still
+receives the findings as the `review` reply, and the leader reads only the line.
 
 **A wait alone sends no digest (decided 2026-11-12).** A `wait` entry is shown on the
 team page and in a digest that has something else in it, but it is never the reason for

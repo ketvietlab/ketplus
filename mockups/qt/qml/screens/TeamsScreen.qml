@@ -252,6 +252,13 @@ Item {
             memberAgentDialog.target = "reviewer"
             memberAgentDialog.open()
         }
+        // T-55: a decision answered in the user's own words, and the daemon's refusal of it.
+        else if ((name === "decision-other" || name === "decision-other-refused") && decisions.length > 0) {
+            openOther(decisions[0].id)
+            otherText = "Neither: keep the current flow until the pilot ends."
+            if (name === "decision-other-refused")
+                otherError = "The decision " + decisions[0].id + " was already answered."
+        }
         else if (name === "task")
             showTask(tasks.some(t => t.id === "T-3") && team.id !== "pilot" ? "T-3" : tasks[0].id)
         else if (name === "handover")
@@ -412,6 +419,35 @@ Item {
                         when: "Just now" }].concat(team.updates)
         })
         screen.window.notify("Sent to " + reference(decision.askedBy))
+    }
+
+    // T-55: "Other…", the user's own answer written on the card. One card writes at a time;
+    // `otherError` is the daemon's refusal, shown on the card with the text kept.
+    property string otherDecision: ""
+    property string otherText: ""
+    property string otherError: ""
+    function openOther(id) {
+        otherDecision = id
+        otherText = ""
+        otherError = ""
+    }
+    function cancelOther() {
+        otherDecision = ""
+        otherText = ""
+        otherError = ""
+    }
+    // Sends the written answer as the decision's choice; `refusal` stands for the daemon's.
+    function sendOther(decision, text, refusal) {
+        const answer = text.trim()
+        if (answer === "")
+            return false
+        if (refusal) {
+            otherError = refusal
+            return false
+        }
+        cancelOther()
+        decide(decision, answer)
+        return true
     }
 
     function openConversation(number) {
@@ -655,6 +691,24 @@ Item {
               "the summary stays after every worktree was removed")
         removalOutcome = null
         change(before)
+        // T-55: Other writes the answer; blank text is not sent; a refusal keeps the text.
+        const asked = decisions.find(d => d.kind !== "merge" && d.kind !== "budget")
+        check(!!asked, "a team decision to answer in your own words")
+        if (asked) {
+            const open = { decisions: decisions, tasks: tasks, members: members, updates: team.updates }
+            openOther(asked.id)
+            check(!sendOther(asked, "   ") && otherDecision === asked.id, "Other sends nothing while blank")
+            cancelOther()
+            check(otherDecision === "" && decisions.some(d => d.id === asked.id), "Cancel puts the card back")
+            openOther(asked.id)
+            otherText = "Neither: use Adyen\nfor the fees"
+            check(!sendOther(asked, otherText, "The decision was already answered.")
+                  && otherError !== "" && otherText.startsWith("Neither"), "a refusal shows and keeps the text")
+            check(sendOther(asked, otherText) && !decisions.some(d => d.id === asked.id)
+                  && team.updates[0].text === asked.id + " decided: Neither: use Adyen\nfor the fees",
+                  "Other answers the decision with the written text")
+            change(open)
+        }
         return failures
     }
 
@@ -910,6 +964,7 @@ Item {
                     readonly property var task: screen.tasks.find(t => t.id === modelData.task) || null
                     // Past this a choice is a sentence, not a button's label.
                     readonly property bool sentences: modelData.options.some(o => o.length > 28)
+                    readonly property bool writing: screen.otherDecision === modelData.id
                     height: cardBody.implicitHeight + screen.px(32)
                     border.color: KetTheme.t.accentBorder
                     Column {
@@ -969,6 +1024,35 @@ Item {
                                     }
                                 }
                             }
+                            // T-55: the last row is the user's own answer.
+                            Basic.AbstractButton {
+                                id: otherRow
+                                objectName: "decisionOther"
+                                visible: !card.writing
+                                width: parent.width
+                                height: otherLine.implicitHeight + screen.px(20)
+                                hoverEnabled: true
+                                Accessible.name: "Write another answer"
+                                onClicked: screen.openOther(card.modelData.id)
+                                background: Rectangle {
+                                    radius: screen.px(6)
+                                    color: otherRow.down ? KetTheme.t.surfaceInset
+                                         : otherRow.hovered ? KetTheme.t.surfaceHover : "transparent"
+                                    border.color: otherRow.visualFocus ? KetTheme.t.focusBorder : KetTheme.t.panelBorder
+                                    border.width: otherRow.visualFocus ? 2 : 1
+                                }
+                                contentItem: Item {
+                                    RowLayout {
+                                        id: otherLine
+                                        x: screen.px(14)
+                                        width: parent.width - screen.px(26)
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: screen.px(12)
+                                        Label { Layout.fillWidth: true; text: "Other…"; lineHeight: 1.3 }
+                                        KetIcon { name: "chevron-right"; box: screen.px(14); color: KetTheme.t.textMuted }
+                                    }
+                                }
+                            }
                         }
                         Item { visible: card.sentences; width: 1; height: screen.px(2) }
                         // The choices, and beside them who asked and what the answer unblocks.
@@ -985,11 +1069,14 @@ Item {
                                     onClicked: screen.decide(card.modelData, modelData)
                                 }
                             }
+                            // T-55: the last choice is the user's own answer, written on the card.
                             KetButton {
-                                text: "Answer in the conversation"
-                                variant: KetTheme.ButtonVariant.Ghost
-                                visible: !!card.modelData.askedBy
-                                onClicked: screen.openConversation(card.modelData.askedBy)
+                                objectName: "decisionOther"
+                                visible: !card.sentences && !card.writing
+                                text: "Other…"
+                                variant: KetTheme.ButtonVariant.Secondary
+                                Accessible.name: "Write another answer"
+                                onClicked: screen.openOther(card.modelData.id)
                             }
                             Label {
                                 Layout.fillWidth: true
@@ -999,6 +1086,61 @@ Item {
                                       + (card.task ? " · " + (card.task.state === "blocked" ? "Blocks " : "For ") + card.task.id : "")
                                 color: KetTheme.t.textMuted
                                 font.pixelSize: screen.px(12)
+                            }
+                        }
+                        // T-55: the written answer. Enter sends, Shift+Enter adds a line and Esc
+                        // cancels (the desktop's keys); Send waits for words.
+                        Column {
+                            objectName: "decisionOtherBox"
+                            visible: card.writing
+                            width: parent.width
+                            spacing: screen.px(8)
+                            topPadding: screen.px(4)
+                            KetTextArea {
+                                id: otherField
+                                objectName: "decisionOtherText"
+                                width: parent.width
+                                minimumLines: 2
+                                maximumLines: 8
+                                maxLength: 4000
+                                placeholderText: "Write your answer…"
+                                Accessible.name: "Your answer"
+                                text: card.writing ? screen.otherText : ""
+                                onTextChanged: if (card.writing) screen.otherText = text
+                                Keys.onEscapePressed: screen.cancelOther()
+                                onVisibleChanged: if (visible) focusInput()
+                            }
+                            Label {
+                                objectName: "decisionOtherError"
+                                visible: card.writing && screen.otherError !== ""
+                                width: parent.width
+                                text: screen.otherError
+                                color: KetTheme.t.danger
+                                wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                width: parent.width
+                                spacing: screen.px(8)
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: "Enter sends · Shift+Enter adds a line · Esc cancels"
+                                    color: KetTheme.t.textMuted
+                                    font.pixelSize: screen.px(12)
+                                    elide: Text.ElideRight
+                                }
+                                KetButton {
+                                    objectName: "decisionOtherCancel"
+                                    text: "Cancel"
+                                    variant: KetTheme.ButtonVariant.Ghost
+                                    onClicked: screen.cancelOther()
+                                }
+                                KetButton {
+                                    objectName: "decisionOtherSend"
+                                    text: "Send"
+                                    variant: KetTheme.ButtonVariant.Primary
+                                    enabled: screen.otherText.trim() !== ""
+                                    onClicked: screen.sendOther(card.modelData, screen.otherText)
+                                }
                             }
                         }
                     }

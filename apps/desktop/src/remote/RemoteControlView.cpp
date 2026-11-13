@@ -876,12 +876,18 @@ QWidget* RemoteControlView::createControlPage() {
     connect(pairingDialog_, &ket::Dialog::finished, this, &RemoteControlView::closePairing);
     pairingDialog_->setBody(pairingPanel_);
     bodyLayout->addWidget(linkedContent_);
-    linuxMachines_ = new LinuxMachinesSection(body);
+    auto* linuxColumn = new QWidget(body);
+    linuxColumn->setObjectName(QStringLiteral("linuxMachinesColumn"));
+    linuxColumnLayout_ = new QVBoxLayout(linuxColumn);
+    chrome_geometry::margins(linuxColumnLayout_, 24, 0, 24, 0);
+    chrome_geometry::spacing(linuxColumnLayout_, 0);
+    linuxMachines_ = new LinuxMachinesSection(linuxColumn);
+    linuxColumnLayout_->addWidget(linuxMachines_);
     // The page's Add menu shows only once this Mac's relay is linked.
     linuxMachines_->setPairingEntryShown(!configured_);
     connect(linuxMachines_, &LinuxMachinesSection::machinesChanged, this,
             &RemoteControlView::machinesChanged);
-    bodyLayout->addWidget(linuxMachines_);
+    bodyLayout->addWidget(linuxColumn);
     bodyLayout->addWidget(linkedFooter_);
     bodyLayout->addStretch(1);
     auto* bodyHost = new QWidget;
@@ -1065,6 +1071,9 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         }
     }
     pageHeader_->setVisible(configured_);
+    if (linuxColumnLayout_)
+        chrome_geometry::margins(linuxColumnLayout_, configured_ ? 0 : 24, 0, configured_ ? 0 : 24,
+                                 0);
     unlinkedContent_->setVisible(!configured_);
     linkedContent_->setVisible(configured_);
     linkedFooter_->setVisible(configured_);

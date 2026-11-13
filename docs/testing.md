@@ -249,6 +249,11 @@ changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
 
+The machine picker geometry regression also mounts the real ActivityBar at 240 px
+in light/dark and checks all four connection states remain readable before the
+trailing route/name is elided in the closed label; the popup stays name-first. `ketplus_remote_workspace_tests` checks that the
+signed-out Linux section shares the introduction's 24 px column at wide/narrow widths.
+
 `ketplus_machine_end_to_end_tests` (macOS Desktop, offscreen) is the #419
 acceptance: the real `MainWindow`, given the app's one `LinuxMachines` set
 through `useLinuxMachines()` as `main()` does, with SSH and Relay backends over
@@ -1008,3 +1013,8 @@ identifier, starts no updater/network operation and restores only its own test d
 It verifies that restored staging and HTTP defaults cannot override the compiled feed.
 Run it with `QT_QPA_PLATFORM=offscreen`; production bundle installation and owner-run
 manual UI acceptance remain separate checks.
+
+`ketplus_machine_toast_tests` renders the production Machine composer in temporary
+INI settings, in light/dark. It checks the exact recipe gap after growth and window
+resize, composer/view hide and restore, and preservation of another composer's
+reservation during hide and destruction. It uses no backend or provider.

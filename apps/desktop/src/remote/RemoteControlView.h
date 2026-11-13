@@ -86,6 +86,7 @@ class RemoteControlView final : public QWidget {
     QWidget* linkedContent_{nullptr};
     QWidget* linkedFooter_{nullptr};
     LinuxMachinesSection* linuxMachines_{nullptr};
+    QVBoxLayout* linuxColumnLayout_{nullptr};
     RemoteActivitySection* activity_{nullptr};
     QLabel* notice_{nullptr};
     QLabel* welcomeNotice_{nullptr};

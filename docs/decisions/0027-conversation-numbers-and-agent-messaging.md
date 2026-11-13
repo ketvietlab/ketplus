@@ -354,3 +354,9 @@ Cursor was not part of the run.
   `4821`.
 - **Sequential numbers:** an adjacent typo would usually reach a real
   conversation.
+
+## Sealed pending-reply hint
+
+Session heartbeat metadata includes the optional boolean `awaitingAgentReply`. It is true when the current conversation generation has at least one outbound `expect_reply` message in `queued`, `held`, `releasing` or `delivered` state that has not expired. Answered, failed and expired messages, notices without `expect_reply`, and requests from a previous generation do not set it. Multiple pending requests keep it true until the final one resolves.
+
+The publisher reads the durable journal at each heartbeat and emits explicit false to clear an earlier true. This is separate from `awaitingReply`, which means the user has been asked to approve or decide. The new hint is sealed with the other session metadata: message bodies, recipients and reply contents are not added to plaintext snapshots. Older clients ignore the optional field; clients receiving no field treat it as false. A client must not infer this state from transcript text or an incoming `agentTurn`.
