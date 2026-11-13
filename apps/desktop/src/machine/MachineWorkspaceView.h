@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QComboBox;
+class QStackedWidget;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
@@ -15,6 +16,7 @@ class QToolButton;
 namespace ketplus {
 
 class MachineApprovalCards;
+class MachineAttachmentPanel;
 class MachineCatalog;
 class MachineConversationActions;
 class MachineConversationSession;
@@ -97,6 +99,9 @@ class MachineWorkspaceView final : public QWidget {
     QComboBox* worktrees_{nullptr};
     MachineRichTranscript* transcript_{nullptr};
     MachineApprovalCards* approvals_{nullptr};
+    QStackedWidget* attachmentStack_{nullptr};
+    QHash<QString, MachineAttachmentPanel*> attachmentPanels_;
+    MachineAttachmentPanel* attachmentPanel_{nullptr};
     QPlainTextEdit* composer_{nullptr};
     QLabel* composerReason_{nullptr};
     QPushButton* attach_{nullptr};

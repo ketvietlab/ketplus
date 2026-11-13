@@ -1,9 +1,13 @@
 #include "KetToast.h"
 #include "agent/ToastAvoidanceOwner.h"
+#include "machine/MachineAttachmentPanel.h"
 #include "machine/MachineWorkspaceView.h"
+#include <QKeyEvent>
+#include <QKeySequence>
 
 #include <QEvent>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QTimer>
 
 namespace ketplus {
@@ -44,6 +48,12 @@ void MachineWorkspaceView::refreshToastAncestors() {
 }
 
 bool MachineWorkspaceView::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == composer_ && event->type() == QEvent::KeyPress && attachmentPanel_ &&
+        attach_->isEnabled()) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (key->matches(QKeySequence::Paste) && attachmentPanel_->pasteImage())
+            return true;
+    }
     if (!toastTeardown_) {
         if (event->type() == QEvent::ParentChange)
             refreshToastAncestors();

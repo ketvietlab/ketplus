@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QtTest>
 
 using namespace ketplus;
@@ -41,6 +42,34 @@ class MachineConversationTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void readyAttachmentsReachTurnsAndClearOnlyAfterCompletion() {
+        FakeMachineBackend relay("machine", Route::Relay);
+        relay.setState(State::Connected);
+        relay.answer = [](const FakeMachineBackend::Call& call, QJsonObject* result, QString*) {
+            if (call.operation == "startTurn" || call.operation == "steerTurn")
+                *result = {{"status", "queued"}, {"command_id", "attachment-turn"}};
+        };
+        MachineConversationSession session(&relay, "session", 8);
+        QSignalSpy sent(&session, &MachineConversationSession::attachmentsSent);
+        const QJsonArray ids{"committed-file"};
+        session.send({}, ids);
+        QCOMPARE(relay.calls("startTurn").size(), 1);
+        QCOMPARE(relay.calls("startTurn").first().request.value("attachment_ids").toArray(), ids);
+        QVERIFY(session.hasAttachmentSend());
+        QCOMPARE(sent.size(), 0);
+        relay.complete("attachment-turn", {{"turn_sequence", 1}});
+        QCOMPARE(sent.size(), 1);
+        QVERIFY(sent[0][1].toString().isEmpty());
+        QVERIFY(!session.hasAttachmentSend());
+        session.setRunning(true);
+        session.send("steer with attachment", ids);
+        QCOMPARE(relay.calls("steerTurn").first().request.value("attachment_ids").toArray(), ids);
+        relay.complete("attachment-turn", {}, "Attachment expired");
+        QCOMPARE(sent.size(), 2);
+        QCOMPARE(sent[1][1].toString(), QStringLiteral("Attachment expired"));
+        QVERIFY(!session.hasAttachmentSend());
+    }
+
     void relayEventsReachTheTranscriptAndTheCatalog() {
         bool verified = true;
         FakeMachineBackend relay("fp-relay", Route::Relay);

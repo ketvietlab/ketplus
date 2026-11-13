@@ -203,6 +203,9 @@ target_link_libraries(ketplus_machine_composition_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_machine_attachment_tests MachineAttachmentPanelTest.cpp)
+target_link_libraries(ketplus_machine_attachment_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
 ketplus_add_gui_test(ketplus_machine_toast_tests MachineWorkspaceToastTest.cpp)
 target_link_libraries(ketplus_machine_toast_tests PRIVATE Qt6::Test ketplus_desktop_support)
 

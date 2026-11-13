@@ -117,7 +117,7 @@ operation that fails shows its error.
 | Rename | `renameConversation` | `session.rename {title}` | Control v2 `session.rename` |
 | Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | Control v2 `session.fork`, the host's remote operation; the new session arrives in the command's completion |
 | Archive | `setConversationArchived` | `session.set_archived {archived}`, daemon feature `session.archive/1` | not offered: `session.set_archived` is not a host remote operation |
-| Attachments | none | not offered: `MachineBackend` has no staging operations | not offered |
+| Attachments | `attachmentCommand` (begin/chunk/commit/cancel) | Existing `attachment.stage.*`, gated on daemon hello | Existing encrypted Control v2 `attachment.stage.*`, durable outbox; queued commands finish on `commandCompleted` |
 | Older transcript pages | `transcriptPage` | `session.transcript_page {before_cursor, limit}` | window before a cursor, with a snapshot fence |
 | Large events | `transcriptLargeEvent` (`remote::resolveLargeEvents`) | fragments, checked by `LargeEventReassembler` | reassembled on the host |
 
@@ -434,3 +434,23 @@ The code is `ControlV2Client::entitlements()` and
   a new authentication surface (ADR 0022 keeps the host outbound-only).
 - **Password authentication for SSH.** Rejected: KetPlus would hold or relay a
   secret it cannot protect better than the user's SSH agent.
+
+## Remote attachment staging
+
+The remote workspace stages files and clipboard images for an existing conversation
+through `MachineAttachmentUpload`, a session/generation-bound coordinator. It sends
+32-KiB chunks and waits for the verified result of every command, including a Relay
+outbox command initially reported as queued, before advancing. A file is sendable only
+after commit returns `ready`; a failed chunk cannot silently become turn input.
+Removal waits for any pending operation before issuing cancel. The daemon remains
+responsible for quotas, revisions, digests and expiry (ADRs 0007 and 0051). This adds
+no command kind, envelope field or server protocol requirement.
+
+The picker accepts the same per-file limits and error copy as the local workspace:
+images up to 20 MiB and plain text up to 512 KiB. Staging also enforces the daemon's
+five-file/40-MiB draft quota. Other readable raster formats are encoded as PNG before
+staging; clipboard images are encoded in memory, without a temporary plaintext file.
+The panel shows uploading, ready and failed states and retains ready IDs after a
+failed send; it clears them only after actual turn submission completion. Draft panels
+are scoped by machine, session and generation. New-conversation attachment staging
+remains unavailable until a session exists; its tooltip explains this boundary.

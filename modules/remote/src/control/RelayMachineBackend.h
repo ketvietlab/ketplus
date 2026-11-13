@@ -71,6 +71,9 @@ class RelayMachineBackend final : public MachineBackend {
     void createSession(const QJsonObject& request, Callback callback) override;
     // Stops following the conversation's events until it is opened again.
     void conversationClosed(const QString& sessionId) override;
+    void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
+                           qint64 generation, const QJsonObject& request,
+                           Callback callback) override;
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override;
     void steerTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,

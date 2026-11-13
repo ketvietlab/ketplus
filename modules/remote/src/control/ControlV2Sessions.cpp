@@ -235,7 +235,11 @@ void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback 
 }
 void ControlV2Client::prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext,
                                      Callback done) {
-    static const QSet<QString> supported{"session.start_turn",
+    static const QSet<QString> supported{"attachment.stage.begin",
+                                         "attachment.stage.chunk",
+                                         "attachment.stage.commit",
+                                         "attachment.stage.cancel",
+                                         "session.start_turn",
                                          "session.steer",
                                          "session.interrupt",
                                          "session.rename",

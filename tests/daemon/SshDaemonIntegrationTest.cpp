@@ -1,7 +1,9 @@
 #include "FakeCodex.h"
+#include "MachineAttachmentUpload.h"
 #include "SshFixture.h"
 #include "ssh/SshMachineBackend.h"
 #include "ssh/SshMachineStore.h"
+#include <QSignalSpy>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -136,8 +138,28 @@ class SshDaemonIntegrationTest : public QObject {
             return completed >= turns;
         };
         QTRY_VERIFY_WITH_TIMEOUT(turnCompleted(1), patience);
+        // Files and images reach the real daemon through the SSH tunnel, with the
+        // same bounded stage protocol used by Relay; no provider quota is involved.
+        QVERIFY(backend.supports(ketplus::remote::MachineBackend::Feature::Attachments));
+        const QList<QPair<QString, QByteArray>> attachments{
+            {"text/plain", QByteArray("SSH attachment fixture\n")},
+            {"image/png", QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC"
+                                                 "0lEQVR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII=")}};
+        QJsonArray attachmentIds;
+        for (const auto& attachment : attachments) {
+            ketplus::remote::MachineAttachmentUpload upload(&backend, sessionId, generation);
+            QSignalSpy finished(&upload, &ketplus::remote::MachineAttachmentUpload::finished);
+            upload.start(attachment.first == "text/plain" ? "note.txt" : "image.png",
+                         attachment.first, attachment.second);
+            QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, patience);
+            QVERIFY2(upload.ready(), qPrintable(finished[0][1].toString()));
+            attachmentIds.append(upload.attachmentId());
+        }
+        // The second turn consumes the committed attachment ids.
         Reply approving;
-        backend.startTurn(sessionId, generation, {{"prompt", "approve"}}, approving.callback());
+        backend.startTurn(sessionId, generation,
+                          {{"prompt", "approve"}, {"attachment_ids", attachmentIds}},
+                          approving.callback());
         QTRY_VERIFY_WITH_TIMEOUT(approving.done(), patience);
         QVERIFY2(approving.error.isEmpty(), qPrintable(approving.error));
 
