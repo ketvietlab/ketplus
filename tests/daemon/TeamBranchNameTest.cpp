@@ -1,4 +1,4 @@
-// T-93 (ADR 0121 §9): a new task's branch is `<type>/<slug>-t<n>` and its worktree
+// T-93 (ADR 0123 §9): a new task's branch is `<type>/<slug>-t<n>` and its worktree
 // `<repository>-<type>-<slug>-t<n>`, named by the leader or derived from the title; a task
 // from before keeps `team/<id>/t-<n>`. The coordinator cases use a fake runtime; the git cases
 // temporary repositories with a bare remote; the leader's tools the session runtime with the
@@ -228,6 +228,30 @@ class TeamBranchNameTest final : public QObject {
         QCOMPARE(planned(create({.title = "Cart"})), QStringLiteral("feat/cart-t2"));
     }
 
+    // Review L1: before the repository's branches are listed, the name is accepted and the
+    // history says it was not checked against them yet.
+    void aNameNotYetCheckedSaysSo() {
+        host_.unlistedRepositories.insert("/repo");
+        const QString id = create({.title = "Fix login"});
+        QCOMPARE(planned(id), QStringLiteral("fix/login-t1"));
+        QVERIFY(get(id).history.first().text.contains("not listed yet"));
+        host_.unlistedRepositories.clear();
+        const QString checked = create({.title = "Cart"});
+        QVERIFY(!get(checked).history.first().text.contains("not listed yet"));
+    }
+
+    // Review N1: names git refuses as a directory/file conflict clash.
+    void folderNamesClash() {
+        QVERIFY(names::refsClash("feat", "feat/cart-t1"));
+        QVERIFY(names::refsClash("fix/x-t1/sub", "fix/x-t1"));
+        QVERIFY(names::refsClash("fix/x-t1", "fix/x-t1"));
+        QVERIFY(!names::refsClash("feat/cart-t1", "feat/cart-t12"));
+        QVERIFY(!names::refsClash("feat/cart", "feat/cart-t1"));
+        QVERIFY(!names::refsClash("", "feat"));
+        QVERIFY(names::clashesWithAny("feat/cart-t1", {"integration", "feat"}));
+        QVERIFY(!names::clashesWithAny("feat/cart-t1", {"integration", "fix"}));
+    }
+
     // Criterion 4: renamed by the leader before the branch exists, refused after.
     void aBranchIsRenamedOnlyBeforeItStarts() {
         const QString id = create({.title = "Cart", .lane = "Web"});
@@ -330,6 +354,14 @@ class TeamBranchNameTest final : public QObject {
         QCOMPARE(team_git::branchNames(shop),
                  std::optional<QSet<QString>>(
                      QSet<QString>{"integration", "fix/login-t1", "feat/remote-t2"}));
+        // Review N1: a branch that is a folder of the name, or the other way round.
+        git(shop, {"branch", "chore"});
+        QCOMPARE(team_git::branchTaken(shop, "chore/deps-t3"), std::optional<bool>(true));
+        git(shop, {"branch", "docs/guide-t4/draft"});
+        QCOMPARE(team_git::branchTaken(shop, "docs/guide-t4"), std::optional<bool>(true));
+        QCOMPARE(team_git::branchTaken(shop, "docs/guide-t5"), std::optional<bool>(false));
+        git(shop, {"branch", "-d", "chore"});
+        git(shop, {"branch", "-d", "docs/guide-t4/draft"});
 
         Team team;
         team.id = 7;

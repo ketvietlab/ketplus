@@ -56,6 +56,8 @@ class FakeHost final : public TeamHostPort {
     // T-93: the branches git already has, by repository and name.
     std::optional<bool> branchTaken(const QString& repository,
                                     const QString& branch) const override {
+        if (unlistedRepositories.contains(repository))
+            return std::nullopt;
         return takenBranches.contains(repository + QLatin1Char('|') + branch);
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
@@ -268,6 +270,8 @@ class FakeHost final : public TeamHostPort {
     QHash<QString, QString> repositoryErrors;
     // T-93: "<repository>|<branch>" of branches git has.
     QSet<QString> takenBranches;
+    // T-93 review L1: repositories whose branches were not listed yet.
+    QSet<QString> unlistedRepositories;
     StorageFacts storageFacts;
     QList<std::pair<QString, QStringList>> storageAsks;
     QList<std::pair<QString, QString>> removals;

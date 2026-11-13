@@ -124,7 +124,7 @@ struct Task final {
     // repository changed. Empty: the team's. Read them through taskScope().
     QString repository;
     QString integrationBranch;
-    // T-93 (ADR 0121 §9): the branch the task's worktree gets, `<type>/<slug>-t<n>`, named or
+    // T-93 (ADR 0123 §9): the branch the task's worktree gets, `<type>/<slug>-t<n>`, named or
     // derived when it was created. Empty slug: a task from before, `team/<id>/t-<n>`.
     QString branchType;
     QString branchSlug;

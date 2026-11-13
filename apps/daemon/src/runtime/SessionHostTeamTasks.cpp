@@ -5,6 +5,7 @@
 #include "protocol/DaemonProtocol.h"
 #include "runtime/TeamGit.h"
 #include "runtime/TeamPullRequests.h"
+#include "teams/TeamBranchNames.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -45,10 +46,11 @@ teams::RepositoryCheck SessionHost::checkRepository(const QString& path,
 }
 
 // T-93: answered from the last listing of the repository's branches, never by git on the
-// event loop (a slow git would hold every reply). The listing is asked again on its own
-// thread when
-// it is missing or old; until the first one arrives the answer is unknown and the worktree's
-// creation, which runs git off this thread anyway, checks the name for good.
+// event loop (a slow git would hold every reply). The listing is asked again on its own thread
+// when it is missing or old, and an old one still answers meanwhile. Teams' repositories are
+// listed when the teams load; until a repository's first listing arrives the answer is unknown,
+// the task's history says so, and the worktree's creation, which runs git off this thread
+// anyway, checks the name for good. An empty `branch` only asks for the listing.
 std::optional<bool> SessionHost::branchTaken(const QString& repository,
                                              const QString& branch) const {
     if (repository.isEmpty())
@@ -75,9 +77,9 @@ std::optional<bool> SessionHost::branchTaken(const QString& repository,
                 Qt::QueuedConnection);
         });
     }
-    if (!known.read.isValid())
+    if (!known.read.isValid() || branch.isEmpty())
         return std::nullopt;
-    return known.names.contains(branch);
+    return teams::branch_names::clashesWithAny(branch, known.names);
 }
 
 // A prepared command's git runs on the thread of the team's other questions, in their order.

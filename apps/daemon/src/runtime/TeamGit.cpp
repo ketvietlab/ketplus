@@ -267,22 +267,12 @@ teams::RepositoryCheck checkRepository(const QString& path, const QString& integ
 std::optional<bool> branchTaken(const QString& repository, const QString& branch) {
     if (repository.isEmpty() || branch.isEmpty())
         return std::nullopt;
-    for (const QString& ref : {QStringLiteral("refs/heads/%1").arg(branch),
-                               QStringLiteral("refs/remotes/origin/%1").arg(branch)}) {
-        QProcess process;
-        process.setWorkingDirectory(repository);
-        process.start(QStringLiteral("git"),
-                      {QStringLiteral("--no-optional-locks"), QStringLiteral("show-ref"),
-                       QStringLiteral("--verify"), QStringLiteral("--quiet"), ref});
-        if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit)
-            return std::nullopt;
-        // 0: there; 1: git answered and there is no such ref; anything else: git failed.
-        if (process.exitCode() == 0)
-            return true;
-        if (process.exitCode() != 1)
-            return std::nullopt;
-    }
-    return false;
+    // One listing answers both the name and the folder clash git would refuse (`feat` against
+    // `feat/x-t1`).
+    const auto names = branchNames(repository);
+    if (!names)
+        return std::nullopt;
+    return teams::branch_names::clashesWithAny(branch, *names);
 }
 
 std::optional<QSet<QString>> branchNames(const QString& repository) {
@@ -304,7 +294,7 @@ std::optional<QSet<QString>> branchNames(const QString& repository) {
 }
 
 // ADR 0114, open point 1: a worktree beside the repository, as the worktrees of ADR 0111 are,
-// from the integration branch. T-93 (ADR 0121 §9): `<repository>-<type>-<slug>-t<n>` on
+// from the integration branch. T-93 (ADR 0123 §9): `<repository>-<type>-<slug>-t<n>` on
 // `<type>/<slug>-t<n>`; a task from before keeps `<repository>-team-<id>-t-<n>` on
 // `team/<id>/t-<n>`.
 teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task& task) {

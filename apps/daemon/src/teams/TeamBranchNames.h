@@ -1,11 +1,12 @@
 #pragma once
 
-// T-93 (ADR 0121 §9): the branch and worktree a new task is given, `<type>/<slug>-t<n>` and
+// T-93 (ADR 0123 §9): the branch and worktree a new task is given, `<type>/<slug>-t<n>` and
 // `<repository>-<type>-<slug>-t<n>`, from the leader's branch_type/branch_slug or from the
 // task's title. A task without a slug, as every task created before, keeps `team/<id>/t-<n>`.
 #include "teams/Team.h"
 #include "teams/TeamRules.h"
 
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -42,5 +43,11 @@ inline constexpr qsizetype maximumSlug = 40;
 // `<repository>-team-<team>-t-<n>` for a task without a slug.
 [[nodiscard]] QString plannedWorktreeName(const QString& repositoryName, qint64 teamId,
                                           const Task& task);
+
+// Whether two branch names cannot both be refs: the same name, or one is a folder of the other
+// (`feat` and `feat/x-t1`), which git refuses as a directory/file conflict.
+[[nodiscard]] bool refsClash(const QString& one, const QString& other);
+// Whether `branch` clashes with any of `names`.
+[[nodiscard]] bool clashesWithAny(const QString& branch, const QSet<QString>& names);
 
 } // namespace ketplus::daemon::teams::branch_names

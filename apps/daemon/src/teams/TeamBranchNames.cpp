@@ -93,7 +93,7 @@ QString withoutDiacritics(const QString& text) {
     return plain;
 }
 
-// Bracketed asides, such as "(ketplus-app #114)", say where, not what.
+// Bracketed asides, such as "(mobile #114)", say where, not what.
 QString withoutAsides(const QString& title) {
     static const QRegularExpression asides(QStringLiteral("\\([^)]*\\)|\\[[^\\]]*\\]"));
     QString text = title;
@@ -225,6 +225,25 @@ QString plannedWorktreeName(const QString& repositoryName, const qint64 teamId, 
     return QStringLiteral("%1-%2-%3-t%4")
         .arg(repositoryName, task.branchType, task.branchSlug)
         .arg(taskNumber(task.id));
+}
+
+bool refsClash(const QString& one, const QString& other) {
+    if (one.isEmpty() || other.isEmpty())
+        return false;
+    if (one == other)
+        return true;
+    const auto under = [](const QString& inner, const QString& outer) {
+        return inner.size() > outer.size() && inner.startsWith(outer) &&
+               inner.at(outer.size()) == QLatin1Char('/');
+    };
+    return under(one, other) || under(other, one);
+}
+
+bool clashesWithAny(const QString& branch, const QSet<QString>& names) {
+    for (const QString& name : names)
+        if (refsClash(branch, name))
+            return true;
+    return false;
 }
 
 } // namespace ketplus::daemon::teams::branch_names

@@ -68,7 +68,7 @@ const QStringList& names() {
 
 QJsonArray teamTools() {
     const QJsonObject taskId = text(QStringLiteral("The task id, such as T-3."));
-    // T-93 (ADR 0121 §9): the branch `<type>/<slug>-t<n>` a task's worktree gets.
+    // T-93 (ADR 0123 §9): the branch `<type>/<slug>-t<n>` a task's worktree gets.
     const QJsonObject branchType{
         {QStringLiteral("type"), QStringLiteral("string")},
         {QStringLiteral("enum"),
@@ -80,7 +80,8 @@ QJsonArray teamTools() {
     const QJsonObject branchSlug =
         text(QStringLiteral("Leader, optional: the branch's slug, lower-case words joined by "
                             "hyphens, at most 40 characters (the branch is <type>/<slug>-t<n>). "
-                            "Default: from the title."));
+                            "Default: from the title, in its language; give a short English "
+                            "slug when the title is not English."));
     const QJsonObject member = text(QStringLiteral("The member's conversation number."));
     return {
         tool(QStringLiteral("team_get"),

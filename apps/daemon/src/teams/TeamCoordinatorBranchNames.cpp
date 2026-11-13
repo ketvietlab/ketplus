@@ -1,13 +1,14 @@
-// T-93 (ADR 0121 §9): a new task's branch says what it is, `<type>/<slug>-t<n>`, named by the
-// leader or derived from its title, and is refused when that name is already taken.
+// T-93 (ADR 0123 §9): a new task's branch says what it is, `<type>/<slug>-t<n>`, named by the
+// leader or derived from its title, and is refused when that name is already taken or would
+// clash with another branch as a folder.
 #include "teams/TeamBranchNames.h"
 #include "teams/TeamCoordinator.h"
 
 namespace ketplus::daemon::teams {
 
 std::optional<TeamError> TeamCoordinator::nameTaskBranch(const Team& team, Task& task,
-                                                         const QString& type,
-                                                         const QString& slug) const {
+                                                         const QString& type, const QString& slug,
+                                                         bool* unchecked) const {
     const QString chosenType = type.isEmpty() ? branch_names::typeOf(task.title) : type;
     const QString chosenSlug = slug.isEmpty() ? branch_names::slugOf(task.title) : slug;
     if (auto invalid = branch_names::validType(chosenType))
@@ -38,12 +39,20 @@ std::optional<TeamError> TeamCoordinator::nameTaskBranch(const Team& team, Task&
             const QString theirs = candidate.branch.isEmpty()
                                        ? branch_names::plannedBranch(other.id, candidate)
                                        : candidate.branch;
-            if (theirs == branch)
+            if (branch_names::refsClash(theirs, branch))
                 return taken(QStringLiteral("%1's of team %2").arg(candidate.id).arg(other.id));
         }
     }
-    if (host_->branchTaken(repository, branch) == std::optional<bool>(true))
-        return taken(QStringLiteral("in %1 or its origin").arg(repository));
+    // Taken also covers a folder clash (`feat` against `feat/x-t1`), which git refuses.
+    const std::optional<bool> inRepository = host_->branchTaken(repository, branch);
+    if (inRepository == std::optional<bool>(true))
+        return taken(QStringLiteral("in %1 or its origin, or clashes with a branch there as a "
+                                    "folder")
+                         .arg(repository));
+    // The host has not listed the repository's branches yet: the name is checked again, for
+    // good, when the worktree is made.
+    if (unchecked)
+        *unchecked = !inRepository.has_value();
     task.branchType = chosenType;
     task.branchSlug = chosenSlug;
     return std::nullopt;

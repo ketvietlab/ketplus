@@ -123,7 +123,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
   checked main checkout and integration branch; started tasks keep the repository they began
   in, and `team_task_create` may name a task's own repository.
-  Branch names (ADR 0121 §9, T-93): a new task's branch is `<type>/<slug>-t<n>` and its
+  Branch names (ADR 0123 §9, T-93): a new task's branch is `<type>/<slug>-t<n>` and its
   worktree `<repository>-<type>-<slug>-t<n>`, from `branch_type`/`branch_slug` or derived
   from the title (Vietnamese diacritics removed), refused when taken, renamed by the leader
   only before the worktree exists; older tasks keep `team/<id>/t-<n>`.

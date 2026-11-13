@@ -11,6 +11,12 @@
 namespace ketplus::daemon::teams {
 namespace {
 
+// T-93 (ADR 0123 §9, review L1): the repository's branches were not listed yet.
+QString uncheckedBranchText() {
+    return QStringLiteral(" The repository's branches were not listed yet; the name is checked "
+                          "against them when the worktree is made.");
+}
+
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
 TeamError notFound() {
@@ -98,20 +104,22 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
         return {.error = invalid};
     }
     // T-93: after the repository, whose branches the name must not take.
-    if (auto invalid =
-            nameTaskBranch(*team, task, draft.branchType.trimmed(), draft.branchSlug.trimmed())) {
+    bool unchecked = false;
+    if (auto invalid = nameTaskBranch(*team, task, draft.branchType.trimmed(),
+                                      draft.branchSlug.trimmed(), &unchecked)) {
         --team->nextTask;
         return {.error = invalid};
     }
     const QString branch = branch_names::plannedBranch(team->id, task);
     addHistory(
         task, actor, QStringLiteral("created"),
-        task.repository.isEmpty()
-            ? QStringLiteral("Created by %1, branch %2.").arg(actorName(*team, actor), branch)
-            : QStringLiteral("Created by %1, branch %2 in %3 against %4.")
-                  .arg(actorName(*team, actor), branch, task.repository,
-                       task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
-                                                        : task.integrationBranch));
+        (task.repository.isEmpty()
+             ? QStringLiteral("Created by %1, branch %2.").arg(actorName(*team, actor), branch)
+             : QStringLiteral("Created by %1, branch %2 in %3 against %4.")
+                   .arg(actorName(*team, actor), branch, task.repository,
+                        task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                         : task.integrationBranch)) +
+            (unchecked ? uncheckedBranchText() : QString()));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
@@ -209,11 +217,13 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         const QString slug = changes.contains(QStringLiteral("branch_slug"))
                                  ? changes.value(QStringLiteral("branch_slug")).toString().trimmed()
                                  : task->branchSlug;
-        if (auto invalid = nameTaskBranch(*team, *task, type, slug))
+        bool unchecked = false;
+        if (auto invalid = nameTaskBranch(*team, *task, type, slug, &unchecked))
             return restore(*invalid);
         if (const QString now = branch_names::plannedBranch(team->id, *task); now != was)
             addHistory(*task, actor, QStringLiteral("branch"),
-                       QStringLiteral("Branch %1 → %2.").arg(was, now),
+                       QStringLiteral("Branch %1 → %2.").arg(was, now) +
+                           (unchecked ? uncheckedBranchText() : QString()),
                        {{QStringLiteral("from"), was}, {QStringLiteral("to"), now}});
     }
     if (changes.contains(QStringLiteral("pull_request")) ||
