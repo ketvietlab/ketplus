@@ -301,6 +301,7 @@ void MarkdownPreviewPane::showEmpty(const ThemePalette& palette) {
     renderTimer_->stop();
     palette_ = palette;
     hasSource_ = false;
+    hasRenderedDocument_ = false;
     renderedMarkdown_.clear();
     renderedFilePath_.clear();
     markdown_.clear();
@@ -354,9 +355,11 @@ void MarkdownPreviewPane::renderNow() {
     applyDocumentStyle();
     auto markdownFeatures = QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub);
     markdownFeatures.setFlag(QTextDocument::MarkdownNoHTML);
-    const bool rebuild = renderedMarkdown_ != prepared.markdown || renderedFilePath_ != filePath_;
+    const bool rebuild = !hasRenderedDocument_ || renderedMarkdown_ != prepared.markdown ||
+                         renderedFilePath_ != filePath_;
     if (rebuild) {
         browser_->document()->setMarkdown(prepared.markdown, markdownFeatures);
+        hasRenderedDocument_ = true;
         renderedMarkdown_ = prepared.markdown;
         renderedFilePath_ = filePath_;
     }
@@ -385,10 +388,16 @@ void MarkdownPreviewPane::renderNow() {
         setNotice({});
     }
 
-    QTimer::singleShot(0, this, [this, scrollRatio] {
-        auto* scrollBar = browser_->verticalScrollBar();
-        scrollBar->setValue(qRound(scrollRatio * scrollBar->maximum()));
-    });
+    if (!rebuild) {
+        // A color/resource refresh keeps the existing viewport immediately; a
+        // queued ratio restore could overwrite a subsequent user scroll.
+        browser_->verticalScrollBar()->setValue(oldValue);
+    } else {
+        QTimer::singleShot(0, this, [this, scrollRatio] {
+            auto* scrollBar = browser_->verticalScrollBar();
+            scrollBar->setValue(qRound(scrollRatio * scrollBar->maximum()));
+        });
+    }
 }
 
 MarkdownPreviewPane::PreparedDocument MarkdownPreviewPane::prepareDocument() {

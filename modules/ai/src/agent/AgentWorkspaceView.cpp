@@ -284,8 +284,9 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
 
 void AgentWorkspaceView::applyTheme(const ThemePalette& palette,
                                     const int /*interfaceFontSizePixels*/) {
+    const bool hadCanonicalSyntax = bool(colorScheme_);
     colorScheme_.reset();
-    applyDocumentPalette(palette);
+    applyDocumentPalette(palette, hadCanonicalSyntax);
 }
 
 void AgentWorkspaceView::applyDocumentPalette(const ThemePalette& palette, bool forceSyntax) {

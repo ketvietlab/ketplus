@@ -15,6 +15,16 @@ using namespace ketplus;
 class SchemeRenderingTest : public QObject {
     Q_OBJECT
   private slots:
+    void emptyUntitledSourceReplacesThePlaceholder() {
+        MarkdownPreviewPane pane;
+        const auto palette = colorSchemePalette(builtinColorScheme(SchemeKind::Light));
+        pane.showEmpty(palette);
+        auto* browser = pane.findChild<QTextBrowser*>();
+        QVERIFY(browser);
+        QVERIFY(!browser->document()->isEmpty());
+        pane.setSource({}, {}, palette);
+        QTRY_VERIFY(browser->document()->isEmpty());
+    }
     void fencedSyntaxRefreshesWithinTheSameDocument() {
         QTextDocument document;
         document.setMarkdown(QStringLiteral("```cpp\nint n = 7; // note\n```"));
@@ -88,6 +98,7 @@ class SchemeRenderingTest : public QObject {
         QVERIFY(browser);
         QTRY_VERIFY(browser->document()->toPlainText().contains(QStringLiteral("Heading")));
         QTRY_VERIFY(browser->verticalScrollBar()->maximum() > 100);
+        QCoreApplication::processEvents();
         auto* document = browser->document();
         const auto text = document->toPlainText();
         QTextCursor cursor(document);

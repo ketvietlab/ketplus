@@ -128,6 +128,12 @@ TextEdit { width: 400; textFormat: TextEdit.MarkdownText; text: "```cpp\nint n =
         // Ordinary repeated formatting retains the same highlighter and snapshot.
         view.formatMessageDocument(quickDocument, 14, 400);
         QCOMPARE(styles.size(), 1);
+        view.applyTheme(theme.palette());
+        QCOMPARE(styles.size(), 2);
+        QCOMPARE(quickDocument->textDocument(), document);
+        for (const auto& format : document->begin().layout()->formats())
+            if (format.start == 0 && format.length == 3)
+                QVERIFY(format.format.foreground().color() != QColor(123, 45, 67));
     }
 };
 QTEST_MAIN(SchemeChatTest)

@@ -67,6 +67,7 @@ class MarkdownPreviewPane final : public QWidget {
     std::shared_ptr<const ColorScheme> scheme_;
     QString renderedMarkdown_;
     QString renderedFilePath_;
+    bool hasRenderedDocument_{false};
     QHash<QString, QString> diagramFiles_;
     bool hasSource_{false};
     int fontSizePixels_{15};

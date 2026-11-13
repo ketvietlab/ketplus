@@ -27,8 +27,10 @@ class SchemeDocumentSyntax final : public QSyntaxHighlighter {
         setObjectName(QStringLiteral("ketSchemeDocumentSyntax"));
     }
     void update(const ColorScheme& scheme, bool enabled) {
+        const bool plainForeground = scheme.editor.value(QStringLiteral("fg")) !=
+                                     scheme.ui.value(QStringLiteral("chrome.textMain"));
         if (styles_ == scheme.syntax && foreground_ == scheme.editor.value(QStringLiteral("fg")) &&
-            enabled_ == enabled)
+            plainForeground_ == plainForeground && enabled_ == enabled)
             return;
         styles_ = scheme.syntax;
         // Callers may retain a mutable reference to an authored role across a
@@ -36,6 +38,7 @@ class SchemeDocumentSyntax final : public QSyntaxHighlighter {
         styles_.detach();
         foreground_ = scheme.editor.value(QStringLiteral("fg"));
         enabled_ = enabled;
+        plainForeground_ = plainForeground;
         rehighlight();
     }
 
@@ -51,7 +54,10 @@ class SchemeDocumentSyntax final : public QSyntaxHighlighter {
                             format.property(QTextFormat::BlockCodeLanguage)
                         ? qMax(0, previousBlockState())
                         : 0;
-        setFormat(0, int(text.size()), foreground_);
+        // Preserve the legacy sparse formatting for default code blocks. A
+        // full-line range is needed only for an independent editor foreground.
+        if (plainForeground_)
+            setFormat(0, int(text.size()), foreground_);
         const auto spans = ket::highlightLine(
             text, format.property(QTextFormat::BlockCodeLanguage).toString(), state);
         for (const auto& span : spans) {
@@ -76,6 +82,7 @@ class SchemeDocumentSyntax final : public QSyntaxHighlighter {
     QMap<QString, SyntaxStyle> styles_;
     QColor foreground_;
     bool enabled_{false};
+    bool plainForeground_{false};
 };
 } // namespace
 void applySchemeDocumentSyntax(QTextDocument* document, const ColorScheme& scheme, bool enabled) {
