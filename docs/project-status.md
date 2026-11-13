@@ -24,6 +24,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+
 - VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
   includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
   approximations. Semantic colors remain metadata; extension code never runs.
