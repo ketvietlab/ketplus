@@ -112,8 +112,7 @@ QJsonArray features(const int minor) {
             QStringLiteral("session.work_report/1"), QStringLiteral("session.awaiting_reply/1"),
             QStringLiteral("teams/1"), QStringLiteral("teams.tasks/1"),
             QStringLiteral("teams.summary/1"), QStringLiteral("teams.settings/1"),
-            QStringLiteral("teams.storage/1"),
-            QStringLiteral("transport.oversized/1")};
+            QStringLiteral("teams.storage/1"), QStringLiteral("transport.oversized/1")};
 }
 
 QString timestamp() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }

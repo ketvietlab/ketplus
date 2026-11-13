@@ -57,6 +57,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/ipc/LocalIpcServer.h
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
+    src/protocol/ScheduleProtocol.cpp
+    src/protocol/ScheduleProtocol.h
     src/providers/ProviderAdapter.h
     src/providers/CopilotCli.cpp
     src/providers/CopilotCli.h
