@@ -1,0 +1,174 @@
+{
+    "diff": {
+        "added": "#50FA7B20",
+        "removed": "#FF555550"
+    },
+    "editor": {
+        "bg": "#282A36",
+        "caret": "#F8F8F2",
+        "fg": "#F8F8F2",
+        "gutterBg": "#282A36",
+        "gutterFg": "#6272A4",
+        "selection": "#44475A"
+    },
+    "extends": "builtin-dark",
+    "id": "builtin.dracula",
+    "kind": "dark",
+    "metadata": {
+        "author": "Dracula Theme",
+        "importReport": {
+            "counts": {
+                "approximated": 53,
+                "mapped": 47,
+                "skipped": 334
+            },
+            "path": "docs/theme-import-reports/dracula.json"
+        },
+        "license": "MIT",
+        "manualAdjustments": [
+        ],
+        "sourceApp": "VS Code",
+        "sourceFile": "extension/theme/dracula.json",
+        "sourceLabel": "Community",
+        "upstream": {
+            "author": "Dracula Theme",
+            "commit": "9726e1f6b51a4382334bc36e03128fcf02c3fb45",
+            "files": [
+                {
+                    "path": "LICENSE",
+                    "sha256": "f08d0bba7f8906ed4e7a76d7e555a883968d83eb550ae298ce893a65aee15dff",
+                    "url": "https://raw.githubusercontent.com/dracula/visual-studio-code/9726e1f6b51a4382334bc36e03128fcf02c3fb45/LICENSE"
+                },
+                {
+                    "path": "dracula.vsix",
+                    "sha256": "03f3b92496dd7f9983bbeed0864681e049d7a94e459430b299f47b3e2e8e3a75",
+                    "url": "https://github.com/dracula/visual-studio-code/releases/download/v2.24.3/dracula.vsix"
+                }
+            ],
+            "key": "dracula",
+            "license": "MIT",
+            "licenseFiles": [
+                {
+                    "distributionFile": "Dracula-MIT.txt",
+                    "source": "LICENSE"
+                }
+            ],
+            "repo": "dracula/visual-studio-code"
+        },
+        "vscodeSemanticHighlighting": true
+    },
+    "name": "Dracula",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "bold": false,
+            "fg": "#50FA7B",
+            "italic": true,
+            "underline": false
+        },
+        "comment": {
+            "fg": "#6272A4"
+        },
+        "constant": {
+            "fg": "#F8F8F2"
+        },
+        "function": {
+            "bold": false,
+            "fg": "#8BE9FD",
+            "italic": false,
+            "underline": false
+        },
+        "keyword": {
+            "bold": false,
+            "fg": "#F8F8F2",
+            "italic": true,
+            "underline": false
+        },
+        "operator": {
+            "bold": true,
+            "fg": "#F8F8F2",
+            "italic": false,
+            "underline": false
+        },
+        "string": {
+            "fg": "#6272A4"
+        },
+        "type": {
+            "bold": false,
+            "fg": "#FFB86C",
+            "italic": true,
+            "underline": false
+        },
+        "variable": {
+            "bold": false,
+            "fg": "#8BE9FD",
+            "italic": true,
+            "underline": true
+        }
+    },
+    "terminal": {
+        "ansi0": "#21222C",
+        "ansi1": "#FF5555",
+        "ansi10": "#69FF94",
+        "ansi11": "#FFFFA5",
+        "ansi12": "#D6ACFF",
+        "ansi13": "#FF92DF",
+        "ansi14": "#A4FFFF",
+        "ansi15": "#FFFFFF",
+        "ansi2": "#50FA7B",
+        "ansi3": "#F1FA8C",
+        "ansi4": "#BD93F9",
+        "ansi5": "#FF79C6",
+        "ansi6": "#8BE9FD",
+        "ansi7": "#F8F8F2",
+        "ansi8": "#6272A4",
+        "ansi9": "#FF6E6E",
+        "bg": "#282A36",
+        "cursor": "#F8F8F2",
+        "fg": "#F8F8F2",
+        "selection": "#44475A"
+    },
+    "ui": {
+        "button": {
+            "bg": "#44475A",
+            "fg": "#F8F8F2",
+            "hover": "#44475A"
+        },
+        "chrome": {
+            "accent": "#6272A4",
+            "appBackground": "#21222C",
+            "border": "#BD93F9",
+            "danger": "#FF5555",
+            "pageBackground": "#282A36",
+            "panelBackground": "#282A36",
+            "panelSubtle": "#282A36",
+            "textMain": "#F8F8F2",
+            "textSecondary": "#F8F8F2"
+        },
+        "focus": {
+            "border": "#6272A4"
+        },
+        "input": {
+            "bg": "#282A36",
+            "border": "#191A21",
+            "fg": "#F8F8F2"
+        },
+        "list": {
+            "fg": "#F8F8F2",
+            "hover": "#44475A75",
+            "selection": "#44475A",
+            "selectionFg": "#F8F8F2"
+        },
+        "sidebar": {
+            "bg": "#21222C",
+            "border": "#BD93F9",
+            "fg": "#F8F8F2"
+        },
+        "tab": {
+            "activeBg": "#282A36",
+            "activeFg": "#F8F8F2",
+            "inactiveBg": "#21222C",
+            "inactiveFg": "#6272A4"
+        }
+    }
+}

@@ -24,6 +24,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- The color-scheme catalog embeds the original two Két defaults plus eight
+  attributed MIT/Apache-2.0 conversions from pinned official upstream sources.
+  Built-ins are read-only, have offline completeness/contrast tests and a
+  reproducible importer command with saved reports. App-wide custom-color
+  application remains part of the separate ThemeManager adapter work.
+
 - JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
   and plugin JAR data into canonical variants with explicit approximation and
   omission reports. It does not execute plugins or install/activate schemes.
