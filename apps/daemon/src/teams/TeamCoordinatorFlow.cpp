@@ -73,8 +73,18 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 
 } // namespace
 
-void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
+void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     const qint64 teamId = snapshot.id;
+    // T-90: a turn a developer starts on its task in progress (a review's findings, an
+    // answered question) runs in that task's worktree, wherever the conversation pointed
+    // before: another task's worktree, or one merged since.
+    TeamMessage message = sent;
+    if (const Task* task = message.pointAt.isEmpty() && !message.taskId.isEmpty()
+                               ? snapshot.task(message.taskId)
+                               : nullptr;
+        task && task->owner == message.toSession && task->state == state::inProgress &&
+        !task->worktree.isEmpty())
+        message.pointAt = task->worktree;
     // A turn the team starts never runs in a worktree its member was handed out of. With the
     // outbox, that is settled when the message is sent; without it (the coordinator's own
     // tests), the host switches at once and this is settled before the lines below.
@@ -117,15 +127,16 @@ void TeamCoordinator::pauseIfBudgetUsed(Team& team, QList<Update>& updates) {
     team.paused = true;
     team.pausedReason = QStringLiteral("budget");
     const QString more = QStringLiteral("Continue (%1 more turns)").arg(team.turnBudget);
-    raiseDecision(team, QStringLiteral("budget"),
-                  QStringLiteral("The team used its %1 automatic turns. Continue?")
-                      .arg(team.turnBudget),
-                  QStringLiteral("Automatic turns are paused until you answer. Held messages "
-                                 "are delivered in order when the team continues."),
-                  {more, QStringLiteral("Stop")}, more, {}, QStringLiteral("daemon"));
-    updates.append({.kind = QStringLiteral("paused"),
-                    .text = QStringLiteral("Paused: the team used its %1 automatic turns.")
-                                .arg(team.turnBudget)});
+    raiseDecision(
+        team, QStringLiteral("budget"),
+        QStringLiteral("The team used its %1 automatic turns. Continue?").arg(team.turnBudget),
+        QStringLiteral("Automatic turns are paused until you answer. Held messages "
+                       "are delivered in order when the team continues."),
+        {more, QStringLiteral("Stop")}, more, {}, QStringLiteral("daemon"));
+    updates.append(
+        {.kind = QStringLiteral("paused"),
+         .text =
+             QStringLiteral("Paused: the team used its %1 automatic turns.").arg(team.turnBudget)});
 }
 
 QString TeamCoordinator::takeMemberTurn(const QString& sessionId) {
@@ -137,7 +148,8 @@ QString TeamCoordinator::takeMemberTurn(const QString& sessionId) {
     pauseIfBudgetUsed(*team, updates);
     if (team->paused) {
         if (!updates.isEmpty() && commit(*team, before, QStringLiteral("daemon"), updates))
-            qWarning("Unable to pause team %lld for its budget.", static_cast<long long>(before.id));
+            qWarning("Unable to pause team %lld for its budget.",
+                     static_cast<long long>(before.id));
         return team->pausedReason == QStringLiteral("budget") ? QStringLiteral("team_budget")
                                                               : QStringLiteral("team_paused");
     }

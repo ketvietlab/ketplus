@@ -194,6 +194,8 @@ class CloudControlClient final : public QObject {
     // name, answered sealed to the phone that asked.
     void executeWorktreeCommand(const QJsonObject& command, const QJsonObject& payload,
                                 const QByteArray& senderAgreementKey);
+    void publishPreparedSession(const QJsonObject& command, const QJsonObject& result,
+                                const QByteArray& senderAgreementKey);
     // ADR 0116: a team command, checked against this Mac, its owner and the capability it
     // names, run by the session host and answered sealed to the device that sent it.
     void executeTeamCommand(const QJsonObject& command, const QJsonObject& payload,

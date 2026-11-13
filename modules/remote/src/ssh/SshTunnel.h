@@ -101,7 +101,7 @@ class SshTunnel : public QObject {
     // Reconnects scheduled since the last Connected state.
     [[nodiscard]] int reconnectAttempts() const { return reconnects_; }
 
-    // ADR 0123: installer calls retain the verified destination and an immutable trust
+    // ADR 0124: installer calls retain the verified destination and an immutable trust
     // snapshot. No caller can request a permissive SSH invocation. `trustFile` is in the
     // installer's private temporary directory and must outlive the returned process args.
     [[nodiscard]] QStringList installationArguments(const QString& command,

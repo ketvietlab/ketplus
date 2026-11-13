@@ -452,9 +452,10 @@ five-file/40-MiB draft quota. Other readable raster formats are encoded as PNG b
 staging; clipboard images are encoded in memory, without a temporary plaintext file.
 The panel shows uploading, ready and failed states and retains ready IDs after a
 failed send; it clears them only after actual turn submission completion. Draft panels
-are scoped by machine, session and generation. New-conversation attachment staging
-remains unavailable until a session exists; its tooltip explains this boundary.
-First-turn staging and the session-preparation ADR are tracked separately in T-83.
+are scoped by machine, session and generation. First-turn attachments use the private
+inactive preparation lifecycle in [ADR 0122](0122-first-turn-remote-attachments.md)
+when the target advertises it. Older targets retain the existing-conversation-only
+flow; the tooltip explains that boundary.
 
 File-read and text-policy errors use the same path-bearing copy as local turn
 submission. Conversion and clipboard failures are reported explicitly; a failed

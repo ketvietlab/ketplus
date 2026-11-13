@@ -313,7 +313,7 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                  QStringLiteral("session.mode.apply"), QStringLiteral("attachment.stage.begin"),
                  QStringLiteral("attachment.stage.chunk"),
                  QStringLiteral("attachment.stage.commit"),
-                 QStringLiteral("attachment.stage.cancel"),
+                 QStringLiteral("attachment.stage.cancel"), QStringLiteral("session.prepare/1"),
                  // MCP media is journaled as media_ref blocks resolved from the
                  // owner-only <state dir>/media store (same user; no IPC bytes).
                  QStringLiteral("media.local_store")}}};

@@ -117,8 +117,8 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
     *data = std::move(result);
     return true;
 }
-bool IncludeResolver::loadJsonChain(const QString& path, QVector<JsonSource>* chain,
-                                    Error* error) const {
+bool IncludeResolver::loadJsonChain(const QString& path, QVector<JsonSource>* chain, Error* error,
+                                    quint64* remainingBytes) const {
     if (error)
         *error = {};
     if (!chain)
@@ -139,6 +139,13 @@ bool IncludeResolver::loadJsonChain(const QString& path, QVector<JsonSource>* ch
         QByteArray data;
         if (!read(normalized, &data, error))
             return false;
+        if (remainingBytes) {
+            if (quint64(data.size()) > *remainingBytes) {
+                *remainingBytes = 0;
+                return fail(error, QStringLiteral("Import exceeds shared read budget"), file);
+            }
+            *remainingBytes -= quint64(data.size());
+        }
         bytes += quint64(data.size());
         if (bytes > MaxExpandedBytes)
             return fail(error, QStringLiteral("Include chain exceeds 100 MiB"), file);

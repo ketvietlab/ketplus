@@ -151,6 +151,9 @@ class SshMachineBackend final : public MachineBackend {
                               const QJsonObject& request, Callback callback) override;
     // As locally: the first turn in the remote worktree (its path) creates the conversation.
     void createSession(const QJsonObject& request, Callback callback) override;
+    void prepareSession(const QJsonObject& request, Callback callback) override;
+    void cancelPreparedSession(const QString& sessionId, qint64 generation,
+                               Callback callback) override;
     void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
                            qint64 generation, const QJsonObject& request,
                            Callback callback) override;

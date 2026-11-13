@@ -58,6 +58,7 @@ const QStringList& names() {
                                    QStringLiteral("team_review_accept"),
                                    QStringLiteral("team_lane_set"),
                                    QStringLiteral("team_paths_allow"),
+                                   QStringLiteral("team_repository_set"),
                                    QStringLiteral("team_decision_raise"),
                                    QStringLiteral("team_decision_withdraw")};
     return value;
@@ -149,7 +150,14 @@ QJsonArray teamTools() {
               {QStringLiteral("lane"), text(QStringLiteral("The lane it is planned for."))},
               {QStringLiteral("criteria"), list(QStringLiteral("Acceptance criteria, in order."))},
               {QStringLiteral("depends_on"),
-               list(QStringLiteral("Task ids that must be done first."))}},
+               list(QStringLiteral("Task ids that must be done first."))},
+              {QStringLiteral("repository"),
+               text(QStringLiteral("Optional: the full path of another repository's main "
+                                   "checkout this task works in. Its branch, worktree, merge "
+                                   "check and cleanup use it. Default: the team's."))},
+              {QStringLiteral("integration_branch"),
+               text(QStringLiteral("Optional, with repository: its integration branch, which "
+                                   "origin must have. Default: the team's."))}},
              {QStringLiteral("title")}),
         tool(QStringLiteral("team_task_assign"),
              QStringLiteral("Leader: assign a To do task to a developer. Starts the owner's turn."),
@@ -214,6 +222,18 @@ QJsonArray teamTools() {
                                    "or tests/fixtures."))},
               {QStringLiteral("reason"), text(QStringLiteral("Why, recorded in the history."))}},
              {QStringLiteral("paths"), QStringLiteral("reason")}),
+        tool(QStringLiteral("team_repository_set"),
+             QStringLiteral("Leader: move the team to another repository (the full path of its "
+                            "main checkout) and integration branch, which origin must have. "
+                            "New tasks and tasks not started yet use it; started tasks keep the "
+                            "repository, branch and worktree they began in. Nothing on disk "
+                            "moves. Logged in Updates."),
+             {{QStringLiteral("repository"),
+               text(QStringLiteral("The full path of the repository's main checkout."))},
+              {QStringLiteral("integration_branch"),
+               text(QStringLiteral("Its integration branch. Default: the team's current one."))},
+              {QStringLiteral("reason"), text(QStringLiteral("Why, recorded in Updates."))}},
+             {QStringLiteral("repository"), QStringLiteral("reason")}),
         tool(
             QStringLiteral("team_decision_raise"),
             QStringLiteral("Leader: ask the user a question that changes the product, with two "

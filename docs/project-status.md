@@ -24,6 +24,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+
+- VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
+  includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
+  approximations. Semantic colors remain metadata; extension code never runs.
 - Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
   diagnostics, unknown-data preservation, complete built-in inheritance, embedded
   light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
@@ -112,6 +119,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
+  Repository ([ADR 0123](decisions/0123-team-and-task-repository.md)): the user (Team page,
+  Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
+  checked main checkout and integration branch; started tasks keep the repository they began
+  in, and `team_task_create` may name a task's own repository.
   Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
   a task that records a pull request is done once `gh` says it is merged, from any open
   state, checked at load, every 2 minutes and with the merge check (at most 20 pull
@@ -160,7 +171,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   (assignment, digest, review request, verdict, decision) with Open T-n; a digest of many
   changes is one card. Anything it cannot read stays the message's text.
 
-- SSH daemon installer consumer (#666, ADR 0123): Connections separates metadata review
+- SSH daemon installer consumer (#666, ADR 0124): Connections separates metadata review
   from explicit install consent; verifies an Ed25519-signed version-matched GitHub
   release manifest and artifact SHA-256; installs the complete user-space runtime over
   the verified SSH route; commits after daemon hello, with rollback, managed upgrades,

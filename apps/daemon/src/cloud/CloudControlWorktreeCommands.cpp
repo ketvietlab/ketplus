@@ -79,6 +79,7 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.branches.read");
     const bool configuring =
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.configuration.read");
+    const bool preparing = command.value("kind") == "session.prepare";
     const QJsonObject newWorktree = payload.value(QStringLiteral("new_worktree")).toObject();
     const QString branch = newWorktree.value(QStringLiteral("branch")).toString().trimmed();
     const QString base = newWorktree.value(QStringLiteral("base")).toString().trimmed();
@@ -90,8 +91,9 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1) != 0 ||
         command.value(QStringLiteral("expectedLifecycleRevision")).toInteger(-1) != 0 ||
         worktreePath.isEmpty() || !QFileInfo(worktreePath).isDir() ||
-        (!listing && !configuring &&
+        (!listing && !configuring && !preparing &&
          payload.value(QStringLiteral("prompt")).toString().trimmed().isEmpty()) ||
+        (preparing && !newWorktree.isEmpty()) ||
         (!newWorktree.isEmpty() && (branch.isEmpty() || base.isEmpty()))) {
         acknowledgeCommand(
             command,
@@ -100,6 +102,21 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
              {QStringLiteral("error_message"),
               QStringLiteral("The enrolled worktree scope changed.")}},
             senderAgreementKey);
+        return;
+    }
+    if (preparing) {
+        auto localPayload = payload;
+        localPayload.insert("worktree_path", worktreePath);
+        const auto result =
+            host_->handleCommand({{"message_id", command.value("id")},
+                                  {"message_type", "session.prepare"},
+                                  {"_verified_sender_device_id", content.value("senderDeviceId")},
+                                  {"payload", localPayload}},
+                                 "cloud-control-v2");
+        if (result.value("ok").toBool())
+            publishPreparedSession(command, result, senderAgreementKey);
+        else
+            acknowledgeCommand(command, result, senderAgreementKey);
         return;
     }
     if (configuring) {

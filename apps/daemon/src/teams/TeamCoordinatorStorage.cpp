@@ -47,10 +47,11 @@ QString busy(const QString& state, const bool idle, const bool approvalsPending)
 
 QList<const Task*> TeamCoordinator::doneWorktrees(const Team& team) {
     QList<const Task*> done;
-    const QString main = canonical(team.repository);
     for (const Task& task : team.tasks)
+        // T-90: never the main checkout of the repository the task worked in.
         if (task.state == state::done && !task.worktree.isEmpty() &&
-            QFileInfo(task.worktree).isDir() && canonical(task.worktree) != main)
+            QFileInfo(task.worktree).isDir() &&
+            canonical(task.worktree) != canonical(taskScope(team, task).repository))
             done.append(&task);
     return done;
 }
@@ -125,9 +126,11 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
         return refuse(notRemoved(
             QStringLiteral("%1 is not done; only a done task's worktree is removed.").arg(taskId)));
     const QString path = task->worktree;
+    // T-90: the worktree belongs to the repository the task worked in.
+    const QString repository = taskScope(*team, *task).repository;
     if (path.isEmpty() || !QFileInfo(path).isDir())
         return refuse(notRemoved(QStringLiteral("%1 has no worktree on disk.").arg(taskId)));
-    if (canonical(path) == canonical(team->repository))
+    if (canonical(path) == canonical(repository))
         return refuse(notRemoved(QStringLiteral("%1 is the repository's main checkout, which is "
                                                 "never removed.")
                                      .arg(path)));
@@ -137,7 +140,7 @@ void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
     if (worktreeRemovals_.contains(path))
         return refuse(notRemoved(QStringLiteral("%1 is being removed already.").arg(path)));
     worktreeRemovals_.insert(path);
-    host_->askRemoveWorktree(team->repository, path,
+    host_->askRemoveWorktree(repository, path,
                              [guard = QPointer<TeamCoordinator>(this), teamId, taskId, path,
                               done = std::move(done)](const QString& error) {
                                  if (!guard)
@@ -167,6 +170,9 @@ void TeamCoordinator::worktreeRemoved(const qint64 teamId, const QString& taskId
         QStringList moved;
         QStringList stayed;
     };
+    // T-90: the main checkout of the repository the task worked in.
+    const Task* task = team->task(taskId);
+    const QString home = task ? taskScope(*team, *task).repository : team->repository;
     const QList<FolderConversation> inFolder = host_->conversationsIn(path);
     auto moves = std::make_shared<Moves>();
     moves->waiting = static_cast<int>(inFolder.size());
@@ -219,7 +225,7 @@ void TeamCoordinator::worktreeRemoved(const qint64 teamId, const QString& taskId
         const QString name = QStringLiteral("“%1”").arg(
             conversation.title.isEmpty() ? conversation.sessionId : conversation.title);
         host_->askPointConversationAt(
-            conversation.sessionId, team->repository, [moves, name, finish](const QString& error) {
+            conversation.sessionId, home, [moves, name, finish](const QString& error) {
                 if (error.isEmpty())
                     moves->moved.append(name);
                 else

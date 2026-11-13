@@ -92,8 +92,17 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
     task.dependsOn = draft.dependsOn;
     for (const QString& criterion : draft.criteria)
         task.criteria.append({.text = criterion.trimmed()});
+    if (auto invalid = taskRepository(*team, draft, task)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
     addHistory(task, actor, QStringLiteral("created"),
-               QStringLiteral("Created by %1.").arg(actorName(*team, actor)));
+               task.repository.isEmpty()
+                   ? QStringLiteral("Created by %1.").arg(actorName(*team, actor))
+                   : QStringLiteral("Created by %1, in %2 against %3.")
+                         .arg(actorName(*team, actor), task.repository,
+                              task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                               : task.integrationBranch));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,

@@ -8,7 +8,7 @@
 
 namespace ketplus::remote::ssh {
 
-// ADR 0123. The release owner supplies the public key at build time. An empty key is
+// ADR 0124. The release owner supplies the public key at build time. An empty key is
 // deliberately not replaced with a network-provided key or an unsigned checksum.
 struct DaemonReleaseChannel {
     QUrl manifestUrl;

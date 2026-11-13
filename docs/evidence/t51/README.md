@@ -1,6 +1,6 @@
 # SSH installer verification
 
-Issue [#666](https://github.com/ketvietlab/ketplus/issues/666), ADR 0123.
+Issue [#666](https://github.com/ketvietlab/ketplus/issues/666), ADR 0124.
 Production installation remains disabled until the release owner supplies the
 dedicated Ed25519 public key. No release, signing secret or production key was
 created or published by this change.

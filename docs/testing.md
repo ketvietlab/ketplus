@@ -50,6 +50,29 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks primary-role precedence in alphabetic and reversed
+attribute order, missing-primary fallbacks, effect-color presence/validity in both
+option orders, syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, internal DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
+## VS Code importer fixtures
+
+`ketplus_vscode_import_tests` covers original dark/light/include themes, standard
+DOCTYPE tmTheme resources, explicit style resets, ordered fallback chains, ANSI16,
+semantic metadata without application, unsupported selectors and multi-variant
+VSIX. Failure cases cover unsafe paths/archives, malformed data, entity expansion,
+include cycles and shared byte/canonical-output limits. Fixture provenance is in
+`core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
+targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
+
 ## Theme input security fixtures
 
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
@@ -142,6 +165,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
+| First-turn remote attachments (ADR 0122) | `ketplus_session_preparation_store_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_machine_preparation_tests` | Private allocation/retry, atomic activation/cancel, restart/expiry and bounded receipts; authenticated Relay routing and creator-key barrier before ACK; encrypted staging through the first fake-provider turn; offscreen composer retry, visible/removable pending files during preparation/refusal, text-only recovery, late cancellation after view destruction, restart-safe durable cancellation and old-hosted/old-daemon fallback. Run the existing Machine attachment/conversation and SSH/Relay backend suites too. |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
 | Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle, deny list and work display, reverted toggle on save failure |
@@ -1034,7 +1058,7 @@ INI settings, in light/dark. It checks the exact recipe gap after growth and win
 resize, composer/view hide and restore, and preservation of another composer's
 reservation during hide and destruction. It uses no backend or provider.
 
-### Consented SSH daemon installation (ADR 0123)
+### Consented SSH daemon installation (ADR 0124)
 
 `ketplus_daemon_release_tests` verifies Ed25519 manifests and fail-closed build
 configuration. `ketplus_ssh_install_transaction_tests` exercises the actual
@@ -1053,7 +1077,7 @@ Widgets/Svg/Test, OpenSSL, Python 3.9+ and a non-root loopback sshd. Run ctest w
 
 The QA runtime must come from the task's complete `cmake --install` stage and
 have a clean exact build revision. Archive its top-level children directly
-(no `.` member/CPack wrapper; ADR 0123 layout v1). In a task-owned directory,
+(no `.` member/CPack wrapper; ADR 0124 layout v1). In a task-owned directory,
 generate an Ed25519 QA keypair, restrict the private file to 0600, and set:
 
 - `KETPLUS_T51_QA_KEY`: the QA private PEM file (outside the repository).

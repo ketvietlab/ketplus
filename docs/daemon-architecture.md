@@ -1079,7 +1079,7 @@ What clients read is bounded by the size of the team, never by its age (ADR 0115
 
 ### Consented SSH installer lifecycle
 
-ADR 0123 adds authenticated `daemon.stop_if_idle` for explicit uninstall of a
+ADR 0124 adds authenticated `daemon.stop_if_idle` for explicit uninstall of a
 receipt-owned SSH installation. It shares `daemon.prepare_upgrade`'s atomic
 `SessionHost::hasActiveSessions()` refusal and listener shutdown fence, without
 a replacement-version field. It cannot interrupt active turns or approvals.

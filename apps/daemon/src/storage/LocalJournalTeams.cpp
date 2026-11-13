@@ -147,9 +147,11 @@ bool LocalJournal::saveTeam(const qint64 teamId, const qint64 expectedRevision,
         return false;
     }
     QSqlQuery update(database_);
-    update.prepare(QStringLiteral("UPDATE teams SET document = ?, revision = ?, changed_at = ? "
-                                  "WHERE id = ? AND revision = ?"));
+    // T-90: the repository column follows the document, since a team can change repository.
+    update.prepare(QStringLiteral("UPDATE teams SET document = ?, repository = ?, revision = ?, "
+                                  "changed_at = ? WHERE id = ? AND revision = ?"));
     update.addBindValue(compact(document));
+    update.addBindValue(document.value(QStringLiteral("repository")).toString());
     update.addBindValue(document.value(QStringLiteral("revision")).toInteger());
     update.addBindValue(document.value(QStringLiteral("changed_at")).toString());
     update.addBindValue(teamId);

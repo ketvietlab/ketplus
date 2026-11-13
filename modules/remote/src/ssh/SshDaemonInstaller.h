@@ -15,7 +15,7 @@ namespace ketplus::remote::ssh {
 class SshTunnel;
 
 // One explicit operation bound to a verified host identity. The UI asks to review metadata,
-// then separately confirms the complete signed artifact and remote changes. ADR 0123.
+// then separately confirms the complete signed artifact and remote changes. ADR 0124.
 class SshDaemonInstaller final : public QObject {
     Q_OBJECT
   public:

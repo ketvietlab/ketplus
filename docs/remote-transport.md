@@ -44,6 +44,7 @@ Features are gated by capability name, never by version number, as on local IPC:
 | `transport.webrtc/1` | Signals through `/v2/relay`, obtains TURN credentials and speaks the frames below. |
 | `events.forward_only/1` | Reads transcript events only from frames and host pages, never from stored events. |
 | `teams.remote/1` | Answers sealed `team.*` commands through the mailbox and adds `team` to session metadata (ADR 0116). |
+| `session.prepare/1` | Allocates a private inactive attachment scope before a conversation's first turn (ADR 0122). |
 
 Each party advertises its own set:
 
@@ -52,6 +53,14 @@ Each party advertises its own set:
   after an app update.
 - The relay answers each heartbeat with the names it enables for that machine
   (`compatibility.capabilities`) and shows clients the same set in each `/v2/machines` entry.
+
+The desktop offers first-turn attachments only when the target daemon and relay both
+advertise `session.prepare/1`. Preparation and its cancellation use the encrypted
+mailbox; existing-session attachment commands keep their current route and format.
+Before reporting preparation success, the host publishes private routing and a key
+wrap only for the creating device. The scope stays out of conversation lists until
+the first real turn. Cancel discards inactive files; abandoned scopes expire after
+a fixed 24 hours. See [ADR 0122](decisions/0122-first-turn-remote-attachments.md).
 
 The relay enables `transport.webrtc/1` for a machine when it and the host both support it. A client
 tries WebRTC only when it supports the name too.

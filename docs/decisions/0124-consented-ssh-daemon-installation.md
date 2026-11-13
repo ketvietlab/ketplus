@@ -1,4 +1,4 @@
-# 0123: Consented user-space daemon installation over SSH
+# 0124: Consented user-space daemon installation over SSH
 
 Status: accepted; production installs remain disabled until the release owner supplies the public key
 Date: 2026-11-13

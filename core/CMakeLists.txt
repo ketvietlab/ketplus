@@ -72,6 +72,34 @@ qt_add_resources(ketplus_ui "color_schemes"
 )
 add_library(KetPlusCM::ui ALIAS ketplus_ui)
 
+add_library(ketplus_jetbrains_import STATIC
+    src/ui/theme/import/JetBrainsImporter.h
+    src/ui/theme/import/JetBrainsImporter.cpp
+    src/ui/theme/import/JetBrainsImport_p.h
+    src/ui/theme/import/JetBrainsMapping.h
+    src/ui/theme/import/JetBrainsCommon.cpp
+    src/ui/theme/import/JetBrainsEditor.cpp
+    src/ui/theme/import/JetBrainsUi.cpp
+)
+target_link_libraries(ketplus_jetbrains_import PUBLIC ketplus_ui PRIVATE ketplus_theme_io)
+ketplus_enable_warnings(ketplus_jetbrains_import)
+add_library(KetPlusCM::jetbrains_import ALIAS ketplus_jetbrains_import)
+
+add_library(ketplus_vscode_import STATIC
+    src/ui/theme/vscode/VsCodeImporter.h
+    src/ui/theme/vscode/VsCodeImporter.cpp
+    src/ui/theme/vscode/VsCodeImport_p.h
+    src/ui/theme/vscode/VsCodeMapping.h
+    src/ui/theme/vscode/VsCodeColors.cpp
+    src/ui/theme/vscode/VsCodeScopes.cpp
+    src/ui/theme/vscode/VsCodePlist.cpp
+    src/ui/theme/vscode/VsCodeSession.cpp
+)
+target_link_libraries(ketplus_vscode_import PUBLIC ketplus_ui PRIVATE ketplus_theme_io)
+ketplus_enable_warnings(ketplus_vscode_import)
+add_library(KetPlusCM::vscode_import ALIAS ketplus_vscode_import)
+
+
 add_library(ketplus_core STATIC
     src/core/Document.cpp
     src/core/Document.h
@@ -510,17 +538,35 @@ if(KETPLUS_CM_BUILD_TESTS)
         endif()
     endfunction()
 
-    add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
-    target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)
-    ketplus_enable_warnings(ketplus_color_scheme_tests)
-    ketplus_cm_add_test(ketplus_color_scheme_tests ketplus_color_scheme_tests)
-    set_tests_properties(ketplus_color_scheme_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
     add_executable(ketplus_theme_input_tests tests/ThemeInputTest.cpp)
     target_link_libraries(ketplus_theme_input_tests PRIVATE Qt6::Test ketplus_theme_io ketplus_miniz)
     ketplus_enable_warnings(ketplus_theme_input_tests)
     ketplus_cm_add_test(ketplus_theme_input_tests ketplus_theme_input_tests)
     set_tests_properties(ketplus_theme_input_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_jetbrains_import_tests tests/JetBrainsImportTest.cpp)
+    target_link_libraries(ketplus_jetbrains_import_tests PRIVATE Qt6::Test ketplus_jetbrains_import)
+    target_include_directories(ketplus_jetbrains_import_tests SYSTEM PRIVATE "${ketplus_miniz_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/miniz-include")
+    target_compile_definitions(ketplus_jetbrains_import_tests PRIVATE
+        JETBRAINS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/jetbrains")
+    ketplus_enable_warnings(ketplus_jetbrains_import_tests)
+    ketplus_cm_add_test(ketplus_jetbrains_import_tests ketplus_jetbrains_import_tests)
+    set_tests_properties(ketplus_jetbrains_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_vscode_import_tests tests/VsCodeImportTest.cpp)
+    target_link_libraries(ketplus_vscode_import_tests PRIVATE Qt6::Test ketplus_vscode_import)
+    target_include_directories(ketplus_vscode_import_tests SYSTEM PRIVATE "${ketplus_miniz_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/miniz-include")
+    target_compile_definitions(ketplus_vscode_import_tests PRIVATE
+        VSCODE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vscode")
+    ketplus_enable_warnings(ketplus_vscode_import_tests)
+    ketplus_cm_add_test(ketplus_vscode_import_tests ketplus_vscode_import_tests)
+    set_tests_properties(ketplus_vscode_import_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_color_scheme_tests tests/ColorSchemeTest.cpp)
+    target_link_libraries(ketplus_color_scheme_tests PRIVATE Qt6::Test ketplus_ui)
+    ketplus_enable_warnings(ketplus_color_scheme_tests)
+    ketplus_cm_add_test(ketplus_color_scheme_tests ketplus_color_scheme_tests)
+    set_tests_properties(ketplus_color_scheme_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_tests tests/DocumentTest.cpp)
     target_link_libraries(ketplus_tests PRIVATE Qt6::Test ketplus_core)

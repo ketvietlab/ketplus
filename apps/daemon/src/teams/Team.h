@@ -119,6 +119,11 @@ struct Task final {
     QString baseCommit;
     QString headCommit;
     QString pullRequest;
+    // T-90 (ADR 0123): the repository and integration branch the task works in when they are
+    // not the team's: named when the task was created, or kept from before the team's
+    // repository changed. Empty: the team's. Read them through taskScope().
+    QString repository;
+    QString integrationBranch;
     int round{0};
     // T-23: the reviewer of its last round, which reviews its next round while it is on the
     // team.
@@ -263,6 +268,11 @@ struct Team final {
 [[nodiscard]] QJsonObject toJson(const Team& team);
 [[nodiscard]] Team teamFromJson(const QJsonObject& json);
 [[nodiscard]] QJsonObject toJson(const Task& task, bool withHistory = true);
+
+// T-90 (ADR 0123): the team as the task sees it: its repository and integration branch are
+// the task's own when it has them. Git about a task (its worktree, branch, merge, diff and
+// cleanup) reads them from here, never from the team directly.
+[[nodiscard]] Team taskScope(const Team& team, const Task& task);
 
 // ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
 // The summary lists the first outside paths of a task and the newest answered decisions;
