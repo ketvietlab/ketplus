@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <algorithm>
 #include <miniz.h>
 
 using namespace ketplus;
@@ -45,6 +46,12 @@ QByteArray zip(const QList<QPair<QByteArray, QByteArray>>& entries) {
     mz_free(buffer);
     mz_zip_writer_end(&archive);
     return result;
+}
+QByteArray xmlValue(const QByteArray& name, const QList<QPair<QByteArray, QByteArray>>& fields) {
+    QByteArray result = "<option name=\"" + name + "\"><value>";
+    for (const auto& field : fields)
+        result += "<option name=\"" + field.first + "\" value=\"" + field.second + "\"/>";
+    return result + "</value></option>";
 }
 QByteArray xmlAttribute(const QByteArray& name, const QByteArray& property,
                         const QByteArray& value) {
@@ -158,6 +165,125 @@ class JetBrainsImportTest : public QObject {
             QCOMPARE(result.schemes.first().scheme.terminal["ansi" + QString::number(i)],
                      QColor("#223344"));
         }
+    }
+    void primaryAttributesWinRegardlessOfXmlOrder() {
+        // IDE exports sort alphabetically: aliases occur both before and after the primary.
+        QList<QByteArray> names{
+            "DEFAULT_BLOCK_COMMENT",   "DEFAULT_CLASS_NAME",     "DEFAULT_CLASS_REFERENCE",
+            "DEFAULT_DOC_COMMENT",     "DEFAULT_FUNCTION_CALL",  "DEFAULT_FUNCTION_DECLARATION",
+            "DEFAULT_GLOBAL_VARIABLE", "DEFAULT_INSTANCE_FIELD", "DEFAULT_INSTANCE_METHOD",
+            "DEFAULT_INTERFACE_NAME",  "DEFAULT_LINE_COMMENT",   "DEFAULT_LOCAL_VARIABLE",
+            "DEFAULT_PARAMETER",       "DEFAULT_STATIC_FIELD",   "DEFAULT_STATIC_METHOD",
+            "JAVA_METHOD_DECLARATION"};
+        std::sort(names.begin(), names.end());
+        const QSet<QByteArray> primary{"DEFAULT_CLASS_NAME", "DEFAULT_FUNCTION_DECLARATION",
+                                       "DEFAULT_LINE_COMMENT", "DEFAULT_LOCAL_VARIABLE"};
+        QTemporaryDir dir;
+        const auto path = dir.filePath("ordered.icls");
+        for (bool reversed : {false, true}) {
+            if (reversed)
+                std::reverse(names.begin(), names.end());
+            QByteArray xml = "<scheme name=\"Alphabetical\" parent_scheme=\"Darcula\"><attributes>";
+            for (const auto& name : names) {
+                const bool main = primary.contains(name);
+                QList<QPair<QByteArray, QByteArray>> fields{
+                    {"FOREGROUND", main ? "A9B7C6" : "9876AA"}, {"FONT_TYPE", main ? "0" : "3"}};
+                if (!main)
+                    fields.append({{"EFFECT_TYPE", "2"}, {"EFFECT_COLOR", "ff0000"}});
+                xml += xmlValue(name, fields);
+            }
+            QVERIFY(write(path, xml + "</attributes></scheme>"));
+            const auto result = JetBrainsImporter::importFile(path);
+            QVERIFY(result.ok());
+            const auto& syntax = result.schemes.first().scheme.syntax;
+            for (const auto& role : {"function", "variable", "type", "comment"}) {
+                const auto style = syntax.value(QString::fromLatin1(role));
+                QCOMPARE(style.fg.value(), QColor("#A9B7C6"));
+                QCOMPARE(style.bold.value(), false);
+                QCOMPARE(style.italic.value(), false);
+                QCOMPARE(style.underline.value(), false);
+            }
+            for (const auto& name : names)
+                if (!primary.contains(name))
+                    QVERIFY(reportHas(result.report, QString::fromLatin1(name),
+                                      ImportDisposition::Skipped));
+        }
+    }
+    void secondaryAttributesSupplyMissingPrimaryValues() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("fallback.icls");
+        const auto language =
+            xmlValue("JAVA_METHOD_DECLARATION", {{"FOREGROUND", "ff0000"}, {"FONT_TYPE", "0"}});
+        const auto secondary =
+            xmlValue("DEFAULT_STATIC_METHOD", {{"FOREGROUND", "123456"}, {"FONT_TYPE", "2"}});
+        const QByteArray inherited =
+            "<option name=\"DEFAULT_FUNCTION_DECLARATION\" baseAttributes=\"BASE_METHOD\"/>";
+        for (const auto& attributes :
+             {language + inherited + secondary, secondary + inherited + language}) {
+            QVERIFY(write(path, "<scheme name=\"Fallback\"><attributes>" + attributes +
+                                    "</attributes></scheme>"));
+            const auto result = JetBrainsImporter::importFile(path);
+            QVERIFY(result.ok());
+            const auto style = result.schemes.first().scheme.syntax.value("function");
+            QCOMPARE(style.fg.value(), QColor("#123456"));
+            QCOMPARE(style.bold.value(), false);
+            QCOMPARE(style.italic.value(), true);
+            QVERIFY(reportHas(result.report, "DEFAULT_FUNCTION_DECLARATION",
+                              ImportDisposition::Skipped, "inheritance"));
+            QVERIFY(reportHas(result.report, "DEFAULT_STATIC_METHOD",
+                              ImportDisposition::Approximated, "Secondary"));
+            QVERIFY(
+                reportHas(result.report, "JAVA_METHOD_DECLARATION", ImportDisposition::Skipped));
+        }
+    }
+    void underlineRequiresAnEffectColor_data() {
+        QTest::addColumn<int>("effect");
+        QTest::addColumn<QByteArray>("effectColor");
+        QTest::addColumn<bool>("hasColor");
+        QTest::addColumn<bool>("validColor");
+        QTest::addColumn<bool>("colorFirst");
+        for (int effect : {1, 2, 4, 5})
+            for (const auto& state :
+                 {QByteArray("missing"), QByteArray("empty"), QByteArray("invalid"),
+                  QByteArray("black"), QByteArray("color")})
+                for (bool first : {false, true}) {
+                    const auto name =
+                        QByteArray::number(effect) + '-' + state + (first ? "-before" : "-after");
+                    const QByteArray value = state == "invalid" ? "not-a-color"
+                                             : state == "black" ? "0"
+                                             : state == "color" ? "ffaa00"
+                                                                : "";
+                    QTest::newRow(name.constData())
+                        << effect << value << (state != "missing")
+                        << (state == "black" || state == "color") << first;
+                }
+    }
+    void underlineRequiresAnEffectColor() {
+        QFETCH(int, effect);
+        QFETCH(QByteArray, effectColor);
+        QFETCH(bool, hasColor);
+        QFETCH(bool, validColor);
+        QFETCH(bool, colorFirst);
+        QList<QPair<QByteArray, QByteArray>> fields{{"FOREGROUND", "123456"}};
+        if (hasColor && colorFirst)
+            fields.append({"EFFECT_COLOR", effectColor});
+        fields.append({"EFFECT_TYPE", QByteArray::number(effect)});
+        if (hasColor && !colorFirst)
+            fields.append({"EFFECT_COLOR", effectColor});
+        QTemporaryDir dir;
+        const auto path = dir.filePath("effect.icls");
+        QVERIFY(write(path, "<scheme name=\"Effects\"><attributes>" +
+                                xmlValue("DEFAULT_KEYWORD", fields) + "</attributes></scheme>"));
+        const auto result = JetBrainsImporter::importFile(path);
+        QVERIFY(result.ok());
+        const auto style = result.schemes.first().scheme.syntax.value("keyword");
+        QCOMPARE(style.fg.value(), QColor("#123456"));
+        QCOMPARE(style.underline.value(), validColor);
+        QVERIFY(reportHas(result.report, "DEFAULT_KEYWORD/EFFECT_TYPE",
+                          !validColor   ? ImportDisposition::Skipped
+                          : effect == 1 ? ImportDisposition::Mapped
+                                        : ImportDisposition::Approximated,
+                          validColor ? QString{} : QStringLiteral("EFFECT_COLOR")));
     }
     void uiThemeWithEditor() {
         const auto path = QString::fromUtf8(JETBRAINS_FIXTURE_DIR) + "/sample.theme.json";
