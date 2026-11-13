@@ -327,7 +327,6 @@ void MainWindow::moveConversationToCreatedWorktree(const QString& worktreePath,
             const QString moved =
                 result.value(QStringLiteral("worktree_path")).toString(worktreePath);
             setFileContextWorktree(moved);
-            promotedSidebarRepository_ = sidebarRepositoryForPath(moved);
             scheduleSidebarRefresh(true);
             statusBar()->showMessage(tr("Next turn: %1").arg(branch), 5000);
         });
