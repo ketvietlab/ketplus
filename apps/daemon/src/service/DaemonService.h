@@ -27,6 +27,7 @@ struct DaemonConfiguration final {
     QString codexExecutable;
     QString claudeExecutable;
     QString cursorExecutable;
+    QString copilotExecutable;
 };
 
 class DaemonService final : public QObject {
