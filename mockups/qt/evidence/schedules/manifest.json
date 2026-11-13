@@ -1,0 +1,668 @@
+[
+  {
+    "file": "01-schedules-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "7e1f0377e87c40d8ab9870e37ef68f2c1749b8c325608257f7324e7f127a9202"
+  },
+  {
+    "file": "01-schedules-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "8fc70c1734b60893af803885576bc9c1c40d87fb35932fb0440e2fb65ff0829e"
+  },
+  {
+    "file": "01-view-menu-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--open=view-menu",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "587ec70cd0f6db42173d78bcae8b8d679d5cb4f116afb677fed116eb9182d5ef"
+  },
+  {
+    "file": "01-view-menu-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--open=view-menu",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "ddc7441a785988772a2ad644c3be9bfc6614c1f4a18c5f26c98e5c6cc9f4a17c"
+  },
+  {
+    "file": "02-editor-team-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=edit",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "d82f9565265783434127d384826812114517dc0208a1c97e20f01e3a7c7f7451"
+  },
+  {
+    "file": "02-editor-team-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=edit",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "08af2dbce58eddf1a2a3b2120788bc633b6eb9be95bc668c66501359293f9148"
+  },
+  {
+    "file": "02-editor-new-conversation-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=new-conversation",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "05bb2449f29efc31fb352b6ea400c0dce05d808599abc25c5f2f0235527a9e59"
+  },
+  {
+    "file": "02-editor-new-conversation-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=new-conversation",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "85404949e5eb9daee153fcc2a70fbefab68a40db1ef0213759ac21bcb3366a5f"
+  },
+  {
+    "file": "02-editor-weekly-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=weekly",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "426156ce504861b4c95ea834f4a7b53c1e833f8a479cdca0bd490b6a61f37b40"
+  },
+  {
+    "file": "02-editor-weekly-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=weekly",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "2925d7db022103012ce408574b0af88206b17a0ba776dd5bf4fc6532321a1365"
+  },
+  {
+    "file": "02-editor-policies-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=policies",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "20058ce0110ae4bfb6d61b6b9478e648a6e3f62cf5670c2a092f7678a59bfefb"
+  },
+  {
+    "file": "02-editor-policies-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=policies",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "315a58cdb2826ecc55e57530abbe78af0289b83b92eb6941aab6821a307da8c5"
+  },
+  {
+    "file": "02-editor-validation-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=validation",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "38a2c6bcde9b3c2e92f949d9ba6ce9513d253a9b69ccb77e292013f608ffdfee"
+  },
+  {
+    "file": "02-editor-validation-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=validation",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "6eb4d5029d94a79618ecf22e1b3cea3012964eae384bcf7260256032c48829ac"
+  },
+  {
+    "file": "03-history-failure-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=failure",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "2eac89219c42df15e6e5d206a96d7ce0750de1035654aeb60405a6631e46aff6"
+  },
+  {
+    "file": "03-history-failure-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=failure",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "ccf6784e1a20dd5cfc4cdbb2df8cd4167bfd33103e9c76c62ccd21e983612113"
+  },
+  {
+    "file": "03-delete-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=delete",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "573122dcbb57fed24c72f80c4281b6a22a33dc666775af07408125bca0e9c929"
+  },
+  {
+    "file": "03-delete-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=delete",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "1f75b4a8906a47cb4cf121a4e92279b7408caf523db24a3a0ff0ca5c9067a8ac"
+  },
+  {
+    "file": "04-new-send-now-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-new",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "5033bd4690bc399f08b097e08c192d0b0db189f7bc1620e56efd51e6589d391a"
+  },
+  {
+    "file": "04-new-send-now-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-new",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "9c32927e41df8b4b0e7f3ff1d090878fed5bbee50f144102dfcf752a80c35f27"
+  },
+  {
+    "file": "04-new-at-time-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-at",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "ea3e424e8bab1b3943d8495957d063424bf9c7c2c6734c31d4eb596f06cc22b0"
+  },
+  {
+    "file": "04-new-at-time-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-at",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "59615a5252af181bbffc5e3a67af398b74c0f51f33e4d6833cef39d9e16bdaf9"
+  },
+  {
+    "file": "04-new-repeat-more-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-more",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "3ef70a0eb60a0eb268d19913a68d18fa5af6a9c58b4a15aeea10a79be7abe839"
+  },
+  {
+    "file": "04-new-repeat-more-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-more",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "80c471bd399df90b7867a92137eb24d2c9f8030e82ee252b8a3645bdb5350221"
+  },
+  {
+    "file": "04-new-weekly-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-weekly",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "7f9db77493ee4ce1e01fd616be1d4e622380653394193c9464bf30c3fa699016"
+  },
+  {
+    "file": "04-new-weekly-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-weekly",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "d24ac8441a7720d1442366d976f38d5c3b105368532bafb225bcd99534258564"
+  },
+  {
+    "file": "04-scheduled-send-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-ready",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "93f1f5b63f501adecca01fe63e824c48ffbe9e05857a0a936d1bab384f9f6286"
+  },
+  {
+    "file": "04-scheduled-send-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-ready",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "1126219931d42a805cb79f97f055a60b9b3cc0427c7dc040ae077d12f96d32fc"
+  },
+  {
+    "file": "04-existing-schedule-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-existing",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "33536641beaacceefe97729c8b02f8a1dfedabc4424041499baff9fa8d6aa679"
+  },
+  {
+    "file": "04-existing-schedule-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-existing",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "0e16c19f77bed7097f374d45902195ebb149f02694f6354c7613e345a9e731ef"
+  },
+  {
+    "file": "05-scheduled-transcript-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=scheduled",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "822268ab0f6783572d490d0173cbf6ddd015d7aeb7f3ddfcdc3e70d6685b68c6"
+  },
+  {
+    "file": "05-scheduled-transcript-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=scheduled",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "7522b48596f4965b28edc19c2b225dd1fbdb5d95471b6b46bef10dfd5795c4f2"
+  },
+  {
+    "file": "06-failure-toast-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-failure",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "b013c92aaf606da8435c194c147361da7937ae4bddc626b283d6f28ab3614c6b"
+  },
+  {
+    "file": "06-failure-toast-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-failure",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "62db11d231637cd75c3b706c42135d46e96c987e65eaaee5556fd18e659bec3b"
+  },
+  {
+    "file": "07-team-now-light.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "15afe5a3d874a7e5fc055ff12eae2ee47ccef4377e2ac606f26c81d29482cbb3"
+  },
+  {
+    "file": "07-team-now-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "fb208cb595c9ebf4dacec4b61c602c05935b5804a0617b4716c6a2ad6aca3267"
+  },
+  {
+    "file": "07-team-start-dialog-light.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-scheduled",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "d4706abac232f015842ad97fc5f8c36ee8cbdfbab23c320134b666cf9e3cfcce"
+  },
+  {
+    "file": "07-team-start-dialog-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-scheduled",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "d301d9afac6efdc435da86562f1da8abc5dfcc7969e7d7f3a60913ae9e2bc7cc"
+  },
+  {
+    "file": "07-team-repeat-light.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-repeat",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "4eed8ea467f0f2a9bb0d90dc184ec168d27e6dc2f5e9396f95bc3630b68728af"
+  },
+  {
+    "file": "07-team-repeat-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-repeat",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "7bdf69acddd2c4421a2c7f0c65bea088a6772a7da72cbd870883bb1c5c47e476"
+  },
+  {
+    "file": "07-team-members-light.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-members",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "1b7d0c4b386378c3d7fe15e5465329fc0284bac048a0a0f283bf887c8a3aba49"
+  },
+  {
+    "file": "07-team-members-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-members",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "6aae9aa7ecd420892ad89f90c71106806ca817b2502a5780a83f2d87542f2be9"
+  },
+  {
+    "file": "07-team-start-invalid-light.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-start-invalid",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "10c82b6f478936d680d570742786b54b0c39d14f68195b8901f3c7560b39613b"
+  },
+  {
+    "file": "07-team-start-invalid-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--open=new-team-start-invalid",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "05be3f1362eced64d0ce315c7e027b34dece3a92823f28ad1a2d32d600f9f2d7"
+  },
+  {
+    "file": "08-team-waiting-light.png",
+    "flags": [
+      "--screen=teams",
+      "--state=scheduled",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "832401568d08fadc894e9717628931082cb0b38722b929e41daa360bb2005a01"
+  },
+  {
+    "file": "08-team-waiting-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--state=scheduled",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "915e801e82b5f41ba8d546fd06c1ba3ea5531b5dd4d2b1733dfdcbd83d5717a8"
+  },
+  {
+    "file": "08-team-recurring-light.png",
+    "flags": [
+      "--screen=teams",
+      "--state=recurring",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "8c5f356bf1a5c87b6d55d59cb313220e9088dac4432f1000b67db22a9fc8503c"
+  },
+  {
+    "file": "08-team-recurring-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--state=recurring",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "225e985da81d832eaf1462139c1abd3a8e9b1a5c6d74d1a54b03ab2c38a62b12"
+  },
+  {
+    "file": "08-team-updates-light.png",
+    "flags": [
+      "--screen=teams",
+      "--state=recurring",
+      "--scroll=1",
+      "--light"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "8fa7b73ca35322ed39e726ca3dfd792d665d80045cf58cb16969b6663abe5db9"
+  },
+  {
+    "file": "08-team-updates-dark.png",
+    "flags": [
+      "--screen=teams",
+      "--state=recurring",
+      "--scroll=1",
+      "--dark"
+    ],
+    "width": 1440,
+    "height": 900,
+    "sha256": "9efedfeb36ccaf53f37c452eab6f08782014ead3a42ed0dcdd9ee7dbbdfb522f"
+  },
+  {
+    "file": "09-empty-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=empty",
+      "--light"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "78f2bef0cbe857f7c163249fefc061fab1ceeb499d0f9ded0f7e9f57dcb2e456"
+  },
+  {
+    "file": "09-empty-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=empty",
+      "--dark"
+    ],
+    "width": 1160,
+    "height": 800,
+    "sha256": "1bd8362fda77b8c776c288c76aff59b3a68e7d4ce4ff9ecb049c33a81a99c842"
+  },
+  {
+    "file": "10-minimum-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--size=900x600",
+      "--light"
+    ],
+    "width": 900,
+    "height": 600,
+    "sha256": "d35c8d431f98164c809398e2f2d8360b1b24b15b68daef0d27bb985a3562eedd"
+  },
+  {
+    "file": "10-minimum-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--size=900x600",
+      "--dark"
+    ],
+    "width": 900,
+    "height": 600,
+    "sha256": "9ef2a69d6b72f8012bd4e452c6533683cd5759e44ce5473adc102501f6862fa3"
+  },
+  {
+    "file": "10-minimum-editor-light.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=new-conversation",
+      "--size=900x600",
+      "--light"
+    ],
+    "width": 900,
+    "height": 600,
+    "sha256": "eb7456ccfe48c503226355425d029d0a9d0e0f065efc1c7c164ededa8a55586b"
+  },
+  {
+    "file": "10-minimum-editor-dark.png",
+    "flags": [
+      "--screen=schedules",
+      "--state=new-conversation",
+      "--size=900x600",
+      "--dark"
+    ],
+    "width": 900,
+    "height": 600,
+    "sha256": "a79fb45f5ad5d168d0bc9a0cd870871269df9a257b9fc410f09a5eca5241f4d2"
+  },
+  {
+    "file": "10-minimum-popover-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-more",
+      "--size=1024x640",
+      "--light"
+    ],
+    "width": 1024,
+    "height": 640,
+    "sha256": "0c10806510f0c3f0866ddb39bf8f0741b92624a61ad71f89af5d3682328978ae"
+  },
+  {
+    "file": "10-minimum-popover-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-more",
+      "--size=1024x640",
+      "--dark"
+    ],
+    "width": 1024,
+    "height": 640,
+    "sha256": "9de1f259c2f43455fc17667ba5549493bff974eb115d3d25e635096aa9cbf666"
+  },
+  {
+    "file": "10-minimum-scheduled-send-light.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-ready",
+      "--size=1024x640",
+      "--light"
+    ],
+    "width": 1024,
+    "height": 640,
+    "sha256": "b96ddbc82bf725049fc50dd7659adbc2b2597e29ca42e32203b0fca1d3545066"
+  },
+  {
+    "file": "10-minimum-scheduled-send-dark.png",
+    "flags": [
+      "--screen=workspace",
+      "--state=schedule-ready",
+      "--size=1024x640",
+      "--dark"
+    ],
+    "width": 1024,
+    "height": 640,
+    "sha256": "85ea3cd3526a6fa6ccc31d47a6f37ab0dddf786464109b833874e78d57d4bde7"
+  }
+]

@@ -17,7 +17,7 @@ Column {
     Column {
         width: parent.width; visible: !!section.start
         spacing: KetTheme.px(8, KetTheme.zoom)
-        KetBanner { width: parent.width; title: "⏱ Starts " + (section.start ? Rules.nextLabel(section.start).replace("today ", "today at ").replace("tomorrow ", "tomorrow at ") : ""); message: "The leader will start planning at the scheduled time." }
+        KetBanner { width: parent.width; title: "Starts " + (section.start ? Rules.nextLabel(section.start).replace("today ", "today at ").replace("tomorrow ", "tomorrow at ") : ""); message: "The leader will start planning at the scheduled time." }
         Flow {
             width: parent.width; spacing: KetTheme.px(8, KetTheme.zoom)
             KetButton {
@@ -30,25 +30,25 @@ Column {
     }
     RowLayout {
         width: parent.width
-        ScheduleText { Layout.fillWidth: true; text: "Team schedules"; font.pixelSize: KetTheme.px(14, KetTheme.zoom); font.weight: Font.DemiBold }
-        KetButton { text: "Add recurring schedule"; iconName: "plus"; onClicked: section.window.newTeamSchedule(section.team.id) }
+        ScheduleText { Layout.fillWidth: true; text: "Schedules"; font.pixelSize: KetTheme.px(14, KetTheme.zoom); font.weight: Font.DemiBold }
     }
     Repeater {
         model: section.recurring
-        RowLayout {
+        Column {
             required property var modelData
             width: parent.width
-            KetButton {
-                Layout.fillWidth: true
-                text: modelData.name + " · " + Rules.summary(modelData) + (modelData.enabled ? " · next: " + Rules.nextLabel(modelData) : " · paused")
-                variant: KetTheme.ButtonVariant.Ghost
-                onClicked: section.window.openSchedules(modelData.id, section.team.id)
+            spacing: KetTheme.px(6, KetTheme.zoom)
+            ScheduleText { width: parent.width; text: modelData.name; font.weight: Font.Medium }
+            ScheduleText { width: parent.width; text: Rules.summary(modelData) + (modelData.enabled ? " · next: " + Rules.nextLabel(modelData) : " · paused"); color: KetTheme.t.textSecondary }
+            Flow {
+                width: parent.width; spacing: KetTheme.px(8, KetTheme.zoom)
+                KetButton { text: "Edit"; onClicked: section.window.editExistingSchedule(modelData) }
+                KetButton { text: modelData.enabled ? "Pause" : "Resume"; onClicked: section.window.scheduleStore.patch(modelData.id, { enabled: !modelData.enabled }) }
+                KetButton { text: "Open in Schedules"; onClicked: section.window.openSchedules(modelData.id, section.team.id) }
             }
-            KetCheckbox { checked: modelData.enabled; Accessible.name: "Enable or disable " + modelData.name; onToggled: section.window.scheduleStore.patch(modelData.id, { enabled: checked }) }
         }
     }
     ScheduleText { visible: section.recurring.length === 0; text: "No recurring schedules for this team yet."; color: KetTheme.t.textSecondary }
-    KetButton { text: "Team schedules…"; variant: KetTheme.ButtonVariant.Ghost; onClicked: section.window.openSchedules("", section.team.id) }
     KetDialog {
         id: cancelStart
         title: "Cancel the scheduled team start?"

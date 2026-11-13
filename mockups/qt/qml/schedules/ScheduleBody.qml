@@ -12,6 +12,16 @@ Flickable {
     Layout.fillHeight: true
     implicitHeight: column.height
     contentHeight: column.height
+    property bool followEnd: false
+    function positionAtEnd() { if (followEnd) contentY = Math.max(0, contentHeight - height) }
+    function scrollToEnd() { followEnd = true; positionAtEnd() }
+    onHeightChanged: if (followEnd) Qt.callLater(positionAtEnd)
+    onContentHeightChanged: if (followEnd) Qt.callLater(positionAtEnd)
+    onMovementStarted: followEnd = false
+    function fullyShows(item) {
+        const point = item.mapToItem(body, 0, 0)
+        return height > 0 && point.y >= -1 && point.y + item.height <= height + 1
+    }
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     Basic.ScrollBar.vertical: Basic.ScrollBar {

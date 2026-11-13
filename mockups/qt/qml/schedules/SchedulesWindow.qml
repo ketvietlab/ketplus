@@ -46,54 +46,48 @@ Basic.ApplicationWindow {
         requestedVisible = true
         if (window.presentationReady) present()
     }
-    function edit(entry, target, number, once) { showSchedule(entry ? entry.id : "", ""); editor.load(entry, target, number, once) }
-    function newTeamSchedule(id) {
-        showSchedule("", id)
-        editor.load(null, 2, "4821", false)
-        editor.selectTeam(id)
-    }
-    function setPrompt(text) { editor.setPrompt(text) }
+    function edit(entry) { if (entry) { showSchedule(entry.id, ""); editor.load(entry, entry.target, entry.conversation, false) } }
     function checks() {
-        store.reset()
-        showSchedule("web", "")
-        const same = schedules
-        showSchedule("ci", "")
+        store.reset(); showSchedule("web", "")
         let errors = 0
         function check(ok, text) { if (!ok) { console.warn("QML schedule check: " + text); errors++ } }
-        check(schedules === same && selectedId === "ci" && modality === Qt.NonModal, "one non-modal window is reused")
+        showSchedule("ci", "")
+        check(selectedId === "ci" && modality === Qt.NonModal, "one non-modal manager is reused")
         editor.load(store.find("web"), 2, "4821", false)
-        check(editor.draft.target === 2 && editor.draft.rule === 1, "team editor uses current target and rule")
+        check(editor.draft.target === 2 && editor.draft.rule === 1, "edit preserves target and rule")
+        editor.setPrompt("")
+        check(!editor.attemptSave() && editor.visible, "edit rejects an empty prompt")
         editor.reject()
-        editor.load(null, 0, "8116", false)
-        check(editor.draft.conversation === "8116" && editor.draft.rule === 1, "repeat menu prefills this conversation and daily")
-        check(!editor.attemptSave() && editor.visible, "invalid empty form stays open")
+        editor.load(store.find("start"), 2, "6100", false)
+        check(editor.draft.teamId === "website" && editor.draft.conversation === "6100", "edit preserves the waiting team's target")
         editor.reject()
-        for (const state of ["new", "weekly", "new-conversation", "validation", "delete"]) {
-            showState(state); editor.close(); deleteDialog.close()
-        }
-        store.reset()
         showSchedule("web", "release")
-        check(shown.length === 3 && shown.every(e => e.teamId === "release"), "team menu filters the window")
+        check(shown.length === 2 && shown.every(e => e.teamId === "release"), "team filter")
         search.text = "no matching schedules"
-        check(shown.length === 0 && selected === null, "search empty state clears the stale detail")
+        check(shown.length === 0 && selected === null, "filtered empty clears stale detail")
         showSchedule("weekly", "")
         const before = store.entries.length
         deleteDialog.open(); deleteDialog.reject()
-        check(store.entries.length === before, "cancel deletion preserves the schedule")
+        check(store.entries.length === before, "cancel delete keeps schedule")
         deleteDialog.open(); confirmDelete.clicked()
-        check(store.entries.length === before - 1 && !store.find("weekly"), "confirm deletion removes only the selected schedule")
-        editor.load(Object.assign({}, store.find("web"), { id: "", name: "A new daily draft" }), 2, "4821", false)
-        check(editor.attemptSave() && store.entries.some(e => e.name === "A new daily draft"), "valid editor creates a schedule")
-        store.reset(); hide()
+        check(store.entries.length === before - 1 && !store.find("weekly"), "confirm delete removes selected schedule")
+        showState("empty")
+        check(store.entries.length === 0 && shown.length === 0, "empty manager has no fixtures")
+        editor.close(); store.reset(); hide()
         return errors
+    }
+    function evidenceChecks(state) {
+        if (state === "empty") return store.entries.length === 0 && shown.length === 0 && selected === null
+        if (state === "policies") return editor.policiesVisible()
+        return true
     }
     function showState(state) {
         store.reset(); showSchedule(state === "failure" ? "ci" : "web", state === "team" ? "release" : "")
         if (state === "empty") { store.entries = []; selectedId = "" }
-        if (["new", "edit", "weekly", "new-conversation", "validation", "policies"].includes(state)) {
-            editor.load(state === "edit" || state === "weekly" || state === "policies" ? store.find(state === "weekly" ? "weekly" : "web") : null,
+        if (["edit", "weekly", "new-conversation", "validation", "policies"].includes(state)) {
+            editor.load(store.find(state === "weekly" ? "weekly" : state === "new-conversation" ? "ci" : "web"),
                         state === "new-conversation" ? 1 : 2, "8116", false)
-            if (state === "validation") { editor.tried = true }
+            if (state === "validation") { editor.setPrompt(""); editor.tried = true }
             if (state === "policies") Qt.callLater(() => editor.scrollToEnd())
         }
         if (state === "delete") deleteDialog.open()
@@ -125,11 +119,10 @@ Basic.ApplicationWindow {
             Layout.margins: schedules.px(16)
             spacing: schedules.px(10)
             ScheduleText { text: "Schedules"; font.pixelSize: schedules.px(20); font.weight: Font.DemiBold }
-            KetBadge { text: schedules.teamFilter ? "Team Release 1.4" : store.entries.length + " schedules" }
+            KetBadge { text: schedules.teamFilter ? "Team " + (window.teamList.find(t => t.id === schedules.teamFilter) || { name: schedules.teamFilter }).name : store.entries.length + " schedules" }
             Item { Layout.fillWidth: true }
             KetSelect { id: filter; Layout.preferredWidth: schedules.px(150); model: ["All schedules", "Enabled", "Paused", "Agent-created"]; Accessible.name: "Filter schedules" }
             KetTextField { id: search; Layout.preferredWidth: schedules.px(220); placeholderText: "Search schedules…"; Accessible.name: "Search schedules" }
-            KetButton { text: "New schedule"; iconName: "plus"; variant: KetTheme.ButtonVariant.Primary; onClicked: editor.load(null, schedules.teamFilter ? 2 : 0, schedules.window.conversation.number, false) }
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: KetTheme.t.panelBorder }
         KetEmptyState {
@@ -137,12 +130,11 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true; Layout.fillHeight: true
             iconName: "clock"
             title: store.entries.length === 0 ? "No schedules yet" : "No schedules found"
-            message: store.entries.length === 0 ? "Put agents on a schedule: every morning, on weekdays or every week…" : "Try another name or change your filters."
-            actionText: store.entries.length === 0 ? "Create your first schedule" : "Clear filters"
-            actionIcon: store.entries.length === 0 ? "plus" : "search"
+            message: store.entries.length === 0 ? "Create schedules from New conversation or New team." : "Try another name or change your filters."
+            actionText: store.entries.length === 0 ? "" : "Clear filters"
+            actionIcon: "search"
             onActionTriggered: {
-                if (store.entries.length === 0) editor.load(null, 0, schedules.window.conversation.number, false)
-                else { search.text = ""; filter.currentIndex = 0; schedules.teamFilter = "" }
+                search.text = ""; filter.currentIndex = 0; schedules.teamFilter = ""
             }
         }
         RowLayout {

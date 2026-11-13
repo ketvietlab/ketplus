@@ -18,9 +18,12 @@ KetDialog {
     property var days: [1,2,3,4,5]
     property bool tried: false
     property bool teamStart: false
+    readonly property var teams: window.teamList
+    readonly property var selectedTeam: teams[teamPicker.currentIndex] || null
     readonly property var draft: ({
         id: original.id || "", name: nameField.text, prompt: promptField.text,
-        target: target, conversation: conversation, teamId: target === 2 ? (teamPicker.currentIndex === 0 ? "release" : "docs") : "",
+        target: target, conversation: target === 2 && selectedTeam ? selectedTeam.members[0].number : conversation,
+        teamId: target === 2 && selectedTeam ? selectedTeam.id : "",
         teamName: teamPicker.currentText, provider: provider, model: model, effort: effort,
         repository: repoPicker.currentText, worktree: worktree.checked,
         rule: rule.currentIndex, time: timeField.text, date: dateField.text,
@@ -32,7 +35,9 @@ KetDialog {
     signal saved(string id)
     function px(v) { return KetTheme.px(v, KetTheme.zoom) }
     function load(entry, requestedTarget, number, once) {
-        original = entry || {}
+        if (!entry) return
+        body.followEnd = false; body.contentY = 0
+        original = entry
         teamStart = original.kind === "team-start"
         target = entry ? entry.target : (requestedTarget || 0)
         conversation = entry ? entry.conversation : (number || "8116")
@@ -46,14 +51,15 @@ KetDialog {
         zonePicker.currentIndex = Math.max(0, Rules.zones.indexOf(original.zone || "Asia/Ho_Chi_Minh"))
         hoursField.text = original.hours || "4"
         busyPicker.currentIndex = original.busy || 0; missedPicker.currentIndex = original.missed || 0
-        teamPicker.currentIndex = original.teamId === "docs" ? 1 : 0
+        selectTeam(original.teamId)
         repoPicker.currentIndex = original.repository === "website" ? 1 : 0
         worktree.checked = original.worktree !== false
         tried = false
         open()
     }
-    function scrollToEnd() { body.contentY = Math.max(0, body.contentHeight - body.height) }
-    function selectTeam(id) { teamPicker.currentIndex = id === "docs" ? 1 : 0 }
+    function scrollToEnd() { body.scrollToEnd() }
+    function policiesVisible() { return visible && body.fullyShows(busyPicker) && body.fullyShows(missedPicker) }
+    function selectTeam(id) { teamPicker.currentIndex = Math.max(0, teams.findIndex(t => t.id === id)) }
     function setPrompt(text) { promptField.text = text }
     function attemptSave() {
         tried = true
@@ -62,7 +68,7 @@ KetDialog {
         if (!id) return false
         accept(); saved(id); return true
     }
-    title: original.id ? "Edit schedule" : "New schedule"
+    title: "Edit schedule"
     width: parent ? Math.min(px(720), parent.width - px(32)) : px(720)
     ScheduleBody {
         id: body
@@ -94,7 +100,7 @@ KetDialog {
         }
         KetFieldRow {
             width: parent.width; visible: editor.target === 2; label: "Team"; help: "→ The leader receives this task"
-            KetSelect { id: teamPicker; width: parent.width; model: ["Release 1.4", "Docs refresh"]; Accessible.name: "Target team" }
+            KetSelect { id: teamPicker; width: parent.width; model: editor.teams.map(t => t.name); Accessible.name: "Target team" }
         }
         KetFieldRow {
             width: parent.width; label: "Prompt"; stacked: true

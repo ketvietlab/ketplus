@@ -12,7 +12,6 @@ import Ket
 Basic.AbstractButton {
     id: control
 
-    property string scheduleHint
     property string number
     property int status: KetTheme.ConversationStatus.NotStarted
     // Finished since the user last opened it.
@@ -30,7 +29,7 @@ Basic.AbstractButton {
                                            : KetTheme.conversationStatusLabel(status))
                                           + (detail ? " · " + detail : "")
     // Everything the row does not draw, one fact a line.
-    readonly property string hint: [role, statusLabel, worktree, scheduleHint]
+    readonly property string hint: [role, statusLabel, worktree]
                                    .filter(line => line !== "").join("\n")
     // The level: a repository's own conversations stand at 20, a team's members at 38.
     property real indent: px(20)
@@ -114,16 +113,10 @@ Basic.AbstractButton {
             font.pixelSize: control.px(11)
         }
 
-        KetIcon {
-            visible: control.scheduleHint !== ""
-            anchors.verticalCenter: parent.verticalCenter
-            x: numberText.x - control.px(20)
-            name: "clock"; box: control.px(12); color: KetTheme.t.textMuted
-        }
         Text {
             x: control.textLeft
             anchors.verticalCenter: parent.verticalCenter
-            width: numberText.x - control.px(control.scheduleHint ? 28 : 10) - x
+            width: numberText.x - control.px(10) - x
             text: control.text
             elide: Text.ElideRight
             color: control.recipe.title

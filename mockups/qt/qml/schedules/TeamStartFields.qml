@@ -6,6 +6,8 @@ import "ScheduleRules.js" as Rules
 
 Column {
     id: fields
+    property string startHint: "The leader starts planning at "
+    property bool showStartChoice: true
     property bool scheduled: false
     property bool tried: false
     property alias date: dateField.text
@@ -14,12 +16,14 @@ Column {
     readonly property string problem: scheduled ? Rules.startError(date, time, zone) : ""
     spacing: KetTheme.px(8, KetTheme.zoom)
     function reset() { scheduled = false; date = "2026-11-13"; time = "22:00"; zoneField.currentIndex = 0; tried = false }
+    function setZone(zone) { zoneField.currentIndex = Math.max(0, Rules.zones.indexOf(zone)) }
     function preset(tomorrow) { scheduled = true; date = tomorrow ? "2026-11-14" : "2026-11-13"; time = tomorrow ? "08:00" : "22:00" }
-    ScheduleText { text: "Start"; font.weight: Font.Medium }
+    ScheduleText { visible: fields.showStartChoice; text: "Start"; font.weight: Font.Medium }
     Row {
+        visible: fields.showStartChoice
         spacing: KetTheme.px(20, KetTheme.zoom)
         KetRadio { text: "Now"; checked: !fields.scheduled; onClicked: fields.scheduled = false }
-        KetRadio { text: "Schedule"; checked: fields.scheduled; onClicked: fields.scheduled = true }
+        KetRadio { text: "Scheduled"; checked: fields.scheduled; onClicked: fields.scheduled = true }
     }
     Column {
         visible: fields.scheduled
@@ -46,7 +50,7 @@ Column {
         }
         ScheduleText {
             width: parent.width
-            text: fields.tried && fields.problem ? fields.problem : "→ The leader starts planning at " + fields.time
+            text: fields.tried && fields.problem ? fields.problem : "→ " + fields.startHint + fields.time
             color: fields.tried && fields.problem ? KetTheme.t.danger : KetTheme.t.textSecondary
             Accessible.role: fields.tried && fields.problem ? Accessible.AlertMessage : Accessible.StaticText
         }

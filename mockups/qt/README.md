@@ -112,40 +112,57 @@ update notice and toasts. Conversations carry no user tags (ADR 0117).
 
 ## Scheduling design prototype
 
-Schedules are a separate, reusable **non-modal window**, opened from **View → Schedules…**
-(⇧⌘J / Ctrl+Shift+J), the conversation menu or the team menu. There is no new sidebar
-navigation entry. Existing team/conversation rows may carry a passive clock with a next-run
-hint. All scheduling UI and sample content are English, per the updated design request.
+The round-2 design creates schedules **only from New conversation or New team**.
+Schedules is a reusable **non-modal management window**, opened from **View → Schedules…**
+(⇧⌘J / Ctrl+Shift+J), the composer clock or an existing team schedule's management action.
+It provides list/detail/history, Run now, Pause/Resume, Edit and confirmed Delete. Its empty
+state explains where to create schedules. There is no create action in that window and no
+new sidebar navigation entry, sidebar clock or conversation-header clock.
 
-`--screen=schedules` opens the list and detail pane. States: `empty`, `failure`, `team`,
-`new`, `edit`, `weekly`, `new-conversation`, `validation`, `policies` and `delete`.
-`workspace/scheduled`, `workspace/schedule-send` and `workspace/schedule-failure` show the
-message marker, composer picker and failure notification. `--open=conversation-menu` shows
-the header menu. `teams/scheduled` shows the waiting team and its recurring schedules;
-`--open=new-team-scheduled` and `--open=new-team-start-invalid` show scheduled creation and
-its validation. The existing New team fields, locked roles and per-role model picker remain.
+The composer clock sits immediately to the right of the Context/Limit ring, with the same
+visible diameter and vertical center. In a new, unsent conversation it opens Send now, At a
+time and Repeat options. More contains busy/missed policies. Applying a schedule activates
+the clock and replaces Send with a labelled Schedule action. Existing conversations show
+this clock only when they have a schedule, with Edit, Pause/Resume and Open in Schedules.
 
-The mock clock is fixed at **13 November 2026, 15:00 Asia/Ho_Chi_Minh**. Three fixed-offset
-zones (Asia/Ho_Chi_Minh, UTC, Asia/Tokyo) make the preview reproducible. Creating, editing,
-enabling, pausing, searching and deleting schedules change memory only. Preset sends clear
-the draft after saving; cancelling a custom schedule preserves it. Run now simulates success,
-Codex sign-in failure or a busy-conversation skip. This is a UI prototype: it has no persistent
-schedules, daemon integration, background execution, provider access or team wake-up.
+New team's Schedule section combines Start (Now or Scheduled, 1 minute–30 days) and
+Repeat (Off, daily, weekdays, weekly or every N hours). The recurring work order follows
+the goal until edited. Existing locked roles, per-role model/effort and permissions remain.
+Team pages expose manage-only Schedules; a waiting team uses a separate, inactive fixture.
 
-Run checks with no visible windows:
+`--screen=schedules` opens the manager. States: `empty`, `failure`, `team`, `edit`, `weekly`,
+`new-conversation` (edit an existing new-conversation target), `validation`, `policies`, `delete`.
+Workspace states: `schedule-new`, `schedule-at`, `schedule-more`, `schedule-weekly`,
+`schedule-ready`, `schedule-existing`, `scheduled` and `schedule-failure`. Team states:
+`scheduled` (waiting) and `recurring` (active history). New team dialogs use
+`--open=new-team`, `new-team-scheduled`, `new-team-repeat`, `new-team-members` or
+`new-team-start-invalid`.
+
+All scheduling UI and synthetic samples are English. The fixture clock is **13 November
+2026, 15:00 Asia/Ho_Chi_Minh**. Three fixed-offset zones make previews reproducible.
+Creating, editing, pausing, searching, deleting and running schedules change memory only.
+This prototype has no persistent scheduler, provider access, background execution or team
+wake-up integration.
+
+Run checks and capture evidence without visible windows:
 
 ```sh
 QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
 QT_QPA_PLATFORM=offscreen build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock --edition=lite --smoke
+python3 mockups/qt/tools/capture_schedules.py build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock
 ```
 
-Every native review run must pass `--display=secondary`. The mock places its owned windows
-before showing them and refuses an unavailable requested display. `--screenshot` captures
-the schedule window when it is open, and `--size` also sizes that evidence window. The
-minimum main window remains 1024 × 640; Schedules supports 900 × 600.
+`--check-state` validates a requested startup state and exits. Startup checks and screenshot
+captures reject QML errors and invalid evidence (including an incorrectly populated empty
+state, hidden policy controls or composer controls outside the minimum-width layout).
 
-See [the scheduling evidence index](evidence/schedules/README.md) for the eight surfaces,
-English light/dark captures, minimum-size views and reproducible commands.
+Every native review run must pass `--display=secondary`. The mock places owned windows
+before showing them and refuses an unavailable requested display. `--screenshot` captures
+the schedule window when open; `--size` also sizes that window. The minimum main window
+is 1024 × 640; Schedules supports 900 × 600.
+
+See [the scheduling evidence index](evidence/schedules/README.md) for all 60 light/dark
+captures, minimum-size views, state arguments and a SHA-256 manifest.
 
 ## Transcript content types
 

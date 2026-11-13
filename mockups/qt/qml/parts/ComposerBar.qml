@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket
 import KetPlusMock
+import "../schedules/ScheduleRules.js" as Rules
 
 // The composer as KetPlus desktop lays it out: the card holds only the message and its
 // send/stop circle; the row below holds attachments and the mode on the left, then the
@@ -13,13 +14,32 @@ Item {
     id: bar
 
     required property var window
-    property string pendingScheduledDraft: ""
-    Connections {
-        target: bar.window
-        function onScheduledDraftSaved() {
-            if (composer.text === bar.pendingScheduledDraft) composer.text = ""
-            bar.pendingScheduledDraft = ""
-        }
+    property var scheduleDrafts: ({})
+    readonly property string conversationNumber: window.conversation.number
+    readonly property var existingSchedule: window.scheduleStore.clockFor(conversationNumber) || null
+    readonly property bool newConversation: window.conversation.transcript === "welcome" && !existingSchedule
+    readonly property var scheduleDraft: scheduleDrafts[conversationNumber] || null
+    readonly property bool scheduleSet: newConversation && !!scheduleDraft
+    function setScheduleDraft(plan) {
+        const next = Object.assign({}, scheduleDrafts)
+        if (plan) next[conversationNumber] = Object.assign({}, plan)
+        else delete next[conversationNumber]
+        scheduleDrafts = next
+    }
+    function submitSchedule(text) {
+        if (!scheduleSet || !text.trim()) return false
+        const id = window.scheduleStore.save(Object.assign({}, scheduleDraft, {
+            name: text.split("\n")[0].slice(0, 64), prompt: text, target: scheduleDraft.newConversation ? 1 : 0,
+            conversation: conversationNumber, sourceConversation: conversationNumber,
+            provider: provider, model: model, effort: effort, repository: window.repository,
+            worktree: !!scheduleDraft.newConversation, creator: "You"
+        }))
+        if (!id) return false
+        setScheduleDraft(null); composer.text = ""; window.openSchedules(id); return true
+    }
+    function openSchedule() {
+        if (newConversation) { firstSchedule.prepare(scheduleDraft); firstSchedule.openAbove(scheduleButton) }
+        else if (existingSchedule) existingMenu.popup(scheduleButton, scheduleButton.width - existingMenu.width, -existingMenu.height - px(6))
     }
     property bool busy: false
     signal stopRequested()
@@ -51,9 +71,13 @@ Item {
     // Review evidence: --open=model|mode|limits; limits-cost opens Cost details and
     // limits-api-key shows a conversation on an API key, which has no such row.
     function openPanel(name) {
-        if (name === "schedule-send") {
-            composer.text = "Summarize failing CI workflows and suggest next steps."
-            scheduleButton.clicked()
+        if (["schedule-new", "schedule-ready", "schedule-more", "schedule-weekly", "schedule-at", "schedule-existing"].includes(name)) {
+            if (name !== "schedule-existing") composer.text = "Write a new post for the website"
+            openSchedule()
+            if (newConversation && name !== "schedule-new") {
+                firstSchedule.preview(name === "schedule-weekly" ? "weekly" : name === "schedule-at" ? "at" : name === "schedule-more" ? "more" : "repeat")
+                if (name === "schedule-ready") firstSchedule.apply()
+            }
         }
         else if (name === "model")
             modelDialog.open()
@@ -68,7 +92,7 @@ Item {
             composer.focusInput()
         // The suggestion popovers, for the side by side with the app's composer.
         else if (["mention", "agent-mention", "skill", "slash"].includes(name)) {
-            composer.text = ({ "mention": "look at @tomorrow", "agent-mention": "ask @agent/82", "skill": "use $rev", "slash": "/" })[name]
+            composer.text = ({ "mention": "look at @mai", "agent-mention": "ask @agent/82", "skill": "use $rev", "slash": "/" })[name]
             suggestions.suggestions = ({
                 "mention": [{ kind: "file", path: "src/app/main.cpp" }, { kind: "file", path: "src/app/MainWindow.cpp" }, { kind: "file", path: "src/main", directory: true }],
                 "agent-mention": [{ kind: "conversation", mention: "@agent/8213", description: "Finish the repository picker", detail: "Claude · ketplus-desktop" }, { kind: "conversation", mention: "@agent/8215", description: "Follow up on the new UI", detail: "Codex · ketplus-desktop" }],
@@ -87,10 +111,12 @@ Item {
 
     KetComposer {
         id: composer
-        width: parent.width - scheduleButton.width - bar.px(6)
+        width: parent.width - (bar.scheduleSet ? scheduledSend.width + bar.px(6) : 0)
         busy: bar.busy
         placeholderText: bar.placeholder
+        actionButton.visible: !bar.scheduleSet
         onSubmitted: text => {
+            if (bar.scheduleSet) { if (!bar.submitSchedule(text)) composer.text = text; return }
             if (bar.blocked) {
                 // KetComposer clears its input before it emits submitted; put the draft back.
                 composer.text = text
@@ -104,22 +130,15 @@ Item {
         onStopRequested: { bar.stopRequested(); bar.window.notify("Stopped the turn") }
     }
 
-    // Compose beside the kit's public actionButton geometry, without changing the kit's
-    // input or moving its toolbar. The product owns the gap between these sibling controls.
+    // The configured first message has a labelled primary action instead of Send.
     KetButton {
-        id: scheduleButton
-        x: composer.width + bar.px(6)
-        y: {
-            // mapToItem alone does not subscribe to ancestor geometry changes.
-            for (let item = composer.actionButton; item && item !== bar; item = item.parent) {
-                item.y; item.height; item.scale; item.rotation
-            }
-            return composer.actionButton.mapToItem(bar, 0, composer.actionButton.height / 2).y - height / 2
-        }
-        text: "▾"; iconName: "clock"
-        variant: KetTheme.ButtonVariant.Ghost
-        Accessible.name: "Schedule send"
-        onClicked: sendScheduleMenu.popup(scheduleButton, -sendScheduleMenu.width + scheduleButton.width, -sendScheduleMenu.height - bar.px(6))
+        id: scheduledSend
+        visible: bar.scheduleSet
+        anchors.right: parent.right
+        anchors.verticalCenter: composer.verticalCenter
+        text: "Schedule"; variant: KetTheme.ButtonVariant.Primary
+        enabled: composer.text.trim() !== ""
+        onClicked: bar.submitSchedule(composer.text)
     }
 
     ComposerSuggestions {
@@ -167,7 +186,7 @@ Item {
 
         ComposerFooterButton {
             id: modelButton
-            Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 120 : 240))
+            Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 150 : 270))
             text: bar.providerLabel + " · " + bar.model + "   " + bar.effort
             iconName: bar.setup ? "warning" : ""
             warning: !!bar.setup
@@ -180,28 +199,54 @@ Item {
 
         KetUsageRing {
             id: ring
+            objectName: "composerContextRing"
             Layout.alignment: Qt.AlignVCenter
             value: bar.contextUsed
             onClicked: limits.toggleAbove(ring)
         }
+        KetIconButton {
+            id: scheduleButton
+            objectName: "composerScheduleClock"
+            Layout.alignment: Qt.AlignVCenter
+            controlSize: KetTheme.ControlSize.Small
+            // The clock symbol has optical margins; match its visible circle to the ring.
+            glyphSize: ring.recipe.size * 1.24
+            visible: bar.newConversation || !!bar.existingSchedule
+            iconName: "clock"; checkable: true
+            checked: bar.scheduleSet || (!!bar.existingSchedule && bar.existingSchedule.enabled)
+            text: bar.newConversation ? (bar.scheduleSet ? "Scheduled · " + Rules.nextLabel(bar.scheduleDraft) : "Schedule first message")
+                  : bar.existingSchedule ? (bar.existingSchedule.enabled ? "Next run: " + Rules.nextLabel(bar.existingSchedule) : "Schedule paused") : "Schedule"
+            onClicked: bar.openSchedule()
+        }
     }
 
-    function scheduleDraft(minutes) {
-        if (!composer.text.trim()) { composer.focusInput(); return }
-        const id = bar.window.scheduleStore.save({ name: "Send message · #" + bar.window.conversation.number,
-            prompt: composer.text, target: 0, conversation: bar.window.conversation.number, rule: 0,
-            date: minutes === 1080 ? "2026-11-14" : "2026-11-13", time: minutes === 30 ? "15:30" : minutes === 60 ? "16:00" : "09:00",
-            zone: "Asia/Ho_Chi_Minh", days: [], hours: "4", busy: 0, missed: 0, creator: "You" })
-        if (id) { composer.text = ""; bar.window.openSchedules(id) }
-    }
+    ConversationSchedulePopover { id: firstSchedule; onConfigured: plan => bar.setScheduleDraft(plan) }
     KetMenu {
-        id: sendScheduleMenu
-        KetMenuSection { text: "Schedule send" }
-        KetMenuItem { text: "In 30 minutes"; description: "Today at 15:30"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(30) }
-        KetMenuItem { text: "In 1 hour"; description: "Today at 16:00"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(60) }
-        KetMenuItem { text: "Tomorrow at 09:00"; description: "14/11 · Asia/Ho_Chi_Minh"; enabled: composer.text.trim() !== ""; onTriggered: bar.scheduleDraft(1080) }
-        KetMenuSeparator {}
-        KetMenuItem { text: "Custom…"; iconName: "clock"; onTriggered: { bar.pendingScheduledDraft = composer.text; bar.window.editSchedule(0, true, composer.text) } }
+        id: existingMenu
+        KetMenuSection { text: bar.existingSchedule ? bar.existingSchedule.name : "Schedule" }
+        KetMenuItem { text: "Edit"; iconName: "edit"; onTriggered: bar.window.editExistingSchedule(bar.existingSchedule) }
+        KetMenuItem { text: bar.existingSchedule && bar.existingSchedule.enabled ? "Pause" : "Resume"; onTriggered: if (bar.existingSchedule) bar.window.scheduleStore.patch(bar.existingSchedule.id, { enabled: !bar.existingSchedule.enabled }) }
+        KetMenuItem { text: "Open in Schedules"; onTriggered: if (bar.existingSchedule) bar.window.openSchedules(bar.existingSchedule.id) }
+    }
+    function scheduleEvidenceChecks() {
+        const geometry = scheduleButton.visible && scheduleButton.x >= ring.x + ring.width
+            && scheduleButton.x + scheduleButton.width <= footer.width + 1
+            && Math.abs(KetTheme.iconDrawSize(scheduleButton.glyphSize) * 0.817 - ring.width) < 1
+            && Math.abs(scheduleButton.y + scheduleButton.height / 2 - ring.y - ring.height / 2) <= 0.5
+        if (newConversation) {
+            const valid = geometry && (firstSchedule.geometryVisible() || (scheduleSet && scheduledSend.visible))
+            if (!valid) console.warn("QML schedule geometry: ring=" + ring.x + "/" + ring.width + " center=" + (ring.y + ring.height / 2) + ", clock=" + scheduleButton.x + "/" + footer.width + " glyph=" + scheduleButton.glyphSize + " center=" + (scheduleButton.y + scheduleButton.height / 2) + ", popup=" + firstSchedule.x + "," + firstSchedule.y + " " + firstSchedule.width + "x" + firstSchedule.height + ", overlay=" + (firstSchedule.parent ? firstSchedule.parent.width + "x" + firstSchedule.parent.height : "none"))
+            return valid
+        }
+        return geometry && !!existingSchedule && existingMenu.visible
+    }
+    function scheduleChecks() {
+        if (!newConversation) return false
+        firstSchedule.prepare(null); firstSchedule.preview("repeat")
+        firstSchedule.apply()
+        const scheduled = scheduleSet && scheduledSend.visible
+        const saved = submitSchedule("A scheduled first message")
+        return scheduled && saved && !!existingSchedule && !newConversation
     }
     KetMenu {
         id: attachMenu

@@ -93,8 +93,11 @@ int main(int argc, char* argv[]) {
         QStringLiteral("With --smoke: choose a menu item by keyboard. It activates the window."));
     const QCommandLineOption size(
         QStringLiteral("size"), QStringLiteral("Window size, as 1024x640."), QStringLiteral("WxH"));
-    parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke, edition,
-                       chrome, display, keys, size});
+    const QCommandLineOption checkState(
+        QStringLiteral("check-state"),
+        QStringLiteral("Verify the requested startup state and exit."));
+    parser.addOptions({checkState, screen, state, open, dark, light, zoom, scroll, screenshot,
+                       smoke, edition, chrome, display, keys, size});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -161,6 +164,9 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    // Initialize only after every QML Component.onCompleted handler has finished.
+    if (window->metaObject()->indexOfMethod("initializeMock()") >= 0)
+        QMetaObject::invokeMethod(window, "initializeMock");
     // Fail reproducible captures if a child initialization resets the requested plan state.
     if (controller.edition != QLatin1String("lite") &&
         controller.initialScreen == QLatin1String("workspace") &&
@@ -209,6 +215,21 @@ int main(int argc, char* argv[]) {
             qobject_cast<QQuickWindow*>(window->property("evidenceWindow").value<QObject*>());
         if (evidence && evidence != window)
             evidence->resize(parts.at(0).toInt(), parts.at(1).toInt());
+    }
+
+    const auto evidenceValid = [window] {
+        if (window->metaObject()->indexOfMethod("evidenceChecks()") < 0)
+            return true;
+        QVariant valid;
+        const bool invoked =
+            QMetaObject::invokeMethod(window, "evidenceChecks", Q_RETURN_ARG(QVariant, valid));
+        return invoked && valid.toBool();
+    };
+    if (parser.isSet(checkState)) {
+        QTimer::singleShot(1200, window, [evidenceValid] {
+            QApplication::exit(evidenceValid() && qmlProblems == 0 ? 0 : 1);
+        });
+        return QApplication::exec();
     }
 
     if (parser.isSet(smoke)) {
@@ -300,7 +321,11 @@ int main(int argc, char* argv[]) {
         return ids.isEmpty() || qmlProblems > 0 ? 1 : 0;
     }
     if (const QString file = parser.value(screenshot); !file.isEmpty()) {
-        QTimer::singleShot(1200, window, [window, file] {
+        QTimer::singleShot(1200, window, [window, file, evidenceValid] {
+            if (!evidenceValid() || qmlProblems > 0) {
+                QApplication::exit(1);
+                return;
+            }
             // Schedules is a non-modal window rather than a replacement primary page.
             // Capture that window, including its kit dialogs, when a schedule state opens it.
             auto* target =

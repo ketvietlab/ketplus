@@ -99,9 +99,10 @@ Item {
     onConversationChanged: { detailsOpen = false; syncPlan() }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    function scheduleEvidenceChecks() { return composerBar.scheduleEvidenceChecks() }
+    function scheduleChecks() { return composerBar.scheduleChecks() }
     function openComposerPanel(name) {
-        if (name === "conversation-menu") conversationHeader.openConversationMenu()
-        else if (name === "content-tabs") detailsPane.openTabMenu()
+        if (name === "content-tabs") detailsPane.openTabMenu()
         // The header's Plan ring, and the Atlas action pressed twice (it closes the pane again).
         else if (name === "plan") toggleContent("plan")
         else if (name === "atlas-toggle") { toggleContent("atlas"); toggleContent("atlas") }

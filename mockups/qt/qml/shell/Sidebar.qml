@@ -435,7 +435,6 @@ Rectangle {
                                     SidebarRow {
                                         id: row
                                         required property var modelData
-                                        scheduleHint: sidebar.window.scheduleHint(modelData.number)
                                         unread: !!modelData.unread
                                         detail: modelData.from ? "from " + modelData.from : ""
                                         objectName: "conversation-" + modelData.number
@@ -620,7 +619,6 @@ Rectangle {
     KetMenu {
         id: teamMenu
         property var team: null
-        KetMenuItem { text: "Team schedules…"; iconName: "clock"; onTriggered: sidebar.window.openSchedules("", teamMenu.team.id) }
         KetMenuItem { text: "Open team"; iconName: "bot"; onTriggered: sidebar.window.openTeam(teamMenu.team.id) }
         KetMenuItem {
             readonly property bool full: !!teamMenu.team && sidebar.developersOf(teamMenu.team) >= Fixtures.mostDevelopers
@@ -642,8 +640,6 @@ Rectangle {
         readonly property bool leads: !!team && team.members.some(m => m.number === sidebar.window.conversation.number && m.role !== "developer")
         readonly property bool lastDeveloper: !!team && !leads && sidebar.developersOf(team) <= 1
         readonly property var joinable: sidebar.window.teamList.filter(t => t.repository === sidebar.window.repository)
-        KetMenuItem { text: "Schedule send…"; iconName: "clock"; onTriggered: sidebar.window.editSchedule(0, true, "") }
-        KetMenuItem { text: "Repeat…"; iconName: "clock"; onTriggered: sidebar.window.editSchedule(0, false, "") }
         KetMenuItem { text: "Rename…"; iconName: "edit"; onTriggered: sidebar.window.renameDialog.open() }
         KetMenuItem { text: "Fork conversation"; iconName: "branch"; onTriggered: sidebar.window.notify("Forked into a new conversation") }
         KetMenuItem { text: "Change worktree…"; iconName: "branch"; onTriggered: sidebar.window.picker.open() }
@@ -662,7 +658,7 @@ Rectangle {
         // Inserted in order: a Repeater inside a Menu misplaces its items.
         Instantiator {
             model: rowMenu.team ? [] : rowMenu.joinable
-            onObjectAdded: (index, object) => rowMenu.insertItem(7 + index, object)
+            onObjectAdded: (index, object) => rowMenu.insertItem(5 + index, object)
             onObjectRemoved: (index, object) => rowMenu.removeItem(object)
             KetMenuItem {
                 required property var modelData

@@ -6,6 +6,7 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 import "schedules/ScheduleRules.js" as ScheduleRules
+import "schedules/ScheduleSamples.js" as ScheduleSamples
 
 // The KetPlus Pro window: the sidebar and the current screen, with the app-wide overlays
 // (Quick search, the repository picker, dialogs and toasts).
@@ -15,7 +16,7 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "schedules", "schedules/empty", "schedules/failure", "schedules/team",
-        "workspace/scheduled", "workspace/schedule-failure", "workspace/schedule-send", "teams/scheduled",
+        "workspace/scheduled", "workspace/schedule-failure", "workspace/schedule-new", "workspace/schedule-ready", "workspace/schedule-existing", "teams/scheduled", "teams/recurring",
         "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
         "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
@@ -112,7 +113,9 @@ Basic.ApplicationWindow {
     property var started: ({ [Fixtures.repositories[0].name]: [Object.assign({}, Fixtures.repositories[0].conversations[0], {
         number: "8116", title: "Recheck CI", transcript: "short", providerId: "codex", provider: "Codex",
         status: KetTheme.ConversationStatus.Completed, hasPlan: false
-    })] })
+    })].concat(ScheduleSamples.waitingTeam(Fixtures.teams[0]).members.map(m => Object.assign({}, Fixtures.repositories[0].conversations[0], {
+        number: m.number, title: m.title, transcript: "welcome", status: KetTheme.ConversationStatus.NotStarted, hasPlan: false
+    }))) })
     property int startedCount: 0
     function conversationsOf(repository) {
         const fixture = Fixtures.repositories.find(r => r.name === repository)
@@ -276,19 +279,9 @@ Basic.ApplicationWindow {
     ScheduleStore { id: scheduleStore }
     SchedulesWindow {
         id: schedules; window: app; store: scheduleStore
-        onSaved: { if (app.savingComposerSchedule) app.scheduledDraftSaved(); app.savingComposerSchedule = false }
-        onEditorClosed: app.savingComposerSchedule = false
     }
     function openSchedules(id, team) { schedules.showSchedule(id || "", team || "") }
-    function editSchedule(target, once, prompt, number) {
-        schedules.edit(null, target, number || conversation.number, once)
-        savingComposerSchedule = !!prompt
-        if (prompt) schedules.setPrompt(prompt)
-    }
-    signal scheduledDraftSaved()
-    property bool savingComposerSchedule: false
     function editExistingSchedule(entry) { schedules.edit(entry, entry.target, entry.conversation, false) }
-    function newTeamSchedule(id) { schedules.newTeamSchedule(id) }
     function openScheduledConversation(number, scheduleId) {
         scheduledRunId = scheduleId || "web"
         const found = findConversation(number)
@@ -304,15 +297,23 @@ Basic.ApplicationWindow {
     }
     function scheduleFailure() { showScheduleFailure("ci", "Schedule “Summarize failing CI” failed — Codex is not signed in.") }
     function scheduleSkipped() { showScheduleFailure("retry", "Schedule “Recheck CI” skipped — The conversation is busy.") }
-    function scheduleChecks() { return schedules.checks() }
-    function scheduleHint(number) {
-        const entry = scheduleStore.clockFor(number)
-        return entry ? "Next run: " + ScheduleRules.nextLabel(entry) : ""
+    function scheduleChecks() {
+        const found = findConversation(conversation.number)
+        const entries = scheduleStore.entries
+        showScreen("workspace/welcome")
+        if (!workspace.scheduleChecks()) console.warn("QML schedule check: new conversation did not create its first-message schedule")
+        scheduleStore.entries = entries
+        if (found) openConversation(found.repository, found.conversation)
+        teams.scheduleChecks()
+        return schedules.checks()
     }
-    function teamScheduleHint(id) {
-        const entries = scheduleStore.forTeam(id).filter(e => e.enabled)
-        const start = entries.find(e => e.kind === "team-start")
-        return start ? "Starts " + ScheduleRules.nextLabel(start) : entries.length ? "Next run: " + ScheduleRules.nextLabel(entries[0]) : ""
+    function evidenceChecks() {
+        let valid = true
+        if (Mock.initialScreen === "schedules") valid = schedules.evidenceChecks(Mock.initialState)
+        if (Mock.initialScreen === "workspace" && ["schedule-new", "schedule-ready", "schedule-more", "schedule-at", "schedule-weekly", "schedule-existing"].includes(Mock.initialState)) valid = workspace.scheduleEvidenceChecks()
+        if (Mock.initialScreen === "teams") valid = teams.scheduleEvidenceChecks(Mock.initialState, Mock.initialPanel)
+        if (!valid) console.warn("QML evidence check failed: " + Mock.initialScreen + "/" + Mock.initialState + "/" + Mock.initialPanel)
+        return valid
     }
     // Do not show native windows before --display has selected their monitor.
     property bool presentationReady: false
@@ -331,10 +332,20 @@ Basic.ApplicationWindow {
             schedules.showState(String(id).split("/")[1] || "")
             return
         }
-        if (id === "workspace/scheduled" || id === "workspace/schedule-failure" || id === "workspace/schedule-send") {
+        if (["workspace/schedule-new", "workspace/schedule-ready", "workspace/schedule-more", "workspace/schedule-at", "workspace/schedule-weekly"].includes(id)) {
+            showScreen("workspace/welcome")
+            Qt.callLater(() => workspace.openComposerPanel(id.split("/")[1]))
+            return
+        }
+        if (id === "workspace/schedule-existing") {
+            const found = findConversation("8116")
+            openConversation(found.repository, found.conversation)
+            Qt.callLater(() => workspace.openComposerPanel("schedule-existing"))
+            return
+        }
+        if (id === "workspace/scheduled" || id === "workspace/schedule-failure") {
             openScheduledConversation("4821")
             if (id === "workspace/schedule-failure") Qt.callLater(scheduleFailure)
-            if (id === "workspace/schedule-send") Qt.callLater(() => workspace.openComposerPanel("schedule-send"))
             return
         }
         const parts = String(id).split("/")
@@ -465,7 +476,7 @@ Basic.ApplicationWindow {
     color: KetTheme.t.pageBg
     font.family: KetTheme.fontFamily
 
-    Component.onCompleted: {
+    function initializeMock() {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
