@@ -250,8 +250,11 @@ current-window value.
   `authenticate`. Token absence alone does not reject a BYOK session. An explicit
   authentication failure ends the turn with login guidance; retry uses a fresh
   process. Permission, network and usage failures retain separate, sanitized
-  explanations. Initialization and session requests time out after 30 seconds;
-  a prompt request has a 30-minute deadline. Streaming and cancellation use the
+  explanations. Initialization and ordinary setup calls time out after 30 seconds;
+  session creation/loading allows 120 seconds for cold MCP workers. Prompts have
+  no wall-clock deadline: long-running work and human approval must not kill the
+  shared process or unrelated conversations. Process exit and explicit Stop
+  still end waiting turns. Streaming and cancellation use the
   shared ACP engine. Model catalogs and provider-specific permission/browser
   integration are separate work; this backend foundation advertises no model list.
 

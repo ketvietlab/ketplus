@@ -10,6 +10,7 @@
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
 
 using namespace ketplus::daemon;
@@ -224,6 +225,27 @@ class CopilotAdapterTest final : public QObject {
         QTRY_COMPARE(adapter.findChild<QProcess*>()->state(), QProcess::NotRunning);
     }
 
+    void waitingPromptHasNoProcessKillTimer() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath("copilot");
+        QVERIFY(writeFakeCopilot(path, dir.filePath("log")));
+        CopilotAdapter adapter(path);
+        QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
+        bool accepted = false;
+        adapter.call("turn/start", params("hold"), [&](const QJsonObject&, const QString& error) {
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            accepted = true;
+        });
+        QTRY_VERIFY(accepted);
+        // Once setup completes, the held prompt has no timer capable of killing
+        // the shared worker while the user is reviewing a permission card.
+        for (const auto* timer : adapter.findChildren<QTimer*>())
+            QVERIFY(!timer->isActive());
+        QVERIFY(!completed(events));
+        adapter.call("turn/interrupt", {{"sessionId", "test-session"}},
+                     [](const QJsonObject&, const QString& error) { QVERIFY(error.isEmpty()); });
+        QTRY_VERIFY(completed(events));
+    }
     void startupDeadlineSettlesOnce() {
         QTemporaryDir dir;
         const QString path = dir.filePath("copilot");

@@ -166,6 +166,13 @@ QString CopilotAdapter::turnFailureMessage(const QString& error) const {
 }
 
 int CopilotAdapter::requestTimeoutMs(const QString& method) const {
-    return method == QStringLiteral("session/prompt") ? 30 * 60 * 1000 : 30 * 1000;
+    // A prompt may legitimately stream or wait for human approval indefinitely.
+    // Killing this shared worker on a wall-clock turn deadline would disrupt other sessions.
+    if (method == QStringLiteral("session/prompt"))
+        return 0;
+    // Cold MCP workers can take longer than the initial protocol handshake.
+    if (method == QStringLiteral("session/new") || method == QStringLiteral("session/load"))
+        return 120 * 1000;
+    return 30 * 1000;
 }
 } // namespace ketplus::daemon
