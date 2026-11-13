@@ -2120,10 +2120,11 @@ Flickable {
         AgentRunStatus {
             workspace: shell
             visible: host.sessionRunning && !transcriptFooter.runningReport
+            // Its dots start where the rows above it start (T-88).
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: transcriptFooter.sideMargin
-            anchors.rightMargin: transcriptFooter.sideMargin
+            anchors.leftMargin: shell.transcriptRowX(transcriptFooter.width)
+            anchors.rightMargin: shell.transcriptRowX(transcriptFooter.width)
             anchors.top: parent.top
             anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
         }
