@@ -1,5 +1,13 @@
 # Release process
 
+Linux Pro engineering packages use the native Docker recipe in
+[linux-desktop-packaging.md](linux-desktop-packaging.md). Build AppImage and deb
+on each native architecture, verify installed `--build-info`, run the SDK-free
+smoke for both formats, and retain SHA-256 checksums and metadata. These unsigned
+build-only artifacts must not be published until the Qt/AppImage source and
+notice audit and release approval are complete. Debian repository signing is a
+separate follow-up; no production signing material belongs in the build image.
+
 ## Branch policy
 
 Three long-lived branches carry every change (ADR 0030):

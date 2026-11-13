@@ -25,6 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  linux-pro-packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    uses: ./.github/workflows/linux-pro-packages.yml
+    with:
+      architecture: ${{ matrix.architecture }}
+
   linux-daemon:
     runs-on: ubuntu-24.04
     timeout-minutes: 35

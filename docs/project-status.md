@@ -24,6 +24,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Linux Pro build-only AppImage/deb assembly uses native Ubuntu 24.04 Docker
+  recipes, Qt/QML/WebEngine deployment, bundled browser/sidecar runtimes, fixed
+  production build identity, checksums and an SDK-free offline smoke. The manual
+  native ARM workflow is prepared without changing host emulation. ARM execution,
+  release signing and the dependency source/notice audit remain release gates;
+  see `linux-desktop-packaging.md`.
+
 - Appearance mounts a searchable canonical scheme library with source labels and
   swatches, local import variant/review/preview, export, duplication and deletion.
   Preferred system variants and the Lite/Pro keyboard picker use the live selection

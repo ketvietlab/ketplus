@@ -147,7 +147,7 @@ add_custom_command(TARGET ketplus_daemon POST_BUILD
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
     install(TARGETS ketplus_daemon RUNTIME DESTINATION bin COMPONENT Runtime)
     install(DIRECTORY "${KETPLUS_CLAUDE_SIDECAR_STAGE}/"
-        DESTINATION lib/ketplus/claude-sidecar COMPONENT Runtime)
+        DESTINATION lib/ketplus/claude-sidecar USE_SOURCE_PERMISSIONS COMPONENT Runtime)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"
         DESTINATION lib/ketplus COMPONENT Runtime)
 endif()

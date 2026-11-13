@@ -271,6 +271,14 @@ KetAtlas lane opt-in and report its skip separately.
 
 ## Minimum verification
 
+Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
+the offscreen bundled-browser/Claude-adapter tests and production build-info
+checks through `packaging/linux/build-desktop.sh`. Verify both actual package
+formats in `Dockerfile.desktop-smoke` with `--network=none`, no SDK and fresh
+home/config/data directories. Run each native architecture separately; an amd64
+result is not ARM proof. See `linux-desktop-packaging.md` for the build commands
+and outstanding publication gates.
+
 Update-preparation changes run `python3 tests/packaging/test_update_archive_cli.py`
 for invalid notes/version, output collisions, cleanup after a failed signing step,
 the existing feed as generator input and its mode, no rollback after the feed is

@@ -1,0 +1,21 @@
+name: Linux Pro build-only PR
+on:
+  pull_request:
+    branches: [integration]
+    paths:
+      - 'packaging/linux/**'
+      - 'apps/desktop/CMakeLists.txt'
+      - 'modules/browser/**'
+      - 'tests/BundledBrowserRuntimeTest.cpp'
+      - 'tests/packaging/test_linux_desktop_packages.py'
+      - '.github/workflows/linux-pro-packages*.yml'
+permissions:
+  contents: read
+concurrency:
+  group: linux-pro-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  native-arm64:
+    uses: ./.github/workflows/linux-pro-packages.yml
+    with:
+      architecture: arm64

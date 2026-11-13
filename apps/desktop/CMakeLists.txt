@@ -524,6 +524,7 @@ if(UNIX AND NOT APPLE)
         DESTINATION share/applications COMPONENT Runtime)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/packaging/linux/hicolor/"
         DESTINATION share/icons/hicolor COMPONENT Runtime)
+    include("${PROJECT_SOURCE_DIR}/packaging/linux/DesktopRuntime.cmake")
 endif()
 
 if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)
