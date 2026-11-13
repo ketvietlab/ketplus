@@ -108,17 +108,23 @@ payloads also undergo miniz output-size, stream and CRC validation. No extractio
 to disk occurs. ZIP entry names must be UTF-8. Limits apply to every entry,
 including unrequested entries.
 
-`parseXml` returns a small `XmlNode` tree using `QXmlStreamReader`. All DTDs
-(including the common plist DOCTYPE) and unresolved entities are rejected; no
-external resolver or network access is installed. Standard escaped XML characters
-remain supported. XML has additional 128-level/100,000-node bounds. A tmTheme
-with a DOCTYPE must have that declaration removed before importing.
+`parseXml` returns a small `XmlNode` tree using `QXmlStreamReader`. External
+DOCTYPE identifiers, including the standard Apple plist header in `.tmTheme`,
+are accepted without fetching or validating their DTD. All internal subsets,
+entity declarations and unresolved entity references are rejected; no external
+resolver or network access is installed. Standard escaped XML characters remain
+supported. XML has additional 128-level/100,000-node bounds.
 
 `IncludeResolver` reads from a caller-selected root directory or validated archive.
 It rejects remote/absolute references, root escapes and filesystem symlinks, and
 returns JSON documents parent first without merging them. The root counts as
 level one of the 16-level limit. Failed reads/parses leave outputs empty. Parsed
 files are limited to 5 MiB; include chains have a cumulative 100 MiB budget.
+On Unix, directory-descriptor reads with `openat`/`O_NOFOLLOW` also prevent a
+checked path from being replaced by a symlink before opening. Non-Unix reads
+check path containment and symlinks before opening, but do not provide the same
+race protection against concurrent replacement of directories/junctions; import
+from a directory whose contents are not concurrently modified by another actor.
 Format-specific import and merge semantics remain the adapter's responsibility.
 
 Resolve includes relative to the declaring file, detect cycles, and enforce depth

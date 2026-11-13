@@ -1,3 +1,4 @@
+#include "BrowserToolLaunch.h"
 #include "providers/acp/AcpAdapter.h"
 #include <QJsonDocument>
 #include <QProcess>
@@ -50,13 +51,15 @@ AcpAdapter::AcpAdapter(QString label, QObject* parent)
         starting_ = false;
         setReady(false);
         noteUnexpectedStop();
-        const QString reason = QStringLiteral("Unable to start %1 ACP: %2%3")
-                                   .arg(label_, process_->errorString(), stderrTail());
+        const QString reason =
+            processFailure(QStringLiteral("Unable to start %1 ACP: %2%3")
+                               .arg(label_, process_->errorString(), stderrTail()),
+                           std::nullopt);
         failPending(reason);
         emit stopped(reason);
     });
     connect(process_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](const int, const QProcess::ExitStatus) {
+            [this](const int exitCode, const QProcess::ExitStatus) {
                 consumeStdout();
                 starting_ = false;
                 setReady(false);
@@ -76,8 +79,10 @@ AcpAdapter::AcpAdapter(QString label, QObject* parent)
                         emit stopped(reason);
                     return;
                 }
-                const QString reason = QStringLiteral("The %1 ACP process exited unexpectedly.%2")
-                                           .arg(label_, stderrTail());
+                const QString reason =
+                    processFailure(QStringLiteral("The %1 ACP process exited unexpectedly.%2")
+                                       .arg(label_, stderrTail()),
+                                   exitCode);
                 failPending(reason);
                 emit stopped(reason);
             });
@@ -164,9 +169,12 @@ void AcpAdapter::initialize() {
              [this](const QJsonObject& result, const QString& error) {
                  starting_ = false;
                  narrowing_.acpInitialized(result);
-                 if (!error.isEmpty()) {
-                     const QString reason = QStringLiteral("%1 ACP initialization failed: %2%3")
-                                                .arg(label_, error, stderrTail());
+                 const QString startupError = error.isEmpty() ? initializationError(result) : error;
+                 if (!startupError.isEmpty()) {
+                     const QString reason =
+                         processFailure(QStringLiteral("%1 ACP initialization failed: %2%3")
+                                            .arg(label_, startupError, stderrTail()),
+                                        std::nullopt);
                      noteUnexpectedStop();
                      failPending(reason);
                      emit stopped(reason);
@@ -186,6 +194,10 @@ void AcpAdapter::initialize() {
 }
 
 void AcpAdapter::failPending(const QString& reason) {
+    for (auto* timer : std::exchange(pendingTimers_, {})) {
+        timer->stop();
+        timer->deleteLater();
+    }
     pendingMethods_.clear();
     const auto pending = std::exchange(pending_, {});
     for (const Callback& callback : pending)
@@ -195,7 +207,12 @@ void AcpAdapter::failPending(const QString& reason) {
         call.callback({}, reason);
     // The next process numbers its requests from the start again; an answer to one of them
     // must not take the shape of an unanswered request this process left behind.
+    cancelPermissions();
     permissionOptionsByRequest_.clear();
+    // Failure and shutdown must signal workers too, before dropping captured injection state.
+    for (auto it = browserSessions_.cbegin(); it != browserSessions_.cend(); ++it)
+        if (!it.value().isEmpty())
+            browser_tools::signalTurnEnd(it.value());
     startingSessions_.clear();
     browserSessions_.clear();
     agentSessions_.clear();

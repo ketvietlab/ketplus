@@ -58,7 +58,8 @@ class ColorSchemeReader {
 };
 class ColorSchemeWriter {
   public:
-    [[nodiscard]] static QByteArray write(const ColorScheme& scheme);
+    [[nodiscard]] static QByteArray write(const ColorScheme& scheme,
+                                          QList<SchemeDiagnostic>* diagnostics = nullptr);
 };
 // A resolved value has every documented token and style property filled.
 [[nodiscard]] ColorScheme builtinColorScheme(SchemeKind kind);

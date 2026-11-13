@@ -1,5 +1,6 @@
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ProviderDisplay.h"
 #include "agent/TranscriptSanitizer.h"
 #include <cmath>
 
@@ -9,7 +10,9 @@ namespace {
 QString providerName(const QString& provider) {
     if (provider.isEmpty())
         return QStringLiteral("another provider");
-    return provider.left(1).toUpper() + provider.mid(1);
+    if (provider == QStringLiteral("copilot"))
+        return QStringLiteral("GitHub Copilot");
+    return provider_display::name(provider);
 }
 // What retention reduced in a turn, as the mock's note: "This turn is older than 30 days:
 // 38 commands and 12 tool results were reduced to their summaries (1.2 MB)."

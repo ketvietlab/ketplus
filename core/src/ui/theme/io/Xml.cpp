@@ -18,8 +18,16 @@ bool parseXml(const QByteArray& data, XmlNode* root, Error* error) {
     int nodes = 0;
     while (!xml.atEnd()) {
         const auto token = xml.readNext();
-        if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference) {
-            xml.raiseError(QStringLiteral("DTD and external entities are forbidden"));
+        if (token == QXmlStreamReader::DTD) {
+            // External DOCTYPE identifiers (standard plist headers) are inert:
+            // QXmlStreamReader performs no external DTD/entity fetch. Reject an
+            // internal subset entirely so entity expansion/default attributes
+            // cannot change the document before we consume its elements.
+            if (!xml.entityDeclarations().isEmpty() || xml.text().contains(u'['))
+                xml.raiseError(
+                    QStringLiteral("Internal DTD subsets and entity declarations are forbidden"));
+        } else if (token == QXmlStreamReader::EntityReference) {
+            xml.raiseError(QStringLiteral("Unresolved/external entities are forbidden"));
         } else if (token == QXmlStreamReader::StartElement) {
             if (stack.size() >= 128 || ++nodes > 100000) {
                 xml.raiseError(QStringLiteral("XML nesting or node limit exceeded"));

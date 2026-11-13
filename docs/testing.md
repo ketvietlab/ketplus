@@ -66,7 +66,7 @@ with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
 It constructs small ZIP fixtures in memory, including patched hostile metadata,
 and tests JSONC comment/string boundaries and error locations, ZIP traversal,
-links/collisions/CRC failure, all four archive budgets, XML DTD/entity rejection,
+links/collisions/CRC failure, all four archive budgets, standard plist DOCTYPE acceptance without external resolution, internal DTD/entity rejection,
 and local/archive includes with cycles, escapes and the 16-level boundary.
 
 ## Target map
@@ -88,6 +88,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
 | Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
+| Copilot desktop presentation | `ketplus_copilot_presentation_tests` | platform setup guides, daemon discovery/provider identity, transcript names, Teams availability, model permissions and missing/older-daemon states; native QML offscreen at wide and narrow zoomed layouts; `KETPLUS_COPILOT_CAPTURE` saves the wide picker screenshot; no provider invocation |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
 | Desktop zoom | `ketplus_desktop_zoom_tests` | repeated 90/100/110/125% zoom transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and merging with another window's newer settings |
@@ -115,6 +116,9 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
 | Claude/Cursor framing | `ketplus_provider_framing_tests` | Coalesced real QProcess output, 16-MiB per-line boundary, aggregate valid frames, oversized complete/partial suffixes, failure drain and fresh-generation recovery; fixture process only |
 | Malformed provider frames | `ketplus_provider_malformed_frame_tests` | Fake Codex/Claude/Cursor processes: initialize and pending calls, UTF-8/binary/control/JSON failures, suffix quarantine, once-only error callbacks, payload-free diagnostics and fresh-generation recovery; an oversized Claude or Cursor line, in the initialize response or a later call, publishes one stop and one crash backoff; POSIX process fixtures skip on Windows |
+| Copilot adapter | `ketplus_daemon_copilot_adapter_tests`, `ketplus_copilot_cli_tests` | Discovery/overrides, Windows wrapper policy, fake ACP stream/cancel, explicit/nested/exit authentication failures, sanitized unrelated errors, fresh-process retry, startup deadline and host routing; no provider quota |
+| Copilot permissions/browser | `ketplus_daemon_copilot_tools_tests` | Fake ACP permission option IDs, no promotion to always, absent options, expiry/cancel, stale turn/process answers, forged browser identity, host approval cards, MCP setup/resume/disable, routing, image content and completion/failure/shutdown cleanup; no provider quota |
+| Copilot models | `ketplus_copilot_catalog_tests` | Config/grouped and advertised legacy catalogs, model/string/output bounds, fallback, cache/coalescing/expiry, timeout/stop cleanup, host model discovery, selected model before prompt, switches across turns, empty load state and explicit setter failures; native fixture executable only, no provider quota |
 | Shared ACP engine | `ketplus_daemon_acp_adapter_tests` | Provider-independent fake stdio process: initialize, MCP session creation/load fallback, assistant/tool/usage events, permission option IDs and forged MCP identity refusal, cancellation, pending-call shutdown and malformed-output restart |
 | ACP capability defaults | `ketplus_provider_compatibility_tests`, `ketplus_daemon_cursor_adapter_tests` | Missing/null/wrong-type capability fields, boolean controls/reset and actual session/load suppression; fake Cursor explicitly advertises implemented features |
 | Provider line scanning | `ketplus_provider_line_reader_tests` | Deep array/object streams, chunk/depth bounds, JSON escapes/Unicode, invalid metadata, dotted-key isolation, next-line/reset recovery and a fresh-child POSIX peak-memory bound; no live provider |

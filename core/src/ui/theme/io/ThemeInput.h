@@ -30,7 +30,8 @@ struct XmlNode {
     QString text;
     QVector<XmlNode> children;
 };
-// Rejects all DTDs and unresolved entities; no resolver or network access is installed.
+// Accepts inert external DOCTYPE identifiers, rejects internal subsets/entities.
+// No entity resolver or network access is installed.
 bool parseXml(const QByteArray& data, XmlNode* root, Error* error = nullptr);
 
 class ZipArchive {

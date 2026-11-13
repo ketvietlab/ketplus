@@ -51,7 +51,13 @@ class RemoteControlProjectionTest final : public QObject {
   private slots:
     void init() { r03::resetCredentials(); }
 
+    void projectionShowsOnlyHostVerifiedConversationsAndReportsTheRest_data() {
+        QTest::addColumn<QString>("adapter");
+        QTest::newRow("codex") << "codex";
+        QTest::newRow("copilot") << "copilot";
+    }
     void projectionShowsOnlyHostVerifiedConversationsAndReportsTheRest() {
+        QFETCH(QString, adapter);
         FixtureTransport network;
         ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
         EncryptedFixture fixture(client, network);
@@ -63,6 +69,7 @@ class RemoteControlProjectionTest final : public QObject {
                                                                       recipient, "linux-host", 1)});
         network.replies.insert(prefix + "/v2/mobile/sessions/fresh-session/keys", QJsonArray{});
         auto verified = indexRow("opaque-session", 3, "linux-host", "wt-a");
+        verified.insert("adapter", adapter);
         verified.insert("encryptedMetadata",
                         sealedMetadata(fixture.host, "opaque-session", 3, 9, metadata));
         auto tampered = indexRow("tampered-session", 1, "linux-host", "wt-b");
@@ -124,6 +131,7 @@ class RemoteControlProjectionTest final : public QObject {
         QCOMPARE(conversations.size(), 1);
         const auto shown = conversations.at(0).toObject();
         QCOMPARE(shown.value("id").toString(), QStringLiteral("opaque-session"));
+        QCOMPARE(shown.value("adapter").toString(), adapter);
         QCOMPARE(shown.value("title").toString(), QStringLiteral("Sealed title"));
         QCOMPARE(shown.value("state").toString(), QStringLiteral("running"));
         QCOMPARE(shown.value("updatedAt").toString(), QStringLiteral("2026-11-12T08:00:00.000Z"));

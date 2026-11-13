@@ -59,8 +59,18 @@ Basic.Popup {
     readonly property string cursorInstallCommand: Qt.platform.os === "windows"
         ? "irm 'https://cursor.com/install?win32=true' | iex"
         : "curl https://cursor.com/install -fsS | bash"
+    readonly property bool hasCopilotModels: models.some(function(model) {
+        return model.provider === "copilot" && !model.hidden
+            && model.permissions && model.permissions.length > 0
+    })
+    readonly property string copilotInstallCommand: Qt.platform.os === "windows"
+        ? "winget install GitHub.Copilot"
+        : Qt.platform.os === "osx" ? "brew install --cask copilot-cli"
+        : "npm install -g @github/copilot"
     readonly property var providerModels: models.filter(function(model) {
         return model.provider === picker.selectedProviderTab && !model.hidden
+            && (model.provider !== "copilot" || (model.permissions && model.permissions.length > 0
+                && !(picker.draftSetup && picker.draftSetup.blocking)))
     })
     readonly property var filteredModels: {
         const query = modelSearch.text.trim().toLocaleLowerCase()
@@ -142,7 +152,7 @@ Basic.Popup {
                 break
             }
         }
-        if (!matchedPreferred && selectedModel) {
+        if (!matchedPreferred && selectedModel && tab !== "copilot") {
             for (let i = 0; i < models.length; ++i) {
                 if (catalogMatches(models[i], selectedModel) && models[i].provider) {
                     tab = models[i].provider
@@ -153,6 +163,7 @@ Basic.Popup {
         // A provider with a setup guide keeps its tab, so its banner says what to do.
         if (tab === "claude" && !hasClaudeModels && !hasSetup("claude")) tab = "codex"
         if (tab === "cursor" && !hasCursorModels && !hasSetup("cursor")) tab = "codex"
+        if (tab === "copilot" && !hasCopilotModels && !hasSetup("copilot")) tab = "codex"
         if (lockedProvider) tab = lockedProvider
         selectedProviderTab = tab
         syncCurrentModel()
@@ -271,7 +282,9 @@ Basic.Popup {
             lockedProvider: picker.lockedProvider
             hasClaudeModels: picker.hasClaudeModels
             hasCursorModels: picker.hasCursorModels
+            hasCopilotModels: picker.hasCopilotModels
             cursorInstallCommand: picker.cursorInstallCommand
+            copilotInstallCommand: picker.copilotInstallCommand
             setupProviders: Object.keys(picker.setups)
             onProviderChosen: (provider) => {
                 picker.selectedProviderTab = provider
@@ -313,6 +326,12 @@ Basic.Popup {
                     ? (picker.hasCursorModels
                        ? "Cursor lists models from the installed CLI (`agent models`)."
                        : "Install Cursor CLI: " + picker.cursorInstallCommand)
+                  : picker.selectedProviderTab === "copilot"
+                    ? (picker.hasCopilotModels
+                       ? "GitHub Copilot lists models from its installed CLI through ACP."
+                       : "Install GitHub Copilot CLI: " + picker.copilotInstallCommand)
+                  : picker.hasCopilotModels
+                    ? "Codex is ready. GitHub Copilot is available."
                   : picker.hasClaudeModels && picker.hasCursorModels
                     ? "Codex is ready. Claude and Cursor are available."
                   : picker.hasClaudeModels

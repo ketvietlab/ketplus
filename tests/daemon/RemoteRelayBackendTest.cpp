@@ -323,11 +323,12 @@ class RemoteRelayBackendTest final : public QObject {
         QVERIFY(!answer.error.isEmpty());
         QCOMPARE(network.paths.size(), before);
 
-        backend.createSession({{"repository_id", "repo-1"},
-                               {"worktree_id", "wt-empty"},
-                               {"prompt", "private first prompt"},
-                               {"options", QJsonObject{{"model", "fixture"}}}},
-                              answer.callback());
+        backend.createSession(
+            {{"repository_id", "repo-1"},
+             {"worktree_id", "wt-empty"},
+             {"prompt", "private first prompt"},
+             {"options", QJsonObject{{"model", "fixture"}, {"provider", "copilot"}}}},
+            answer.callback());
         QTRY_VERIFY(answer.done);
         QVERIFY2(answer.error.isEmpty(), qPrintable(answer.error));
         QCOMPARE(answer.result.value("session_id").toString(), "created-session");
@@ -342,6 +343,12 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(relay.plaintexts.value(created).value("prompt").toString(),
                  "private first prompt");
         QCOMPARE(relay.executions.value(created), 1);
+        QCOMPARE(relay.plaintexts.value(created)
+                     .value("options")
+                     .toObject()
+                     .value("provider")
+                     .toString(),
+                 QStringLiteral("copilot"));
         for (const auto& body : std::as_const(network.bodies))
             QVERIFY(!body.contains("private first prompt"));
     }
