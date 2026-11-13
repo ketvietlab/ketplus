@@ -187,6 +187,10 @@ feed refusal and tampered/unsigned/wrong-key refusal. It invokes OpenSSL and the
 release policy only, without a server or client. This is a producer/crypto fixture,
 not evidence of a complete Sparkle N-to-N+1 update or a signed/notarized DMG.
 The real isolated localhost client QA remains a separate release gate.
+If a QA entry point or driver stands in for the UI, record how that binary differs
+from the shipping app. Verify the deployed production bundle independently; the
+owner still performs a manual Check for Updates on the signed Pro build before
+distribution.
 
 ### Preparing a scoped macOS update
 
