@@ -704,8 +704,10 @@ contract and compatibility rules. This documents client behavior, not relay depl
 
 ### Relay address and sign-in
 
-The relay is the standalone KétPlus runtime (`https://ketplus-staging.ketviet.vn`
-by default), which serves `/v2/...` at the root of its host. A base URL may still
+Production packages compile `https://api.ketplus.app` into the desktop and daemon
+(`KETPLUS_PRODUCTION_RELEASE=ON`). Developer/staging defaults remain
+`https://ketplus-staging.ketviet.vn` until the separately approved staging cutover.
+The relay is the standalone KétPlus runtime, which serves `/v2/...` at the root of its host. A base URL may still
 carry a path, as the tenant gateway's `/native/ketplus` did before the staging
 cutover: every request and the `/v2/relay` socket append their path to that base
 (`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.

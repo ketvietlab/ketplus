@@ -101,6 +101,10 @@ ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cp
 ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
 ketplus_add_daemon_test(ketplus_computer_provider_integration_tests ComputerProviderIntegrationTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_handoff_tests ProviderHandoffTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_adapter_tests CopilotAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_tools_tests CopilotToolsTest.cpp)
+ketplus_add_daemon_test(ketplus_copilot_catalog_tests CopilotCatalogTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_acp_adapter_tests AcpAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
@@ -133,7 +137,7 @@ ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
 ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_daemon_test(ketplus_team_storage_tests TeamStorageTest.cpp)
-# T-90 (ADR 0121): the team's repository changes; a task works in a repository of its own.
+# T-90 (ADR 0123): the team's repository changes; a task works in a repository of its own.
 ketplus_add_daemon_test(ketplus_team_repository_tests TeamRepositoryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_branch_name_tests TeamBranchNameTest.cpp)
 # T-38: tracked changes only, allowed paths, and a head only from the task's own branch.
@@ -272,3 +276,8 @@ target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
 
 ketplus_add_daemon_test(ketplus_relay_attachment_host_tests RelayAttachmentHostTest.cpp)
 target_sources(ketplus_relay_attachment_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+
+ketplus_add_daemon_test(ketplus_session_preparation_store_tests SessionPreparationStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_session_preparation_host_tests SessionPreparationHostTest.cpp)
+ketplus_add_daemon_test(ketplus_relay_preparation_host_tests RelayPreparationHostTest.cpp)
+target_sources(ketplus_relay_preparation_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)

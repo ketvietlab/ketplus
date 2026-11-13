@@ -224,6 +224,17 @@ tree); there is no option to leave it out, and the bundle check fails without it
 bundle and replaces the installed copies, so neither keeps files from the tree
 the bundle was last built with (#124), as for the browser runtime (#94).
 
+ACP providers share `providers/acp/AcpAdapter`: it owns stdio process lifetime,
+bounded JSON-RPC framing and response correlation, initialization, session
+creation/loading with host-supplied MCP servers, prompt/cancel, permission
+responses and canonical transcript events. CLI discovery, launch/version policy,
+model catalogs and provider extensions stay in each concrete adapter. Cursor's
+`cursor/*` requests and account/model error explanations remain Cursor-specific;
+the shared engine has no provider names or installation paths. MCP permission
+exemptions default to denied: only a concrete adapter can interpret its own
+trusted tool identity. Provider-specific client capability metadata and session
+mode identifiers are opt-in hooks.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows
@@ -292,8 +303,9 @@ while the envelope major stays 0.
 ## Shared browser tools
 
 `modules/browser` resolves one host-controlled MCP launch for Codex, Claude and
-Cursor. The browser remains a separate stdio worker. Claude SDK receives the
-server map per query; Cursor ACP receives it on session creation and loading.
+Cursor and Copilot. The browser remains a separate stdio worker. Claude SDK receives the
+server map per query; ACP receives it on session creation and loading. Copilot
+keeps normal approvals until its structured MCP identity is verified (ADR 0120).
 The same local settings control origins and enablement for all providers;
 settings changes wait for the next Claude/Cursor turn. Source readiness probes
 share engine selection with the worker, and built-in skill discovery uses the

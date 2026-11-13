@@ -48,7 +48,7 @@ namespace {
 // Scoped to a catalog worktree rather than a session, and sealed to this Mac.
 bool isWorktreeCommand(const QJsonObject& command) {
     const QString kind = command.value(QStringLiteral("kind")).toString();
-    return kind == QStringLiteral("session.create") ||
+    return kind == QStringLiteral("session.create") || kind == QStringLiteral("session.prepare") ||
            kind == QStringLiteral("worktree.branches.read") ||
            kind == QStringLiteral("worktree.configuration.read");
 }
@@ -830,7 +830,8 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     QStringLiteral("question.answer"), QStringLiteral("attachment.stage.begin"),
                     QStringLiteral("attachment.stage.chunk"),
                     QStringLiteral("attachment.stage.commit"),
-                    QStringLiteral("attachment.stage.cancel")};
+                    QStringLiteral("attachment.stage.cancel"),
+                    QStringLiteral("session.prepare.cancel")};
                 if (!remoteOperations.contains(kind)) {
                     acknowledgeCommand(
                         command,
@@ -845,6 +846,7 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     {QStringLiteral("protocol_version"), 0},
                     {QStringLiteral("message_id"), command.value(QStringLiteral("id"))},
                     {QStringLiteral("message_type"), kind},
+                    {QStringLiteral("_verified_sender_device_id"), senderId},
                     {QStringLiteral("session_id"), sessionId},
                     {QStringLiteral("session_generation"), generation},
                     {QStringLiteral("sent_at"), protocol::timestamp()},

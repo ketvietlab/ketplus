@@ -285,7 +285,7 @@ void TeamTaskDialog::rebuild() {
         {tr("Worktree"), task.value(QStringLiteral("worktree")).toString(), "teamTaskWorktree",
          true},
         {tr("Depends on"), depends.join(QStringLiteral(", ")), "teamTaskDependencies", true}};
-    // T-90 (ADR 0121): a task that works in another repository than the team's names it.
+    // T-90 (ADR 0123): a task that works in another repository than the team's names it.
     if (const QString own = task.value(QStringLiteral("repository")).toString(); !own.isEmpty())
         facts.insert(3, {tr("Repository"),
                          QStringLiteral("%1 → %2").arg(

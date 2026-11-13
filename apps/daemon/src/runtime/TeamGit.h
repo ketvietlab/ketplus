@@ -37,7 +37,7 @@ namespace ketplus::daemon::team_git {
 // The task's branch against its base on the integration branch; nothing when git failed.
 [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
                                                       const teams::Task& task);
-// T-90 (ADR 0121): whether a team or task may work in `path`: an absolute path to the main
+// T-90 (ADR 0123): whether a team or task may work in `path`: an absolute path to the main
 // checkout of a Git repository whose origin has `integrationBranch` as a remote-tracking
 // branch (nothing is fetched). The canonical path, or why not.
 [[nodiscard]] teams::RepositoryCheck checkRepository(const QString& path,

@@ -14,6 +14,7 @@ namespace ketplus {
 using toast_avoidance::ownerProperty;
 
 MachineWorkspaceView::~MachineWorkspaceView() {
+    discardPreparation();
     toastTeardown_ = true;
     clearToastAvoidance();
     for (const auto& ancestor : toastAncestors_)

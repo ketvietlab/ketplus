@@ -17,7 +17,9 @@ QString tr(const char* text) { return QCoreApplication::translate("TeamAgentDial
 QVariantList modelsOf(const QVariantList& models, const QString& provider) {
     QVariantList result;
     for (const QVariant& value : models)
-        if (value.toMap().value(QStringLiteral("provider")).toString() == provider)
+        if (value.toMap().value(QStringLiteral("provider")).toString() == provider &&
+            !value.toMap().value(QStringLiteral("hidden")).toBool() &&
+            (provider != "copilot" || !value.toMap().value("permissions").toList().isEmpty()))
             result.append(value);
     return result;
 }
@@ -44,6 +46,9 @@ QStringList team_agents::readyProviders(const QVariantList& models) {
     QStringList providers;
     for (const QVariant& value : models) {
         const QString provider = value.toMap().value(QStringLiteral("provider")).toString();
+        if (value.toMap().value("hidden").toBool() ||
+            (provider == "copilot" && value.toMap().value("permissions").toList().isEmpty()))
+            continue;
         if (!provider.isEmpty() && !providers.contains(provider))
             providers.append(provider);
     }
@@ -57,6 +62,8 @@ QString team_agents::providerLabel(const QString& provider) {
         return QStringLiteral("Codex");
     if (provider == QStringLiteral("cursor"))
         return QStringLiteral("Cursor");
+    if (provider == QStringLiteral("copilot"))
+        return QStringLiteral("GitHub Copilot");
     return provider;
 }
 
@@ -93,7 +100,8 @@ team_agents::Defaults team_agents::defaults(const QVariantList& models) {
                              ? QStringLiteral("claude")
                              : (ready.isEmpty() ? QString{} : ready.first());
     QString develop = lead;
-    for (const QString& provider : {QStringLiteral("codex"), QStringLiteral("cursor")})
+    for (const QString& provider :
+         {QStringLiteral("codex"), QStringLiteral("cursor"), QStringLiteral("copilot")})
         if (provider != lead && ready.contains(provider)) {
             develop = provider;
             break;

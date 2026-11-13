@@ -108,6 +108,8 @@ for line in sys.stdin:
         emit({'method': 'thread/name/updated', 'params': {
             'threadId': thread_id, 'threadName': name}})
     elif method == 'turn/start':
+        if os.environ.get('KETPLUS_FAKE_CODEX_LOG_INPUT'):
+            log('input:' + json.dumps(message['params']['input']))
         log('turn-start:' + json.dumps({'approvalPolicy': message['params'].get('approvalPolicy'),
                                         'sandboxPolicy': message['params'].get('sandboxPolicy')}))
         turns += 1
