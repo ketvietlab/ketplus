@@ -13,14 +13,14 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
 
-# The kit, pinned to the commit the app pins (until ket-qt #55 is merged, a merge of it
-# onto #53). FETCHCONTENT_SOURCE_DIR_KETQT points at a
-# local checkout instead. KetQt::Widgets is only for ket::printImage(), the image viewer's
-# Print: the system print dialog is a widget, as in the app.
+# Match the app pin: develop includes #55 (multi-line fields/mentions) and #56
+# (toast bottom avoidance used by this mock). FETCHCONTENT_SOURCE_DIR_KETQT
+# points at a local checkout instead. KetQt::Widgets provides ket::printImage():
+# the image viewer uses the system widget print dialog, as in the app.
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 7a1ef101e09017488194b78f701790e533025945 # ket-qt #55 (multi-line text field) on #53/#54
+    GIT_TAG 652685a8e36e95823011b93eb1f24113e41be7fa # Same revision as core/cmake/Dependencies.cmake
 )
 FetchContent_MakeAvailable(ketqt)
 
@@ -95,3 +95,18 @@ qt_add_resources(ketplus_qt_mock mock_docs
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
                                               Qt6::Qml Qt6::Test Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
+
+# Run the mock's existing deterministic QML model suites through CTest.
+include(CTest)
+if(BUILD_TESTING)
+    find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
+                 HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
+    foreach(suite ContentTabsModel PlanRunModel)
+        add_test(NAME mock_${suite}
+                 COMMAND "${KETPLUS_MOCK_QMLTESTRUNNER}" -input
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_${suite}.qml")
+        set_tests_properties(mock_${suite} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+    endforeach()
+    add_test(NAME mock_smoke COMMAND $<TARGET_FILE:ketplus_qt_mock> --smoke)
+    set_tests_properties(mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+endif()
