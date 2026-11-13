@@ -2112,7 +2112,8 @@ Flickable {
         // closes the transcript and carries the live activity in place of the run line.
         readonly property var runningReport: host.sessionRunning && host.turnWorkReport
             && host.turnWorkReport.items && host.turnWorkReport.items.length > 0 ? host.turnWorkReport : null
-        readonly property real sideMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
+        // The run line and the running report start where the rows start (T-88).
+        readonly property real rowX: shell.transcriptRowX(width)
         height: !host.sessionRunning ? 0
             : runningReport ? runningCard.implicitHeight + KetTheme.px(24, KetTheme.zoom)
             : KetTheme.px(62, KetTheme.zoom)
@@ -2123,8 +2124,8 @@ Flickable {
             // Its dots start where the rows above it start (T-88).
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: shell.transcriptRowX(transcriptFooter.width)
-            anchors.rightMargin: shell.transcriptRowX(transcriptFooter.width)
+            anchors.leftMargin: transcriptFooter.rowX
+            anchors.rightMargin: transcriptFooter.rowX
             anchors.top: parent.top
             anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
         }
@@ -2132,9 +2133,9 @@ Flickable {
             id: runningCard
             objectName: "runningWorkReport"
             visible: !!transcriptFooter.runningReport
-            x: transcriptFooter.sideMargin
+            x: transcriptFooter.rowX
             y: KetTheme.px(8, KetTheme.zoom)
-            width: parent.width - 2 * transcriptFooter.sideMargin
+            width: parent.width - 2 * transcriptFooter.rowX
             report: transcriptFooter.runningReport || ({})
             running: true
             activity: host.runStatus
