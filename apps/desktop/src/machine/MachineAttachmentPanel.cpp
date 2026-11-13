@@ -41,19 +41,39 @@ void MachineAttachmentPanel::chooseFiles() {
     if (!sending_)
         addFiles(QFileDialog::getOpenFileNames(this, tr("Attach images or text files")));
 }
+void MachineAttachmentPanel::rejectInput(const QString& message) {
+    emit inputRejected(message);
+    QMessageBox box(QMessageBox::Information, tr("Cannot attach file"), message, QMessageBox::Ok,
+                    this);
+    box.setTextFormat(Qt::PlainText);
+    box.exec();
+}
+bool MachineAttachmentPanel::discardable() const {
+    if (!rows_.isEmpty() || sending_)
+        return false;
+    for (auto* upload : findChildren<remote::MachineAttachmentUpload*>())
+        if (!upload->terminal())
+            return false;
+    return true;
+}
 void MachineAttachmentPanel::addFiles(const QStringList& paths) {
     for (const auto& path : paths) {
         QFile file(path);
-        QImageReader reader(path);
-        const bool image = reader.canRead();
-        if (!file.open(QIODevice::ReadOnly) ||
-            file.size() > (image ? 20 * 1024 * 1024 : 512 * 1024)) {
-            QMessageBox::information(
-                this, tr("Cannot attach file"),
-                tr("Choose an image up to 20 MB or a text file up to 512 KB."));
+        if (!file.open(QIODevice::ReadOnly) || file.size() > 20 * 1024 * 1024) {
+            rejectInput(tr("Cannot attach file (unreadable or over 20 MB): %1").arg(path));
             continue;
         }
+        QImageReader reader(path);
+        const bool image = reader.canRead();
         QByteArray bytes = file.read(image ? 20 * 1024 * 1024 + 1 : 512 * 1024 + 1);
+        if (file.error() != QFileDevice::NoError) {
+            rejectInput(tr("Cannot attach file (unreadable or over 20 MB): %1").arg(path));
+            continue;
+        }
+        if (!image && (bytes.size() > 512 * 1024 || bytes.contains('\0'))) {
+            rejectInput(tr("Attach an image or a text file up to 512 KB: %1").arg(path));
+            continue;
+        }
         QString name = QFileInfo(path).fileName();
         QString type = QStringLiteral("text/plain");
         if (image) {
@@ -64,16 +84,22 @@ void MachineAttachmentPanel::addFiles(const QStringList& paths) {
                 type = QStringLiteral("image/jpeg");
             else {
                 const QImage decoded = reader.read();
+                if (decoded.isNull()) {
+                    rejectInput(tr("Could not decode the attachment image: %1").arg(path));
+                    continue;
+                }
                 bytes.clear();
                 QBuffer buffer(&bytes);
                 buffer.open(QIODevice::WriteOnly);
-                if (decoded.isNull() || !decoded.save(&buffer, "PNG"))
+                if (!decoded.save(&buffer, "PNG")) {
+                    rejectInput(tr("Could not encode the attachment image: %1").arg(path));
                     continue;
+                }
                 name += QStringLiteral(".png");
                 type = QStringLiteral("image/png");
             }
         }
-        addBytes(name, type, bytes);
+        addBytes(name, type, bytes, path);
     }
 }
 bool MachineAttachmentPanel::pasteImage() {
@@ -83,27 +109,36 @@ bool MachineAttachmentPanel::pasteImage() {
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
-    if (!image.isNull() && image.save(&buffer, "PNG"))
-        addBytes(tr("Clipboard image.png"), QStringLiteral("image/png"), bytes);
-    return true;
+    if (image.isNull() || !image.save(&buffer, "PNG")) {
+        rejectInput(tr("Could not save the clipboard image."));
+        return false;
+    }
+    return addBytes(tr("Clipboard image.png"), QStringLiteral("image/png"), bytes);
 }
-void MachineAttachmentPanel::addBytes(QString name, QString type, QByteArray bytes) {
+bool MachineAttachmentPanel::addBytes(QString name, QString type, QByteArray bytes,
+                                      const QString& source) {
     if (sending_ || !backend_)
-        return;
-    if (bytes.isEmpty() || bytes.size() > 20 * 1024 * 1024 ||
-        (type == QLatin1String("text/plain") &&
-         (bytes.size() > 512 * 1024 || bytes.contains('\0')))) {
-        QMessageBox::information(this, tr("Cannot attach file"),
-                                 tr("Choose an image up to 20 MB or a text file up to 512 KB."));
-        return;
+        return false;
+    const QString origin = source.isEmpty() ? name : source;
+    if (bytes.size() > 20 * 1024 * 1024) {
+        rejectInput(tr("Cannot attach file (unreadable or over 20 MB): %1").arg(origin));
+        return false;
+    }
+    if (type == QLatin1String("text/plain") &&
+        (bytes.size() > 512 * 1024 || bytes.contains('\0'))) {
+        rejectInput(tr("Attach an image or a text file up to 512 KB: %1").arg(origin));
+        return false;
+    }
+    if (bytes.isEmpty()) {
+        rejectInput(tr("The attachment file is empty: %1").arg(origin));
+        return false;
     }
     qint64 total = bytes.size();
     for (const auto& row : rows_)
         total += row.bytes;
     if (rows_.size() >= 5 || total > 40 * 1024 * 1024) {
-        QMessageBox::information(this, tr("Cannot attach file"),
-                                 tr("Choose up to five files, totalling at most 40 MB."));
-        return;
+        rejectInput(tr("Choose up to five files, totalling at most 40 MB."));
+        return false;
     }
     auto* upload = new remote::MachineAttachmentUpload(backend_, sessionId_, generation_, this);
     auto* row = new QWidget(this);
@@ -131,6 +166,7 @@ void MachineAttachmentPanel::addBytes(QString name, QString type, QByteArray byt
             });
     emit changed();
     upload->start(std::move(name), std::move(type), std::move(bytes));
+    return true;
 }
 void MachineAttachmentPanel::remove(remote::MachineAttachmentUpload* upload) {
     if (sending_)
@@ -141,8 +177,15 @@ void MachineAttachmentPanel::remove(remote::MachineAttachmentUpload* upload) {
         auto row = rows_.takeAt(i);
         // Keep the coordinator alive until a queued begin has completed and cancel is sent.
         disconnect(upload, nullptr, this, nullptr);
-        connect(upload, &remote::MachineAttachmentUpload::finished, upload, &QObject::deleteLater);
-        upload->cancel();
+        if (upload->terminal() && !upload->ready())
+            upload->deleteLater();
+        else {
+            connect(upload, &remote::MachineAttachmentUpload::finished, this, [this, upload] {
+                upload->deleteLater();
+                emit changed();
+            });
+            upload->cancel();
+        }
         if (row.widget)
             row.widget->deleteLater();
         emit changed();

@@ -17,6 +17,7 @@ class MachineAttachmentUpload final : public QObject {
     void cancel();
     [[nodiscard]] QString attachmentId() const { return id_; }
     [[nodiscard]] bool ready() const { return ready_; }
+    [[nodiscard]] bool terminal() const { return done_; }
   signals:
     void progress(qint64 acknowledgedBytes, qint64 totalBytes);
     void finished(const QString& attachmentId, const QString& error);

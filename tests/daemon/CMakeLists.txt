@@ -259,3 +259,6 @@ target_sources(ketplus_team_transcript_contract_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/ai/src/agent/TeamTranscriptBlocks.cpp)
 target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/ai/src)
+
+ketplus_add_daemon_test(ketplus_relay_attachment_host_tests RelayAttachmentHostTest.cpp)
+target_sources(ketplus_relay_attachment_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)

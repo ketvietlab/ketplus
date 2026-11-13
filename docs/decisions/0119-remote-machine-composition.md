@@ -454,3 +454,10 @@ The panel shows uploading, ready and failed states and retains ready IDs after a
 failed send; it clears them only after actual turn submission completion. Draft panels
 are scoped by machine, session and generation. New-conversation attachment staging
 remains unavailable until a session exists; its tooltip explains this boundary.
+First-turn staging and the session-preparation ADR are tracked separately in T-83.
+
+File-read and text-policy errors use the same path-bearing copy as local turn
+submission. Conversion and clipboard failures are reported explicitly; a failed
+paste is not consumed as a successful attachment. Empty inactive panels are
+pruned, and removed failed uploads release their coordinators; drafts and pending
+cancellations are retained deliberately until they settle.

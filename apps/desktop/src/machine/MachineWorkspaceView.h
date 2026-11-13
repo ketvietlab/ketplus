@@ -68,6 +68,7 @@ class MachineWorkspaceView final : public QWidget {
     void renderWorktrees();
     void renderTranscript();
     void renderActions(bool newConversation);
+    void pruneAttachmentPanels();
     void submit();
     void createConversation(const QString& prompt);
     // `reload` reads the conversation again (and the route follows it) when it was not shown.

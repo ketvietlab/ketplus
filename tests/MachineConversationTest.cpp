@@ -1,5 +1,6 @@
 #include "FakeMachineBackend.h"
 #include "MachineHosts.h"
+#include "machine/MachineAttachmentPanel.h"
 #include "machine/MachineCatalog.h"
 #include "machine/MachineConversationSession.h"
 #include "machine/MachineSidebar.h"
@@ -42,6 +43,21 @@ class MachineConversationTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void emptyAttachmentPanelsArePrunedWhenLeavingAConversation() {
+        FakeMachineBackend ssh("machine", Route::Ssh);
+        ssh.answer = sshHost();
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        for (int i = 0; i < 3; ++i) {
+            view.openConversation("linux-1");
+            QTRY_COMPARE(view.findChildren<MachineAttachmentPanel*>().size(), 1);
+            view.startNewConversation();
+            QTRY_VERIFY(view.findChildren<MachineAttachmentPanel*>().isEmpty());
+        }
+    }
+
     void readyAttachmentsReachTurnsAndClearOnlyAfterCompletion() {
         FakeMachineBackend relay("machine", Route::Relay);
         relay.setState(State::Connected);

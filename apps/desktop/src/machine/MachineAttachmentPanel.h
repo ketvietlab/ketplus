@@ -22,8 +22,10 @@ class MachineAttachmentPanel final : public QWidget {
     [[nodiscard]] QJsonArray attachmentIds() const;
     void setSending(bool sending);
     void sent(bool success);
+    [[nodiscard]] bool discardable() const;
   signals:
     void changed();
+    void inputRejected(const QString& message);
 
   private:
     struct Row {
@@ -31,7 +33,8 @@ class MachineAttachmentPanel final : public QWidget {
         QPointer<remote::MachineAttachmentUpload> upload;
         qint64 bytes;
     };
-    void addBytes(QString name, QString type, QByteArray bytes);
+    bool addBytes(QString name, QString type, QByteArray bytes, const QString& source = {});
+    void rejectInput(const QString& message);
     void remove(remote::MachineAttachmentUpload* upload);
     QPointer<remote::MachineBackend> backend_;
     QString sessionId_;

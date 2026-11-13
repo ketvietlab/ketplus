@@ -254,7 +254,10 @@ void MachineWorkspaceView::showSession(MachineConversationSession* session, cons
                                                session->generation(), attachmentStack_);
             attachmentPanels_.insert(key, panel);
             attachmentStack_->addWidget(panel);
-            connect(panel, &MachineAttachmentPanel::changed, this, &MachineWorkspaceView::render);
+            connect(panel, &MachineAttachmentPanel::changed, this, [this] {
+                render();
+                pruneAttachmentPanels();
+            });
         }
         attachmentPanel_ = panel;
         attachmentStack_->setCurrentWidget(panel);
@@ -263,6 +266,7 @@ void MachineWorkspaceView::showSession(MachineConversationSession* session, cons
                 [panel](const QJsonArray&, const QString& error) { panel->sent(error.isEmpty()); });
     }
     attachmentStack_->setVisible(attachmentPanel_ != nullptr);
+    pruneAttachmentPanels();
 
     if (session_ != nullptr && session_ != session) {
         disconnect(session_, nullptr, this, nullptr);
@@ -336,6 +340,18 @@ void MachineWorkspaceView::renderTranscript() {
     // The renderer keeps the reader's place: an older page is prepended above them, and only
     // a reader at the newest row follows live rows (as This Mac's transcript does).
     transcript_->show(session_);
+}
+
+void MachineWorkspaceView::pruneAttachmentPanels() {
+    for (auto it = attachmentPanels_.begin(); it != attachmentPanels_.end();) {
+        auto* panel = it.value();
+        if (panel != attachmentPanel_ && panel->discardable()) {
+            attachmentStack_->removeWidget(panel);
+            panel->deleteLater();
+            it = attachmentPanels_.erase(it);
+        } else
+            ++it;
+    }
 }
 
 void MachineWorkspaceView::renderActions(const bool newConversation) {
