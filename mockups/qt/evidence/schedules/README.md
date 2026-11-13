@@ -16,7 +16,7 @@ All paths below are relative to `mockups/qt/evidence/schedules/`. Each basename 
 | Visible busy/missed policies; required prompt error | `02-editor-policies`, `02-editor-validation` | `--screen=schedules --state=policies`, `validation` |
 | Failure history and delete confirmation | `03-history-failure`, `03-delete` | `--screen=schedules --state=failure`, `delete` |
 | New conversation: default, one-time, repeat + More, weekly | `04-new-send-now`, `04-new-at-time`, `04-new-repeat-more`, `04-new-weekly` | `--screen=workspace --state=schedule-new`, `schedule-at`, `schedule-more`, `schedule-weekly` |
-| Active clock and labelled Schedule submit action | `04-scheduled-send` | `--screen=workspace --state=schedule-ready` |
+| Active clock with the normal Send action | `04-scheduled-send` | `--screen=workspace --state=schedule-ready` |
 | Existing-conversation manage-only clock menu | `04-existing-schedule` | `--screen=workspace --state=schedule-existing` |
 | Scheduled user-message marker | `05-scheduled-transcript` | `--screen=workspace --state=scheduled` |
 | Failure notification with Open schedule | `06-failure-toast` | `--screen=workspace --state=schedule-failure` |

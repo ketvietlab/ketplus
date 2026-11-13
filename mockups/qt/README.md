@@ -122,7 +122,7 @@ new sidebar navigation entry, sidebar clock or conversation-header clock.
 The composer clock sits immediately to the right of the Context/Limit ring, with the same
 visible diameter and vertical center. In a new, unsent conversation it opens Send now, At a
 time and Repeat options. More contains busy/missed policies. Applying a schedule activates
-the clock and replaces Send with a labelled Schedule action. Existing conversations show
+the clock. Send keeps its normal appearance and label, and saves the schedule when pressed. Existing conversations show
 this clock only when they have a schedule, with Edit, Pause/Resume and Open in Schedules.
 
 New team's Schedule section combines Start (Now or Scheduled, 1 minute–30 days) and

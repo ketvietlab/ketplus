@@ -292,7 +292,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "70c8a2dfd647c9376190d2f0a8d488bf08bbfd8c40675ee23c52c640d42db473"
+    "sha256": "1538f4719cb50f443e87b56cb8b8342c59c13a6de0bc3df1fe517e19ff31ea48"
   },
   {
     "file": "04-scheduled-send-dark.png",
@@ -303,7 +303,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "8b3ea0425fec2161b797cacf8b7eb12442feacfae0ddb9d7742c09f3a2abc82a"
+    "sha256": "38e4291dde0c73fc9e764a49653838a6200dc204d385d1e45837fe0dff2c308e"
   },
   {
     "file": "04-existing-schedule-light.png",
@@ -651,7 +651,7 @@
     ],
     "width": 1024,
     "height": 640,
-    "sha256": "9a73aaf37762aad19805a038d4ec00138f9d7f3162d915de140d54dab8186c46"
+    "sha256": "1aaec70561fb4ac044ce4734a43d4e28297471b5488a00a3beecbb7e490b5b07"
   },
   {
     "file": "10-minimum-scheduled-send-dark.png",
@@ -663,6 +663,6 @@
     ],
     "width": 1024,
     "height": 640,
-    "sha256": "c2e29efb7c8a3fd36c19ea8536690241ad760ba3e3d43f4f5f740facad646ce7"
+    "sha256": "8d0a12bd6d7f3c8b1362266de86a6e2fed19553974c7951ccd1616949f27bb74"
   }
 ]

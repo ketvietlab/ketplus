@@ -111,10 +111,9 @@ Item {
 
     KetComposer {
         id: composer
-        width: parent.width - (bar.scheduleSet ? scheduledSend.width + bar.px(6) : 0)
+        width: parent.width
         busy: bar.busy
         placeholderText: bar.placeholder
-        actionButton.visible: !bar.scheduleSet
         onSubmitted: text => {
             if (bar.scheduleSet) { if (!bar.submitSchedule(text)) composer.text = text; return }
             if (bar.blocked) {
@@ -128,17 +127,6 @@ Item {
             composer.text = ""
         }
         onStopRequested: { bar.stopRequested(); bar.window.notify("Stopped the turn") }
-    }
-
-    // The configured first message has a labelled primary action instead of Send.
-    KetButton {
-        id: scheduledSend
-        visible: bar.scheduleSet
-        anchors.right: parent.right
-        anchors.verticalCenter: composer.verticalCenter
-        text: "Schedule"; variant: KetTheme.ButtonVariant.Primary
-        enabled: composer.text.trim() !== ""
-        onClicked: bar.submitSchedule(composer.text)
     }
 
     ComposerSuggestions {
@@ -238,7 +226,8 @@ Item {
             && Math.abs(KetTheme.iconDrawSize(scheduleButton.glyphSize) * 0.817 - ring.width) < 1
             && Math.abs(scheduleButton.y + scheduleButton.height / 2 - ring.y - ring.height / 2) <= 0.5
         if (newConversation) {
-            const valid = geometry && (firstSchedule.geometryVisible() || (scheduleSet && scheduledSend.visible))
+            const valid = geometry && composer.width === width && composer.actionButton.visible
+                && (firstSchedule.geometryVisible() || (scheduleSet && scheduleButton.checked))
             if (!valid) console.warn("QML schedule geometry: ring=" + ring.x + "/" + ring.width + " center=" + (ring.y + ring.height / 2) + ", clock=" + scheduleButton.x + "/" + footer.width + " glyph=" + scheduleButton.glyphSize + " center=" + (scheduleButton.y + scheduleButton.height / 2) + ", popup=" + firstSchedule.x + "," + firstSchedule.y + " " + firstSchedule.width + "x" + firstSchedule.height + ", overlay=" + (firstSchedule.parent ? firstSchedule.parent.width + "x" + firstSchedule.parent.height : "none"))
             return valid
         }
@@ -248,11 +237,16 @@ Item {
         if (!newConversation) return false
         firstSchedule.prepare(null); firstSchedule.preview("repeat")
         firstSchedule.apply()
-        const scheduled = scheduleSet && scheduledSend.visible
+        const scheduled = scheduleSet && composer.actionButton.visible
+            && composer.actionButton.Accessible.name === "Send request" && composer.width === width
         scheduleButton.clicked()
         const staysActive = scheduleButton.checked && firstSchedule.visible
         firstSchedule.close()
-        const saved = submitSchedule("A scheduled first message")
+        composer.text = "A scheduled first message"
+        const count = window.scheduleStore.entries.length
+        composer.actionButton.clicked()
+        const saved = window.scheduleStore.entries.length === count + 1
+            && !!existingSchedule && existingSchedule.prompt === "A scheduled first message"
         return scheduled && staysActive && saved && !!existingSchedule && !newConversation
     }
     KetMenu {
