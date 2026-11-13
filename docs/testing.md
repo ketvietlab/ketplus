@@ -64,7 +64,8 @@ targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
 
 `ketplus_scheme_library_tests` covers format dispatch, multi-variant choice,
 review-before-write and cancellation, native round-trip/export errors, catalog
-search, protected built-ins, duplication/deletion, active and preferred fallback,
+search, built-in deletion protection after selection/theme updates in both reserved
+ID namespaces, duplication/deletion, active and preferred fallback,
 selection locks, live selection, in-memory import preview restoration and the
 shared keyboard picker. It checks both minimum/large Appearance layouts at every
 supported zoom in light/dark. `ketplus_settings_tests` retains existing settings
@@ -77,6 +78,14 @@ The harness refuses to show a native window unless the secondary DELL display is
 present, sets that screen before showing, captures light/dark/report, and removes
 its isolated test profile. The normal ctest path uses offscreen rendering and does
 not open a native window.
+
+## Bundled color-scheme fixtures
+
+Run `ketplus_builtin_scheme_tests`, `ketplus_color_scheme_tests`, and the two
+importer/common-input targets offscreen after changing bundled palettes or the
+catalog. These checks use embedded resources and committed import reports without
+network or provider access. Explicit source regeneration/byte verification is
+separate: follow `docs/color-schemes.md` with the locked upstream cache.
 
 ## JetBrains importer fixtures
 

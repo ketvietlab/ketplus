@@ -489,7 +489,7 @@ void SchemeLibraryTest::appearanceLayoutAndReviewCaptures() {
         QVERIFY(panel);
         auto preferred = theme.schemeSelection();
         for (const auto& scheme : library.catalog().list())
-            if (!scheme.id.startsWith(u"builtin-") && scheme.kind == SchemeKind::Dark)
+            if (!SchemeLibrary::isBuiltinId(scheme.id) && scheme.kind == SchemeKind::Dark)
                 preferred.darkSchemeId = scheme.id;
         QVERIFY(theme.setSchemeSelection(preferred));
         auto* reset = dialog.findChild<ket::Button*>(QStringLiteral("settingsResetButton"));
@@ -541,7 +541,7 @@ void SchemeLibraryTest::appearanceLayoutAndReviewCaptures() {
         if (!output.isEmpty())
             QVERIFY(dialog.grab().save(QDir(output).filePath(QStringLiteral("import-report.png"))));
         QTest::keyClick(report, Qt::Key_Escape);
-        QCOMPARE(library.catalog().list().size(), 4);
+        QCOMPARE(library.catalog().list().size(), embeddedSchemeCount() + 2);
         dialog.close();
     }
 }

@@ -1,0 +1,1073 @@
+{
+    "counts": {
+        "approximated": 35,
+        "mapped": 36,
+        "skipped": 106
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Explicit workbench color declaration takes precedence",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/0/foreground",
+            "targetPath": "editor.foreground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.background",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.selectionBackground",
+            "targetPath": "editor.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorCursor.foreground",
+            "targetPath": "editor.caret"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.lineHighlightBackground",
+            "targetPath": "editor.lineHighlight"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.background",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/titleBar.activeBackground",
+            "targetPath": "ui.chrome.appBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.background",
+            "targetPath": "ui.chrome.pageBackground"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.background",
+            "targetPath": "ui.chrome.panelBackground"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/sideBar.background",
+            "targetPath": "ui.chrome.panelSubtle"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "ui.chrome.textMain"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "ui.chrome.textSecondary"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/panel.border",
+            "targetPath": "ui.chrome.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/focusBorder",
+            "targetPath": "ui.chrome.accent"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/errorForeground",
+            "targetPath": "ui.chrome.danger"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/sideBar.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "ui.sidebar.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/panel.border",
+            "targetPath": "ui.sidebar.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/input.background",
+            "targetPath": "ui.input.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/input.foreground",
+            "targetPath": "ui.input.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/list.hoverBackground",
+            "targetPath": "ui.list.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/list.activeSelectionBackground",
+            "targetPath": "ui.list.selection"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "ui.list.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.activeBackground",
+            "targetPath": "ui.tab.activeBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.activeForeground",
+            "targetPath": "ui.tab.activeFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.inactiveBackground",
+            "targetPath": "ui.tab.inactiveBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.inactiveForeground",
+            "targetPath": "ui.tab.inactiveFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/focusBorder",
+            "targetPath": "ui.focus.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/button.background",
+            "targetPath": "ui.button.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/button.background",
+            "targetPath": "ui.button.hover"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.background",
+            "targetPath": "terminal.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.foreground",
+            "targetPath": "terminal.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorCursor.foreground",
+            "targetPath": "terminal.cursor"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.selectionBackground",
+            "targetPath": "terminal.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBlack",
+            "targetPath": "terminal.ansi0"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiRed",
+            "targetPath": "terminal.ansi1"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiGreen",
+            "targetPath": "terminal.ansi2"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiYellow",
+            "targetPath": "terminal.ansi3"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBlue",
+            "targetPath": "terminal.ansi4"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiMagenta",
+            "targetPath": "terminal.ansi5"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiCyan",
+            "targetPath": "terminal.ansi6"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiWhite",
+            "targetPath": "terminal.ansi7"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightBlack",
+            "targetPath": "terminal.ansi8"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightRed",
+            "targetPath": "terminal.ansi9"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightGreen",
+            "targetPath": "terminal.ansi10"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightYellow",
+            "targetPath": "terminal.ansi11"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightBlue",
+            "targetPath": "terminal.ansi12"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightMagenta",
+            "targetPath": "terminal.ansi13"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightCyan",
+            "targetPath": "terminal.ansi14"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/terminal.ansiBrightWhite",
+            "targetPath": "terminal.ansi15"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/activityBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/agentsChatInput.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/agentsChatInput.focusBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/agentsNewSessionButton.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/agentsPanel.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/badge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/debugExceptionWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/debugExceptionWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/debugToolBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/dropdown.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/dropdown.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.selectionHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.wordHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editor.wordHighlightStrongBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorBracketHighlight.foreground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorBracketHighlight.foreground2",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorBracketHighlight.foreground3",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorGroup.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorGroupHeader.tabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorHoverWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorIndentGuide.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorIndentGuide.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorLineNumber.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorMarkerNavigationError.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorMarkerNavigationWarning.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorWhitespace.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/editorWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/input.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputOption.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.errorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.errorBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.infoBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.infoBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.warningBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/inputValidation.warningBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/list.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/list.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/list.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/minimap.selectionHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/modernActivityBarItem.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/modernActivityBarItem.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/panelSection.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/panelSectionHeader.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/peekView.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/peekViewEditor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/peekViewEditor.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/peekViewResult.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/peekViewTitle.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/pickerGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/pickerGroup.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/ports.iconRunningProcessForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/progressBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/quickInputList.focusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/selection.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/sideBarSectionHeader.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/sideBarTitle.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBar.debuggingBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBar.noFolderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBarItem.prominentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBarItem.prominentHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/statusBarItem.remoteBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/surface.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/tab.lastPinnedBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/colors/titleBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/1/scope/meta.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/1/scope/source.groovy.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/1/scope/string meta.image.inline.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/1",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/2",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/3",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/4",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/5",
+            "targetPath": "syntax.number"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/6",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/7",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/8/scope/storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/9/scope/entity.name.namespace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/9/scope/entity.name.scope-resolution",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/9",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/10",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/11/scope/punctuation.definition.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/12/scope/punctuation.section.embedded.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/12/scope/punctuation.section.embedded.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/13/scope/meta.preprocessor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/13",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/14",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/14",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/15",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/16/scope/entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/16/scope/punctuation.separator.namespace.ruby",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/17",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/18/scope/entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/19/scope/punctuation.definition.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/20",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/21",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/22/scope/punctuation.separator.continuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/23/scope/support.constant",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/23/scope/support.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/24",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/25",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/26/scope/support.other.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/27/scope/invalid",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/28/scope/meta.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/28/scope/meta.diff.header",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/29/scope/markup.deleted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/30/scope/markup.changed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/31/scope/markup.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/32/scope/markup.quote",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/33/scope/markup.list",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/34/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/34/scope/markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/35/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/36/scope/markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/37/scope/markup.strikethrough",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/38/scope/markup.inline.raw",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/39/scope/markup.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/tokenColors/40/scope/markup.heading.setext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Missing/unknown kind inferred from opaque editor background, otherwise dark",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json/type",
+            "targetPath": "kind"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Lexilla uses shared roles, not TextMate scope stacks; rule order is parent first then child, later explicit fields override",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+            "targetPath": "syntax"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Extension JavaScript, grammars, semantic token providers and UI contributions are never executed",
+            "sourcePath": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+            "targetPath": ""
+        }
+    ]
+}
