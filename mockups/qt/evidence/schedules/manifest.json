@@ -292,7 +292,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "93f1f5b63f501adecca01fe63e824c48ffbe9e05857a0a936d1bab384f9f6286"
+    "sha256": "70c8a2dfd647c9376190d2f0a8d488bf08bbfd8c40675ee23c52c640d42db473"
   },
   {
     "file": "04-scheduled-send-dark.png",
@@ -303,7 +303,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "1126219931d42a805cb79f97f055a60b9b3cc0427c7dc040ae077d12f96d32fc"
+    "sha256": "8b3ea0425fec2161b797cacf8b7eb12442feacfae0ddb9d7742c09f3a2abc82a"
   },
   {
     "file": "04-existing-schedule-light.png",
@@ -314,7 +314,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "33536641beaacceefe97729c8b02f8a1dfedabc4424041499baff9fa8d6aa679"
+    "sha256": "14822fc23ee6da457b708294d1c448d13de63ae526018ad2841fc49392c8b293"
   },
   {
     "file": "04-existing-schedule-dark.png",
@@ -325,7 +325,7 @@
     ],
     "width": 1440,
     "height": 900,
-    "sha256": "0e16c19f77bed7097f374d45902195ebb149f02694f6354c7613e345a9e731ef"
+    "sha256": "558b4035409ec76c3ed7b24d3a34ad56e22dcea1112f68f4f72df950c5692a6d"
   },
   {
     "file": "05-scheduled-transcript-light.png",
@@ -651,7 +651,7 @@
     ],
     "width": 1024,
     "height": 640,
-    "sha256": "b96ddbc82bf725049fc50dd7659adbc2b2597e29ca42e32203b0fca1d3545066"
+    "sha256": "9a73aaf37762aad19805a038d4ec00138f9d7f3162d915de140d54dab8186c46"
   },
   {
     "file": "10-minimum-scheduled-send-dark.png",
@@ -663,6 +663,6 @@
     ],
     "width": 1024,
     "height": 640,
-    "sha256": "85ea3cd3526a6fa6ccc31d47a6f37ab0dddf786464109b833874e78d57d4bde7"
+    "sha256": "c2e29efb7c8a3fd36c19ea8536690241ad760ba3e3d43f4f5f740facad646ce7"
   }
 ]

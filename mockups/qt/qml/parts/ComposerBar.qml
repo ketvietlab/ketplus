@@ -214,9 +214,13 @@ Item {
             visible: bar.newConversation || !!bar.existingSchedule
             iconName: "clock"; checkable: true
             checked: bar.scheduleSet || (!!bar.existingSchedule && bar.existingSchedule.enabled)
+            previewState: checked ? ({ hovered: true, pressed: down, enabled: enabled, focused: visualFocus }) : null
             text: bar.newConversation ? (bar.scheduleSet ? "Scheduled · " + Rules.nextLabel(bar.scheduleDraft) : "Schedule first message")
                   : bar.existingSchedule ? (bar.existingSchedule.enabled ? "Next run: " + Rules.nextLabel(bar.existingSchedule) : "Schedule paused") : "Schedule"
-            onClicked: bar.openSchedule()
+            onClicked: {
+                checked = Qt.binding(() => bar.scheduleSet || (!!bar.existingSchedule && bar.existingSchedule.enabled))
+                bar.openSchedule()
+            }
         }
     }
 
@@ -245,8 +249,11 @@ Item {
         firstSchedule.prepare(null); firstSchedule.preview("repeat")
         firstSchedule.apply()
         const scheduled = scheduleSet && scheduledSend.visible
+        scheduleButton.clicked()
+        const staysActive = scheduleButton.checked && firstSchedule.visible
+        firstSchedule.close()
         const saved = submitSchedule("A scheduled first message")
-        return scheduled && saved && !!existingSchedule && !newConversation
+        return scheduled && staysActive && saved && !!existingSchedule && !newConversation
     }
     KetMenu {
         id: attachMenu
