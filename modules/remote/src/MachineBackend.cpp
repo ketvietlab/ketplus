@@ -2,6 +2,14 @@
 
 namespace ketplus::remote {
 
+void MachineBackend::prepareSession(const QJsonObject&, Callback callback) {
+    callback({}, unsupportedReason(Feature::SessionPreparation));
+}
+
+void MachineBackend::cancelPreparedSession(const QString&, qint64, Callback callback) {
+    callback({}, unsupportedReason(Feature::SessionPreparation));
+}
+
 QString MachineBackend::attachmentCommandKind(const AttachmentOperation operation) {
     switch (operation) {
     case AttachmentOperation::Begin:
@@ -24,6 +32,8 @@ void MachineBackend::attachmentCommand(AttachmentOperation, const QString&, qint
 QString MachineBackend::unsupportedReason(const Feature feature) const {
     if (connectionState() != ConnectionState::Connected)
         return tr("Available once this machine is connected.");
+    if (feature == Feature::SessionPreparation)
+        return tr("Update the remote daemon and Relay to attach files before the first message.");
     Q_UNUSED(feature);
     return tr("Not available on Linux machines yet.");
 }

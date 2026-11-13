@@ -102,6 +102,16 @@ class FakeMachineBackend final : public remote::MachineBackend {
     void createSession(const QJsonObject& request, Callback callback) override {
         record("createSession", {}, 0, request, std::move(callback));
     }
+    void prepareSession(const QJsonObject& request, Callback callback) override {
+        record("prepareSession", {}, 0, request, std::move(callback));
+    }
+    void cancelPreparedSession(const QString& id, qint64 generation, Callback callback) override {
+        record("cancelPreparedSession", id, generation, {}, std::move(callback));
+    }
+    void attachmentCommand(AttachmentOperation operation, const QString& id, qint64 generation,
+                           const QJsonObject& request, Callback callback) override {
+        record(attachmentCommandKind(operation), id, generation, request, std::move(callback));
+    }
     void startTurn(const QString& sessionId, qint64 generation, const QJsonObject& request,
                    Callback callback) override {
         record("startTurn", sessionId, generation, request, std::move(callback));

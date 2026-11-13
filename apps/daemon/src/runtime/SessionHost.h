@@ -240,6 +240,12 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
+    [[nodiscard]] QJsonObject prepareSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject cancelPreparedSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject authorizePreparation(const QJsonObject& request) const;
+    [[nodiscard]] QJsonObject checkedAttachmentSession(const QJsonObject& request,
+                                                       Session** session);
+    void expirePreparedSessions();
     // Drives bounded passes over deleted sessions' remaining history (ADR 0093).
     void scheduleHistoryPurge(int delayMs);
     void purgeDeletedHistory();
@@ -557,6 +563,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QList<ProviderAdapter*> providers_;
     ApprovalBroker* approvals_{nullptr};
     QHash<QString, Session> sessions_;
+    // Never enumerated by session/catalog APIs; only attachment staging uses these contexts.
+    QHash<QString, Session> preparedSessions_;
     QHash<QString, QString> sessionsByThread_;
     QHash<QString, QString> pendingProviderByRequest_;
     // Codex notifications ignored since the daemon started, per method (diagnostics only).
