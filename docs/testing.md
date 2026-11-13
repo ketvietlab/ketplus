@@ -50,6 +50,29 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks primary-role precedence in alphabetic and reversed
+attribute order, missing-primary fallbacks, effect-color presence/validity in both
+option orders, syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, internal DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
+## VS Code importer fixtures
+
+`ketplus_vscode_import_tests` covers original dark/light/include themes, standard
+DOCTYPE tmTheme resources, explicit style resets, ordered fallback chains, ANSI16,
+semantic metadata without application, unsupported selectors and multi-variant
+VSIX. Failure cases cover unsafe paths/archives, malformed data, entity expansion,
+include cycles and shared byte/canonical-output limits. Fixture provenance is in
+`core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
+targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
+
 ## Theme input security fixtures
 
 `ketplus_theme_input_tests` runs headlessly with no provider or network access.
@@ -67,6 +90,8 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Scheme consumer adapters | `ketplus_scheme_consumer_tests` (Lite) | Lexilla role/font style mapping, editor state parity and buffer/selection/undo preservation, terminal ANSI replacement and screen/selection preservation |
+| Theme selection store | `ketplus_theme_selection_tests` (Lite) | One-time migration, revisioned atomic commits, cross-process directory watcher updates, lock and config failure recovery |
 | Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
@@ -142,6 +167,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
+| First-turn remote attachments (ADR 0122) | `ketplus_session_preparation_store_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_machine_preparation_tests` | Private allocation/retry, atomic activation/cancel, restart/expiry and bounded receipts; authenticated Relay routing and creator-key barrier before ACK; encrypted staging through the first fake-provider turn; offscreen composer retry, visible/removable pending files during preparation/refusal, text-only recovery, late cancellation after view destruction, restart-safe durable cancellation and old-hosted/old-daemon fallback. Run the existing Machine attachment/conversation and SSH/Relay backend suites too. |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
 | Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle, deny list and work display, reverted toggle on save failure |
@@ -1033,3 +1059,39 @@ manual UI acceptance remain separate checks.
 INI settings, in light/dark. It checks the exact recipe gap after growth and window
 resize, composer/view hide and restore, and preservation of another composer's
 reservation during hide and destruction. It uses no backend or provider.
+
+`ketplus_scheme_manager_tests` covers one-time legacy migration, independent
+system preferences, built-in parity against live kit tokens, complete async
+publication, exact notification counts, preview cancellation/commit, stale-result
+suppression and external revision cancellation. `ketplus_git_diff_view_tests`
+also verifies model/selection identity and alpha-composited canonical diff colors.
+These offscreen checks do not replace native DELL or Pro chat acceptance.
+
+## Color-scheme rendering and native comparison
+
+`ketplus_scheme_rendering_tests` covers same-mode fenced-code color/font updates,
+Mermaid configuration cache invalidation and Markdown document/selection/scroll
+preservation. `ketplus_scheme_chat_tests` checks canonical syntax on an existing
+Quick text document and retains the Quick root, transcript model and selection.
+The related Pro streaming, shell and Mermaid targets exercise live updates with
+fake/local fixtures; they do not invoke providers.
+
+Native evidence is opt-in and refuses to show a window unless a DELL screen is
+found. Ordinary offscreen runs skip these two manual cases:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/lite-dev/core/ketplus_scheme_consumer_tests nativeBuiltinComparisonOnDell
+QT_QPA_PLATFORM=cocoa QSG_RHI_BACKEND=metal KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+  KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/dev/ketplus_scheme_chat_tests nativeBuiltinComparisonOnDell
+```
+
+Review the widget pair captures and the legacy/canonical chat captures in both
+modes. The targeted macOS/Qt 6.11 check used DELL P2219H; both chat pairs had zero
+changed pixels. The captures contain synthetic test messages only.
+
+If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
+can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
+application's scheme persistence or publication. See Qt's [disk-cache
+configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).

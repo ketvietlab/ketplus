@@ -501,10 +501,10 @@ void MainWindow::createActions() {
         this, {.document = [this] { return documentOwner(); },
                .restyle =
                    [this](EditorWidget* editor) {
-                       editor->applyTheme(theme_.palette());
+                       editor->applyColorScheme(theme_.colorScheme());
                        if (editor == splitSource_ && splitEditor_ != nullptr) {
                            splitEditor_->shareDocumentWith(*editor);
-                           splitEditor_->applyTheme(theme_.palette());
+                           splitEditor_->applyColorScheme(theme_.colorScheme());
                        }
                    },
                .reopened =

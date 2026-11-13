@@ -3,6 +3,7 @@
 #include "ui/Theme.h"
 #include <QObject>
 #include <functional>
+#include <memory>
 
 class QWidget;
 namespace ket {
@@ -21,6 +22,7 @@ class MarkdownModeController final : public QObject {
     MarkdownModeController(QWidget* surface, Source source, bool diff = false);
     void configure(const QString& path, const ThemePalette& palette, bool enabled);
     void setMode(const QString& mode);
+    void applyColorScheme(const ColorScheme& scheme);
     QString mode() const { return mode_; }
     void invalidate();
     void setTypography(int fontSize, int lineHeight);
@@ -44,6 +46,7 @@ class MarkdownModeController final : public QObject {
     ket::SegmentedControl* segments_;
     Source source_;
     ThemePalette palette_;
+    std::shared_ptr<const ColorScheme> scheme_;
     QString path_;
     QString mode_;
     QString unavailable_;

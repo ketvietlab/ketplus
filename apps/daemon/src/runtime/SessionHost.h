@@ -10,6 +10,7 @@
 #include "teams/TeamCoordinator.h"
 #include "teams/TeamRemoteView.h"
 
+#include <QDateTime>
 #include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonArray>
@@ -240,6 +241,12 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
+    [[nodiscard]] QJsonObject prepareSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject cancelPreparedSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject authorizePreparation(const QJsonObject& request) const;
+    [[nodiscard]] QJsonObject checkedAttachmentSession(const QJsonObject& request,
+                                                       Session** session);
+    void expirePreparedSessions();
     // Drives bounded passes over deleted sessions' remaining history (ADR 0093).
     void scheduleHistoryPurge(int delayMs);
     void purgeDeletedHistory();
@@ -330,6 +337,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QString takeTeamTurn(const QString& sessionId) override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
+    [[nodiscard]] teams::RepositoryCheck
+    checkRepository(const QString& path, const QString& integrationBranch) const override;
+    [[nodiscard]] std::optional<bool> branchTaken(const QString& repository,
+                                                  const QString& branch) const override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
     void askPointConversationAt(const QString& sessionId, const QString& worktree,
                                 teams::PointDone done) override;
@@ -557,6 +568,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QList<ProviderAdapter*> providers_;
     ApprovalBroker* approvals_{nullptr};
     QHash<QString, Session> sessions_;
+    // Never enumerated by session/catalog APIs; only attachment staging uses these contexts.
+    QHash<QString, Session> preparedSessions_;
     QHash<QString, QString> sessionsByThread_;
     QHash<QString, QString> pendingProviderByRequest_;
     // Codex notifications ignored since the daemon started, per method (diagnostics only).
@@ -586,8 +599,22 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     int mediaReadsInFlight_{0};
     // Last member: its destructor waits for running decodes before anything else goes away.
     QThreadPool mediaReads_;
+    // T-93: the branch names of each repository as git last listed them, read on
+    // teamBranchNames_ so a new task's name is checked without git on the event loop. `read`
+    // is invalid until the first listing arrives; a listing older than branchNamesAgeMs is
+    // asked again.
+    struct BranchNames final {
+        QSet<QString> names;
+        QDateTime read;
+        bool reading{false};
+    };
+    static constexpr qint64 branchNamesAgeMs = 30 * 1000;
+    mutable QHash<QString, BranchNames> branchNames_;
     // One thread for what a team's own checks ask git, in the order they were asked.
     QThreadPool teamGit_;
+    // T-93: one thread for the branch listings, apart from teamGit_ so a listing never holds
+    // a worktree, a switch or a merge check behind it.
+    QThreadPool teamBranchNames_;
     // ADR 0118: the remote's pull requests, apart from git, so a slow network holds no merge
     // check, review diff or worktree. Set when the host stops, to end a batch early.
     QThreadPool teamRemote_;

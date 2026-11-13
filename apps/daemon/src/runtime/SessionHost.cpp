@@ -19,6 +19,7 @@
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -187,6 +188,17 @@ QString requestedAdapter(const QJsonObject& options, const QString& fallback) {
 // Commands relayed from the phone arrive under this client id; every other client runs on the Mac.
 bool localClient(const QString& clientId) { return clientId != QStringLiteral("cloud-control-v2"); }
 
+QJsonObject requestWithPreparationOwner(const QJsonObject& incoming, const QString& clientId) {
+    auto request = incoming;
+    // The cloud dispatcher supplies this only after verifying the device's signature.
+    // Caller-supplied payload fields never determine prepared-session ownership.
+    const auto device = incoming.value("_verified_sender_device_id").toString();
+    request.insert("_preparation_owner", localClient(clientId)
+                                             ? QStringLiteral("local")
+                                             : (device.isEmpty() ? QString() : "relay:" + device));
+    return request;
+}
+
 // Appends each provider's model list to `merged` in order; a provider that fails adds nothing.
 void appendModelLists(QList<ProviderAdapter*> providers, QJsonArray merged,
                       std::function<void(const QJsonArray&)> done) {
@@ -319,6 +331,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
+    teamBranchNames_.setMaxThreadCount(1);
     teamRemote_.setMaxThreadCount(1);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
@@ -498,13 +511,24 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
     auto* cleanup = new QTimer(this);
     cleanup->setInterval(15000);
     connect(cleanup, &QTimer::timeout, this, &SessionHost::processDeletionWork);
+    connect(cleanup, &QTimer::timeout, this, &SessionHost::expirePreparedSessions);
     cleanup->start();
     QTimer::singleShot(0, this, &SessionHost::processDeletionWork);
+    QTimer::singleShot(0, this, &SessionHost::expirePreparedSessions);
 }
 
-QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString& clientId) {
+QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QString& clientId) {
+    const auto request = requestWithPreparationOwner(incoming, clientId);
     const QString type = request.value(QStringLiteral("message_type")).toString();
     const QString messageId = request.value(QStringLiteral("message_id")).toString();
+    // Durable allocation receipts provide idempotency scoped to their owner, rather than
+    // the ordinary global command-result cache. Authorize before any cache lookup.
+    if (type == "session.prepare")
+        return prepareSession(request);
+    if (type == "session.prepare.cancel")
+        return cancelPreparedSession(request);
+    if (const auto failure = authorizePreparation(request); !failure.isEmpty())
+        return failure;
     // Local administration only, checked before the command-result cache.
     if (type.startsWith("session.agent_messages.") && !localClient(clientId))
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
@@ -1003,7 +1027,7 @@ QJsonObject SessionHost::applyMode(const QJsonObject& request) {
 
 QJsonObject SessionHost::beginAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1029,7 +1053,7 @@ QJsonObject SessionHost::beginAttachment(const QJsonObject& request) {
 
 QJsonObject SessionHost::appendAttachmentChunk(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1049,7 +1073,7 @@ QJsonObject SessionHost::appendAttachmentChunk(const QJsonObject& request) {
 
 QJsonObject SessionHost::commitAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1064,7 +1088,7 @@ QJsonObject SessionHost::commitAttachment(const QJsonObject& request) {
 
 QJsonObject SessionHost::cancelAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1168,7 +1192,7 @@ QJsonObject SessionHost::transcriptPage(const QJsonObject& request) const {
 
 QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                                    const QJsonObject& agentOrigin) {
-    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     const QString prompt = payload.value(QStringLiteral("prompt")).toString().trimmed();
     const QJsonArray submittedInput = payload.value(QStringLiteral("input")).toArray();
     const bool hasImage =
@@ -1193,6 +1217,25 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     }
 
     auto it = sessions_.find(sessionId);
+    const auto preparation =
+        it == sessions_.end() ? journal_->sessionPreparation(sessionId) : std::nullopt;
+    if (preparation) {
+        if (const auto failure = authorizePreparation(request); !failure.isEmpty())
+            return failure;
+        const auto requestedPath = payload.value("worktree_path").toString();
+        if (!requestedPath.isEmpty() &&
+            normalizedWorktree(requestedPath) != preparation->worktreePath)
+            return error("preparation_scope_changed", "The prepared worktree cannot change.");
+        auto submittedOptions = payload.value("options").toObject();
+        if (!submittedOptions.isEmpty()) {
+            if (!submittedOptions.contains("provider"))
+                submittedOptions.insert("provider", "codex");
+            if (submittedOptions != preparation->options)
+                return error("preparation_scope_changed", "The prepared options cannot change.");
+        }
+        payload.insert("worktree_path", preparation->worktreePath);
+        payload.insert("options", preparation->options);
+    }
     if (it != sessions_.end()) {
         const auto expected = payload.value(QStringLiteral("expected_context_revision"));
         if ((it->stored.contextRevision > 1 || !expected.isUndefined()) &&
@@ -1250,9 +1293,16 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                 QStringLiteral("full") &&
             options.value(QStringLiteral("risk_acknowledged")).toBool())
             session.stored.executionPolicy = QStringLiteral("full");
-        if (!journal_->upsertSession(session.stored)) {
+        const bool persisted =
+            preparation
+                ? journal_->activatePreparedSession(session.stored,
+                                                    request.value("_preparation_owner").toString(),
+                                                    QDateTime::currentMSecsSinceEpoch())
+                : journal_->upsertSession(session.stored);
+        if (!persisted) {
             return error(QStringLiteral("journal_error"), journal_->errorString());
         }
+        preparedSessions_.remove(sessionId);
         it = sessions_.insert(sessionId, session);
         QString numberError;
         if (journal_->assignConversationNumber(sessionId, session.stored.generation, &numberError)
@@ -1795,8 +1845,18 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
     return accepted;
 }
 
-void SessionHost::handleCommandDeferred(const QJsonObject& request, const QString& clientId,
+void SessionHost::handleCommandDeferred(const QJsonObject& incoming, const QString& clientId,
                                         CommandCallback done) {
+    const auto request = requestWithPreparationOwner(incoming, clientId);
+    if (request.value("message_type") == "session.prepare" ||
+        request.value("message_type") == "session.prepare.cancel") {
+        done(handleCommand(request, clientId));
+        return;
+    }
+    if (const auto failure = authorizePreparation(request); !failure.isEmpty()) {
+        done(failure);
+        return;
+    }
     if (request.value("message_type") == "session.configuration.read" &&
         request.value("payload").toObject().value("include_claude_usage").toBool()) {
         readClaudeAccountUsage(request, clientId, std::move(done));

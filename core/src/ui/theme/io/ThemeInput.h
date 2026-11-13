@@ -62,8 +62,10 @@ class IncludeResolver {
     bool resolve(const QString& declaringPath, const QString& reference, QString* path,
                  Error* error = nullptr) const;
     bool read(const QString& path, QByteArray* data, Error* error = nullptr) const;
-    bool loadJsonChain(const QString& path, QVector<JsonSource>* chain,
-                       Error* error = nullptr) const;
+    // Optional shared remaining-byte budget is consumed across calls, including
+    // unsuccessful reads/parses, so package variants cannot multiply read work.
+    bool loadJsonChain(const QString& path, QVector<JsonSource>* chain, Error* error = nullptr,
+                       quint64* remainingBytes = nullptr) const;
 
   private:
     QString root;

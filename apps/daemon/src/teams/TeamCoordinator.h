@@ -39,6 +39,21 @@ struct TaskWorktree final {
     QString branch;
     QString worktree;
     QString baseCommit;
+    // T-90: the repository and integration branch it was made in; empty when not known.
+    QString repository;
+    QString integrationBranch;
+};
+
+// The task takes the worktree git made for it. T-90: one made in another repository than the
+// team's (the task's own, or the team's before it changed meanwhile) is kept with the task.
+void takeWorktree(const Team& team, Task& task, const TaskWorktree& made);
+
+// T-90 (ADR 0123): a repository checked for a team or a task. `repository` is the canonical
+// path of its main checkout; `error`, when set, says in words a person can act on why it was
+// refused.
+struct RepositoryCheck final {
+    QString repository;
+    QString error;
 };
 
 // A message the team sends into a member's conversation through the broker (ADR 0027).
@@ -192,6 +207,22 @@ class TeamHostPort {
     // Asked only for a conversation that is to join a team, because the session runtime may
     // have to ask git for it.
     [[nodiscard]] virtual QString conversationRepository(const QString& sessionId) const = 0;
+    // T-90 (ADR 0123): whether a team or task may work in `path`: the main checkout of a Git
+    // repository whose origin has `integrationBranch` (any repository when it is empty).
+    [[nodiscard]] virtual RepositoryCheck checkRepository(const QString& path,
+                                                          const QString& integrationBranch) const {
+        (void)path;
+        (void)integrationBranch;
+        return {.repository = {}, .error = QStringLiteral("Repositories cannot be checked here.")};
+    }
+    // T-93 (ADR 0123 §9): whether `branch` is already a local branch of `repository` or a
+    // branch of its origin (as last fetched). Nothing when git could not answer.
+    [[nodiscard]] virtual std::optional<bool> branchTaken(const QString& repository,
+                                                          const QString& branch) const {
+        (void)repository;
+        (void)branch;
+        return false;
+    }
     // Creates the task's branch and worktree. Nothing, with `error` set, when git failed.
     virtual std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                            QString* error) {
@@ -311,6 +342,14 @@ struct TaskDraft final {
     QString lane;
     QStringList dependsOn;
     QStringList criteria;
+    // T-90 (ADR 0123): another repository than the team's for this task, and its integration
+    // branch (the team's when empty). Empty: the team's repository.
+    QString repository;
+    QString integrationBranch;
+    // T-93 (ADR 0123 §9): the type (feat, fix, chore, docs, refactor, test) and slug of the
+    // task's branch `<type>/<slug>-t<n>`; derived from the title when empty.
+    QString branchType;
+    QString branchSlug;
 };
 
 struct TeamResult final {
@@ -370,8 +409,8 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request") and
-    // turn_budget; other keys are ignored.
+    // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request"),
+    // turn_budget, and repository with an optional reason (T-90); other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
     // ADR 0114, open point 2 (TeamCoordinatorSettings.cpp): what a new team starts from,
@@ -572,6 +611,20 @@ class TeamCoordinator : public QObject {
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
                                               QList<Update>& updates);
+    // T-90 (ADR 0123), in TeamCoordinatorRepository.cpp: moves the team to another
+    // repository (and integration branch). Tasks that already have a branch keep the
+    // repository they were started in; nothing on disk moves.
+    std::optional<TeamError> changeRepository(Team& team, const QJsonObject& changes,
+                                              const QString& actor, QList<Update>& updates);
+    // The repository a new task names, checked; empty values for the team's own.
+    std::optional<TeamError> taskRepository(const Team& team, const TaskDraft& draft,
+                                            Task& task) const;
+    // T-93 (ADR 0123 §9), in TeamCoordinatorBranchNames.cpp: names the branch of a task not
+    // started yet, `type`/`slug` or the title's when empty, refused when another branch or a
+    // task of a team in the same repository has that name or clashes with it as a folder.
+    // `unchecked` is set when the repository's own branches were not known yet.
+    std::optional<TeamError> nameTaskBranch(const Team& team, Task& task, const QString& type,
+                                            const QString& slug, bool* unchecked = nullptr) const;
     // Leaves the developer's open tasks unassigned, with an entry in their history.
     void unassignTasksOf(Team& team, const QString& sessionId, const QString& actor,
                          const QString& reason, QList<Update>& updates);
