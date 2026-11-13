@@ -232,6 +232,10 @@ remains an owner-operated pre-release check.
 Packaging is not complete yet. Passing CI is necessary but does not by itself
 authorize distribution of an official binary.
 
+The DMG filename follows `CMAKE_OSX_ARCHITECTURES`, including when the build host
+has a different architecture. Verify the filename against the app, daemon and
+browser Node slices; the host processor is not evidence of the target slice.
+
 The unsigned package layout is available through the CMake `package` target as
 a branded drag-to-Applications DMG with a deterministic Finder layout that does
 not require Automation permission during packaging. It installs the per-user

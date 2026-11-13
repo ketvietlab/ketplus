@@ -1,4 +1,6 @@
 if(APPLE)
+    add_test(NAME ketplus_macos_package_architecture_tests
+        COMMAND "${CMAKE_COMMAND}" -P "${PROJECT_SOURCE_DIR}/tests/packaging/MacPackageArchitectureTest.cmake")
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_qa_arch_feed_tests
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_qa_arch_feeds.py")
