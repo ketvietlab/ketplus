@@ -388,7 +388,7 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
     if (item.value("messageKey").toString().isEmpty())
         item.insert("messageKey", QUuid::createUuid().toString());
     // Ungrouped defaults, so group recomputation only reports rows whose grouping changed.
-    for (const auto* key : {"groupKey", "groupRole", "groupSummary"})
+    for (const auto* key : {"groupKey", "groupRole", "groupSummary", "groupLatest"})
         if (!item.contains(key))
             item.insert(key, QString{});
     for (const auto* key : {"groupSize", "groupFailed"})
@@ -396,6 +396,8 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
             item.insert(key, 0);
     if (!item.contains("groupRunning"))
         item.insert("groupRunning", false);
+    if (!item.contains("groupTail"))
+        item.insert("groupTail", false);
     QVariantList imageSources;
     for (const QVariant& image : item.value("images", QVariantList{}).toList()) {
         if (!image.toString().trimmed().isEmpty())
