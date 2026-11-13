@@ -21,6 +21,7 @@ class SchemeLibrary {
     importCandidate(const SchemeImportCandidate& candidate) const;
     [[nodiscard]] bool exportScheme(const QString& id, const QString& path,
                                     QList<SchemeDiagnostic>* diagnostics) const;
+    [[nodiscard]] static bool isBuiltinId(const QString& id);
     [[nodiscard]] static QString sourceLabel(const ColorScheme& scheme);
     [[nodiscard]] static QString diagnosticText(const QList<SchemeDiagnostic>& diagnostics);
 

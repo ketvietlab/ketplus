@@ -176,7 +176,7 @@ void SchemeLibraryPanel::rebuildRows() {
             // Update check states without deleting the focused/activating control.
             for (auto* button : rows_->findChildren<ket::Choice*>())
                 button->setChecked(button->property("schemeId").toString() == id);
-            remove_->setEnabled(!id.startsWith(u"builtin-"));
+            remove_->setEnabled(!SchemeLibrary::isBuiltinId(id));
             emit schemeActivated(id);
         });
         ++visible;
@@ -188,7 +188,7 @@ void SchemeLibraryPanel::rebuildRows() {
     rowLayout_->addStretch();
     export_->setEnabled(!selectedId_.isEmpty());
     duplicate_->setEnabled(!selectedId_.isEmpty());
-    remove_->setEnabled(!selectedId_.isEmpty() && !selectedId_.startsWith(u"builtin-"));
+    remove_->setEnabled(!selectedId_.isEmpty() && !SchemeLibrary::isBuiltinId(selectedId_));
 }
 void SchemeLibraryPanel::showError(const QString& message) {
     notice_->setTone(ket::BannerTone::Danger);

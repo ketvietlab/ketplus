@@ -31,6 +31,12 @@
 #include <QtTest>
 
 using namespace ketplus;
+namespace {
+qsizetype embeddedSchemeCount() {
+    QTemporaryDir directory;
+    return ColorSchemeCatalog(directory.path()).list().size();
+}
+} // namespace
 class SchemeLibraryTest final : public QObject {
     Q_OBJECT
   private slots:
@@ -38,6 +44,7 @@ class SchemeLibraryTest final : public QObject {
         QStandardPaths::setTestModeEnabled(true);
         registerKetFonts();
     }
+    void recognizesReservedNamespacesAndSourceMetadata();
     void detectsFormatsAndRoundTrips();
     void importsOnlyChosenVariants();
     void rejectsInvalidInputWithoutWriting();
@@ -51,6 +58,24 @@ class SchemeLibraryTest final : public QObject {
     void keyboardPickerPreviewsCommitsAndRestores();
     void appearanceLayoutAndReviewCaptures();
 };
+void SchemeLibraryTest::recognizesReservedNamespacesAndSourceMetadata() {
+    QVERIFY(SchemeLibrary::isBuiltinId(QStringLiteral("builtin-light")));
+    QVERIFY(SchemeLibrary::isBuiltinId(QStringLiteral("builtin.future-community-scheme")));
+    QVERIFY(!SchemeLibrary::isBuiltinId(QStringLiteral("my-builtin.scheme")));
+    QVERIFY(!SchemeLibrary::isBuiltinId(QStringLiteral("builtin")));
+    auto scheme = builtinColorScheme(SchemeKind::Dark);
+    scheme.id = QStringLiteral("user-copy");
+    scheme.metadata = {{QStringLiteral("sourceApp"), QStringLiteral("VS Code")},
+                       {QStringLiteral("sourceLabel"), QStringLiteral("Community")}};
+    QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("Community"));
+    QVERIFY(!SchemeLibrary::isBuiltinId(scheme.id));
+    scheme.metadata["sourceLabel"] = QStringLiteral("unrecognized-source");
+    QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("VS Code"));
+    scheme.metadata = {{QStringLiteral("sourceApp"), QStringLiteral("JetBrains")}};
+    QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("JetBrains"));
+    scheme.metadata = {};
+    QCOMPARE(SchemeLibrary::sourceLabel(scheme), QStringLiteral("KetPlus"));
+}
 void SchemeLibraryTest::detectsFormatsAndRoundTrips() {
     QTemporaryDir root;
     SchemeLibrary library(root.path());
@@ -101,7 +126,7 @@ void SchemeLibraryTest::importsOnlyChosenVariants() {
     QTest::mouseClick(report->findChild<ket::Button*>(QStringLiteral("acceptSchemeImport")),
                       Qt::LeftButton);
     const auto schemes = ColorSchemeCatalog(root.path()).list();
-    QCOMPARE(schemes.size(), 3);
+    QCOMPARE(schemes.size(), embeddedSchemeCount() + 1);
     QCOMPARE(schemes.last().name, QStringLiteral("Night variant"));
 }
 void SchemeLibraryTest::rejectsInvalidInputWithoutWriting() {
@@ -118,7 +143,7 @@ void SchemeLibraryTest::rejectsInvalidInputWithoutWriting() {
         QVERIFY(!batch.ok());
         QVERIFY(!batch.diagnostics.isEmpty());
     }
-    QCOMPARE(library.catalog().list().size(), 2);
+    QCOMPARE(library.catalog().list().size(), embeddedSchemeCount());
     QVERIFY(!QDir(library.catalog().directory()).exists());
 }
 void SchemeLibraryTest::cancelDoesNotImportAndAcceptWritesNewIdentity() {
@@ -135,11 +160,11 @@ void SchemeLibraryTest::cancelDoesNotImportAndAcceptWritesNewIdentity() {
     QVERIFY(dialog->findChild<ket::TextArea*>(QStringLiteral("schemeImportDetails"))
                 ->text()
                 .contains("Mapped"));
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
     QTest::keyClick(dialog, Qt::Key_Escape);
     QCOMPARE(changed.count(), 0);
     QCOMPARE(finished.count(), 1);
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     panel.inspectFile(path);
     QTRY_VERIFY((dialog = panel.findChild<ket::Dialog*>(QStringLiteral("schemeImportReport"))));
@@ -147,7 +172,7 @@ void SchemeLibraryTest::cancelDoesNotImportAndAcceptWritesNewIdentity() {
     QVERIFY(accept);
     QTest::mouseClick(accept, Qt::LeftButton);
     QCOMPARE(changed.count(), 1);
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 3);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount() + 1);
     QVERIFY(!panel.selectedId().startsWith(u"builtin-"));
 }
 void SchemeLibraryTest::searchesBySourceAndProtectsBuiltins() {
@@ -162,8 +187,13 @@ void SchemeLibraryTest::searchesBySourceAndProtectsBuiltins() {
     panel.show();
     QVERIFY(!panel.findChild<ket::Button*>(QStringLiteral("deleteScheme"))->isEnabled());
     auto* search = panel.findChild<ket::TextField*>(QStringLiteral("schemeSearch"));
+    qsizetype matching = 0;
+    for (const auto& scheme : library.catalog().list())
+        if (SchemeLibrary::sourceLabel(scheme) == u"JetBrains" ||
+            scheme.name.contains(QStringLiteral("JetBrains"), Qt::CaseInsensitive))
+            ++matching;
     search->setText(QStringLiteral("JetBrains"));
-    QCOMPARE(panel.findChildren<ket::Choice*>().size(), 1);
+    QCOMPARE(panel.findChildren<ket::Choice*>().size(), matching);
     search->setText(QStringLiteral("nonexistent-name"));
     QCOMPARE(panel.findChildren<ket::Choice*>().size(), 0);
     panel.inspectFile(root.filePath(QStringLiteral("missing.json")));
@@ -185,7 +215,7 @@ void SchemeLibraryTest::duplicatesAndDeletesAfterConfirmation() {
     for (auto* button : dialog->findChildren<ket::Button*>())
         if (button->text() == QStringLiteral("Duplicate"))
             QTest::mouseClick(button, Qt::LeftButton);
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 3);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount() + 1);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     const auto duplicated = panel.selectedId();
     QSignalSpy removed(&panel, &SchemeLibraryPanel::schemeRemoved);
@@ -196,7 +226,7 @@ void SchemeLibraryTest::duplicatesAndDeletesAfterConfirmation() {
     QTest::mouseClick(confirm, Qt::LeftButton);
     QCOMPARE(removed.count(), 1);
     QCOMPARE(removed.first().first().toString(), duplicated);
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
     QVERIFY(panel.selectedId().startsWith(u"builtin-"));
 }
 void SchemeLibraryTest::persistsSelectionAndResetsRemovedPreferences() {
@@ -227,7 +257,7 @@ void SchemeLibraryTest::persistsSelectionAndResetsRemovedPreferences() {
     QTest::mouseClick(confirm, Qt::LeftButton);
     QCOMPARE(store.schemeSelection().schemeId, QStringLiteral("builtin-dark"));
     QCOMPARE(store.schemeSelection().darkSchemeId, QStringLiteral("builtin-dark"));
-    QCOMPARE(catalog.list().size(), 2);
+    QCOMPARE(catalog.list().size(), embeddedSchemeCount());
     QTRY_COMPARE(panel.selectedId(), QStringLiteral("builtin-dark"));
 }
 void SchemeLibraryTest::lockedSelectionKeepsActiveScheme() {
@@ -250,7 +280,7 @@ void SchemeLibraryTest::lockedSelectionKeepsActiveScheme() {
     auto* confirm = panel.findChild<ket::Button*>(QStringLiteral("confirmDeleteScheme"));
     QVERIFY(confirm);
     QTest::mouseClick(confirm, Qt::LeftButton);
-    QCOMPARE(catalog.list().size(), 3);
+    QCOMPARE(catalog.list().size(), embeddedSchemeCount() + 1);
     QCOMPARE(store.schemeSelection().schemeId, added.scheme.id);
     auto* error = panel.findChild<ket::Banner*>(QStringLiteral("schemeError"));
     QVERIFY(error->message().contains(QStringLiteral("busy")));
@@ -311,14 +341,14 @@ void SchemeLibraryTest::previewsImportAndRestoresOnCancel() {
     QVERIFY(!dialog->isVisible());
     auto* notice = panel.findChild<ket::Banner*>(QStringLiteral("schemePreviewBanner"));
     QVERIFY(notice && notice->isVisible());
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
     QTest::mouseClick(notice->action(), Qt::LeftButton);
     QVERIFY(dialog->isVisible());
     QTest::keyClick(dialog, Qt::Key_Escape);
     QTRY_COMPARE(theme.colorScheme().id, QStringLiteral("builtin-light"));
     QVERIFY(!theme.hasSchemePreview());
     QCOMPARE(theme.schemeSelection(), initial);
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     panel.inspectFile(QStringLiteral(SCHEME_FIXTURES "/jetbrains/dark.icls"));
     QTRY_VERIFY((dialog = panel.findChild<ket::Dialog*>(QStringLiteral("schemeImportReport"))));
@@ -330,7 +360,7 @@ void SchemeLibraryTest::previewsImportAndRestoresOnCancel() {
     QTest::keyClick(notice->action(), Qt::Key_Escape);
     QTRY_VERIFY(!theme.hasSchemePreview());
     QTRY_COMPARE(theme.colorScheme().id, QStringLiteral("builtin-light"));
-    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), 2);
+    QCOMPARE(ColorSchemeCatalog(root.path()).list().size(), embeddedSchemeCount());
 }
 void SchemeLibraryTest::keyboardPickerPreviewsCommitsAndRestores() {
     QTemporaryDir root;

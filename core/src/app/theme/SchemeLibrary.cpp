@@ -76,7 +76,14 @@ bool SchemeLibrary::exportScheme(const QString& id, const QString& path,
     }
     return true;
 }
+bool SchemeLibrary::isBuiltinId(const QString& id) {
+    return id.startsWith(u"builtin-") || id.startsWith(u"builtin.");
+}
 QString SchemeLibrary::sourceLabel(const ColorScheme& scheme) {
+    const auto label = scheme.metadata.value(QStringLiteral("sourceLabel")).toString();
+    if (label == u"VS Code" || label == u"JetBrains" || label == u"Community" ||
+        label == u"KetPlus")
+        return label;
     const auto app = scheme.metadata.value(QStringLiteral("sourceApp")).toString();
     if (app == u"VS Code" || app == u"JetBrains")
         return app;

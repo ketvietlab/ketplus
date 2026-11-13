@@ -75,7 +75,7 @@ void SchemeLibraryPanel::exportSelected() {
         showError(SchemeLibrary::diagnosticText(diagnostics));
 }
 void SchemeLibraryPanel::deleteSelected() {
-    if (selectedId_.startsWith(u"builtin-"))
+    if (SchemeLibrary::isBuiltinId(selectedId_))
         return;
     const auto original = library_.catalog().load(selectedId_);
     if (!original.success) {

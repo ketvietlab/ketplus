@@ -385,14 +385,16 @@ reserved built-ins; custom schemes use their canonical terminal background.
 ## Managing schemes in Settings
 
 Settings > Appearance mounts `app/theme/SchemeLibraryPanel`. It provides catalog
-search and source labels,
+search and source labels (`metadata.sourceLabel` takes precedence over the input
+format in `sourceApp`, including community attribution),
 scheme-color swatches, local file detection, variant selection and a detailed
 mapped/approximated/skipped report before any catalog write. Parsing runs off the
 GUI thread. Closing or cancelling review does not install a scheme; successful
 imports receive fresh local IDs. A failed multi-variant save attempts to remove
 only the IDs created by that operation and reports any rollback failure.
 
-Export uses an atomic write to `.ketscheme.json`. Built-ins cannot be deleted;
+Export uses an atomic write to `.ketscheme.json`. Both reserved `builtin-*` and
+`builtin.*` ID namespaces disable deletion without a hardcoded theme list;
 duplication creates an independent file with a new name and identity. To change
 color values, export, edit the JSON and re-import it as a new immutable scheme.
 The selection controls use the public ThemeManager API and its revisioned
