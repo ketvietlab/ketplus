@@ -320,3 +320,115 @@ combined editor/UI variants, JAR discovery and import failures.
 The canonical model suite covers alpha parsing, unknown-data round trips, diagnostics, inheritance and
 explicit false flags, built-in palette parity, catalog reopen/identity/duplicate/
 remove/fallback, lock contention and failed writes. No provider is invoked.
+
+## Theme selection persistence
+
+`ThemeSelectionStore` owns committed selection independently of catalog contents.
+ThemeManager consumes it through a snapshot controller. Its default file is `AppDataLocation/color-schemes/selection.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "revision": "1",
+  "followSystem": true,
+  "schemeId": "builtin-light",
+  "lightSchemeId": "builtin-light",
+  "darkSchemeId": "builtin-dark"
+}
+```
+
+Revision is an unsigned 64-bit decimal string, avoiding JSON number precision
+loss. Locked atomic commits advance it monotonically, while identical commits
+are idempotent. Unknown scheme IDs are valid selection identities; the consumer
+resolves catalog absence with a built-in fallback. Malformed JSON or invalid field
+values leave the last known in-memory selection intact on startup/refresh and are
+exposed through `lastError()` and `failed`. The next explicit commit repairs them
+under the write lock with an atomic replacement and a new revision; an unchanged
+selection also repairs the file. No automatic repair happens during observation.
+Newer schema versions, oversized files (whose version cannot safely be inspected),
+symlinks and read/lock/write errors remain protected from replacement. Invalid
+requested identities are rejected.
+
+The constructor accepts a legacy `appearance/theme` value. It migrates
+System/Light/Dark only when the file is absent and rechecks under the write lock
+so concurrent startup cannot overwrite another process's migration. Existing
+selection files always win over legacy settings. The store watches the directory,
+surviving atomic replacement of the file; consumers call `refresh()` on focus to
+recover missed notifications. `changed` fires once per newly observed revision.
+Previews belong in ThemeManager and must never call `commit` until confirmed.
+
+`ketplus_theme_selection_tests` exercises migration, reopen, idempotent and
+cross-instance commits, real child-process watcher propagation, lock contention,
+malformed/oversized/newer configurations and revision validation. It is a Qt Core
+only target and does not launch providers or native windows.
+
+## Consumer adapters
+
+`EditorWidget::applyColorScheme` and `TerminalView::applyColorScheme` accept the
+canonical scheme without modifying buffers, selection or terminal process state.
+The explicit Lexilla adapter uses the pinned syntax library's lexer-style tables;
+keyword/string/number/type/comment/attribute roles carry color and bold/italic/
+underline independently of UI accent. Roles the lexer cannot distinguish retain
+plain-text fallback; semantic highlighting is not claimed. Embedded gutter and
+caret-line tokens retain legacy light/dark colors and caret-line alpha, with a
+Scintilla state-parity regression test. Terminal foreground,
+background, cursor, selection and all 16 ANSI slots come from the scheme; alpha
+for RGB-only Scintilla/vterm paths is composited onto the component background.
+The main-window hosts pass canonical snapshots to these consumers. Reserved
+built-ins retain legacy per-lexer bold/italic defaults; imported/custom schemes
+honor explicit role flags. Python definition names, lexical operators and shell/
+CSS variables use dedicated roles where the lexer exposes distinct styles. Other
+functions/constants remain deterministic lexical fallbacks, without semantic
+inference. Standalone Terminal preserves its historical page background only for
+reserved built-ins; custom schemes use their canonical terminal background.
+
+## Live selection API
+
+`ThemeManager::schemeSelection()` exposes the committed `ThemeSelection`.
+`setSchemeSelection()` commits a selection through the locked, revisioned store;
+`previewSchemeSelection()` changes only this process. `commitSchemePreview()`
+commits an installed selection and `cancelPreview()` restores committed state.
+`previewColorScheme()` accepts an in-memory canonical import for local inspection;
+install that scheme in the catalog before committing its ID. In-memory previews
+cannot implicitly install themselves. `hasSchemePreview()` and `schemeError()`
+expose state, and `schemeFailed` reports persistence failures.
+
+`colorScheme()` and `palette()` refer to the last complete applied snapshot.
+User-file reads, inheritance resolution and kit-override preparation run on the
+Qt Concurrent pool. Generation checks discard superseded results. Embedded
+built-ins remain synchronous for existing `setMode` callers. A newer committed
+revision cancels local previews, and application activation refreshes the store.
+System following chooses independent light/dark preferred IDs from Qt style hints;
+custom preferences pin the kit to the resolved snapshot to avoid intermediate colors.
+The standard built-in pair preserves the existing kit System mode. Direct legacy
+Appearance mode changes remain process-local built-in previews.
+
+Publication switches the kit branch under blocked intermediate notifications,
+then replaces its overrides once. ThemeManager updates the compatibility palette
+and notifies existing consumers during that one kit change. Unchanged built-in
+values produce no overrides, preserving all kit defaults and translucent colors.
+The explicit kit adapter maps chrome/input/button aliases and ANSI colors; syntax
+roles are deliberately not projected onto accent/chart tokens. Consumers read
+syntax from the canonical snapshot. Kit recipes without a distinct token for a
+schema role still use their shared recipe semantics; they cannot gain independent
+sidebar/list/tab colors solely through this override table.
+
+Main-window editor, terminal and diff consumers use canonical snapshots in place.
+Terminal panels retain the snapshot for subsequently opened tabs. Diff background
+colors preserve imported alpha by compositing over the panel; unchanged built-ins
+keep the kit's original soft tints. Pro chat, Markdown/Mermaid and standalone Terminal consume live snapshots too.
+The kit is pinned to PR #57's develop merge. Fenced-code formatting shares a
+canonical document highlighter; it compares cached styles on ordinary text
+updates and rehighlights only when the scheme changes. Existing Quick roots,
+transcript models, documents and text selections remain in place.
+
+Mermaid jobs capture the full color configuration when requested; the cache key
+includes its fingerprint. Configuration JSON is prepared once per actual theme
+change, avoiding work on streaming deltas. Queued diagrams keep their captured
+colors even if a later selection is published. Markdown preview uses stable
+source-based image URLs and replaces cached image resources without rebuilding
+unchanged Markdown, preserving selection and scroll while new colors render.
+
+Native comparison on DELL P2219H covered Light/Dark editor and terminal widgets
+and Qt Quick chat. The legacy/scheme chat captures were pixel-identical in both
+modes. These are targeted color/state checks, not broader release acceptance.

@@ -33,6 +33,7 @@ class MermaidRenderer final : public QObject {
     explicit MermaidRenderer(QObject* parent = nullptr);
     ~MermaidRenderer() override;
 
+    void invalidateColors();
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] const QString& executablePath() const noexcept;
     [[nodiscard]] Result request(const QString& source, bool darkTheme, bool raster = false);
@@ -54,15 +55,23 @@ class MermaidRenderer final : public QObject {
         QString source;
         QString outputPath;
         bool darkTheme{false};
+        QByteArray configuration;
     };
 
     [[nodiscard]] static QString discoverExecutable();
-    [[nodiscard]] static QString keyFor(const QString& source, bool darkTheme, bool raster);
+    [[nodiscard]] static QString keyFor(const QString& source, bool darkTheme, bool raster,
+                                        const QByteArray& fingerprint);
     [[nodiscard]] QString outputPathFor(const QString& cacheKey, bool raster) const;
     [[nodiscard]] static QString partialPathFor(const QString& outputPath);
     void startNext();
     void finishCurrent(bool succeeded, const QString& error = {});
 
+    struct Configuration {
+        QByteArray json;
+        QByteArray fingerprint;
+    };
+    std::optional<Configuration> lightConfiguration_;
+    std::optional<Configuration> darkConfiguration_;
     QString executablePath_;
     QString cacheDirectory_;
     QProcess* process_{nullptr};

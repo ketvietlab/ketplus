@@ -84,7 +84,7 @@ TerminalPanel* MainWindow::ensureTerminal() {
     }
 
     terminal_ = new TerminalPanel(mainSplit_);
-    terminal_->applyTheme(theme_.palette());
+    terminal_->applyColorScheme(theme_.colorScheme());
     terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
                              appearanceSettings_.terminal.lineHeightPixels,
                              appearanceSettings_.terminalFontFamily);
@@ -143,7 +143,7 @@ ExplorerPanel* MainWindow::ensureExplorer() {
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
                     editor->configureLexerForPath(editor->document().filePath());
-                    editor->applyTheme(theme_.palette());
+                    editor->applyColorScheme(theme_.colorScheme());
                     updateTabTitle(editor);
                 }
             });

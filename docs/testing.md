@@ -90,6 +90,8 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Scheme consumer adapters | `ketplus_scheme_consumer_tests` (Lite) | Lexilla role/font style mapping, editor state parity and buffer/selection/undo preservation, terminal ANSI replacement and screen/selection preservation |
+| Theme selection store | `ketplus_theme_selection_tests` (Lite) | One-time migration, revisioned atomic commits, cross-process directory watcher updates, lock and config failure recovery |
 | Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
@@ -1057,3 +1059,39 @@ manual UI acceptance remain separate checks.
 INI settings, in light/dark. It checks the exact recipe gap after growth and window
 resize, composer/view hide and restore, and preservation of another composer's
 reservation during hide and destruction. It uses no backend or provider.
+
+`ketplus_scheme_manager_tests` covers one-time legacy migration, independent
+system preferences, built-in parity against live kit tokens, complete async
+publication, exact notification counts, preview cancellation/commit, stale-result
+suppression and external revision cancellation. `ketplus_git_diff_view_tests`
+also verifies model/selection identity and alpha-composited canonical diff colors.
+These offscreen checks do not replace native DELL or Pro chat acceptance.
+
+## Color-scheme rendering and native comparison
+
+`ketplus_scheme_rendering_tests` covers same-mode fenced-code color/font updates,
+Mermaid configuration cache invalidation and Markdown document/selection/scroll
+preservation. `ketplus_scheme_chat_tests` checks canonical syntax on an existing
+Quick text document and retains the Quick root, transcript model and selection.
+The related Pro streaming, shell and Mermaid targets exercise live updates with
+fake/local fixtures; they do not invoke providers.
+
+Native evidence is opt-in and refuses to show a window unless a DELL screen is
+found. Ordinary offscreen runs skip these two manual cases:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/lite-dev/core/ketplus_scheme_consumer_tests nativeBuiltinComparisonOnDell
+QT_QPA_PLATFORM=cocoa QSG_RHI_BACKEND=metal KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+  KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/dev/ketplus_scheme_chat_tests nativeBuiltinComparisonOnDell
+```
+
+Review the widget pair captures and the legacy/canonical chat captures in both
+modes. The targeted macOS/Qt 6.11 check used DELL P2219H; both chat pairs had zero
+changed pixels. The captures contain synthetic test messages only.
+
+If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
+can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
+application's scheme persistence or publication. See Qt's [disk-cache
+configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).

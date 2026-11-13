@@ -3,12 +3,15 @@
 #include <QObject>
 #include <QString>
 
-#include <optional>
+#include "ui/theme/ThemeSelection.h"
 
 class QApplication;
 class QFont;
 
 namespace ketplus {
+
+struct ColorScheme;
+class ThemeSchemeController;
 
 struct ThemePalette final {
     bool operator==(const ThemePalette&) const = default;
@@ -77,10 +80,20 @@ class ThemeManager final : public QObject {
     };
     Q_ENUM(Mode)
 
-    explicit ThemeManager(QApplication& application, QObject* parent = nullptr);
+    explicit ThemeManager(QApplication& application, QObject* parent = nullptr,
+                          QString schemeDirectory = {});
 
     [[nodiscard]] Mode mode() const noexcept;
     [[nodiscard]] const ThemePalette& palette() const noexcept;
+    [[nodiscard]] const ColorScheme& colorScheme() const noexcept;
+    [[nodiscard]] ThemeSelection schemeSelection() const;
+    [[nodiscard]] bool hasSchemePreview() const;
+    [[nodiscard]] QString schemeError() const;
+    [[nodiscard]] bool setSchemeSelection(const ThemeSelection& selection);
+    [[nodiscard]] bool commitSchemePreview();
+    void previewSchemeSelection(const ThemeSelection& selection);
+    // Local, in-memory import preview. Install first, then commit its catalog id.
+    void previewColorScheme(const ColorScheme& scheme);
     // The chosen interface size, before the zoom.
     [[nodiscard]] int interfaceFontSizePixels() const noexcept;
     [[nodiscard]] int interfaceZoomPercent() const noexcept;
@@ -95,18 +108,16 @@ class ThemeManager final : public QObject {
 
   signals:
     void themeChanged();
+    void schemeFailed(const QString& message);
 
   private:
-    void syncAppearance();
     void apply(bool notify = true);
-    [[nodiscard]] Mode effectiveMode() const noexcept;
     void loadInterfaceFont();
     void setApplicationFont(const QFont& font);
     void restoreTooltipFont();
 
     QApplication& application_;
-    Mode mode_{Mode::System};
-    std::optional<Mode> previewMode_;
+    ThemeSchemeController* schemes_{nullptr};
     ThemePalette palette_;
     QString uiFontFamily_;
     int interfaceFontSizePixels_{14};

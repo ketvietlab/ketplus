@@ -481,7 +481,7 @@ void MainWindow::openFile(const QString& filePath) {
         initialEditor->deleteLater();
     }
 
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);

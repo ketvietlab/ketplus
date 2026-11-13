@@ -99,6 +99,9 @@ target_link_libraries(ketplus_agent_shell_tests PRIVATE
     ketplus_desktop_shell
 )
 
+ketplus_add_gui_test(ketplus_scheme_chat_tests SchemeChatTest.cpp)
+target_link_libraries(ketplus_scheme_chat_tests PRIVATE Qt6::Test Qt6::Quick ketplus_ai KetPlusCM::ui)
+
 ketplus_add_gui_test(ketplus_agent_streaming_tests AgentWorkspaceStreamingTest.cpp)
 target_link_libraries(ketplus_agent_streaming_tests PRIVATE Qt6::Test ketplus_ai)
 
