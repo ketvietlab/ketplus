@@ -65,6 +65,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/ClaudeAdapter.h
     src/providers/CopilotAdapter.cpp
     src/providers/CopilotAdapter.h
+    src/providers/CopilotCatalog.cpp
+    src/providers/CopilotCatalog.h
     src/providers/CursorAdapter.cpp
     src/providers/CursorModelCatalog.cpp
     src/providers/CursorModelConfig.cpp
