@@ -2,6 +2,7 @@
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
+#include "teams/TeamBranchNames.h"
 
 #include <QDir>
 
@@ -9,6 +10,12 @@
 
 namespace ketplus::daemon::teams {
 namespace {
+
+// T-93 (ADR 0123 §9, review L1): the repository's branches were not listed yet.
+QString uncheckedBranchText() {
+    return QStringLiteral(" The repository's branches were not listed yet; the name is checked "
+                          "against them when the worktree is made.");
+}
 
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
@@ -92,8 +99,27 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
     task.dependsOn = draft.dependsOn;
     for (const QString& criterion : draft.criteria)
         task.criteria.append({.text = criterion.trimmed()});
-    addHistory(task, actor, QStringLiteral("created"),
-               QStringLiteral("Created by %1.").arg(actorName(*team, actor)));
+    if (auto invalid = taskRepository(*team, draft, task)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    // T-93: after the repository, whose branches the name must not take.
+    bool unchecked = false;
+    if (auto invalid = nameTaskBranch(*team, task, draft.branchType.trimmed(),
+                                      draft.branchSlug.trimmed(), &unchecked)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    const QString branch = branch_names::plannedBranch(team->id, task);
+    addHistory(
+        task, actor, QStringLiteral("created"),
+        (task.repository.isEmpty()
+             ? QStringLiteral("Created by %1, branch %2.").arg(actorName(*team, actor), branch)
+             : QStringLiteral("Created by %1, branch %2 in %3 against %4.")
+                   .arg(actorName(*team, actor), branch, task.repository,
+                        task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                         : task.integrationBranch)) +
+            (unchecked ? uncheckedBranchText() : QString()));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
@@ -172,6 +198,33 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         }
         task = team->task(taskId);
         task->dependsOn = dependencies;
+    }
+    // T-93: the leader renames the branch while it does not exist yet.
+    if (changes.contains(QStringLiteral("branch_type")) ||
+        changes.contains(QStringLiteral("branch_slug"))) {
+        if (!leaderOrUser(role))
+            return restore(
+                forbidden(QStringLiteral("rename a task's branch"), QStringLiteral("the leader")));
+        if (!task->branch.isEmpty())
+            return restore(refusal(QStringLiteral("branch_started"),
+                                   QStringLiteral("%1 already works on %2; a started branch "
+                                                  "keeps its name.")
+                                       .arg(task->id, task->branch)));
+        const QString was = branch_names::plannedBranch(team->id, *task);
+        const QString type = changes.contains(QStringLiteral("branch_type"))
+                                 ? changes.value(QStringLiteral("branch_type")).toString().trimmed()
+                                 : task->branchType;
+        const QString slug = changes.contains(QStringLiteral("branch_slug"))
+                                 ? changes.value(QStringLiteral("branch_slug")).toString().trimmed()
+                                 : task->branchSlug;
+        bool unchecked = false;
+        if (auto invalid = nameTaskBranch(*team, *task, type, slug, &unchecked))
+            return restore(*invalid);
+        if (const QString now = branch_names::plannedBranch(team->id, *task); now != was)
+            addHistory(*task, actor, QStringLiteral("branch"),
+                       QStringLiteral("Branch %1 → %2.").arg(was, now) +
+                           (unchecked ? uncheckedBranchText() : QString()),
+                       {{QStringLiteral("from"), was}, {QStringLiteral("to"), now}});
     }
     if (changes.contains(QStringLiteral("pull_request")) ||
         changes.contains(QStringLiteral("note"))) {

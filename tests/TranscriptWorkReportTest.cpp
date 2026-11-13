@@ -500,12 +500,15 @@ void AgentWorkspaceViewTest::runningTurnShowsItsWorkReport() {
     QQuickItem* indicator = nullptr;
     QTRY_VERIFY((indicator = findVisibleItem(root, "workingIndicator")) != nullptr);
     QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    const qreal runLineX = indicator->mapToScene(QPointF{}).x();
 
     view.setTurnWorkReport(mockReport().toVariantMap());
     QQuickItem* card = nullptr;
     QTRY_VERIFY((card = findVisibleItem(root, "runningWorkReport")) != nullptr);
     QVERIFY(findVisibleItem(root, "workingIndicator") == nullptr);
     QVERIFY(card->property("running").toBool());
+    // It starts where the run line it replaces started: at the transcript's rows (T-88).
+    QCOMPARE(card->mapToScene(QPointF{}).x(), runLineX);
     QCOMPARE(card->property("total").toInt(), 7);
     QCOMPARE(card->property("finished").toInt(), 3);
     // The bar follows the counts even though the report arrived after the card was made.

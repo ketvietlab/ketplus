@@ -13,6 +13,7 @@
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
+#include "teams/TeamRepositorySettings.h"
 #include "teams/TeamReviewSettings.h"
 #include "teams/TeamTurnBudget.h"
 
@@ -429,9 +430,12 @@ void TeamPage::buildHeading(const QJsonObject& team) {
         flow->addWidget(chip);
         spoken.append(value);
     };
-    fact(QStringLiteral("folder"),
-         QFileInfo(team.value(QStringLiteral("repository")).toString()).fileName(),
-         "teamPageRepository");
+    const QString repository = team.value(QStringLiteral("repository")).toString();
+    fact(QStringLiteral("folder"), QFileInfo(repository).fileName(), "teamPageRepository");
+    // T-90: the folder's name is short; the whole path is one hover away.
+    // The label manages its own tooltip while it elides, so the chip holds the path.
+    if (auto* label = facts->findChild<QWidget*>(QStringLiteral("teamPageRepository")))
+        label->parentWidget()->setToolTip(repository);
     fact(QStringLiteral("branch"), branch.isEmpty() ? tr("The current branch") : branch,
          "teamPageBranch", !branch.isEmpty());
     fact(QStringLiteral("pull-request"),
@@ -462,6 +466,9 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     budget->setObjectName(QStringLiteral("teamPageTurnBudget"));
     auto* review = menu.addAction(ket::Icons::icon(u"eye"), tr("Review…"));
     review->setObjectName(QStringLiteral("teamPageReview"));
+    // T-90: where the team works; started tasks keep theirs.
+    auto* repository = menu.addAction(ket::Icons::icon(u"folder"), tr("Repository…"));
+    repository->setObjectName(QStringLiteral("teamPageRepositorySettings"));
     // T-23: a second reviewer, at any team size; a team has at most two.
     auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
     reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
@@ -478,6 +485,7 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     commands->bind(pause, commandKey(QStringLiteral("paused")));
     commands->bind(budget, commandKey(QStringLiteral("turn_budget")));
     commands->bind(review, commandKey(QStringLiteral("review")));
+    commands->bind(repository, commandKey(QStringLiteral("repository")));
     commands->bind(remove, commandKey(QStringLiteral("delete")));
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
     if (chosen == create)
@@ -496,6 +504,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         afterMenuCloses(this, [this, team] { TeamTurnBudgetForm::present(this, teams_, team); });
     else if (chosen == review)
         afterMenuCloses(this, [this, team] { (void)teamReviewSettings(this, teams_, team); });
+    else if (chosen == repository)
+        afterMenuCloses(this, [this, team] { (void)teamRepositorySettings(this, teams_, team); });
     else if (chosen == reviewer)
         afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)

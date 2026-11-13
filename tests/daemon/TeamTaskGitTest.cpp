@@ -340,7 +340,8 @@ class TeamTaskGitProtocolTest final : public QObject {
         QVERIFY2(ticksAtReply >= 10, qPrintable(QString::number(ticksAtReply)));
         const QString worktree = reply.value("task").toObject().value("worktree").toString();
         QVERIFY(QFileInfo(worktree).isDir());
-        QVERIFY(worktree.endsWith(QStringLiteral("shop-team-%1-t-1").arg(teamId)));
+        // T-93: named from its title.
+        QVERIFY(worktree.endsWith(QStringLiteral("shop-feat-cart-t1")));
 
         // The leader's tool assigns the other task the same way.
         reply = {};

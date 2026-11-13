@@ -65,8 +65,9 @@ void MainWindow::setupTeams() {
     update();
 }
 
-QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
-                                                  QVariantList& conversations) const {
+QVector<SidebarTeam>
+MainWindow::takeSidebarTeams(const QString& repository,
+                             QHash<QString, QVariantList>& conversationsByRepository) const {
     QVector<SidebarTeam> folders;
     if (teams_ == nullptr || !teams_->hasTeams())
         return folders;
@@ -89,15 +90,30 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
         });
         for (const QJsonObject& member : std::as_const(ordered)) {
             const QString sessionId = member.value(QStringLiteral("session_id")).toString();
-            const auto found =
-                std::find_if(conversations.begin(), conversations.end(), [&](const QVariant& row) {
-                    return row.toMap().value(QStringLiteral("sessionId")).toString() == sessionId;
-                });
+            // T-92: the member's row from the group it was created in, which is this
+            // repository unless the team moved (ADR 0123); its own repository first.
+            QVariantList* holder = nullptr;
+            QVariantList::iterator found;
+            const auto findIn = [&](QVariantList& conversations) {
+                found = std::find_if(
+                    conversations.begin(), conversations.end(), [&](const QVariant& row) {
+                        return row.toMap().value(QStringLiteral("sessionId")).toString() ==
+                               sessionId;
+                    });
+                if (found != conversations.end())
+                    holder = &conversations;
+            };
+            if (conversationsByRepository.contains(repository))
+                findIn(conversationsByRepository[repository]);
+            for (auto group = conversationsByRepository.begin();
+                 holder == nullptr && group != conversationsByRepository.end(); ++group)
+                if (group.key() != repository)
+                    findIn(group.value());
             // A member whose conversation this window does not list yet appears once it does.
-            if (found == conversations.end())
+            if (holder == nullptr)
                 continue;
             QVariantMap row = found->toMap();
-            conversations.erase(found);
+            holder->erase(found);
             const QString role = member.value(QStringLiteral("role")).toString();
             row.insert(QStringLiteral("teamId"), folder.id);
             row.insert(QStringLiteral("teamRole"), role);

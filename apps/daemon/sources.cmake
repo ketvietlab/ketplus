@@ -32,6 +32,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlUploadProgress.cpp
     src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
+    src/cloud/CloudControlPreparations.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h
@@ -125,6 +126,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalTeams.cpp
     src/teams/Team.cpp
     src/teams/Team.h
+    src/teams/TeamBranchNames.cpp
+    src/teams/TeamBranchNames.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
     src/teams/TeamAgentTasks.cpp
@@ -149,6 +152,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorSettings.cpp
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
+    src/teams/TeamCoordinatorBranchNames.cpp
+    src/teams/TeamCoordinatorRepository.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorReviewTools.cpp
     src/teams/TeamCoordinatorReviewers.cpp
@@ -171,6 +176,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/SessionHostPreparation.cpp
     src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
@@ -196,6 +202,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
     src/storage/LocalJournal.cpp
+    src/storage/LocalJournalPreparations.cpp
+    src/storage/SessionPreparation.h
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
     src/storage/LocalJournalHistoryPurge.cpp

@@ -37,9 +37,28 @@ class FakeHost final : public TeamHostPort {
             *error = worktreeError;
             return std::nullopt;
         }
+        // T-90: made in the repository the task works in, as team_git::createWorktree does.
+        const Team scope = taskScope(team, task);
+        madeIn.append(scope.repository);
         return TaskWorktree{.branch = QStringLiteral("team/%1/%2").arg(team.id).arg(task.id),
                             .worktree = worktreeRoot + task.id,
-                            .baseCommit = QStringLiteral("base")};
+                            .baseCommit = QStringLiteral("base"),
+                            .repository = scope.repository,
+                            .integrationBranch = scope.integrationBranch};
+    }
+    RepositoryCheck checkRepository(const QString& path,
+                                    const QString& integrationBranch) const override {
+        repositoryChecks.append({path, integrationBranch});
+        if (const QString error = repositoryErrors.value(path); !error.isEmpty())
+            return {.repository = {}, .error = error};
+        return {.repository = QDir::cleanPath(path), .error = {}};
+    }
+    // T-93: the branches git already has, by repository and name.
+    std::optional<bool> branchTaken(const QString& repository,
+                                    const QString& branch) const override {
+        if (unlistedRepositories.contains(repository))
+            return std::nullopt;
+        return takenBranches.contains(repository + QLatin1Char('|') + branch);
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
         if (const QString error = pointErrors.value(sessionId); !error.isEmpty())
@@ -244,6 +263,15 @@ class FakeHost final : public TeamHostPort {
     QString worktreeRoot = QStringLiteral("/wt/");
     // The repository its conversations are in.
     QString repository = QStringLiteral("/repo");
+    // T-90: the repository each worktree was made in, the repositories checked, and the
+    // ones refused with the reason.
+    QStringList madeIn;
+    mutable QList<std::pair<QString, QString>> repositoryChecks;
+    QHash<QString, QString> repositoryErrors;
+    // T-93: "<repository>|<branch>" of branches git has.
+    QSet<QString> takenBranches;
+    // T-93 review L1: repositories whose branches were not listed yet.
+    QSet<QString> unlistedRepositories;
     StorageFacts storageFacts;
     QList<std::pair<QString, QStringList>> storageAsks;
     QList<std::pair<QString, QString>> removals;

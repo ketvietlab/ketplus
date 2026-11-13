@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/theme/SchemeQuickPicker.h"
 #include "ui/AboutDialog.h"
 
 #include "editor/DocumentFormatControls.h"
@@ -501,10 +502,10 @@ void MainWindow::createActions() {
         this, {.document = [this] { return documentOwner(); },
                .restyle =
                    [this](EditorWidget* editor) {
-                       editor->applyTheme(theme_.palette());
+                       editor->applyColorScheme(theme_.colorScheme());
                        if (editor == splitSource_ && splitEditor_ != nullptr) {
                            splitEditor_->shareDocumentWith(*editor);
-                           splitEditor_->applyTheme(theme_.palette());
+                           splitEditor_->applyColorScheme(theme_.colorScheme());
                        }
                    },
                .reopened =
@@ -519,6 +520,11 @@ void MainWindow::createActions() {
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
+    auto* schemeAction = appearanceMenu->addAction(tr("Color Scheme…"));
+    schemeAction->setObjectName(QStringLiteral("selectColorScheme"));
+    connect(schemeAction, &QAction::triggered, this,
+            [this] { showColorSchemePicker(theme_, this); });
+    appearanceMenu->addSeparator();
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
 

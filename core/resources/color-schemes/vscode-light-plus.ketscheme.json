@@ -1,0 +1,146 @@
+{
+    "editor": {
+        "bg": "#FFFFFF",
+        "caret": "#000000",
+        "fg": "#000000",
+        "gutterBg": "#FFFFFF",
+        "gutterFg": "#000000"
+    },
+    "extends": "builtin-light",
+    "id": "builtin.vscode-light-plus",
+    "kind": "light",
+    "metadata": {
+        "author": "Microsoft Corporation",
+        "importReport": {
+            "counts": {
+                "approximated": 61,
+                "mapped": 6,
+                "skipped": 125
+            },
+            "path": "docs/theme-import-reports/vscode-light-plus.json"
+        },
+        "license": "MIT",
+        "manualAdjustments": [
+        ],
+        "sourceApp": "VS Code",
+        "sourceFile": "extensions/theme-defaults/themes/light_plus.json",
+        "sourceLabel": "VS Code",
+        "upstream": {
+            "author": "Microsoft Corporation",
+            "commit": "1b509615d9f84db862313485737c05e8b81d2977",
+            "files": [
+                {
+                    "path": "LICENSE.txt",
+                    "sha256": "9480271317925265e806a9a196aaa33410a962fa9d4d1e248a4a5187bc8c9df9",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/LICENSE.txt"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/dark_plus.json",
+                    "sha256": "409f33088a5cfd6589384900ef80627787c568d367c25b12f31bc7940936e573",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_plus.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/dark_vs.json",
+                    "sha256": "9fc2c16761400632eac6166ff7bb0435c5190a94bffa51ec1ef19b2ce78576b2",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_vs.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/light_plus.json",
+                    "sha256": "26fbb053bec8ce2b65706d5fcb993da8c19174cfdbf35a49b465236b5ed26203",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_plus.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/light_vs.json",
+                    "sha256": "ce562a2ebec8c9a91021afb9ba7c9e8bcf4176df634fec8b77c748b42e3ce748",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_vs.json"
+                },
+                {
+                    "path": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+                    "sha256": "920e68b8a62e3e6581cee8d7900af1772865e5fe2b9efe5904baa4a8a89bc445",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json"
+                }
+            ],
+            "key": "vscode",
+            "license": "MIT",
+            "licenseFiles": [
+                {
+                    "distributionFile": "VSCode-Themes-MIT.txt",
+                    "source": "LICENSE.txt"
+                }
+            ],
+            "repo": "microsoft/vscode"
+        },
+        "vscodeSemanticHighlighting": true,
+        "vscodeSemanticTokenColors": {
+            "customLiteral": "#795E26",
+            "newOperator": "#AF00DB",
+            "numberLiteral": "#098658",
+            "stringLiteral": "#a31515"
+        }
+    },
+    "name": "VS Code Light+",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "fg": "#800000"
+        },
+        "comment": {
+            "fg": "#008000"
+        },
+        "constant": {
+            "fg": "#EE0000"
+        },
+        "function": {
+            "fg": "#795E26"
+        },
+        "keyword": {
+            "fg": "#EE0000"
+        },
+        "number": {
+            "fg": "#098658"
+        },
+        "operator": {
+            "fg": "#EE0000"
+        },
+        "string": {
+            "fg": "#811F3F"
+        },
+        "type": {
+            "fg": "#267F99"
+        },
+        "variable": {
+            "fg": "#0070C1"
+        }
+    },
+    "terminal": {
+        "bg": "#FFFFFF",
+        "fg": "#000000"
+    },
+    "ui": {
+        "chrome": {
+            "appBackground": "#FFFFFF",
+            "pageBackground": "#FFFFFF",
+            "panelBackground": "#FFFFFF",
+            "panelSubtle": "#00000000",
+            "textMain": "#000000",
+            "textSecondary": "#000000"
+        },
+        "input": {
+            "bg": "#FFFFFF",
+            "fg": "#000000"
+        },
+        "list": {
+            "fg": "#000000",
+            "hover": "#E8E8E8"
+        },
+        "sidebar": {
+            "bg": "#FFFFFF",
+            "fg": "#000000"
+        },
+        "tab": {
+            "activeBg": "#FFFFFF",
+            "activeFg": "#000000",
+            "inactiveFg": "#616161"
+        }
+    }
+}

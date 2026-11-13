@@ -18,29 +18,29 @@ File icon and product icon themes are separate future features.
 
 ## Current integration points
 
-- `core/src/ui/Theme.h/.cpp`: `ThemeManager` persists `appearance/theme`, drives
-  `ket::Appearance` for light/dark/system and interface zoom, and projects Két
-  tokens into the legacy `ThemePalette`/QSS. `ket::Style` owns the application
-  palette and shared control drawing; `ket::Profile::ketPlus()` supplies metrics.
+- `core/src/ui/Theme.h/.cpp` and `core/src/ui/theme/`: ThemeManager selects a
+  canonical scheme through a revisioned selection store, migrates `appearance/theme`
+  once, prepares user snapshots asynchronously, and publishes kit color overrides
+  with one complete palette notification. Interface zoom remains separate.
 - `apps/desktop/src/app/MainWindow.cpp`: appearance menu and `themeChanged` propagation.
-- `modules/ai/src/agent/AgentWorkspaceView.cpp`: palette-to-QML token mapping.
-- `core/src/editor/EditorWidget.cpp`: Lexilla styles use dedicated
-  `syntaxKeyword` / `syntaxString` / `syntaxNumber` / `syntaxType` /
-  `syntaxComment` / `syntaxAttribute` roles (with chrome-token fallbacks). Diff
-  added/removed lines still use semantic positive/danger.
-- `core/src/terminal/TerminalView.cpp`: default foreground/background/cursor colors;
-  imported themes also need a separate 16-color ANSI palette.
+- `modules/ai/src/agent/AgentWorkspaceView.cpp`: existing Quick roots and transcript
+  documents consume canonical colors/font flags without model or view resets.
+- `core/src/editor/SyntaxRoleAdapter.cpp`: explicit shared-token/Lexilla role mapping,
+  extended lexical function/operator/variable styles and reserved built-in font parity.
+- `core/src/terminal/TerminalColorScheme.cpp`: foreground/background/cursor, selection
+  and ANSI16; terminal tabs retain their sessions while colors change.
+- Diff and Markdown/Mermaid consumers update styles/resources in place; diagram
+  cache keys include the captured color configuration.
 
 Preserve these consumers while migrating them; do not replace the editor or
 recreate the chat view as part of theme support.
 
-An imported theme must eventually reach the Két token/recipe consumers as well
-as the legacy palette. Updating QPalette or QSS alone would leave kit Widgets and
-QML on the built-in colours. The current kit exposes built-in light/dark tokens;
-the importer needs a reviewed shared token-override API before it can promise
-consistent custom colours. Keep geometry, profile metrics and zoom outside
-that colour override. [design-system.md](design-system.md) lists the current
-semantic roles and migration boundaries.
+Imported themes reach Két Widgets and QML through the generic runtime color
+API merged in ket-qt #57. Geometry, profile metrics and zoom stay outside that
+color override. The canonical adapter maps existing kit tokens; recipe roles
+without a distinct token retain their shared semantics. See
+[color-schemes.md](color-schemes.md) for the implemented API and limits, and
+[design-system.md](design-system.md) for semantic roles and migration boundaries.
 
 ## Architecture
 
@@ -213,8 +213,17 @@ the Microsoft Marketplace or depend on undocumented download endpoints.
 
 ## Theme selection and multiple processes
 
+Implementation status: local JSON/JSONC, VSIX, JetBrains and native scheme import
+is available in Settings > Appearance. Search, source labels, swatches, preferred
+system variants, detailed conversion review, local preview/restore, export,
+duplication and deletion use the canonical catalog and live selection API.
+View > Appearance > Color Scheme… registers the shared keyboard picker in Lite
+and Pro. Network discovery, automatic package updates and Marketplace installation
+remain future work.
+
+
 Settings > Appearance contains installed-theme search, swatches, variant selection,
-Install from VSIX/File, and uninstall/update actions. A keyboard theme picker uses
+Import from VSIX/File, export, duplicate and delete actions. A keyboard theme picker uses
 arrows for temporary preview, Enter to commit, and Escape to restore. Future
 Spotlight integration invokes this same command; it does not own theme state.
 

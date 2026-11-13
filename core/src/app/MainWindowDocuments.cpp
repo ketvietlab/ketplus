@@ -175,7 +175,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
         }
     }
     editor->configureLexerForPath(path);
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     if (splitPane_ != nullptr && editor == splitSource_) {
         // Save As may pick a new lexer, so refresh the split view's styles.
         splitPane_->refreshCurrentSource();
@@ -414,7 +414,7 @@ EditorWidget* MainWindow::createEditor() {
             [this](const QString& message) { statusBar()->showMessage(message, 7000); });
     editor->setEditorSettings(appearanceSettings_.editor);
     editor->setViewOptions(viewOptions_);
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
@@ -531,9 +531,9 @@ void MainWindow::activateCurrentTab() {
                     .arg(result.error));
             return;
         }
-        editor->applyTheme(theme_.palette());
+        editor->applyColorScheme(theme_.colorScheme());
     } else if (editor->hasPendingTheme()) {
-        editor->applyTheme(theme_.palette());
+        editor->applyColorScheme(theme_.colorScheme());
     }
 
     editor->markActivated(++tabAccessSequence_);
@@ -782,7 +782,7 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         connect(splitPane_, &EditorSplitPane::currentSourceChanged, this,
                 [this](EditorWidget* current) {
                     splitSource_ = current;
-                    splitEditor_->applyTheme(theme_.palette());
+                    splitEditor_->applyColorScheme(theme_.colorScheme());
                     updateEditorActions();
                 });
         connect(splitPane_, &EditorSplitPane::emptied, this, &MainWindow::closeSplit);
@@ -940,8 +940,8 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
             editor->setEditorSettings(appearanceSettings_.editor);
-            if (editor == activeEditor && !editor->isHibernated()) {
-                editor->applyTheme(theme_.palette());
+            if (editor != nullptr && editor == activeEditor && !editor->isHibernated()) {
+                editor->applyColorScheme(theme_.colorScheme());
             } else {
                 editor->markThemePending();
             }
@@ -951,7 +951,7 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     }
     if (splitEditor_ != nullptr) {
         splitEditor_->setEditorSettings(appearanceSettings_.editor);
-        splitEditor_->applyTheme(theme_.palette());
+        splitEditor_->applyColorScheme(theme_.colorScheme());
     }
     if (terminal_ != nullptr) {
         terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
@@ -969,22 +969,22 @@ void MainWindow::applyThemeToEditors() {
     auto* activeEditor = currentEditor();
     for (int index = 0; index < tabs_->count(); ++index) {
         auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
-        if (editor == activeEditor && !editor->isHibernated()) {
-            editor->applyTheme(theme_.palette());
+        if (editor != nullptr && editor == activeEditor && !editor->isHibernated()) {
+            editor->applyColorScheme(theme_.colorScheme());
         } else if (editor != nullptr) {
             editor->markThemePending();
         }
     }
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* diffView = qobject_cast<GitDiffView*>(tabs_->widget(index))) {
-            diffView->applyTheme(theme_.palette());
+            diffView->applyColorScheme(theme_.colorScheme());
         }
     }
     if (splitEditor_ != nullptr) {
-        splitEditor_->applyTheme(theme_.palette());
+        splitEditor_->applyColorScheme(theme_.colorScheme());
     }
     if (terminal_ != nullptr) {
-        terminal_->applyTheme(theme_.palette());
+        terminal_->applyColorScheme(theme_.colorScheme());
     }
     applySearchPanelColors();
     updateMarkdownPreview();

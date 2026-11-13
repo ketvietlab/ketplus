@@ -12,7 +12,8 @@ namespace ketplus {
 namespace {
 bool validUserId(const QString& id) {
     static const QRegularExpression pattern(QStringLiteral("^[a-z0-9][a-z0-9._-]{0,127}\\z"));
-    return pattern.match(id).hasMatch() && !id.startsWith(u"builtin-");
+    return pattern.match(id).hasMatch() && !id.startsWith(u"builtin-") &&
+           !id.startsWith(u"builtin.");
 }
 QString filename(const QString& id) { return id + QStringLiteral(".ketscheme.json"); }
 SchemeDiagnostic failure(const QString& message) {
@@ -25,6 +26,24 @@ ColorSchemeReadResult readFile(const QString& path) {
     // Bounded even if a file is replaced or grows after opening.
     return ColorSchemeReader::read(file.read(ColorSchemeReader::maximumBytes + 1));
 }
+const QList<ColorScheme>& builtins() {
+    static const QList<ColorScheme> schemes = [] {
+        QList<ColorScheme> result{builtinColorScheme(SchemeKind::Light),
+                                  builtinColorScheme(SchemeKind::Dark)};
+        for (const auto* slug :
+             {"vscode-dark-plus", "vscode-light-plus", "darcula", "intellij-light", "dracula",
+              "one-dark-pro", "nord", "solarized-dark"}) {
+            const auto loaded =
+                readFile(QStringLiteral(":/color-schemes/") + QString::fromLatin1(slug) +
+                         QStringLiteral(".ketscheme.json"));
+            if (!loaded.ok())
+                qFatal("Invalid embedded community color scheme");
+            result.append(loaded.scheme);
+        }
+        return result;
+    }();
+    return schemes;
+}
 } // namespace
 ColorSchemeCatalog::ColorSchemeCatalog(QString root)
     : root_(root.isEmpty() ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
@@ -32,8 +51,7 @@ ColorSchemeCatalog::ColorSchemeCatalog(QString root)
                            : std::move(root)) {}
 QString ColorSchemeCatalog::directory() const { return root_; }
 QList<ColorScheme> ColorSchemeCatalog::list() const {
-    QList<ColorScheme> schemes{builtinColorScheme(SchemeKind::Light),
-                               builtinColorScheme(SchemeKind::Dark)};
+    QList<ColorScheme> schemes = builtins();
     const QDir directory(root_);
     for (const auto& entry : directory.entryInfoList({QStringLiteral("*.ketscheme.json")},
                                                      QDir::Files | QDir::NoSymLinks, QDir::Name)) {
@@ -45,10 +63,10 @@ QList<ColorScheme> ColorSchemeCatalog::list() const {
     return schemes;
 }
 ColorSchemeCatalogResult ColorSchemeCatalog::load(const QString& id, SchemeKind fallback) const {
-    if (id == u"builtin-light" || id == u"builtin-dark")
-        return {builtinColorScheme(id == u"builtin-light" ? SchemeKind::Light : SchemeKind::Dark),
-                {},
-                true};
+    for (const auto& scheme : builtins()) {
+        if (scheme.id == id)
+            return {scheme, {}, true};
+    }
     QList<SchemeDiagnostic> diagnostics;
     const QString path = QDir(root_).filePath(filename(id));
     if (validUserId(id) && !QFileInfo(path).isSymLink()) {

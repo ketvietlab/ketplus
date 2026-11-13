@@ -116,7 +116,7 @@ TerminalPanel* MainWindow::ensureTerminal() {
     }
 
     terminal_ = new TerminalPanel(mainSplit_);
-    terminal_->applyTheme(theme_.palette());
+    terminal_->applyColorScheme(theme_.colorScheme());
     applyTerminalTypography(terminal_);
     mainSplit_->addWidget(terminal_);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(workspaceSplit_), 1);
@@ -185,7 +185,7 @@ TerminalPanel* MainWindow::openAgentTerminalTab() {
     auto* terminal = new TerminalPanel(detailTabs);
     // The detail tab is the terminal's tab, so the panel's own tab bar would be a second one.
     terminal->setSingleSession(true);
-    terminal->applyTheme(theme_.palette());
+    terminal->applyColorScheme(theme_.colorScheme());
     applyTerminalTypography(terminal);
     terminal->start(workspaceRoot_.isEmpty() ? QDir::homePath() : workspaceRoot_);
     connect(terminal, &TerminalPanel::closeRequested, this, [this, terminal] {
@@ -364,7 +364,7 @@ bool MainWindow::showAgentFile(const QString& filePath) {
         return true;
     }
 
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     const int index = detailTabs->addTab(editor, editor->document().displayName());
     detailTabs->setTabToolTip(index, absolutePath);
     detailTabs->setCurrentIndex(index);
@@ -385,6 +385,7 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
         if (existing != nullptr && normalizedPath(existing->filePath()) == absolutePath &&
             existing->mode() == mode) {
             existing->setDiff(absolutePath, mode, diff, theme_.palette());
+            existing->applyColorScheme(theme_.colorScheme());
             detailTabs->setCurrentIndex(index);
             updateAgentDetailTabs();
             statusBar()->showMessage(QStringLiteral("Updated Git diff"), 2000);
@@ -395,6 +396,7 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
     auto* diffView = new GitDiffView(detailTabs);
     diffView->applyEditorSettings(appearanceSettings_.editor);
     diffView->setDiff(absolutePath, mode, diff, theme_.palette());
+    diffView->applyColorScheme(theme_.colorScheme());
     connect(diffView, &GitDiffView::openFileRequested, this, &MainWindow::openFile);
     connect(diffView, &GitDiffView::refreshRequested, this,
             [this](const QString& path, const GitDiffMode requestedMode) {
