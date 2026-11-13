@@ -632,6 +632,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QStrin
         result = readWorkReport(request);
     } else if (type.startsWith(QStringLiteral("team."))) {
         result = teamCommand(type, request);
+    } else if (type.startsWith(QStringLiteral("schedule."))) {
+        result = scheduleCommand(type, request);
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -2693,6 +2695,12 @@ bool SessionHost::isMutating(const QString& messageType) {
     if (messageType.startsWith(QStringLiteral("team.")))
         return !messageType.endsWith(QStringLiteral(".list")) &&
                !messageType.endsWith(QStringLiteral(".get"));
+    if (messageType.startsWith(QStringLiteral("schedule.")))
+        return messageType == QStringLiteral("schedule.create") ||
+               messageType == QStringLiteral("schedule.update") ||
+               messageType == QStringLiteral("schedule.delete") ||
+               messageType == QStringLiteral("schedule.setEnabled") ||
+               messageType == QStringLiteral("schedule.runNow");
     return messageType == QStringLiteral("session.agent_messages.release") ||
            messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||

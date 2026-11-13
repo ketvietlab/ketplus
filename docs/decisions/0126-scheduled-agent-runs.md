@@ -126,7 +126,7 @@ manages; it does not create.
 - The recurrence engine can change DST and timezone behaviour without a protocol
   revision, as long as `rule` stays a JSON object string with the v1 kinds.
 - A client that does not know `schedules/1` ignores the feature. This daemon
-  does not advertise it until the handlers exist, and older daemons never do.
+  advertises it on minor 1 now that the handlers are registered. Older daemons never do.
 - Run now is part of the contract now and returns `not_implemented` until the
   runtime handles it.
 

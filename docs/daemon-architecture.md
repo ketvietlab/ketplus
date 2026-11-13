@@ -1007,43 +1007,6 @@ tool call so idle servers do not hold connection slots. Codex receives the
 server as dotted per-thread `config` keys on start, resume and fork; Claude and
 Cursor receive it beside `ketplus_browser`.
 
-## Scheduled runs
-
-The daemon stores schedules that send a prompt on a rule. The `schedule.*` request
-contract is specified separately; this section is the journal that contract reads.
-
-### Storage
-
-`LocalJournalSchedules.cpp` creates `schedules` and `schedule_runs` on open with
-`CREATE TABLE IF NOT EXISTS`. A journal written before schedules gains the empty
-tables, and the rows it already had stay as they were. The tables are additive, so
-`journal_format::current` stays 1: an older daemon ignores them and does not rewrite
-them (ADR 0095). Open creates the tables before it records the format marker. A
-failure closes the journal, and the next open tries again.
-
-A schedule row stores its id, name, enabled flag, prompt, and one target:
-`conversation` (a session id), `new` (workspace and repository paths, provider, model,
-effort, isolated-worktree flag, title template), `team` (a team id) or `team_start`
-(a team id, prompt optional). The recurrence rule is opaque JSON. `busy_policy` is
-`queue` or `skip`, `missed_policy` is `run_once` or `skip`. The row also stores who
-created it, the created and updated times, `next_run_at` and `last_run_at`. List
-filters by target kind, session id and team id, together.
-
-`status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
-disables every `conversation` schedule that names that session and sets
-`target_deleted`. The rows and their runs stay, so the disable is visible rather than
-a silent drop. Enabling such a schedule is refused until an update clears the status.
-Deleting a schedule deletes its runs in the same transaction. Deleting a team
-(`deleteTeam`) deletes `team` and `team_start` schedules whose team id is that team's
-decimal id, and their runs. Other schedules are left alone.
-
-`schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
-`skipped` or `missed`), when it was due, when it started and finished, the session
-and turn it used, and any error. Runs are listed newest first, in pages. After each
-append the journal keeps the last 50 runs of that schedule
-(`LocalJournal::maximumScheduleRuns`) and deletes the older ones. Updating a run's
-status does not change that order.
-
 ## Returning to a previous provider
 
 A -> B -> A starts a new native thread on the return to A. The handoff transcript
@@ -1127,8 +1090,8 @@ a fake future version or kills an existing daemon as an uninstall fallback.
 ## Scheduled runs (ADR 0126)
 
 The daemon owns schedules that send a prompt at a time or on a recurrence, including
-while the desktop window is closed. The feature name is `schedules/1`, but
-`daemon.hello` does not advertise it until the handlers below exist.
+while the desktop window is closed. `daemon.hello` minor 1 advertises `schedules/1`
+now that the handlers below are registered.
 The shared documents are `ketplus::schedule::Schedule` and `ScheduleRun` in
 `modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
 Wire names are snake_case. A schedule keeps its last 50 runs.
@@ -1164,8 +1127,43 @@ Schedules are created only from New conversation and New team. `created_by` is
 set by the daemon from the connection (`user`, or the agent conversation id);
 a create that sends it is `unknown_field`. Agent-created schedules wait on the
 limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
-Phone and cloud sync are out of scope for v1. Journal tables and the SessionHost
-handlers are a following change; they persist these documents and call this parser.
-Deleting a schedule deletes its runs, deleting a team deletes its `team` and
-`team_start` schedules, and deleting a conversation disables schedules that target
-it and records that status.
+Phone and cloud sync are out of scope for v1. `SessionHostSchedules.cpp` handles
+`schedule.list`, `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled` and `schedule.runs` through this parser
+and the journal below. A successful create, update, delete or `setEnabled` emits
+`schedule.changed`. `schedule.runNow` answers `not_implemented` until the runner
+exists.
+
+### Storage
+
+`LocalJournalSchedules.cpp` creates `schedules` and `schedule_runs` on open with
+`CREATE TABLE IF NOT EXISTS`. A journal written before schedules gains the empty
+tables, and the rows it already had stay as they were. The tables are additive, so
+`journal_format::current` stays 1: an older daemon ignores them and does not rewrite
+them (ADR 0095). Open creates the tables before it records the format marker. A
+failure closes the journal, and the next open tries again.
+
+A schedule row stores its id, name, enabled flag, prompt, and one target. A
+`conversation` target stores the session id. A `new` target stores the protocol
+`workspace` (the repository path) plus provider, model, effort, the isolated-worktree
+flag and the title template. A `team` or `team_start` target stores the team id.
+The recurrence rule is opaque JSON. `busy_policy` is `queue` or `skip`,
+`missed_policy` is `run_once` or `skip`. The row also stores who created it, the
+created and updated times, `next_run_at` and `last_run_at`. List filters by target
+kind, session id and team id, together.
+
+`status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
+disables every `conversation` schedule that names that session and sets
+`target_deleted`. The rows and their runs stay, so the disable is visible rather than
+a silent drop. Enabling such a schedule is refused until an update clears the status.
+The wire document does not carry `status`; clients see `enabled: false`. Deleting a
+schedule deletes its runs in the same transaction. Deleting a team (`deleteTeam`)
+deletes `team` and `team_start` schedules whose team id is that team's decimal id,
+and their runs. Other schedules are left alone.
+
+`schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
+`skipped` or `missed`), when it was due, when it started and finished, the session
+and turn it used, and any error. Runs are listed newest first, in pages. After each
+append the journal keeps the last 50 runs of that schedule
+(`LocalJournal::maximumScheduleRuns`) and deletes the older ones. Updating a run's
+status does not change that order.
