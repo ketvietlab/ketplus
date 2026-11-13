@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workspace/SidebarRepositoryPins.h"
+
 #include <QPoint>
 #include <QPointer>
 #include <QSet>
@@ -15,6 +17,7 @@ class SidebarSectionLabel;
 class SidebarTeamBranch;
 class SidebarTreeGuide;
 } // namespace ket
+class QMenu;
 class QVBoxLayout;
 
 namespace ketplus {
@@ -40,21 +43,29 @@ struct SidebarRepository final {
     QString name;
     bool active{false};
     QVariantList conversations;
-    bool promoted{false};
     // Listed before the repository's other conversations; none without teams/1.
     QVector<SidebarTeam> teams;
+    // T-92: whether the user may pin it (this Mac's repositories; not another machine's), and
+    // its place among the pinned ones, from 0, or -1. SidebarRepositoryList sets the place of a
+    // pinnable repository from its pins.
+    bool pinnable{false};
+    int pinOrder{-1};
 
     friend bool operator==(const SidebarRepository& left, const SidebarRepository& right) {
         return left.path == right.path && left.name == right.name && left.active == right.active &&
-               left.conversations == right.conversations && left.promoted == right.promoted &&
-               left.teams == right.teams;
+               left.conversations == right.conversations && left.teams == right.teams &&
+               left.pinnable == right.pinnable && left.pinOrder == right.pinOrder;
     }
 };
 
-// The order the phones use too (the companion mobile client): conversations by
-// "lastTurnStartedAt", newest first, then title and id; repositories by their newest
-// conversation, then name and path. An explicit conversation repository switch promotes its target.
+// Conversations by "lastTurnStartedAt", newest first, then title and id. Repositories: the
+// pinned ones first, in the order they were pinned (T-92); then by their newest turn start of
+// anything they show, their own conversations and their teams' members alike; then name and
+// path. The phones (the companion mobile client) order conversations and unpinned repositories
+// by recency too.
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories);
+// The newest turn start among a repository's conversations and its teams' members; 0 for none.
+[[nodiscard]] qint64 sidebarRepositoryRecency(const SidebarRepository& repository);
 
 // The repository list of ketPlus Pro is the tree of the Qt mock (mockups/qt, "Sidebar tree"):
 // a repository is the root, its teams are branches under it, "Conversations (n)" labels the
@@ -83,6 +94,13 @@ class SidebarRepositoryList final : public QWidget {
     // name and its members' titles the same; a team's mark stands over its members' marks; every
     // conversation is one line high. Empty when the visible tree holds all of them.
     [[nodiscard]] QStringList layoutProblems() const;
+
+    // T-92: pins a pinnable repository to the top, after those pinned before, or unpins it.
+    void setRepositoryPinned(const QString& path, bool pinned);
+    [[nodiscard]] const SidebarRepositoryPins& pins() const { return pins_; }
+    // The repository header's context menu: Pin to top or Unpin. Nothing for a repository
+    // that cannot be pinned. The caller owns it.
+    [[nodiscard]] QMenu* createRepositoryMenu(const QString& path, QWidget* parent);
 
   signals:
     // A conversation changed visual status without rebuilding its row; the owner redraws its
@@ -124,6 +142,8 @@ class SidebarRepositoryList final : public QWidget {
     void applyPresentation();
     void onRepositoryHeaderClicked(const QString& path);
     void persistCollapsedRepositories() const;
+    // T-92: a small pin drawn at the end of a pinned repository's name row.
+    void presentPinMark(ket::SidebarRepositoryHeader* header, bool pinned) const;
 
     QVBoxLayout* layout_{nullptr};
     QVector<SidebarRepository> repositories_;
@@ -133,6 +153,7 @@ class SidebarRepositoryList final : public QWidget {
     QVector<QWidget*> groups_;
     QVector<QWidget*> folders_;
     QSet<QString> collapsedPaths_;
+    SidebarRepositoryPins pins_;
     QSet<QString> collapsedTeams_;
     bool collapsedTeamsLoaded_{false};
     QPointer<ket::SidebarRow> pressedRow_;

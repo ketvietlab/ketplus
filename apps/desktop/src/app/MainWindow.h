@@ -254,8 +254,9 @@ class MainWindow final : public QMainWindow {
     // ADR 0114 (#464): teams in the sidebar while the daemon advertises teams/1.
     void setupTeams();
     // Takes the members of the repository's teams out of `conversations`, into their folders.
-    [[nodiscard]] QVector<SidebarTeam> takeSidebarTeams(const QString& repository,
-                                                        QVariantList& conversations) const;
+    [[nodiscard]] QVector<SidebarTeam>
+    takeSidebarTeams(const QString& repository,
+                     QHash<QString, QVariantList>& conversationsByRepository) const;
     // Each member conversation's role for the Agent Workspace header (#467).
     void updateTeamRoles();
     void showTeamMenu(const QString& teamId);
@@ -494,7 +495,6 @@ class MainWindow final : public QMainWindow {
     QHash<QString, QString> activeFileByWorktree_;
     QString workspaceRoot_;
     QString fileContextRoot_;
-    QString promotedSidebarRepository_;
     QString pendingTranscriptDiff_;
     QString pendingTranscriptDiffRoot_;
     QString repositoryDisplayRoot_;
