@@ -173,8 +173,12 @@ property, rather than reproducing TextMate specificity ranking.
 `fontStyle` supports bold, italic and underline. An empty string explicitly resets
 all three flags; omitted style properties inherit earlier rules/base values.
 Strikethrough, syntax backgrounds and other settings are reported as skipped.
-Unscoped rule foreground/background supplies missing workbench editor defaults;
-later unscoped defaults override earlier defaults. Global typography is skipped.
+Unscoped rule colors are converted to workbench IDs before fallback resolution.
+Foreground/background, caret, selection, lineHighlight, gutterForeground and ANSI
+colors supply missing workbench declarations, including sidebar/terminal/gutter
+fallbacks. Later global rules override earlier globals; explicit workbench values
+(including null resets) take precedence. Unsupported global colors are listed as
+unmapped colors, and global typography is skipped.
 `semanticTokenColors` is merged parent-first into inert
 `metadata.vscodeSemanticTokenColors`, and semanticHighlighting is retained as
 metadata only; neither changes applied syntax styles.

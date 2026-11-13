@@ -137,6 +137,18 @@ class VsCodeImportTest : public QObject {
         const auto& s = result.schemes.first().scheme;
         QCOMPARE(s.editor["fg"], QColor("#EEEEEE"));
         QCOMPARE(s.editor["bg"], QColor("#151515"));
+        QCOMPARE(s.editor["caret"], QColor("#FFAA11"));
+        QCOMPARE(s.editor["selection"], QColor("#334455"));
+        QCOMPARE(s.editor["lineHighlight"], QColor("#222233"));
+        QCOMPARE(s.editor["gutterFg"], QColor("#667788"));
+        QCOMPARE(s.editor["gutterBg"], QColor("#151515"));
+        QCOMPARE(s.ui["sidebar.bg"], QColor("#151515"));
+        QCOMPARE(s.ui["chrome.pageBackground"], QColor("#151515"));
+        QCOMPARE(s.ui["tab.activeBg"], QColor("#151515"));
+        QCOMPARE(s.terminal["bg"], QColor("#151515"));
+        QVERIFY(
+            reported(result.report, "invisibles", ImportDisposition::Skipped, "no corresponding"));
+
         QCOMPARE(s.syntax["string"].fg.value(), QColor("#55AA66"));
         QVERIFY(s.syntax["string"].italic.value());
         QVERIFY(s.syntax["string"].underline.value());
@@ -234,6 +246,8 @@ class VsCodeImportTest : public QObject {
             QVERIFY(!result.ok());
             QVERIFY(result.schemes.isEmpty());
             QVERIFY(!result.report.diagnostics.isEmpty());
+            if (bytes.contains("include"))
+                QVERIFY(!result.report.diagnostics.first().message.contains("line 0"));
         }
         QVERIFY(write(dir.filePath("evil.tmTheme"),
                       "<!DOCTYPE plist [<!ENTITY x SYSTEM "

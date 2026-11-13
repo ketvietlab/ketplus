@@ -31,11 +31,10 @@ bool Session::convert(const QString& path, const QString& label, const QString& 
     QVector<ket::theme::io::JsonSource> chain;
     ket::theme::io::Error error;
     if (!resolver.loadJsonChain(path, &chain, &error, &remaining)) {
-        failure(out, error.source.isEmpty() ? path : error.source,
-                QStringLiteral("%1 (line %2, column %3)")
-                    .arg(error.message)
-                    .arg(error.line)
-                    .arg(error.column));
+        auto message = error.message;
+        if (error.line > 0)
+            message += QStringLiteral(" (line %1, column %2)").arg(error.line).arg(error.column);
+        failure(out, error.source.isEmpty() ? path : error.source, message);
         return false;
     }
     variant.sourcePath = path;
@@ -65,6 +64,7 @@ bool Session::convert(const QString& path, const QString& label, const QString& 
     identity.addData(label.toUtf8());
     identity.addData(hint.toUtf8());
     AuthoredColors colors;
+    QSet<QString> declaredColors;
     QList<Rule> rules;
     QString declaredType;
     QJsonObject semantic;
@@ -85,14 +85,16 @@ bool Session::convert(const QString& path, const QString& label, const QString& 
             for (auto it = entries.begin(); it != entries.end(); ++it) {
                 const auto source = layer.path + QStringLiteral("/colors/") + it.key();
                 if (it.value().isNull()) {
+                    declaredColors.insert(it.key());
                     colors.remove(it.key());
                     report(
                         out, ImportDisposition::Mapped, source, {},
                         QStringLiteral(
                             "Explicit null removes the inherited color; fallback chain applies"));
-                } else if (const auto parsed = parseColor(it.value()))
+                } else if (const auto parsed = parseColor(it.value())) {
+                    declaredColors.insert(it.key());
                     colors[it.key()] = {*parsed, source};
-                else
+                } else
                     report(out, ImportDisposition::Skipped, source, {},
                            QStringLiteral(
                                "Invalid VS Code hex color; previous/default value retained"));
@@ -158,6 +160,7 @@ bool Session::convert(const QString& path, const QString& label, const QString& 
     }
     if (!semantic.isEmpty())
         scheme.metadata.insert(QStringLiteral("vscodeSemanticTokenColors"), semantic);
+    mapGlobalColors(rules, colors, declaredColors, out);
     mapWorkbench(colors, scheme, out);
     mapRules(rules, scheme, out);
     const auto kind = hint.isEmpty() ? declaredType : hint;

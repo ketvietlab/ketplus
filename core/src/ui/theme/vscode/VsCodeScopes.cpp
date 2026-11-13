@@ -64,9 +64,57 @@ void applySettings(const QJsonObject& settings, const QString& role, ColorScheme
                           "without a TextMate scope stack"));
 }
 } // namespace
+void mapGlobalColors(const QList<Rule>& rules, AuthoredColors& colors,
+                     const QSet<QString>& declared, ImportReport& out) {
+    const QMap<QString, QString> aliases{
+        {"foreground", "editor.foreground"},
+        {"background", "editor.background"},
+        {"caret", "editorCursor.foreground"},
+        {"selection", "editor.selectionBackground"},
+        {"lineHighlight", "editor.lineHighlightBackground"},
+        {"gutterForeground", "editorLineNumber.foreground"},
+        {"invisibles", "editorWhitespace.foreground"},
+        {"guide", "editorIndentGuide.background"},
+        {"inactiveSelection", "editor.inactiveSelectionBackground"}};
+    const QStringList ansi{
+        "ansiBlack",       "ansiRed",           "ansiGreen",       "ansiYellow",
+        "ansiBlue",        "ansiMagenta",       "ansiCyan",        "ansiWhite",
+        "ansiBrightBlack", "ansiBrightRed",     "ansiBrightGreen", "ansiBrightYellow",
+        "ansiBrightBlue",  "ansiBrightMagenta", "ansiBrightCyan",  "ansiBrightWhite"};
+    for (const auto& rule : rules) {
+        const auto scope = rule.value.value(QStringLiteral("scope"));
+        if (!scope.isUndefined() && !(scope.isString() && scope.toString().trimmed().isEmpty()))
+            continue;
+        const auto settings = rule.value.value(QStringLiteral("settings")).toObject();
+        for (auto it = settings.begin(); it != settings.end(); ++it) {
+            const auto source = rule.source + '/' + it.key();
+            const auto id = ansi.contains(it.key()) ? QStringLiteral("terminal.") + it.key()
+                                                    : aliases.value(it.key());
+            if (id.isEmpty()) {
+                report(out, ImportDisposition::Skipped, source, {},
+                       it.key() == u"fontStyle"
+                           ? QStringLiteral(
+                                 "Global token typography has no shared default-text style slot")
+                           : QStringLiteral(
+                                 "Global TextMate setting has no supported color conversion"));
+                continue;
+            }
+            const auto parsed = parseColor(it.value());
+            if (!parsed || declared.contains(id)) {
+                report(out, ImportDisposition::Skipped, source, id,
+                       !parsed ? QStringLiteral("Invalid global TextMate color")
+                               : QStringLiteral(
+                                     "Explicit workbench color declaration takes precedence"));
+                continue;
+            }
+            colors[id] = {*parsed, source};
+            report(out, ImportDisposition::Approximated, source, id,
+                   QStringLiteral(
+                       "Global TextMate color converted before workbench fallback resolution"));
+        }
+    }
+}
 void mapRules(const QList<Rule>& rules, ColorScheme& scheme, ImportReport& out) {
-    const bool workbenchFg = scheme.editor.contains(QStringLiteral("fg"));
-    const bool workbenchBg = scheme.editor.contains(QStringLiteral("bg"));
     for (const auto& rule : rules) {
         const auto rawSettings = rule.value.value(QStringLiteral("settings"));
         if (!rawSettings.isObject()) {
@@ -77,32 +125,8 @@ void mapRules(const QList<Rule>& rules, ColorScheme& scheme, ImportReport& out) 
         const auto settings = rawSettings.toObject();
         const auto selector = rule.value.value(QStringLiteral("scope"));
         if (selector.isUndefined() ||
-            (selector.isString() && selector.toString().trimmed().isEmpty())) {
-            for (const auto& entry :
-                 {qMakePair(QStringLiteral("foreground"), QStringLiteral("fg")),
-                  qMakePair(QStringLiteral("background"), QStringLiteral("bg"))}) {
-                if (!settings.contains(entry.first))
-                    continue;
-                const auto parsed = parseColor(settings.value(entry.first));
-                if (parsed && !(entry.second == u"fg" ? workbenchFg : workbenchBg)) {
-                    scheme.editor[entry.second] = *parsed;
-                    report(
-                        out, ImportDisposition::Approximated, rule.source + '/' + entry.first,
-                        QStringLiteral("editor.") + entry.second,
-                        QStringLiteral(
-                            "Unscoped TextMate default supplies missing workbench editor color"));
-                } else
-                    report(out, ImportDisposition::Skipped, rule.source + '/' + entry.first, {},
-                           QStringLiteral(
-                               "Invalid default or explicit workbench color takes precedence"));
-            }
-            for (auto it = settings.begin(); it != settings.end(); ++it)
-                if (it.key() != u"foreground" && it.key() != u"background")
-                    report(out, ImportDisposition::Skipped, rule.source + '/' + it.key(), {},
-                           QStringLiteral(
-                               "Global token typography has no shared default-text style slot"));
+            (selector.isString() && selector.toString().trimmed().isEmpty()))
             continue;
-        }
         QStringList selectors;
         if (selector.isString())
             selectors = selector.toString().split(',');
