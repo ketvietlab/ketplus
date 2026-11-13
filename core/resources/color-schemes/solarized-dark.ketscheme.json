@@ -12,7 +12,7 @@
     "id": "builtin.solarized-dark",
     "kind": "dark",
     "metadata": {
-        "author": "Microsoft Corporation; Solarized palette by Ethan Schoonover",
+        "author": "Microsoft Corporation",
         "importReport": {
             "counts": {
                 "approximated": 35,
@@ -28,7 +28,7 @@
         "sourceFile": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
         "sourceLabel": "VS Code",
         "upstream": {
-            "author": "Microsoft Corporation; Solarized palette by Ethan Schoonover",
+            "author": "Microsoft Corporation",
             "commit": "1b509615d9f84db862313485737c05e8b81d2977",
             "files": [
                 {

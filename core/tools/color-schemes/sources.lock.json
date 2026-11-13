@@ -6,7 +6,7 @@
       "repo": "microsoft/vscode",
       "commit": "1b509615d9f84db862313485737c05e8b81d2977",
       "license": "MIT",
-      "author": "Microsoft Corporation; Solarized palette by Ethan Schoonover",
+      "author": "Microsoft Corporation",
       "files": [
         {
           "path": "LICENSE.txt",

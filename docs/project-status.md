@@ -28,7 +28,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   attributed MIT/Apache-2.0 conversions from pinned official upstream sources.
   Built-ins are read-only, have offline completeness/contrast tests and a
   reproducible importer command with saved reports. App-wide custom-color
-  application remains part of the separate ThemeManager adapter work.
+  application uses the integrated ThemeManager adapters described below.
+
 - Color-scheme selection now has revisioned persistence, one-time legacy migration,
   local preview/commit/cancel, independent system preferences and asynchronous
   snapshot preparation. Main-window editor/terminal/diff adapters preserve their

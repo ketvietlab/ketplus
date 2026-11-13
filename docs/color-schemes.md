@@ -334,14 +334,14 @@ opaque editor foreground/background and WCAG relative luminance.
 
 | Theme | ID | Kind | Source label | Pinned source and attribution | License | Import counts | Editor contrast |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| VS Code Dark+ | `builtin.vscode-dark-plus` | dark | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation; Solarized palette by Ethan Schoonover | MIT | 5 / 61 / 115 | 11.25:1 |
-| VS Code Light+ | `builtin.vscode-light-plus` | light | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation; Solarized palette by Ethan Schoonover | MIT | 6 / 61 / 125 | 21.00:1 |
+| VS Code Dark+ | `builtin.vscode-dark-plus` | dark | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation | MIT | 5 / 61 / 115 | 11.25:1 |
+| VS Code Light+ | `builtin.vscode-light-plus` | light | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation | MIT | 6 / 61 / 125 | 21.00:1 |
 | Darcula | `builtin.darcula` | dark | JetBrains | [JetBrains/intellij-community](https://github.com/JetBrains/intellij-community/tree/417e214ea024cd783179244f51329df01277bb93) · JetBrains s.r.o. | Apache-2.0 | 41 / 12 / 1341 | 6.93:1 |
 | IntelliJ Light | `builtin.intellij-light` | light | JetBrains | [JetBrains/intellij-community](https://github.com/JetBrains/intellij-community/tree/417e214ea024cd783179244f51329df01277bb93) · JetBrains s.r.o. | Apache-2.0 | 18 / 5 / 164 | 20.03:1 |
 | Dracula | `builtin.dracula` | dark | Community | [dracula/visual-studio-code](https://github.com/dracula/visual-studio-code/tree/9726e1f6b51a4382334bc36e03128fcf02c3fb45) · Dracula Theme | MIT | 47 / 53 / 334 | 13.36:1 |
 | One Dark Pro | `builtin.one-dark-pro` | dark | Community | [Binaryify/OneDark-Pro](https://github.com/Binaryify/OneDark-Pro/tree/75c80ab18d90655e05ad837bb8d89f5e68d5ce53) · Binaryify | MIT | 43 / 144 / 461 | 6.57:1 |
 | Nord | `builtin.nord` | dark | Community | [nordtheme/visual-studio-code](https://github.com/nordtheme/visual-studio-code/tree/8ead09822c02d0d49d0f764104505e5a34d3689f) · Arctic Ice Studio / Sven Greb | MIT | 52 / 32 / 425 | 9.25:1 |
-| Solarized Dark | `builtin.solarized-dark` | dark | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation; Solarized palette by Ethan Schoonover | MIT | 36 / 35 / 106 | 4.75:1 |
+| Solarized Dark | `builtin.solarized-dark` | dark | VS Code | [microsoft/vscode](https://github.com/microsoft/vscode/tree/1b509615d9f84db862313485737c05e8b81d2977) · Microsoft Corporation | MIT | 36 / 35 / 106 | 4.75:1 |
 
 The Két originals use the existing Két Design System MIT snapshots; their
 foreground/background contrast is 15.15:1 (light) and 14.53:1 (dark), measured by

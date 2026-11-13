@@ -129,6 +129,19 @@ class BuiltinSchemeTest : public QObject {
         const auto metadata = loaded.scheme.metadata;
         QCOMPARE(metadata.value("sourceLabel").toString(), source);
         QVERIFY(!metadata.value("author").toString().isEmpty());
+        if (id == u"builtin.vscode-dark-plus" || id == u"builtin.vscode-light-plus") {
+            QCOMPARE(metadata["author"].toString(), QStringLiteral("Microsoft Corporation"));
+            QVERIFY(!metadata.contains("upstreamCredits"));
+        }
+        if (id == u"builtin.solarized-dark") {
+            QCOMPARE(metadata["author"].toString(), QStringLiteral("Microsoft Corporation"));
+            const auto credits = metadata["upstreamCredits"].toArray();
+            QCOMPARE(credits.size(), 1);
+            QCOMPARE(credits[0].toObject()["author"].toString(),
+                     QStringLiteral("Ethan Schoonover"));
+            QCOMPARE(credits[0].toObject()["repo"].toString(),
+                     QStringLiteral("altercation/solarized"));
+        }
         QVERIFY(metadata["license"] == "MIT" || metadata["license"] == "Apache-2.0");
         QVERIFY(metadata["manualAdjustments"].isArray());
         const auto upstream = metadata["upstream"].toObject();
