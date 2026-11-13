@@ -286,7 +286,7 @@ diff for generated data, absolute paths, and credentials.
 
 ## Team translations
 
-A team works in English or Vietnamese (ADR 0124). English is the source text; the
+A team works in English or Vietnamese (ADR 0125). English is the source text; the
 Vietnamese text is `modules/remote/translations/ketplus_teams_vi.ts`, which `lrelease`
 compiles into the build (Qt `LinguistTools`). After adding or changing a team text, in
 `apps/desktop/src/teams` (`tr()`) or `apps/daemon/src/teams`

@@ -1,4 +1,4 @@
-# ADR 0124: A team works in its leader's language
+# ADR 0125: A team works in its leader's language
 
 Status: accepted (2026-11-13). Amends ADR 0114 (team record, Updates, decisions).
 

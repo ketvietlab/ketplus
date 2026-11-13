@@ -159,7 +159,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   check skips tasks with a pull request, needs the branch's own commits and accepts
   `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
   live team.
-  Team language ([ADR 0124](decisions/0124-team-language.md), T-56): a team works in
+  Team language ([ADR 0125](decisions/0125-team-language.md), T-56): a team works in
   English or Vietnamese, set in New Team (from the system or the goal's letters) and in the
   team menu. The team page, its dialogs, the daemon's Updates, history, its own decisions
   and the leader's digest follow it through Qt Linguist (`ketplus_teams_vi.ts`), and the

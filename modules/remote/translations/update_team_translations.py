@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refreshes the team translations from the team sources (T-56, ADR 0124, docs/development.md).
+"""Refreshes the team translations from the team sources (T-56, ADR 0125, docs/development.md).
 
 lupdate finds every team text, but it guesses a context per class, and the desktop's
 free tr() helpers translate under contexts lupdate cannot see. A team text means the same

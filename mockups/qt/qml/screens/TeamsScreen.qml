@@ -45,7 +45,7 @@ Item {
     })
 
     readonly property var members: team ? team.members : []
-    // T-56 (ADR 0124): a team works in English or Vietnamese; a team without one is English.
+    // T-56 (ADR 0125): a team works in English or Vietnamese; a team without one is English.
     readonly property var languages: [{ code: "en", name: "English" }, { code: "vi", name: "Tiếng Việt" }]
     readonly property string teamLanguage: team && team.language ? team.language : "en"
     readonly property var tasks: team ? team.tasks : []
@@ -1637,7 +1637,7 @@ Item {
                 screen.window.notify(mine ? "The leader merges reviewed tasks" : "Reviewed tasks wait for you to merge")
             }
         }
-        // T-56 (ADR 0124): the language the team page, its updates and decisions use.
+        // T-56 (ADR 0125): the language the team page, its updates and decisions use.
         KetMenuItem {
             text: "English"
             description: screen.teamLanguage === "en" ? "The team works in it" : ""
@@ -2210,7 +2210,7 @@ Item {
         property var plan: defaults
         // Who merges a reviewed task into the integration branch: "leader" or "user".
         property string merges: "leader"
-        // T-56 (ADR 0124): the team's language follows the goal's letters until it is picked.
+        // T-56 (ADR 0125): the team's language follows the goal's letters until it is picked.
         property bool languagePicked: false
         readonly property var roles: [
             { role: "leader", label: "Leader" },
