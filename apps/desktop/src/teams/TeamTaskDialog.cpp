@@ -276,7 +276,7 @@ void TeamTaskDialog::rebuild() {
         const char* name;
         bool mono;
     };
-    const QList<Fact> facts{
+    QList<Fact> facts{
         {tr("Owner"), ownerName, "teamTaskOwner", false},
         {tr("Reviewer"), reviewer, "teamTaskReviewer", false},
         {tr("Pull request"), task.value(QStringLiteral("pull_request")).toString(),
@@ -285,6 +285,12 @@ void TeamTaskDialog::rebuild() {
         {tr("Worktree"), task.value(QStringLiteral("worktree")).toString(), "teamTaskWorktree",
          true},
         {tr("Depends on"), depends.join(QStringLiteral(", ")), "teamTaskDependencies", true}};
+    // T-90 (ADR 0121): a task that works in another repository than the team's names it.
+    if (const QString own = task.value(QStringLiteral("repository")).toString(); !own.isEmpty())
+        facts.insert(3, {tr("Repository"),
+                         QStringLiteral("%1 → %2").arg(
+                             own, task.value(QStringLiteral("integration_branch")).toString()),
+                         "teamTaskRepository", true});
     auto* grid = new QGridLayout;
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setHorizontalSpacing(px(16));

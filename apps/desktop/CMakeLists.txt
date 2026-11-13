@@ -95,6 +95,8 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamTaskDialog.cpp
     src/teams/TeamTaskDialog.h
     src/teams/TeamTaskDialogActions.cpp
+    src/teams/TeamRepositorySettings.cpp
+    src/teams/TeamRepositorySettings.h
     src/teams/TeamReviewSettings.cpp
     src/teams/TeamReviewSettings.h
     src/teams/TeamTurnBudget.cpp

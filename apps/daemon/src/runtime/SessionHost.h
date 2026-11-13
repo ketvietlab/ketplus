@@ -327,6 +327,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QString takeTeamTurn(const QString& sessionId) override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
+    [[nodiscard]] teams::RepositoryCheck
+    checkRepository(const QString& path, const QString& integrationBranch) const override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
     void askPointConversationAt(const QString& sessionId, const QString& worktree,
                                 teams::PointDone done) override;

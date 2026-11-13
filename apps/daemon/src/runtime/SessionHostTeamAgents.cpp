@@ -245,7 +245,9 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
              .description = payload.value(QStringLiteral("description")).toString(),
              .lane = payload.value(QStringLiteral("lane")).toString(),
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
-             .criteria = strings(payload.value(QStringLiteral("criteria")))},
+             .criteria = strings(payload.value(QStringLiteral("criteria"))),
+             .repository = payload.value(QStringLiteral("repository")).toString(),
+             .integrationBranch = payload.value(QStringLiteral("integration_branch")).toString()},
             sessionId, &created);
         return answer(result, created);
     }
@@ -304,6 +306,19 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             teams_->allowPaths(teamId, taskId, strings(payload.value(QStringLiteral("paths"))),
                                payload.value(QStringLiteral("reason")).toString(), sessionId),
             taskId);
+    }
+    if (operation == QStringLiteral("team_repository_set")) {
+        // T-90 (ADR 0121): the leader names why, as for a lane change.
+        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
+            return refusal(QStringLiteral("invalid_payload"),
+                           QStringLiteral("Give the reason the repository changes."));
+        QJsonObject changes{
+            {QStringLiteral("repository"), payload.value(QStringLiteral("repository")).toString()},
+            {QStringLiteral("reason"), payload.value(QStringLiteral("reason")).toString()}};
+        if (payload.contains(QStringLiteral("integration_branch")))
+            changes.insert(QStringLiteral("integration_branch"),
+                           payload.value(QStringLiteral("integration_branch")).toString());
+        return answer(teams_->update(teamId, changes, sessionId), {});
     }
     return teamDecisionOperation(sessionId, operation, payload);
 }

@@ -407,7 +407,13 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         }
         team->goal = goal;
     }
-    if (changes.contains(QStringLiteral("integration_branch"))) {
+    // T-90: a new repository is checked with its integration branch, so both change together.
+    if (changes.contains(QStringLiteral("repository"))) {
+        if (auto invalid = changeRepository(*team, changes, actor, updates)) {
+            *team = before;
+            return {.error = invalid};
+        }
+    } else if (changes.contains(QStringLiteral("integration_branch"))) {
         const QString branch =
             changes.value(QStringLiteral("integration_branch")).toString().trimmed();
         if (auto invalid = rules::validBranch(branch)) {

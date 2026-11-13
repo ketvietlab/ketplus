@@ -133,6 +133,8 @@ ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
 ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_daemon_test(ketplus_team_storage_tests TeamStorageTest.cpp)
+# T-90 (ADR 0121): the team's repository changes; a task works in a repository of its own.
+ketplus_add_daemon_test(ketplus_team_repository_tests TeamRepositoryTest.cpp)
 # T-38: tracked changes only, allowed paths, and a head only from the task's own branch.
 ketplus_add_daemon_test(ketplus_team_attribution_tests TeamAttributionTest.cpp)
 # ADR 0116: team commands from paired phones, checked against the contract's fixture.

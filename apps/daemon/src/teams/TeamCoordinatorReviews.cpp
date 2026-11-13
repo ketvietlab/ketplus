@@ -54,9 +54,12 @@ int shownLimit(const int limit, const int round) { return std::max(limit, round)
 // T-40: a comment on a public pull request names no folder of this computer. The task's
 // worktree, the team's repository and the home folder are replaced, longest first.
 QString publicText(QString text, const Team& team, const Task& task) {
+    // T-90: the task's own repository too, when it has one.
     QList<std::pair<QString, QString>> paths{{task.worktree, QStringLiteral("<task worktree>")},
                                              {team.repository, QStringLiteral("<repository>")},
                                              {QDir::homePath(), QStringLiteral("~")}};
+    if (!task.repository.isEmpty())
+        paths.append({task.repository, QStringLiteral("<repository>")});
     std::sort(paths.begin(), paths.end(),
               [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
     for (const auto& [path, name] : paths) {
@@ -88,13 +91,13 @@ QString TeamCoordinator::roundLimitQuestion(const int round, const int maxRounds
 
 QString TeamCoordinator::reviewText(const Team& team, const Task& task,
                                     const std::optional<TaskDiff>& diff) {
-    QStringList lines{
-        QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
-            .arg(team.name, task.id, task.title)
-            .arg(task.round)
-            .arg(shownLimit(roundLimit(team, task), task.round)),
-        QStringLiteral("Branch: %1, against %2").arg(task.branch, team.integrationBranch),
-        QStringLiteral("Worktree: %1").arg(task.worktree)};
+    QStringList lines{QStringLiteral("Team %1: review task %2 \"%3\" (round %4 of %5).")
+                          .arg(team.name, task.id, task.title)
+                          .arg(task.round)
+                          .arg(shownLimit(roundLimit(team, task), task.round)),
+                      QStringLiteral("Branch: %1, against %2")
+                          .arg(task.branch, taskScope(team, task).integrationBranch),
+                      QStringLiteral("Worktree: %1").arg(task.worktree)};
     if (TeamCoordinator::recordsPullRequest(task))
         lines << QStringLiteral("Pull request: %1").arg(task.pullRequest);
     if (!task.headCommit.isEmpty())
@@ -181,16 +184,17 @@ void TeamCoordinator::pumpReviews(const qint64 teamId) {
             continue;
         }
         reviewDiffs_.insert(diffKey(teamId, reviewer));
-        host_->askDiff(
-            *team, *next,
-            [self = QPointer<TeamCoordinator>(this), teamId, reviewer, asked = *next,
-             repository = team->repository,
-             integration = team->integrationBranch](const std::optional<TaskDiff>& diff) {
-                if (!self)
-                    return;
-                self->reviewDiffs_.remove(diffKey(teamId, reviewer));
-                self->startReview(teamId, reviewer, asked, repository, integration, diff);
-            });
+        host_->askDiff(*team, *next,
+                       [self = QPointer<TeamCoordinator>(this), teamId, reviewer, asked = *next,
+                        repository = taskScope(*team, *next).repository,
+                        integration = taskScope(*team, *next).integrationBranch](
+                           const std::optional<TaskDiff>& diff) {
+                           if (!self)
+                               return;
+                           self->reviewDiffs_.remove(diffKey(teamId, reviewer));
+                           self->startReview(teamId, reviewer, asked, repository, integration,
+                                             diff);
+                       });
     }
 }
 
@@ -211,8 +215,8 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     const Task* next = nextInReview(std::as_const(*team), *slot);
     if (!next || next->id != asked.id || next->branch != asked.branch ||
         next->worktree != asked.worktree || next->baseCommit != asked.baseCommit ||
-        next->headCommit != asked.headCommit || team->repository != repository ||
-        team->integrationBranch != integration) {
+        next->headCommit != asked.headCommit || taskScope(*team, *next).repository != repository ||
+        taskScope(*team, *next).integrationBranch != integration) {
         pumpReviews(teamId);
         return;
     }

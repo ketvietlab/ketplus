@@ -22,3 +22,4 @@ Do not use an ADR for routine implementation detail. When superseding a
 decision, retain the old record and link both documents.
 
 - [0120: GitHub Copilot through a shared ACP adapter](0120-github-copilot-acp-provider.md)
+- [0121: A team's repository can change, and a task can work in its own](0121-team-and-task-repository.md)

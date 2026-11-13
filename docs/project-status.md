@@ -97,6 +97,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `user` — and becomes Done when the integration branch contains its branch
   (`git merge-base --is-ancestor`, checked after every member's turn and on
   `team.get`), also for a merge made by hand.
+  Repository ([ADR 0121](decisions/0121-team-and-task-repository.md)): the user (Team page,
+  Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
+  checked main checkout and integration branch; started tasks keep the repository they began
+  in, and `team_task_create` may name a task's own repository.
   Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
   a task that records a pull request is done once `gh` says it is merged, from any open
   state, checked at load, every 2 minutes and with the merge check (at most 20 pull
