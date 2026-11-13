@@ -113,7 +113,9 @@ QJsonArray features(const int minor) {
             QStringLiteral("teams/1"), QStringLiteral("teams.tasks/1"),
             QStringLiteral("teams.summary/1"), QStringLiteral("teams.settings/1"),
             QStringLiteral("teams.storage/1"),
-            QStringLiteral("transport.oversized/1")};
+            // ADR 0126: schedule.list/get/create/update/delete/setEnabled/runNow/runs
+            // and the schedule.changed / schedule.run events.
+            QStringLiteral("schedules/1"), QStringLiteral("transport.oversized/1")};
 }
 
 QString timestamp() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }

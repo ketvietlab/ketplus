@@ -37,6 +37,7 @@ struct ValidationResult final {
 // The minor both sides speak; a client that sends none speaks minor 0.
 [[nodiscard]] int negotiatedMinor(const QJsonObject& helloPayload);
 // Optional behaviour this daemon offers at `minor`, as "name" or "name/revision".
+// `schedules/1` (ADR 0126) is the schedule.* requests and events in ScheduleProtocol.h.
 [[nodiscard]] QJsonArray features(int minor);
 
 } // namespace ketplus::daemon::protocol
