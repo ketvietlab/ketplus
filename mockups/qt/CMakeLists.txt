@@ -47,7 +47,7 @@ qt_add_executable(ketplus_qt_mock MACOSX_BUNDLE src/main.cpp src/MockController.
                   src/MockController.cpp)
 set_target_properties(ketplus_qt_mock PROPERTIES OUTPUT_NAME "KetPlusMock")
 
-file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml)
+file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml qml/*.js)
 set_source_files_properties(qml/Fixtures.qml qml/TranscriptFixtures.qml PROPERTIES
                             QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(ketplus_qt_mock
@@ -101,11 +101,25 @@ include(CTest)
 if(BUILD_TESTING)
     find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
                  HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
-    foreach(suite ContentTabsModel PlanRunModel)
+    foreach(suite ContentTabsModel PlanRunModel ScheduleRules)
         add_test(NAME mock_${suite}
                  COMMAND "${KETPLUS_MOCK_QMLTESTRUNNER}" -input
                          "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_${suite}.qml")
         set_tests_properties(mock_${suite} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+    endforeach()
+    foreach(state empty policies)
+        add_test(NAME mock_schedule_${state}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=schedules --state=${state} --check-state)
+        set_tests_properties(mock_schedule_${state}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    endforeach()
+    foreach(state schedule-new schedule-repeat schedule-ready schedule-existing schedule-more schedule-at schedule-weekly)
+        add_test(NAME mock_${state}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=workspace --state=${state} --size=1024x640 --check-state)
+        set_tests_properties(mock_${state}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    endforeach()
+    add_test(NAME mock_scheduled_team_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --state=scheduled --check-state)
+    set_tests_properties(mock_scheduled_team_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    foreach(panel new-team-repeat new-team-members)
+        add_test(NAME mock_${panel}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --open=${panel} --check-state)
+        set_tests_properties(mock_${panel}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     endforeach()
     add_test(NAME mock_smoke COMMAND $<TARGET_FILE:ketplus_qt_mock> --smoke)
     set_tests_properties(mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)

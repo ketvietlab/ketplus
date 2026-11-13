@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Ket
 import KetPlusMock
 import KetPlusMock.Native
+import "../schedules/ScheduleSamples.js" as ScheduleSamples
 
 // Teams (concept): several conversations with one goal. The page answers, in order, what waits
 // for the user, who is on the team and what each member holds, and where every task stands.
@@ -14,7 +15,7 @@ Item {
     id: screen
 
     required property var window
-    property var teams: Fixtures.teams
+    property var teams: Fixtures.teams.concat([ScheduleSamples.waitingTeam(Fixtures.teams[0])])
     property int teamIndex: 0
     readonly property var team: teams[teamIndex] || null
     // The Tasks filter: a task state, or "" for every task.
@@ -60,6 +61,9 @@ Item {
     property bool removingAll: false
     property var removalOutcome: null
     function gb(value) { return value.toFixed(1) + " GB" }
+    readonly property var scheduledUpdates: team && window.scheduleStore.find("web")
+        && window.scheduleStore.find("web").teamId === team.id
+        ? [{ icon: "clock", text: "Scheduled run: Daily website article → leader", detail: "Schedule · @agent/4821", when: "08:00" }] : []
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
     readonly property var leader: members.find(m => m.role === "leader") || null
@@ -107,12 +111,15 @@ Item {
     // `teams/ready`: the user merges, and T-1 passed review: "Merge T-1?" waits for the user.
     // `teams/paused`: the team used its automatic turns and waits for the user to go on.
     function showState(state) {
-        teams = state === "empty" ? [] : Fixtures.teams
+        teams = state === "empty" ? [] : Fixtures.teams.concat([ScheduleSamples.waitingTeam(Fixtures.teams[0])])
         // `teams/live`: content as a team writes it: long choices, descriptions, lanes, updates.
         if (state === "live")
             teams = [Fixtures.liveTeam]
         teamIndex = 0
         filter = ""
+        if (state === "scheduled") {
+            teamIndex = teams.findIndex(t => t.id === "website")
+        }
         if (state === "large" || state === "two-reviewers")
             change({ members: members.concat([{ number: "9079", title: "Check this worktree", role: "developer",
                 provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["apps/desktop/src/onboarding/"],
@@ -203,8 +210,33 @@ Item {
     }
 
     // `--open=new-team|add-member|task|handover` opens a dialog for review captures.
+    function scheduleChecks() {
+        const oldTeams = teams, oldIndex = teamIndex, oldStarted = window.started, oldEntries = window.scheduleStore.entries
+        startNewTeam(""); teamName.text = "Website"; teamGoal.text = "Write a new post for the website"
+        teamStart.preset(false); teamStart.previewRepeat()
+        createButton.clicked()
+        const created = team
+        if (!created || !window.scheduleStore.forTeam(created.id).some(e => e.kind === "team-start")
+            || !window.scheduleStore.forTeam(created.id).some(e => e.kind !== "team-start")) console.warn("QML schedule check: New team must save start and recurring work order")
+        teams = oldTeams; teamIndex = oldIndex; window.started = oldStarted; window.scheduleStore.entries = oldEntries
+    }
+    function scheduleEvidenceChecks(state, panel) {
+        if (state === "scheduled" && (!team || team.id !== "website" || team.automaticTurns !== 0 || tasks.length || decisions.length || team.updates.length || scheduledUpdates.length)) return false
+        if (panel === "new-team-repeat" && (!teamStart.recurring || teamStart.workOrder !== teamGoal.text)) return false
+        if (panel === "new-team-members" && !(newTeamBody.contentY > 0 && Math.abs(newTeamBody.contentY + newTeamBody.height - newTeamBody.contentHeight) <= 1)) return false
+        return true
+    }
     function openDialog(name) {
-        if (name === "new-team")
+        if (["new-team-scheduled", "new-team-start-invalid", "new-team-repeat", "new-team-members"].includes(name)) {
+            startNewTeam("")
+            teamName.text = "Website"
+            teamGoal.text = "Write a new post for the website"
+            teamStart.preset(false)
+            if (name === "new-team-repeat") teamStart.previewRepeat()
+            if (name === "new-team-members") { teamStart.previewRepeat(); Qt.callLater(() => newTeamBody.scrollToEnd()) }
+            if (name === "new-team-start-invalid") { teamStart.date = "2026-11-13"; teamStart.time = "14:59"; teamStart.tried = true }
+        }
+        else if (name === "new-team")
             startNewTeam("")
         else if (name === "new-team-goal" || name === "new-team-unknown") {
             // A long goal with a mention drawn as a token, and the picker open on the next one;
@@ -725,6 +757,12 @@ Item {
         Layout.fillHeight: true
         implicitHeight: bodyFields.height
         contentHeight: bodyFields.height
+        property bool followEnd: false
+        function positionAtEnd() { if (followEnd) contentY = Math.max(0, contentHeight - height) }
+        function scrollToEnd() { followEnd = true; positionAtEnd() }
+        onHeightChanged: if (followEnd) Qt.callLater(positionAtEnd)
+        onContentHeightChanged: if (followEnd) Qt.callLater(positionAtEnd)
+        onMovementStarted: followEnd = false
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Basic.ScrollBar.vertical: Basic.ScrollBar {
@@ -838,6 +876,8 @@ Item {
                     onClicked: teamMenu.popup(moreButton, moreButton.width - teamMenu.width, moreButton.height + screen.px(4))
                 }
             }
+
+            TeamSchedules { width: parent.width; window: screen.window; team: screen.team }
 
             // The goal whole, folded after three lines (ADR 0114); a mention opens its
             // conversation. Everywhere else the goal keeps one line.
@@ -1507,13 +1547,13 @@ Item {
             }
             Panel {
                 id: updatesPanel
-                visible: !!screen.team && screen.team.updates.length > 0
+                visible: !!screen.team && screen.team.updates.length + screen.scheduledUpdates.length > 0
                 height: updateList.implicitHeight
                 Column {
                     id: updateList
                     width: parent.width
                     Repeater {
-                        model: screen.team ? screen.team.updates : []
+                        model: screen.team ? screen.scheduledUpdates.concat(screen.team.updates) : []
                         Item {
                             id: updateRow
                             required property var modelData
@@ -2235,14 +2275,16 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1; teamReview.rounds = 2; teamReview.place = "board" }
+        onOpened: { newTeamBody.followEnd = false; newTeamBody.contentY = 0; teamStart.reset(); tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1; teamReview.rounds = 2; teamReview.place = "board" }
         DialogBody {
+            id: newTeamBody
             KetFieldRow {
                 width: parent.width
                 label: "Name"
                 error: newTeamDialog.tried && teamName.text.trim() === "" ? "Name the team." : ""
                 KetTextField { id: teamName; width: parent.width; placeholderText: "Onboarding rework"; invalid: newTeamDialog.tried && text.trim() === "" }
             }
+            TeamScheduleFields { id: teamStart; width: parent.width; goal: teamGoal.text }
             KetFieldRow {
                 width: parent.width
                 label: "Goal"
@@ -2418,13 +2460,21 @@ Item {
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     newTeamDialog.tried = true
+                    teamStart.tried = true
                     const name = teamName.text.trim()
-                    if (name === "" || teamGoal.problem !== "" || Fixtures.turnBudgetError(teamBudget.text) !== "")
+                    if (name === "" || teamGoal.problem !== "" || Fixtures.turnBudgetError(teamBudget.text) !== "" || teamStart.problem !== "")
                         return
                     newTeamDialog.accept()
-                    screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
+                    const created = screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
                                       leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText,
                                       Number(teamBudget.text.trim()), { rounds: teamReview.rounds, place: teamReview.place })
+                    if (teamStart.scheduled) screen.window.scheduleStore.save({
+                        name: "Start team " + name, prompt: teamGoal.text.trim(), kind: "team-start", target: 2,
+                        teamId: created, teamName: name, conversation: screen.team.members[0].number, rule: 0,
+                        date: teamStart.date, time: teamStart.time, zone: teamStart.zone, days: [], hours: "4", busy: 0, missed: 0 })
+                    if (teamStart.recurring) screen.window.scheduleStore.save(Object.assign({}, teamStart.recurringDraft, {
+                        name: "Daily website article", prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
+                        conversation: screen.team.members[0].number, date: teamStart.date, busy: 0, missed: 0 }))
                 }
             }
         ]
