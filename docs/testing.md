@@ -1058,3 +1058,10 @@ manual UI acceptance remain separate checks.
 INI settings, in light/dark. It checks the exact recipe gap after growth and window
 resize, composer/view hide and restore, and preservation of another composer's
 reservation during hide and destruction. It uses no backend or provider.
+
+`ketplus_scheme_manager_tests` covers one-time legacy migration, independent
+system preferences, built-in parity against live kit tokens, complete async
+publication, exact notification counts, preview cancellation/commit, stale-result
+suppression and external revision cancellation. `ketplus_git_diff_view_tests`
+also verifies model/selection identity and alpha-composited canonical diff colors.
+These offscreen checks do not replace native DELL or Pro chat acceptance.

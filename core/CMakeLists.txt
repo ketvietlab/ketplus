@@ -28,7 +28,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets Concurrent)
 
 include(cmake/CompilerCache.cmake)
 include(cmake/Dependencies.cmake)
@@ -52,6 +52,10 @@ add_library(ketplus_ui STATIC
     src/ui/theme/ColorSchemeCatalog.h
     src/ui/theme/ThemeSelection.cpp
     src/ui/theme/ThemeSelection.h
+    src/ui/theme/ThemeSchemeController.cpp
+    src/ui/theme/ThemeSchemeController.h
+    src/ui/theme/ColorSchemeKitAdapter.cpp
+    src/ui/theme/ColorSchemeKitAdapter.h
     src/ui/InterfaceZoom.h
     src/ui/TypeScale.h
     src/ui/KetFonts.cpp
@@ -61,7 +65,7 @@ add_library(ketplus_ui STATIC
     src/ui/AboutDialog.cpp
     src/ui/AboutDialog.h
 )
-target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets)
+target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets PRIVATE Qt6::Concurrent PUBLIC KetQt::Tokens KetQt::Icons KetQt::Widgets)
 target_include_directories(ketplus_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -552,6 +556,13 @@ if(KETPLUS_CM_BUILD_TESTS)
         endif()
     endfunction()
 
+
+    add_executable(ketplus_scheme_manager_tests tests/SchemeManagerTest.cpp)
+    target_link_libraries(ketplus_scheme_manager_tests PRIVATE Qt6::Test ketplus_ui)
+    ketplus_enable_warnings(ketplus_scheme_manager_tests)
+    ketplus_cm_add_test(ketplus_scheme_manager_tests ketplus_scheme_manager_tests)
+    set_tests_properties(ketplus_scheme_manager_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_executable(ketplus_scheme_consumer_tests tests/SchemeConsumerTest.cpp)
     target_link_libraries(ketplus_scheme_consumer_tests PRIVATE Qt6::Test ketplus_editor ketplus_terminal_ui)
     ketplus_enable_warnings(ketplus_scheme_consumer_tests)
@@ -571,6 +582,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_color_scheme_tests)
     ketplus_cm_add_test(ketplus_color_scheme_tests ketplus_color_scheme_tests)
     set_tests_properties(ketplus_color_scheme_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 
     add_executable(ketplus_theme_input_tests tests/ThemeInputTest.cpp)
     target_link_libraries(ketplus_theme_input_tests PRIVATE Qt6::Test ketplus_theme_io ketplus_miniz)

@@ -324,8 +324,8 @@ remove/fallback, lock contention and failed writes. No provider is invoked.
 ## Theme selection persistence foundation
 
 `ThemeSelectionStore` owns committed selection independently of catalog contents.
-It is a persistence foundation; ThemeManager and component integration are still
-pending. Its default file is `AppDataLocation/color-schemes/selection.json`:
+ThemeManager consumes it through a snapshot controller; remaining consumer
+integration and native acceptance are tracked in T-5. Its default file is `AppDataLocation/color-schemes/selection.json`:
 
 ```json
 {
@@ -396,3 +396,40 @@ import preview restoration and the command picker await the T-5 theme applicatio
 API. The existing Appearance controls remain the active application UI until
 that binding and its integration tests are complete. Native light/dark/report
 screenshots are still pending that integration.
+
+## Live selection API (T-5 integration in progress)
+
+`ThemeManager::schemeSelection()` exposes the committed `ThemeSelection`.
+`setSchemeSelection()` commits a selection through the locked, revisioned store;
+`previewSchemeSelection()` changes only this process. `commitSchemePreview()`
+commits an installed selection and `cancelPreview()` restores committed state.
+`previewColorScheme()` accepts an in-memory canonical import for local inspection;
+install that scheme in the catalog before committing its ID. In-memory previews
+cannot implicitly install themselves. `hasSchemePreview()` and `schemeError()`
+expose state, and `schemeFailed` reports persistence failures.
+
+`colorScheme()` and `palette()` refer to the last complete applied snapshot.
+User-file reads, inheritance resolution and kit-override preparation run on the
+Qt Concurrent pool. Generation checks discard superseded results. Embedded
+built-ins remain synchronous for existing `setMode` callers. A newer committed
+revision cancels local previews, and application activation refreshes the store.
+System following chooses independent light/dark preferred IDs from Qt style hints;
+custom preferences pin the kit to the resolved snapshot to avoid intermediate colors.
+The standard built-in pair preserves the existing kit System mode. Direct legacy
+Appearance mode changes remain process-local built-in previews.
+
+Publication switches the kit branch under blocked intermediate notifications,
+then replaces its overrides once. ThemeManager updates the compatibility palette
+and notifies existing consumers during that one kit change. Unchanged built-in
+values produce no overrides, preserving all kit defaults and translucent colors.
+The explicit kit adapter maps chrome/input/button aliases and ANSI colors; syntax
+roles are deliberately not projected onto accent/chart tokens. Consumers read
+syntax from the canonical snapshot. Kit recipes without a distinct token for a
+schema role still use their shared recipe semantics; they cannot gain independent
+sidebar/list/tab colors solely through this override table.
+
+Main-window editor, terminal and diff consumers use canonical snapshots in place.
+Terminal panels retain the snapshot for subsequently opened tabs. Diff background
+colors preserve imported alpha by compositing over the panel; unchanged built-ins
+keep the kit's original soft tints. Pro chat/Markdown/Mermaid and standalone
+Terminal integration, native DELL acceptance remain open. The kit is pinned to PR #57’s develop merge.
