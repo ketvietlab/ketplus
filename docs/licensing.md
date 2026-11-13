@@ -56,6 +56,7 @@ application.
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Qt resources of KétPlus, KétPlus Terminal and KétPlus Pro | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | Ship the copyright and complete OFL text; a modified font must not use the reserved names |
 | KÉT Sans Mono | 0.10.4 Medium TTF in `core/assets/fonts` | Embedded in the same Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | As KÉT Sans; never use 0.10.3, which carries the old licence |
+| Két Design System | 0.1.44 color-scheme snapshots in `core/resources/color-schemes` | Embedded configuration data | MIT | Include the publisher notice in CM color-scheme resources |
 | Két Design System | 0.1.44 Mermaid snapshots in `core/resources/mermaid` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
 | Sparkle | 2.10.0 release archive pinned by SHA-256 | Unmodified framework in `Contents/Frameworks`, only when `KETPLUS_UPDATE_FEED_URL` is set (ADR 0019) | MIT, plus the bsdiff and other notices in its `LICENSE` | Ship `Sparkle-MIT.txt` complete |
 
