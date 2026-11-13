@@ -294,6 +294,7 @@ if(APPLE)
             "-DKETPLUS_APP_BUNDLE=$<TARGET_BUNDLE_DIR:ketplus>"
             "-DKETPLUS_PRODUCT_VERSION=${PROJECT_VERSION}"
             "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/packaging/macos/VerifyBundle.cmake"
     )
 endif()
