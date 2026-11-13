@@ -12,6 +12,9 @@ class QLabel;
 class QPlainTextEdit;
 class QPushButton;
 class QToolButton;
+namespace ketplus::remote {
+class MachineBackend;
+}
 
 namespace ketplus {
 
@@ -38,6 +41,8 @@ class MachineWorkspaceView final : public QWidget {
     void openConversation(const QString& sessionId);
     // Shows the new-conversation composer with its worktree picker.
     void startNewConversation(const QString& repositoryId = {});
+    // Uses the same file-validation/staging path as the Attach picker and drag/drop callers.
+    void attachFiles(const QStringList& paths);
     [[nodiscard]] MachineConversationSession* session() const;
     [[nodiscard]] QString openSessionId() const;
     // Rename, fork and archive of this machine's conversations (the sidebar menu uses it too).
@@ -75,6 +80,18 @@ class MachineWorkspaceView final : public QWidget {
     void showSession(MachineConversationSession* session, bool reload);
     void bind(const QString& sessionId, qint64 generation, bool running);
     void finishCreate(const QString& machine, const QJsonObject& result, const QString& error);
+    void discardPreparation();
+    void preparedAttachments(const QJsonObject& result);
+    void sendPreparedAttachments(const QString& prompt);
+    QPointer<remote::MachineBackend> draftBackend_;
+    QPointer<MachineConversationSession> draftSession_;
+    QPointer<MachineAttachmentPanel> draftPanel_;
+    QString draftRequestId_;
+    QString draftWorktree_;
+    QString draftRepository_;
+    QStringList pendingAttachmentPaths_;
+    quint64 draftEpoch_{0};
+    bool preparing_{false};
 
     MachineCatalog* catalog_;
     QPointer<MachineConversationSession> session_;

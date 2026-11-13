@@ -69,6 +69,9 @@ class RelayMachineBackend final : public MachineBackend {
     void transcriptLargeEvent(const QString& sessionId, qint64 generation,
                               const QJsonObject& request, Callback callback) override;
     void createSession(const QJsonObject& request, Callback callback) override;
+    void prepareSession(const QJsonObject& request, Callback callback) override;
+    void cancelPreparedSession(const QString& sessionId, qint64 generation,
+                               Callback callback) override;
     // Stops following the conversation's events until it is opened again.
     void conversationClosed(const QString& sessionId) override;
     void attachmentCommand(AttachmentOperation operation, const QString& sessionId,
@@ -102,6 +105,7 @@ class RelayMachineBackend final : public MachineBackend {
     using OutboxRoute = CommandOutbox::Route;
     void setState(ConnectionState state, const QString& reason);
     void probe();
+    void worktreeCommand(const QString& kind, const QJsonObject& request, Callback callback);
     void scheduleProbe();
     // Classifies a relay failure: a fatal one goes Offline, anything else reconnects.
     void failed(const QString& error);
@@ -165,6 +169,9 @@ class RelayMachineBackend final : public MachineBackend {
     quint64 nextWaiter_{0};
     // The verified projection rows of this machine, by session id.
     QHash<QString, QJsonObject> sessions_;
+    // Host-signed preparation results, private to this backend and never projected as a chat.
+    QHash<QString, QJsonObject> prepared_;
+    bool preparationSupported_{false};
     QJsonArray repositories_;
     // Sessions whose events are followed, with the last cursor seen.
     QHash<QString, qint64> watched_;

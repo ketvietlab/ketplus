@@ -32,6 +32,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlUploadProgress.cpp
     src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
+    src/cloud/CloudControlPreparations.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h

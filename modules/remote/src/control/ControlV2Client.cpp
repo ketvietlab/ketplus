@@ -156,6 +156,9 @@ void ControlV2Client::authorized(const QByteArray& method, const QString& path,
 void ControlV2Client::listSessions(Callback done) {
     authorized("GET", "/v2/mobile/sessions", {}, std::move(done));
 }
+void ControlV2Client::listMachines(Callback done) {
+    authorized("GET", "/v2/machines", {}, std::move(done));
+}
 void ControlV2Client::listWorktrees(Callback done) {
     authorized("GET", "/v2/mobile/worktrees", {}, std::move(done));
 }

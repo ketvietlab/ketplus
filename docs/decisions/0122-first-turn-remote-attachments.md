@@ -1,6 +1,6 @@
-# 0121: Prepare a session before staging a conversation’s first attachment
+# 0122: Prepare a session before staging a conversation’s first attachment
 
-Status: accepted; additive Relay contract approved, implementation in progress
+Status: accepted
 Date: 2026-11-13
 
 ## Context
@@ -125,6 +125,16 @@ worktree-scoped command kind, its authenticated/idempotent result and capability
 must be understood by the client, host and Relay allowlist/validation path. Reusing
 an optional field of `session.create` would still change its prompt-required
 semantics; it is not a way to claim protocol compatibility.
+
+Before acknowledging a Relay preparation, the daemon publishes a private routing
+snapshot and a signed session-key envelope addressed only to the creating device.
+Both writes must succeed before the sealed result reports success. The snapshot
+contains opaque scope identifiers, creator device, generation and the original
+expiry; file names, bytes, options and host paths remain encrypted or local.
+Normal session lists, periodic active-session snapshots and ordinary multi-device
+key distribution exclude prepared allocations. After the first real turn activates
+the session, normal conversation projection and key distribution apply. Failed
+publication can be retried with the same client request id without a provider turn.
 
 The local IPC/SSH preparation contract also needs an explicit inactive lifecycle.
 Do not weaken the existing session requirement for `attachment.stage.*`, introduce

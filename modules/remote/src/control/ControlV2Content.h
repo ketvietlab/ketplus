@@ -30,7 +30,7 @@ inline bool validContent(const QJsonObject& content, const QString& session, qin
 }
 // Kinds the relay scopes to a catalog worktree rather than a session (worktreeScoped).
 inline bool worktreeScoped(const QString& kind) {
-    return kind == QLatin1String("session.create") ||
+    return kind == QLatin1String("session.create") || kind == QLatin1String("session.prepare") ||
            kind == QLatin1String("worktree.configuration.read") ||
            kind == QLatin1String("worktree.branches.read");
 }

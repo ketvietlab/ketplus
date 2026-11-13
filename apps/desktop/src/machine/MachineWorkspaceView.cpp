@@ -9,6 +9,7 @@
 #include "machine/MachineRichTranscript.h"
 
 #include <QComboBox>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -97,6 +98,17 @@ MachineWorkspaceView::MachineWorkspaceView(MachineCatalog* catalog, QWidget* par
     connect(attach_, &QPushButton::clicked, this, [this] {
         if (attachmentPanel_)
             attachmentPanel_->chooseFiles();
+        else if (!pendingAttachmentPaths_.isEmpty())
+            attachFiles({});
+        else
+            attachFiles(QFileDialog::getOpenFileNames(this, tr("Attach images or text files")));
+    });
+    connect(worktrees_, &QComboBox::currentIndexChanged, this, [this] {
+        if (!draftRequestId_.isEmpty() &&
+            (draftWorktree_ != worktrees_->currentData().toString() ||
+             draftRepository_ != worktrees_->currentData(Qt::UserRole + 1).toString()))
+            discardPreparation();
+        render();
     });
     layout->addLayout(actions);
     setupToastAvoidance();
@@ -164,6 +176,8 @@ QString MachineWorkspaceView::openSessionId() const {
 void MachineWorkspaceView::catalogChanged() {
     // The selected machine changed or its lists did: restore what that machine last showed.
     const QString machine = catalog_->machineId();
+    if (draftBackend_ && draftBackend_ != catalog_->backend())
+        discardPreparation();
     // A pending fork is dropped when its machine goes away or is switched away from.
     if (!pendingFork_.isEmpty() &&
         (catalog_->backend() == nullptr || machine != pendingForkMachine_))
@@ -193,6 +207,7 @@ void MachineWorkspaceView::catalogChanged() {
 }
 
 void MachineWorkspaceView::openConversation(const QString& sessionId) {
+    discardPreparation();
     // The reader chose what to read: a fork still waiting to be listed does not take over.
     if (sessionId != pendingFork_)
         pendingFork_.clear();
@@ -225,6 +240,7 @@ void MachineWorkspaceView::bind(const QString& sessionId, const qint64 generatio
 }
 
 void MachineWorkspaceView::startNewConversation(const QString& repositoryId) {
+    discardPreparation();
     newConversationRepository_ = repositoryId;
     pendingFork_.clear();
     forkOrigins_.clear();
@@ -242,7 +258,7 @@ void MachineWorkspaceView::startNewConversation(const QString& repositoryId) {
 }
 
 void MachineWorkspaceView::showSession(MachineConversationSession* session, const bool reload) {
-    attachmentPanel_ = nullptr;
+    attachmentPanel_ = session == nullptr ? draftPanel_.data() : nullptr;
     if (session != nullptr) {
         const QString key = catalog_->machineId() + QLatin1Char('/') + session->sessionId() +
                             QLatin1Char('/') + QString::number(session->generation()) +
@@ -303,12 +319,17 @@ void MachineWorkspaceView::render() {
     renderActions(newConversation);
 
     const bool connected = catalog_->state() == State::Connected;
-    const bool canAct = newConversation
-                            ? connected && worktrees_->currentData().isValid() && !creating_
-                            : session_->canAct();
+    const bool canAct =
+        newConversation ? connected && worktrees_->currentData().isValid() && !creating_ &&
+                              !preparing_ && (!draftSession_ || !draftSession_->hasAttachmentSend())
+                        : session_->canAct();
     // A request the route holds or queued is named, so the composer never looks hung.
     QString reason;
-    if (newConversation && creating_)
+    if (newConversation && preparing_)
+        reason = tr("Preparing attachments on the machine…");
+    else if (newConversation && draftSession_ && draftSession_->hasAttachmentSend())
+        reason = draftSession_->writeStatus();
+    else if (newConversation && creating_)
         reason = !connected ? tr("Waiting for the machine to reconnect. The conversation "
                                  "starts when it does (held for up to 15 minutes).")
                  : createCommand_.isEmpty()
@@ -331,7 +352,8 @@ void MachineWorkspaceView::render() {
     composer_->setReadOnly(!canAct);
     composer_->setEnabled(canAct);
     composerReason_->setText(reason);
-    send_->setEnabled(canAct && (!attachmentPanel_ || attachmentPanel_->allReady()));
+    send_->setEnabled(canAct && pendingAttachmentPaths_.isEmpty() &&
+                      (!attachmentPanel_ || attachmentPanel_->allReady()));
     stop_->setVisible(session_ != nullptr && session_->running());
     stop_->setEnabled(canAct);
 }
@@ -352,15 +374,6 @@ void MachineWorkspaceView::pruneAttachmentPanels() {
         } else
             ++it;
     }
-}
-
-void MachineWorkspaceView::renderActions(const bool newConversation) {
-    more_->setVisible(!newConversation);
-    // Attachments are offered on every route and say why they cannot be used yet.
-    QString reason;
-    attach_->setEnabled(
-        session_ && actions_->available(MachineConversationActions::Feature::Attachments, &reason));
-    attach_->setToolTip(session_ ? reason : tr("Open a conversation before attaching files."));
 }
 
 void MachineWorkspaceView::renderWorktrees() {
@@ -415,6 +428,10 @@ void MachineWorkspaceView::submit() {
             attachmentPanel_->setSending(true);
         session_->send(prompt, ids);
         composer_->clear();
+        return;
+    }
+    if (draftSession_) {
+        sendPreparedAttachments(prompt);
         return;
     }
     createConversation(prompt);

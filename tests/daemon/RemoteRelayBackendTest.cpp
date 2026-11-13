@@ -1,6 +1,7 @@
 #include "MachineAttachmentUpload.h"
 #include "SyntheticRelay.h"
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -75,6 +76,99 @@ class RemoteRelayBackendTest final : public QObject {
 
   private slots:
     void init() { r03::resetCredentials(); }
+
+    void preparationIsCapabilityGatedAndUsesAPrivateHostSignedScope_data() {
+        QTest::addColumn<bool>("supported");
+        QTest::addColumn<bool>("cancel");
+        QTest::addColumn<bool>("refuse");
+        QTest::newRow("old-relay") << false << false << false;
+        QTest::newRow("first-turn") << true << false << false;
+        QTest::newRow("cancel") << true << true << false;
+        QTest::newRow("prepare-refused") << true << false << true;
+    }
+    void preparationIsCapabilityGatedAndUsesAPrivateHostSignedScope() {
+        QFETCH(bool, supported);
+        QFETCH(bool, cancel);
+        QFETCH(bool, refuse);
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        if (!supported)
+            relay.machinesStatus = 404;
+        if (supported)
+            network.replies.insert(
+                prefix + "/v2/machines",
+                QJsonArray{QJsonObject{{"id", "linux-host"},
+                                       {"capabilities", QJsonArray{"session.prepare/1"}}}});
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(dir.filePath("outbox.json")));
+        connectAndWait(backend);
+        QCOMPARE(backend.supports(MachineBackend::Feature::SessionPreparation), supported);
+        QVERIFY(backend.supports(MachineBackend::Feature::Attachments));
+        QJsonObject listing;
+        settledListing(backend, &listing);
+        relay.results = [&](const QString& kind, const QJsonObject& payload) -> QJsonObject {
+            if (kind == "session.prepare") {
+                if (refuse)
+                    return {{"ok", false}, {"error_message", "Preparation refused"}};
+                if (payload.value("client_request_id") != "draft-1" || payload.contains("prompt"))
+                    return {{"ok", false}, {"error_message", "Invalid preparation"}};
+                const auto keys = client.identity().value("keys").toObject();
+                const auto wrapped = fixture.host.wrapSessionKey(
+                    "prepared-private", 1, 1,
+                    {{"id", "remote-client"}, {"keyVersion", 1}, {"keys", keys}}, "linux-host", 1);
+                network.replies.insert(prefix + "/v2/mobile/sessions/prepared-private/keys",
+                                       QJsonArray{wrapped});
+                return {{"ok", true},
+                        {"session_id", "prepared-private"},
+                        {"session_generation", 1},
+                        {"expires_at_ms", QDateTime::currentMSecsSinceEpoch() + 60000}};
+            }
+            return {{"ok", true}};
+        };
+        Answer prepared;
+        backend.prepareSession({{"repository_id", "repo-1"},
+                                {"worktree_id", "wt-a"},
+                                {"client_request_id", "draft-1"}},
+                               prepared.callback());
+        QTRY_VERIFY(prepared.done);
+        if (!supported || refuse) {
+            QVERIFY(!prepared.error.isEmpty());
+            QCOMPARE(readsOf(relay, "session.prepare"), supported ? 1 : 0);
+            return;
+        }
+        QVERIFY2(prepared.error.isEmpty(), qPrintable(prepared.error));
+        QCOMPARE(prepared.result.value("session_id"), "prepared-private");
+        QVERIFY(!relay.eventPolls.contains("prepared-private"));
+        Answer sessions;
+        backend.listConversations({}, sessions.callback());
+        QTRY_VERIFY(sessions.done);
+        QVERIFY(!QJsonDocument(sessions.result).toJson().contains("prepared-private"));
+        Answer stage;
+        backend.attachmentCommand(MachineBackend::AttachmentOperation::Begin, "prepared-private", 1,
+                                  {{"attachment_id", "file-1"}}, stage.callback());
+        QTRY_VERIFY(stage.done);
+        QVERIFY2(stage.error.isEmpty(), qPrintable(stage.error));
+        QVERIFY(!relay.eventPolls.contains("prepared-private"));
+        Answer finished;
+        if (cancel)
+            backend.cancelPreparedSession("prepared-private", 1, finished.callback());
+        else
+            backend.startTurn("prepared-private", 1, {{"prompt", "read"}}, finished.callback());
+        QTRY_VERIFY(finished.done);
+        QVERIFY2(finished.error.isEmpty(), qPrintable(finished.error));
+        if (cancel) {
+            backend.attachmentCommand(MachineBackend::AttachmentOperation::Begin,
+                                      "prepared-private", 1, {}, stage.callback());
+            QTRY_VERIFY(stage.done);
+            QVERIFY(!stage.error.isEmpty());
+        }
+        QCOMPARE(readsOf(relay, "session.create"), 0);
+        for (const auto& body : relay.firstBodies)
+            QVERIFY(!body.contains("draft-1"));
+    }
 
     void attachmentUploadResumesQueuedStepsAndRejectsFailedChunks() {
         const QList<QPair<QString, bool>> scenarios{

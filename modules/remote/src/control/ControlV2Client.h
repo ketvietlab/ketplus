@@ -51,6 +51,7 @@ class ControlV2Client final : public QObject {
     // it (#88), for its newest key version; empty when none is. ADR 0119 names the machine by it.
     [[nodiscard]] QString pinnedFingerprint(const QString& machineId) const;
     void listSessions(Callback done);
+    void listMachines(Callback done);
     void listWorktrees(Callback done);
     void events(const QJsonObject& session, qint64 afterCursor, Callback done);
     // The paired hosts' repositories/worktrees and conversations, as

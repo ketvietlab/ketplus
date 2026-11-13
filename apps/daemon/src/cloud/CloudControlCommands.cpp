@@ -48,7 +48,7 @@ namespace {
 // Scoped to a catalog worktree rather than a session, and sealed to this Mac.
 bool isWorktreeCommand(const QJsonObject& command) {
     const QString kind = command.value(QStringLiteral("kind")).toString();
-    return kind == QStringLiteral("session.create") ||
+    return kind == QStringLiteral("session.create") || kind == QStringLiteral("session.prepare") ||
            kind == QStringLiteral("worktree.branches.read") ||
            kind == QStringLiteral("worktree.configuration.read");
 }

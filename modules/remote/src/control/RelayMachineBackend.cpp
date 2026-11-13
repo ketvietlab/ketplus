@@ -1,5 +1,6 @@
 #include "control/RelayMachineBackend.h"
 #include "control/ControlV2Client.h"
+#include <QDateTime>
 #include <QTimer>
 #include <climits>
 
@@ -118,6 +119,7 @@ void RelayMachineBackend::fence(const QString& reason) {
 }
 
 void RelayMachineBackend::probe() {
+    preparationSupported_ = false;
     if (!client_ || !client_->signedIn()) {
         failed(QStringLiteral("Sign in before connecting to a remote host."));
         return;
@@ -133,12 +135,28 @@ void RelayMachineBackend::probe() {
                     scheduleProbe();
                 return;
             }
-            attempts_ = 0;
-            everConnected_ = true;
-            setState(ConnectionState::Connected, {});
-            events_->start();
-            resume();
-            releaseWaiters();
+            // Older relays may not expose this read. Failure disables only preparation;
+            // it must not break existing conversations or existing-session uploads.
+            client_->listMachines(
+                guarded([this, generation](const QJsonValue& machines, const QString& failure) {
+                    if (generation != generation_)
+                        return;
+                    if (failure.isEmpty() && machines.isArray())
+                        for (const auto& entry : machines.toArray()) {
+                            const auto row = entry.toObject();
+                            if (row.value("id").toString() == relayMachineId_)
+                                preparationSupported_ =
+                                    row.value("capabilities")
+                                        .toArray()
+                                        .contains(QStringLiteral("session.prepare/1"));
+                        }
+                    attempts_ = 0;
+                    everConnected_ = true;
+                    setState(ConnectionState::Connected, {});
+                    events_->start();
+                    resume();
+                    releaseWaiters();
+                }));
         }));
 }
 
@@ -257,7 +275,12 @@ void RelayMachineBackend::project(std::function<void(const QJsonObject&, const Q
 }
 
 QJsonObject RelayMachineBackend::sessionRow(const QString& id, qint64 generation) const {
-    const auto row = sessions_.value(id);
+    auto row = sessions_.value(id);
+    if (row.isEmpty()) {
+        row = prepared_.value(id);
+        if (row.value("expires_at_ms").toInteger() <= QDateTime::currentMSecsSinceEpoch())
+            return {};
+    }
     return row.value("generation").toInteger() == generation ? row : QJsonObject{};
 }
 

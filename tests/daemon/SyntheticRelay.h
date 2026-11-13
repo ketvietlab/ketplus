@@ -47,6 +47,7 @@ class SyntheticRelay {
     QByteArray clientSigning;
     QByteArray clientAgreement;
     bool offline{false};
+    int machinesStatus{200};
     // The next N command submissions reach the relay, but their answers are lost.
     int dropSubmitAnswers{0};
     // The host is away: commands stay queued.
@@ -142,6 +143,11 @@ class SyntheticRelay {
         if (offline) {
             network.nextFailure = QNetworkReply::ConnectionRefusedError;
             return std::pair{0, QJsonObject{}};
+        }
+        if (path == "/v2/machines") {
+            if (network.replies.contains(prefix + path))
+                return std::nullopt;
+            return std::pair{machinesStatus, QJsonObject{{"code", "not_found"}}};
         }
         if (path == "/v2/mobile/worktrees") {
             network.replies.insert(prefix + path, worktrees);
@@ -305,11 +311,13 @@ class SyntheticRelay {
                                                     "linux-host", 1));
         } else {
             const auto session = dto.value("sessionId").toString();
+            const auto generation = dto.value("sessionGeneration").toInteger();
+            const auto keyId = session + ":" + QString::number(generation) + ":1";
             const auto aad = CloudCrypto::canonical(
-                {"ketplus", 2, "command-result", id, "workspace", "linux-host", session, 3, 1,
-                 "completed", "ok", session + ":3:1", 1, "linux-host", 1});
+                {"ketplus", 2, "command-result", id, "workspace", "linux-host", session, generation,
+                 1, "completed", "ok", keyId, 1, "linux-host", 1});
             dto.insert("encryptedResult",
-                       fixture.host.encrypt(bytes, aad, session, 3, 1, "linux-host", 1));
+                       fixture.host.encrypt(bytes, aad, session, generation, 1, "linux-host", 1));
         }
     }
 };
