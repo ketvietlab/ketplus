@@ -422,7 +422,7 @@ QJsonObject projectTranscriptWindowForCloud(const QJsonObject& page,
                                      : decide(transferId, manifest);
             // A large item's stub carries no transcript marker. A hidden agents tool call is
             // still left out on the phone, which applies the same rule by tool name to the item
-            // it fetches (T-78, ketplus-app TranscriptVisibility.swift).
+            // it fetches (T-78, the phone's TranscriptVisibility).
             if (decision.has_value())
                 event.insert(QStringLiteral("payload"), *decision);
             events.append(event);
