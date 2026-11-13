@@ -11,7 +11,9 @@ Item {
     property string lockedProvider
     property bool hasClaudeModels: false
     property bool hasCursorModels: false
+    property bool hasCopilotModels: false
     property string cursorInstallCommand
+    property string copilotInstallCommand
     // Providers with a setup guide (ADR 0110): their tab opens, so the picker's banner shows.
     property var setupProviders: []
     signal providerChosen(string provider)
@@ -26,9 +28,10 @@ Item {
         color: providerTabs.recipe.rule
     }
 
-    Row {
+    Flow {
         id: providerGrid
         objectName: "providerTabs"
+        width: parent.width
         spacing: providerTabs.recipe.spacing
 
         Repeater {
@@ -36,6 +39,7 @@ Item {
                 {id: "codex", label: "Codex"},
                 {id: "claude", label: "Claude"},
                 {id: "cursor", label: "Cursor"},
+                {id: "copilot", label: "GitHub Copilot"},
                 {id: "ketrouter", label: "K\u00e9tRouter"}
             ]
             Basic.ToolButton {
@@ -45,6 +49,7 @@ Item {
                 readonly property bool supported: modelData.id === "codex"
                     || (modelData.id === "claude" && providerTabs.hasClaudeModels)
                     || (modelData.id === "cursor" && providerTabs.hasCursorModels)
+                    || (modelData.id === "copilot" && providerTabs.hasCopilotModels)
                     || providerTabs.setupProviders.indexOf(modelData.id) >= 0
                 readonly property bool lockedOut: supported && providerTabs.lockedProvider !== "" && providerTabs.lockedProvider !== modelData.id
                 readonly property var recipe: KetTheme.routeTabRecipe(KetTheme.dark, KetTheme.zoom, enabled && providerTabs.selectedProvider === modelData.id, hovered, down, enabled, visualFocus)
@@ -57,7 +62,7 @@ Item {
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData.label
                 Accessible.selected: enabled && providerTabs.selectedProvider === modelData.id
-                Accessible.description: enabled ? (providerTabs.selectedProvider === modelData.id ? "Current provider" : "Select provider") : lockedOut ? "Switch to " + modelData.label + " after this turn" : modelData.id === "cursor" ? "Install Cursor CLI, then retry" : "Not supported yet"
+                Accessible.description: enabled ? (providerTabs.selectedProvider === modelData.id ? "Current provider" : "Select provider") : lockedOut ? "Switch to " + modelData.label + " after this turn" : modelData.id === "cursor" ? "Install Cursor CLI, then retry" : modelData.id === "copilot" ? "Install GitHub Copilot CLI on the daemon's machine, then retry" : "Not supported yet"
                 contentItem: Item {
                     Text {
                         id: tabLabel
@@ -92,6 +97,8 @@ Item {
                           : providerButton.lockedOut ? "Switch to " + providerButton.modelData.label + " after this turn"
                           : providerButton.modelData.id === "cursor"
                             ? "Install Cursor CLI: " + providerTabs.cursorInstallCommand
+                          : providerButton.modelData.id === "copilot"
+                            ? "Install GitHub Copilot CLI: " + providerTabs.copilotInstallCommand
                           : providerButton.modelData.label + ": not supported yet"
                 }
                 onClicked: {
