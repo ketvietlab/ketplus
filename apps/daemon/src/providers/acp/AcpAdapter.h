@@ -8,6 +8,7 @@
 #include <QPair>
 #include <QSet>
 #include <optional>
+#include <utility>
 class QProcess;
 class QTimer;
 namespace ketplus::daemon {
@@ -50,6 +51,11 @@ class AcpAdapter : public ProviderAdapter {
     virtual void applySessionModel(const QString&, const QString&, const QJsonObject&,
                                    std::function<void()> done) {
         done();
+    }
+    // Providers with strict selection must be able to fail before any prompt is sent.
+    virtual void prepareSessionModel(const QString& sessionId, const QString& model,
+                                     const QJsonObject& result, Callback done) {
+        applySessionModel(sessionId, model, result, [done = std::move(done)] { done({}, {}); });
     }
     // Translate host policy into the provider's advertised ACP mode identifier.
     virtual QString sessionPermissionMode(const QString&) const { return {}; }

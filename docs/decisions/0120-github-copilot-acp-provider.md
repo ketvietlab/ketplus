@@ -122,6 +122,19 @@ interactive `/model` command [G2]; neither proves the availability of a
 `copilot models` subprocess API. Exact Copilot ACP catalog shapes and the
 permission needed to discover them remain unverified (see Verification).
 
+Implementation bounds: cache/coalesce setup-only probes for 60 seconds, cap their
+combined output at one MiB and their lifetime at eight seconds, and run them in a
+temporary directory without host MCP servers. Accept at most 256 models, with
+256-character ids and labels and 2,000-character descriptions. Cap the normalized
+catalog at 256 KiB of JSON to leave space in the daemon's one-MiB frame for
+metadata and other providers; excess returns the default-only fallback. Preserve
+grouped select values. Recheck selection against each real session's catalog and wait for
+the setter response before prompting; failed or unconfirmed selection is a turn
+error. An empty load response may reuse that ACP session's previously advertised
+catalog. Config-option updates replace its state. The default-only fallback means
+leave the current provider selection unchanged. Synthetic fixtures cover both
+catalog shapes and setters; they do not verify a particular live Copilot release.
+
 ### Permission requests
 
 Translate `session/request_permission` through KetPlus's existing authoritative

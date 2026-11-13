@@ -23,7 +23,8 @@ QString safeExplanation(QString text) {
 } // namespace
 
 CopilotAdapter::CopilotAdapter(const QString& executable, QObject* parent)
-    : AcpAdapter(QStringLiteral("GitHub Copilot"), parent), explicitPath_(executable) {
+    : AcpAdapter(QStringLiteral("GitHub Copilot"), parent), explicitPath_(executable),
+      catalog_(new CopilotCatalog(this)) {
     refreshDiscovery();
 }
 
@@ -77,12 +78,15 @@ void CopilotAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> d
 }
 
 void CopilotAdapter::configurationCatalog(Callback done) {
-    done({{QStringLiteral("catalog"), QJsonArray{}}}, {});
+    catalog_->get(
+        executable(), [done = std::move(done)](const QJsonObject& result, const QString& error) {
+            done({{QStringLiteral("catalog"), result.value(QStringLiteral("data"))}}, error);
+        });
 }
 
 void CopilotAdapter::call(const QString& method, const QJsonObject& params, Callback done) {
     if (method == QStringLiteral("model/list")) {
-        done({{QStringLiteral("data"), QJsonArray{}}}, {});
+        catalog_->get(executable(), std::move(done));
         return;
     }
     if (authenticationFailed_) {

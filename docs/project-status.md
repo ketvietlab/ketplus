@@ -29,8 +29,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   streamed turns, cancellation, bounded request deadlines and explicit sign-in
   failures have deterministic fake-process coverage. Turn-bound one-time approvals
   and host Browser MCP setup/routing/cleanup also have fake-process coverage;
-  unverified Copilot MCP identities still require approval. Model refinements remain
-  separate integration work; authenticated Copilot behavior remains unverified.
+  unverified Copilot MCP identities still require approval. Model discovery uses
+  bounded, cached ACP session catalogs and a provider-default fallback; explicit
+  selections are confirmed before prompting. Authenticated Copilot behavior
+  remains unverified.
 
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a

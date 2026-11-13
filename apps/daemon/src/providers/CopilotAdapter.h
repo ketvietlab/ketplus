@@ -1,5 +1,6 @@
 #pragma once
 
+#include "providers/CopilotCatalog.h"
 #include "providers/CopilotCli.h"
 #include "providers/acp/AcpAdapter.h"
 #include <QElapsedTimer>
@@ -30,6 +31,11 @@ class CopilotAdapter final : public AcpAdapter {
     QString sessionError(const QString& error) const override;
     QString turnFailureMessage(const QString& error) const override;
     int requestTimeoutMs(const QString& method) const override;
+    void prepareSessionModel(const QString& sessionId, const QString& model,
+                             const QJsonObject& result, Callback done) override;
+    void handleSessionUpdate(const QJsonObject& params) override;
+    void resetProviderState() override;
+    void stopAuxiliaryProcesses() override;
 
   private:
     void refreshDiscovery() const;
@@ -38,5 +44,7 @@ class CopilotAdapter final : public AcpAdapter {
     mutable copilot_cli::DiscoveryResult discovery_;
     mutable QElapsedTimer lastDiscovery_;
     bool authenticationFailed_{false};
+    CopilotCatalog* catalog_;
+    QHash<QString, copilot_catalog::Snapshot> sessionModels_;
 };
 } // namespace ketplus::daemon
