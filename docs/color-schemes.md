@@ -77,8 +77,10 @@ unknown values; importers should put supported values into the typed maps and
 unmapped source data into metadata or preserved extension objects. Unknown JSON
 values are inert data. Formatting and original hex spelling are not preserved.
 
-`ColorSchemeWriter::write(scheme)` serializes sparse values. Callers construct
-valid typed maps using documented keys. Validation is performed by reading the
+`ColorSchemeWriter::write(scheme, diagnostics)` serializes sparse values. It
+returns empty bytes and structured errors for unknown typed-map keys; extensions
+belong in `preserved` JSON, where round trips keep them without changing ownership.
+Callers construct valid typed maps using documented keys. Validation is performed by reading the
 serialized bytes, as the catalog does before writing. Read/write/read of a valid
 scheme compares equal using `ColorScheme::operator==`.
 
@@ -89,12 +91,13 @@ colors cannot clear defaults. Missing syntax foregrounds and flags inherit the
 same role from the base. New roles added in later versions can receive defaults
 without rewriting installed files. `colorSchemePalette` is the temporary RGB
 compatibility projection; component consumers should use the resolved QColor
-values for alpha support. The legacy projection emits opaque hex RGB.
+values for alpha support. The legacy projection composites alpha over the resolved panel and emits opaque
+hex RGB. A translucent panel is first composited over its embedded base panel.
 
 The embedded `light.ketscheme.json` and `dark.ketscheme.json` capture the current
 Két DS built-in palette, including its composited chrome borders. Their MIT
 notice and source version/hash are embedded alongside them. A parity test
-compares every legacy `ThemePalette` field with the existing DS calculation.
+compares every legacy `ThemePalette` field with the actual `ThemeManager` palette.
 This task introduces the data contract; ThemeManager selection and component
 adapters integrate it separately.
 

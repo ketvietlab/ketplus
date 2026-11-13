@@ -234,6 +234,30 @@ current-window value.
   is missing or its file has gone. A CLI installed while KetPlus runs, or moved
   by its own updater, is used on the next request or Retry without restarting
   the daemon (`ProviderExecutable`).
+- The daemon's GitHub Copilot adapter uses provider id `copilot` and the
+  user-installed [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+  It starts `copilot --acp --stdio`; KetPlus does not bundle or download the CLI.
+  Discovery checks the absolute daemon `--copilot <path>` option, then
+  `KETPLUS_COPILOT`, then `PATH`, then the platform locations in
+  [ADR 0120](decisions/0120-github-copilot-acp-provider.md#executable-discovery):
+  `~/.local/bin`, Homebrew and `/usr/local/bin` on macOS/Linux, plus `/usr/bin`
+  on Linux; `%APPDATA%\npm` and the WinGet links folder on Windows. An invalid
+  explicit override is an actionable error, rather than a fallback to another CLI.
+  Missing CLI errors link to the installation guide and explain the override.
+  Sign in with `copilot login` on the machine running the daemon, or configure
+  the CLI's supported headless authentication there. Authentication remains with
+  the CLI; KetPlus neither copies tokens into its journal nor calls ACP
+  `authenticate`. Token absence alone does not reject a BYOK session. An explicit
+  authentication failure ends the turn with login guidance; retry uses a fresh
+  process. Permission, network and usage failures retain separate, sanitized
+  explanations. Initialization and ordinary setup calls time out after 30 seconds;
+  session creation/loading allows 120 seconds for cold MCP workers. Prompts have
+  no wall-clock deadline: long-running work and human approval must not kill the
+  shared process or unrelated conversations. Process exit and explicit Stop
+  still end waiting turns. Streaming and cancellation use the
+  shared ACP engine. Model catalogs and provider-specific permission/browser
+  integration are separate work; this backend foundation advertises no model list.
+
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in
@@ -835,6 +859,31 @@ KETPLUS_RUN_LIVE_AGENT_TEST=1 build/dev/ketplus_agent_tests liveCodexSmoke
 The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 
 ## Composer and provider capabilities
+
+Desktop recognizes daemon adapter `copilot` as **GitHub Copilot** in the model
+picker, composer, Teams and restored transcripts. Its tab follows the same
+setup-guide behavior as Cursor: when the daemon reports a missing CLI, the tab
+opens installation/sign-in steps while Apply stays disabled. An older daemon
+that supplies neither a Copilot catalog nor a setup guide leaves the tab disabled.
+An existing Copilot conversation keeps its provider and draft in that case;
+Send is disabled with guidance to choose another provider, even when a Codex
+model shares the saved model id.
+Copilot models are offered only with permission profiles supplied by the daemon;
+Desktop does not inherit Codex or Cursor modes for them. A blocking setup state
+also prevents applying a stale Copilot catalog.
+
+The setup guide uses Homebrew on macOS, npm on Linux (Node.js 22 or later), and
+WinGet on Windows. Commands run on the machine hosting the daemon. Sign in with
+`copilot login`, or configure the daemon's supported token environment as described
+in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
+[GitHub's installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+`--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
+paths do not install a CLI or run a provider prompt by themselves.
+
+History, notifications and local/ControlV2/relay transport retain `copilot` as the
+adapter id. Journal `cursor` fields remain event sequence numbers. No remote
+wire format or transcript cursor semantics change. Availability of actual turns,
+models and modes depends on the installed daemon's Copilot adapter.
 
 - The two-row composer includes attachment chips, permission selection, model and
   reasoning selection, and Send/Stop. Enter sends; Shift+Enter inserts a new line.

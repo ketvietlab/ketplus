@@ -29,6 +29,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
   selection UI and consumer adapters are tracked separately.
 
+- GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
+  `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
+  streamed turns, cancellation, bounded request deadlines and explicit sign-in
+  failures have deterministic fake-process coverage. Model/permission/browser
+  refinements and Desktop/remote provider selection are separate integration work.
+
 - Bounded team messages (ADR 0115):
   - A message too large for one frame becomes a failure of its request, or a
     `truncated` event; the client keeps its connection.

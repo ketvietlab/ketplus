@@ -131,33 +131,29 @@ void AcpAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
     emit canonicalEvent(turn.ketplusSessionId, QStringLiteral("turn.started"),
                         {{QStringLiteral("turn_id"), turn.turnId},
                          {QStringLiteral("thread_id"), turn.acpSessionId}});
-    const quint64 id = nextRequestId_++;
-    pending_.insert(id, [this, sessionId = turn.ketplusSessionId](const QJsonObject& result,
-                                                                  const QString& error) {
-        auto it = turns_.find(sessionId);
-        if (it == turns_.end())
-            return;
-        if (!error.isEmpty()) {
-            finishTurn(sessionId, QStringLiteral("failed"), turnFailureMessage(error));
-            return;
-        }
-        if (isFailureText(it->assistantText)) {
-            finishTurn(sessionId, QStringLiteral("failed"), turnFailureMessage(it->assistantText));
-            return;
-        }
-        emitContextUsage(sessionId, result);
-        const QString stop = result.value(QStringLiteral("stopReason")).toString();
-        finishTurn(sessionId,
-                   stop == QStringLiteral("cancelled") || stop == QStringLiteral("interrupted")
-                       ? QStringLiteral("interrupted")
-                       : QStringLiteral("completed"));
-    });
-    sendObject(
-        {{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
-         {QStringLiteral("id"), static_cast<qint64>(id)},
-         {QStringLiteral("method"), QStringLiteral("session/prompt")},
-         {QStringLiteral("params"), QJsonObject{{QStringLiteral("sessionId"), turn.acpSessionId},
-                                                {QStringLiteral("prompt"), prompt}}}});
+    sendCall(
+        QStringLiteral("session/prompt"),
+        {{QStringLiteral("sessionId"), turn.acpSessionId}, {QStringLiteral("prompt"), prompt}},
+        [this, sessionId = turn.ketplusSessionId](const QJsonObject& result, const QString& error) {
+            auto it = turns_.find(sessionId);
+            if (it == turns_.end())
+                return;
+            if (!error.isEmpty()) {
+                finishTurn(sessionId, QStringLiteral("failed"), turnFailureMessage(error));
+                return;
+            }
+            if (isFailureText(it->assistantText)) {
+                finishTurn(sessionId, QStringLiteral("failed"),
+                           turnFailureMessage(it->assistantText));
+                return;
+            }
+            emitContextUsage(sessionId, result);
+            const QString stop = result.value(QStringLiteral("stopReason")).toString();
+            finishTurn(sessionId,
+                       stop == QStringLiteral("cancelled") || stop == QStringLiteral("interrupted")
+                           ? QStringLiteral("interrupted")
+                           : QStringLiteral("completed"));
+        });
 }
 
 QJsonArray AcpAdapter::promptContent(const QJsonObject& params) const {
