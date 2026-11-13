@@ -469,6 +469,13 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     row.insert("groupLeaderKey", row.value("messageKey"));
     row.insert("groupRole", "leader");
     row.insert("groupSummary", activityTallySummary(tally));
+    // T-91: the step the group is on, worded as its own row, for a running group's heading.
+    const auto latest = data.value("latest").toObject();
+    const auto latestItem = latest.value("item").toObject();
+    row.insert("groupLatest", latestItem.isEmpty()
+                                  ? QString{}
+                                  : activityGroupLatest(activityMessage(
+                                        latestItem, latest.value("completed").toBool())));
     row.insert("groupSize", data.value("count").toInt());
     row.insert("groupRunning", data.value("running_count").toInt() > 0);
     row.insert("groupFailed", data.value("failed_count").toInt());

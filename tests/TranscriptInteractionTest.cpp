@@ -581,7 +581,7 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QCOMPARE(model->get(0).value("messageKey").toString(), "open");
     QCOMPARE(model->sourceCount(), rows.size());
     QCOMPARE(model->get(0).value("groupSummary").toString(),
-             QStringLiteral("Used ketplus_browser · 7 steps"));
+             QStringLiteral("Used ketplus_browser 7 times"));
     QVERIFY(view.transcriptCopyText().contains("Observed the page"));
     QVERIFY(view.transcriptCopyText().contains("Inspected the page"));
     auto* root = view.quickView()->rootObject();

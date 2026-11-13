@@ -4,6 +4,7 @@
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
 
+#include <KetAppearance.h>
 #include <QAccessible>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -1648,4 +1649,58 @@ void AgentWorkspaceViewTest::copiesMouseSelectionWithShortcut() {
     body->forceActiveFocus();
     QTest::keySequence(window, QKeySequence::Copy);
     QCOMPARE(QGuiApplication::clipboard()->text(), indented);
+}
+
+// T-91: a running group's heading is its latest step, live; once the agent writes, it is the
+// whole group.
+void AgentWorkspaceViewTest::runningGroupHeadingFollowsItsLatestStep() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.setSessionState("Heading", "Working…", true);
+    auto command = [](const QString& key, const QString& title, const bool running) {
+        QVariantMap row = readRow(key, title, running);
+        row.insert("subtype", "command");
+        row.insert("title", title);
+        return row;
+    };
+    view.resetMessages({textRow("u", "user", "Check the tree"),
+                        command("c1", "Ran git fetch", false), readRow("r1", "AGENTS.md"),
+                        command("c2", "Running git status --short --branch", true)},
+                       "workspace:heading");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QQuickItem* heading = nullptr;
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    const QString capture = qEnvironmentVariable("KETPLUS_GROUP_HEADING_CAPTURE");
+    const auto grab = [&](const QString& state) {
+        if (capture.isEmpty())
+            return;
+        auto& mode = ket::Appearance::instance();
+        const auto previous = mode.mode();
+        mode.setMode(ket::Appearance::Mode::Dark);
+        view.applyTheme(ketplus::currentThemePalette());
+        QTest::qWait(200);
+        QVERIFY(view.quickView()->grabWindow().save(capture + "-" + state + ".png"));
+        mode.setMode(previous);
+        view.applyTheme(ketplus::currentThemePalette());
+    };
+    grab("running");
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Running git status --short --branch"));
+
+    // A step joins: the heading follows it.
+    view.appendMessage(readRow("r2", "README.md", true));
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("README.md"));
+
+    // The steps finish and the agent writes: the heading counts the whole group.
+    view.updateMessage(3, command("c2", "Ran git status --short --branch", false));
+    view.updateMessage(4, readRow("r2", "README.md", false));
+    view.appendMessage(textRow("a", "assistant", "The tree is clean."));
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Ran 2 commands, explored 2 files"));
+    grab("ended");
 }

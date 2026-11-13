@@ -597,6 +597,8 @@ class LocalJournal final {
     [[nodiscard]] std::pair<qint64, bool> activityMembership(const QJsonObject& event,
                                                              const QString& itemId) const;
     [[nodiscard]] QJsonObject activityGroupSummary(const QJsonObject& event, qint64 group) const;
+    // The group's last step as {item, completed}, its item trimmed of output (T-91).
+    [[nodiscard]] QJsonObject activityGroupLatest(const QJsonObject& event, qint64 group) const;
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,
                               QString* error);
