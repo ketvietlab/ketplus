@@ -110,6 +110,7 @@ void MachineAttachmentPanel::addBytes(QString name, QString type, QByteArray byt
     auto* line = new QHBoxLayout(row);
     line->setContentsMargins(0, 0, 0, 0);
     auto* label = new QLabel(tr("%1 — Uploading…").arg(name), row);
+    label->setTextFormat(Qt::PlainText);
     label->setWordWrap(true);
     auto* removeButton = new QPushButton(tr("Remove"), row);
     removeButton->setAccessibleName(tr("Remove %1").arg(name));
