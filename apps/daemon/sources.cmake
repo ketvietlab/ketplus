@@ -175,6 +175,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostSchedules.cpp
+    src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamStorage.cpp

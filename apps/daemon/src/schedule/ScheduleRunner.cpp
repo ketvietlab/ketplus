@@ -82,6 +82,9 @@ std::chrono::milliseconds cappedAlarmDelay(std::chrono::milliseconds delay) {
 struct QtScheduleAlarm::Timer {
     explicit Timer(QtScheduleAlarm* owner) : owner(owner) {
         timer.setSingleShot(true);
+        // CoarseTimer can be about 5% late. A 60-minute cap would then miss the 60-second
+        // on-time window and record a skip-policy fire as missed.
+        timer.setTimerType(Qt::PreciseTimer);
         QObject::connect(&timer, &QTimer::timeout, &timer, [this] { this->owner->notify(); });
     }
 
@@ -336,8 +339,8 @@ ScheduleRunner::Run ScheduleRunner::deliverNew(Schedule schedule, const QDateTim
 }
 
 void ScheduleRunner::promote(Schedule schedule, Run run) {
-    if (!schedule.enabled)
-        return;
+    // A paused schedule still owes a run that runNow already accepted. Leaving it queued
+    // blocks every later runNow, which returns that same row.
     const auto current = store_.queuedRun(schedule.id);
     if (!current || current->id != run.id)
         return;

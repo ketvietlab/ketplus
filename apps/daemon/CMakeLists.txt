@@ -5,7 +5,7 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeAccountUsage.cpp src/providers/ClaudeAccountUsage.h
     src/providers/ClaudeKeychain.cpp)
 if(APPLE)
-    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation")
+    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit")
 endif()
 target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Concurrent

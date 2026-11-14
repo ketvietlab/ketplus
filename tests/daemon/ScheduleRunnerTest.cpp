@@ -225,6 +225,7 @@ class ScheduleRunnerTest final : public QObject {
     void invalidRuleDisablesTheSchedule();
     void runNowDoesNotConsumeTheRule();
     void runNowWhileBusyReturnsTheQueuedRun();
+    void runNowOnAPausedScheduleStartsWhenTheTurnEnds();
     void runNowUnknownId();
     void rearmsForTheEarliestSchedule();
     void earlyAlarmDoesNotFire();
@@ -563,6 +564,30 @@ void ScheduleRunnerTest::runNowWhileBusyReturnsTheQueuedRun() {
     QCOMPARE(second.runId, first.runId);
     QCOMPARE(world.store.runsFor(QStringLiteral("q")).size(), 1);
     QCOMPARE(world.store.runsFor(QStringLiteral("q")).first().status, documents::RunStatus::Queued);
+}
+
+void ScheduleRunnerTest::runNowOnAPausedScheduleStartsWhenTheTurnEnds() {
+    World world;
+    auto schedule = makeDaily(QStringLiteral("paused"));
+    schedule.enabled = false;
+    schedule.target.sessionId = QStringLiteral("session-1");
+    world.store.save(schedule);
+    world.runtime.setState(QStringLiteral("paused"), schedule::ConversationState::Busy,
+                           QStringLiteral("session-1"));
+    const auto queued = world.runner.runNow(QStringLiteral("paused"));
+    QVERIFY(queued.ok);
+    QCOMPARE(world.store.runsFor(QStringLiteral("paused")).first().status,
+             documents::RunStatus::Queued);
+
+    world.runtime.setState(QStringLiteral("paused"), schedule::ConversationState::Idle,
+                           QStringLiteral("session-1"));
+    world.runner.turnFinished(QStringLiteral("session-1"));
+    QCOMPARE(world.store.runsFor(QStringLiteral("paused")).first().status,
+             documents::RunStatus::Running);
+
+    const auto again = world.runner.runNow(QStringLiteral("paused"));
+    QVERIFY(again.ok);
+    QVERIFY(again.runId != queued.runId);
 }
 
 void ScheduleRunnerTest::runNowUnknownId() {

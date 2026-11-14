@@ -416,6 +416,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void startScheduleRunner();
     void stopScheduleRunner();
     void noteSchedulesChanged();
+    Q_INVOKABLE void noteScheduleClockChanged();
+    void noteScheduleTurnEnded(const QString& sessionId, bool succeeded, const QString& errorCode,
+                               const QString& errorMessage);
     [[nodiscard]] QJsonObject runScheduleNow(const QString& id);
     friend class HostScheduleRuntime;
     struct ScheduleEngine;

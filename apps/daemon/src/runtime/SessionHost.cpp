@@ -329,7 +329,6 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
-    startScheduleRunner();
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
     teamBranchNames_.setMaxThreadCount(1);
@@ -516,6 +515,9 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
     cleanup->start();
     QTimer::singleShot(0, this, &SessionHost::processDeletionWork);
     QTimer::singleShot(0, this, &SessionHost::expirePreparedSessions);
+    // After sessions_ is filled. A due conversation must see its session, or the catch-up
+    // is recorded provider_not_ready and a run_once miss is consumed.
+    startScheduleRunner();
 }
 
 QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QString& clientId) {
@@ -1440,6 +1442,12 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     const QString clientMessageId = payload.value(QStringLiteral("client_message_id")).toString();
     if (!clientMessageId.isEmpty() && clientMessageId.size() <= 128)
         userMessage.insert(QStringLiteral("client_message_id"), clientMessageId);
+    // ADR 0126: a scheduled prompt keeps the ids the transcript marker reads.
+    for (const QString& key : {QStringLiteral("schedule_id"), QStringLiteral("run_id")}) {
+        const QString value = payload.value(key).toString();
+        if (!value.isEmpty())
+            userMessage.insert(key, value);
+    }
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
         it->stored.executionPolicy = permission == "danger-full-access" ? "full"
@@ -2684,6 +2692,20 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
                 ? std::optional<bool>(payload.value(QStringLiteral("reason")).toString() ==
                                       QStringLiteral("user"))
                 : std::nullopt);
+    // Last: a queued schedule may start another turn, which can rehash sessions_.
+    if (!alive.isNull() &&
+        (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped"))) {
+        const bool completed = type == QStringLiteral("turn.completed");
+        const QString status = payload.value(QStringLiteral("status")).toString();
+        const bool succeeded = completed && status != QStringLiteral("failed") &&
+                               status != QStringLiteral("interrupted") &&
+                               status != QStringLiteral("stopped");
+        noteScheduleTurnEnded(sessionId, succeeded,
+                              succeeded   ? QString()
+                              : completed ? status
+                                          : QStringLiteral("runtime_stopped"),
+                              payload.value(QStringLiteral("message")).toString());
+    }
     return true;
 }
 
