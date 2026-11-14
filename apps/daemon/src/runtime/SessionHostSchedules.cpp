@@ -218,6 +218,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleCreatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -274,6 +275,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -294,6 +296,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!journal_->deleteSchedule(*id, &error))
             return journalError(error);
         changed(QString::fromLatin1(protocol::scheduleDeletedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDeletedResult(*id);
     }
 
@@ -325,14 +328,15 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
     if (type == QLatin1String(protocol::scheduleRunNowType)) {
-        if (!protocol::parseScheduleId(payload, &failure))
+        const auto id = protocol::parseScheduleId(payload, &failure);
+        if (!id)
             return failed(failure);
-        return failed(QString::fromLatin1(protocol::scheduleNotImplementedCode),
-                      QStringLiteral("schedule.runNow is not implemented yet."));
+        return runScheduleNow(*id);
     }
 
     if (type == QLatin1String(protocol::scheduleRunsType)) {
@@ -374,11 +378,13 @@ void SessionHost::publishDisabledSessionSchedules(const QString& sessionId) {
     for (const ScheduleRecord& record : *rows)
         if (record.target.kind == QLatin1String("conversation"))
             publishScheduleChange(QString::fromLatin1(protocol::scheduleUpdatedChange), record);
+    noteSchedulesChanged();
 }
 
 void SessionHost::schedulesDeleted(const QList<ScheduleRecord>& schedules) {
     for (const ScheduleRecord& record : schedules)
         publishScheduleChange(QString::fromLatin1(protocol::scheduleDeletedChange), record);
+    noteSchedulesChanged();
 }
 
 } // namespace ketplus::daemon

@@ -175,6 +175,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostSchedules.cpp
+    src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamStorage.cpp
@@ -253,6 +254,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/McpMediaStore.h
     src/schedule/ScheduleRule.cpp
     src/schedule/ScheduleRule.h
+    src/schedule/JournalScheduleStore.cpp
+    src/schedule/JournalScheduleStore.h
     src/schedule/ScheduleRunner.cpp
     src/schedule/ScheduleRunner.h
 )

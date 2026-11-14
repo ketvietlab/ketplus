@@ -411,8 +411,18 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     // ADR 0126, in SessionHostSchedules.cpp. Parses with the shared schedule contract,
-    // then reads and writes LocalJournal. schedule.runNow stays not_implemented.
+    // then reads and writes LocalJournal. schedule.runNow calls the runner.
     [[nodiscard]] QJsonObject scheduleCommand(const QString& type, const QJsonObject& request);
+    void startScheduleRunner();
+    void stopScheduleRunner();
+    void noteSchedulesChanged();
+    Q_INVOKABLE void noteScheduleClockChanged();
+    void noteScheduleTurnEnded(const QString& sessionId, bool succeeded, const QString& errorCode,
+                               const QString& errorMessage);
+    [[nodiscard]] QJsonObject runScheduleNow(const QString& id);
+    friend class HostScheduleRuntime;
+    struct ScheduleEngine;
+    ScheduleEngine* scheduleEngine_{nullptr};
     void publishScheduleChange(const QString& change, const ScheduleRecord& record);
     void publishDisabledSessionSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);

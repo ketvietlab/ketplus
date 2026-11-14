@@ -568,6 +568,9 @@ class LocalJournal final {
     // `limit` above maximumScheduleRuns is clamped to it. `beforeId` empty reads the newest page.
     [[nodiscard]] std::optional<ScheduleRunPage> scheduleRuns(const QString& scheduleId, int limit,
                                                               const QString& beforeId = {}) const;
+    // No row and a failed read are both empty; errorString() is set only when the read failed.
+    [[nodiscard]] std::optional<ScheduleRunRecord> scheduleRun(const QString& id) const;
+    [[nodiscard]] std::optional<ScheduleRunRecord> queuedScheduleRun(const QString& scheduleId) const;
 
   private:
     bool initializeSchedules();

@@ -102,9 +102,9 @@ manages; it does not create.
 
    Success payloads include `ok: true`. List returns `schedules`. Get, create,
    update and setEnabled return `schedule`. Delete returns `id`. Runs returns
-   `runs` (newest first) and `has_more`. Run now returns `run`. Until the
-   runtime exists, run now answers `not_implemented`. A missing schedule is
-   `schedule_not_found`.
+   `runs` (newest first) and `has_more`. Run now returns `run`. It does not answer
+   `not_implemented`; that code stays in the header for clients that still branch
+   on it. A missing schedule is `schedule_not_found`.
 
    Stable codes: `unknown_field`, `empty_prompt`, `missing_target`, `invalid_enum`,
    `invalid_payload`, `invalid_rule`, `prompt_not_allowed`, `team_start_constraint`,
@@ -133,8 +133,8 @@ manages; it does not create.
   revision, as long as `rule` stays a JSON object string with the v1 kinds.
 - A client that does not know `schedules/1` ignores the feature. This daemon
   advertises it on minor 1 now that the handlers are registered. Older daemons never do.
-- Run now is part of the contract now and returns `not_implemented` until the
-  runtime handles it.
+- Run now is handled by the daemon runner and returns the run. It does not answer
+  `not_implemented`.
 
 ## Alternatives considered
 
