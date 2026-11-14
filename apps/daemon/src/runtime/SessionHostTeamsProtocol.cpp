@@ -1,6 +1,8 @@
 // ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
+#include "teams/TeamRepeat.h"
 #include "teams/TeamRules.h"
+#include "teams/TeamStart.h"
 
 #include "agents/ReviewerPolicy.h"
 
@@ -215,6 +217,13 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         return createTeam(payload);
     if (type == QStringLiteral("team.update"))
         return answer(teams_->update(teamId, payload, QStringLiteral("user")));
+    if (type == QStringLiteral("team.start"))
+        return answer(teams_->startNow(teamId, QStringLiteral("user")));
+    if (type == QStringLiteral("team.startAt.update"))
+        return answer(teams_->updateStartAt(
+            teamId, payload.value(QStringLiteral("start_at")).toObject(), QStringLiteral("user")));
+    if (type == QStringLiteral("team.startAt.cancel"))
+        return answer(teams_->cancelStartAt(teamId, QStringLiteral("user")));
     if (type == QStringLiteral("team.delete")) {
         if (const auto refused = teams_->remove(teamId))
             return failure(*refused);
@@ -322,6 +331,32 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
 }
 
 QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
+    QJsonObject startAt;
+    if (payload.contains(QStringLiteral("start_at"))) {
+        const QJsonValue value = payload.value(QStringLiteral("start_at"));
+        if (!value.isObject())
+            return failure(QStringLiteral("start_at_invalid"),
+                           QStringLiteral("start_at must be an object."));
+        startAt = value.toObject();
+        teams::TeamStartRequest request;
+        if (const auto invalid = teams::parseTeamStart(startAt, &request))
+            return failure(invalid->code, invalid->message);
+        teams::TeamStartPlan plan;
+        if (const auto invalid =
+                teams::planTeamStart(request, QDateTime::currentDateTimeUtc(), &plan))
+            return failure(invalid->code, invalid->message);
+    }
+    QJsonObject repeat;
+    if (payload.contains(QStringLiteral("repeat"))) {
+        const QJsonValue value = payload.value(QStringLiteral("repeat"));
+        if (!value.isObject())
+            return failure(QStringLiteral("repeat_invalid"),
+                           QStringLiteral("repeat must be an object."));
+        repeat = value.toObject();
+        if (const auto invalid =
+                teams::parseTeamRepeat(repeat, QDateTime::currentDateTimeUtc(), nullptr))
+            return failure(invalid->code, invalid->message);
+    }
     const QString repository =
         repositoryOf(normalizedWorktree(payload.value(QStringLiteral("repository")).toString()));
     if (repository.isEmpty())
@@ -476,7 +511,7 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         started.append(sessionId);
         draft.members[index].sessionId = sessionId;
     }
-    const auto result = teams_->create(draft, QStringLiteral("user"));
+    const auto result = teams_->create(draft, QStringLiteral("user"), startAt, {}, repeat);
     if (!result.ok()) {
         for (const QString& id : std::as_const(started))
             discardMemberConversation(id);

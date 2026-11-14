@@ -67,7 +67,7 @@ struct TeamMessage final {
     // The member it comes from, or empty for the team itself (a digest, a decision).
     QString fromSession;
     // "assignment", "digest", "review", "decision", "nudge", "stall", "wait",
-    // "message_failed" or "team".
+    // "message_failed", "team" or "schedule".
     QString kind;
     QString taskId;
     QString body;
@@ -77,6 +77,9 @@ struct TeamMessage final {
     QString id;
     // An assignment: the worktree its receiver is pointed at before the message is sent.
     QString pointAt;
+    // A scheduled team run. The body stays the sentence the leader reads; these tag it.
+    QString scheduleId;
+    QString runId;
 };
 
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
@@ -301,6 +304,10 @@ class TeamHostPort {
     // ADR 0114 §2: the team continued; the messages its members' agents sent each other and
     // that waited for it are delivered.
     virtual void releaseTeamHeldMessages(const QStringList& sessionIds) { (void)sessionIds; }
+    // A team_start schedule was stored, replaced or removed. The schedule runner re-arms.
+    virtual void schedulesChanged() {}
+    // A paused team that is still waiting for its start was resumed. `teamId` is decimal.
+    virtual void scheduledTeamMayStart(qint64 teamId) { (void)teamId; }
     // Shows a line in the conversation without starting a turn.
     virtual void noteInConversation(const QString& sessionId, const QJsonObject& note) {
         (void)sessionId;
@@ -412,7 +419,37 @@ class TeamCoordinator : public QObject {
 
     // `draft` carries the settings and the members with their session ids. Nothing is stored
     // when a rule refuses it.
-    TeamResult create(Team draft, const QString& actor);
+    // `startAt` empty starts the leader now. Otherwise it is {at, timezone}: the team is
+    // stored and the leader waits for that team_start schedule. `now` empty is the clock.
+    // `repeat` empty stores no team schedule. Otherwise it is {rule, work_order}.
+    TeamResult create(Team draft, const QString& actor, const QJsonObject& startAt = {},
+                      const QDateTime& now = {}, const QJsonObject& repeat = {});
+    // What the team-schedule runner may do with a {kind: team} row.
+    enum class TeamRunGate { Deliver, Busy, Missing };
+    struct TeamRunLook {
+        TeamRunGate gate{TeamRunGate::Missing};
+        QString sessionId;
+    };
+    [[nodiscard]] TeamRunLook lookAtTeamRun(qint64 teamId) const;
+    // Posts one scheduled work order, or refuses it without holding a turn.
+    // Empty code means the leader was messaged.
+    struct TeamRunDelivery {
+        QString sessionId;
+        QString errorCode;
+        QString errorMessage;
+    };
+    TeamRunDelivery deliverTeamRun(qint64 teamId, const QString& name, const QString& workOrder,
+                                   const QString& when, const QString& scheduleId,
+                                   const QString& runId);
+    // Starts a waiting team now and drops its team_start schedule.
+    TeamResult startNow(qint64 teamId, const QString& actor);
+    TeamResult updateStartAt(qint64 teamId, const QJsonObject& startAt, const QString& actor,
+                             const QDateTime& now = {});
+    // Drops the schedule. The team stays waiting until startNow.
+    TeamResult cancelStartAt(qint64 teamId, const QString& actor);
+    // The team_start runner's delivery. False when no turn was sent: already started,
+    // no goal, no leader, or the journal refused the change.
+    bool startLeader(qint64 teamId);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
     // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request"),
     // turn_budget, and repository with an optional reason (T-90); other keys are ignored.
@@ -654,8 +691,6 @@ class TeamCoordinator : public QObject {
                    const QString& reason, QList<Update>& updates);
     // T-53: blocks a task that already had the passes a lowered limit allows; true if it did.
     bool blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates);
-    // The leader's first turn, once the team has a goal (ADR 0114, #456/#458).
-    void startLeader(qint64 teamId);
     // Starts a turn of `toSession` after the commit that caused it, counted against the
     // budget; held while the team is paused (TeamCoordinatorFlow.cpp).
     virtual void wake(const Team& team, const TeamMessage& message);

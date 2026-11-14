@@ -125,6 +125,37 @@ manages; it does not create.
    `target_deleted`, and emits `schedule.changed` (`updated`) for each. Existing
    journals open unchanged. This decision does not add those tables.
 
+9. **A team can wait for its start.** `team.create` accepts an optional `start_at`
+   `{at, timezone}`: a local `YYYY-MM-DDTHH:mm` and an IANA timezone, at least one
+   minute and at most 30 days ahead. The team and its members are created, and the
+   leader's first turn waits for one `team_start` schedule (`once`, `missed_policy`
+   `run_once`, `busy_policy` `queue`) fired by the one schedule runner. The team
+   document then has `start_at` and `status` `scheduled`. `team.start` starts it
+   now, `team.startAt.update` moves the time, and `team.startAt.cancel` removes the
+   schedule and leaves the team waiting, with `status` `waiting` and no `start_at`.
+   A fire that finds no goal records the run as failed (`goal_required`) and does
+   not start the leader; setting a goal afterwards does. Stable codes: `start_at_invalid`,
+   `start_at_too_soon`, `start_at_too_late`, `team_already_started`,
+   `start_not_scheduled`, `goal_required`.
+
+10. **A team can repeat a work order.** `team.create` accepts an optional `repeat`
+    next to `start_at`: `{rule, work_order}`, with optional `busy_policy`
+    (`queue` or `skip`, default `queue`) and `missed_policy` (`run_once` or
+    `skip`, default `run_once`). It is stored as one schedule whose target is
+    `{kind: "team", team_id}` and whose prompt is the work order. This is the
+    way the product creates a team schedule. `schedule.update`, `setEnabled` and
+    `delete` still manage it, and `schedule.list` filters it by `team_id`.
+    Deleting the team deletes it. On each fire the leader receives one message,
+    `Scheduled run: <name> (<date>): <work order>`, through the same team
+    message path, tagged with `schedule_id` and `run_id`. The run records the
+    leader's conversation. `queue` waits until that conversation's turn ends;
+    `skip` records the fire as skipped. A team that has not started, is paused,
+    or has used its automatic turns records the run as failed (`team_not_started`,
+    `team_paused`, `team_budget`) and does not start a turn, assign a task, or
+    approve the plan. A missed fire follows the schedule's `missed_policy` and
+    never catches up more than once. The team's Updates feed gains
+    `Scheduled run: <name>`. Stable codes also include `repeat_invalid`.
+
 ## Consequences
 
 - Desktop and the daemon share one JSON document, so a later screen does not

@@ -367,6 +367,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void askRemoveWorktree(const QString& repository, const QString& worktree,
                            teams::RemovalDone done) override;
     void schedulesDeleted(const QList<ScheduleRecord>& schedules) override;
+    void schedulesChanged() override;
+    void scheduledTeamMayStart(qint64 teamId) override;
     [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
     [[nodiscard]] QList<teams::FolderConversation>
     conversationsIn(const QString& path) const override;

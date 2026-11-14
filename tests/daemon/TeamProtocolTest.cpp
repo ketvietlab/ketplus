@@ -587,6 +587,42 @@ class TeamProtocolTest final : public QObject {
                      .toString(),
                  QStringLiteral("forbidden"));
     }
+
+    void startAtIsRefusedBeforeAnyConversation() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto past =
+            command(fixture, "team.create",
+                    {{"name", "Checkout"},
+                     {"repository", "/tmp/not-a-repo"},
+                     {"plan", plan()},
+                     {"start_at", QJsonObject{{"at", "2020-01-01T00:00"}, {"timezone", "UTC"}}}});
+        QCOMPARE(past.value("error_code").toString(), QStringLiteral("start_at_too_soon"));
+        const QDateTime late = QDateTime::currentDateTimeUtc().addDays(31);
+        const auto tooLate = command(
+            fixture, "team.create",
+            {{"name", "Checkout"},
+             {"repository", "/tmp/not-a-repo"},
+             {"plan", plan()},
+             {"start_at", QJsonObject{{"at", late.toString(QStringLiteral("yyyy-MM-ddTHH:mm"))},
+                                      {"timezone", "UTC"}}}});
+        QCOMPARE(tooLate.value("error_code").toString(), QStringLiteral("start_at_too_late"));
+        const auto bad = command(
+            fixture, "team.create",
+            {{"name", "Checkout"},
+             {"repository", "/tmp/not-a-repo"},
+             {"plan", plan()},
+             {"start_at", QJsonObject{{"at", "2026-11-14T09:00"}, {"timezone", "Not/AZone"}}}});
+        QCOMPARE(bad.value("error_code").toString(), QStringLiteral("start_at_invalid"));
+        const auto repeat = command(
+            fixture, "team.create",
+            {{"name", "Checkout"},
+             {"repository", "/tmp/not-a-repo"},
+             {"plan", plan()},
+             {"repeat", QJsonObject{{"rule", QJsonObject{{"kind", "daily"}}},
+                                     {"work_order", "Write the post."}}}});
+        QCOMPARE(repeat.value("error_code").toString(), QStringLiteral("invalid_rule"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TeamProtocolTest)

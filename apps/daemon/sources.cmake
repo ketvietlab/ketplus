@@ -149,6 +149,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamVerdictLine.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorStart.cpp
+    src/teams/TeamRepeat.cpp
+    src/teams/TeamRepeat.h
+    src/teams/TeamStart.cpp
+    src/teams/TeamStart.h
     src/teams/TeamCoordinatorAssign.cpp
     src/teams/TeamCoordinatorAllowedPaths.cpp
     src/teams/TeamCoordinatorAttribution.cpp
@@ -258,4 +263,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/schedule/JournalScheduleStore.h
     src/schedule/ScheduleRunner.cpp
     src/schedule/ScheduleRunner.h
+    src/schedule/JournalScheduleStore.cpp
+    src/schedule/JournalScheduleStore.h
+    src/schedule/TeamStartRuntime.cpp
+    src/schedule/TeamStartRuntime.h
 )

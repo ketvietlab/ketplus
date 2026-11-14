@@ -373,6 +373,13 @@ ScheduleRunner::Run ScheduleRunner::applyDelivery(Run run, const Delivery& deliv
         run.finishedAt = stamp(now);
         run.errorCode = delivery.errorCode;
         run.errorMessage = delivery.errorMessage;
+    } else if (delivery.finished) {
+        run.status = documents::RunStatus::Succeeded;
+        run.finishedAt = stamp(now);
+        run.sessionId = delivery.sessionId;
+        run.turnId = delivery.turnId;
+        run.errorCode.clear();
+        run.errorMessage.clear();
     } else {
         run.status = documents::RunStatus::Running;
         run.sessionId = delivery.sessionId;
