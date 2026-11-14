@@ -10,10 +10,10 @@ QString teamKey(const QString& teamId) { return QStringLiteral("team:") + teamId
 
 } // namespace
 
-TeamStartRuntime::TeamStartRuntime(teams::TeamCoordinator* teams) : teams_(teams) {}
+TeamStartRuntime::TeamStartRuntime(teams::TeamCoordinator* teams, Changed changed)
+    : teams_(teams), changed_(std::move(changed)) {}
 
-ScheduleRuntime::Inspection
-TeamStartRuntime::inspect(const documents::Schedule& schedule) const {
+Inspection TeamStartRuntime::inspect(const documents::Schedule& schedule) const {
     if (schedule.target.kind != documents::TargetKind::TeamStart || !teams_)
         return {ConversationState::Missing, {}};
     const teams::Team* team = teams_->team(schedule.target.teamId.toLongLong());
@@ -24,8 +24,7 @@ TeamStartRuntime::inspect(const documents::Schedule& schedule) const {
     return {ConversationState::Idle, {}};
 }
 
-ScheduleRuntime::Delivery TeamStartRuntime::deliver(const documents::Schedule& schedule,
-                                                    const documents::Run& run) {
+Delivery TeamStartRuntime::deliver(const documents::Schedule& schedule, const documents::Run& run) {
     (void)run;
     Delivery delivery;
     if (schedule.target.kind != documents::TargetKind::TeamStart || !teams_) {
@@ -53,8 +52,8 @@ ScheduleRuntime::Delivery TeamStartRuntime::deliver(const documents::Schedule& s
 void TeamStartRuntime::emitRun(const documents::Run& run) { (void)run; }
 
 void TeamStartRuntime::emitChanged(const QString& change, const documents::Schedule& schedule) {
-    (void)change;
-    (void)schedule;
+    if (changed_)
+        changed_(change, schedule);
 }
 
 } // namespace ketplus::daemon::schedule

@@ -2,6 +2,8 @@
 
 #include "schedule/ScheduleRunner.h"
 
+#include <functional>
+
 namespace ketplus::daemon::teams {
 class TeamCoordinator;
 }
@@ -12,7 +14,10 @@ namespace ketplus::daemon::schedule {
 // is the leader's first turn. Prompt schedules are not in this store.
 class TeamStartRuntime final : public ScheduleRuntime {
   public:
-    explicit TeamStartRuntime(teams::TeamCoordinator* teams);
+    using Changed =
+        std::function<void(const QString& change, const ::ketplus::schedule::Schedule&)>;
+
+    explicit TeamStartRuntime(teams::TeamCoordinator* teams, Changed changed = {});
 
     [[nodiscard]] Inspection inspect(const ::ketplus::schedule::Schedule& schedule) const override;
     Delivery deliver(const ::ketplus::schedule::Schedule& schedule,
@@ -22,6 +27,7 @@ class TeamStartRuntime final : public ScheduleRuntime {
 
   private:
     teams::TeamCoordinator* teams_;
+    Changed changed_;
 };
 
 } // namespace ketplus::daemon::schedule

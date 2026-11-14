@@ -397,46 +397,58 @@ QJsonObject toJson(const Team& team) {
         if (!first && !slot.reviewing.isEmpty())
             first = &slot;
     }
-    return {{QStringLiteral("id"), QString::number(team.id)},
-            {QStringLiteral("repository"), team.repository},
-            {QStringLiteral("name"), team.name},
-            {QStringLiteral("goal"), team.goal},
-            {QStringLiteral("integration_branch"), team.integrationBranch},
-            {QStringLiteral("merge_policy"), team.mergePolicy},
-            {QStringLiteral("execution_policy"), team.executionPolicy},
-            {QStringLiteral("language"), team.language},
-            {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
-            {QStringLiteral("paused"), team.paused},
-            {QStringLiteral("paused_reason"), team.pausedReason},
-            {QStringLiteral("shared_paths"), strings(team.sharedPaths)},
-            {QStringLiteral("max_rounds"), team.maxRounds},
-            {QStringLiteral("review_place"), team.reviewPlace},
-            {QStringLiteral("turn_budget"), team.turnBudget},
-            {QStringLiteral("automatic_turns"), team.automaticTurns},
-            {QStringLiteral("plan_approved"), team.planApproved},
-            {QStringLiteral("leader_started"), team.leaderStarted},
-            {QStringLiteral("members"), members},
-            {QStringLiteral("tasks"), tasks},
-            {QStringLiteral("tasks_done"), done},
-            {QStringLiteral("decisions"), decisions},
-            {QStringLiteral("open_decisions"), team.openDecisions()},
-            {QStringLiteral("held"), team.held},
-            {QStringLiteral("outbox"), team.outbox},
-            {QStringLiteral("reviews"), reviews},
-            {QStringLiteral("review_waiting"), strings(team.reviewQueue)},
-            // Before T-23 a team had one reviewer: these say what that one did, for a reader
-            // that knows no "reviews" — the first review in flight and every task waiting.
-            {QStringLiteral("review_queue"), strings(waiting)},
-            {QStringLiteral("reviewing"), first ? first->reviewing : QString{}},
-            {QStringLiteral("reviewing_message"), first ? first->message : QString{}},
-            {QStringLiteral("relocations"), relocations},
-            {QStringLiteral("next_task"), team.nextTask},
-            {QStringLiteral("next_decision"), team.nextDecision},
-            {QStringLiteral("revision"), team.revision},
-            {QStringLiteral("settings_revision"), team.settingsRevision},
-            {QStringLiteral("members_revision"), team.membersRevision},
-            {QStringLiteral("created_at"), team.createdAt},
-            {QStringLiteral("changed_at"), team.changedAt}};
+    QJsonObject json{
+        {QStringLiteral("id"), QString::number(team.id)},
+        {QStringLiteral("repository"), team.repository},
+        {QStringLiteral("name"), team.name},
+        {QStringLiteral("goal"), team.goal},
+        {QStringLiteral("integration_branch"), team.integrationBranch},
+        {QStringLiteral("merge_policy"), team.mergePolicy},
+        {QStringLiteral("execution_policy"), team.executionPolicy},
+        {QStringLiteral("language"), team.language},
+        {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
+        {QStringLiteral("paused"), team.paused},
+        {QStringLiteral("paused_reason"), team.pausedReason},
+        {QStringLiteral("shared_paths"), strings(team.sharedPaths)},
+        {QStringLiteral("max_rounds"), team.maxRounds},
+        {QStringLiteral("review_place"), team.reviewPlace},
+        {QStringLiteral("turn_budget"), team.turnBudget},
+        {QStringLiteral("automatic_turns"), team.automaticTurns},
+        {QStringLiteral("plan_approved"), team.planApproved},
+        {QStringLiteral("leader_started"), team.leaderStarted},
+        {QStringLiteral("members"), members},
+        {QStringLiteral("tasks"), tasks},
+        {QStringLiteral("tasks_done"), done},
+        {QStringLiteral("decisions"), decisions},
+        {QStringLiteral("open_decisions"), team.openDecisions()},
+        {QStringLiteral("held"), team.held},
+        {QStringLiteral("outbox"), team.outbox},
+        {QStringLiteral("reviews"), reviews},
+        {QStringLiteral("review_waiting"), strings(team.reviewQueue)},
+        // Before T-23 a team had one reviewer: these say what that one did, for a reader
+        // that knows no "reviews" — the first review in flight and every task waiting.
+        {QStringLiteral("review_queue"), strings(waiting)},
+        {QStringLiteral("reviewing"), first ? first->reviewing : QString{}},
+        {QStringLiteral("reviewing_message"), first ? first->message : QString{}},
+        {QStringLiteral("relocations"), relocations},
+        {QStringLiteral("next_task"), team.nextTask},
+        {QStringLiteral("next_decision"), team.nextDecision},
+        {QStringLiteral("revision"), team.revision},
+        {QStringLiteral("settings_revision"), team.settingsRevision},
+        {QStringLiteral("members_revision"), team.membersRevision},
+        {QStringLiteral("created_at"), team.createdAt},
+        {QStringLiteral("changed_at"), team.changedAt}};
+    if (team.startWaiting) {
+        json.insert(QStringLiteral("start_waiting"), true);
+        json.insert(QStringLiteral("status"), QStringLiteral("scheduled"));
+        if (!team.startAt.isEmpty())
+            json.insert(QStringLiteral("start_at"),
+                        QJsonObject{{QStringLiteral("at"), team.startAt},
+                                    {QStringLiteral("timezone"), team.startTimeZone}});
+        if (!team.startScheduleId.isEmpty())
+            json.insert(QStringLiteral("start_schedule_id"), team.startScheduleId);
+    }
+    return json;
 }
 
 Team teamFromJson(const QJsonObject& json) {
@@ -467,6 +479,11 @@ Team teamFromJson(const QJsonObject& json) {
     team.automaticTurns = json.value(QStringLiteral("automatic_turns")).toInt();
     team.planApproved = json.value(QStringLiteral("plan_approved")).toBool();
     team.leaderStarted = json.value(QStringLiteral("leader_started")).toBool();
+    team.startWaiting = json.value(QStringLiteral("start_waiting")).toBool();
+    team.startScheduleId = json.value(QStringLiteral("start_schedule_id")).toString();
+    const QJsonObject startAt = json.value(QStringLiteral("start_at")).toObject();
+    team.startAt = startAt.value(QStringLiteral("at")).toString();
+    team.startTimeZone = startAt.value(QStringLiteral("timezone")).toString();
     for (const auto& value : json.value(QStringLiteral("members")).toArray())
         team.members.append(memberFromJson(value.toObject()));
     for (const auto& value : json.value(QStringLiteral("tasks")).toArray())

@@ -69,16 +69,18 @@ class HostScheduleRuntime final : public schedule::ScheduleRuntime {
             return conversation(schedule.target.sessionId);
         if (schedule.target.kind == Kind::NewConversation)
             return fresh(schedule);
+        if (schedule.target.kind == Kind::TeamStart)
+            return teamStart(schedule);
         return leader(schedule);
     }
 
     schedule::Delivery deliver(const ::ketplus::schedule::Schedule& schedule,
                                const ::ketplus::schedule::Run& run) override {
         using Kind = ::ketplus::schedule::TargetKind;
+        if (schedule.target.kind == Kind::TeamStart)
+            return deliverTeamStart(schedule);
         const QJsonObject tagged = schedule::scheduledUserMessage(schedule, run);
         QString prompt = tagged.value(QStringLiteral("text")).toString();
-        if (prompt.isEmpty() && schedule.target.kind == Kind::TeamStart)
-            prompt = QStringLiteral("Start the team.");
         if (schedule.target.kind == Kind::NewConversation)
             return deliverNew(schedule, run, prompt);
         const QString sessionId = schedule.target.kind == Kind::Conversation
@@ -127,6 +129,40 @@ class HostScheduleRuntime final : public schedule::ScheduleRuntime {
             !QFileInfo(schedule.target.workspace).isDir())
             inspection.state = schedule::ConversationState::WorkspaceMissing;
         return inspection;
+    }
+
+    schedule::Inspection teamStart(const ::ketplus::schedule::Schedule& schedule) const {
+        schedule::Inspection inspection;
+        bool ok = false;
+        const qint64 teamId = schedule.target.teamId.toLongLong(&ok);
+        const teams::Team* team = ok && host_->teams_ != nullptr ? host_->teams_->team(teamId) : nullptr;
+        if (team == nullptr) {
+            inspection.state = schedule::ConversationState::Missing;
+            return inspection;
+        }
+        if (!team->leaderStarted && team->paused) {
+            inspection.state = schedule::ConversationState::Busy;
+            inspection.sessionId = QStringLiteral("team:") + QString::number(teamId);
+            return inspection;
+        }
+        return inspection;
+    }
+
+    schedule::Delivery deliverTeamStart(const ::ketplus::schedule::Schedule& schedule) {
+        schedule::Delivery delivery;
+        bool ok = false;
+        const qint64 teamId = schedule.target.teamId.toLongLong(&ok);
+        const teams::Team* team = ok && host_->teams_ != nullptr ? host_->teams_->team(teamId) : nullptr;
+        if (team == nullptr || host_->teams_ == nullptr) {
+            delivery.errorCode = QString::fromLatin1(schedule::targetDeletedCode);
+            delivery.errorMessage = QStringLiteral("The schedule target no longer exists.");
+            return delivery;
+        }
+        const teams::Member* leader = team->memberWithRole(teams::role::leader);
+        host_->teams_->startLeader(teamId);
+        delivery.finished = true;
+        delivery.sessionId = leader == nullptr ? QString{} : leader->sessionId;
+        return delivery;
     }
 
     schedule::Inspection leader(const ::ketplus::schedule::Schedule& schedule) const {
@@ -291,6 +327,11 @@ void SessionHost::startScheduleRunner() {
 void SessionHost::stopScheduleRunner() {
     delete scheduleEngine_;
     scheduleEngine_ = nullptr;
+}
+
+void SessionHost::scheduledTeamMayStart(const qint64 teamId) {
+    if (scheduleEngine_ != nullptr)
+        scheduleEngine_->runner.turnFinished(QStringLiteral("team:") + QString::number(teamId));
 }
 
 void SessionHost::noteSchedulesChanged() {

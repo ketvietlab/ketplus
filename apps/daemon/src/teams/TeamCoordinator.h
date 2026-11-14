@@ -669,8 +669,6 @@ class TeamCoordinator : public QObject {
                    const QString& reason, QList<Update>& updates);
     // T-53: blocks a task that already had the passes a lowered limit allows; true if it did.
     bool blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates);
-    // The leader's first turn, once the team has a goal (ADR 0114, #456/#458).
-    void startLeader(qint64 teamId);
     // Starts a turn of `toSession` after the commit that caused it, counted against the
     // budget; held while the team is paused (TeamCoordinatorFlow.cpp).
     virtual void wake(const Team& team, const TeamMessage& message);

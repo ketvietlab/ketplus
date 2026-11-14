@@ -1062,6 +1062,15 @@ projection revision. Images, legacy blobs and larger payloads remain retained.
 `teams` (one JSON document per team under a revision; `AUTOINCREMENT` ids are never
 reused), `team_members` (session id → team, the primary key enforces one team per
 conversation) and `team_updates` (the append-only log with its digest mark).
+A team can be created to start now, or at a `start_at` at least one minute and at
+most 30 days ahead. With a start time the members exist but `leader_started` stays
+false and one `team_start` schedule (`once`, `missed_policy` `run_once`) waits on the
+schedule runner. The team document then carries `start_at` and `status` `scheduled`.
+At the fire, or once when the Mac wakes, the runner calls the leader's first turn.
+A paused team keeps that run queued until it is resumed. `team.start` starts it now,
+`team.startAt.update` moves the time, and `team.startAt.cancel` drops the schedule
+and leaves the team waiting for a manual start. Deleting the team deletes the
+schedule. No member receives a turn before the leader starts.
 `TeamRules` checks membership and task moves without side effects and returns the
 error code of ADR 0114; `TeamCoordinator` applies them, journals every change, emits
 `team.changed` / `team.removed` to local clients, and decides which change starts a turn
