@@ -13,6 +13,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QJsonArray>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
@@ -23,7 +24,7 @@ using namespace ketplus;
 
 namespace {
 
-QJsonObject schedule() {
+QJsonObject oneSchedule() {
     return {{QStringLiteral("id"), QStringLiteral("morning")},
             {QStringLiteral("name"), QStringLiteral("Morning")},
             {QStringLiteral("enabled"), true},
@@ -73,8 +74,12 @@ QJsonObject runDocument(const QString& id, const QString& scheduleId, const QStr
     return {{QStringLiteral("id"), id},
             {QStringLiteral("schedule_id"), scheduleId},
             {QStringLiteral("scheduled_for"), when},
+            {QStringLiteral("started_at"), when},
+            {QStringLiteral("finished_at"), when},
             {QStringLiteral("status"), status},
             {QStringLiteral("session_id"), session},
+            {QStringLiteral("turn_id"), QString{}},
+            {QStringLiteral("error_code"), QString{}},
             {QStringLiteral("error_message"), error}};
 }
 
@@ -86,14 +91,19 @@ QJsonArray sampleSchedules() {
     return {scheduleDocument(QStringLiteral("daily"), QStringLiteral("Daily website article"), true,
                              prompt,
                              {{QStringLiteral("kind"), QStringLiteral("team")},
-                              {QStringLiteral("team_id"), QStringLiteral("Release 1.4")}},
+                              {QStringLiteral("team_id"), QStringLiteral("Release.1.4")}},
                              QStringLiteral("{\"kind\":\"daily\",\"time\":\"08:00\",\"timezone\":"
                                             "\"Asia/Ho_Chi_Minh\"}"),
                              QStringLiteral("user"), QStringLiteral("2026-11-14T01:00:00Z")),
             scheduleDocument(QStringLiteral("ci"), QStringLiteral("Summarize failing CI"), true,
                              QStringLiteral("Summarize the failures."),
                              {{QStringLiteral("kind"), QStringLiteral("new")},
-                              {QStringLiteral("workspace"), QStringLiteral("~/dev/ketplus")}},
+                              {QStringLiteral("workspace"), QStringLiteral("~/dev/ketplus")},
+                              {QStringLiteral("provider"), QStringLiteral("codex")},
+                              {QStringLiteral("model"), QStringLiteral("GPT-5.6 Sol")},
+                              {QStringLiteral("effort"), QStringLiteral("medium")},
+                              {QStringLiteral("isolated_worktree"), true},
+                              {QStringLiteral("title_template"), QString{}}},
                              QStringLiteral("{\"kind\":\"weekdays\",\"time\":\"08:30\","
                                             "\"timezone\":\"%1\"}")
                                  .arg(zone),
@@ -108,7 +118,7 @@ QJsonArray sampleSchedules() {
                              QStringLiteral("8116"), QStringLiteral("2026-11-13T10:00:00Z")),
             scheduleDocument(QStringLiteral("start"), QStringLiteral("Start Website"), true, {},
                              {{QStringLiteral("kind"), QStringLiteral("team_start")},
-                              {QStringLiteral("team_id"), QStringLiteral("Release 1.4")}},
+                              {QStringLiteral("team_id"), QStringLiteral("Release.1.4")}},
                              QStringLiteral("{\"kind\":\"once\",\"at\":\"2026-11-13T22:00\","
                                             "\"timezone\":\"%1\"}")
                                  .arg(zone),
@@ -116,7 +126,7 @@ QJsonArray sampleSchedules() {
             scheduleDocument(QStringLiteral("weekly"), QStringLiteral("Weekly report"), false,
                              QStringLiteral("Send the weekly report."),
                              {{QStringLiteral("kind"), QStringLiteral("team")},
-                              {QStringLiteral("team_id"), QStringLiteral("Release 1.4")}},
+                              {QStringLiteral("team_id"), QStringLiteral("Release.1.4")}},
                              QStringLiteral("{\"kind\":\"weekly\",\"days\":[\"fri\"],\"time\":"
                                             "\"17:00\",\"timezone\":\"%1\"}")
                                  .arg(zone),
@@ -209,6 +219,7 @@ void ScheduleWindowTest::menuOpensAndRaisesOneWindow() {
     menu->addAction(action);
     QCOMPARE(action->objectName(), QStringLiteral("schedulesMenuAction"));
     QCOMPARE(action->text(), QStringLiteral("Schedules…"));
+    QCOMPARE(action->shortcut(), QKeySequence(QStringLiteral("Ctrl+Shift+J")));
 
     action->trigger();
     ScheduleWindow* first = windows.window();
@@ -256,8 +267,8 @@ void ScheduleWindowTest::editShowsValidationWithoutSending() {
                 return;
             }
             reply({{QStringLiteral("ok"), true},
-                   {QStringLiteral("schedules"), QJsonArray{schedule()}},
-                   {QStringLiteral("schedule"), schedule()}},
+                   {QStringLiteral("schedules"), QJsonArray{oneSchedule()}},
+                   {QStringLiteral("schedule"), oneSchedule()}},
                   {});
         });
     windows.client()->setAvailable(true);
@@ -272,7 +283,7 @@ void ScheduleWindowTest::editShowsValidationWithoutSending() {
     QVERIFY(labelContains(window, QStringLiteral("Prompt is required.")));
     auto* target = window->findChild<QLabel*>(QStringLiteral("scheduleTargetReadOnly"));
     QVERIFY(target != nullptr);
-    QCOMPARE(target->text(), QStringLiteral("Conversation · sess-1"));
+    QCOMPARE(target->text(), QStringLiteral("#sess-1"));
 }
 
 void ScheduleWindowTest::runNowShowsNotImplemented() {
@@ -294,7 +305,7 @@ void ScheduleWindowTest::runNowShowsNotImplemented() {
                   {});
             return;
         }
-        reply({{QStringLiteral("ok"), true}, {QStringLiteral("schedules"), QJsonArray{schedule()}}},
+        reply({{QStringLiteral("ok"), true}, {QStringLiteral("schedules"), QJsonArray{oneSchedule()}}},
               {});
     });
     windows.client()->setAvailable(true);
@@ -326,7 +337,7 @@ void ScheduleWindowTest::deleteWaitsForConfirmation() {
                   {});
             return;
         }
-        reply({{QStringLiteral("ok"), true}, {QStringLiteral("schedules"), QJsonArray{schedule()}}},
+        reply({{QStringLiteral("ok"), true}, {QStringLiteral("schedules"), QJsonArray{oneSchedule()}}},
               {});
     });
     windows.client()->setAvailable(true);
@@ -398,15 +409,24 @@ void ScheduleWindowTest::captureLightAndDark() {
         saveGrab(empty.window(), folder, QStringLiteral("09-empty-") + suffix);
         empty.window()->close();
 
-        QMainWindow bar;
-        bar.resize(420, 80);
-        auto* view = bar.menuBar()->addMenu(QStringLiteral("View"));
+        QWidget menuHost;
+        menuHost.resize(360, 240);
+        auto* bar = new QMenuBar(&menuHost);
+        auto* view = bar->addMenu(QStringLiteral("&View"));
+        view->addAction(QStringLiteral("Command Palette"));
         view->addAction(populated.createAction(view));
-        bar.show();
-        view->popup(bar.menuBar()->mapToGlobal(QPoint(8, bar.menuBar()->height())));
+        view->addAction(QStringLiteral("Enter Full Screen"));
+        bar->resize(360, bar->sizeHint().height());
+        bar->move(0, 16);
+        menuHost.show();
+        view->setParent(&menuHost);
+        view->setWindowFlags(Qt::Widget);
+        view->move(8, bar->y() + bar->height());
+        view->setFixedWidth(260);
+        view->show();
         QTest::qWait(50);
-        saveGrab(view, folder, QStringLiteral("01-view-menu-") + suffix);
-        view->close();
+        saveGrab(&menuHost, folder, QStringLiteral("01-view-menu-") + suffix);
+        menuHost.close();
     };
     shoot(ket::Appearance::Mode::Light, QStringLiteral("light"));
     shoot(ket::Appearance::Mode::Dark, QStringLiteral("dark"));

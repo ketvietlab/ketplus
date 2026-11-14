@@ -88,6 +88,11 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     if (teamStart_)
         promptRow_->setHelp(tr("A team start has no prompt."));
     column->addWidget(promptRow_);
+    promptNote_ = new QLabel(body);
+    promptNote_->setObjectName(QStringLiteral("schedulePromptError"));
+    promptNote_->setWordWrap(true);
+    promptNote_->hide();
+    column->addWidget(promptNote_);
 
     repeat_ = new ket::SegmentedControl(
         {tr("Once"), tr("Daily"), tr("Weekdays"), tr("Weekly"), tr("Every N hours")}, body);
@@ -283,43 +288,37 @@ void ScheduleEditor::updateSummary() {
     summary_->setText(scheduleRuleSummary(scheduleRuleText(collect())));
 }
 
-void ScheduleEditor::showIssue(const QString& code, const QString& message) {
-    QString field;
-    if (code == QLatin1String(schedule::emptyPromptCode) ||
-        code == QLatin1String(schedule::promptNotAllowedCode))
-        field = QStringLiteral("prompt");
-    else if (code == QLatin1String(schedule::invalidRuleCode))
-        field = QStringLiteral("rule");
-    else if (code == QLatin1String(schedule::teamStartConstraintCode))
-        field = QStringLiteral("missed_policy");
-    else if (code == QLatin1String(schedule::invalidPayloadCode) &&
-             message.contains(QStringLiteral("name")))
-        field = QStringLiteral("name");
-    else if (code == QLatin1String(schedule::invalidEnumCode) &&
-             message.contains(QStringLiteral("busy_policy")))
-        field = QStringLiteral("busy_policy");
-    else if (code == QLatin1String(schedule::invalidEnumCode) &&
-             message.contains(QStringLiteral("missed_policy")))
-        field = QStringLiteral("missed_policy");
-    nameRow_->setError(field == QLatin1String("name") ? message : QString{});
-    promptRow_->setError(field == QLatin1String("prompt") ? message : QString{});
-    ruleRow_->setError(field == QLatin1String("rule") ? message : QString{});
-    busyRow_->setError(field == QLatin1String("busy_policy") ? message : QString{});
-    missedRow_->setError(field == QLatin1String("missed_policy") ? message : QString{});
-    // The prompt's note sits under the native text editor, so the message also leads the card.
-    banner_->setText(message);
-    if (!message.isEmpty()) {
-        QPalette palette = banner_->palette();
+void ScheduleEditor::showIssue(const QString& code, const QString& message, const QString& field) {
+    QString resolved = field;
+    if (resolved.isEmpty()) {
+        if (code == QLatin1String(schedule::emptyPromptCode) ||
+            code == QLatin1String(schedule::promptNotAllowedCode))
+            resolved = QStringLiteral("prompt");
+        else if (code == QLatin1String(schedule::invalidRuleCode))
+            resolved = QStringLiteral("rule");
+        else if (code == QLatin1String(schedule::teamStartConstraintCode))
+            resolved = QStringLiteral("missed_policy");
+    }
+    nameRow_->setError(resolved == QLatin1String("name") ? message : QString{});
+    promptRow_->setError({});
+    ruleRow_->setError(resolved == QLatin1String("rule") ? message : QString{});
+    busyRow_->setError(resolved == QLatin1String("busy_policy") ? message : QString{});
+    missedRow_->setError(resolved == QLatin1String("missed_policy") ? message : QString{});
+    const bool promptError = resolved == QLatin1String("prompt") && !message.isEmpty();
+    prompt_->setInvalid(promptError);
+    promptNote_->setText(promptError ? message : QString{});
+    promptNote_->setVisible(promptError);
+    if (promptError) {
+        QPalette palette = promptNote_->palette();
         const QColor danger = ket::Tokens::color(u"danger", ket::Appearance::instance().theme());
         for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
             palette.setColor(group, QPalette::WindowText, danger);
-        banner_->setPalette(palette);
+        promptNote_->setPalette(palette);
     }
-    const bool show = !message.isEmpty();
-    const bool moved = banner_->isVisible() != show;
-    banner_->setVisible(show);
-    if (moved)
-        dialog_->setCardWidth(560);
+    const bool banner = !message.isEmpty() && resolved.isEmpty();
+    banner_->setText(banner ? message : QString{});
+    banner_->setVisible(banner);
+    dialog_->setCardWidth(560);
 }
 
 void ScheduleEditor::save() {
@@ -334,7 +333,7 @@ void ScheduleEditor::save() {
         edit.rule = collect();
     const EditIssue invalid = validateScheduleEdit(schedule_, edit);
     if (!invalid.ok()) {
-        showIssue(invalid.code, invalid.message);
+        showIssue(invalid.code, invalid.message, invalid.field);
         return;
     }
     showIssue({}, {});

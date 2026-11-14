@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Schedule.h"
+
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -37,14 +39,14 @@ class ScheduleClient final : public QObject {
     // `more` asks for the next older page. The first call replaces the page.
     void loadRuns(const QString& id, bool more);
 
-    [[nodiscard]] QList<QJsonObject> schedules() const;
-    [[nodiscard]] std::optional<QJsonObject> schedule(const QString& id) const;
+    [[nodiscard]] QList<schedule::Schedule> schedules() const;
+    [[nodiscard]] std::optional<schedule::Schedule> schedule(const QString& id) const;
     [[nodiscard]] QString listError() const { return listError_; }
 
-    [[nodiscard]] QList<QJsonObject> runs(const QString& id) const;
+    [[nodiscard]] QList<schedule::Run> runs(const QString& id) const;
     [[nodiscard]] bool runsLoaded(const QString& id) const;
     [[nodiscard]] bool runsHaveMore(const QString& id) const;
-    [[nodiscard]] QJsonObject latestRun(const QString& id) const;
+    [[nodiscard]] schedule::Run latestRun(const QString& id) const;
 
   signals:
     void changed();
@@ -52,7 +54,7 @@ class ScheduleClient final : public QObject {
 
   private:
     struct RunPage {
-        QList<QJsonObject> items;
+        QList<schedule::Run> items;
         bool loaded{false};
         bool hasMore{false};
     };
@@ -65,9 +67,9 @@ class ScheduleClient final : public QObject {
     bool available_{false};
     int listRequest_{0};
     QString listError_;
-    QHash<QString, QJsonObject> schedules_;
+    QHash<QString, schedule::Schedule> schedules_;
     QHash<QString, RunPage> runs_;
-    QHash<QString, QJsonObject> latestRun_;
+    QHash<QString, schedule::Run> latestRun_;
 };
 
 } // namespace ketplus

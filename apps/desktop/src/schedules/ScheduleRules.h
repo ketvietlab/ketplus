@@ -53,7 +53,10 @@ struct EditIssue final {
 [[nodiscard]] QString scheduleRuleText(const ScheduleRule& rule);
 [[nodiscard]] QString scheduleRuleSummary(const QString& rule);
 
-[[nodiscard]] QString scheduleTargetLabel(const QJsonObject& target);
+// `createdBy` is "user" or a conversation id. A conversation target then reads
+// "#8116" or "#8116 · agent-created", matching the schedules mock.
+[[nodiscard]] QString scheduleTargetLabel(const QJsonObject& target,
+                                          const QString& createdBy = {});
 [[nodiscard]] QString scheduleWhenLabel(const QString& iso, const QString& timezone);
 [[nodiscard]] QString scheduleRunLabel(const QJsonObject& run);
 [[nodiscard]] QString scheduleLastLabel(const QJsonObject& schedule, const QJsonObject& latestRun);

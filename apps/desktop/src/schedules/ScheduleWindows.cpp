@@ -3,6 +3,7 @@
 #include "schedules/ScheduleWindow.h"
 
 #include <QAction>
+#include <QKeySequence>
 #include <QWidget>
 
 namespace ketplus {
@@ -13,6 +14,8 @@ ScheduleWindows::ScheduleWindows(QObject* parent)
 QAction* ScheduleWindows::createAction(QObject* parent) {
     auto* action = new QAction(tr("Schedules…"), parent);
     action->setObjectName(QStringLiteral("schedulesMenuAction"));
+    // Qt maps Ctrl to Command on macOS, so this is ⇧⌘J, the mock's shortcut.
+    action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+J")));
     connect(action, &QAction::triggered, this, [this] { show(); });
     return action;
 }

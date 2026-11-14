@@ -46,45 +46,48 @@ void ScheduleClient::refresh() {
                        return;
                    }
                    alive->listError_.clear();
-                   QHash<QString, QJsonObject> next;
+                   QHash<QString, schedule::Schedule> next;
                    for (const QJsonValue value :
                         result.value(QStringLiteral("schedules")).toArray()) {
-                       const QJsonObject schedule = value.toObject();
-                       const QString id = schedule.value(QStringLiteral("id")).toString();
-                       if (!id.isEmpty())
-                           next.insert(id, schedule);
+                       schedule::Failure failure;
+                       const std::optional<schedule::Schedule> schedule =
+                           schedule::scheduleFromJson(value.toObject(), &failure);
+                       if (schedule)
+                           next.insert(schedule->id, *schedule);
                    }
                    alive->schedules_ = next;
                    emit alive->changed();
                });
 }
 
-void ScheduleClient::store(const QJsonObject& schedule) {
-    const QString id = schedule.value(QStringLiteral("id")).toString();
-    if (id.isEmpty())
+void ScheduleClient::store(const QJsonObject& document) {
+    schedule::Failure failure;
+    const std::optional<schedule::Schedule> schedule =
+        schedule::scheduleFromJson(document, &failure);
+    if (!schedule)
         return;
-    if (const auto it = schedules_.constFind(id); it != schedules_.cend() && *it == schedule)
+    if (const auto it = schedules_.constFind(schedule->id);
+        it != schedules_.cend() && schedule::toJson(*it) == schedule::toJson(*schedule))
         return;
-    schedules_.insert(id, schedule);
+    schedules_.insert(schedule->id, *schedule);
     emit changed();
 }
 
-void ScheduleClient::prependRun(const QJsonObject& run) {
-    const QString scheduleId = run.value(QStringLiteral("schedule_id")).toString();
-    const QString runId = run.value(QStringLiteral("id")).toString();
-    if (scheduleId.isEmpty() || runId.isEmpty())
+void ScheduleClient::prependRun(const QJsonObject& document) {
+    schedule::Failure failure;
+    const std::optional<schedule::Run> run = schedule::runFromJson(document, &failure);
+    if (!run)
         return;
-    latestRun_.insert(scheduleId, run);
-    if (const auto it = runs_.find(scheduleId); it != runs_.end() && it->loaded) {
+    latestRun_.insert(run->scheduleId, *run);
+    if (const auto it = runs_.find(run->scheduleId); it != runs_.end() && it->loaded) {
         const auto same =
-            std::find_if(it->items.cbegin(), it->items.cend(), [&](const QJsonObject& item) {
-                return item.value(QStringLiteral("id")).toString() == runId;
-            });
+            std::find_if(it->items.cbegin(), it->items.cend(),
+                         [&](const schedule::Run& item) { return item.id == run->id; });
         if (same == it->items.cend()) {
-            it->items.prepend(run);
+            it->items.prepend(*run);
             while (it->items.size() > schedule::maximumRetainedRuns)
                 it->items.removeLast();
-            emit runsChanged(scheduleId);
+            emit runsChanged(run->scheduleId);
         }
     }
     emit changed();
@@ -129,9 +132,13 @@ void ScheduleClient::absorb(const QString& type, const QJsonObject& payload,
     if (type == QLatin1String("schedule.runs")) {
         const QString id = payload.value(QStringLiteral("id")).toString();
         RunPage& page = runs_[id];
-        QList<QJsonObject> received;
-        for (const QJsonValue value : result.value(QStringLiteral("runs")).toArray())
-            received.append(value.toObject());
+        QList<schedule::Run> received;
+        for (const QJsonValue value : result.value(QStringLiteral("runs")).toArray()) {
+            schedule::Failure failure;
+            if (const std::optional<schedule::Run> run =
+                    schedule::runFromJson(value.toObject(), &failure))
+                received.append(*run);
+        }
         if (payload.contains(QStringLiteral("before_id")))
             page.items.append(received);
         else
@@ -170,38 +177,35 @@ void ScheduleClient::loadRuns(const QString& id, const bool more) {
         const RunPage page = runs_.value(id);
         if (!page.loaded || !page.hasMore || page.items.isEmpty())
             return;
-        payload.insert(QStringLiteral("before_id"),
-                       page.items.constLast().value(QStringLiteral("id")).toString());
+        payload.insert(QStringLiteral("before_id"), page.items.constLast().id);
     }
     request(QStringLiteral("schedule.runs"), payload);
 }
 
-QList<QJsonObject> ScheduleClient::schedules() const {
-    QList<QJsonObject> list = schedules_.values();
-    std::sort(list.begin(), list.end(), [](const QJsonObject& left, const QJsonObject& right) {
-        const QString leftName = left.value(QStringLiteral("name")).toString();
-        const QString rightName = right.value(QStringLiteral("name")).toString();
-        if (leftName != rightName)
-            return leftName.localeAwareCompare(rightName) < 0;
-        return left.value(QStringLiteral("id")).toString() <
-               right.value(QStringLiteral("id")).toString();
-    });
+QList<schedule::Schedule> ScheduleClient::schedules() const {
+    QList<schedule::Schedule> list = schedules_.values();
+    std::sort(list.begin(), list.end(),
+              [](const schedule::Schedule& left, const schedule::Schedule& right) {
+                  if (left.name != right.name)
+                      return left.name.localeAwareCompare(right.name) < 0;
+                  return left.id < right.id;
+              });
     return list;
 }
 
-std::optional<QJsonObject> ScheduleClient::schedule(const QString& id) const {
+std::optional<schedule::Schedule> ScheduleClient::schedule(const QString& id) const {
     const auto it = schedules_.constFind(id);
     if (it == schedules_.cend())
         return std::nullopt;
     return *it;
 }
 
-QList<QJsonObject> ScheduleClient::runs(const QString& id) const { return runs_.value(id).items; }
+QList<schedule::Run> ScheduleClient::runs(const QString& id) const { return runs_.value(id).items; }
 
 bool ScheduleClient::runsLoaded(const QString& id) const { return runs_.value(id).loaded; }
 
 bool ScheduleClient::runsHaveMore(const QString& id) const { return runs_.value(id).hasMore; }
 
-QJsonObject ScheduleClient::latestRun(const QString& id) const { return latestRun_.value(id); }
+schedule::Run ScheduleClient::latestRun(const QString& id) const { return latestRun_.value(id); }
 
 } // namespace ketplus
