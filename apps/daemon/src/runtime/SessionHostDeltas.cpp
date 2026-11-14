@@ -40,6 +40,7 @@ void scheduleFlush(QTimer& timer, int delay) {
 } // namespace
 
 SessionHost::~SessionHost() {
+    stopScheduleRunner();
     deltaFlush_.stop();
     // Questions to git nobody will read: the ones not started are dropped; the pool's own
     // destructor waits for the one that runs.
