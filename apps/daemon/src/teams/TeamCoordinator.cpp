@@ -637,10 +637,12 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
     if (const Team* current = this->team(teamId)) {
         // An immediate team starts when its goal arrives. A scheduled team whose once
         // fire already passed without a goal starts the same way. A team still armed,
-        // or one whose start was cancelled, waits.
+        // or one whose start was cancelled, waits. A paused team, or one whose start
+        // run is still queued, waits for resume to promote that run.
         const bool waitingForManualStart = current->startWaiting && current->startAt.isEmpty();
-        if (!current->leaderStarted && !waitingForManualStart &&
-            !startStillArmed(*journal_, *current))
+        const bool startQueued = journal_->queuedScheduleRun(current->startScheduleId).has_value();
+        if (!current->leaderStarted && !current->paused && !waitingForManualStart &&
+            !startStillArmed(*journal_, *current) && !startQueued)
             startLeader(teamId);
     }
     return {.teamId = teamId};

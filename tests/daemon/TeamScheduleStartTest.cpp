@@ -159,6 +159,38 @@ class TeamScheduleStartTest final : public QObject {
         QCOMPARE(host_.messages.size(), 1);
     }
 
+    void aRenameWhilePausedDoesNotStealTheQueuedStart() {
+        const TeamResult created = teams_->create(draft(), QStringLiteral("user"),
+                                                  startAt(clock_.now_.addSecs(120)), clock_.now_);
+        QVERIFY2(created.ok(), created.error ? qPrintable(created.error->message) : "");
+        const QString scheduleId = teams_->team(created.teamId)->startScheduleId;
+        QVERIFY(
+            teams_
+                ->update(created.teamId, {{QStringLiteral("paused"), true}}, QStringLiteral("user"))
+                .ok());
+        clock_.now_ = clock_.now_.addSecs(180);
+        runner_->noteClockChanged();
+        QVERIFY(!leaderStarted(created.teamId));
+        QVERIFY(teams_
+                    ->update(created.teamId,
+                             {{QStringLiteral("name"), QStringLiteral("Checkout later")}},
+                             QStringLiteral("user"))
+                    .ok());
+        QVERIFY(!leaderStarted(created.teamId));
+        const auto queued = journal_->scheduleRuns(scheduleId, 10);
+        QVERIFY(queued && !queued->runs.isEmpty());
+        QCOMPARE(queued->runs.first().status, QStringLiteral("queued"));
+        QVERIFY(teams_
+                    ->update(created.teamId, {{QStringLiteral("paused"), false}},
+                             QStringLiteral("user"))
+                    .ok());
+        QVERIFY(leaderStarted(created.teamId));
+        QCOMPARE(host_.messages.size(), 1);
+        const auto runs = journal_->scheduleRuns(scheduleId, 10);
+        QVERIFY(runs && !runs->runs.isEmpty());
+        QCOMPARE(runs->runs.first().status, QStringLiteral("succeeded"));
+    }
+
     void startNowChangeAndCancel() {
         const TeamResult created = teams_->create(draft(), QStringLiteral("user"),
                                                   startAt(clock_.now_.addSecs(3600)), clock_.now_);
