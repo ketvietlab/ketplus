@@ -131,6 +131,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void eventReady(const QJsonObject& event);
     // ADR 0114: team.changed or team.removed, for every local client.
     void teamEvent(const QString& type, const QJsonObject& payload);
+    // ADR 0126: schedule.changed, for every local client. schedule.run is the runner's.
+    void scheduleEvent(const QString& type, const QJsonObject& payload);
     // A change every desktop window shows at once that is not a session event (#429):
     // `tags.changed` with the catalog and/or the sessions whose labels changed.
     void noticeReady(const QString& type, const QJsonObject& payload);
@@ -364,6 +366,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                     teams::StorageDone done) override;
     void askRemoveWorktree(const QString& repository, const QString& worktree,
                            teams::RemovalDone done) override;
+    void schedulesDeleted(const QList<ScheduleRecord>& schedules) override;
     [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
     [[nodiscard]] QList<teams::FolderConversation>
     conversationsIn(const QString& path) const override;
@@ -407,6 +410,11 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Reads the teams and gives back the member name to members an agent message titled.
     void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
+    // ADR 0126, in SessionHostSchedules.cpp. Parses with the shared schedule contract,
+    // then reads and writes LocalJournal. schedule.runNow stays not_implemented.
+    [[nodiscard]] QJsonObject scheduleCommand(const QString& type, const QJsonObject& request);
+    void publishScheduleChange(const QString& change, const ScheduleRecord& record);
+    void publishDisabledSessionSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
     // Has the git a task command will ask for read off the event loop, then calls `then`,
     // where the command runs as always: a client's request, and a member's team_task_* tool.

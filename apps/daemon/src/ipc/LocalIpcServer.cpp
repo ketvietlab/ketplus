@@ -54,6 +54,7 @@ LocalIpcServer::LocalIpcServer(SessionHost* host, const QString& serverName,
     connect(server_, &QLocalServer::newConnection, this, &LocalIpcServer::acceptConnections);
     connect(host_, &SessionHost::eventReady, this, &LocalIpcServer::broadcastEvent);
     connect(host_, &SessionHost::teamEvent, this, &LocalIpcServer::broadcastTeamEvent);
+    connect(host_, &SessionHost::scheduleEvent, this, &LocalIpcServer::broadcastTeamEvent);
     connect(host_, &SessionHost::noticeReady, this, &LocalIpcServer::broadcastNotice);
 }
 
@@ -518,7 +519,7 @@ void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
     socket->write(frame);
 }
 
-// ADR 0114: team.changed and team.removed reach every authenticated client, never an agent.
+// Team and schedule events reach every authenticated client, never an agent.
 void LocalIpcServer::broadcastTeamEvent(const QString& type, const QJsonObject& payload) {
     const QJsonObject envelope{
         {QStringLiteral("protocol_version"), protocol::currentVersion},
