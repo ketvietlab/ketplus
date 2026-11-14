@@ -18,7 +18,8 @@ namespace ketplus {
 
 // The New team "Schedule" section, and the team page's Change time dialog.
 // Start now with repeat off adds nothing to team.create. A scheduled start is
-// start_at {at, timezone}. A repeat is {rule, work_order} for the team schedule.
+// start_at {at, timezone}. A repeat is {rule, work_order}; rule is the daemon object
+// with time_zone.
 class TeamScheduleFields final : public QWidget {
     Q_OBJECT
 

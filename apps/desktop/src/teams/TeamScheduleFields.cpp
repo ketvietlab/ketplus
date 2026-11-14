@@ -11,6 +11,7 @@
 
 #include <QButtonGroup>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QTimeZone>
@@ -226,7 +227,24 @@ QJsonObject TeamScheduleFields::repeat() const {
         const QString today = QDateTime::currentDateTime().date().toString(Qt::ISODate);
         rule.anchor = today + QLatin1Char('T') + rule.time;
     }
-    return {{QStringLiteral("rule"), scheduleRuleText(rule)},
+    // team.create parses repeat.rule with the daemon engine, which wants an object
+    // and time_zone. The desktop editor's opaque string uses timezone instead.
+    QJsonObject object{{QStringLiteral("kind"), rule.kind},
+                       {QStringLiteral("time_zone"), rule.timezone}};
+    if (rule.kind == QLatin1String("daily") || rule.kind == QLatin1String("weekdays") ||
+        rule.kind == QLatin1String("weekly"))
+        object.insert(QStringLiteral("time"), rule.time);
+    if (rule.kind == QLatin1String("weekly")) {
+        QJsonArray days;
+        for (const QString& day : rule.days)
+            days.append(day);
+        object.insert(QStringLiteral("days"), days);
+    }
+    if (rule.kind == QLatin1String("interval")) {
+        object.insert(QStringLiteral("every_hours"), rule.everyHours);
+        object.insert(QStringLiteral("anchor"), rule.anchor);
+    }
+    return {{QStringLiteral("rule"), object},
             {QStringLiteral("work_order"), order_->text().trimmed()}};
 }
 

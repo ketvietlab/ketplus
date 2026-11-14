@@ -122,9 +122,11 @@ class TeamScheduleFormTest final : public QObject {
                      .toString(),
                  QStringLiteral("Asia/Ho_Chi_Minh"));
         const QJsonObject repeatPayload = sent.value(QStringLiteral("repeat")).toObject();
-        QVERIFY(repeatPayload.value(QStringLiteral("rule"))
-                    .toString()
-                    .contains(QStringLiteral("\"kind\":\"daily\"")));
+        const QJsonObject rule = repeatPayload.value(QStringLiteral("rule")).toObject();
+        QCOMPARE(rule.value(QStringLiteral("kind")).toString(), QStringLiteral("daily"));
+        QCOMPARE(rule.value(QStringLiteral("time")).toString(), QStringLiteral("08:00"));
+        QCOMPARE(rule.value(QStringLiteral("time_zone")).toString(),
+                 QStringLiteral("Asia/Ho_Chi_Minh"));
         QCOMPARE(repeatPayload.value(QStringLiteral("work_order")).toString(),
                  QStringLiteral("Write a new article for the website"));
     }
