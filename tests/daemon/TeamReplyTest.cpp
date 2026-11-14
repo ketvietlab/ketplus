@@ -28,12 +28,16 @@ struct SlowGit final {
 
     // Two seconds by default. The session runtime gives up on a git call after two seconds,
     // so a worktree switch is only carried out with a shorter delay.
-    explicit SlowGit(const QString& directory, const QByteArray& seconds = "2") {
+    explicit SlowGit(const QString& directory, const QByteArray& seconds = "2",
+                     const QString& startedFile = {}) {
         const QString real = QStandardPaths::findExecutable(QStringLiteral("git"));
         QFile script(directory + QStringLiteral("/git"));
         if (real.isEmpty() || !QDir().mkpath(directory) || !script.open(QIODevice::WriteOnly))
             return;
-        script.write("#!/bin/sh\nsleep " + seconds + "\nexec '" + real.toUtf8() + "' \"$@\"\n");
+        script.write("#!/bin/sh\n");
+        if (!startedFile.isEmpty())
+            script.write(": > '" + startedFile.toUtf8().replace("'", "'\\''") + "'\n");
+        script.write("sleep " + seconds + "\nexec '" + real.toUtf8() + "' \"$@\"\n");
         script.close();
         installed = script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("PATH", directory.toUtf8() + ':' + path);
@@ -463,14 +467,27 @@ class TeamReplyTest final : public QObject {
         assignByTheLeader("T-3", developers_.at(0));
         QTest::qWait(300);
         QCOMPARE(count("assignment"), 2);
-        const SlowGit slow(fixture_->directory.filePath("bin"));
+        const QString gitStarted = fixture_->directory.filePath("resume-git-started");
+        const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
         QVERIFY(slow.installed);
-        const QJsonObject resumed =
-            timed("team.update", {{"team_id", teamId_}, {"paused", false}}, &elapsed);
+        QJsonObject resumed;
+        int assignmentsAtReply = -1;
+        bool gitStartedAtReply = true;
+        fixture_->host->handleCommandDeferred(
+            agent_test::request("team.update", {{"team_id", teamId_}, {"paused", false}}),
+            "desktop-test", [&](const QJsonObject& result) {
+                assignmentsAtReply = count("assignment");
+                gitStartedAtReply = QFileInfo::exists(gitStarted);
+                resumed = result;
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(!resumed.isEmpty(), 30000);
         QVERIFY2(resumed.value("ok").toBool(), qPrintable(agent_test::text(resumed)));
-        qInfo("team.update (resume with a held assignment): reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        // ADR 0114 orders the reply before deferred Git and message delivery. Wall time
+        // also includes the journal commit and scheduler delays, so observe that order.
+        QCOMPARE(assignmentsAtReply, 2);
+        QVERIFY2(!gitStartedAtReply, "Deferred Git ran before the resume reply.");
         QVERIFY(!resumed.value("team").toObject().value("paused").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 3, 30000);
     }
 };
