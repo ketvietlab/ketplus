@@ -9,7 +9,8 @@ talks to the daemon, Git, a provider or the network.
 ## Build and run
 
 Qt 6.8 or later with Core, Gui, Qml, Quick, QuickControls2, Svg, Test and
-Widgets. Tests are enabled by default (`BUILD_TESTING=ON`) and also require
+Widgets, and LinguistTools (`lrelease`). Tests are enabled by default
+(`BUILD_TESTING=ON`) and also require Python 3 and
 Qt's `qmltestrunner`, including its QtTest QML module. Install the Qt Quick Test
 tools with the SDK, or set `KETPLUS_MOCK_QMLTESTRUNNER` to the matching runner
 executable if it is not in the SDK bin directory or `PATH`.
@@ -20,7 +21,7 @@ cmake --build build/mock
 build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock      # macOS
 ```
 
-Run the two QML model suites and the screen smoke check offscreen:
+Run the deterministic model, team-language and screen smoke checks offscreen:
 
 ```sh
 QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
@@ -49,7 +50,23 @@ KetPlusMock --smoke --display=secondary                # on another display, lea
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
+KetPlusMock --screen=teams --state=vi --screenshot=teams-vi.png
+KetPlusMock --screen=teams --state=vi-paused --screenshot=teams-budget-vi.png
 KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits (limits-cost opens Cost details, limits-api-key has none), reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
+```
+
+Teams default to English; prefix a team state with `vi-` (or use `vi` for the
+default state) for Vietnamese. Changing Language in the team menu updates the
+page, board, decisions and their team controls live. The mock compiles the product's
+`ketplus_teams_vi.ts` catalog directly; only additional mock copy lives in
+`translations/mock_teams_vi.ts`. Provider/model names and authored fixture
+content stay as supplied. `--smoke` checks the rendered English/Vietnamese
+bindings and switching back; `--screen=teams --state=vi --check-state` runs the
+focused check. Run only the affected checks with:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock \
+  -R 'mock_(team_copy_catalog|team_language|smoke)$' --output-on-failure
 ```
 
 Screens and states (`--screen` / `--state`):

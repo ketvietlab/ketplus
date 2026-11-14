@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets LinguistTools)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
@@ -46,6 +46,13 @@ FetchContent_MakeAvailable(ketplus_mock_ket_sans)
 qt_add_executable(ketplus_qt_mock MACOSX_BUNDLE src/main.cpp src/MockController.h
                   src/MockController.cpp)
 set_target_properties(ketplus_qt_mock PROPERTIES OUTPUT_NAME "KetPlusMock")
+
+# Share T-56's product wording; keep only additional mock copy in the local catalog.
+qt_add_lrelease(TS_FILES ../../modules/remote/translations/ketplus_teams_vi.ts
+                        translations/mock_teams_vi.ts
+                QM_FILES_OUTPUT_VARIABLE mock_team_qm_files)
+qt_add_resources(ketplus_qt_mock mock_team_translations
+    PREFIX "/mock/i18n" BASE "${CMAKE_CURRENT_BINARY_DIR}" FILES ${mock_team_qm_files})
 
 file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml qml/*.js)
 set_source_files_properties(qml/Fixtures.qml qml/TranscriptFixtures.qml PROPERTIES
@@ -99,6 +106,13 @@ target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin Ke
 # Run the mock's existing deterministic QML model suites through CTest.
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME mock_team_copy_catalog
+             COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_team_copy.py")
+    add_test(NAME mock_team_language
+             COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --state=vi --check-state)
+    set_tests_properties(mock_team_copy_catalog mock_team_language PROPERTIES
+                         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
                  HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
     foreach(suite ContentTabsModel PlanRunModel ScheduleRules)
