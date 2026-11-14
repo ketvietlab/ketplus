@@ -122,6 +122,28 @@ void ScheduleRunner::start() {
     arm();
 }
 
+void ScheduleRunner::abandonRunsWithoutATurn(
+    const std::function<bool(const Run&)>& turnStillExists) {
+    const QDateTime now = clock_.now();
+    for (Run run : store_.unfinishedRuns()) {
+        const bool running = run.status == documents::RunStatus::Running;
+        const bool queued = run.status == documents::RunStatus::Queued;
+        if (!running && !queued)
+            continue;
+        // A queued run whose conversation is still in a turn waits. Every other open
+        // run belonged to a process that is gone.
+        if (queued && turnStillExists && turnStillExists(run))
+            continue;
+        run.status = documents::RunStatus::Failed;
+        run.finishedAt = stamp(now);
+        run.errorCode = QString::fromLatin1(runtimeStoppedCode);
+        run.errorMessage = QStringLiteral("The daemon stopped before this run finished.");
+        if (!store_.saveRun(run))
+            continue;
+        runtime_.emitRun(run);
+    }
+}
+
 void ScheduleRunner::noteClockChanged() {
     reconcile();
     arm();

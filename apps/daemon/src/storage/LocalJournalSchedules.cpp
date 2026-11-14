@@ -686,4 +686,21 @@ std::optional<ScheduleRunRecord> LocalJournal::queuedScheduleRun(const QString& 
     return readRun(query, 0);
 }
 
+QList<ScheduleRunRecord> LocalJournal::unfinishedScheduleRuns() const {
+    setError({});
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("SELECT %1 FROM schedule_runs WHERE status IN ('queued', 'running') "
+                       "ORDER BY rowid ASC")
+            .arg(runColumns));
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return {};
+    }
+    QList<ScheduleRunRecord> runs;
+    while (query.next())
+        runs.append(readRun(query, 0));
+    return runs;
+}
+
 } // namespace ketplus::daemon
