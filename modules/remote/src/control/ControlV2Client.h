@@ -112,6 +112,7 @@ class ControlV2Client final : public QObject {
         qint64 until{0};
     };
     [[nodiscard]] static QString worktreeVerdictKey(const QJsonObject& entry);
+    [[nodiscard]] qint64 worktreeVerificationNow() const;
     void queueWorktreeVerification(const QJsonObject& entry);
     // Runs queued verifications, at most verifyConcurrency_ at a time.
     void pumpWorktreeVerification();
@@ -123,6 +124,7 @@ class ControlV2Client final : public QObject {
     int verifyConcurrency_{4};
     int verifyTimeoutMilliseconds_{5000};
     int verifyRetryMilliseconds_{30000};
+    std::function<qint64()> worktreeVerificationClock_;
     // A non-durable worktree command (a read): prepare, submit, then poll until it ends or the
     // timeout passes.
     void awaitWorktreeCommand(const QJsonObject& intent, const QJsonObject& plaintext,

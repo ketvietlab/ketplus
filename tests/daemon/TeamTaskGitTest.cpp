@@ -30,9 +30,11 @@ void git(const QString& directory, const QStringList& arguments) {
 // With a log, it writes the arguments of each call there.
 struct SlowGit final {
     QByteArray path = qgetenv("PATH");
+    QString releasePath;
     bool installed = false;
 
-    explicit SlowGit(const QString& directory, const QString& log = {}) {
+    explicit SlowGit(const QString& directory, const QString& log = {}, const QString& gate = {})
+        : releasePath(gate) {
         const QString real = QStandardPaths::findExecutable(QStringLiteral("git"));
         QFile script(directory + QStringLiteral("/git"));
         if (real.isEmpty() || !QDir().mkpath(directory) || !script.open(QIODevice::WriteOnly))
@@ -40,12 +42,27 @@ struct SlowGit final {
         script.write("#!/bin/sh\n");
         if (!log.isEmpty())
             script.write("printf '%s\\n' \"$*\" >> '" + log.toUtf8() + "'\n");
-        script.write("sleep 0.3\nexec '" + real.toUtf8() + "' \"$@\"\n");
+        if (releasePath.isEmpty())
+            script.write("sleep 0.3\n");
+        else
+            script.write("while [ ! -f '" + releasePath.toUtf8().replace("'", "'\\''") +
+                         "' ]; do sleep 0.01; done\n");
+        script.write("exec '" + real.toUtf8() + "' \"$@\"\n");
         script.close();
         installed = script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("PATH", directory.toUtf8() + ':' + path);
     }
-    ~SlowGit() { qputenv("PATH", path); }
+    bool release() const {
+        if (releasePath.isEmpty())
+            return true;
+        QFile gate(releasePath);
+        return gate.open(QIODevice::WriteOnly);
+    }
+    ~SlowGit() {
+        // An assertion failure must also release the worker before the fixture joins it.
+        (void)release();
+        qputenv("PATH", path);
+    }
     SlowGit(const SlowGit&) = delete;
     SlowGit& operator=(const SlowGit&) = delete;
 };
@@ -408,12 +425,10 @@ class TeamTaskGitProtocolTest final : public QObject {
         git(repository, {"init", "-q", "-b", "integration"});
         git(repository, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
                          "--allow-empty", "-m", "start"});
-        int ticks = 0;
-        QTimer pulse;
-        connect(&pulse, &QTimer::timeout, &pulse, [&ticks] { ++ticks; });
-        pulse.start(10);
+        QTimer eventLoopProbe;
         const QString log = fixture.directory.filePath("git-calls");
-        const SlowGit slow(fixture.directory.filePath("bin"), log);
+        const SlowGit slow(fixture.directory.filePath("bin"), log,
+                           fixture.directory.filePath("release-git"));
         QVERIFY(slow.installed);
         const auto lookups = [&log] {
             QFile file(log);
@@ -421,22 +436,22 @@ class TeamTaskGitProtocolTest final : public QObject {
         };
 
         QJsonObject reply;
-        int ticksAtReply = 0;
         const auto list = [&] {
             reply = {};
-            ticks = 0;
             fixture.host->handleCommandDeferred(
                 agent_test::request("team.list", {{"repository", repository}}), "desktop-test",
-                [&](const QJsonObject& result) {
-                    reply = result;
-                    ticksAtReply = ticks;
-                });
+                [&](const QJsonObject& result) { reply = result; });
         };
         list();
         QVERIFY(reply.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(lookups(), 1, 30000);
+        bool eventLoopRan = false;
+        QTimer::singleShot(0, &eventLoopProbe, [&] { eventLoopRan = true; });
+        QTRY_VERIFY(eventLoopRan);
+        QVERIFY(reply.isEmpty()); // Git is still held, yet the daemon's loop ran.
+        QVERIFY(slow.release());
         QTRY_VERIFY_WITH_TIMEOUT(!reply.isEmpty(), 30000);
         QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
-        QVERIFY2(ticksAtReply >= 10, qPrintable(QString::number(ticksAtReply)));
         QCOMPARE(lookups(), 1);
         // Known now: the next command that names it does not wait.
         list();

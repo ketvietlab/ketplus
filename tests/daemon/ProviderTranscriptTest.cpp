@@ -269,36 +269,25 @@ class ProviderTranscriptTest : public QObject {
             if (entry.value("subtype") == "fileChange")
                 edits.append(entry.value("fileChanges").toList().first().toMap());
         }
-        const QStringList expected{"fileRead | Read: a/b.qml",
-                                   "codeSearch | Searched code: “Animation” in modules",
-                                   "fileSearch | Searched files: **/*.qml",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "webSearch | Searched the web: qt animation",
-                                   "webFetch | Fetched: doc.qt.io/x",
-                                   "toolsLoaded | Loaded tools: Read",
-                                   "skill | Used skill: ket-atlas",
-                                   "taskStopped | Stopped a background task",
-                                   "monitor | Waited",
-                                   "wake | Scheduled wake-up",
-                                   "subAgent | Ran a subagent: Audit icons",
-                                   "integration | Used ketplus_agents: agents_send",
-                                   "integration | Used node_repl: js",
-                                   "fileRead | Read: a.cpp L1–5",
-                                   "codeSearch | Searched code: “foo” in src",
-                                   "fileSearch | Listed files: src",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "webSearch | Searched the web: qt",
-                                   "webSearch | Opened a page: doc.qt.io",
-                                   "webSearch | Found in page: “Timer” on doc.qt.io",
-                                   "imageView | Viewed an image",
-                                   "imageGeneration | Generated an image",
-                                   "thought | Thought",
-                                   "wait | Waited"};
-        QCOMPARE(steps, expected);
+        const QStringList expected{
+            "fileRead | Read: a/b.qml", "codeSearch | Searched code: “Animation” in modules",
+            "fileSearch | Searched files: **/*.qml", "fileChange | Edited 1 file",
+            "fileChange | Edited 1 file", "webSearch | Searched the web: qt animation",
+            "webFetch | Fetched: doc.qt.io/x", "toolsLoaded | Loaded tools: Read",
+            "skill | Used skill: ket-atlas", "taskStopped | Stopped a background task",
+            "monitor | Waited", "wake | Scheduled wake-up",
+            "subAgent | Ran a subagent: Audit icons",
+            // Agent sends have their own agent_message.state card, not a
+            // duplicate raw tool row (sentAgentMessagesAreOneNote).
+            "integration | Used node_repl: js", "fileRead | Read: a.cpp L1–5",
+            "codeSearch | Searched code: “foo” in src", "fileSearch | Listed files: src",
+            "fileChange | Edited 1 file", "fileChange | Edited 1 file",
+            "fileChange | Edited 1 file", "fileChange | Edited 1 file",
+            "webSearch | Searched the web: qt", "webSearch | Opened a page: doc.qt.io",
+            "webSearch | Found in page: “Timer” on doc.qt.io", "imageView | Viewed an image",
+            "imageGeneration | Generated an image", "thought | Thought", "wait | Waited"};
+        QVERIFY2(steps == expected,
+                 qPrintable(QStringLiteral("Actual steps:\n") + steps.join('\n')));
         // A thought is timed from its start to its completion, as the mock's "Thought · 14 s".
         const QJsonObject thought{{"id", "r1"}, {"type", "reasoning"}, {"text", "secret plan"}};
         const auto lifecycle = [&thought](qint64 cursor, const char* type, const char* at) {

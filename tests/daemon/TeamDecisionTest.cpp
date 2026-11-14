@@ -169,7 +169,7 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(host_.of("assignment").isEmpty());
         QVERIFY(team().task(first)->assignmentHeld && team().task(second)->assignmentHeld);
         QCOMPARE(team().openDecisions(), 1);
-        const Decision& plan = team().decisions.first();
+        const Decision plan = team().decisions.first();
         QCOMPARE(plan.kind, QStringLiteral("first_plan"));
         QCOMPARE(plan.question, QStringLiteral("Start these 2 tasks?"));
         QVERIFY(plan.context.contains("T-1 \"Cart\" → Dev 1"));

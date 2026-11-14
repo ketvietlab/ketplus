@@ -57,6 +57,9 @@ class RemoteControlTestAccess {
     static void verifyRetry(ControlV2Client& client, int milliseconds) {
         client.verifyRetryMilliseconds_ = milliseconds;
     }
+    static void verificationClock(ControlV2Client& client, std::function<qint64()> clock) {
+        client.worktreeVerificationClock_ = std::move(clock);
+    }
     static void expireCredential(ControlV2Client& client) {
         client.credential_.insert("expiresAt", "2020-01-01T00:00:00.000Z");
     }
