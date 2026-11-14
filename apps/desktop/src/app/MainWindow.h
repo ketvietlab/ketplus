@@ -76,6 +76,7 @@ class SettingsWorkspacePage;
 class TeamDirectory;
 class TeamPage;
 class ScheduleWindows;
+class ComposerSchedule;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -486,6 +487,8 @@ class MainWindow final : public QMainWindow {
     remote::DaemonClient* accountDaemon_{nullptr};
     TeamDirectory* teams_{nullptr};
     ScheduleWindows* schedules_{nullptr};
+    ComposerSchedule* composerSchedule_{nullptr};
+    void attachComposerSchedule();
     QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};

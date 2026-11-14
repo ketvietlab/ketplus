@@ -593,5 +593,86 @@ Item {
                 }
             }
         }
+        Kit.KetIconButton {
+            id: scheduleClock
+            objectName: "composerScheduleClock"
+            readonly property var bridge: agentHost.scheduleBridge
+            visible: !!bridge && bridge.clockVisible && root.scheduleContextRevision >= 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: usageRingButton.implicitWidth
+            Layout.preferredHeight: usageRingButton.implicitHeight
+            controlSize: Kit.KetTheme.ControlSize.Small
+            glyphSize: Math.max(1, usageRingButton.implicitWidth * 1.24)
+            iconName: Kit.KetTheme.iconForLucide("clock")
+            checkable: true
+            checked: !!bridge && bridge.clockActive
+            Accessible.name: bridge ? bridge.tooltip : "Schedule first message"
+            onClicked: {
+                checked = Qt.binding(() => !!scheduleClock.bridge && scheduleClock.bridge.clockActive)
+                skillsPopup.close()
+                permissionMenu.close()
+                modelPopup.close()
+                if (usageLimitsPopover.close)
+                    usageLimitsPopover.close()
+                if (!bridge)
+                    return
+                if (bridge.newConversation)
+                    schedulePopover.open()
+                else
+                    existingScheduleMenu.open()
+            }
+            KetToolTip {
+                objectName: "ketToolTip"
+                visible: scheduleClock.hovered && !schedulePopover.visible && !existingScheduleMenu.visible
+                text: scheduleClock.Accessible.name
+            }
+        }
+    }
+    ComposerSchedulePopover {
+        id: schedulePopover
+        objectName: "scheduleFirstMessagePopover"
+        bridge: scheduleClock.bridge
+        parent: Basic.Overlay.overlay
+    }
+    Popup {
+        id: existingScheduleMenu
+        objectName: "existingScheduleMenu"
+        parent: Basic.Overlay.overlay
+        padding: 8
+        modal: true
+        contentItem: Column {
+            spacing: 4
+            Label {
+                text: "Schedule"
+                font.bold: true
+            }
+            Button {
+                text: "Edit"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.edit()
+                    existingScheduleMenu.close()
+                }
+            }
+            Button {
+                text: scheduleClock.bridge && scheduleClock.bridge.clockActive ? "Pause" : "Resume"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.pause()
+                    existingScheduleMenu.close()
+                }
+            }
+            Button {
+                text: "Open in Schedules"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.openSchedules()
+                    existingScheduleMenu.close()
+                }
+            }
+        }
     }
 }

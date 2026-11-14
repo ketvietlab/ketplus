@@ -724,6 +724,50 @@ Item {
         target: agentHost
         function onMermaidChanged() { imagePreview.refreshMermaid() }
     }
+    Connections {
+        target: agentHost.scheduleBridge
+        enabled: agentHost.scheduleBridge !== null
+        ignoreUnknownSignals: true
+        function onCreated() { prompt.clear() }
+        function onSendFailed(message) { workspaceToast.show(message) }
+        function onToastRequested(message, scheduleId) {
+            scheduleFailureToast.reason = message
+            scheduleFailureToast.scheduleId = scheduleId
+            scheduleFailureToast.open()
+        }
+    }
+    Popup {
+        id: scheduleFailureToast
+        objectName: "scheduleFailureToast"
+        property string reason: ""
+        property string scheduleId: ""
+        modal: false
+        padding: 12
+        width: Math.min(420, parent ? parent.width - 24 : 420)
+        x: parent ? parent.width - width - 16 : 0
+        y: parent ? parent.height - height - 24 : 0
+        contentItem: Row {
+            spacing: 8
+            Text {
+                objectName: "scheduleFailureReason"
+                width: Math.min(260, scheduleFailureToast.width - 140)
+                text: scheduleFailureToast.reason
+                wrapMode: Text.Wrap
+                color: KetTheme.t.text
+            }
+            Button {
+                objectName: "scheduleFailureOpen"
+                text: "Open schedule"
+                flat: true
+                onClicked: {
+                    const bridge = agentHost.scheduleBridge
+                    if (bridge)
+                        bridge.openSchedule(scheduleFailureToast.scheduleId)
+                    scheduleFailureToast.close()
+                }
+            }
+        }
+    }
     Kit.KetToast {
         id: workspaceToast
         objectName: "workspaceToast"
@@ -1351,9 +1395,30 @@ Item {
         revealLatestAfterSubmit()
     }
 
+    readonly property int scheduleContextRevision: {
+        const bridge = agentHost.scheduleBridge
+        if (!bridge)
+            return 0
+        const count = agentHost.messageModel ? agentHost.messageModel.count : 0
+        let sessionId = ""
+        for (const conversation of agentHost.conversations || []) {
+            if (conversation.active)
+                sessionId = conversation.sessionId || conversation.id || ""
+        }
+        bridge.setContext(count === 0, sessionId, agentHost.activePath || "", selectedProvider,
+                          selectedModel, selectedEffort)
+        return count + selectedProvider.length
+    }
+
     function submitCurrentPrompt() {
         if (!agentHost.agentAvailable || agentHost.steeringPending || root.copilotUnavailable)
             return
+        const bridge = agentHost.scheduleBridge
+        if (bridge && bridge.scheduleSet && bridge.newConversation && !agentHost.sessionRunning) {
+            bridge.draftPrompt = prompt.text
+            if (bridge.send())
+                return
+        }
         const value = prompt.text.trim()
         if (value.length === 0 && agentHost.attachments.length === 0)
             return

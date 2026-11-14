@@ -294,6 +294,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskBar.qml
         src/agent/qml/AgentComposer.qml
+        src/agent/qml/ComposerSchedulePopover.qml
         src/agent/qml/AgentComposerAction.qml
         src/agent/qml/AgentAttachmentChip.qml
         src/agent/qml/AgentPermissionMenu.qml
