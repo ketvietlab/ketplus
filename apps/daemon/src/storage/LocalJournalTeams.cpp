@@ -194,6 +194,11 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
             return false;
         }
     }
+    // Team and team_start schedules belong to the team; their runs go with them.
+    if (!removeSchedulesForTeam(QString::number(teamId), error)) {
+        database_.rollback();
+        return false;
+    }
     if (database_.commit())
         return true;
     if (error)

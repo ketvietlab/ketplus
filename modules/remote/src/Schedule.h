@@ -92,6 +92,9 @@ struct Schedule final {
     QString updatedAt;
     QString nextRunAt;
     QString lastRunAt;
+    // Empty, or "target_deleted" after the conversation a conversation target names is
+    // deleted. Omitted from JSON while empty. The client cannot set it.
+    QString status;
 };
 
 struct Run final {

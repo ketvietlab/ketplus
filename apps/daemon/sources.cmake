@@ -131,6 +131,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostWorkReports.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
+    src/storage/ScheduleRecord.h
+    src/storage/LocalJournalSchedules.cpp
     src/storage/LocalJournalReviewers.cpp
     src/storage/LocalJournalTeams.cpp
     src/teams/Team.cpp
@@ -172,6 +174,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
+    src/runtime/SessionHostSchedules.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamStorage.cpp

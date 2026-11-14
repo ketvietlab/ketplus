@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agents/ReviewIntegrity.h"
+#include "storage/ScheduleRecord.h"
 #include "teams/Team.h"
 #include "teams/TeamRules.h"
 #include "teams/TeamStorage.h"
@@ -335,6 +336,8 @@ class TeamHostPort {
         (void)path;
         return {};
     }
+    // team and team_start schedules removed with the team, so the desktop can drop them.
+    virtual void schedulesDeleted(const QList<ScheduleRecord>& schedules) { (void)schedules; }
 };
 
 // A new task as the leader or the user writes it.
