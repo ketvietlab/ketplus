@@ -62,6 +62,15 @@ ket::FieldRow* stackedRow(const QString& label, QWidget* control, QWidget* paren
     return row;
 }
 
+// The scroll area stretches the form to the viewport. Pin the minimum to the
+// visible size hint so hidden rows cannot leave spare height in the fields.
+void fitForm(QWidget* form) {
+    if (form == nullptr)
+        return;
+    form->setMinimumHeight(0);
+    form->setMinimumHeight(form->sizeHint().height());
+}
+
 void choose(ket::Select* select, const QVariant& value) {
     const int index = select->findData(value);
     select->setCurrentIndex(index >= 0 ? index : 0);
@@ -196,11 +205,9 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     summary_->setObjectName(QStringLiteral("scheduleRuleSummary"));
     summary_->setWordWrap(true);
     column->addWidget(summary_);
-
-    // The card stops at the window, and a minimum taller than that paints over
-    // the footer. The form keeps its own height and scrolls above Cancel/Save.
-    body->adjustSize();
-    body->setMinimumHeight(body->sizeHint().height());
+    // Extra viewport height stays below the fields. Without this, a stacked
+    // FieldRow parks the spare space between its label and its control.
+    column->addStretch(1);
     auto* scroll = new FormScroll;
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
@@ -291,6 +298,7 @@ void ScheduleEditor::applyKind() {
     anchorRow_->setVisible(edit && kind == 4);
     zoneRow_->setVisible(edit);
     raw_->setVisible(preserved_);
+    fitForm(promptNote_ == nullptr ? nullptr : promptNote_->parentWidget());
 }
 
 ScheduleRule ScheduleEditor::collect() const {
@@ -345,11 +353,7 @@ void ScheduleEditor::showIssue(const QString& code, const QString& message, cons
             palette.setColor(group, QPalette::WindowText, danger);
         promptNote_->setPalette(palette);
     }
-    if (QWidget* form = promptNote_->parentWidget()) {
-        form->setMinimumHeight(0);
-        const int natural = form->sizeHint().height();
-        form->setMinimumHeight(natural);
-    }
+    fitForm(promptNote_->parentWidget());
     const bool banner = !message.isEmpty() && resolved.isEmpty();
     banner_->setText(banner ? message : QString{});
     banner_->setVisible(banner);
