@@ -419,6 +419,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void stopScheduleRunner();
     void noteSchedulesChanged();
     Q_INVOKABLE void noteScheduleClockChanged();
+    // Pins the schedule clock, then catches up runs that are due at that instant.
+    // Left unset, the runner keeps reading the wall clock.
+    Q_INVOKABLE void setScheduleTimeForTest(const QDateTime& now);
     void noteScheduleTurnEnded(const QString& sessionId, bool succeeded, const QString& errorCode,
                                const QString& errorMessage);
     [[nodiscard]] QJsonObject runScheduleNow(const QString& id);

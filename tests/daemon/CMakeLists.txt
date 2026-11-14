@@ -185,6 +185,12 @@ ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
 ketplus_add_daemon_test(ketplus_daemon_schedule_storage_tests ScheduleStorageTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_schedule_tests AgentScheduleTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_schedule_host_tests ScheduleHostTest.cpp)
+ketplus_add_daemon_test(ketplus_schedule_integration_tests ScheduleIntegrationTest.cpp)
+target_sources(ketplus_schedule_integration_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/apps/desktop/src/schedules/ScheduleClient.cpp
+    ${PROJECT_SOURCE_DIR}/apps/desktop/src/schedules/ScheduleRules.cpp)
+target_include_directories(ketplus_schedule_integration_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/apps/desktop/src)
 # Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
 find_package(SQLite3)
 if(TARGET SQLite::SQLite3)

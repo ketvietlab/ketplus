@@ -284,8 +284,19 @@ class HostScheduleRuntime final : public schedule::ScheduleRuntime {
     SessionHost* host_;
 };
 
+class OverridableScheduleClock final : public schedule::ScheduleClock {
+  public:
+    [[nodiscard]] QDateTime now() const override {
+        return pinned_.isValid() ? pinned_ : QDateTime::currentDateTimeUtc();
+    }
+    void pin(const QDateTime& instant) { pinned_ = instant.toUTC(); }
+
+  private:
+    QDateTime pinned_;
+};
+
 struct SessionHost::ScheduleEngine {
-    schedule::SystemScheduleClock clock;
+    OverridableScheduleClock clock;
     schedule::QtScheduleAlarm alarm;
     JournalScheduleStore store;
     HostScheduleRuntime runtime;
@@ -371,6 +382,15 @@ void SessionHost::noteSchedulesChanged() {
 void SessionHost::noteScheduleClockChanged() {
     if (scheduleEngine_ != nullptr)
         scheduleEngine_->runner.noteClockChanged();
+}
+
+void SessionHost::setScheduleTimeForTest(const QDateTime& now) {
+    if (scheduleEngine_ == nullptr)
+        startScheduleRunner();
+    if (scheduleEngine_ == nullptr)
+        return;
+    scheduleEngine_->clock.pin(now);
+    scheduleEngine_->runner.noteClockChanged();
 }
 
 void SessionHost::noteScheduleTurnEnded(const QString& sessionId, bool succeeded,

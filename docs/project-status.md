@@ -24,6 +24,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Scheduled agent runs (ADR 0126) are implemented on this branch. A team can wait
+  for a start time, and a conversation or a team can run again on a daily schedule.
+  The desktop client creates the schedule, the daemon fires it from its schedule
+  clock, `schedule.run` reaches the client, and the run is kept in history. Phone
+  and cloud sync, attachments, cron syntax, and a team working window or deadline
+  stay out of scope. This is not a released acceptance claim.
+
 - Linux Pro build-only AppImage/deb assembly uses native Ubuntu 24.04 Docker
   recipes, Qt/QML/WebEngine deployment, bundled browser/sidecar runtimes, fixed
   production build identity, checksums and an SDK-free offline smoke. Both amd64
