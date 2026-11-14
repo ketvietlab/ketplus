@@ -7,6 +7,7 @@
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
 #include "git/GitChangesPanel.h"
+#include "schedules/ScheduleWindows.h"
 #include "teams/TeamCommands.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
@@ -246,6 +247,17 @@ void MainWindow::showTeamPage(const QString& teamId, const QString& repository) 
     connect(teamPage_, &TeamPage::addMemberRequested, this, &MainWindow::showAddTeamMemberDialog);
     connect(teamPage_, &TeamPage::addReviewerRequested, this,
             &MainWindow::showAddTeamReviewerDialog);
+    if (schedules_ != nullptr)
+        teamPage_->setScheduleClient(schedules_->client());
+    connect(teamPage_, &TeamPage::scheduleRequested, this,
+            [this](const QString& id, const bool edit) {
+                if (schedules_ == nullptr)
+                    return;
+                if (edit)
+                    schedules_->edit(id);
+                else
+                    schedules_->show(id);
+            });
     connect(teamPage_, &TeamPage::newTeamRequested, this, &MainWindow::showNewTeamDialog);
     connect(teamPage_, &TeamPage::deleteRequested, this, &MainWindow::deleteTeam);
     connect(teamPage_, &TeamPage::removeMemberRequested, this, &MainWindow::leaveTeam);

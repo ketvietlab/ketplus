@@ -20,11 +20,12 @@ class ScheduleWindows final : public QObject {
     explicit ScheduleWindows(QObject* parent = nullptr);
 
     [[nodiscard]] ScheduleClient* client() const { return client_; }
-    [[nodiscard]] ScheduleWindow* window() const { return window_; }
+    [[nodiscard]] ScheduleWindow* window() const;
     // The View menu item. Triggering it opens the window, or raises it when it is already open.
     [[nodiscard]] QAction* createAction(QObject* parent);
 
     void show(const QString& scheduleId = {});
+    void edit(const QString& scheduleId);
 
   signals:
     void conversationRequested(const QString& sessionId);

@@ -34,6 +34,8 @@ class ScheduleClient final : public QObject {
     [[nodiscard]] bool isAvailable() const noexcept { return available_; }
 
     void refresh();
+    // Merges schedule.list for one team into the cache. Does not drop other teams.
+    void refreshTeam(const QString& teamId);
     void applyEvent(const QString& type, const QJsonObject& payload);
     void request(const QString& type, const QJsonObject& payload, Reply reply = {});
     // `more` asks for the next older page. The first call replaces the page.

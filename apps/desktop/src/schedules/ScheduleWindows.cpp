@@ -11,6 +11,8 @@ namespace ketplus {
 ScheduleWindows::ScheduleWindows(QObject* parent)
     : QObject(parent), client_(new ScheduleClient(this)) {}
 
+ScheduleWindow* ScheduleWindows::window() const { return window_; }
+
 QAction* ScheduleWindows::createAction(QObject* parent) {
     auto* action = new QAction(tr("Schedules…"), parent);
     action->setObjectName(QStringLiteral("schedulesMenuAction"));
@@ -32,6 +34,12 @@ void ScheduleWindows::show(const QString& scheduleId) {
     window_->raise();
     window_->activateWindow();
     window_->noteRaised();
+}
+
+void ScheduleWindows::edit(const QString& scheduleId) {
+    show(scheduleId);
+    if (window_ != nullptr)
+        window_->edit(scheduleId);
 }
 
 } // namespace ketplus

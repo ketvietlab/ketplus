@@ -22,3 +22,20 @@ border. The form scrolls above Cancel and Save, and the rule summary stays in th
 Reproduce with `QT_QPA_PLATFORM=offscreen` and
 `KETPLUS_SCHEDULE_CAPTURE=<directory>` on `ketplus_schedule_window_tests`.
 Without that variable the test does not write files.
+
+## Team start and team schedules
+
+Offscreen grabs of the New team dialog and the team page. An immediate team with
+repeat off sends neither `start_at` nor `repeat`. A waiting team shows the start
+banner. A team schedule is listed for that team only, with Edit, Pause, Open in
+Schedules and the leader conversation.
+
+| Files | State |
+| --- | --- |
+| `07-new-team-{light,dark}.png` | New team, Start now, repeat off |
+| `08-team-waiting-{light,dark}.png` | Starts at, with Start now / Change time / Cancel start |
+| `08-team-schedules-{light,dark}.png` | One team schedule, skip reason, no add button |
+
+Reproduce with `KETPLUS_TEAM_SCHEDULE_CAPTURE=<directory>` on
+`ketplus_team_schedule_form_tests`. Without that variable the test does not
+write files.

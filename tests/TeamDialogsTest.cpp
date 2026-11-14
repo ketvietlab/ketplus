@@ -230,6 +230,8 @@ class TeamDialogsTest final : public QObject {
         ket::Dialog* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
         auto* form = dialog->findChild<NewTeamForm*>();
         QTRY_VERIFY(form->budgetField()->isVisible());
+        // The Schedule section sits above this field, so a 900px window scrolls to it.
+        dialog->findChild<QScrollArea*>()->ensureWidgetVisible(form->budgetField());
         QVERIFY(dialog->card()->geometry().contains(
             QRect(form->budgetField()->mapTo(dialog->card(), QPoint()), form->budgetField()->size())
                 .translated(dialog->card()->pos())));

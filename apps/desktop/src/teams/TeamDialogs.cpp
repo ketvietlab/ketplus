@@ -1,4 +1,5 @@
 #include "teams/TeamDialogs.h"
+#include "teams/TeamScheduleFields.h"
 
 #include "KetAppearance.h"
 #include "KetButton.h"
@@ -19,6 +20,7 @@
 
 #include <QButtonGroup>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QEvent>
 #include <QFontMetrics>
 #include <QHBoxLayout>
@@ -166,6 +168,10 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     branch_->setPlaceholderText(tr("The branch reviewed tasks merge into"));
     rows_.insert(QStringLiteral("name"), new ket::FieldRow(tr("Name"), name_, {}, this));
     layout->addWidget(rows_.value(QStringLiteral("name")));
+    // After the name, as the New team mock: Start now (default) or a scheduled start,
+    // and a repeat that stays off unless the user asks for one.
+    schedule_ = new TeamScheduleFields(this);
+    layout->addWidget(schedule_);
     rows_.insert(QStringLiteral("goal"),
                  new ket::FieldRow(tr("Goal"), goal_,
                                    tr("The leader breaks it into tasks and may ask the "
@@ -193,6 +199,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
         language_->findData(team_language::fromLocale(QLocale::system().uiLanguages().value(0))));
     connect(language_, &QComboBox::activated, this, [this] { languageChosen_ = true; });
     connect(goal_, &ket::TextArea::textChanged, this, [this] {
+        schedule_->setGoal(goal_->text());
         if (const QString written = remote::team_language::detect(goal_->text());
             !languageChosen_ && !written.isEmpty())
             language_->setCurrentIndex(language_->findData(written));
@@ -384,6 +391,10 @@ QJsonObject NewTeamForm::payload() const {
     result.insert(QStringLiteral("plan"), plan);
     if (const QString goal = goal_->text().trimmed(); !goal.isEmpty())
         result.insert(QStringLiteral("goal"), goal);
+    if (const QJsonObject start = schedule_->startAt(); !start.isEmpty())
+        result.insert(QStringLiteral("start_at"), start);
+    if (const QJsonObject repeat = schedule_->repeat(); !repeat.isEmpty())
+        result.insert(QStringLiteral("repeat"), repeat);
     if (const QString branch = branch_->text().trimmed(); !branch.isEmpty())
         result.insert(QStringLiteral("integration_branch"), branch);
     return result;
@@ -403,6 +414,9 @@ bool NewTeamForm::validate() {
         errors_.insert(QStringLiteral("name"), tr("Name the team."));
     if (const QString goal = goalEditor_->problem(); !goal.isEmpty())
         errors_.insert(QStringLiteral("goal"), goal);
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    schedule_->showProblem(now);
+    const bool scheduleOk = schedule_->problem(now).isEmpty();
     if (const QString budget = team_budget::error(budget_->text()); !budget.isEmpty())
         errors_.insert(QStringLiteral("turn_budget"), budget);
     budget_->setInvalid(errors_.contains(QStringLiteral("turn_budget")));
@@ -423,7 +437,9 @@ bool NewTeamForm::validate() {
         name_->setFocus();
     else if (!errors_.value(QStringLiteral("goal")).isEmpty())
         goal_->editor()->setFocus();
-    return errors_.isEmpty();
+    else if (!scheduleOk)
+        schedule_->setFocus();
+    return errors_.isEmpty() && scheduleOk;
 }
 
 void NewTeamForm::showErrors(const QJsonObject& refusal) {

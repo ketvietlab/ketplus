@@ -60,6 +60,27 @@ void ScheduleClient::refresh() {
                });
 }
 
+void ScheduleClient::refreshTeam(const QString& teamId) {
+    if (!available_ || !transport_ || teamId.isEmpty())
+        return;
+    const QPointer<ScheduleClient> alive(this);
+    transport_(QStringLiteral("schedule.list"), {{QStringLiteral("team_id"), teamId}},
+               [alive](const QJsonObject& result, const QString& error) {
+                   if (!alive || !alive->available_)
+                       return;
+                   if (!error.isEmpty()) {
+                       alive->listError_ = scheduleFailureText(result, error);
+                       emit alive->changed();
+                       return;
+                   }
+                   alive->listError_.clear();
+                   for (const QJsonValue value :
+                        result.value(QStringLiteral("schedules")).toArray())
+                       alive->store(value.toObject());
+                   emit alive->changed();
+               });
+}
+
 void ScheduleClient::store(const QJsonObject& document) {
     schedule::Failure failure;
     const std::optional<schedule::Schedule> schedule =

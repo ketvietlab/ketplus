@@ -100,6 +100,8 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamGoal.cpp
     src/teams/TeamDialogs.h
     src/teams/TeamPage.cpp
+    src/teams/TeamPageSchedules.cpp
+    src/teams/TeamScheduleFields.cpp
     src/teams/TeamPage.h
     src/teams/TeamPageParts.cpp
     src/teams/TeamPageParts.h

@@ -63,6 +63,11 @@ void ScheduleWindow::present(const QString& scheduleId) {
     reload();
 }
 
+void ScheduleWindow::edit(const QString& scheduleId) {
+    present(scheduleId);
+    editSelected();
+}
+
 void ScheduleWindow::build() {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(scaled(20), scaled(16), scaled(20), scaled(16));

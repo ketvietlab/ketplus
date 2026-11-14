@@ -32,6 +32,7 @@ class ScheduleWindow final : public QWidget {
     ScheduleWindow(ScheduleClient* client, QWidget* parent = nullptr);
 
     void present(const QString& scheduleId);
+    void edit(const QString& scheduleId);
     [[nodiscard]] int raiseCount() const { return raiseCount_; }
     void noteRaised() { ++raiseCount_; }
 

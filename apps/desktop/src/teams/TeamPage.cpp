@@ -317,6 +317,7 @@ void TeamPage::rebuild() {
     } else {
         buildHeading(*team);
         buildBanners(*team);
+        buildSchedules(*team);
         buildDecisions(*team);
         buildTasks(*team);
         buildDoneWorktrees(*team);

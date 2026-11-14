@@ -145,7 +145,9 @@ target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
                       ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
+ketplus_add_gui_test(ketplus_team_schedule_form_tests TeamScheduleFormTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+target_link_libraries(ketplus_team_schedule_form_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_sidebar_window_tests TeamSidebarWindowTest.cpp)
 target_link_libraries(ketplus_team_sidebar_window_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.cpp)

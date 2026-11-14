@@ -23,6 +23,7 @@ class Dialog;
 
 namespace ketplus {
 
+class ScheduleClient;
 class TeamDirectory;
 namespace team_page {
 class TaskRows;
@@ -49,6 +50,8 @@ class TeamPage final : public QWidget {
     [[nodiscard]] QTableWidget* tasksTable() const { return tasks_; }
     [[nodiscard]] QJsonArray updates() const { return updates_; }
     void setTaskFilter(const QString& state);
+    // The app's one schedule client. The page lists this team's schedules from it.
+    void setScheduleClient(ScheduleClient* client);
     // Names the goal's mentions and marks the numbers not on this computer.
     void setConversationDirectory(team_goal::ConversationDirectory directory);
     // Opens the task dialog (description, criteria, dependencies, history, Hand over…).
@@ -62,6 +65,8 @@ class TeamPage final : public QWidget {
     // T-23: the banner's "Add a second reviewer".
     void addReviewerRequested(const QString& teamId);
     void newTeamRequested(const QString& repository);
+    // Open the Schedules window on this id. `edit` opens its editor.
+    void scheduleRequested(const QString& scheduleId, bool edit);
     void deleteRequested(const QString& teamId);
     void removeMemberRequested(const QString& teamId, const QString& sessionId);
 
@@ -89,6 +94,7 @@ class TeamPage final : public QWidget {
     [[nodiscard]] QString teamLanguage() const;
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
+    void buildSchedules(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
     // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
     [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
@@ -123,6 +129,7 @@ class TeamPage final : public QWidget {
     [[nodiscard]] QString commandKey(const QString& what) const;
 
     TeamDirectory* teams_;
+    ScheduleClient* schedules_{nullptr};
     QString teamId_;
     QString repository_;
     QString filter_;
