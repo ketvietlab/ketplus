@@ -11,6 +11,7 @@
 
 #include <QDateTime>
 #include <QHash>
+#include <QStringList>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -556,6 +557,9 @@ class LocalJournal final {
     // Disables conversation schedules that target this session and records status
     // target_deleted. The rows stay. deleteSession does this in its own transaction.
     bool disableSchedulesForSession(const QString& sessionId, QString* error = nullptr);
+    // Disables schedules this conversation created. Status stays empty so a person can
+    // enable one again. Returns the ids that were enabled.
+    QStringList disableAgentSchedules(const QString& sessionId, QString* error = nullptr);
     bool appendScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
     bool updateScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
     // `limit` above maximumScheduleRuns is clamped to it. `beforeId` empty reads the newest page.

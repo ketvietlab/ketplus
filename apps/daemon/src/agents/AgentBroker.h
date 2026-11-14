@@ -70,6 +70,17 @@ class AgentHostPort {
         return {};
     }
     // A team_* tool call (`operation` without the "agents." prefix) by the conversation.
+    // ADR 0126 agent schedules. `operation` is schedule_create, schedule_list or schedule_cancel.
+    virtual QJsonObject agentSchedule(const QString& sessionId, const QString& operation,
+                                      const QJsonObject& payload) {
+        (void)sessionId;
+        (void)operation;
+        (void)payload;
+        return {{QStringLiteral("ok"), false},
+                {QStringLiteral("error_code"), QStringLiteral("unsupported_operation")},
+                {QStringLiteral("error_message"),
+                 QStringLiteral("This daemon cannot create agent schedules.")}};
+    }
     virtual QJsonObject teamOperation(const QString& sessionId, const QString& operation,
                                       const QJsonObject& payload) {
         (void)sessionId;
