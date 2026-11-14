@@ -1,8 +1,6 @@
 // ADR 0114: the session runtime's side of agent teams.
 #include "runtime/SessionHost.h"
 
-#include "protocol/ScheduleProtocol.h"
-
 #include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
 #include "runtime/TeamGit.h"

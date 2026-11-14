@@ -426,8 +426,9 @@ class TeamCoordinator : public QObject {
                              const QDateTime& now = {});
     // Drops the schedule. The team stays waiting until startNow.
     TeamResult cancelStartAt(qint64 teamId, const QString& actor);
-    // The team_start runner's delivery. No message when the leader already started.
-    void startLeader(qint64 teamId);
+    // The team_start runner's delivery. False when no turn was sent: already started,
+    // no goal, no leader, or the journal refused the change.
+    bool startLeader(qint64 teamId);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
     // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request"),
     // turn_budget, and repository with an optional reason (T-90); other keys are ignored.

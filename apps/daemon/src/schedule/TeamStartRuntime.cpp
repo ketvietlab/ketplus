@@ -13,40 +13,64 @@ QString teamKey(const QString& teamId) { return QStringLiteral("team:") + teamId
 TeamStartRuntime::TeamStartRuntime(teams::TeamCoordinator* teams, Changed changed)
     : teams_(teams), changed_(std::move(changed)) {}
 
+Inspection inspectTeamStart(const teams::TeamCoordinator* teams,
+                            const documents::Schedule& schedule) {
+    Inspection inspection;
+    if (schedule.target.kind != documents::TargetKind::TeamStart || teams == nullptr) {
+        inspection.state = ConversationState::Missing;
+        return inspection;
+    }
+    bool ok = false;
+    const qint64 teamId = schedule.target.teamId.toLongLong(&ok);
+    const teams::Team* team = ok ? teams->team(teamId) : nullptr;
+    if (team == nullptr) {
+        inspection.state = ConversationState::Missing;
+        return inspection;
+    }
+    if (!team->leaderStarted && team->paused) {
+        inspection.state = ConversationState::Busy;
+        inspection.sessionId = teamKey(QString::number(teamId));
+        return inspection;
+    }
+    return inspection;
+}
+
+Delivery deliverTeamStart(teams::TeamCoordinator* teams, const documents::Schedule& schedule) {
+    Delivery delivery;
+    bool ok = false;
+    const qint64 teamId = schedule.target.teamId.toLongLong(&ok);
+    const teams::Team* team =
+        ok && teams != nullptr && schedule.target.kind == documents::TargetKind::TeamStart
+            ? teams->team(teamId)
+            : nullptr;
+    if (team == nullptr) {
+        delivery.errorCode = QString::fromLatin1(targetDeletedCode);
+        delivery.errorMessage = QStringLiteral("The schedule target no longer exists.");
+        return delivery;
+    }
+    const teams::Member* leader = team->memberWithRole(teams::role::leader);
+    const QString sessionId = leader == nullptr ? QString{} : leader->sessionId;
+    const bool hasGoal = !team->goal.isEmpty();
+    if (!teams->startLeader(teamId)) {
+        delivery.errorCode =
+            hasGoal ? QStringLiteral("team_not_started") : QStringLiteral("goal_required");
+        delivery.errorMessage =
+            hasGoal ? QStringLiteral("The leader did not start.")
+                    : QStringLiteral("The team needs a goal before the leader can start.");
+        return delivery;
+    }
+    delivery.finished = true;
+    delivery.sessionId = sessionId;
+    return delivery;
+}
+
 Inspection TeamStartRuntime::inspect(const documents::Schedule& schedule) const {
-    if (schedule.target.kind != documents::TargetKind::TeamStart || !teams_)
-        return {ConversationState::Missing, {}};
-    const teams::Team* team = teams_->team(schedule.target.teamId.toLongLong());
-    if (!team)
-        return {ConversationState::Missing, {}};
-    if (!team->leaderStarted && team->paused)
-        return {ConversationState::Busy, teamKey(schedule.target.teamId)};
-    return {ConversationState::Idle, {}};
+    return inspectTeamStart(teams_, schedule);
 }
 
 Delivery TeamStartRuntime::deliver(const documents::Schedule& schedule, const documents::Run& run) {
     (void)run;
-    Delivery delivery;
-    if (schedule.target.kind != documents::TargetKind::TeamStart || !teams_) {
-        delivery.errorCode = QString::fromLatin1(targetDeletedCode);
-        delivery.errorMessage = QStringLiteral("The schedule target no longer exists.");
-        return delivery;
-    }
-    const qint64 teamId = schedule.target.teamId.toLongLong();
-    const teams::Team* team = teams_->team(teamId);
-    if (!team) {
-        delivery.errorCode = QString::fromLatin1(targetDeletedCode);
-        delivery.errorMessage = QStringLiteral("The schedule target no longer exists.");
-        return delivery;
-    }
-    const QString leader = [&] {
-        const teams::Member* member = team->memberWithRole(teams::role::leader);
-        return member ? member->sessionId : QString{};
-    }();
-    teams_->startLeader(teamId);
-    delivery.finished = true;
-    delivery.sessionId = leader;
-    return delivery;
+    return deliverTeamStart(teams_, schedule);
 }
 
 void TeamStartRuntime::emitRun(const documents::Run& run) { (void)run; }

@@ -440,7 +440,10 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("changed_at"), team.changedAt}};
     if (team.startWaiting) {
         json.insert(QStringLiteral("start_waiting"), true);
-        json.insert(QStringLiteral("status"), QStringLiteral("scheduled"));
+        // `scheduled` means a start time is still set. After cancel the team waits for
+        // team.start, with no start_at, so a client can tell the two apart.
+        json.insert(QStringLiteral("status"), team.startAt.isEmpty() ? QStringLiteral("waiting")
+                                                                     : QStringLiteral("scheduled"));
         if (!team.startAt.isEmpty())
             json.insert(QStringLiteral("start_at"),
                         QJsonObject{{QStringLiteral("at"), team.startAt},

@@ -10,8 +10,14 @@ class TeamCoordinator;
 
 namespace ketplus::daemon::schedule {
 
-// ScheduleRuntime for a team_start row: a paused team stays queued, and delivery
-// is the leader's first turn. Prompt schedules are not in this store.
+// The one team_start inspection and delivery. HostScheduleRuntime and the test
+// runner below both call these, so the live path is the one the tests fire.
+[[nodiscard]] Inspection inspectTeamStart(const teams::TeamCoordinator* teams,
+                                          const ::ketplus::schedule::Schedule& schedule);
+Delivery deliverTeamStart(teams::TeamCoordinator* teams,
+                          const ::ketplus::schedule::Schedule& schedule);
+
+// ScheduleRuntime for a team_start row. Prompt schedules are not this runtime's job.
 class TeamStartRuntime final : public ScheduleRuntime {
   public:
     using Changed =

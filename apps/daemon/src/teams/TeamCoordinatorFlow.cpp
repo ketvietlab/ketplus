@@ -94,8 +94,9 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     if (!team)
         return;
     const Team before = *team;
-    // A scheduled team keeps every turn, including an assignment, until the leader starts.
-    if (!team->leaderStarted) {
+    // Only a team still waiting for its start holds turns. A team created to start now
+    // has no goal yet and has not started; it still receives assignments and digests.
+    if (team->startWaiting && !team->leaderStarted) {
         team->held.append(heldJson(message));
         if (commit(*team, before, QStringLiteral("daemon"), {}))
             qWarning("Unable to hold the team's %s.", qUtf8Printable(message.kind));

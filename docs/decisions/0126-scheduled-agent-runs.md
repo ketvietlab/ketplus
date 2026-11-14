@@ -132,9 +132,11 @@ manages; it does not create.
    `run_once`, `busy_policy` `queue`) fired by the one schedule runner. The team
    document then has `start_at` and `status` `scheduled`. `team.start` starts it
    now, `team.startAt.update` moves the time, and `team.startAt.cancel` removes the
-   schedule and leaves the team waiting. Stable codes: `start_at_invalid`,
+   schedule and leaves the team waiting, with `status` `waiting` and no `start_at`.
+   A fire that finds no goal records the run as failed (`goal_required`) and does
+   not start the leader; setting a goal afterwards does. Stable codes: `start_at_invalid`,
    `start_at_too_soon`, `start_at_too_late`, `team_already_started`,
-   `start_not_scheduled`.
+   `start_not_scheduled`, `goal_required`.
 
 ## Consequences
 

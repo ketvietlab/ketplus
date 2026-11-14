@@ -21,6 +21,15 @@ TeamError notFound() {
     return {QStringLiteral("team_not_found"), QStringLiteral("The team no longer exists.")};
 }
 
+// A start time that has not fired yet. A disabled or missing schedule already fired
+// (or was removed); cancel clears startAt, so that team is not armed either.
+bool startStillArmed(const LocalJournal& journal, const Team& team) {
+    if (!team.startWaiting || team.startAt.isEmpty() || team.startScheduleId.isEmpty())
+        return false;
+    const auto row = journal.schedule(team.startScheduleId);
+    return row && row->enabled;
+}
+
 int roleOrder(const QString& role) {
     return role == role::leader ? 0 : role == role::developer ? 1 : 2;
 }
@@ -412,8 +421,18 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor, const QJson
         Team& stored = teams_[draft.id];
         const Team before = stored;
         stored.startScheduleId = scheduleId;
-        if (const auto failed = commit(stored, before, actor, {}))
+        if (const auto failed = commit(stored, before, actor, {})) {
+            // The schedule row is already in the journal. Drop the team with it, or the
+            // caller's discarded member conversations leave an orphan team behind.
+            const qint64 id = draft.id;
+            const QStringList sessions = draft.memberSessions();
+            QString ignored;
+            (void)journal_->deleteTeam(id, &ignored);
+            teams_.remove(id);
+            for (const QString& session : sessions)
+                teamBySession_.remove(session);
             return {.error = failed};
+        }
         if (host_)
             host_->schedulesChanged();
     } else {
@@ -615,18 +634,25 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         }
         scheduleDigest(teamId);
     }
-    if (const Team* current = this->team(teamId); !current || !current->startWaiting)
-        startLeader(teamId);
+    if (const Team* current = this->team(teamId)) {
+        // An immediate team starts when its goal arrives. A scheduled team whose once
+        // fire already passed without a goal starts the same way. A team still armed,
+        // or one whose start was cancelled, waits.
+        const bool waitingForManualStart = current->startWaiting && current->startAt.isEmpty();
+        if (!current->leaderStarted && !waitingForManualStart &&
+            !startStillArmed(*journal_, *current))
+            startLeader(teamId);
+    }
     return {.teamId = teamId};
 }
 
-void TeamCoordinator::startLeader(const qint64 teamId) {
+bool TeamCoordinator::startLeader(const qint64 teamId) {
     Team* team = mutableTeam(teamId);
     if (!team || team->leaderStarted || team->goal.isEmpty())
-        return;
+        return false;
     const Member* leader = team->memberWithRole(role::leader);
     if (!leader)
-        return;
+        return false;
     const Team before = *team;
     team->leaderStarted = true;
     team->startWaiting = false;
@@ -634,9 +660,11 @@ void TeamCoordinator::startLeader(const qint64 teamId) {
     team->startTimeZone.clear();
     team->startScheduleId.clear();
     if (commit(*team, before, QStringLiteral("daemon"), {}))
-        return;
+        return false;
     QStringList members;
+    QStringList sessions;
     for (const Member& member : team->members) {
+        sessions.append(member.sessionId);
         const auto conversation = host_->teamConversation(member.sessionId);
         const QString number = conversation ? conversation->number : QString{};
         members << QStringLiteral("- #%1 %2, %3%4")
@@ -687,6 +715,10 @@ void TeamCoordinator::startLeader(const qint64 teamId) {
                  .kind = QStringLiteral("team"),
                  .body = body.join(QLatin1Char('\n'))});
     releaseHeld(teamId);
+    // Messages the host held while the team was paused before this start.
+    if (host_)
+        host_->releaseTeamHeldMessages(sessions);
+    return true;
 }
 
 std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {

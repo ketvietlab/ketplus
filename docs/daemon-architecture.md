@@ -1067,10 +1067,12 @@ most 30 days ahead. With a start time the members exist but `leader_started` sta
 false and one `team_start` schedule (`once`, `missed_policy` `run_once`) waits on the
 schedule runner. The team document then carries `start_at` and `status` `scheduled`.
 At the fire, or once when the Mac wakes, the runner calls the leader's first turn.
+A team with no goal fails that run (`goal_required`) and starts once a goal is set.
 A paused team keeps that run queued until it is resumed. `team.start` starts it now,
 `team.startAt.update` moves the time, and `team.startAt.cancel` drops the schedule
-and leaves the team waiting for a manual start. Deleting the team deletes the
-schedule. No member receives a turn before the leader starts.
+and leaves the team waiting for a manual start (`status` `waiting`, no `start_at`).
+Deleting the team deletes the schedule. No member receives a turn before the leader
+starts, and a team created to start now is not held back while it still has no goal.
 `TeamRules` checks membership and task moves without side effects and returns the
 error code of ADR 0114; `TeamCoordinator` applies them, journals every change, emits
 `team.changed` / `team.removed` to local clients, and decides which change starts a turn

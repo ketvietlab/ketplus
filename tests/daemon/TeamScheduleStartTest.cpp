@@ -176,6 +176,9 @@ class TeamScheduleStartTest final : public QObject {
         const Team* cancelled = teams_->team(created.teamId);
         QVERIFY(cancelled->startWaiting);
         QVERIFY(cancelled->startScheduleId.isEmpty());
+        QCOMPARE(toJson(*cancelled).value(QStringLiteral("status")).toString(),
+                 QStringLiteral("waiting"));
+        QVERIFY(!toJson(*cancelled).contains(QStringLiteral("start_at")));
         QVERIFY(!leaderStarted(created.teamId));
         QCOMPARE(
             journal_->schedules(ScheduleFilter{.targetKind = QStringLiteral("team_start")})->size(),
@@ -186,6 +189,29 @@ class TeamScheduleStartTest final : public QObject {
         const TeamResult again = teams_->startNow(created.teamId, QStringLiteral("user"));
         QVERIFY(!again.ok());
         QCOMPARE(again.error->code, QStringLiteral("team_already_started"));
+    }
+
+    void aTeamWithoutAGoalStartsWhenTheGoalArrives() {
+        Team team = draft();
+        team.goal.clear();
+        const TeamResult created = teams_->create(team, QStringLiteral("user"),
+                                                  startAt(clock_.now_.addSecs(120)), clock_.now_);
+        QVERIFY2(created.ok(), created.error ? qPrintable(created.error->message) : "");
+        clock_.now_ = clock_.now_.addSecs(180);
+        runner_->noteClockChanged();
+        QVERIFY(!leaderStarted(created.teamId));
+        const QString scheduleId = teams_->team(created.teamId)->startScheduleId;
+        const auto runs = journal_->scheduleRuns(scheduleId, 10);
+        QVERIFY(runs);
+        QCOMPARE(runs->runs.size(), 1);
+        QCOMPARE(runs->runs.first().status, QStringLiteral("failed"));
+        QCOMPARE(runs->runs.first().errorCode, QStringLiteral("goal_required"));
+        QVERIFY(teams_
+                    ->update(created.teamId, {{QStringLiteral("goal"), QStringLiteral("Ship it.")}},
+                             QStringLiteral("user"))
+                    .ok());
+        QVERIFY(leaderStarted(created.teamId));
+        QCOMPARE(host_.messages.size(), 1);
     }
 
     void deletingTheTeamDeletesTheSchedule() {
