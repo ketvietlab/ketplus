@@ -2,7 +2,11 @@
 """Offline negative checks for the packaging trust boundary."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,6 +18,35 @@ spec.loader.exec_module(packages)
 
 
 class LinuxDesktopPackagesTest(unittest.TestCase):
+    def test_launcher_preserves_original_environment_for_real_children(self):
+        names = ('LD_LIBRARY_PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'QML2_IMPORT_PATH',
+                 'QTWEBENGINEPROCESS_PATH', 'QTWEBENGINE_RESOURCES_PATH', 'QTWEBENGINE_LOCALES_PATH')
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory)
+            (prefix / 'bin').mkdir()
+            launcher = prefix / 'ketplus-pro'
+            shutil.copyfile(ROOT / 'packaging/linux/run-desktop.sh', launcher)
+            launcher.chmod(0o755)
+            # Every launcher route spawns another real process. No mocked environment API.
+            program = '#!' + sys.executable + '\nimport subprocess, sys\nsubprocess.run([sys.executable, "-c", "import json, os; print(json.dumps(dict(os.environ)))"], check=True)\n'
+            for name in ('KetPlus', 'ketplus_daemon'):
+                binary = prefix / 'bin' / name
+                binary.write_text(program)
+                binary.chmod(0o755)
+            for value in (None, '', 'original user value with spaces'):
+                environment = dict(os.environ)
+                for name in names:
+                    environment.pop(name, None)
+                    if value is not None:
+                        environment[name] = value
+                for args in ([], ['--daemon'], ['--build-info']):
+                    with self.subTest(value=value, args=args):
+                        result = subprocess.run([str(launcher), *args], env=environment,
+                                                text=True, capture_output=True, check=True)
+                        actual = json.loads(result.stdout)
+                        self.assertEqual({key: actual[key] for key in names if key in actual},
+                                         {key: environment[key] for key in names if key in environment})
+
     def test_cached_runtime_is_verified_before_use(self):
         with tempfile.TemporaryDirectory() as directory:
             cache = Path(directory)

@@ -71,7 +71,7 @@ def verified_runtime(cache, arch, pin):
 
 def validate_prefix(prefix):
     required = ["bin/KetPlus", "bin/ketplus_daemon", "bin/ketplusctl", "ketplus-pro",
-                "bin/qt.conf", "lib/libQt6Core.so.6", "lib/libQt6Widgets.so.6",
+                "bin/qt.conf", "libexec/qt.conf", "lib/libQt6Core.so.6", "lib/libQt6Widgets.so.6",
                 "lib/libQt6PrintSupport.so.6", "lib/libQt6SvgWidgets.so.6",
                 "lib/libQt6Core5Compat.so.6", "libexec/QtWebEngineProcess",
                 "resources/qtwebengine_resources.pak", "qml/QtQuick/qmldir",

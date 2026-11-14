@@ -69,6 +69,8 @@ qt6_deploy_runtime_dependencies(
     GENERATE_QT_CONF NO_TRANSLATIONS)
 file(WRITE \"\${QT_DEPLOY_PREFIX}/bin/qt.conf\"
     \"[Paths]\\nPrefix=..\\nLibraries=lib\\nLibraryExecutables=libexec\\nPlugins=plugins\\nQmlImports=qml\\nData=.\\nTranslations=translations\\n\")
+file(COPY_FILE \"\${QT_DEPLOY_PREFIX}/bin/qt.conf\"
+    \"\${QT_DEPLOY_PREFIX}/libexec/qt.conf\")
 ")
 install(SCRIPT "${ketplus_linux_deploy_script}" COMPONENT Runtime)
 

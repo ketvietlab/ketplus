@@ -22,8 +22,9 @@ feature/fix -> test what you changed -> pull request into integration -> merge
                                              release: main fast-forwards to develop
 ```
 
-- `integration` receives every feature and fix pull request. Its public-tree
-  guard runs on PRs; Linux packaging changes also run the ARM build-only workflow.
+- `integration` receives every feature and fix pull request. Only its lightweight
+  public-tree guard runs on PRs; native Linux packaging runs through the normal
+  promotion/release build workflow, not integration PRs (ADR 0030).
   Before pushing, the author runs the tests for the part they changed (see
   `docs/testing.md`) and records the commands and results in the pull request.
 - `develop` is verified. It receives only promotion pull requests whose head is
