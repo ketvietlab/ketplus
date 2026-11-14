@@ -85,6 +85,14 @@ void capture(QObject* owner, const Scope& scope, std::function<void(Snapshot)> d
 
 QJsonArray changes(const Snapshot& before, const Snapshot& after) {
     QJsonArray result;
+    // A worktree that could not be read before the turn cannot be vouched for: the review
+    // does not count.
+    if (!before.local)
+        result.append(
+            QJsonObject{{QStringLiteral("field"), QStringLiteral("worktree")},
+                        {QStringLiteral("before"), QStringLiteral("unreadable")},
+                        {QStringLiteral("after"),
+                         after.local ? QStringLiteral("readable") : QStringLiteral("unreadable")}});
     if (before.local) {
         add(result, QStringLiteral("head"), before.head, after.head);
         add(result, QStringLiteral("symbolic_ref"), before.symbolicRef, after.symbolicRef);
@@ -115,6 +123,7 @@ QString describe(const QJsonArray& changes) {
         const QString name = field == QStringLiteral("head")           ? QStringLiteral("HEAD")
                              : field == QStringLiteral("symbolic_ref") ? QStringLiteral("branch")
                              : field == QStringLiteral("status") ? QStringLiteral("worktree status")
+                             : field == QStringLiteral("worktree") ? QStringLiteral("worktree")
                              : field == QStringLiteral("task_head")
                                  ? QStringLiteral("task head_commit")
                                  : QStringLiteral("remote branch head");

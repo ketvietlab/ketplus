@@ -65,7 +65,8 @@ turn starts it records, off the event loop, for each review request: the reviewe
 worktree's HEAD, its symbolic ref and a SHA-256 of `git status --porcelain=v2
 --untracked-files=all`; for a team's task also its `head_commit` and the remote branch
 head (`git ls-remote origin <branch>`, best effort: a remote that does not answer is
-logged and not compared). After the turn ends, with any status, it records them again.
+logged and not compared). A worktree that cannot be read before the turn voids the review,
+since nothing can be vouched for. After the turn ends, with any status, it records them again.
 If anything changed, the verdict does not count: the request fails with
 `review_tampered`, no review is recorded and no round is used, and the working
 conversation gets a `review_tampered` notice that lists each field before and after.

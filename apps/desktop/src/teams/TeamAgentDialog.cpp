@@ -143,8 +143,7 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
         providers_->setEnabled(choice == AgentChoice::fullAccessReviewer &&
                                providers_->count() > 1);
         help = choice == AgentChoice::fullAccessReviewer
-                   ? tr("Claude keeps a review read-only. Codex reviews with Full access; KetPlus "
-                        "checks the branch after each review.")
+                   ? tr("Reviews with Full access; KetPlus checks the branch after each review.")
                    : tr("The reviewer runs on Claude, which keeps a review read-only. Codex can "
                         "review only with Full access.");
         if (!hasChoice())

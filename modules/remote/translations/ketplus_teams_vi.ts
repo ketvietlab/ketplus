@@ -574,10 +574,6 @@ Lane nào cũng được: %2</translation>
             <translation>Chọn…</translation>
         </message>
         <message>
-            <source>Claude keeps a review read-only. Codex reviews with Full access; KetPlus checks the branch after each review.</source>
-            <translation>Claude giữ cho việc review chỉ đọc. Codex review với Toàn quyền; KetPlus kiểm tra branch sau mỗi lượt review.</translation>
-        </message>
-        <message>
             <source>Close</source>
             <translation>Đóng</translation>
         </message>
@@ -1248,6 +1244,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Reviews every lane</source>
             <translation>Review mọi lane</translation>
+        </message>
+        <message>
+            <source>Reviews with Full access; KetPlus checks the branch after each review.</source>
+            <translation>Review với Toàn quyền; KetPlus kiểm tra branch sau mỗi lượt review.</translation>
         </message>
         <message>
             <source>Review…</source>

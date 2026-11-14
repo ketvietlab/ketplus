@@ -1,5 +1,6 @@
 // ADR 0067: automatic review of finished turns. Scripted fake providers only.
 #include "AgentTestFixture.h"
+#include "agents/ReviewIntegrity.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -345,8 +346,25 @@ class TurnReviewTest final : public QObject {
         QVERIFY(request);
         QCOMPARE(request->state, "failed");
         QCOMPARE(request->error, "review_tampered");
+        // No round used: the next review of this exchange is round 1 again.
+        QCOMPARE(fixture.journal->reviewRequestsInChain(request->chainId, working), 0);
         if (field == "status")
             QVERIFY(QFileInfo::exists(worktree + "/dirty.txt"));
+    }
+
+    // A worktree the daemon could not read before the review turn cannot be vouched for.
+    void anUnreadableWorktreeVoidsTheReview() {
+        review_integrity::Snapshot before;
+        review_integrity::Snapshot after;
+        after.local = true;
+        after.head = QStringLiteral("abc");
+        const QJsonArray changed = review_integrity::changes(before, after);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(changed.first().toObject().value("field").toString(), "worktree");
+        QCOMPARE(changed.first().toObject().value("before").toString(), "unreadable");
+        before.local = true;
+        before.head = after.head;
+        QVERIFY(review_integrity::changes(before, after).isEmpty());
     }
 
     // The Claude guard is unchanged: a Claude review still runs read-only and is not checked.
