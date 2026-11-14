@@ -1,4 +1,4 @@
-// ADR 0112 §6: tasks, with one owner, states, criteria and history. The coordinator runs on a
+// ADR 0114 §6: tasks, with one owner, states, criteria and history. The coordinator runs on a
 // real journal with a fake runtime; the protocol case uses a temporary Git repository and the
 // scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"
@@ -8,6 +8,8 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
+
+#include <algorithm>
 
 using namespace ketplus::daemon;
 using namespace ketplus::daemon::teams;
@@ -20,6 +22,9 @@ class FakeHost final : public TeamHostPort {
         const auto it = conversations.constFind(sessionId);
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
     }
+    QString conversationRepository(const QString& sessionId) const override {
+        return conversations.contains(sessionId) ? QStringLiteral("/repo") : QString{};
+    }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
         (void)error;
@@ -28,15 +33,20 @@ class FakeHost final : public TeamHostPort {
                             .baseCommit = QStringLiteral("base")};
     }
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override {
+        if (busy.contains(sessionId))
+            return QStringLiteral("Wait for the turn to finish before switching worktrees.");
         if (!pointError.isEmpty())
             return pointError;
         pointed.insert(sessionId, worktree);
+        conversations[sessionId].worktree = worktree;
         return {};
     }
     std::optional<bool> hasUncommittedWork(const QString& worktree) const override {
         return dirty.contains(worktree);
     }
-    QString headCommit(const QString& worktree) const override { return worktree + "@head"; }
+    QString taskCommit(const Team&, const Task& task) const override {
+        return task.branch + "@head";
+    }
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
         return {};
@@ -51,13 +61,15 @@ class FakeHost final : public TeamHostPort {
                                   .number = id,
                                   .title = id,
                                   .provider = provider,
-                                  .repository = QStringLiteral("/repo"),
+                                  .worktree = QStringLiteral("/repo"),
                                   .idle = true});
     }
 
     QHash<QString, TeamConversation> conversations;
     QHash<QString, QString> pointed;
     QString pointError;
+    // Conversations that run a turn: they cannot change worktree until it ends.
+    QSet<QString> busy;
     QSet<QString> dirty;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
@@ -69,6 +81,7 @@ Team standard(const bool leaderWrites = true) {
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
     team.leaderWritesRequirements = leaderWrites;
+    team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
                     {.sessionId = "dev1",
                      .role = role::developer,
@@ -208,7 +221,7 @@ class TeamTaskTest final : public QObject {
         QVERIFY(dirty.error->message.contains("Commit your work in /wt/T-1"));
         host_.dirty.clear();
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
-        QCOMPARE(get(id).headCommit, QStringLiteral("/wt/T-1@head"));
+        QCOMPARE(get(id).headCommit, get(id).branch + QStringLiteral("@head"));
         QCOMPARE(
             teams_->moveTask(team_, id, state::inProgress, "dev1").error.value_or(TeamError{}).code,
             QStringLiteral("invalid_transition"));
@@ -235,6 +248,13 @@ class TeamTaskTest final : public QObject {
         QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
         const auto refused = teams_->moveTask(team_, second, state::inProgress, "dev2");
         QCOMPARE(refused.error.value_or(TeamError{}).code, QStringLiteral("dependencies_open"));
+        // Tasks cannot wait for each other in a circle, however long.
+        const QString third = task("Third", {second});
+        QCOMPARE(teams_->updateTask(team_, first, {{"depends_on", QJsonArray{third}}}, "lead")
+                     .error.value_or(TeamError{})
+                     .code,
+                 QStringLiteral("dependency_cycle"));
+        QVERIFY(get(first).dependsOn.isEmpty());
         QVERIFY(refused.error->message.contains(first));
         QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
         for (const QString& next : {state::inProgress})
@@ -321,6 +341,8 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(moved.branch, QStringLiteral("team/%1/T-1").arg(team_));
         QCOMPARE(moved.state, state::inProgress);
         QCOMPARE(host_.pointed.value("dev2"), QStringLiteral("/wt/T-1"));
+        // The previous owner leaves the worktree that is not its own any more.
+        QCOMPARE(host_.pointed.value("dev1"), QStringLiteral("/repo"));
         QCOMPARE(host_.messages.size(), 1);
         QVERIFY(host_.messages.first().body.contains("handed over"));
         QVERIFY(host_.messages.first().body.contains("History:"));
@@ -328,6 +350,92 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(host_.notes.first().first, QStringLiteral("dev1"));
         QCOMPARE(moved.history.last().data.value("reason").toString(),
                  QStringLiteral("Dev 1 is on the API"));
+    }
+
+    void handoverLeavesAPreviousOwnerThatStandsElsewhere() {
+        // Its next task is queued: the conversation is in that task's worktree already.
+        const QString first = task("Cart");
+        const QString second = task("Checkout");
+        QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
+        QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->handoverTask(team_, first, "dev2", "Dev 1 has Checkout", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+
+        // Held for the first plan: the owner never entered the task's worktree.
+        QVERIFY(!teams_->remove(team_));
+        Team unapproved = standard();
+        unapproved.planApproved = false;
+        team_ = teams_->create(unapproved, "user").teamId;
+        host_.conversations["dev1"].worktree = QStringLiteral("/elsewhere");
+        host_.pointed.clear();
+        const QString held = task("Cart");
+        QVERIFY(teams_->assignTask(team_, held, "dev1", "lead").ok());
+        QVERIFY(get(held).assignmentHeld);
+        QVERIFY(teams_->handoverTask(team_, held, "dev2", "Dev 2 knows the cart", "lead").ok());
+        QVERIFY(!host_.pointed.contains("dev1"));
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/elsewhere"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aBusyPreviousOwnerLeavesWhenItsTurnEnds() {
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, id, "dev2", "Dev 1 is on the API", "lead").ok());
+        QCOMPARE(get(id).owner, QStringLiteral("dev2"));
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        QCOMPARE(teams_->team(team_)->relocations,
+                 QList<Relocation>({{.session = "dev1", .from = "/wt/T-1"}}));
+        const auto waits = [this, &id] {
+            const QList<HistoryEntry> history = get(id).history;
+            return std::any_of(history.cbegin(), history.cend(), [](const HistoryEntry& entry) {
+                return entry.kind == "worktree" && entry.text.contains("when its turn ends");
+            });
+        };
+        QVERIFY(waits());
+
+        // The move is stored with the team, and a turn that is still running keeps it.
+        reopen();
+        QCOMPARE(teams_->team(team_)->relocations.size(), 1);
+        teams_->memberTurnEnded("dev2");
+        QCOMPARE(teams_->team(team_)->relocations.size(), 1);
+
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/repo"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aWaitingMoveGoesToTheTaskThePreviousOwnerStillHas() {
+        const QString first = task("Cart");
+        const QString second = task("Checkout");
+        QVERIFY(teams_->assignTask(team_, first, "dev1", "lead").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, first, "dev2", "Dev 2 knows the cart", "lead").ok());
+        // Assigned during the turn: the conversation cannot enter this worktree either.
+        QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-2"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
+    }
+
+    void aTaskHandedBackKeepsItsOwnerInTheWorktree() {
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        host_.busy.insert("dev1");
+        QVERIFY(teams_->handoverTask(team_, id, "dev2", "Dev 2 knows the cart", "lead").ok());
+        QVERIFY(teams_->handoverTask(team_, id, "dev1", "Dev 2 is away", "lead").ok());
+        // Dev 2 was free and left at once; Dev 1 owns the task again and stays.
+        QCOMPARE(host_.conversations.value("dev2").worktree, QStringLiteral("/repo"));
+        host_.busy.clear();
+        teams_->memberTurnEnded("dev1");
+        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));
+        QVERIFY(teams_->team(team_)->relocations.isEmpty());
     }
 
     void assignmentIsDeliveredWhenTheConversationCannotBeMoved() {
@@ -404,17 +512,21 @@ class TeamTaskProtocolTest final : public QObject {
                          {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}});
         QVERIFY2(result.value("ok").toBool(), qPrintable(agent_test::text(result)));
         const QJsonObject task = result.value("task").toObject();
-        QCOMPARE(task.value("branch").toString(), QStringLiteral("team/%1/t-1").arg(teamId));
+        // T-93: named from its title.
+        QCOMPARE(task.value("branch").toString(), QStringLiteral("feat/cart-t1"));
         const QString worktree = task.value("worktree").toString();
         QVERIFY(QFileInfo(worktree).isDir());
-        QVERIFY(worktree.endsWith(QStringLiteral("shop-team-%1-t-1").arg(teamId)));
-        // The owner now works in the task's worktree and receives the assignment.
-        const QJsonArray listed = command("session.list", {}).value("sessions").toArray();
-        QString path;
-        for (const auto& value : listed)
-            if (value.toObject().value("session_id").toString() == developer)
-                path = value.toObject().value("worktree_path").toString();
-        QCOMPARE(QFileInfo(path).canonicalFilePath(), QFileInfo(worktree).canonicalFilePath());
+        QVERIFY(worktree.endsWith(QStringLiteral("shop-feat-cart-t1")));
+        // The owner now works in the task's worktree and receives the assignment, both after
+        // the reply (T-28).
+        const auto ownerPath = [&] {
+            for (const auto& value : command("session.list", {}).value("sessions").toArray())
+                if (value.toObject().value("session_id").toString() == developer)
+                    return QFileInfo(value.toObject().value("worktree_path").toString())
+                        .canonicalFilePath();
+            return QString{};
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(ownerPath(), QFileInfo(worktree).canonicalFilePath(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.journal->agentMessagesOf(developer, 1, 10).isEmpty(),
                                  5000);
         const auto message = fixture.journal->agentMessagesOf(developer, 1, 10).first();

@@ -1824,7 +1824,7 @@ class DaemonLifecycleTest final : public QObject {
                   {"type", "fileChange"},
                   {"status", "completed"},
                   {"changes",
-                   QJsonArray{QJsonObject{{"path", root + "/apps/ios/App.swift"}, {"diff", ""}},
+                   QJsonArray{QJsonObject{{"path", root + "/src/mobile/App.swift"}, {"diff", ""}},
                               QJsonObject{{"path", "docs/README.md"}, {"diff", ""}},
                               QJsonObject{{"path", root + "-other/KETJS.override"}, {"diff", ""}},
                               QJsonObject{{"path", root + "/../escape.txt"}, {"diff", ""}},
@@ -1838,8 +1838,8 @@ class DaemonLifecycleTest final : public QObject {
                 changes = payload.value("item").toObject().value("changes").toArray();
         }
         QCOMPARE(changes.size(), 5);
-        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "apps/ios/App.swift");
-        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/apps/ios/App.swift");
+        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "src/mobile/App.swift");
+        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/src/mobile/App.swift");
         QCOMPARE(changes[1].toObject().value("worktreePath").toString(), "docs/README.md");
         for (qsizetype index = 2; index < changes.size(); ++index) {
             const QJsonObject change = changes[index].toObject();
@@ -2281,6 +2281,7 @@ class DaemonLifecycleTest final : public QObject {
         const QString endpoint = directory.filePath("minor.sock");
         const QByteArray token("local-test-token-with-at-least-32-bytes");
         LocalIpcServer server(&host, endpoint, token);
+        server.setHostKeyFingerprint([] { return QStringLiteral("host-key-fingerprint"); });
         QVERIFY(server.listen());
 
         const auto hello = [&](const QString& id, const QJsonValue& minor) {
@@ -2303,11 +2304,16 @@ class DaemonLifecycleTest final : public QObject {
         QCOMPARE(legacy.value("protocol_version").toInt(-1), 0);
         QCOMPARE(legacy.value("protocol_minor").toInt(-1), 0);
         QVERIFY(legacy.value("features").toArray().isEmpty());
+        // ADR 0119: the machine id is negotiated, so a pre-negotiation client is not given one.
+        QVERIFY(!legacy.contains("host_key_fingerprint"));
         // A newer client is answered with the daemon's own minor.
         const QJsonObject newer = hello("newer", 99);
         QCOMPARE(newer.value("protocol_minor").toInt(-1), protocol::currentMinor);
         QVERIFY(newer.value("features").toArray().contains("provider.runtime_status"));
         QVERIFY(newer.value("features").toArray().contains("transcript.window/1"));
+        QVERIFY(newer.value("features").toArray().contains("daemon.host_identity/1"));
+        QCOMPARE(newer.value("host_key_fingerprint").toString(),
+                 QStringLiteral("host-key-fingerprint"));
     }
 
     void closesConnectionsThatDoNotCompleteHello() {

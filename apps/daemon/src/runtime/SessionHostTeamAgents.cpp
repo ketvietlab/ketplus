@@ -1,8 +1,9 @@
-// ADR 0112: the team_* tools of the ketplus_agents server. The daemon checks the caller's
+// ADR 0114: the team_* tools of the ketplus_agents server. The daemon checks the caller's
 // role for every call; a role that may not act is refused with the role that may.
 #include "runtime/SessionHost.h"
 
 #include "agents/AgentInstructions.h"
+#include "teams/TeamAgentTasks.h"
 
 namespace ketplus::daemon {
 namespace {
@@ -42,18 +43,34 @@ QJsonObject SessionHost::teamMembership(const QString& sessionId) const {
     for (const QString& role : {teams::role::leader, teams::role::reviewer})
         if (const QString number = teamRoleNumber(sessionId, role); !number.isEmpty())
             json.insert(role + QStringLiteral("_number"), number);
+    // T-23: every reviewer, by number and name, so a member can address either.
+    QJsonArray reviewers;
+    for (const teams::Member& entry : team->members)
+        if (entry.role == teams::role::reviewer)
+            reviewers.append(QJsonObject{{QStringLiteral("number"), memberNumber(entry.sessionId)},
+                                         {QStringLiteral("name"), entry.name}});
+    json.insert(QStringLiteral("reviewers"), reviewers);
     return json;
+}
+
+QString SessionHost::memberNumber(const QString& sessionId) const {
+    const auto it = sessions_.constFind(sessionId);
+    return it == sessions_.cend()
+               ? QString{}
+               : journal_->conversationNumber(it->stored.id, it->stored.generation);
 }
 
 QString SessionHost::teamRoleNumber(const QString& sessionId, const QString& role) const {
     const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
-    const teams::Member* member = team ? team->memberWithRole(role) : nullptr;
-    if (!member)
+    if (!team)
         return {};
-    const auto it = sessions_.constFind(member->sessionId);
-    return it == sessions_.cend()
-               ? QString{}
-               : journal_->conversationNumber(it->stored.id, it->stored.generation);
+    // T-23: "reviewer" is the reviewer of the caller's work; empty when that is not one.
+    if (role == teams::role::reviewer) {
+        const QString reviewer = teams::TeamCoordinator::reviewerFor(*team, sessionId);
+        return reviewer.isEmpty() ? QString{} : memberNumber(reviewer);
+    }
+    const teams::Member* member = team->memberWithRole(role);
+    return member ? memberNumber(member->sessionId) : QString{};
 }
 
 QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
@@ -71,7 +88,50 @@ QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
          .mergePolicy = team->mergePolicy,
          .integrationBranch =
              team->integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team->integrationBranch,
-         .leaderWritesRequirements = team->leaderWritesRequirements});
+         .leaderWritesRequirements = team->leaderWritesRequirements,
+         .language = team->language});
+}
+
+QString SessionHost::teamMemberByNumber(const teams::Team& team, const QString& number) const {
+    const QString wanted = agent_messaging::bareNumber(number);
+    for (const teams::Member& member : team.members) {
+        const auto it = sessions_.constFind(member.sessionId);
+        if (it != sessions_.cend() &&
+            journal_->conversationNumber(it->stored.id, it->stored.generation) == wanted)
+            return member.sessionId;
+    }
+    return {};
+}
+
+// The tools that reach git, as teamOperation below reads them: a developer hands its task to
+// review, the leader assigns a task or hands it over.
+void SessionHost::prepareTeamOperation(const QString& sessionId, const QString& operation,
+                                       const QJsonObject& payload, std::function<void()> then) {
+    using Kind = teams::TeamCoordinator::TaskRequest::Kind;
+    const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
+    const QString role = team ? team->member(sessionId)->role : QString{};
+    std::optional<Kind> kind;
+    if (operation == QStringLiteral("team_task_update") && role == teams::role::developer)
+        kind = Kind::Move;
+    else if (operation == QStringLiteral("team_task_assign") && role == teams::role::leader)
+        kind = Kind::Assign;
+    else if (operation == QStringLiteral("team_task_handover") && role == teams::role::leader)
+        kind = Kind::Handover;
+    if (!kind) {
+        then();
+        return;
+    }
+    teams_->prepare({.kind = *kind,
+                     .teamId = team->id,
+                     .taskId = payload.value(QStringLiteral("task_id")).toString(),
+                     .actor = sessionId,
+                     .owner = *kind == Kind::Move
+                                  ? QString{}
+                                  : teamMemberByNumber(
+                                        *team, payload.value(QStringLiteral("owner")).toString()),
+                     .reason = payload.value(QStringLiteral("reason")).toString(),
+                     .to = payload.value(QStringLiteral("state")).toString()},
+                    std::move(then));
 }
 
 QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& operation,
@@ -102,19 +162,67 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                 {QStringLiteral("you"), teamMembership(sessionId)}};
     }
     if (operation == QStringLiteral("team_tasks")) {
-        if (!taskId.isEmpty()) {
-            const teams::Task* task = team->task(taskId);
-            if (!task)
-                return refusal(QStringLiteral("task_not_found"),
-                               QStringLiteral("There is no task %1.").arg(taskId));
-            return {{QStringLiteral("ok"), true}, {QStringLiteral("task"), teams::toJson(*task)}};
+        // T-36: compact rows for the list; one task with a page of its history; one entry
+        // uncut. The desktop and paired devices read tasks through other commands.
+        if (taskId.isEmpty()) {
+            const auto members = [&](const QString& session) {
+                const teams::Member* member = team->member(session);
+                return teams::AgentMember{.number = memberNumber(session),
+                                          .name = member ? member->name : QString{}};
+            };
+            const teams::AgentTaskFilter filter{
+                .open = payload.value(QStringLiteral("open")).toBool(),
+                .mine = payload.value(QStringLiteral("mine")).toBool() ? sessionId : QString{}};
+            return {{QStringLiteral("ok"), true},
+                    {QStringLiteral("tasks"), teams::agentTaskRows(*team, filter, members)}};
         }
-        QJsonArray tasks;
-        for (const teams::Task& task : team->tasks)
-            tasks.append(teams::toJson(task, false));
-        return {{QStringLiteral("ok"), true}, {QStringLiteral("tasks"), tasks}};
+        const teams::Task* task = team->task(taskId);
+        if (!task)
+            return refusal(QStringLiteral("task_not_found"),
+                           QStringLiteral("There is no task %1.").arg(taskId));
+        if (payload.contains(QStringLiteral("entry"))) {
+            const qsizetype entry = payload.value(QStringLiteral("entry")).toInteger(-1);
+            if (entry < 0 || entry >= task->history.size())
+                return refusal(QStringLiteral("entry_not_found"),
+                               QStringLiteral("%1 has history entries 0 to %2.")
+                                   .arg(taskId)
+                                   .arg(task->history.size() - 1));
+            return {{QStringLiteral("ok"), true},
+                    {QStringLiteral("task"),
+                     teams::agentTaskEntry(*task, entry,
+                                           teams_->wholeHistoryText(teamId, taskId, entry))}};
+        }
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("task"),
+                 teams::agentTaskPage(
+                     *task, payload.value(QStringLiteral("history_start")).toInteger(-1),
+                     payload.value(QStringLiteral("history_limit")).toInt(teams::agentHistoryPage),
+                     teams_->wholeHistoryEntries(teamId, taskId))}};
+    }
+    if (operation == QStringLiteral("team_wait")) {
+        if (role == teams::role::reviewer)
+            return onlyFor(QStringLiteral("the leader and developers"), operation);
+        const int minutes = payload.value(QStringLiteral("minutes")).toInt();
+        const auto result = teams_->wait(
+            teamId, sessionId, minutes, payload.value(QStringLiteral("reason")).toString(), taskId);
+        if (!result.ok())
+            return refusal(result.error->code, result.error->message);
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("wakes_in_minutes"), minutes}};
     }
     if (operation == QStringLiteral("team_task_update")) {
+        // T-93: the leader renames the branch of a task not started yet, and nothing else.
+        if (role == teams::role::leader) {
+            QJsonObject changes;
+            for (const QString& key :
+                 {QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
+                if (payload.contains(key))
+                    changes.insert(key, payload.value(key));
+            if (changes.isEmpty())
+                return onlyFor(QStringLiteral("developers, on their own task, and the leader "
+                                              "renaming a branch"),
+                               operation);
+            return answer(teams_->updateTask(teamId, taskId, changes, sessionId), taskId);
+        }
         if (role != teams::role::developer)
             return onlyFor(QStringLiteral("developers, on their own task"), operation);
         const teams::Task* task = team->task(taskId);
@@ -125,8 +233,10 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             return refusal(QStringLiteral("not_owner"),
                            QStringLiteral("%1 is not your task.").arg(taskId));
         QJsonObject changes;
+        // A branch rename reaches the rules, which keep it for the leader.
         for (const QString& key :
-             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met")})
+             {QStringLiteral("note"), QStringLiteral("pull_request"), QStringLiteral("met"),
+              QStringLiteral("branch_type"), QStringLiteral("branch_slug")})
             if (payload.contains(key))
                 changes.insert(key, payload.value(key));
         if (!changes.isEmpty())
@@ -136,7 +246,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         const QString state = payload.value(QStringLiteral("state")).toString();
         if (!state.isEmpty() && state != team->task(taskId)->state)
             return answer(teams_->moveTask(teamId, taskId, state, sessionId,
-                                           payload.value(QStringLiteral("question")).toString()),
+                                           payload.value(QStringLiteral("question")).toString(),
+                                           payload.value(QStringLiteral("head_commit")).toString()),
                           taskId);
         return answer({.teamId = teamId}, taskId);
     }
@@ -150,21 +261,16 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
              .description = payload.value(QStringLiteral("description")).toString(),
              .lane = payload.value(QStringLiteral("lane")).toString(),
              .dependsOn = strings(payload.value(QStringLiteral("depends_on"))),
-             .criteria = strings(payload.value(QStringLiteral("criteria")))},
+             .criteria = strings(payload.value(QStringLiteral("criteria"))),
+             .repository = payload.value(QStringLiteral("repository")).toString(),
+             .integrationBranch = payload.value(QStringLiteral("integration_branch")).toString(),
+             .branchType = payload.value(QStringLiteral("branch_type")).toString(),
+             .branchSlug = payload.value(QStringLiteral("branch_slug")).toString()},
             sessionId, &created);
         return answer(result, created);
     }
-    const auto memberByNumber = [&](const QString& number) -> QString {
-        QString wanted = number.trimmed();
-        if (wanted.startsWith(QLatin1Char('#')))
-            wanted.remove(0, 1);
-        for (const teams::Member& member : team->members) {
-            const auto it = sessions_.constFind(member.sessionId);
-            if (it != sessions_.cend() &&
-                journal_->conversationNumber(it->stored.id, it->stored.generation) == wanted)
-                return member.sessionId;
-        }
-        return {};
+    const auto memberByNumber = [&](const QString& number) {
+        return teamMemberByNumber(*team, number);
     };
     if (operation == QStringLiteral("team_task_assign"))
         return answer(
@@ -183,6 +289,21 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                                           strings(payload.value(QStringLiteral("criteria"))),
                                           sessionId),
                       taskId);
+    if (operation == QStringLiteral("team_task_close"))
+        return answer(
+            teams_->closeTask(teamId, taskId, payload.value(QStringLiteral("evidence")).toString(),
+                              payload.value(QStringLiteral("note")).toString(), sessionId),
+            taskId);
+    if (operation == QStringLiteral("team_review_void"))
+        return answer(teams_->voidReview(teamId, taskId,
+                                         payload.value(QStringLiteral("reason")).toString(),
+                                         sessionId),
+                      taskId);
+    if (operation == QStringLiteral("team_review_accept"))
+        return answer(teams_->acceptReview(
+                          teamId, taskId, payload.value(QStringLiteral("evidence")).toString(),
+                          payload.value(QStringLiteral("reason")).toString(), sessionId),
+                      taskId);
     if (operation == QStringLiteral("team_lane_set")) {
         const QString developer =
             memberByNumber(payload.value(QStringLiteral("developer")).toString());
@@ -195,14 +316,59 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                           payload.value(QStringLiteral("reason")).toString()),
                       {});
     }
+    if (operation == QStringLiteral("team_paths_allow")) {
+        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
+            return refusal(QStringLiteral("invalid_payload"),
+                           QStringLiteral("Give the reason the paths are allowed."));
+        return answer(
+            teams_->allowPaths(teamId, taskId, strings(payload.value(QStringLiteral("paths"))),
+                               payload.value(QStringLiteral("reason")).toString(), sessionId),
+            taskId);
+    }
+    if (operation == QStringLiteral("team_repository_set")) {
+        // T-90 (ADR 0123): the leader names why, as for a lane change.
+        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
+            return refusal(QStringLiteral("invalid_payload"),
+                           QStringLiteral("Give the reason the repository changes."));
+        QJsonObject changes{
+            {QStringLiteral("repository"), payload.value(QStringLiteral("repository")).toString()},
+            {QStringLiteral("reason"), payload.value(QStringLiteral("reason")).toString()}};
+        if (payload.contains(QStringLiteral("integration_branch")))
+            changes.insert(QStringLiteral("integration_branch"),
+                           payload.value(QStringLiteral("integration_branch")).toString());
+        return answer(teams_->update(teamId, changes, sessionId), {});
+    }
     return teamDecisionOperation(sessionId, operation, payload);
 }
 
-// Decisions arrive with #462.
+// ADR 0114 §3: the leader's decisions. The caller's role was checked by teamOperation.
 QJsonObject SessionHost::teamDecisionOperation(const QString& sessionId, const QString& operation,
                                                const QJsonObject& payload) {
-    (void)sessionId;
-    (void)payload;
+    const teams::Team* team = teams_->teamOf(sessionId);
+    if (!team)
+        return refusal(QStringLiteral("not_on_team"),
+                       QStringLiteral("This conversation is on no team."));
+    const qint64 teamId = team->id;
+    const QString decisionId = payload.value(QStringLiteral("decision_id")).toString();
+    const auto decisionJson = [&](const QString& id) -> QJsonObject {
+        const teams::Team* current = teams_->team(teamId);
+        const teams::Decision* decision = current ? current->decision(id) : nullptr;
+        return decision ? QJsonObject{{QStringLiteral("ok"), true},
+                                      {QStringLiteral("decision"), teams::toJson(*decision)}}
+                        : QJsonObject{{QStringLiteral("ok"), true}};
+    };
+    if (operation == QStringLiteral("team_decision_raise")) {
+        QString raised;
+        const auto result = teams_->raiseQuestion(teamId, payload, sessionId, &raised);
+        return result.ok() ? decisionJson(raised)
+                           : refusal(result.error->code, result.error->message);
+    }
+    if (operation == QStringLiteral("team_decision_withdraw")) {
+        const auto result = teams_->withdrawDecision(
+            teamId, decisionId, payload.value(QStringLiteral("reason")).toString(), sessionId);
+        return result.ok() ? decisionJson(decisionId)
+                           : refusal(result.error->code, result.error->message);
+    }
     return refusal(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown team tool %1.").arg(operation));
 }

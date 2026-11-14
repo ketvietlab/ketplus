@@ -13,7 +13,7 @@ namespace ketplus::daemon {
 // attachment (the message that sends it is), so a kind this build does not know is recorded.
 [[nodiscard]] bool remoteCommandMayChange(const QString& kind);
 // The `remote.audit` reply entries: command_id, kind, device_id, device_key_version,
-// session_id, result_code and recorded_at, plus session_exists and session_title from
+// session_id, team_id, result_code and recorded_at, plus session_exists and session_title from
 // `titles` (by session id), so the desktop can name a conversation or say it was deleted.
 [[nodiscard]] QJsonArray remoteAuditJson(const QList<RemoteCommandAudit>& entries,
                                          const QHash<QString, QString>& titles = {});

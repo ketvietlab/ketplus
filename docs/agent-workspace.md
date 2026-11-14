@@ -22,6 +22,103 @@ changes; formatting-only notifications must not restart the zero-delay timer.
 Font changes still reformat the document, and formatting joins the text edit's
 undo step. The idle composer regression verifies that document notifications settle.
 
+## Remote machines
+
+ADR 0119 "Binding to the selected machine". The window keeps one
+`MachineSelection` (`apps/desktop/src/machine`): This Mac's
+`DaemonMachineBackend` under `local`, and the backend Connections registers for
+each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
+Choosing another machine in the picker binds `MachineCatalog` to its backend and
+shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
+routes share every line of UI code. Every way into the Agent Workspace (the
+activity bar, View > Agent Workspace, the compact window) shows the selected
+machine's. A picked machine with no backend yet opens Connections with an empty
+sidebar, never This Mac's lists, and its workspace shows once Connections
+registers the backend. Backends deliver live events in the local session.event
+shape on every route (`session_id`, `cursor`, `payload {event_type, data}`);
+transcript windows carry `event_type` and the data as `payload`.
+`remote::windowEvent()` reads both, so the UI reads one shape.
+
+- **Sidebar.** `listRepositories` and `listConversations` are read together and
+  replace the lists at once. Rows are keyed by repository id and session id;
+  a row's `path` is the worktree id, never resolved on This Mac. A remote row's
+  context menu and rename, and the conversation header's "…" button, use
+  `MachineConversationActions`: Rename…, Fork and Archive through the
+  machine's backend, each disabled with `MachineBackend::unsupportedReason()`
+  as its tooltip where the route does not carry it (ADR 0119, "Parity of
+  conversation operations"). A fork opens once the machine lists it, if the
+  reader is still where they asked from (the forked conversation, another
+  row's menu or the new-conversation composer); opening another conversation,
+  starting a new one, or the machine going away or being destroyed drops it,
+  and a failed or expired fork leaves nothing waiting. A command the Relay
+  queued shows "Fork sent. Waiting for the machine…" (or Rename, Archive) in
+  the status line of the conversation that sent it until the host answers. A
+  failure shows in the composer's status line.
+- **Repository grain.** The daemon's `workspace.list` names each checkout's
+  `repository_path` (read from a linked worktree's `.git` file and `commondir`,
+  without running Git), and the local and SSH adapter groups checkouts under it
+  with their `worktrees`, as the Relay groups by repository id. A repository
+  therefore appears once on every route.
+- **Conversation binding.** A `MachineConversationSession` keeps the backend it
+  was opened with; turns, steer, stop and approval answers go to that machine
+  even after the picker changes. Each machine keeps the conversation it last
+  showed, so switching back restores it. Answers from a machine that is no
+  longer bound are dropped.
+- **Connection states.** Connecting and Offline show no list and the banner
+  shows the reason. Reconnecting keeps the last lists read-only, the
+  transcript stays readable from its cache, and the composer and approval
+  buttons are disabled with "Reconnecting…" and the reason. The return to
+  Connected lists again and reloads the transcript window and pending
+  approvals on its own.
+- **Worktree picker.** A new conversation picks a worktree of the selected
+  machine and starts with `MachineBackend::createSession`. Worktrees the Relay
+  still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
+  `catalogChanged()` lists again and fills them in.
+- **Approvals and questions.** Cards answer through the conversation's machine;
+  an answer that fails marks the card expired. A question card answers every
+  question of the request at once (single or multiple options, a custom or
+  secret answer), as the daemon refuses a partial answer.
+- **Following a conversation.** Deselecting a conversation, switching machines
+  or closing the view calls `MachineBackend::conversationClosed()`. After a
+  reconnect the listing says whether its turn still runs. A conversation outside
+  every listed repository is listed under its own worktree.
+- **Transcript.** The newest window opens the conversation. Scrolling to the
+  top, or "Show earlier messages", reads the page before the oldest cached
+  event with `transcriptPage`, one at a time, and keeps the reader's place.
+  `remote::resolveLargeEvents()` reads each `large_event` reference fragment by
+  fragment first, so a page is added whole or not at all; a failed read shows
+  its error and scrolling up retries. Live events wait while a window loads
+  and then follow it, and a live item sent as a `large_event` reference is
+  read the same way before the events after it apply. A reader looking at
+  older rows keeps their place; one at the newest row follows new rows. The
+  rows are rebuilt from every kept
+  event, so a turn split across pages reads as one. They render through This
+  Mac's `AgentWorkspaceView` in transcript-only mode (`MachineRichTranscript`,
+  ketplus#598): the same Markdown, tool, diff and changed-file rows, with the
+  machine view's own composer and cards; file actions that need this Mac's disk
+  say why they are unavailable (ADR 0119, "Rich renderer").
+  Attach is shown disabled with its reason.
+- **Held and queued writes.** A route may hold a request while it is
+  Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
+  says it waits for the machine instead of looking hung. A Relay write may
+  answer `{"status": "queued", "command_id"}` with no result: the composer
+  shows it as sent and waiting for the host, and the outcome (the new
+  conversation, or an expired card) is applied on
+  `MachineBackend::commandCompleted()`, which moved to the interface so the UI
+  needs no Relay type.
+- **Registration.** The window's slot for `RemoteControlView::machinesChanged`
+  (`MainWindowRemote.cpp`) calls `MachineSelection::syncBackends()` with
+  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the Relay's
+  while it is the row's route. Each listed id with a backend is registered or
+  replaced (a replacement for the selected machine rebinds every view); a listed
+  machine without one stays selectable and shows as not connected; a machine no
+  longer listed is forgotten, and if it was selected the window returns to This
+  Mac.
+
+Tests: `tests/MachineCompositionTest.cpp`, `tests/MachineConversationTest.cpp`
+and `tests/MachineTranscriptPagingTest.cpp` against `tests/FakeMachineBackend.h`; `tests/MachineWindowTest.cpp` on
+`MainWindow`, with Connections over a fake SSH daemon.
+
 ## Context compaction
 
 `contextCompaction` item start/completion events update one lifecycle row and the
@@ -108,7 +205,11 @@ independent. These safe session snapshots are journaled and restored with the co
 
 A separate Admin API key in Settings → Providers enables desktop organization usage.
 The existing usage popover requests the UTC calendar-month-to-date cost and token report
-on opening or Refresh. It covers all products and keys in that Admin key's organization,
+on opening or Refresh. When the conversation does not run on an API key (runtime
+authentication, or before the first usage report), the conversation and organization
+blocks sit behind one "Cost details" row, collapsed each time the popover opens; the report
+is then requested when the row is expanded, not on opening. Context window and plan limits
+stay visible. It covers all products and keys in that Admin key's organization,
 not just KétPlus or the inference key (which may belong to another organization).
 Cost is after discounts and before credits, not a credit balance. Credit balance and
 account spending limits remain in Anthropic Console; no inferred balance is displayed.
@@ -128,6 +229,70 @@ current-window value.
 
 - The Codex CLI is discovered from `PATH`, `~/.local/bin/codex`, Homebrew, or
   `/usr/local/bin/codex`.
+- A discovered CLI path (not one given with `--codex`/`--cursor` or the
+  `KETPLUS_*` overrides) is looked up again, at most every 2 seconds, while it
+  is missing or its file has gone. A CLI installed while KetPlus runs, or moved
+  by its own updater, is used on the next request or Retry without restarting
+  the daemon (`ProviderExecutable`).
+- The daemon's GitHub Copilot adapter uses provider id `copilot` and the
+  user-installed [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+  It starts `copilot --acp --stdio`; KetPlus does not bundle or download the CLI.
+  Discovery checks the absolute daemon `--copilot <path>` option, then
+  `KETPLUS_COPILOT`, then `PATH`, then the platform locations in
+  [ADR 0120](decisions/0120-github-copilot-acp-provider.md#executable-discovery):
+  `~/.local/bin`, Homebrew and `/usr/local/bin` on macOS/Linux, plus `/usr/bin`
+  on Linux; `%APPDATA%\npm` and the WinGet links folder on Windows. An invalid
+  explicit override is an actionable error, rather than a fallback to another CLI.
+  Missing CLI errors link to the installation guide and explain the override.
+  Sign in with `copilot login` on the machine running the daemon, or configure
+  the CLI's supported headless authentication there. Authentication remains with
+  the CLI; KetPlus neither copies tokens into its journal nor calls ACP
+  `authenticate`. Token absence alone does not reject a BYOK session. An explicit
+  authentication failure ends the turn with login guidance; retry uses a fresh
+  process. Permission, network and usage failures retain separate, sanitized
+  explanations. Initialization and ordinary setup calls time out after 30 seconds;
+  session creation/loading allows 120 seconds for cold MCP workers. Prompts have
+  no wall-clock deadline: long-running work and human approval must not kill the
+  shared process or unrelated conversations. Process exit and explicit Stop
+  still end waiting turns. Streaming and cancellation use the shared ACP engine.
+  The model picker receives Copilot's advertised ACP model selector from the
+  daemon. KetPlus prefers `configOptions` (including grouped choices), preserving
+  its model option id and value exactly. Older `models.availableModels` catalogs
+  use the compatibility `session/set_model` path only when offered by that session.
+  Discovery starts a disposable initialize/session-new probe in a temporary
+  directory with no host MCP servers and never sends a prompt. Concurrent requests
+  share a probe; its result is cached for 60 seconds. The probe has an eight-second
+  deadline and a one-MiB combined stdout/stderr budget. Catalogs are limited to 256
+  models and 256-character identifiers; display labels/descriptions are bounded
+  to 256/2,000 characters. The normalized catalog also has a 256-KiB JSON budget,
+  reserving room in daemon frames for metadata and other providers. No reasoning
+  levels or Cursor variants are invented.
+  If discovery fails, only **Copilot default** is offered with a catalog-unavailable
+  explanation. That choice leaves the provider's current session default unchanged.
+  Explicit model selections are checked against the conversation session's own
+  catalog and applied before a prompt. Switching between turns uses the advertised
+  config setter (or the legacy setter); a refusal, unsupported model or unconfirmed
+  config value fails the turn with an actionable error and sends no prompt.
+  Model rows carry the host **Ask for permission** profile for KetPlus approval
+  requests; this does not assert a Copilot sandbox or infer a provider mode.
+  Coverage uses fake ACP processes; live Copilot model behavior remains unverified.
+  Copilot tool requests use KetPlus approval cards. Allow and Refuse select the
+  CLI's advertised one-time option; missing options, expiry and cancellation
+  return `cancelled`. An approval never becomes an always rule. Pending requests
+  belong to one turn/process; an old card cannot authorize a replacement request.
+  Copilot permission modes are not yet verified, so even Full access does not
+  bypass these cards or claim to enforce a filesystem sandbox.
+  Browser MCP uses the same host Browser settings as Cursor: the daemon injects
+  the resolved stdio server on new/resumed sessions, adds routing instructions
+  separately from user text/images, and signals cleanup on completion, failure,
+  cancellation and shutdown. Disabled/invalid settings inject no browser server
+  and send unavailable guidance on the next turn. Tool images are preserved in
+  canonical transcript content for the existing gallery.
+  Copilot's authenticated MCP identity schema is unverified. Browser requests
+  therefore still ask for approval, including familiar titles and Cursor-shaped
+  `rawInput` identities. No project MCP file or turn-supplied server map overrides
+  the host Browser settings; no blanket allow-all CLI flags are added.
+
 - The Cursor CLI is discovered from `PATH` and `KETPLUS_CURSOR_AGENT`. On
   macOS/Linux the fallbacks are `~/.local/bin/agent`, Homebrew, and
   `/usr/local/bin/agent`. On native Windows the installer puts `agent.cmd` in
@@ -319,12 +484,21 @@ current-window value.
   scan lands the previous list stays, and a prompt or steering input sent in that
   window rescans synchronously first, so it never carries another worktree's skills.
 - Every daemon conversation shows its number (`#4821`, ADR 0027) at the start of
-  its sidebar row and before the header title. Typing `#` in the composer offers
+  its sidebar row and before the header title. Typing `#` or `@agent/` in the composer offers
   numbered conversations by number or title; the daemon lists the ones a
   message names for the agent, which contacts them through `ketplus_agents`
-  only when asked. A turn another agent started shows its message as a
+  only when asked. The content pane beside the transcript opens at 45% of the
+  workspace (transcript 55%) and keeps any width it is dragged to while its tabs
+  change. A turn another agent started shows its message as a
   user bubble under a muted "From @agent/1093 · title · provider" label
-  (reviews keep "Review request from …"); a prompt's images lead its bubble and a steer adds "Sent
+  (reviews keep "Review request from …"). A team's own message (#468: an assignment, the
+  leader's digest, a review request or its verdict, an answered decision) is drawn as one
+  card instead: kind and team, the task and its title, the facts, criteria, changed files,
+  findings, digest groups with what needs the leader marked, or the question and answer.
+  `agent/TeamTranscriptBlocks` reads the card from the message's text, so
+  `ketplus_team_transcript_contract_tests` runs the daemon's real texts through it; a message
+  it cannot read, or a kind it does not know, stays the bubble with its text. Open T-n opens
+  the task on the team page. A prompt's images lead its bubble and a steer adds "Sent
   while <provider> was working" below it, naming the provider its `turn.steered`
   event records (older steers read "the agent"). The sender's transcript adds the mock's note for
   each message it sent: "Message to @agent/1093" (or "Reply to", "Notice to"),
@@ -428,8 +602,21 @@ current-window value.
   repository's worktrees are ordered by when their latest turn started, so
   sending a message, from the desktop or a phone, moves that conversation to
   the top; ties and conversations that never started a turn follow by title.
-  Repositories are ordered by their newest conversation, then by name, so
-  opening or switching one never reorders the list. The start time
+  Repositories are ordered by the newest turn start of anything they show, their
+  own conversations and their teams' members alike (T-92), then by name, so
+  opening or switching one never reorders the list. Repositories the user pinned
+  (**Pin to top** in the repository header's context menu; **Unpin** to undo)
+  come first, in the order they were pinned, with a small pin after the name.
+  Pins are this Mac's: kept in `QSettings` (`sidebar/pinnedRepositories`) by
+  canonical path, a pin whose folder is gone is dropped silently, another
+  machine's repositories cannot be pinned, and phones do not receive them.
+  A conversation's group is fixed: it stays under the repository it was created
+  in (the daemon's `conversation_path`, written once), and a team member stays
+  under its team, whatever worktree or repository the conversation later runs
+  in. Switching worktree or repository, from the worktree picker or a team task
+  assignment, changes only the execution context (Source Control, Files and the
+  composer's repository and branch), never the row's group or the repository
+  order; the highlighted repository is the open conversation's group. The start time
   (`lastTurnStartedAt`) is the daemon's: the journal stamps it on the session
   with each `user.message`, `session.list` reports it, and the heartbeat seals
   it into the session metadata for phones, which apply the same order. Each expanded
@@ -463,6 +650,10 @@ current-window value.
   not future output from the source.
   Deletion confirms the local transcript, optional removal of every worktree
   stored for that conversation, and optional force-delete for those worktrees.
+  The card says what else goes (T-60): Codex and Claude threads only this
+  conversation used are deleted with it; other providers, such as Cursor, keep
+  their own history, which lives outside KetPlus-owned paths, and the conversation
+  is deleted locally instead of being refused (see `docs/daemon-architecture.md`).
   Deletion failures open a visible error dialog even when the status bar is
   hidden. Confirmation keeps the original worktree/conversation identity;
   asynchronous failure retains the conversation rather than hiding its history.
@@ -717,6 +908,31 @@ The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 
 ## Composer and provider capabilities
 
+Desktop recognizes daemon adapter `copilot` as **GitHub Copilot** in the model
+picker, composer, Teams and restored transcripts. Its tab follows the same
+setup-guide behavior as Cursor: when the daemon reports a missing CLI, the tab
+opens installation/sign-in steps while Apply stays disabled. An older daemon
+that supplies neither a Copilot catalog nor a setup guide leaves the tab disabled.
+An existing Copilot conversation keeps its provider and draft in that case;
+Send is disabled with guidance to choose another provider, even when a Codex
+model shares the saved model id.
+Copilot models are offered only with permission profiles supplied by the daemon;
+Desktop does not inherit Codex or Cursor modes for them. A blocking setup state
+also prevents applying a stale Copilot catalog.
+
+The setup guide uses Homebrew on macOS, npm on Linux (Node.js 22 or later), and
+WinGet on Windows. Commands run on the machine hosting the daemon. Sign in with
+`copilot login`, or configure the daemon's supported token environment as described
+in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
+[GitHub's installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+`--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
+paths do not install a CLI or run a provider prompt by themselves.
+
+History, notifications and local/ControlV2/relay transport retain `copilot` as the
+adapter id. Journal `cursor` fields remain event sequence numbers. No remote
+wire format or transcript cursor semantics change. Availability of actual turns,
+models and modes depends on the installed daemon's Copilot adapter.
+
 - The two-row composer includes attachment chips, permission selection, model and
   reasoning selection, and Send/Stop. Enter sends; Shift+Enter inserts a new line.
 - `model/list` is requested as soon as the daemon or Codex transport is ready,
@@ -751,7 +967,9 @@ The live test explicitly selects `gpt-5.6-luna` with medium reasoning effort.
 - Presentation keeps connection availability, folder availability, history load,
   and turn activity as separate axes. The native header displays repository and
   branch labels rather than the absolute worktree path; scope changes cannot turn
-  a late response into the selected conversation's status.
+  a late response into the selected conversation's status. The header and the sidebar
+  draw no user tags and offer no way to add, manage or filter by one (ADR 0117); a team
+  member's role shows as a locked label that opens the team (ADR 0114).
 - Model selection uses one popover with provider tabs, searchable models,
   a discrete effort slider, and reset-to-default. The slider follows the models
   on the open tab, and hides when a model has no separate effort list. Claude is enabled when the
@@ -980,6 +1198,14 @@ streams (diagram above, below and at the tail) and asserts per-presented-frame d
 1.5 px and a bounded GUI gap. `realMmdcSmoke` and `realLargeMmdcSmoke` run the real `mmdc`
 when `KETPLUS_REAL_CHAT_MERMAID=1` (`KETPLUS_CHAT_MERMAID_CAPTURE=<png>` saves a capture).
 
+
+The full-size image and diagram viewer (`imagePreview`, the Két lightbox) opens in its own
+frameless window (`imageWindow`) over the desktop's whole window. The workspace is a Quick
+window inside a widget container, and a popup cannot leave it, so before this the viewer
+covered only the transcript. The window follows the desktop window's geometry
+(`AgentWorkspaceView::hostWindowGeometry`) while it is open, also through full screen, and
+carries its own toast for Copy and Download.
+
 ## Pending conversation settings and file actions
 
 Model/provider/effort and compact-window changes remain available while a turn or
@@ -1054,7 +1280,7 @@ spend cap or bill. Consult Anthropic Console for actual usage. See
 
 ## Teams
 
-[ADR 0112](decisions/0112-agent-teams.md) (epic #450). A team is several conversations of
+[ADR 0114](decisions/0114-agent-teams.md) (epic #450). A team is several conversations of
 one repository on one goal: exactly one **leader**, one to five **developers** and exactly
 one **reviewer** (a Claude conversation). A conversation is on at most one team.
 
@@ -1074,6 +1300,16 @@ one **reviewer** (a Claude conversation). A conversation is on at most one team.
   other state changes start nothing.
 - **Decisions.** Only the leader raises one; the user answers on the team page. The
   folder in the sidebar shows the count.
+- **Commands from the page.** Every control that sends a team command (a decision's
+  choices, Pause and Resume, the menu's merge policy and Delete, Remove…, and the Save,
+  Create, Add and Hand over of the team dialogs) goes through `TeamCommands`. In the same
+  pass as the click, the control keeps the kit's pressed look and every control of the
+  same command is disabled. Activating one again sends nothing until the daemon answers.
+  After 10 seconds the control, or the label beside a decision, says it is still waiting;
+  it stays pending until the answer comes. A refusal gives the controls back and shows the
+  daemon's reason. The state is held per command and not per widget, so a page rebuilt
+  meanwhile is still pending.
 - **Limits.** 40 automatic turns per team since the user last acted on it, then the team
-  pauses and asks. ADR 0027's loop guard still applies. **Pause** holds every team
+  pauses and asks. Turns that members' messages to each other start count against
+  the same budget; ADR 0027's loop guard applies only to messages leaving the team. **Pause** holds every team
   message until Resume.

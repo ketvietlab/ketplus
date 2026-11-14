@@ -45,6 +45,82 @@ QtObject {
         + "+        && Qt.application.state === Qt.ApplicationActive\n"
         + "     visible: animating\n"
 
+    // #468: what team Release 1.4 (Fixtures.teams) sends into its members' conversations. The
+    // daemon writes these messages (assignment, digest, review, decision), so each is a block,
+    // not a paragraph. `workspace/team-*` opens the member's conversation with them.
+    readonly property var teamAssignment: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "assignment", team: "Release 1.4", task: "T-3",
+          title: "Repository picker: recent and pinned repositories",
+          facts: ["Lane Repository picker", "feat/picker-recents", "Assigned by @agent/4821"],
+          criteria: [
+              { text: "The five most recent repositories come first", done: false },
+              { text: "A pinned repository stays above the recent ones", done: false },
+              { text: "Typing filters by name and by path", done: false },
+              { text: "The list works with 0, 1 and 200 repositories", done: false }] },
+        { type: "commentary", text: "Starting T-3 in its worktree. I'll read the picker model first." },
+        { type: "activity", summary: "Explored 3 files", expanded: false, steps: [
+              { kind: "read", title: "Read", detail: "apps/desktop/src/app/picker/RepositoryPickerModel.cpp" },
+              { kind: "read", title: "Read", detail: "apps/desktop/src/app/picker/RepositoryPickerModel.h" },
+              { kind: "read", title: "Read", detail: "apps/desktop/src/app/picker/RecentRepositories.cpp" }] },
+        { type: "answer", status: "", markdown: "T-3 is **In progress**. Recents and pinned repositories are ordered; filtering is next." }
+    ]
+    readonly property var teamDigest: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "digest", team: "Release 1.4", title: "Ten changes since your last digest",
+          groups: [
+              { task: "T-1", title: "Sidebar destinations and their counts", state: "In review", lines: [
+                    { text: "@agent/2035 opened #412" },
+                    { text: "Moved to In review" },
+                    { text: "@agent/4583 started round 1 of 3" }] },
+              { task: "T-3", title: "Repository picker: recent and pinned repositories", state: "In progress", lines: [
+                    { text: "Two of four criteria met" },
+                    { text: "@agent/8213 edited ActivityBar.cpp, a file of the Navigation lane", needsYou: true }] },
+              { task: "T-5", title: "Settings: zoom and text size", state: "Blocked", lines: [
+                    { text: "@agent/8215 asked whether a change applies at once" },
+                    { text: "D-1 waits for the user" }] },
+              { task: "T-6", title: "Settings: the update reminder", state: "In review", lines: [
+                    { text: "@agent/8215 opened #418" },
+                    { text: "Moved to In review" }] },
+              { task: "", title: "", state: "", lines: [
+                    { text: "T-7 has no owner and T-1 is nearly done", needsYou: true }] }] },
+        { type: "commentary", text: "Two things need me: the lane edit in T-3 and an owner for T-7." },
+        { type: "answer", status: "", markdown: "T-7 goes to @agent/2035 after T-1. @agent/2035 keeps ActivityBar.cpp; @agent/8213 reverts its edit." }
+    ]
+    readonly property var teamReview: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "review", team: "Release 1.4", task: "T-1", round: 1,
+          title: "Sidebar destinations and their counts",
+          facts: ["By @agent/2035", "feat/nav-destinations into release/1.4", "#412"],
+          criteria: [
+              { text: "The four destinations match the mock at 100% and 125% zoom", done: true },
+              { text: "Source Control shows the number of changed files", done: true },
+              { text: "Every destination is reachable by keyboard", done: true }],
+          diff: ["6 files, +214 −38", "apps/desktop/src/workspace/ActivityBar.cpp", "apps/desktop/src/workspace/SidebarDestinations.cpp",
+                 "tests/SidebarDestinationsTest.cpp"] },
+        { type: "commentary", text: "Reviewing T-1 against its three criteria, read-only." },
+        { type: "answer", status: "", markdown: "Verdict: no findings. Every criterion holds at 100% and 125%." }
+    ]
+    readonly property var teamVerdict: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "verdict", team: "Release 1.4", task: "T-6", round: 1, passed: false,
+          title: "Settings: the update reminder",
+          facts: ["Round 1 of 3 found issues", "Back to In progress"],
+          findings: [
+              "The reminder opens over a running turn's composer; criterion 2 says it stays out of the way.",
+              "Restart has no accessible name."] },
+        { type: "commentary", text: "Two findings. Fixing both, then back to review." },
+        { type: "answer", status: "", markdown: "Both findings fixed in `UpdateReminder.qml`; T-6 is **In review** again (round 2)." }
+    ]
+    readonly property var teamDecision: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "decision", team: "Release 1.4", task: "T-5", title: "D-1 answered",
+          question: "Should a change of zoom or text size apply at once, or after Apply?",
+          answer: "Apply at once", text: "T-5 can go on." },
+        { type: "commentary", text: "Telling @agent/8215 that a change applies at once." },
+        { type: "answer", status: "", markdown: "@agent/8215 resumes T-5: a change of zoom or text size applies at once." }
+    ]
+
     // Marketing sample: an honest end-of-turn report, not a claim about a real release.
     readonly property var turnReport: [
         { type: "user", text: "Get the release ready. Tell me what is verified, what is blocked, and who owns the next step." },
@@ -91,7 +167,7 @@ QtObject {
         ] },
         { type: "question", header: "Spinner", state: "answered", question: "How should a working row animate?",
           answer: "Step on a shared clock (Recommended)" },
-        { type: "activity", summary: "Used browser · 6 steps", steps: [
+        { type: "activity", summary: "Used browser 6 times", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/sidebar" },
             { kind: "browser", title: "Observed the page", detail: "142 nodes · 3 running rows" },
             { kind: "browser", title: "Clicked", detail: "“Review the startup flow”" },
@@ -112,6 +188,8 @@ QtObject {
           state: "replied", expectReply: true, text: "Is the stepped spinner fine at 20 steps a second?" },
         { type: "user", from: { number: "8941", title: "DS Icon", provider: "Claude" },
           text: "20 steps a second reads as smooth at 14 px. Keep 4 behind another app." },
+        { type: "user", from: { number: "", title: "Example team", provider: "" },
+          text: "You asked to check again: synthetic build status.\n" + "A completed check has no warnings; the remaining check is still running.\n".repeat(8) },
         { type: "event", text: "Context compacted", detail: "Older steps are summarised; the conversation continues." },
         { type: "steer", text: "Also check dark mode before you finish." },
         { type: "activity", summary: "Edited 2 files, ran tests", steps: [
@@ -132,7 +210,7 @@ QtObject {
     readonly property var codex: [
         { type: "event", text: "Switched from Claude to Codex", detail: "GPT-5.6 Luna · High · the conversation history comes along" },
         { type: "user", text: "Add a journal size warning to the daemon status and the sidebar." },
-        { type: "activity", summary: "Thought, explored 4 files, listed 1 folder", steps: [
+        { type: "activity", summary: "Explored 4 files, listed 1 folder", steps: [
             { kind: "thinking", title: "Thought", detail: "14 s" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.cpp" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.h" },
@@ -157,7 +235,7 @@ QtObject {
             { kind: "move", title: "Moved", detail: "docs/journal.md → docs/daemon-journal.md" },
             { kind: "delete", title: "Deleted", detail: "apps/daemon/src/storage/OldRetention.cpp  −120" }
         ] },
-        { type: "activity", summary: "Used ketplus_browser, node_repl · 5 steps", steps: [
+        { type: "activity", summary: "Used ketplus_browser 3 times, used node_repl, used ketplus_agents", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/settings/storage" },
             { kind: "browser", title: "Observed the page", detail: "Storage · 4 meters" },
             { kind: "browser", title: "Captured", detail: "1440 × 900", images: [shot("settings")], expanded: true },

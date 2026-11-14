@@ -7,17 +7,34 @@
 
 namespace ketplus::daemon::agent_messaging {
 
+QString bareNumber(const QString& reference) {
+    const QString text = reference.trimmed();
+    if (text.startsWith(QLatin1Char('#')))
+        return text.mid(1);
+    if (text.startsWith(QStringLiteral("@agent/"), Qt::CaseInsensitive))
+        return text.mid(7);
+    return text;
+}
+
 QString toolInstructions(const QString& ownNumber) {
     return QStringLiteral(
                "[KetPlus agent messaging]\n"
-               "This conversation is #%1 on this computer. Other KetPlus conversations (Claude, "
-               "Codex or Cursor) have their own numbers. The ketplus_agents MCP server (tool "
+               "This conversation is #%1 on this computer, which KetPlus also shows as "
+               "@agent/%1. Other KetPlus conversations (Claude, Codex or Cursor) have their own "
+               "numbers, written #NNNN or @agent/NNNN. The ketplus_agents MCP server (tool "
                "names may have the mcp__ketplus_agents__ prefix) lets you contact them: "
                "agents_list finds conversations by number, title, provider or repository; "
                "agents_send sends a message to a number; agents_inbox lists messages addressed "
                "to you; agents_whoami returns your own number. Contact another conversation only "
                "when the user asks you to or the task clearly needs that conversation's work or "
-               "knowledge. Check the receipt's title before relying on a number. A message to an "
+               "knowledge. Check the receipt's title before relying on a number. Its delivery "
+               "says what happens: starting (a turn starts for it), queued (it arrives when the "
+               "receiver's turn ends), steering (urgent, added to the running turn) or "
+               "urgent_waiting (urgent, but the receiver cannot be steered now: waiting_on says "
+               "what it waits on, and the message arrives at the first point it can; do not "
+               "send it again) or recorded (a review's answer, recorded as its verdict). When "
+               "steering also has waiting_on, the running turn is in a tool call and reads the "
+               "message when that call ends. A message to an "
                "idle conversation starts its turn automatically and spends its provider quota, "
                "so send one complete, self-contained message instead of many small ones, and do "
                "not message back and forth without progress. Set expect_reply when you need an "
@@ -32,7 +49,7 @@ QString toolInstructions(const QString& ownNumber) {
         .arg(ownNumber);
 }
 
-// ADR 0112. The daemon refuses what a role may not do; this text only explains it.
+// ADR 0114. The daemon refuses what a role may not do; this text only explains it.
 QString teamInstructions(const TeamRoleContext& context) {
     QStringList lines{
         QStringLiteral("[KetPlus team]"),
@@ -40,31 +57,51 @@ QString teamInstructions(const TeamRoleContext& context) {
             .arg(context.role, context.team,
                  context.goal.isEmpty() ? QStringLiteral("(not set yet)") : context.goal)};
     if (context.role == QStringLiteral("leader")) {
-        lines << QStringLiteral(
-                     "Break the goal into tasks with team_task_create, each with acceptance "
-                     "criteria%1, a lane and its dependencies, and assign them by lane with "
-                     "team_task_assign. Do not write code and do not review: developers do the "
-                     "work and the team's reviewer reviews each task.")
-                     .arg(context.leaderWritesRequirements
-                              ? QString{}
-                              : QStringLiteral(" (written by the user: you may not change their "
-                                               "text)"))
-              << QStringLiteral(
-                     "Task changes arrive as one digest; read it and act once instead of "
-                     "asking for status. Change a lane with team_lane_set and give the reason; "
-                     "raise a decision with team_decision_raise only for what changes the "
-                     "product. You are the only member that speaks to the user.")
-              << (context.mergePolicy == QStringLiteral("user")
-                      ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
-                                       "unless the user allowed that one task.")
-                            .arg(context.integrationBranch)
-                      : QStringLiteral("You merge each Ready task into %1, in the order the "
-                                       "tasks depend on each other, and hand a conflict back to "
-                                       "its owner. Merge into no other branch.")
-                            .arg(context.integrationBranch))
-              << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
-                                "request or answer for the user.")
-                     .arg(context.integrationBranch);
+        lines
+            << QStringLiteral(
+                   "Break the goal into tasks with team_task_create, each with acceptance "
+                   "criteria%1, a lane and its dependencies, and assign them by lane with "
+                   "team_task_assign. Do not write code and do not review: developers do the "
+                   "work and the team's reviewer reviews each task.")
+                   .arg(context.leaderWritesRequirements
+                            ? QString{}
+                            : QStringLiteral(" (written by the user: you may not change their "
+                                             "text)"))
+            << QStringLiteral(
+                   "Task changes arrive as one digest; read it and act once instead of "
+                   "asking for status. Change a lane with team_lane_set and give the reason; "
+                   "name paths any lane may change (contracts, snapshots, fixtures, tests) "
+                   "with team_paths_allow, for the team or one task; move the team to "
+                   "another repository with team_repository_set and give the reason (started "
+                   "tasks keep theirs), or name a task's own repository on team_task_create; "
+                   "a task's branch is <type>/<slug>-t<n>, from its title unless you give "
+                   "branch_type and branch_slug on team_task_create (give a short English "
+                   "branch_slug when the title is not in English), and you can rename it "
+                   "with team_task_update until its worktree exists; "
+                   "raise a decision with team_decision_raise only for what changes the "
+                   "product. You are the only member that speaks to the user. A task whose "
+                   "pull request is merged is done by itself; close work merged without one "
+                   "with team_task_close, giving the commit or pull request as evidence. A review "
+                   "verdict that should not have counted is voided with team_review_void; a "
+                   "review made on the pull request is accepted with team_review_accept.")
+            << QStringLiteral(
+                   "The team only moves when a turn ends in an action. Before you end a "
+                   "turn, every task that is not done must have an owner working on it, be "
+                   "blocked with what it waits for, or wait on a decision you raised. To "
+                   "wait for something outside the team (a build, a deployment, another "
+                   "conversation), call team_wait with what you wait for: you are woken to "
+                   "check again. Do not end a turn to wait without it.")
+            << (context.mergePolicy == QStringLiteral("user")
+                    ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
+                                     "unless the user allowed that one task.")
+                          .arg(context.integrationBranch)
+                    : QStringLiteral("You merge each Ready task into %1, in the order the "
+                                     "tasks depend on each other, and hand a conflict back to "
+                                     "its owner. Merge into no other branch.")
+                          .arg(context.integrationBranch))
+            << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
+                              "request or answer for the user.")
+                   .arg(context.integrationBranch);
     } else if (context.role == QStringLiteral("developer")) {
         lines << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
                      .arg(context.lane,
@@ -78,8 +115,17 @@ QString teamInstructions(const TeamRoleContext& context) {
                      "lane, or say on the task why you could not. Report through the task with "
                      "team_task_update (state, note, met marks, pull request), not through "
                      "messages. If you need an answer, block the task with your question; the "
-                     "leader answers it. Hand the task to review (state in_review) once its "
-                     "criteria are met and your work is committed. Do not merge.");
+                     "leader answers it. Do not end a turn with your task in progress and "
+                     "nothing said: finish it, block it with what you wait for, or, for "
+                     "something outside the team such as a build, call team_wait so you are "
+                     "woken to check again. Hand the "
+                     "task to review (state in_review) once its "
+                     "criteria are met and your work is committed on the task's branch. If "
+                     "you worked in another worktree or repository, hand it to review with "
+                     "its pull_request and head_commit, and name that worktree in the note. "
+                     "Work that belongs in another repository is a task of its own there: ask "
+                     "the leader for one (team_task_create with repository) instead of a "
+                     "worktree you make yourself. Do not merge.");
     } else {
         lines << QStringLiteral(
             "When a task enters review you receive its criteria and its diff. Review it "
@@ -87,9 +133,29 @@ QString teamInstructions(const TeamRoleContext& context) {
             "finding give the file, line, severity and a one-line summary. End with exactly "
             "one line: \"Verdict: findings\" or \"Verdict: no findings\".");
     }
+    // T-56: what people read on the team page is in the team's language; code is not.
+    if (context.language == QStringLiteral("vi")) {
+        lines << (context.role == QStringLiteral("leader")
+                      ? QStringLiteral(
+                            "The team works in Vietnamese: the user reads its page in "
+                            "Vietnamese. Write task titles, acceptance criteria, notes, lanes, "
+                            "decisions (question, context and choices) and what you tell the "
+                            "user in Vietnamese. Code, commit messages and public pull request "
+                            "bodies stay English.")
+                      : QStringLiteral(
+                            "The team works in Vietnamese: write your task notes and "
+                            "questions in Vietnamese. Code, commit messages, public pull "
+                            "request bodies and the exact verdict line stay English."));
+    }
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
-                            "the team.")
+                            "the team. team_tasks lists one short row per task (open=true for "
+                            "the tasks not done, mine=true for yours); team_tasks task_id=<id> "
+                            "reads one task with its last 10 history entries, history_start "
+                            "and history_limit page back, and entry=<index> reads a cut entry "
+                            "whole. A team with two reviewers lists both in team_get; "
+                            "\"reviewer\" then reaches the one that reviews your task, and "
+                            "otherwise you send to its number.")
           << QStringLiteral("[/KetPlus team]");
     return lines.join(QLatin1Char('\n'));
 }
@@ -132,6 +198,10 @@ QString deliveryText(const QList<AgentMessageRecord>& messages) {
     return blocks.join(QStringLiteral("\n\n"));
 }
 
+bool isDeliveryText(const QString& text) {
+    return text.trimmed().startsWith(QStringLiteral("[KetPlus agent message]"));
+}
+
 QString automaticTurnGuidance(const QJsonArray& messages) {
     const bool replyExpected = std::any_of(messages.begin(), messages.end(), [](const auto& value) {
         return value.toObject().value(QStringLiteral("expect_reply")).toBool();
@@ -169,7 +239,8 @@ QString referenceText(const QList<AgentConversation>& conversations) {
                      conversation.idle ? QStringLiteral("idle") : QStringLiteral("working"),
                      conversation.worktree));
     return QStringLiteral("[KetPlus conversation references]\n"
-                          "The user's text names these KetPlus conversations by number. Contact "
+                          "The user's text names these KetPlus conversations by number, as #NNNN "
+                          "or @agent/NNNN. Contact "
                           "them with the ketplus_agents tools only when the user asks you to; "
                           "a number like this can also be an issue or pull request.\n") +
            lines.join(QLatin1Char('\n')) + QStringLiteral("\n[/KetPlus conversation references]");

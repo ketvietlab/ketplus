@@ -1,10 +1,23 @@
-// ADR 0112 §6: tasks with one owner, states, criteria and an append-only history.
+// ADR 0114 §6: tasks with one owner, states, criteria and an append-only history.
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
+#include "teams/TeamBranchNames.h"
+
+#include <QDir>
+
+#include <utility>
 
 namespace ketplus::daemon::teams {
 namespace {
+
+// T-93 (ADR 0123 §9, review L1): the repository's branches were not listed yet.
+QString uncheckedBranchText(const QString& language) {
+    return say(language,
+               QT_TRANSLATE_NOOP(
+                   "Team", " The repository's branches were not listed yet; the name is checked "
+                           "against them when the worktree is made."));
+}
 
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
@@ -88,13 +101,34 @@ TeamResult TeamCoordinator::createTask(const qint64 teamId, const TaskDraft& dra
     task.dependsOn = draft.dependsOn;
     for (const QString& criterion : draft.criteria)
         task.criteria.append({.text = criterion.trimmed()});
+    if (auto invalid = taskRepository(*team, draft, task)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    // T-93: after the repository, whose branches the name must not take.
+    bool unchecked = false;
+    if (auto invalid = nameTaskBranch(*team, task, draft.branchType.trimmed(),
+                                      draft.branchSlug.trimmed(), &unchecked)) {
+        --team->nextTask;
+        return {.error = invalid};
+    }
+    const QString branch = branch_names::plannedBranch(team->id, task);
     addHistory(task, actor, QStringLiteral("created"),
-               QStringLiteral("Created by %1.").arg(actorName(*team, actor)));
+               (task.repository.isEmpty()
+                    ? say(team->language, QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2."))
+                          .arg(actorName(*team, actor), branch)
+                    : say(team->language,
+                          QT_TRANSLATE_NOOP("Team", "Created by %1, branch %2 in %3 against %4."))
+                          .arg(actorName(*team, actor), branch, task.repository,
+                               task.integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                                : task.integrationBranch)) +
+                   (unchecked ? uncheckedBranchText(team->language) : QString()));
     team->tasks.append(task);
     if (auto failed =
             commit(*team, before, actor,
                    {{.kind = QStringLiteral("task_created"),
-                     .text = QStringLiteral("%1 \"%2\" created.").arg(task.id, task.title),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 \"%2\" created."))
+                                 .arg(task.id, task.title),
                      .taskId = task.id}}))
         return {.error = failed};
     if (taskId)
@@ -140,7 +174,8 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
         const QString lane = changes.value(QStringLiteral("lane")).toString().trimmed();
         if (lane != task->lane)
             addHistory(*task, actor, QStringLiteral("lane"),
-                       QStringLiteral("Lane %1 → %2.").arg(task->lane, lane));
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "Lane %1 → %2."))
+                           .arg(task->lane, lane));
         task->lane = lane;
     }
     if (changes.contains(QStringLiteral("depends_on"))) {
@@ -151,8 +186,50 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 return restore(taskNotFound(dependency));
             dependencies.append(dependency);
         }
+        // A task waits for its dependencies to be done; in a circle none of them starts.
+        QStringList open = dependencies;
+        QSet<QString> seen;
+        while (!open.isEmpty()) {
+            const QString next = open.takeLast();
+            if (next == taskId)
+                return restore(refusal(
+                    QStringLiteral("dependency_cycle"),
+                    QStringLiteral("%1 cannot wait for a task that waits for %1.").arg(taskId)));
+            if (seen.contains(next))
+                continue;
+            seen.insert(next);
+            if (const Task* other = team->task(next))
+                open.append(other->dependsOn);
+        }
         task = team->task(taskId);
         task->dependsOn = dependencies;
+    }
+    // T-93: the leader renames the branch while it does not exist yet.
+    if (changes.contains(QStringLiteral("branch_type")) ||
+        changes.contains(QStringLiteral("branch_slug"))) {
+        if (!leaderOrUser(role))
+            return restore(
+                forbidden(QStringLiteral("rename a task's branch"), QStringLiteral("the leader")));
+        if (!task->branch.isEmpty())
+            return restore(refusal(QStringLiteral("branch_started"),
+                                   QStringLiteral("%1 already works on %2; a started branch "
+                                                  "keeps its name.")
+                                       .arg(task->id, task->branch)));
+        const QString was = branch_names::plannedBranch(team->id, *task);
+        const QString type = changes.contains(QStringLiteral("branch_type"))
+                                 ? changes.value(QStringLiteral("branch_type")).toString().trimmed()
+                                 : task->branchType;
+        const QString slug = changes.contains(QStringLiteral("branch_slug"))
+                                 ? changes.value(QStringLiteral("branch_slug")).toString().trimmed()
+                                 : task->branchSlug;
+        bool unchecked = false;
+        if (auto invalid = nameTaskBranch(*team, *task, type, slug, &unchecked))
+            return restore(*invalid);
+        if (const QString now = branch_names::plannedBranch(team->id, *task); now != was)
+            addHistory(*task, actor, QStringLiteral("branch"),
+                       QStringLiteral("Branch %1 → %2.").arg(was, now) +
+                           (unchecked ? uncheckedBranchText(team->language) : QString()),
+                       {{QStringLiteral("from"), was}, {QStringLiteral("to"), now}});
     }
     if (changes.contains(QStringLiteral("pull_request")) ||
         changes.contains(QStringLiteral("note"))) {
@@ -165,7 +242,7 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 changes.value(QStringLiteral("pull_request")).toString().trimmed().left(500);
         const QString note = changes.value(QStringLiteral("note")).toString().trimmed();
         if (!note.isEmpty()) {
-            addHistory(*task, actor, QStringLiteral("note"), note.left(4000));
+            addHistory(*task, actor, QStringLiteral("note"), note.left(maximumWholeHistoryText));
             updates.append({.kind = QStringLiteral("note"),
                             .text = QStringLiteral("%1: %2").arg(task->id, note.left(500)),
                             .taskId = task->id});
@@ -187,17 +264,19 @@ TeamResult TeamCoordinator::updateTask(const qint64 teamId, const QString& taskI
                 continue;
             task->criteria[index].met = met;
             addHistory(*task, actor, QStringLiteral("met"),
-                       QStringLiteral("%1 criterion %2: %3")
-                           .arg(met ? QStringLiteral("Met") : QStringLiteral("Not met"))
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criterion %2: %3"))
+                           .arg(met ? say(team->language, QT_TRANSLATE_NOOP("Team", "Met"))
+                                    : say(team->language, QT_TRANSLATE_NOOP("Team", "Not met")))
                            .arg(index + 1)
                            .arg(task->criteria[index].text.left(200)),
                        {{QStringLiteral("index"), index}, {QStringLiteral("met"), met}});
             updates.append(
                 {.kind = QStringLiteral("met"),
-                 .text = QStringLiteral("%1 criterion %2 %3.")
+                 .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criterion %2 %3."))
                              .arg(task->id)
                              .arg(index + 1)
-                             .arg(met ? QStringLiteral("met") : QStringLiteral("not met")),
+                             .arg(met ? say(team->language, QT_TRANSLATE_NOOP("Team", "met"))
+                                      : say(team->language, QT_TRANSLATE_NOOP("Team", "not met"))),
                  .taskId = task->id});
         }
     }
@@ -247,157 +326,77 @@ TeamResult TeamCoordinator::setCriteria(const qint64 teamId, const QString& task
     for (const Criterion& criterion : criteria)
         now.append(criterion.text);
     addHistory(*task, actor, QStringLiteral("criteria"),
-               QStringLiteral("Criteria changed by %1.").arg(actorName(*team, actor)),
+               say(team->language, QT_TRANSLATE_NOOP("Team", "Criteria changed by %1."))
+                   .arg(actorName(*team, actor)),
                {{QStringLiteral("from"), QJsonArray::fromStringList(old)},
                 {QStringLiteral("to"), QJsonArray::fromStringList(now)}});
-    if (auto failed = commit(*team, before, actor,
-                             {{.kind = QStringLiteral("criteria"),
-                               .text = QStringLiteral("%1 criteria changed.").arg(task->id),
-                               .taskId = task->id}}))
-        return {.error = failed};
-    return {.teamId = teamId};
-}
-
-TeamResult TeamCoordinator::assignTask(const qint64 teamId, const QString& taskId,
-                                       const QString& owner, const QString& actor) {
-    Team* team = mutableTeam(teamId);
-    if (!team)
-        return {.error = notFound()};
-    // Before any pointer into the team: the copy shares its lists until they detach.
-    const Team before = *team;
-    Task* task = team->task(taskId);
-    if (!task)
-        return {.error = taskNotFound(taskId)};
-    if (!leaderOrUser(actorRole(*team, actor)))
-        return {.error = forbidden(QStringLiteral("assign tasks"), QStringLiteral("the leader"))};
-    const Member* member = team->member(owner);
-    if (!member || member->role != role::developer)
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A task is owned by a developer of the team."))};
-    if (!task->owner.isEmpty())
-        return {.error =
-                    refusal(QStringLiteral("invalid_transition"),
-                            QStringLiteral("%1 has an owner; hand it over instead.").arg(taskId))};
-    if (task->state != state::todo)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("Only a task in To do is assigned."))};
-    if (task->branch.isEmpty()) {
-        QString error;
-        const auto worktree = host_->createTaskWorktree(*team, *task, &error);
-        if (!worktree)
-            return {.error = refusal(QStringLiteral("worktree_unavailable"), error)};
-        team = mutableTeam(teamId);
-        task = team->task(taskId);
-        task->branch = worktree->branch;
-        task->worktree = worktree->worktree;
-        task->baseCommit = worktree->baseCommit;
-    }
-    task->owner = owner;
-    addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Assigned to %1 by %2.").arg(member->name, actorName(*team, actor)),
-               {{QStringLiteral("from"), QString{}}, {QStringLiteral("to"), owner}});
-    const QString name = member->name;
-    if (auto failed = commit(*team, before, actor,
-                             {{.kind = QStringLiteral("task_assigned"),
-                               .text = QStringLiteral("%1 assigned to %2.").arg(taskId, name),
-                               .taskId = taskId,
-                               .data = {{QStringLiteral("owner"), owner}}}}))
-        return {.error = failed};
-    deliverAssignment(*team, *team->task(taskId), actor, false);
-    return {.teamId = teamId};
-}
-
-TeamResult TeamCoordinator::handoverTask(const qint64 teamId, const QString& taskId,
-                                         const QString& owner, const QString& reason,
-                                         const QString& actor) {
-    Team* team = mutableTeam(teamId);
-    if (!team)
-        return {.error = notFound()};
-    // Before any pointer into the team: the copy shares its lists until they detach.
-    const Team before = *team;
-    Task* task = team->task(taskId);
-    if (!task)
-        return {.error = taskNotFound(taskId)};
-    if (!leaderOrUser(actorRole(*team, actor)))
-        return {.error =
-                    forbidden(QStringLiteral("hand tasks over"), QStringLiteral("the leader"))};
-    if (reason.trimmed().isEmpty())
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A handover needs a reason."))};
-    const Member* member = team->member(owner);
-    if (!member || member->role != role::developer)
-        return {.error = refusal(QStringLiteral("invalid_payload"),
-                                 QStringLiteral("A task is owned by a developer of the team."))};
-    if (task->owner == owner)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("%1 already owns %2.").arg(member->name, taskId))};
-    if (task->state == state::done)
-        return {.error = refusal(QStringLiteral("invalid_transition"),
-                                 QStringLiteral("%1 is done.").arg(taskId))};
-    if (task->state == state::inProgress)
-        for (const Task& other : team->tasks)
-            if (other.owner == owner && other.state == state::inProgress)
-                return {.error = refusal(
-                            QStringLiteral("invalid_transition"),
-                            QStringLiteral("%1 is working on %2.").arg(member->name, other.id))};
-    const QString previous = task->owner;
-    if (task->branch.isEmpty()) {
-        QString error;
-        const auto worktree = host_->createTaskWorktree(*team, *task, &error);
-        if (!worktree)
-            return {.error = refusal(QStringLiteral("worktree_unavailable"), error)};
-        team = mutableTeam(teamId);
-        task = team->task(taskId);
-        task->branch = worktree->branch;
-        task->worktree = worktree->worktree;
-        task->baseCommit = worktree->baseCommit;
-    }
-    // One assignment: the owner changes in the same commit, so a failure leaves the old one.
-    task->owner = owner;
-    addHistory(*task, actor, QStringLiteral("owner"),
-               QStringLiteral("Handed over from %1 to %2: %3")
-                   .arg(previous.isEmpty() ? QStringLiteral("nobody") : actorName(*team, previous),
-                        member->name, reason.trimmed()),
-               {{QStringLiteral("from"), previous},
-                {QStringLiteral("to"), owner},
-                {QStringLiteral("reason"), reason.trimmed()}});
     if (auto failed =
             commit(*team, before, actor,
-                   {{.kind = QStringLiteral("task_handover"),
-                     .text = QStringLiteral("%1 handed over to %2: %3")
-                                 .arg(taskId, member->name, reason.trimmed()),
-                     .taskId = taskId,
-                     .data = {{QStringLiteral("from"), previous}, {QStringLiteral("to"), owner}}}}))
+                   {{.kind = QStringLiteral("criteria"),
+                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 criteria changed."))
+                                 .arg(task->id),
+                     .taskId = task->id}}))
         return {.error = failed};
-    if (!previous.isEmpty())
-        host_->noteInConversation(previous,
-                                  {{QStringLiteral("kind"), QStringLiteral("team")},
-                                   {QStringLiteral("state"), QStringLiteral("task_handed_over")},
-                                   {QStringLiteral("task_id"), taskId},
-                                   {QStringLiteral("body"),
-                                    QStringLiteral("%1 is no longer yours: it was handed to %2. %3")
-                                        .arg(taskId, member->name, reason.trimmed())}});
-    deliverAssignment(*team, *team->task(taskId), actor, true, reason.trimmed());
     return {.teamId = teamId};
+}
+
+// T-53: a lowered Max review passes applies from the next review request. A task that
+// already had as many passes as the team now allows goes to the leader instead of to review,
+// once: the limit it carries becomes the team's, so a leader who hands it to review again
+// gets the pass it asked for. Checked as the task enters review and again as a reviewer
+// takes it, since the limit can be lowered while it waits in the queue.
+bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates) {
+    if (task.round <= 0 || task.roundLimit <= team.maxRounds || task.round < team.maxRounds)
+        return false;
+    task.roundLimit = team.maxRounds;
+    task.resumeState = state::inProgress;
+    task.reviewBlock = QStringLiteral("round_limit");
+    task.question =
+        roundLimitQuestion(team.language, task.round, team.maxRounds) +
+        say(team.language, QT_TRANSLATE_NOOP("Team", " The team's Max review passes is now %1."))
+            .arg(team.maxRounds);
+    applyMove(team, task, state::blocked, QStringLiteral("daemon"), task.question, updates);
+    updates.append(
+        {.kind = QStringLiteral("round_limit"),
+         .text = say(team.language,
+                     QT_TRANSLATE_NOOP("Team", "%1 had %2 review passes; the team now allows %3."))
+                     .arg(task.id)
+                     .arg(task.round)
+                     .arg(team.maxRounds),
+         .taskId = task.id,
+         .actionable = true});
+    return true;
 }
 
 void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
     task.state = to;
+    if (to != state::blocked)
+        task.reviewBlock.clear();
     addHistory(task, actor, QStringLiteral("state"),
                QStringLiteral("%1 → %2%3")
-                   .arg(from, to, reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
+                   .arg(stateName(team.language, from), stateName(team.language, to),
+                        reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
                {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}});
     const bool actionable = to == state::ready || to == state::blocked || to == state::done;
-    updates.append({.kind = QStringLiteral("state"),
-                    .text = QStringLiteral("%1 %2 → %3%4")
-                                .arg(task.id, from, to,
-                                     reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
-                    .taskId = task.id,
-                    .actionable = actionable,
-                    .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
-    // A developer whose work all left its hands needs the leader (ADR 0112 §7).
+    updates.append(
+        {.kind = QStringLiteral("state"),
+         .text = QStringLiteral("%1 %2 → %3%4")
+                     .arg(task.id, stateName(team.language, from), stateName(team.language, to),
+                          reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
+         .taskId = task.id,
+         .actionable = actionable,
+         .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
+    // T-19: a task handed to review again starts its replies without a verdict from zero.
+    if (to == state::inReview)
+        task.missingVerdicts = 0;
+    if (to == state::inReview && blockAtLoweredLimit(team, task, updates))
+        return;
+    // ADR 0114 §2: a reviewer takes its tasks first in, first out; commit() sends the next.
+    if (to == state::inReview)
+        queueReview(team, task);
+    // A developer whose work all left its hands needs the leader (ADR 0114 §7).
     if (!task.owner.isEmpty() && (to == state::inReview || to == state::done)) {
         bool busy = false;
         for (const Task& other : team.tasks)
@@ -407,7 +406,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
         if (!busy)
             updates.append(
                 {.kind = QStringLiteral("idle_developer"),
-                 .text = QStringLiteral("%1 has no task left.").arg(actorName(team, task.owner)),
+                 .text = say(team.language, QT_TRANSLATE_NOOP("Team", "%1 has no task left."))
+                             .arg(actorName(team, task.owner)),
                  .taskId = task.id,
                  .actionable = true,
                  .data = {{QStringLiteral("session_id"), task.owner}}});
@@ -415,7 +415,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
 }
 
 TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId, const QString& to,
-                                     const QString& actor, const QString& note) {
+                                     const QString& actor, const QString& note,
+                                     const QString& reportedHead) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
@@ -464,7 +465,8 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                         QStringLiteral("Only the owner of %1 hands it to review.").arg(taskId))};
         if (from != state::inProgress)
             return invalid(QStringLiteral("only a task In progress goes to review."));
-        const auto dirty = host_->hasUncommittedWork(task->worktree);
+        const HandoffFacts read = handoffFor(*team, *task);
+        const std::optional<bool>& dirty = read.dirty;
         if (!dirty)
             return {.error = refusal(
                         QStringLiteral("uncommitted_work"),
@@ -474,7 +476,13 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                      QStringLiteral("Commit your work in %1 before handing %2 to "
                                                     "review; uncommitted changes are not reviewed.")
                                          .arg(task->worktree, taskId))};
-        task->headCommit = host_->headCommit(task->worktree);
+        if (!read.headRead)
+            return {.error = refusal(
+                        QStringLiteral("git_unavailable"),
+                        QStringLiteral("Could not read the branch %1 of %2 from git; try again.")
+                            .arg(task->branch, taskId))};
+        if (auto refused = attributeHead(*team, *task, read.head, reportedHead))
+            return {.error = refused};
     } else if (to == state::blocked) {
         if (!owner && !daemon && !leaderOrUser(role))
             return {.error =
@@ -489,6 +497,7 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                                                     "the leader."))};
         task->resumeState = from == state::inReview ? state::inProgress : from;
         // The actionable state update carries the question to the leader's digest.
+        task->reviewBlock.clear();
         task->question = reason.left(4000);
     } else if (to == state::todo) {
         if (!leaderOrUser(role) && !daemon)
@@ -498,7 +507,8 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
             return invalid(QStringLiteral("a done task stays done."));
         if (!task->owner.isEmpty()) {
             addHistory(*task, actor, QStringLiteral("owner"),
-                       QStringLiteral("Unassigned by %1.").arg(actorName(*team, actor)),
+                       say(team->language, QT_TRANSLATE_NOOP("Team", "Unassigned by %1."))
+                           .arg(actorName(*team, actor)),
                        {{QStringLiteral("from"), task->owner}, {QStringLiteral("to"), QString{}}});
             task->owner.clear();
         }
@@ -563,25 +573,36 @@ void TeamCoordinator::deliverAssignment(const Team& storedTeam, const Task& stor
     // into, and the old ones are freed with `before`.
     const Team team = storedTeam;
     const Task task = storedTask;
+    const Member* sender = team.member(from);
+    TeamMessage message{.teamId = team.id,
+                        .teamName = team.name,
+                        .toSession = task.owner,
+                        .fromSession = sender ? from : QString{},
+                        .kind = QStringLiteral("assignment"),
+                        .taskId = task.id,
+                        .body =
+                            assignmentText(team, task, actorName(team, from), handover, reason)};
+    // T-28: with the outbox, the owner is pointed at the worktree when the message is sent,
+    // after the command is answered: that move asks git.
+    if (deferSending_) {
+        message.pointAt = task.worktree;
+        wake(team, message);
+        return;
+    }
     if (const QString error = host_->pointConversationAt(task.owner, task.worktree);
         !error.isEmpty()) {
         Team* stored = mutableTeam(team.id);
         if (stored && stored->task(task.id)) {
             const Team before = *stored;
-            addHistory(*stored->task(task.id), QStringLiteral("daemon"), QStringLiteral("worktree"),
-                       QStringLiteral("The owner's conversation was not moved to %1: %2")
-                           .arg(task.worktree, error));
+            addHistory(
+                *stored->task(task.id), QStringLiteral("daemon"), QStringLiteral("worktree"),
+                say(stored->language,
+                    QT_TRANSLATE_NOOP("Team", "The owner's conversation was not moved to %1: %2"))
+                    .arg(task.worktree, error));
             (void)commit(*stored, before, QStringLiteral("daemon"), {});
         }
     }
-    const Member* sender = team.member(from);
-    wake(team, {.teamId = team.id,
-                .teamName = team.name,
-                .toSession = task.owner,
-                .fromSession = sender ? from : QString{},
-                .kind = QStringLiteral("assignment"),
-                .taskId = task.id,
-                .body = assignmentText(team, task, actorName(team, from), handover, reason)});
+    wake(team, message);
 }
 
 } // namespace ketplus::daemon::teams

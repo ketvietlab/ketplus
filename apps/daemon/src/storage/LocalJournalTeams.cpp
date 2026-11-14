@@ -1,4 +1,4 @@
-// ADR 0112, open point 4: one JSON document per team, a session → team index that makes
+// ADR 0114, open point 4: one JSON document per team, a session → team index that makes
 // "one team per conversation" a constraint, and the append-only log of updates.
 #include "storage/LocalJournal.h"
 
@@ -31,8 +31,12 @@ bool LocalJournal::initializeTeams() {
                        "NULL, kind TEXT NOT NULL, task_id TEXT NOT NULL DEFAULT '', text TEXT NOT "
                        "NULL, data TEXT NOT NULL DEFAULT '{}', actionable INTEGER NOT NULL DEFAULT "
                        "0, digested INTEGER NOT NULL DEFAULT 0)"),
-        QStringLiteral(
-            "CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)")};
+        QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS team_history_texts (team_id INTEGER NOT "
+                       "NULL, task_id TEXT NOT NULL, entry INTEGER NOT NULL, text TEXT NOT NULL, "
+                       "PRIMARY KEY (team_id, task_id, entry))"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS team_settings (singleton INTEGER PRIMARY KEY "
+                       "CHECK(singleton=1), document TEXT NOT NULL)")};
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
             setError(query.lastError().text());
@@ -40,6 +44,28 @@ bool LocalJournal::initializeTeams() {
         }
     }
     return true;
+}
+
+QJsonObject LocalJournal::teamSettings(bool* read) const {
+    QSqlQuery query(database_);
+    const bool ok =
+        query.exec(QStringLiteral("SELECT document FROM team_settings WHERE singleton = 1"));
+    if (read)
+        *read = ok;
+    return ok && query.next() ? parsed(query.value(0).toString()) : QJsonObject{};
+}
+
+bool LocalJournal::saveTeamSettings(const QJsonObject& settings, QString* error) {
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("INSERT INTO team_settings (singleton, document) VALUES (1, ?) "
+                       "ON CONFLICT(singleton) DO UPDATE SET document = excluded.document"));
+    query.addBindValue(compact(settings));
+    if (query.exec())
+        return true;
+    if (error)
+        *error = query.lastError().text();
+    return false;
 }
 
 bool LocalJournal::writeTeamMembers(const qint64 teamId, const QStringList& sessions,
@@ -121,9 +147,11 @@ bool LocalJournal::saveTeam(const qint64 teamId, const qint64 expectedRevision,
         return false;
     }
     QSqlQuery update(database_);
-    update.prepare(QStringLiteral("UPDATE teams SET document = ?, revision = ?, changed_at = ? "
-                                  "WHERE id = ? AND revision = ?"));
+    // T-90: the repository column follows the document, since a team can change repository.
+    update.prepare(QStringLiteral("UPDATE teams SET document = ?, repository = ?, revision = ?, "
+                                  "changed_at = ? WHERE id = ? AND revision = ?"));
     update.addBindValue(compact(document));
+    update.addBindValue(document.value(QStringLiteral("repository")).toString());
     update.addBindValue(document.value(QStringLiteral("revision")).toInteger());
     update.addBindValue(document.value(QStringLiteral("changed_at")).toString());
     update.addBindValue(teamId);
@@ -151,9 +179,11 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
             *error = database_.lastError().text();
         return false;
     }
-    for (const QString& statement : {QStringLiteral("DELETE FROM team_updates WHERE team_id = ?"),
-                                     QStringLiteral("DELETE FROM team_members WHERE team_id = ?"),
-                                     QStringLiteral("DELETE FROM teams WHERE id = ?")}) {
+    for (const QString& statement :
+         {QStringLiteral("DELETE FROM team_updates WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM team_history_texts WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM team_members WHERE team_id = ?"),
+          QStringLiteral("DELETE FROM teams WHERE id = ?")}) {
         QSqlQuery query(database_);
         query.prepare(statement);
         query.addBindValue(teamId);
@@ -164,6 +194,11 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
             return false;
         }
     }
+    // Team and team_start schedules belong to the team; their runs go with them.
+    if (!removeSchedulesForTeam(QString::number(teamId), error)) {
+        database_.rollback();
+        return false;
+    }
     if (database_.commit())
         return true;
     if (error)
@@ -172,13 +207,67 @@ bool LocalJournal::deleteTeam(const qint64 teamId, QString* error) {
     return false;
 }
 
-QList<QJsonObject> LocalJournal::teamDocuments() const {
+bool LocalJournal::saveTeamHistoryText(const qint64 teamId, const QString& taskId,
+                                       const qsizetype entry, const QString& text, QString* error) {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("INSERT OR REPLACE INTO team_history_texts (team_id, task_id, "
+                                 "entry, text) VALUES (?, ?, ?, ?)"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(static_cast<qint64>(entry));
+    query.addBindValue(text);
+    if (query.exec())
+        return true;
+    if (error)
+        *error = query.lastError().text();
+    return false;
+}
+
+std::optional<QString> LocalJournal::teamHistoryText(const qint64 teamId, const QString& taskId,
+                                                     const qsizetype entry) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT text FROM team_history_texts WHERE team_id = ? AND "
+                                 "task_id = ? AND entry = ?"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(static_cast<qint64>(entry));
+    if (!query.exec() || !query.next())
+        return std::nullopt;
+    return query.value(0).toString();
+}
+
+QSet<qsizetype> LocalJournal::teamHistoryTextEntries(const qint64 teamId,
+                                                     const QString& taskId) const {
+    QSet<qsizetype> entries;
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("SELECT entry FROM team_history_texts WHERE team_id = ? AND task_id = ?"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    if (!query.exec())
+        return entries;
+    while (query.next())
+        entries.insert(query.value(0).toLongLong());
+    return entries;
+}
+
+QList<QJsonObject> LocalJournal::teamDocuments(bool* read) const {
     QList<QJsonObject> documents;
     QSqlQuery query(database_);
-    if (!query.exec(QStringLiteral("SELECT document FROM teams ORDER BY id")))
+    const bool ran = query.exec(QStringLiteral("SELECT document FROM teams ORDER BY id"));
+    if (read)
+        *read = ran;
+    if (!ran)
         return documents;
     while (query.next())
         documents.append(parsed(query.value(0).toString()));
+    // A read that stopped part way is not the whole list: report it and return nothing,
+    // so the caller keeps what it had instead of a list with teams missing.
+    if (query.lastError().isValid()) {
+        if (read)
+            *read = false;
+        return {};
+    }
     return documents;
 }
 
@@ -213,15 +302,18 @@ std::optional<qint64> LocalJournal::appendTeamUpdate(const TeamUpdateRecord& upd
 }
 
 QList<TeamUpdateRecord> LocalJournal::teamUpdates(const qint64 teamId, const bool undigestedOnly,
-                                                  const int limit) const {
+                                                  const int limit, const qint64 beforeId) const {
     QList<TeamUpdateRecord> updates;
     QSqlQuery query(database_);
     query.prepare(
         QStringLiteral("SELECT id, at, actor, kind, task_id, text, data, actionable, digested "
-                       "FROM team_updates WHERE team_id = ? %1 ORDER BY id %2 LIMIT ?")
+                       "FROM team_updates WHERE team_id = ? %1 %3 ORDER BY id %2 LIMIT ?")
             .arg(undigestedOnly ? QStringLiteral("AND digested = 0") : QString{},
-                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC")));
+                 undigestedOnly ? QStringLiteral("ASC") : QStringLiteral("DESC"),
+                 beforeId > 0 ? QStringLiteral("AND id < ?") : QString{}));
     query.addBindValue(teamId);
+    if (beforeId > 0)
+        query.addBindValue(beforeId);
     query.addBindValue(limit);
     if (!query.exec())
         return updates;

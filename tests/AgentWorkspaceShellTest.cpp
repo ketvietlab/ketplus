@@ -3,6 +3,7 @@
 #include "KetDialog.h"
 #include "KetRecipes.h"
 #include "KetSelect.h"
+#include "KetToast.h"
 #include "KetTokens.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -39,6 +40,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPointer>
 #include <QProcess>
 #include <QPushButton>
@@ -58,6 +60,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
+#include <QVBoxLayout>
+#include <QtMath>
 #include <QtTest>
 
 #include <algorithm>
@@ -128,6 +132,119 @@ class AgentWorkspaceShellTest final : public QObject {
                     .filePath(QStringLiteral("conversation-worktrees.sqlite"))
                     .toUtf8());
     }
+    void windowToastsStayAboveTheRealComposer_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
+    void windowToastsStayAboveTheRealComposer() {
+        QFETCH(bool, dark);
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        QVERIFY(
+            QFileInfo(QSettings().fileName()).absoluteFilePath().startsWith(settings.path() + "/"));
+        ketplus::ThemeManager theme(*qApp);
+        const auto restoreTheme =
+            qScopeGuard([&] { theme.setMode(ketplus::ThemeManager::Mode::Light); });
+        theme.setMode(dark ? ketplus::ThemeManager::Mode::Dark
+                           : ketplus::ThemeManager::Mode::Light);
+        QVERIFY(!QSettings().contains(QStringLiteral("workspace/lastRoot")));
+        QWidget window;
+        window.resize(1000, 760);
+        auto* layout = new QVBoxLayout(&window);
+        layout->setContentsMargins(0, 0, 0, 0);
+        auto* workspace = new ketplus::AgentWorkspaceView(&window);
+        layout->addWidget(workspace);
+        window.show();
+        auto* composer = workspace->quickView()->rootObject()->findChild<QQuickItem*>(
+            QStringLiteral("agentBottomComposer"));
+        QVERIFY(composer);
+        ket::Toast toast(QStringLiteral("Files and Source Control"), &window,
+                         ket::ToastTone::Neutral);
+        toast.popup(0);
+        const auto composerTop = [&] {
+            return workspace->mapTo(&window, QPoint()).y() +
+                   qFloor(composer->mapToScene(QPointF()).y());
+        };
+        const int gap = qRound(ket::Appearance::instance().scaled(toast.recipe().bottomOffset));
+        // The native scene receives its viewport asynchronously. Do not use its
+        // pre-layout top (zero) as the baseline for the growth regression.
+        QTRY_VERIFY(composerTop() > window.height() / 2);
+        QTRY_VERIFY(composer->height() > 0);
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        const qreal initialHeight = composer->height();
+        const int initialToastY = toast.y();
+        auto* prompt =
+            workspace->quickView()->rootObject()->property("prompt").value<QQuickItem*>();
+        QVERIFY(prompt);
+        prompt->setProperty("text", QStringLiteral("One\nTwo\nThree\nFour\nFive"));
+        const QString attachment = QDir(settings.path()).filePath(QStringLiteral("fixture.txt"));
+        QFile file(attachment);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("synthetic attachment");
+        file.close();
+        workspace->addAttachments({attachment});
+        QTRY_VERIFY(composer->height() > initialHeight);
+        QTRY_VERIFY(toast.y() < initialToastY);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        const auto capture = [&](const QString& state) {
+            const QString directory = qEnvironmentVariable("KETPLUS_TOAST_CAPTURES");
+            if (!directory.isEmpty()) {
+                QVERIFY(QDir().mkpath(directory));
+                // QWidget::grab excludes embedded native QQuickView pixels. Compose
+                // the two actual rendered surfaces and the real toast at window coordinates.
+                const QImage scene = workspace->quickView()->grabWindow();
+                QVERIFY(!scene.isNull());
+                QPixmap frame = window.grab();
+                QPainter painter(&frame);
+                painter.drawImage(workspace->mapTo(&window, QPoint()), scene);
+                painter.drawPixmap(toast.pos(), toast.grab());
+                painter.end();
+                const QString name =
+                    QStringLiteral("composer-%1-%2").arg(dark ? "dark" : "light", state);
+                QVERIFY(frame.save(QDir(directory).filePath(name + ".png")));
+                QVERIFY(scene.save(QDir(directory).filePath(
+                    QStringLiteral("composer-%1-native-scene.png").arg(dark ? "dark" : "light"))));
+            }
+        };
+        const int reserved = window.height() - composerTop();
+        ket::Toast::setBottomAvoidance(&window, 0);
+        const int defaultYFromBottom = window.height() - toast.y();
+        capture(QStringLiteral("before"));
+        ket::Toast::setBottomAvoidance(&window, reserved);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        capture(QStringLiteral("after"));
+        window.resize(1100, 860);
+        QTRY_VERIFY(toast.geometry().bottom() < composerTop() - gap);
+        auto* inset = new QWidget(&window);
+        inset->setGeometry(0, 40, window.width(), window.height() - 80);
+        workspace->setParent(inset);
+        workspace->setGeometry(inset->rect());
+        inset->show();
+        workspace->show();
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        inset->move(0, 60);
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        layout->addWidget(workspace);
+        workspace->show();
+        delete inset;
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        workspace->setTranscriptOnly(QStringLiteral("Synthetic remote transcript"));
+        QTRY_VERIFY(!composer->isVisible());
+        QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
+        workspace->setTranscriptOnly(QString());
+        QTRY_VERIFY(composer->isVisible());
+        QTRY_COMPARE(toast.y(), composerTop() - gap - toast.height());
+        workspace->hide();
+        QTRY_COMPARE(toast.y(), window.height() - defaultYFromBottom);
+        ket::Toast baseline(QStringLiteral("Files and Source Control"), &window,
+                            ket::ToastTone::Neutral);
+        baseline.popup(0);
+        QTRY_COMPARE(toast.geometry(), baseline.geometry());
+    }
+
     void compactConversationWindowPreservesSessionAndDraft() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -228,6 +345,52 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(disk.readAll(), QByteArray("VERSION 3\n"));
         editor->undoEdit();
     }
+    // The content pane opens at 45% of the workspace and keeps any width it is dragged to.
+    void detailPaneOpensAtFortyFivePercentAndResizesFreely() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1440, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(agent);
+        const auto open = [&](const QString& name) {
+            QFile file(workspace.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("text\n");
+            file.close();
+            emit agent->fileOpenRequested(QUrl::fromLocalFile(file.fileName()).toString());
+        };
+        open("one.txt");
+        auto* pane = window.findChild<QWidget*>("agentDetailPane");
+        QVERIFY(pane);
+        auto* split = qobject_cast<QSplitter*>(pane->parentWidget());
+        QVERIFY(split);
+        QTRY_VERIFY(pane->isVisible());
+        const auto share = [&] { return double(pane->width()) / (pane->width() + agent->width()); };
+        QTRY_VERIFY(qAbs(share() - 0.45) < 0.02);
+
+        // Drag the handle until the pane is about a quarter of the workspace.
+        struct Handle : QSplitter {
+            using QSplitter::moveSplitter;
+        };
+        const int total = pane->width() + agent->width() + split->handleWidth();
+        static_cast<Handle*>(split)->moveSplitter(total - total / 4, split->indexOf(pane));
+        QTRY_VERIFY(share() < 0.3);
+        const int dragged = pane->width();
+
+        // Opening another file switches tabs without resetting the width.
+        open("two.txt");
+        QCOMPARE(window.findChild<QTabWidget*>("agentDetailTabs")->count(), 2);
+        QCOMPARE(pane->width(), dragged);
+    }
+
     // ADR 0106: one Report tab, for the selected conversation only.
     void workReportOpensOneTabForTheActiveConversation() {
         QTemporaryDir settings;
@@ -533,6 +696,12 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* message = form->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
         QVERIFY(message);
         QVERIFY(message->text().startsWith(QStringLiteral("@agent/4821 and its transcript")));
+        // T-60: what the daemon deletes and what stays with the provider.
+        auto* retained = form->findChild<QLabel*>(QStringLiteral("conversationDeleteRetained"));
+        QVERIFY(retained);
+        QVERIFY(retained->text().contains(QStringLiteral("Codex and Claude threads")));
+        QVERIFY(
+            retained->text().contains(QStringLiteral("such as Cursor, keep their own history")));
         QStringList actions;
         for (auto* button : card->card()->findChildren<QAbstractButton*>())
             if (!card->body()->isAncestorOf(button) && !button->text().isEmpty())
@@ -725,12 +894,15 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
-        const QString linkedTwo = directory.filePath(QStringLiteral("ketviet-feature-two"));
-        const QString linkedThree = directory.filePath(QStringLiteral("ketviet-feature-three"));
-        const QString promoted = directory.filePath(QStringLiteral("ketviet-feature-promoted"));
-        const QString stale = directory.filePath(QStringLiteral("ketviet-hospitality-stale"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
+        const QString linkedTwo = directory.filePath(QStringLiteral("sample-project-feature-two"));
+        const QString linkedThree =
+            directory.filePath(QStringLiteral("sample-project-feature-three"));
+        const QString promoted =
+            directory.filePath(QStringLiteral("sample-project-feature-promoted"));
+        const QString stale =
+            directory.filePath(QStringLiteral("sample-project-hospitality-stale"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -782,7 +954,7 @@ class AgentWorkspaceShellTest final : public QObject {
         };
 
         // Worktrees are carried by conversations, not listed as a sidebar level.
-        QTRY_COMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QTRY_COMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
         QVERIFY(
             window.findChildren<QToolButton*>(QStringLiteral("productWorktreeButton")).isEmpty());
 
@@ -792,7 +964,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QTRY_COMPARE(agentView->activePath(), QFileInfo(linked).canonicalFilePath());
         QTest::qWait(300);
         // A linked worktree keeps the main repository identity.
-        QCOMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QCOMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
         auto* sourceControl =
             window.findChild<QAbstractButton*>(QStringLiteral("sourceControlActivityButton"));
         QVERIFY(sourceControl);
@@ -821,14 +993,14 @@ class AgentWorkspaceShellTest final : public QObject {
         const QString title = window.windowTitle();
         window.switchToWorktree(stale);
         QCOMPARE(window.windowTitle(), title);
-        QCOMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
+        QCOMPARE(activeRepositoryGroup(), QStringLiteral("sample-project"));
 
         QSignalSpy created(worktreeCreator, &ketplus::AgentWorktreeCreator::created);
         worktreeCreator->create(repository, repository, QStringLiteral("feature/created-active"),
                                 QStringLiteral("main"));
         QTRY_COMPARE_WITH_TIMEOUT(created.count(), 1, 5000);
         const QString createdPath =
-            QFileInfo(directory.filePath(QStringLiteral("ketviet-feature-created-active")))
+            QFileInfo(directory.filePath(QStringLiteral("sample-project-feature-created-active")))
                 .canonicalFilePath();
         QVERIFY(!createdPath.isEmpty());
         QTRY_COMPARE(agentView->activePath(), createdPath);
@@ -940,8 +1112,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1094,8 +1266,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
-        const QString linked = directory.filePath(QStringLiteral("ketviet-feature"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
+        const QString linked = directory.filePath(QStringLiteral("sample-project-feature"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1250,7 +1422,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1310,7 +1482,7 @@ class AgentWorkspaceShellTest final : public QObject {
             confirm->click();
         }
         const QString createdPath =
-            directory.filePath(QStringLiteral("ketviet-feature-from-picker"));
+            directory.filePath(QStringLiteral("sample-project-feature-from-picker"));
         QTRY_VERIFY_WITH_TIMEOUT(
             manager->conversationOwnedWorktreePaths(agentPath, conversation).size() == 1, 5000);
         QCOMPARE(
@@ -1330,7 +1502,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
-        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        const QString repository = directory.filePath(QStringLiteral("sample-project"));
         QVERIFY(QDir().mkpath(repository));
         const auto git = [&repository](const QStringList& arguments) {
             QProcess process;
@@ -1402,7 +1574,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(conversationButton(QStringLiteral("New conversation")) != nullptr,
                                  5000);
         const QString linkedPath =
-            QFileInfo(directory.filePath(QStringLiteral("ketviet-feature-sidebar-listed")))
+            QFileInfo(directory.filePath(QStringLiteral("sample-project-feature-sidebar-listed")))
                 .canonicalFilePath();
         QVERIFY(!linkedPath.isEmpty());
         QCOMPARE(conversationButton(QStringLiteral("New conversation"))
@@ -1626,7 +1798,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 
         const QString ketplus = directory.filePath(QStringLiteral("ketplus"));
-        const QString ketviet = directory.filePath(QStringLiteral("ketviet"));
+        const QString sampleProject = directory.filePath(QStringLiteral("sample-project"));
         const QString linked = directory.filePath(QStringLiteral("ketplus-refactor"));
         const auto git = [](const QString& repository, const QStringList& arguments) {
             QProcess process;
@@ -1635,7 +1807,7 @@ class AgentWorkspaceShellTest final : public QObject {
             return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
                    process.exitCode() == 0;
         };
-        for (const QString& repository : {ketplus, ketviet}) {
+        for (const QString& repository : {ketplus, sampleProject}) {
             QVERIFY(QDir().mkpath(repository));
             QVERIFY(git(repository, {QStringLiteral("init"), QStringLiteral("-q"),
                                      QStringLiteral("-b"), QStringLiteral("main")}));
@@ -1650,7 +1822,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(
             git(ketplus, {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-qb"),
                           QStringLiteral("refactor"), linked, QStringLiteral("HEAD")}));
-        const QString atlas = QDir(ketviet).filePath(QStringLiteral("design/crm.ketatlas"));
+        const QString atlas = QDir(sampleProject).filePath(QStringLiteral("design/crm.ketatlas"));
         QVERIFY(QDir().mkpath(atlas));
         QFile manifest(QDir(atlas).filePath(QStringLiteral("atlas.json")));
         QVERIFY(manifest.open(QIODevice::WriteOnly | QIODevice::Text));
@@ -1671,7 +1843,7 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* index = window.findChild<ketplus::AtlasIndex*>();
         QVERIFY(view && manager && index);
         const QString ketplusPath = QFileInfo(ketplus).canonicalFilePath();
-        const QString ketvietPath = QFileInfo(ketviet).canonicalFilePath();
+        const QString sampleProjectPath = QFileInfo(sampleProject).canonicalFilePath();
         const QString linkedPath = QFileInfo(linked).canonicalFilePath();
         manager->activate(linkedPath);
         const QString id = manager->activeConversationId(linkedPath);
@@ -1686,9 +1858,9 @@ class AgentWorkspaceShellTest final : public QObject {
         };
         QTRY_VERIFY(conversationButton() != nullptr);
 
-        window.openFolder(ketviet);
+        window.openFolder(sampleProject);
         QVERIFY(QDir(linkedPath).removeRecursively());
-        QCOMPARE(index->workspaceRoot(), ketvietPath);
+        QCOMPARE(index->workspaceRoot(), sampleProjectPath);
         QTRY_COMPARE(index->atlases().size(), 1);
 
         // Still listed under ketplus in the sidebar; that is the row the reader clicks.

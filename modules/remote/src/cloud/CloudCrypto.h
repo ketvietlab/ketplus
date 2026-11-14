@@ -6,6 +6,8 @@
 #include <QJsonObject>
 #include <QString>
 
+#include <functional>
+
 namespace ketplus::daemon {
 
 class CloudCrypto final {
@@ -23,6 +25,8 @@ class CloudCrypto final {
     [[nodiscard]] QByteArray decrypt(const QJsonObject& content, const QByteArray& associatedData,
                                      const QByteArray& senderSigningKey, const QString& sessionId,
                                      qint64 generation, QString* error = nullptr);
+    // Sealed to an agreement key rather than a session key: content named
+    // `session-create:<requestId>`, the key derived with `requestId` as its salt.
     [[nodiscard]] QByteArray decryptSealed(const QJsonObject& content,
                                            const QByteArray& associatedData,
                                            const QByteArray& senderSigningKey,
@@ -32,6 +36,28 @@ class CloudCrypto final {
                   const QByteArray& recipientAgreementKey, const QString& requestId,
                   const QString& recipientDeviceId, int recipientKeyVersion,
                   const QString& senderDeviceId, int senderKeyVersion, QString* error = nullptr);
+    // The same with the content's key id named by the caller, such as
+    // `team-command:<requestId>` and `team-result:<requestId>` (ADR 0116 §2).
+    [[nodiscard]] QByteArray decryptSealedAs(const QJsonObject& content,
+                                             const QByteArray& associatedData,
+                                             const QByteArray& senderSigningKey,
+                                             const QString& requestId, const QString& keyId,
+                                             QString* error = nullptr);
+    [[nodiscard]] QJsonObject
+    encryptSealedAs(const QByteArray& plaintext, const QByteArray& associatedData,
+                    const QByteArray& recipientAgreementKey, const QString& requestId,
+                    const QString& keyId, const QString& recipientDeviceId, int recipientKeyVersion,
+                    const QString& senderDeviceId, int senderKeyVersion, QString* error = nullptr);
+    // The same, for content whose associated data names its own envelope (a command sealed to a
+    // machine binds recipientDeviceId, recipientKeyVersion and ephemeralPublicKey): the callback
+    // receives every envelope field except nonce, ciphertext, tag and signature.
+    using SealedAssociatedData = std::function<QByteArray(const QJsonObject& envelope)>;
+    [[nodiscard]] QJsonObject
+    encryptSealedBound(const QByteArray& plaintext, const SealedAssociatedData& associatedData,
+                       const QByteArray& recipientAgreementKey, const QString& requestId,
+                       const QString& keyId, const QString& recipientDeviceId,
+                       int recipientKeyVersion, const QString& senderDeviceId, int senderKeyVersion,
+                       QString* error = nullptr);
     [[nodiscard]] QJsonObject wrapSessionKey(const QString& sessionId, qint64 generation,
                                              int keyEpoch, const QJsonObject& recipient,
                                              const QString& senderDeviceId, int senderKeyVersion,

@@ -50,7 +50,11 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
                         {"provider", "claude"},
                         {"path", "/work/parser"}},
             QVariantMap{{"number", "2044"}, {"title", "Cursor"}, {"provider", "cursor"}},
-            QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}}};
+            QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}},
+            QVariantMap{{"number", "4066"},
+                        {"title", "Codex full"},
+                        {"provider", "codex"},
+                        {"full_access", true}}};
     });
     view.resize(1200, 700); // room for the full Reviewer label beside the product sidebar
     view.show();
@@ -77,11 +81,24 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QTRY_VERIFY(button->isVisible());
     QCOMPARE(button->property("text").toString(), QStringLiteral("Reviewer  ▾"));
 
-    // Only other Claude conversations can review.
+    // Other Claude conversations review; Codex only with Full access (ketplus#295), and
+    // without it is listed with the reason. Cursor is never listed.
     const auto candidates = view.reviewerCandidates();
-    QCOMPARE(candidates.size(), 1);
+    QCOMPARE(candidates.size(), 3);
     QCOMPARE(candidates.first().toMap().value("number").toString(), QStringLiteral("1093"));
     QCOMPARE(candidates.first().toMap().value("worktree").toString(), QStringLiteral("parser"));
+    QVERIFY(candidates.first().toMap().value("enabled").toBool());
+    const QVariantMap lowered = candidates.at(1).toMap();
+    QCOMPARE(lowered.value("number").toString(), QStringLiteral("3055"));
+    QVERIFY(!lowered.value("enabled").toBool());
+    QCOMPARE(lowered.value("reason").toString(),
+             QStringLiteral("Codex can review only with Full access."));
+    const QVariantMap full = candidates.at(2).toMap();
+    QCOMPARE(full.value("number").toString(), QStringLiteral("4066"));
+    QVERIFY(full.value("enabled").toBool());
+    QCOMPARE(
+        full.value("reason").toString(),
+        QStringLiteral("Reviews with Full access; KetPlus checks the branch after each review."));
 
     auto* header = findVisualItem(root, "agentWorkspaceHeader");
     QVERIFY(header);
@@ -93,8 +110,10 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     auto* existing = menuItem(menu, "existingReviewerItem_1093");
     QVERIFY(existing);
     QVERIFY(!menuItem(menu, "existingReviewerItem_2044"));
-    QVERIFY(!menuItem(menu, "existingReviewerItem_3055"));
-    // ADR 0067: Codex is listed, as the mock, but cannot review; Claude names its model.
+    QVERIFY(!menuItem(menu, "existingReviewerItem_3055")->property("enabled").toBool());
+    QVERIFY(menuItem(menu, "existingReviewerItem_4066")->property("enabled").toBool());
+    // A new reviewer starts read only, so a new Codex one is listed but cannot review; Claude
+    // names its model.
     auto* codex = menuItem(menu, "newCodexReviewerItem");
     QVERIFY(codex && !codex->property("enabled").toBool());
     QCOMPARE(menuItem(menu, "newClaudeReviewerItem")->property("text").toString(),
@@ -168,16 +187,16 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QCOMPARE(reads.size(), 2);
 }
 
-void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data() {
+void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTheTitleSqueezes_data() {
     QTest::addColumn<qreal>("zoom");
     QTest::newRow("medium") << qreal(1);
     QTest::newRow("large") << qreal(1.25);
     QTest::newRow("largest") << qreal(1.5);
 }
 
-// The header gives way in the mock's order: the tags first, then the Reviewer label. The full
+// The header gives way in the mock's order: the Reviewer label first, then the title. The full
 // "Reviewer · @agent/N" label shows only when every visible header item fits.
-void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
+void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTheTitleSqueezes() {
     QFETCH(qreal, zoom);
     auto& appearance = ket::Appearance::instance();
     const qreal previousZoom = appearance.zoom();
@@ -188,9 +207,7 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     view.setAgentAvailable(true);
     view.setActivePath(QDir::tempPath());
     view.setProductSidebarVisible(false); // as in the shell, which has its own sidebar
-    auto tagged = conversation("a", "9410", true, true);
-    tagged.insert("tags", QVariantList{"UI", "Review"});
-    view.setConversations({tagged});
+    view.setConversations({conversation("a", "9410", true, true)});
     view.setSessionState("Startup profiling", "Ready", false);
     view.setExecutionBranch("feat/customer-care-routine-workflow");
     view.acceptReviewerState(
@@ -206,7 +223,7 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     auto* title = findVisualItem(root, "conversationTitle");
     auto* scope = findVisualItem(root, "workspaceScopeChip");
     QVERIFY(title && scope);
-    bool sawTags = false;
+    bool sawFull = false;
     bool sawCollapsed = false;
     for (int width = 1800; width >= 760; width -= 20) {
         view.resize(width, 700);
@@ -220,23 +237,15 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
             if (action && action->isVisible())
                 actionsLeft = qMin(actionsLeft, action->mapToItem(root, QPointF()).x());
         }
-        for (auto* item : {button, findVisualItem(root, "conversationTag_Review")}) {
-            if (!item || !item->isVisible())
-                continue;
-            const auto right = item->mapToItem(root, QPointF(item->width(), 0)).x();
-            QVERIFY2(right <= actionsLeft,
-                     qPrintable(QStringLiteral("%1 ends at %2, actions start at %3 (width %4)")
-                                    .arg(item->objectName())
-                                    .arg(right)
-                                    .arg(actionsLeft)
-                                    .arg(width)));
-        }
+        const auto right = button->mapToItem(root, QPointF(button->width(), 0)).x();
+        QVERIFY2(right <= actionsLeft,
+                 qPrintable(QStringLiteral("Reviewer ends at %1, actions start at %2 (width %3)")
+                                .arg(right)
+                                .arg(actionsLeft)
+                                .arg(width)));
         const bool full = button->property("text").toString() != QStringLiteral("▾");
-        const bool tags = findVisualItem(root, "conversationTag_UI")->isVisible();
         sawCollapsed = sawCollapsed || !full;
-        sawTags = sawTags || tags;
-        QVERIFY2(full || !tags,
-                 qPrintable(QStringLiteral("tags outlast the label at %1").arg(width)));
+        sawFull = sawFull || full;
         if (!full)
             continue;
         QVERIFY2(title->width() >= title->implicitWidth() - 1,
@@ -244,6 +253,6 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
         QVERIFY2(scope->width() >= scope->implicitWidth() - 1,
                  qPrintable(QStringLiteral("scope squeezed at %1").arg(width)));
     }
-    QVERIFY(sawTags);
+    QVERIFY(sawFull);
     QVERIFY(sawCollapsed);
 }

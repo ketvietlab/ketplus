@@ -123,6 +123,26 @@ for line in sys.stdin:
             emit({'method': 'event', 'params': {
                 'sessionId': session_id, 'type': 'turn.started',
                 'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+        elif params.get('prompt') == 'tool-hang':
+            hanging[session_id] = turn_id
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'turn.started',
+                'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'item.started',
+                'payload': {'item_id': 'tool-1', 'item_type': 'commandExecution',
+                            'item': {'id': 'tool-1', 'tool': 'Bash',
+                                     'type': 'commandExecution'}}}})
+        elif params.get('prompt') == 'wait-loop-hang':
+            hanging[session_id] = turn_id
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'turn.started',
+                'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'item.started',
+                'payload': {'item_id': 'tool-2', 'item_type': 'dynamicToolCall',
+                            'item': {'id': 'tool-2', 'tool': 'Monitor',
+                                     'type': 'dynamicToolCall'}}}})
         elif params.get('prompt') == 'background':
             emit({'method': 'event', 'params': {
                 'sessionId': session_id, 'type': 'tasks.changed',
@@ -141,6 +161,8 @@ for line in sys.stdin:
                    'Should I push and open the PR?')
         elif 'no-findings' in params.get('prompt', ''):
             finish(session_id, turn_id, thread_id, 'Looks fine.\nVerdict: no findings')
+        elif 'with-findings' in params.get('prompt', ''):
+            finish(session_id, turn_id, thread_id, 'README.md:1 needs work.\nVerdict: findings')
         else:
             finish(session_id, turn_id, thread_id)
     elif method == 'thread/fork':

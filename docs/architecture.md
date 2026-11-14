@@ -224,6 +224,17 @@ tree); there is no option to leave it out, and the bundle check fails without it
 bundle and replaces the installed copies, so neither keeps files from the tree
 the bundle was last built with (#124), as for the browser runtime (#94).
 
+ACP providers share `providers/acp/AcpAdapter`: it owns stdio process lifetime,
+bounded JSON-RPC framing and response correlation, initialization, session
+creation/loading with host-supplied MCP servers, prompt/cancel, permission
+responses and canonical transcript events. CLI discovery, launch/version policy,
+model catalogs and provider extensions stay in each concrete adapter. Cursor's
+`cursor/*` requests and account/model error explanations remain Cursor-specific;
+the shared engine has no provider names or installation paths. MCP permission
+exemptions default to denied: only a concrete adapter can interpret its own
+trusted tool identity. Provider-specific client capability metadata and session
+mode identifiers are opt-in hooks.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows
@@ -235,7 +246,13 @@ Windows), speaks ACP JSON-RPC on stdio, and normalizes `session/update` and
 `agent models`. Effort suffixes are grouped into families; the adapter maps the
 selected family plus effort back to a CLI id before `--model` and
 `session/set_config_option`. After `session/new` the adapter also sends
-`session/set_config_option` for the selected model. The CLI is never
+`session/set_config_option` for the selected model. A process started with
+`--model` keeps that model, so a turn that switches to Auto ends the idle
+process and starts it again without `--model`; the next turn loads its ACP
+session again. A failed turn keeps Cursor's own words: a team or account usage
+limit ("Your team has reached its usage limit … return on MM/DD/YYYY") is
+reported as `limit_reached` with `resets_at` at local midnight of that day, and
+a plan refusal puts the CLI-login explanation in front of Cursor's text. The CLI is never
 bundled; authentication stays with `agent login` or `CURSOR_API_KEY` /
 `CURSOR_AUTH_TOKEN`. The daemon does not call ACP `authenticate`. Override the
 binary with `--cursor` or `KETPLUS_CURSOR_AGENT`.
@@ -286,8 +303,9 @@ while the envelope major stays 0.
 ## Shared browser tools
 
 `modules/browser` resolves one host-controlled MCP launch for Codex, Claude and
-Cursor. The browser remains a separate stdio worker. Claude SDK receives the
-server map per query; Cursor ACP receives it on session creation and loading.
+Cursor and Copilot. The browser remains a separate stdio worker. Claude SDK receives the
+server map per query; ACP receives it on session creation and loading. Copilot
+keeps normal approvals until its structured MCP identity is verified (ADR 0120).
 The same local settings control origins and enablement for all providers;
 settings changes wait for the next Claude/Cursor turn. Source readiness probes
 share engine selection with the worker, and built-in skill discovery uses the
@@ -416,7 +434,7 @@ Explorer and Source Control render Két row recipes through Qt item delegates, r
 
 ### Pro sidebar presentation
 
-The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Tags are rendered and filtered from supplied metadata; this UI does not invent tags or infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
+The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); a team member's row draws only its locked role tag. This UI does not infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
 
 The sidebar reads the local daemon's `storage.size.read` capability through the existing CodexAppServer facade. The adapter accepts only read/apply operation names and requires a ready daemon advertising the exact operation. A visible window refreshes advisory status at most once a minute, with one in-flight request, a deadline and stale-response fencing. It shows the warning only from an authoritative successful response, hides stale status on disconnect, and links to Settings. This does not change retention policy or start a provider turn.
 
@@ -448,3 +466,29 @@ status badges and palette/profile values. The execution picker retains its
 paginated QListWidget model and paints visible rows from treeItemRecipe; search,
 revision fencing and acknowledgment-driven context changes retain their existing
 ownership. Pairing confirmation and changed-claim rejection remain daemon-backed.
+
+## App-wide toast and embedded input placement
+
+Agent Workspace maps its QML composer's upper edge through the embedded view into
+window coordinates and registers the reserved bottom height with the kit's generic
+Toast API. Composer and ancestor geometry/visibility notifications refresh the
+reservation; reparenting refreshes the watched widget ancestors and releases the
+old window only when this workspace owns its reservation. Hiding the workspace or
+its composer clears the owned reservation, and teardown disables geometry callbacks
+before unloading QML. The mock and workspace-local QML toast map the composer into
+the toast parent's coordinate space for the equivalent Quick reservation. This changes overlay placement only, not transcript/input layout.
+
+Machine Workspace registers its own QWidget composer using the same toast ownership
+property. Its transcript-only Agent Workspace cannot clear the Machine reservation.
+Composer growth, visibility, ancestor movement and reparenting refresh the measured
+window-space top; teardown and hide clear only a reservation held by that view.
+
+### Color-scheme publication
+
+ThemeManager delegates canonical selection and snapshot preparation to
+`ThemeSchemeController` in `core/src/ui/theme/`. A revisioned selection store owns
+committed process-wide preferences; temporary previews never write it. User
+schemes are prepared on Qt Concurrent workers and generation-checked before one
+GUI-thread publication through ket-qt runtime color overrides. Consumers retain
+their existing documents and terminal sessions. See `color-schemes.md` for the
+current API and integration limits.

@@ -1,0 +1,189 @@
+{
+    "diff": {
+        "added": "#294436",
+        "removed": "#484A4A"
+    },
+    "editor": {
+        "bg": "#2B2B2B",
+        "caret": "#BBBBBB",
+        "fg": "#A9B7C6",
+        "gutterBg": "#313335",
+        "gutterFg": "#606366",
+        "lineHighlight": "#323232",
+        "selection": "#214283"
+    },
+    "extends": "builtin-dark",
+    "id": "builtin.darcula",
+    "kind": "dark",
+    "metadata": {
+        "author": "JetBrains s.r.o.",
+        "importReport": {
+            "counts": {
+                "approximated": 12,
+                "mapped": 41,
+                "skipped": 1341
+            },
+            "path": "docs/theme-import-reports/darcula.json"
+        },
+        "jetBrainsEditorScheme": "_prepared/darcula.xml",
+        "jetBrainsParentScheme": "Default",
+        "license": "Apache-2.0",
+        "manualAdjustments": [
+            "Input preparation only: extract the Darcula <scheme> from DefaultColorSchemesManager.xml, attach it as editorScheme to darcula.theme.json. No color/style edits. IDE parent scheme remains approximated by the importer."
+        ],
+        "sourceApp": "JetBrains",
+        "sourceFile": "_prepared/darcula.theme.json",
+        "sourceLabel": "JetBrains",
+        "upstream": {
+            "author": "JetBrains s.r.o.",
+            "commit": "417e214ea024cd783179244f51329df01277bb93",
+            "files": [
+                {
+                    "path": "LICENSE.txt",
+                    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/LICENSE.txt"
+                },
+                {
+                    "path": "NOTICE.txt",
+                    "sha256": "83903abdebe3b3dda1a178fb3f03ac71ef31c4503b79226b66ef27f1aa9d3993",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/NOTICE.txt"
+                },
+                {
+                    "path": "platform/platform-resources/src/DefaultColorSchemesManager.xml",
+                    "sha256": "eee055857ac4df8fe4191d9dd2fca7a2b1df99f9e00dcf25f681d794658ffbb7",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/DefaultColorSchemesManager.xml"
+                },
+                {
+                    "path": "platform/platform-resources/src/themes/darcula.theme.json",
+                    "sha256": "368368c5e0025246ad93e179db2441c47b902270a203dbed004a3c18e0a40360",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/darcula.theme.json"
+                },
+                {
+                    "path": "platform/platform-resources/src/themes/Light.theme.json",
+                    "sha256": "fcb8a6711e686dd8bd8e1e53ef3eae8981b4452b62fef0d9571c97d2050dd069",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/Light.theme.json"
+                },
+                {
+                    "path": "platform/platform-resources/src/themes/Light.xml",
+                    "sha256": "ea2af41e12491f0681b4b5b3dcafe84245a2b56805f8d991b65df73c1a4b2dbb",
+                    "url": "https://raw.githubusercontent.com/JetBrains/intellij-community/417e214ea024cd783179244f51329df01277bb93/platform/platform-resources/src/themes/Light.xml"
+                }
+            ],
+            "key": "jetbrains",
+            "license": "Apache-2.0",
+            "licenseFiles": [
+                {
+                    "distributionFile": "JetBrains-Themes-Apache-2.0.txt",
+                    "source": "LICENSE.txt"
+                },
+                {
+                    "distributionFile": "JetBrains-Themes-NOTICE.txt",
+                    "source": "NOTICE.txt"
+                }
+            ],
+            "repo": "JetBrains/intellij-community"
+        }
+    },
+    "name": "Darcula",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "bold": false,
+            "fg": "#BBB529",
+            "italic": false,
+            "underline": false
+        },
+        "comment": {
+            "bold": false,
+            "fg": "#808080",
+            "italic": false,
+            "underline": false
+        },
+        "constant": {
+            "bold": false,
+            "fg": "#9876AA",
+            "italic": true,
+            "underline": false
+        },
+        "function": {
+            "bold": false,
+            "fg": "#FFC66D",
+            "italic": false,
+            "underline": false
+        },
+        "keyword": {
+            "bold": false,
+            "fg": "#CC7832",
+            "italic": false,
+            "underline": false
+        },
+        "number": {
+            "bold": false,
+            "fg": "#6897BB",
+            "italic": false,
+            "underline": false
+        },
+        "operator": {
+            "bold": false,
+            "italic": false,
+            "underline": false
+        },
+        "string": {
+            "bold": false,
+            "fg": "#6A8759",
+            "italic": false,
+            "underline": false
+        },
+        "type": {
+            "bold": false,
+            "fg": "#769AA5",
+            "italic": false,
+            "underline": false
+        },
+        "variable": {
+            "bold": false,
+            "fg": "#9876AA",
+            "italic": false,
+            "underline": false
+        }
+    },
+    "terminal": {
+        "ansi0": "#000000",
+        "ansi1": "#F0524F",
+        "ansi10": "#4FC414",
+        "ansi11": "#E5BF00",
+        "ansi12": "#1FB0FF",
+        "ansi13": "#ED7EED",
+        "ansi14": "#00E5E5",
+        "ansi15": "#FFFFFF",
+        "ansi2": "#5C962C",
+        "ansi3": "#A68A0D",
+        "ansi4": "#3993D4",
+        "ansi5": "#A771BF",
+        "ansi6": "#00A3A3",
+        "ansi7": "#808080",
+        "ansi8": "#BBBBBB",
+        "ansi9": "#FF4050",
+        "bg": "#2B2B2B",
+        "fg": "#BBBBBB"
+    },
+    "ui": {
+        "chrome": {
+            "border": "#646464",
+            "textMain": "#BBBBBB"
+        },
+        "focus": {
+            "border": "#3D6185"
+        },
+        "input": {
+            "bg": "#45494A"
+        },
+        "sidebar": {
+            "bg": "#3C3F41",
+            "fg": "#BBBBBB"
+        },
+        "tab": {
+            "inactiveBg": "#3C3F41"
+        }
+    }
+}

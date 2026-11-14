@@ -67,6 +67,8 @@ int main(int argc, char* argv[]) {
           QStringLiteral("path")},
          {QStringLiteral("cursor"), QStringLiteral("Cursor CLI (`agent`) executable path."),
           QStringLiteral("path")},
+         {QStringLiteral("copilot"), QStringLiteral("GitHub Copilot CLI executable path."),
+          QStringLiteral("path")},
          {QStringLiteral("check-runtime"),
           QStringLiteral("Verify that required bundled Qt plugins can be loaded.")},
          {QStringLiteral("build-info"),
@@ -121,6 +123,9 @@ int main(int argc, char* argv[]) {
     }
     if (parser.isSet(QStringLiteral("cursor"))) {
         configuration.cursorExecutable = parser.value(QStringLiteral("cursor"));
+    }
+    if (parser.isSet(QStringLiteral("copilot"))) {
+        configuration.copilotExecutable = parser.value(QStringLiteral("copilot"));
     }
 
     // One line a support log can be matched to a build and a relay by.

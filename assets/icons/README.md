@@ -1,31 +1,43 @@
-# Application icon sources
+# Application icon and brand sources
 
-Két Symbol © 2026 Két Việt, CC BY 4.0. See the shipped
-`third_party/licenses/Ket-Symbol-CC-BY-4.0.txt`; product names remain trademarks.
+The ketPlus mark (`assets/brand/ketplus-mark.png`, 1024 px) is the approved artwork
+from `mockups/qt/assets/ketplus-mark-v2.png`, in the interface's accent blue. It is
+not licensed under MPL 2.0; all rights reserved. The wordmark is `ketPlus` in
+KÉT Sans Bold 700 (SIL OFL 1.1), with "Plus" and the framed Pro badge in the
+accent-text blue (`#1238DB` light, `#9EB5FF` dark).
 
-The KétPlus tile and Pro light/dark bare marks are exact copies of the approved
-`mockups/qt/assets/ketplus-mark*.svg` artwork. Lite and Pro use this same tile;
-no distinct Lite tile is present in the approved source. Terminal's source is
-`mockups/terminal/assets/ketplus-terminal.svg`. These are the approved repository
-artifacts, not assets extracted from a newer Két Symbol release.
+Lockup geometry, shared by `mockups/qt/qml/parts/BrandLockup.qml`,
+`modules/ai/src/agent/qml/BrandLockup.qml`, the widget `core/src/ui/BrandLockup.*`
+and `render-brand.swift`: the mark is 1.45× the wordmark pixel size, the gap is
+0.12× the mark; the Pro badge starts 0.3× the wordmark size after it, with 0.6× text,
+centred on the x-height, with a 1.5 px stroke at 17 px.
 
-| Source | SHA-256 |
-| --- | --- |
-| `core/assets/brand/ketplus.svg` | `78bfac071736dc59173a49355fe4b7868d24557e78f946da5e99be3a956ccd24` |
-| `core/assets/brand/ketplus-terminal.svg` | `88b95ca00b8c631f0bd8f2c2dc22fd18fab515133c3e0e51b604b78090ca3087` |
-| `assets/brand/ketplus-mark-light.svg` | `b9a362901f7ffd234f8d89f11652d3a95e56a346ff923fed8bc41b7c354653d6` |
-| `assets/brand/ketplus-mark-dark.svg` | `103b0304bac0dd70aa099bff8b789d463fb894857f204ccd8c4fa2cd4bfa7050` |
+Both editions use the same app icon: the mark on the white tile of the mock's
+Brand screen, inside the macOS icon grid (824 px tile on 1024 px). The icon has no
+"Pro"; the edition shows in the lockup only.
 
-Run `assets/icons/generate-app-icons.sh` from a macOS checkout with Swift/AppKit,
-`sips`, `iconutil` and Python 3. It renders the checked-in core SVGs at 1024 px,
-creates all macOS ICNS sizes and a six-size PNG-backed Windows ICO, then copies
-the KétPlus outputs to the Pro assets. The core exporter is standalone and can
-export `lite` or `terminal` separately. The historical Terminal command delegates
-to it. The Pro bare marks stay vector sources selected by theme.
+Run `assets/icons/generate-app-icons.sh` on macOS (swiftc with AppKit/CoreText,
+`sips`, `iconutil`, Python 3). It downloads the pinned KÉT Sans release (or uses
+`KET_SANS_BOLD=/path/KETSans-Bold.ttf`) and writes:
 
-The existing Lite/Pro CMake resource files consume the new PNG/ICNS/ICO paths.
-The SVG and PNG files are available for Linux desktop packaging. Terminal's
-Windows resource/ICO are prepared; the Terminal target remains macOS-only in
-this baseline. Linux desktop entries, Windows Terminal target support, signing,
-bundle installation and a machine without Homebrew Qt belong to the later
-packaging/acceptance phase and have not been verified here.
+| Output | Lite (`core/`) | Pro |
+| --- | --- | --- |
+| macOS icon, 16–512 @1x/@2x | `core/assets/icons/KetPlus.icns` | `assets/icons/KetPlus.icns` |
+| Windows icon, 16–256 | `core/assets/icons/KetPlus.ico` | `assets/icons/KetPlus.ico` |
+| Window icon, 1024 px | `core/assets/brand/ketplus-app-icon.png` | `assets/brand/ketplus-app-icon.png` |
+| Linux hicolor, 16–512 | `core/assets/linux/hicolor` (`ketplus`) | `packaging/linux/hicolor` (`ketplus-pro`) |
+| Widget lockup mark, 256 px | `core/assets/brand/ketplus-mark-256.png` | `assets/brand/ketplus-mark-256.png` |
+| README lockup, light/dark | `core/assets/brand/ketplus-lockup-*.png` | `assets/brand/ketplus-pro-lockup-*.png` |
+| DMG lockup | | `packaging/macos/dmg-lockup.png` |
+
+The Linux desktop entries are `core/assets/linux/ketplus.desktop` and
+`packaging/linux/ketplus-pro.desktop`; each edition installs its entry and icons
+into `share/applications` and `share/icons/hicolor`. `core/` keeps its own copies
+because it builds without the Pro directories.
+
+KetPlus Terminal keeps its Két Symbol icon (`core/assets/brand/ketplus-terminal.svg`,
+CC BY 4.0, see `third_party/licenses/Ket-Symbol-CC-BY-4.0.txt`), exported by
+`core/assets/icons/generate-terminal-icon.sh`.
+
+Bundle identifiers, executable names and settings locations are unchanged; renaming
+them needs a migration.

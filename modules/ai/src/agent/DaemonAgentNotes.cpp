@@ -1,5 +1,6 @@
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ProviderDisplay.h"
 
 namespace ketplus::agent_message {
 namespace {
@@ -14,10 +15,15 @@ QString stateLabel(const QString& state, const QString& delivery, const QString&
         return QStringLiteral("Replied");
     if (state == QLatin1String("expired"))
         return QStringLiteral("Expired");
+    // ADR 0114 §2: inside a team, its budget or pause holds it until the team continues.
+    if (state == QLatin1String("held") &&
+        (reason == QLatin1String("team_budget") || reason == QLatin1String("team_paused")))
+        return QStringLiteral("Held · until the team continues");
     // An automatic-turn limit stopped it; the other conversation's user decides.
     if (state == QLatin1String("held"))
         return QStringLiteral("Held · waiting for approval there");
-    if (state == QLatin1String("authorized") || state == QLatin1String("releasing"))
+    if (state == QLatin1String("authorized") || state == QLatin1String("releasing") ||
+        state == QLatin1String("released"))
         return QStringLiteral("Delivering");
     // A request fails after delivery when its turn ends without the reply.
     if (reason == QLatin1String("no_reply"))
@@ -33,7 +39,7 @@ void describe(QVariantMap& note) {
     if (const auto title = note.value("agentPeerTitle").toString(); !title.isEmpty())
         parts.append(title);
     if (const auto provider = note.value("agentPeerProvider").toString(); !provider.isEmpty())
-        parts.append(provider.left(1).toUpper() + provider.mid(1));
+        parts.append(provider_display::name(provider));
     const auto state = note.value("status").toString();
     parts.append(stateLabel(state, note.value("agentDelivery").toString(),
                             note.value("agentReason").toString()));

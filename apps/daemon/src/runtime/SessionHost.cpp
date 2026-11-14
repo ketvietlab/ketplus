@@ -19,6 +19,7 @@
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -187,6 +188,17 @@ QString requestedAdapter(const QJsonObject& options, const QString& fallback) {
 // Commands relayed from the phone arrive under this client id; every other client runs on the Mac.
 bool localClient(const QString& clientId) { return clientId != QStringLiteral("cloud-control-v2"); }
 
+QJsonObject requestWithPreparationOwner(const QJsonObject& incoming, const QString& clientId) {
+    auto request = incoming;
+    // The cloud dispatcher supplies this only after verifying the device's signature.
+    // Caller-supplied payload fields never determine prepared-session ownership.
+    const auto device = incoming.value("_verified_sender_device_id").toString();
+    request.insert("_preparation_owner", localClient(clientId)
+                                             ? QStringLiteral("local")
+                                             : (device.isEmpty() ? QString() : "relay:" + device));
+    return request;
+}
+
 // Appends each provider's model list to `merged` in order; a provider that fails adds nothing.
 void appendModelLists(QList<ProviderAdapter*> providers, QJsonArray merged,
                       std::function<void(const QJsonArray&)> done) {
@@ -206,7 +218,7 @@ void appendModelLists(QList<ProviderAdapter*> providers, QJsonArray merged,
 
 bool isCanonicalAdapter(const QString& adapter) {
     return adapter == QStringLiteral("codex") || adapter == QStringLiteral("claude") ||
-           adapter == QStringLiteral("cursor");
+           adapter == QStringLiteral("cursor") || adapter == QStringLiteral("copilot");
 }
 
 // What a tool call will run or touch, for its approval card.
@@ -309,11 +321,18 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
 
 SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAdapter* claude,
                          CursorAdapter* cursor, QObject* parent)
+    : SessionHost(journal, adapter, QList<ProviderAdapter*>{claude, cursor}, parent) {}
+
+SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
+                         QList<ProviderAdapter*> additionalProviders, QObject* parent)
     : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
+    teamGit_.setMaxThreadCount(1);
+    teamBranchNames_.setMaxThreadCount(1);
+    teamRemote_.setMaxThreadCount(1);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
         QBuffer source;
@@ -331,10 +350,9 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);
-    for (ProviderAdapter* provider :
-         {static_cast<ProviderAdapter*>(adapter), static_cast<ProviderAdapter*>(claude),
-          static_cast<ProviderAdapter*>(cursor)})
-        if (provider != nullptr)
+    providers_.append(adapter);
+    for (ProviderAdapter* provider : additionalProviders)
+        if (provider != nullptr && !providers_.contains(provider))
             providers_.append(provider);
     QSet<QString> liveSessions;
     for (ProviderAdapter* provider : std::as_const(providers_))
@@ -350,9 +368,10 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
-    if (claude != nullptr)
-        connect(claude, &ClaudeAdapter::authenticationObserved, this,
-                [this](const QString& source) { readiness_.observeClaudeSource(source); });
+    for (ProviderAdapter* provider : additionalProviders)
+        if (auto* claude = qobject_cast<ClaudeAdapter*>(provider))
+            connect(claude, &ClaudeAdapter::authenticationObserved, this,
+                    [this](const QString& source) { readiness_.observeClaudeSource(source); });
     for (const StoredSession& stored : journal_->sessions()) {
         liveSessions.insert(stored.id);
         Session session;
@@ -492,19 +511,33 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     auto* cleanup = new QTimer(this);
     cleanup->setInterval(15000);
     connect(cleanup, &QTimer::timeout, this, &SessionHost::processDeletionWork);
+    connect(cleanup, &QTimer::timeout, this, &SessionHost::expirePreparedSessions);
     cleanup->start();
     QTimer::singleShot(0, this, &SessionHost::processDeletionWork);
+    QTimer::singleShot(0, this, &SessionHost::expirePreparedSessions);
+    // After sessions_ is filled. A due conversation must see its session, or the catch-up
+    // is recorded provider_not_ready and a run_once miss is consumed.
+    startScheduleRunner();
 }
 
-QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString& clientId) {
+QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QString& clientId) {
+    const auto request = requestWithPreparationOwner(incoming, clientId);
     const QString type = request.value(QStringLiteral("message_type")).toString();
     const QString messageId = request.value(QStringLiteral("message_id")).toString();
+    // Durable allocation receipts provide idempotency scoped to their owner, rather than
+    // the ordinary global command-result cache. Authorize before any cache lookup.
+    if (type == "session.prepare")
+        return prepareSession(request);
+    if (type == "session.prepare.cancel")
+        return cancelPreparedSession(request);
+    if (const auto failure = authorizePreparation(request); !failure.isEmpty())
+        return failure;
     // Local administration only, checked before the command-result cache.
     if (type.startsWith("session.agent_messages.") && !localClient(clientId))
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("session.reviewer.") && !localClient(clientId))
         return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
-    // ADR 0112: teams are the user's; agents use the team_* tools instead.
+    // ADR 0114: teams are the user's; agents use the team_* tools instead.
     if (type.startsWith("team.") && !localClient(clientId))
         return error("forbidden", "Teams are managed from the local Desktop UI.");
     if (type == "session.work_report.read" && !localClient(clientId))
@@ -602,6 +635,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = readWorkReport(request);
     } else if (type.startsWith(QStringLiteral("team."))) {
         result = teamCommand(type, request);
+    } else if (type.startsWith(QStringLiteral("schedule."))) {
+        result = scheduleCommand(type, request);
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -997,7 +1032,7 @@ QJsonObject SessionHost::applyMode(const QJsonObject& request) {
 
 QJsonObject SessionHost::beginAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1023,7 +1058,7 @@ QJsonObject SessionHost::beginAttachment(const QJsonObject& request) {
 
 QJsonObject SessionHost::appendAttachmentChunk(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1043,7 +1078,7 @@ QJsonObject SessionHost::appendAttachmentChunk(const QJsonObject& request) {
 
 QJsonObject SessionHost::commitAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1058,7 +1093,7 @@ QJsonObject SessionHost::commitAttachment(const QJsonObject& request) {
 
 QJsonObject SessionHost::cancelAttachment(const QJsonObject& request) {
     Session* session = nullptr;
-    const QJsonObject failure = checkedSession(request, &session);
+    const QJsonObject failure = checkedAttachmentSession(request, &session);
     if (!failure.isEmpty())
         return failure;
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
@@ -1162,7 +1197,7 @@ QJsonObject SessionHost::transcriptPage(const QJsonObject& request) const {
 
 QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                                    const QJsonObject& agentOrigin) {
-    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     const QString prompt = payload.value(QStringLiteral("prompt")).toString().trimmed();
     const QJsonArray submittedInput = payload.value(QStringLiteral("input")).toArray();
     const bool hasImage =
@@ -1187,6 +1222,25 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     }
 
     auto it = sessions_.find(sessionId);
+    const auto preparation =
+        it == sessions_.end() ? journal_->sessionPreparation(sessionId) : std::nullopt;
+    if (preparation) {
+        if (const auto failure = authorizePreparation(request); !failure.isEmpty())
+            return failure;
+        const auto requestedPath = payload.value("worktree_path").toString();
+        if (!requestedPath.isEmpty() &&
+            normalizedWorktree(requestedPath) != preparation->worktreePath)
+            return error("preparation_scope_changed", "The prepared worktree cannot change.");
+        auto submittedOptions = payload.value("options").toObject();
+        if (!submittedOptions.isEmpty()) {
+            if (!submittedOptions.contains("provider"))
+                submittedOptions.insert("provider", "codex");
+            if (submittedOptions != preparation->options)
+                return error("preparation_scope_changed", "The prepared options cannot change.");
+        }
+        payload.insert("worktree_path", preparation->worktreePath);
+        payload.insert("options", preparation->options);
+    }
     if (it != sessions_.end()) {
         const auto expected = payload.value(QStringLiteral("expected_context_revision"));
         if ((it->stored.contextRevision > 1 || !expected.isUndefined()) &&
@@ -1244,9 +1298,16 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                 QStringLiteral("full") &&
             options.value(QStringLiteral("risk_acknowledged")).toBool())
             session.stored.executionPolicy = QStringLiteral("full");
-        if (!journal_->upsertSession(session.stored)) {
+        const bool persisted =
+            preparation
+                ? journal_->activatePreparedSession(session.stored,
+                                                    request.value("_preparation_owner").toString(),
+                                                    QDateTime::currentMSecsSinceEpoch())
+                : journal_->upsertSession(session.stored);
+        if (!persisted) {
             return error(QStringLiteral("journal_error"), journal_->errorString());
         }
+        preparedSessions_.remove(sessionId);
         it = sessions_.insert(sessionId, session);
         QString numberError;
         if (journal_->assignConversationNumber(sessionId, session.stored.generation, &numberError)
@@ -1287,7 +1348,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return error(
             QStringLiteral("computer_policy_error"),
             QStringLiteral("KetPlus could not turn off computer use for this remote turn."));
-    (void)worktreeCatalogRoot(*it); // Persist repository identity before a checkout is removed.
+    // Persist repository identity before a checkout is removed; git runs off this thread.
+    rememberRepositoryIdentity(it->stored.worktreePath);
     const bool worktreeMissing = !QFileInfo(it->stored.worktreePath).isDir();
     noteWorktreesBeforeTurn(*it);
     QJsonArray input = payload.value(QStringLiteral("input")).toArray();
@@ -1380,6 +1442,12 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     const QString clientMessageId = payload.value(QStringLiteral("client_message_id")).toString();
     if (!clientMessageId.isEmpty() && clientMessageId.size() <= 128)
         userMessage.insert(QStringLiteral("client_message_id"), clientMessageId);
+    // ADR 0126: a scheduled prompt keeps the ids the transcript marker reads.
+    for (const QString& key : {QStringLiteral("schedule_id"), QStringLiteral("run_id")}) {
+        const QString value = payload.value(key).toString();
+        if (!value.isEmpty())
+            userMessage.insert(key, value);
+    }
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
         it->stored.executionPolicy = permission == "danger-full-access" ? "full"
@@ -1436,8 +1504,12 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     turnOptions.insert(QStringLiteral("mode"), it->stored.mode);
     // Only the broker's review requests set this; clients cannot (ADR 0067).
     turnOptions.remove(QStringLiteral("review_guard"));
-    if (agentOrigin.value(QStringLiteral("review_guard")).toBool())
+    turnOptions.remove(QStringLiteral("review_profile"));
+    if (agentOrigin.value(QStringLiteral("review_guard")).toBool()) {
         turnOptions.insert(QStringLiteral("review_guard"), true);
+        turnOptions.insert(QStringLiteral("review_profile"),
+                           agentOrigin.value(QStringLiteral("review_profile")).toString());
+    }
     turnOptions.insert(QStringLiteral("compactWindow"),
                        context_harness::compactWindowJson(it->stored.compactWindow));
     if (it->stored.contextRevision > 1) {
@@ -1572,22 +1644,27 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
         return error(QStringLiteral("journal_error"),
                      QStringLiteral("Provider thread ownership could not be read; the conversation "
                                     "was kept."));
+    // T-60: only Codex and Claude delete the threads KetPlus started for a conversation. A
+    // thread of another provider (Cursor, or one this daemon does not know) lives in that
+    // provider's own store, outside KetPlus-owned paths: deleting the conversation removes
+    // KetPlus's local data and leaves that history to the provider, as the delete dialog says.
+    QJsonArray cleanup;
     for (const auto& value : *targets) {
         const auto provider = value.toObject().value("provider").toString();
-        if (provider != "codex" && provider != "claude")
-            return error(
-                "provider_cleanup_unsupported",
-                "This provider cannot remove its thread data yet; the conversation was kept.");
+        if (provider == "codex" || provider == "claude")
+            cleanup.append(value);
     }
     const auto lastCursor = session->stored.lastCursor;
     QString journalError;
     if (!journal_->deleteSession(sessionId, generation, operationId, lifecycleRevision,
-                                 &journalError, *targets)) {
+                                 &journalError, cleanup)) {
         return error(QStringLiteral("journal_error"), journalError);
     }
+    publishDisabledSessionSchedules(sessionId);
     if (!threadId.isEmpty())
         sessionsByThread_.remove(threadId);
     QDir(handoffDirectory(sessionId)).removeRecursively();
+    QDir(reviewScratchDirectory(sessionId)).removeRecursively();
     deferredJournalBytes_ -= session->deferredJournalBytes;
     deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
@@ -1780,8 +1857,18 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
     return accepted;
 }
 
-void SessionHost::handleCommandDeferred(const QJsonObject& request, const QString& clientId,
+void SessionHost::handleCommandDeferred(const QJsonObject& incoming, const QString& clientId,
                                         CommandCallback done) {
+    const auto request = requestWithPreparationOwner(incoming, clientId);
+    if (request.value("message_type") == "session.prepare" ||
+        request.value("message_type") == "session.prepare.cancel") {
+        done(handleCommand(request, clientId));
+        return;
+    }
+    if (const auto failure = authorizePreparation(request); !failure.isEmpty()) {
+        done(failure);
+        return;
+    }
     if (request.value("message_type") == "session.configuration.read" &&
         request.value("payload").toObject().value("include_claude_usage").toBool()) {
         readClaudeAccountUsage(request, clientId, std::move(done));
@@ -1794,6 +1881,31 @@ void SessionHost::handleCommandDeferred(const QJsonObject& request, const QStrin
     }
     if (isBackgroundTaskCommand(request.value(QStringLiteral("message_type")).toString())) {
         backgroundTaskCommand(request, std::move(done));
+        return;
+    }
+    // ADR 0114 §10: the disk warning and a done worktree's removal answer once measured or
+    // removed. Only for the local client: handleCommand refuses team.* from any other.
+    if (localClient(clientId)) {
+        const QString type = request.value(QStringLiteral("message_type")).toString();
+        if (type == QStringLiteral("team.storage.get") ||
+            type == QStringLiteral("team.worktree.remove")) {
+            teamStorageCommand(request, std::move(done));
+            return;
+        }
+    }
+    // ADR 0114 §1: what a team command asks git is read off the event loop first: the
+    // repositories it names, then a task's worktree or its hand to review. Only for the
+    // local client: handleCommand refuses any other before it asks anything.
+    if (localClient(clientId) && request.value(QStringLiteral("message_type"))
+                                     .toString()
+                                     .startsWith(QStringLiteral("team."))) {
+        auto run = [this, request, clientId, done = std::move(done)] {
+            prepareTeamTask(request, [this, request, clientId, done] {
+                done(handleCommand(request, clientId));
+            });
+        };
+        learnRepositories(teamCommandPaths(request.value(QStringLiteral("payload")).toObject()),
+                          std::move(run));
         return;
     }
     if (request.value(QStringLiteral("message_type")).toString() !=
@@ -1829,7 +1941,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
         approvals_->cancelPending(sessionId, generation);
     });
     if (session->stored.adapter == QStringLiteral("claude") ||
-        session->stored.adapter == QStringLiteral("cursor")) {
+        session->stored.adapter == QStringLiteral("cursor") ||
+        session->stored.adapter == QStringLiteral("copilot")) {
         if (!session->startingTurn && session->stored.turnId.isEmpty() &&
             session->stored.state != QStringLiteral("running")) {
             return error(QStringLiteral("turn_not_running"),
@@ -1840,8 +1953,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
             return error(QStringLiteral("provider_unavailable"),
                          missingProviderMessage(session->stored.adapter));
         }
-        // Claude and Cursor first create a provider-native session.  There is no native turn to
-        // cancel during that short interval, so remember Stop and send it just after the adapter
+        // Claude and ACP providers first create a provider-native session.  There is no native turn
+        // to cancel during that short interval, so remember Stop and send it just after the adapter
         // announces turn.started.  Returning accepted keeps the Desktop control responsive.
         if (session->startingTurn) {
             session->interruptPending = true;
@@ -2275,6 +2388,11 @@ void SessionHost::refreshProviderTitle(const QString& sessionId, const qint64 ge
             const bool customTitle = !providerName.isEmpty();
             const QString candidate =
                 customTitle ? providerName : thread.value(QStringLiteral("preview")).toString();
+            // A team member keeps its member name, and no conversation is titled from the
+            // envelope of an agent message a turn started with (T-26).
+            if (!customTitle &&
+                (self->onTeam(sessionId) || agent_messaging::isDeliveryText(candidate)))
+                return;
             if (!candidate.trimmed().isEmpty() && candidate != current->stored.title) {
                 (void)self->updateSessionTitle(*current, conversation_title::suggest(candidate),
                                                customTitle);
@@ -2564,9 +2682,30 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
         approvals_->expireAssistantQuestions(sessionId, generation);
     if (!alive.isNull() && agents_ != nullptr)
         agents_->noteEvent(sessionId, generation, type, contextualPayload);
-    // ADR 0112 §7: the leader's digest waits for the end of its turn.
+    // ADR 0114 §7: the leader's digest waits for the end of its turn.
     if (!alive.isNull() && teams_ && (type == "turn.completed" || type == "runtime.stopped"))
-        teams_->memberTurnEnded(sessionId);
+        // Only a turn's end says whether the user stopped it; a worker that exits after
+        // the turn says nothing about that.
+        teams_->memberTurnEnded(
+            sessionId,
+            type == "turn.completed"
+                ? std::optional<bool>(payload.value(QStringLiteral("reason")).toString() ==
+                                      QStringLiteral("user"))
+                : std::nullopt);
+    // Last: a queued schedule may start another turn, which can rehash sessions_.
+    if (!alive.isNull() &&
+        (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped"))) {
+        const bool completed = type == QStringLiteral("turn.completed");
+        const QString status = payload.value(QStringLiteral("status")).toString();
+        const bool succeeded = completed && status != QStringLiteral("failed") &&
+                               status != QStringLiteral("interrupted") &&
+                               status != QStringLiteral("stopped");
+        noteScheduleTurnEnded(sessionId, succeeded,
+                              succeeded   ? QString()
+                              : completed ? status
+                                          : QStringLiteral("runtime_stopped"),
+                              payload.value(QStringLiteral("message")).toString());
+    }
     return true;
 }
 
@@ -2580,6 +2719,12 @@ bool SessionHost::isMutating(const QString& messageType) {
     if (messageType.startsWith(QStringLiteral("team.")))
         return !messageType.endsWith(QStringLiteral(".list")) &&
                !messageType.endsWith(QStringLiteral(".get"));
+    if (messageType.startsWith(QStringLiteral("schedule.")))
+        return messageType == QStringLiteral("schedule.create") ||
+               messageType == QStringLiteral("schedule.update") ||
+               messageType == QStringLiteral("schedule.delete") ||
+               messageType == QStringLiteral("schedule.setEnabled") ||
+               messageType == QStringLiteral("schedule.runNow");
     return messageType == QStringLiteral("session.agent_messages.release") ||
            messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||
@@ -2763,8 +2908,10 @@ void SessionHost::handleCanonicalPermission(const QString& adapterName, const QJ
         return;
     }
     const QString tool = params.value(QStringLiteral("tool")).toString();
-    const QString label = adapterName == QStringLiteral("cursor") ? QStringLiteral("Cursor")
-                                                                  : QStringLiteral("Claude");
+    const QString label = adapterName == QStringLiteral("copilot")
+                              ? QStringLiteral("GitHub Copilot")
+                          : adapterName == QStringLiteral("cursor") ? QStringLiteral("Cursor")
+                                                                    : QStringLiteral("Claude");
     (void)approvals_->request(
         it->stored.id, it->stored.generation, taggedRequestId(adapterName, requestId),
         QStringLiteral("approval"),
@@ -2801,6 +2948,10 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
     // Claude and Cursor take answers as they are and decisions as allow/accepted.
     ProviderAdapter* const target = provider(adapterName);
     if (target != nullptr && target != adapter_) {
+        if (adapterName == QStringLiteral("copilot") && result.value("cancelled").toBool()) {
+            target->respond(requestId, result);
+            return;
+        }
         if (result.contains(QStringLiteral("answers"))) {
             target->respond(requestId, result);
             return;

@@ -8,7 +8,6 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
-#include "agent/ConversationTags.h"
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QPointer>
@@ -494,7 +493,7 @@ void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.setAgentAvailable(true);
-    view.setRepositoryName("ketplus-app");
+    view.setRepositoryName("sample-mobile");
     view.setExecutionBranch("develop");
     view.resetMessages({}, "welcome");
     view.resize(1200, 800);
@@ -540,7 +539,7 @@ void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
     auto* place = findVisualItem(root, QStringLiteral("agentEmptyStatePlace"));
     QVERIFY(place);
     QVERIFY(place->property("text").toString().startsWith(
-        QStringLiteral("Your Agent works in ketplus-app on develop.")));
+        QStringLiteral("Your Agent works in sample-mobile on develop.")));
 }
 
 void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter_data() {
@@ -1254,128 +1253,13 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     auto* input = root->findChild<QQuickItem*>("agentPrompt");
     auto* placeholder = root->findChild<QQuickItem*>("composerPlaceholder");
     QVERIFY(input && placeholder);
-    auto* tag = root->findChild<QQuickItem*>("conversationTag_UI");
-    QSignalSpy filtered(&view, &ketplus::AgentWorkspaceView::tagFilterRequested);
-    QTRY_VERIFY((tag = findVisualItem(root, "conversationTag_UI")));
-    QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
-    QCOMPARE(filtered.count(), 1);
-    QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
-    // Add tag waits for a daemon that stores tags (before the first turn too, #429).
-    auto* addTag = root->findChild<QQuickItem*>("headerAddTagButton");
-    QVERIFY(addTag && !addTag->isVisible());
-    view.setConversations(
-        {QVariantMap{{"id", "ui"},
-                     {"active", true},
-                     {"number", "42"},
-                     {"tagsEditable", true},
-                     {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}}});
-    QTRY_VERIFY(addTag->isVisible());
-    QSignalSpy tagged(&view, &ketplus::AgentWorkspaceView::conversationTagRequested);
-    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
-    auto* tagMenu = root->findChild<QObject*>("conversationTagMenu");
-    QVERIFY(tagMenu);
-    QTRY_VERIFY(tagMenu->property("visible").toBool());
-    const auto tagItem = [tagMenu](const char* name) {
-        QObject* found = nullptr;
-        for (int index = 0; index < tagMenu->property("count").toInt() && !found; ++index) {
-            QQuickItem* item = nullptr;
-            QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, item),
-                                      Q_ARG(int, index));
-            if (item && item->objectName() == QLatin1StringView(name))
-                found = item;
-        }
-        return found;
-    };
-    // The catalog, then a separator and Manage tags… (#429).
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
-    QVERIFY(tagItem("conversationTagItem_UI")->property("checked").toBool());
-    auto* review = tagItem("conversationTagItem_Review");
-    QVERIFY(review && !review->property("checked").toBool());
-    review->setProperty("checked", true); // a click toggles the check before it triggers
-    QVERIFY(QMetaObject::invokeMethod(review, "triggered"));
-    QCOMPARE(tagged.count(), 1);
-    QCOMPARE(tagged.first().at(0).toString(), QStringLiteral("ui"));
-    QCOMPARE(tagged.first().at(1).toString(), QStringLiteral("Review"));
-    QVERIFY(tagged.first().at(2).toBool());
-    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
-    QTRY_VERIFY(!tagMenu->property("visible").toBool());
-    // Manage tags… edits a draft of the catalog and saves it whole, with the renames.
-    QSignalSpy catalogSaved(&view, &ketplus::AgentWorkspaceView::tagCatalogSaveRequested);
-    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
-    QTRY_VERIFY(tagMenu->property("visible").toBool());
-    QVERIFY(QMetaObject::invokeMethod(tagItem("conversationManageTagsItem"), "triggered"));
-    auto* manage = root->findChild<QObject*>("manageTagsDialog");
-    QVERIFY(manage);
-    QTRY_VERIFY(manage->property("visible").toBool());
-    QCOMPARE(manage->property("draft").toList().size(), view.tagCatalog().size());
-    // KETPLUS_MANAGE_TAGS_CAPTURE=<file.png> saves it beside KetPlusMock --open=manage-tags.
-    if (const auto capture = qEnvironmentVariable("KETPLUS_MANAGE_TAGS_CAPTURE");
-        !capture.isEmpty()) {
-        QTest::qWait(300);
-        QVERIFY(root->window()->grabWindow().save(capture));
-    }
-    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 0),
-                                      Q_ARG(QVariant, QStringLiteral("label")),
-                                      Q_ARG(QVariant, QStringLiteral("Interface"))));
-    // Popups draw in the window's overlay, outside the header's item tree.
-    auto* save = findVisualItem(root->window()->contentItem(), "manageTagsSave");
-    QVERIFY(save && save->property("enabled").toBool());
-    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
-                                      Q_ARG(QVariant, QStringLiteral("label")),
-                                      Q_ARG(QVariant, QStringLiteral("interface"))));
-    QTRY_VERIFY(!save->property("enabled").toBool()); // the same name twice
-    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
-                                      Q_ARG(QVariant, QStringLiteral("label")),
-                                      Q_ARG(QVariant, QStringLiteral("Speed"))));
-    QTRY_VERIFY(save->property("enabled").toBool());
-    QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
-    QCOMPARE(catalogSaved.count(), 1);
-    const auto savedTags = catalogSaved.first().at(0).toList();
-    QCOMPARE(savedTags.size(), view.tagCatalog().size());
-    QCOMPARE(savedTags.first().toMap().value("label").toString(), QStringLiteral("Interface"));
-    const auto renames = catalogSaved.first().at(1).toMap();
-    QCOMPARE(renames.value(view.tagCatalog().first().toMap().value("label").toString()).toString(),
-             QStringLiteral("Interface"));
-    QCOMPARE(renames.size(), 2);
-    QTRY_VERIFY(!manage->property("visible").toBool());
-    // A catalog from the daemon replaces the menu's labels.
-    view.setTagCatalog({QVariantMap{{"label", "Release"}, {"color", "#d1453b"}}});
-    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
-    QTRY_VERIFY(tagMenu->property("visible").toBool());
-    QTRY_COMPARE(tagMenu->property("count").toInt(), 3);
-    QVERIFY(tagItem("conversationTagItem_Release"));
-    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
-    QTRY_VERIFY(!tagMenu->property("visible").toBool());
-    view.setTagCatalog(ketplus::conversation_tags::catalog());
-    // Another client may have stored the label in another case; it is the same tag.
-    view.setConversations({QVariantMap{{"id", "ui"},
-                                       {"active", true},
-                                       {"number", "42"},
-                                       {"tagsEditable", true},
-                                       {"tags", QVariantList{QVariantMap{{"label", "review"}}}}}});
-    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
-    QTRY_VERIFY(tagMenu->property("visible").toBool());
-    QVERIFY(tagItem("conversationTagItem_Review")->property("checked").toBool());
-    QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
-    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
-    QTRY_VERIFY(!tagMenu->property("visible").toBool());
-    // Every tag shows when the header has room, and they leave together when it has not.
-    view.setConversations({QVariantMap{
-        {"id", "ui"},
-        {"active", true},
-        {"number", "42"},
-        {"tagsEditable", true},
-        {"tags", QVariantList{QVariantMap{{"label", "UI"}}, QVariantMap{{"label", "Review"}},
-                              QVariantMap{{"label", "Docs"}}}}}});
-    view.resize(1400, 700);
-    for (const auto* name :
-         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
-        QTRY_VERIFY2(findVisibleItem(root, name), name);
-    view.resize(480, 700);
-    for (const auto* name :
-         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
-        QTRY_VERIFY2(!findVisibleItem(root, name), name);
-    view.resize(1000, 700);
+    // ADR 0117: the header draws no user tag, even when a row still carries one, and has no
+    // Add tag, tag menu or Manage tags….
+    QTRY_VERIFY(findVisibleItem(root, "conversationTitle"));
+    QVERIFY(!findVisualItem(root, "conversationTag_UI"));
+    QVERIFY(!root->findChild<QQuickItem*>("headerAddTagButton"));
+    QVERIFY(!root->findChild<QObject*>("conversationTagMenu"));
+    QVERIFY(!root->findChild<QObject*>("manageTagsDialog"));
     // The mock's header actions, in its order and with its symbols.
     const QList<std::pair<const char*, const char*>> actions{
         {"headerCompactWindowButton", "panel-left"},
@@ -1386,8 +1270,9 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         {"headerWorkReportButton", "view-list"}};
     qreal previousX = -1;
     for (const auto& [name, icon] : actions) {
-        auto* action = root->findChild<QQuickItem*>(name);
-        QVERIFY2(action && action->isVisible(), name);
+        // The header settles its actions once the window has laid it out.
+        QQuickItem* action = nullptr;
+        QTRY_VERIFY2((action = root->findChild<QQuickItem*>(name)) && action->isVisible(), name);
         QCOMPARE(action->property("iconName").toString(), QLatin1StringView(icon));
         QVERIFY2(action->x() > previousX, name);
         previousX = action->x();
@@ -1399,11 +1284,11 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
     QCOMPARE(changes.count(), 1);
     QCOMPARE(navigated.count(), 0);
-    // With the details pane open, its Open content menu replaces the three openers.
+    // The three openers stay while the details pane is open: they switch its tab.
     view.setDetailsOpen(true);
     for (const char* name :
          {"headerChangesButton", "headerTerminalButton", "headerWorkReportButton"})
-        QTRY_VERIFY2(!root->findChild<QQuickItem*>(name)->isVisible(), name);
+        QTRY_VERIFY2(root->findChild<QQuickItem*>(name)->isVisible(), name);
     QVERIFY(root->findChild<QQuickItem*>("headerAtlasButton") == nullptr ||
             root->findChild<QQuickItem*>("headerAtlasButton")->isVisible());
     view.setDetailsOpen(false);
@@ -2436,7 +2321,7 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
     QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
                 (surface = bubbleOf(gallery)) && !surface->isVisible());
 
-    // Another agent's message names its sender above a plain bubble; a steer says so below.
+    // Incoming agents use the shared card; an owner steer stays a bubble.
     view.resetMessages({QVariantMap{{"kind", "user"},
                                     {"body", "Keep 4 behind another app."},
                                     {"messageKey", "reply"},
@@ -2460,19 +2345,14 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
     };
     QQuickItem* origin = nullptr;
     QQuickItem* steer = nullptr;
-    QTRY_VERIFY((origin = shown(shown, activeTranscript, "agentMessageOrigin")));
+    QTRY_VERIFY((origin = shown(shown, activeTranscript, "transcriptAgentNoteText")));
     QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")));
-    QCOMPARE(origin->property("text").toString(),
-             QString("Reply from @agent/8941 · DS Icon · Claude"));
-    QCOMPARE(origin->property("color").value<QColor>(), steer->property("color").value<QColor>());
+    QVERIFY(origin->property("text").toString().contains("Reply from @agent/8941"));
     auto* replyBubble = bubbleOf(origin);
     auto* steerBubble = bubbleOf(steer);
     QVERIFY(replyBubble && steerBubble);
-    QCOMPARE(QQmlProperty::read(replyBubble, "border.color").value<QColor>(),
-             QQmlProperty::read(steerBubble, "border.color").value<QColor>());
-    QCOMPARE(replyBubble->property("color"), steerBubble->property("color"));
-    QVERIFY(origin->mapToScene(QPointF(0, origin->height())).y() <=
-            replyBubble->mapToScene(QPointF()).y());
+    QCOMPARE(replyBubble->property("color").value<QColor>().alpha(), 0);
+    QVERIFY(steerBubble->property("color").value<QColor>().alpha() > 0);
     QVERIFY(steer->mapToScene(QPointF()).y() >=
             steerBubble->mapToScene(QPointF(0, steerBubble->height())).y());
     // The note names the provider of the steered turn; choosing another provider for the
@@ -2540,6 +2420,14 @@ void AgentWorkspaceViewTest::imageViewerOpensTheRowsImages() {
     QCOMPARE(viewer->property("item").toMap().value("caption").toString(), QString("second.png"));
     // The mock's tools: zoom, rotate, copy, download, print and fullscreen.
     QCOMPARE(viewer->property("tools").toInt(), 0xff);
+    // The workspace is a Quick window inside the desktop's window; the viewer covers all of
+    // the desktop's window, not only the transcript.
+    QWindow* over = imageWindow(root);
+    QVERIFY(over);
+    QTRY_VERIFY(over->isVisible());
+    QCOMPARE(over->geometry(), view.window()->geometry());
+    QVERIFY(over != view.quickView());
+    QCOMPARE(viewer->property("width").toReal(), qreal(over->width()));
     // Copy puts the picture on the clipboard and says so.
     QGuiApplication::clipboard()->clear();
     QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x10))); // Copy

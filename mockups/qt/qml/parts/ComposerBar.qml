@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket
 import KetPlusMock
+import "../schedules/ScheduleRules.js" as Rules
 
 // The composer as KetPlus desktop lays it out: the card holds only the message and its
 // send/stop circle; the row below holds attachments and the mode on the left, then the
@@ -13,6 +14,33 @@ Item {
     id: bar
 
     required property var window
+    property var scheduleDrafts: ({})
+    readonly property string conversationNumber: window.conversation.number
+    readonly property var existingSchedule: window.scheduleStore.clockFor(conversationNumber) || null
+    readonly property bool newConversation: window.conversation.transcript === "welcome" && !existingSchedule
+    readonly property var scheduleDraft: scheduleDrafts[conversationNumber] || null
+    readonly property bool scheduleSet: newConversation && !!scheduleDraft
+    function setScheduleDraft(plan) {
+        const next = Object.assign({}, scheduleDrafts)
+        if (plan) next[conversationNumber] = Object.assign({}, plan)
+        else delete next[conversationNumber]
+        scheduleDrafts = next
+    }
+    function submitSchedule(text) {
+        if (!scheduleSet || !text.trim()) return false
+        const id = window.scheduleStore.save(Object.assign({}, scheduleDraft, {
+            name: text.split("\n")[0].slice(0, 64), prompt: text, target: scheduleDraft.newConversation ? 1 : 0,
+            conversation: conversationNumber, sourceConversation: conversationNumber,
+            provider: provider, model: model, effort: effort, repository: window.repository,
+            worktree: !!scheduleDraft.newConversation, creator: "You"
+        }))
+        if (!id) return false
+        setScheduleDraft(null); composer.text = ""; window.openSchedules(id); return true
+    }
+    function openSchedule() {
+        if (newConversation) { firstSchedule.prepare(scheduleDraft); firstSchedule.openAbove(scheduleButton) }
+        else if (existingSchedule) existingMenu.popup(scheduleButton, scheduleButton.width - existingMenu.width, -existingMenu.height - px(6))
+    }
     property bool busy: false
     signal stopRequested()
     // The provider cannot start a turn yet: Send keeps the draft and says why.
@@ -40,14 +68,27 @@ Item {
     }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    // Review evidence: --open=model|mode|limits.
+    // Review evidence: --open=model|mode|limits; limits-cost opens Cost details and
+    // limits-api-key shows a conversation on an API key, which has no such row.
     function openPanel(name) {
-        if (name === "model")
+        if (["schedule-new", "schedule-repeat", "schedule-ready", "schedule-more", "schedule-weekly", "schedule-at", "schedule-existing"].includes(name)) {
+            if (name !== "schedule-existing") composer.text = "Write a new post for the website"
+            openSchedule()
+            const example = ({ "schedule-repeat": "repeat", "schedule-ready": "repeat", "schedule-weekly": "weekly", "schedule-at": "at", "schedule-more": "more" })[name]
+            if (newConversation && example) {
+                firstSchedule.preview(example)
+                if (name === "schedule-ready") firstSchedule.apply()
+            }
+        }
+        else if (name === "model")
             modelDialog.open()
         else if (name === "mode")
             permissionButton.clicked()
-        else if (name === "limits")
+        else if (["limits", "limits-cost", "limits-api-key"].includes(name)) {
+            limits.apiKey = name === "limits-api-key"
             limits.toggleAbove(ring)
+            limits.costExpanded = name === "limits-cost"
+        }
         else if (name === "composer")
             composer.focusInput()
         // The suggestion popovers, for the side by side with the app's composer.
@@ -75,6 +116,7 @@ Item {
         busy: bar.busy
         placeholderText: bar.placeholder
         onSubmitted: text => {
+            if (bar.scheduleSet) { if (!bar.submitSchedule(text)) composer.text = text; return }
             if (bar.blocked) {
                 // KetComposer clears its input before it emits submitted; put the draft back.
                 composer.text = text
@@ -133,7 +175,7 @@ Item {
 
         ComposerFooterButton {
             id: modelButton
-            Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 120 : 240))
+            Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 150 : 270))
             text: bar.providerLabel + " · " + bar.model + "   " + bar.effort
             iconName: bar.setup ? "warning" : ""
             warning: !!bar.setup
@@ -146,12 +188,77 @@ Item {
 
         KetUsageRing {
             id: ring
+            objectName: "composerContextRing"
             Layout.alignment: Qt.AlignVCenter
             value: bar.contextUsed
             onClicked: limits.toggleAbove(ring)
         }
+        KetIconButton {
+            id: scheduleButton
+            objectName: "composerScheduleClock"
+            Layout.alignment: Qt.AlignVCenter
+            controlSize: KetTheme.ControlSize.Small
+            // The clock symbol has optical margins; match its visible circle to the ring.
+            glyphSize: ring.recipe.size * 1.24
+            visible: bar.newConversation || !!bar.existingSchedule
+            iconName: "clock"; checkable: true
+            checked: bar.scheduleSet || (!!bar.existingSchedule && bar.existingSchedule.enabled)
+            previewState: checked ? ({ hovered: true, pressed: down, enabled: enabled, focused: visualFocus }) : null
+            text: bar.newConversation ? (bar.scheduleSet ? "Scheduled · " + Rules.nextLabel(bar.scheduleDraft) : "Schedule first message")
+                  : bar.existingSchedule ? (bar.existingSchedule.enabled ? "Next run: " + Rules.nextLabel(bar.existingSchedule) : "Schedule paused") : "Schedule"
+            onClicked: {
+                checked = Qt.binding(() => bar.scheduleSet || (!!bar.existingSchedule && bar.existingSchedule.enabled))
+                bar.openSchedule()
+            }
+        }
     }
 
+    ConversationSchedulePopover { id: firstSchedule; onConfigured: plan => bar.setScheduleDraft(plan) }
+    KetMenu {
+        id: existingMenu
+        KetMenuSection { text: bar.existingSchedule ? bar.existingSchedule.name : "Schedule" }
+        KetMenuItem { text: "Edit"; iconName: "edit"; onTriggered: bar.window.editExistingSchedule(bar.existingSchedule) }
+        KetMenuItem { text: bar.existingSchedule && bar.existingSchedule.enabled ? "Pause" : "Resume"; onTriggered: if (bar.existingSchedule) bar.window.scheduleStore.patch(bar.existingSchedule.id, { enabled: !bar.existingSchedule.enabled }) }
+        KetMenuItem { text: "Open in Schedules"; onTriggered: if (bar.existingSchedule) bar.window.openSchedules(bar.existingSchedule.id) }
+    }
+    function scheduleEvidenceChecks(state) {
+        const geometry = scheduleButton.visible && scheduleButton.x >= ring.x + ring.width
+            && scheduleButton.x + scheduleButton.width <= footer.width + 1
+            && Math.abs(KetTheme.iconDrawSize(scheduleButton.glyphSize) * 0.817 - ring.width) < 1
+            && Math.abs(scheduleButton.y + scheduleButton.height / 2 - ring.y - ring.height / 2) <= 0.5
+        if (newConversation) {
+            const valid = geometry && composer.width === width && composer.actionButton.visible
+                && (firstSchedule.geometryVisible() || (scheduleSet && scheduleButton.checked))
+                && (state !== "schedule-new" || (firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked))
+            if (!valid) console.warn("QML schedule geometry: ring=" + ring.x + "/" + ring.width + " center=" + (ring.y + ring.height / 2) + ", clock=" + scheduleButton.x + "/" + footer.width + " glyph=" + scheduleButton.glyphSize + " center=" + (scheduleButton.y + scheduleButton.height / 2) + ", popup=" + firstSchedule.x + "," + firstSchedule.y + " " + firstSchedule.width + "x" + firstSchedule.height + ", overlay=" + (firstSchedule.parent ? firstSchedule.parent.width + "x" + firstSchedule.parent.height : "none"))
+            return valid
+        }
+        return geometry && !!existingSchedule && existingMenu.visible
+    }
+    function scheduleChecks() {
+        if (!newConversation) return false
+        setScheduleDraft(null); openSchedule()
+        const defaults = firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked
+        firstSchedule.preview("at"); firstSchedule.close(); openSchedule()
+        const cancelDefault = firstSchedule.sendNowSelected() && !scheduleSet && !scheduleButton.checked
+        firstSchedule.preview("repeat")
+        firstSchedule.apply()
+        const scheduled = scheduleSet && composer.actionButton.visible
+            && composer.actionButton.Accessible.name === "Send request" && composer.width === width
+        scheduleButton.clicked()
+        const staysActive = scheduleButton.checked && firstSchedule.visible
+            && firstSchedule.mode === 2
+        const previous = JSON.stringify(scheduleDraft)
+        firstSchedule.preview("at"); firstSchedule.close(); openSchedule()
+        const cancelSaved = firstSchedule.mode === 2 && JSON.stringify(scheduleDraft) === previous && scheduleButton.checked
+        firstSchedule.close()
+        composer.text = "A scheduled first message"
+        const count = window.scheduleStore.entries.length
+        composer.actionButton.clicked()
+        const saved = window.scheduleStore.entries.length === count + 1
+            && !!existingSchedule && existingSchedule.prompt === "A scheduled first message"
+        return defaults && cancelDefault && scheduled && staysActive && cancelSaved && saved && !!existingSchedule && !newConversation
+    }
     KetMenu {
         id: attachMenu
         KetMenuItem { text: "Attach files…"; iconName: "attachment"; onTriggered: bar.window.notify("Attached design-system.md") }

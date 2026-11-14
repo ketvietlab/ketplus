@@ -72,6 +72,14 @@ QJsonObject workReportTool() {
                    QStringLiteral("What is left, or the blocker. Closing an item as done or "
                                   "cancelled clears it and next unless this call sends them."))},
          {QStringLiteral("next"), next},
+         {QStringLiteral("replaces"),
+          QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                      {QStringLiteral("items"),
+                       QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}},
+                      {QStringLiteral("description"),
+                       QStringLiteral("Keys of items that are the same work as this one, reported "
+                                      "earlier under another key, open or done. They are hidden "
+                                      "as replaced by this item; open ones are cancelled.")}}},
          {QStringLiteral("verified"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
                       {QStringLiteral("items"),
@@ -90,7 +98,9 @@ QJsonObject workReportTool() {
              "Update this conversation's work report, which KetPlus shows to the user at the "
              "end of the turn. Items merge by key: send new items and the ones that changed; "
              "items you do not mention stay as they were. Never include secrets, credentials, "
-             "tokens or file contents. The answer has the counts the user sees.")},
+             "tokens or file contents. The answer has the counts the user sees, every open item "
+             "and the recently finished ones, also from earlier turns: reconcile them before "
+             "the turn ends, and do not send finished items again unless they changed.")},
         {QStringLiteral("inputSchema"),
          schema({{QStringLiteral("title"),
                   property(QStringLiteral("string"),
@@ -128,8 +138,13 @@ QJsonArray tools() {
              QStringLiteral(
                  "Send a message to another KetPlus conversation by its number. An idle "
                  "conversation starts a turn for it; a busy one receives it when its turn ends. "
-                 "With expect_reply, the answer arrives later as a message in this "
-                 "conversation; do not wait or poll for it.")},
+                 "The receipt's delivery is starting, queued, steering (urgent, added to the "
+                 "running turn) or urgent_waiting (urgent, but the receiver cannot be steered "
+                 "now; waiting_on and note say what it waits on, and the message arrives at "
+                 "the first point it can) or recorded (a review's answer). Steering with "
+                 "waiting_on means the turn reads it when its tool call ends. With expect_reply, "
+                 "the answer arrives later as a "
+                 "message in this conversation; do not wait or poll for it.")},
             {QStringLiteral("inputSchema"),
              schema({{QStringLiteral("to"),
                       property(QStringLiteral("string"),
@@ -147,7 +162,8 @@ QJsonArray tools() {
                      {QStringLiteral("urgent"),
                       property(QStringLiteral("boolean"),
                                QStringLiteral("Steer the receiver's running turn instead of "
-                                              "waiting for it to end."))}},
+                                              "waiting for it to end. When it cannot be "
+                                              "steered now, the receipt says urgent_waiting."))}},
                     {QStringLiteral("to"), QStringLiteral("text")})}},
         QJsonObject{
             {QStringLiteral("name"), QStringLiteral("agents_inbox")},
@@ -338,7 +354,7 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
     if (method == QStringLiteral("ping"))
         return result(id, {});
     if (method == QStringLiteral("tools/list")) {
-        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        // ADR 0114: the team tools only for a member; the daemon refuses them for others.
         QJsonArray listed = tools();
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())

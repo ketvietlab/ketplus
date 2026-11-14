@@ -49,6 +49,22 @@ QJsonObject SessionHost::handleAgentCommand(const QString& token, const QString&
     return agents_->handle(token, type, payload);
 }
 
+void SessionHost::handleAgentCommandDeferred(const QString& token, const QString& type,
+                                             const QJsonObject& payload, CommandCallback done) {
+    auto run = [this, token, type, payload, done = std::move(done)] {
+        done(agents_->handle(token, type, payload));
+    };
+    // Only the caller the broker will accept has anything read for it.
+    const auto owner = agents_->sessionForToken(token);
+    const auto caller = owner ? agentConversation(owner->first) : std::nullopt;
+    if (!caller || caller->generation != owner->second ||
+        !type.startsWith(QStringLiteral("agents.team_task_"))) {
+        run();
+        return;
+    }
+    prepareTeamOperation(caller->sessionId, type.mid(7), payload, std::move(run));
+}
+
 QString SessionHost::agentToken(const QString& sessionId) {
     const auto it = sessions_.constFind(sessionId);
     return it == sessions_.cend() ? QString{} : agents_->tokenFor(sessionId, it->stored.generation);
@@ -64,6 +80,7 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.provider = stored.adapter;
     conversation.model = stored.model;
     conversation.worktree = stored.worktreePath;
+    conversation.executionPolicy = stored.executionPolicy;
     conversation.state = stored.state;
     conversation.lastActivity = stored.lastTurnStartedAt;
     const QString& state = stored.state;
@@ -76,6 +93,17 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.steerable = state == QStringLiteral("running") && !stored.turnId.isEmpty() &&
                              (claude || !stored.threadId.isEmpty()) &&
                              providerSupports(stored.adapter, compat::capability::turnSteer);
+    if (!conversation.idle && !conversation.steerable)
+        conversation.waitingOn =
+            state == QStringLiteral("waiting_for_input")
+                ? QStringLiteral("an approval or an answer from the user")
+            : state == QStringLiteral("stopping") ? QStringLiteral("its turn to stop")
+            : session.startingTurn || state == QStringLiteral("starting") ||
+                    (state == QStringLiteral("running") && stored.turnId.isEmpty())
+                ? QStringLiteral("its turn to start")
+            : state == QStringLiteral("running")
+                ? QStringLiteral("a running turn that its provider cannot steer")
+                : QStringLiteral("a background task (a command or wait it started)");
     return conversation;
 }
 
@@ -186,7 +214,7 @@ QString SessionHost::agentInstructions(const Session& session) const {
         journal_->conversationNumber(session.stored.id, session.stored.generation);
     if (number.isEmpty())
         return {};
-    // ADR 0112: a member also gets its role's instructions, current at every turn.
+    // ADR 0114: a member also gets its role's instructions, current at every turn.
     const QString team = teamInstructionsFor(session.stored.id);
     return team.isEmpty() ? agent_messaging::toolInstructions(number)
                           : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;

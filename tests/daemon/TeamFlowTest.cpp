@@ -1,9 +1,11 @@
-// ADR 0112 §7 and open point 2: what starts a turn, the leader's digest, pause and the budget
+// ADR 0114 §7 and open point 2: what starts a turn, the leader's digest, pause and the budget
 // of automatic turns. The coordinator runs on a real journal with a fake runtime and a short
 // quiet period. No provider is started.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
+#include "teams/TeamRemoteView.h"
+#include "teams/TeamVerdictLine.h"
 
 #include <QDir>
 #include <QProcess>
@@ -12,6 +14,7 @@
 #include <QTest>
 
 using namespace ketplus::daemon;
+using namespace ketplus::daemon::teams;
 using namespace team_test;
 
 class TeamFlowTest final : public QObject {
@@ -127,6 +130,206 @@ class TeamFlowTest final : public QObject {
         teams_->memberTurnEnded("lead");
         settle();
         QCOMPARE(host_.messages.size(), 1);
+    }
+
+    // T-75: a task of dev1 with a pull request, in review, and the leader's inbox empty.
+    QString reviewed(const QString& title) {
+        const QString id = task(title);
+        if (!teams_->assignTask(team_, id, "dev1", "lead").ok() ||
+            !teams_
+                 ->updateTask(team_, id, {{"pull_request", "https://example.test/pull/12"}}, "lead")
+                 .ok() ||
+            !teams_->moveTask(team_, id, state::inProgress, "dev1").ok() ||
+            !teams_->moveTask(team_, id, state::inReview, "dev1").ok())
+            return {};
+        settle();
+        host_.messages.clear();
+        return id;
+    }
+    QString verdictUpdate(const QString& id) {
+        for (const auto& update : journal_->teamUpdates(team_, false, 100))
+            if ((update.kind == "verdict" || update.kind == "round_limit") && update.taskId == id)
+                return update.actionable ? update.text : QStringLiteral("not actionable");
+        return {};
+    }
+
+    // T-75: a findings verdict sends the task back to its developer, and the leader reads it
+    // in its next digest, with the round, the reviewer and the findings by severity.
+    void aFindingsVerdictMakesTheLeadersDigestDue() {
+        start();
+        const QString id = reviewed("Cart");
+        QVERIFY(!id.isEmpty());
+        QVERIFY(host_.of("digest").isEmpty());
+        finishReview(*teams_, "rev",
+                     "## Findings\n- **L1 — Low — `web/cart.ts:4`:** no total.\n"
+                     "- **L2 — Low — `web/cart.ts:9`:** rounding.\n"
+                     "- **N1 — Nit — `web/cart.ts:2`:** a name.\nL1 again: see above.\n"
+                     "Verdict: findings",
+                     false);
+        QCOMPARE(team().task(id)->state, state::inProgress);
+        const QString line = verdictUpdate(id);
+        QCOMPARE(line,
+                 QStringLiteral("Verdict on %1 (PR https://example.test/pull/12), round 1 of 2 by "
+                                "Reviewer: findings (0 High, 0 Medium, 2 Low, 1 Nit). Back to its "
+                                "developer; decide on any finding outside the task's scope.")
+                     .arg(id));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        const TeamMessage digest = host_.of("digest").first();
+        QCOMPARE(digest.toSession, QStringLiteral("lead"));
+        QVERIFY(digest.body.contains(QStringLiteral("- [needs you] ") + line));
+        // The developer gets the findings; nothing goes from member to member besides.
+        QCOMPARE(host_.of("review").size(), 1);
+        QCOMPARE(host_.of("review").first().toSession, QStringLiteral("dev1"));
+    }
+
+    void aPassVerdictMakesTheLeadersDigestDue() {
+        start();
+        const QString id = reviewed("Cart");
+        finishReview(*teams_, "rev", "Nothing to fix.\nVerdict: no findings", true);
+        QCOMPARE(team().task(id)->state, state::ready);
+        const QString line = verdictUpdate(id);
+        QCOMPARE(line, QStringLiteral("Verdict on %1 (PR https://example.test/pull/12), round 1 "
+                                      "of 2 by Reviewer: no findings. Ready to merge.")
+                           .arg(id));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(line));
+    }
+
+    void aRoundLimitVerdictMakesTheLeadersDigestDue() {
+        start();
+        QVERIFY(teams_->update(team_, {{"max_rounds", 1}}, "user").ok());
+        const QString id = reviewed("Cart");
+        host_.messages.clear();
+        finishReview(*teams_, "rev", "web/cart.ts:4 high: no total.\nVerdict: findings", false);
+        QCOMPARE(team().task(id)->state, state::blocked);
+        const QString line = verdictUpdate(id);
+        QVERIFY2(line.endsWith("round 1 of 1 by Reviewer: findings (1 High, 0 Medium, 0 Low, "
+                               "0 Nit). The round limit is reached: you decide."),
+                 qPrintable(line));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(line));
+        QVERIFY(host_.of("review").isEmpty());
+        // One line says the limit is reached: the verdict is the round_limit warning.
+        int limits = 0;
+        for (const auto& update : journal_->teamUpdates(team_, false, 100))
+            limits += update.kind == "round_limit" || update.kind == "verdict" ? 1 : 0;
+        QCOMPARE(limits, 1);
+    }
+
+    // The team page's Updates and the phone's team payload carry the same verdict line.
+    void theVerdictLineIsInTheTeamPageAndThePhonePayload() {
+        start();
+        const QString id = reviewed("Cart");
+        finishReview(*teams_, "rev", "- **L1, Low.** `web/cart.ts:4`: no total.\nVerdict: findings",
+                     false);
+        const QString line = verdictUpdate(id);
+        QVERIFY(line.contains("(0 High, 0 Medium, 1 Low, 0 Nit)"));
+        const QJsonArray page = teams_->updatesJson(team_);
+        const auto has = [&line](const QJsonArray& updates, bool* warning = nullptr) {
+            for (const QJsonValue& value : updates) {
+                const QJsonObject update = value.toObject();
+                if (update.value("text").toString() != line)
+                    continue;
+                if (warning)
+                    *warning = update.value("warning").toBool();
+                return update.value("actionable").toBool();
+            }
+            return false;
+        };
+        QVERIFY(has(page));
+        bool warning = true;
+        QVERIFY(has(remote::updates(page, teams_->teamJson(team())), &warning));
+        QVERIFY(!warning);
+    }
+
+    // A busy leader reads the verdict when its turn ends, not before.
+    void aBusyLeaderReadsTheVerdictWhenItsTurnEnds() {
+        start();
+        const QString id = reviewed("Cart");
+        host_.setIdle("lead", false);
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        settle();
+        QVERIFY(host_.of("digest").isEmpty());
+        host_.setIdle("lead", true);
+        teams_->memberTurnEnded("lead");
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("digest").size(), 1, 2000);
+        QVERIFY(host_.of("digest").first().body.contains(QStringLiteral("Verdict on %1").arg(id)));
+        QVERIFY(host_.of("digest").first().body.contains("severity not stated"));
+    }
+
+    void severitiesAreCountedOncePerFinding() {
+        using verdict_line::count;
+        using verdict_line::counts;
+        QCOMPARE(counts(count("**M1 — Medium — a.cpp:1:** x\n**M1** again\n- L3 - low: y\n"
+                              "F2: Critical z\nVerdict: findings")),
+                 QStringLiteral("1 High, 1 Medium, 1 Low, 0 Nit"));
+        QCOMPARE(counts(count("a.cpp:4 medium: x\nb.cpp:2 nit: y\nVerdict: findings")),
+                 QStringLiteral("0 High, 1 Medium, 0 Low, 1 Nit"));
+        QCOMPARE(counts(count("Some issues.\nVerdict: findings")),
+                 QStringLiteral("severity not stated"));
+    }
+
+    // The formats the team's reviewers write, as they reached the board.
+    void severitiesAreCountedInTheReviewersFormats() {
+        using verdict_line::count;
+        using verdict_line::counts;
+        // "- **H1, High.** …", with the ids mentioned again in the prose and a summary.
+        QCOMPARE(counts(count("**Findings**\n- **H1, High.** `a.cpp:33`: both patterns miss.\n"
+                              "  - Counts — High: 0, Medium: 1, Low: 2 reads as one High.\n"
+                              "- **M1, Medium.** `a.cpp:38`: fixed findings count.\n"
+                              "- **L1, Low.** `b.cpp:134`: no test.\n"
+                              "- **N1, Nit.** `c.cpp:440`: three lines.\n"
+                              "- **N2, Nit.** `sources.cmake:135`: order.\n"
+                              "- **N3, Nit.** `a.h:22`: not the format. Fix with H1.\n"
+                              "In short: 1 High, 1 Medium, 1 Low and 3 Nit.\nVerdict: findings")),
+                 QStringLiteral("1 High, 1 Medium, 1 Low, 3 Nit"));
+        // "- **L1 (Low), file:**".
+        QCOMPARE(counts(count("- **L1 (Low), `a.cpp:12`:** stale summary.\n"
+                              "- **N1 (Nit), `b.qml:3`:** spacing.\nVerdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 1 Low, 1 Nit"));
+        // "- **Low**, `file`:", without ids.
+        QCOMPARE(counts(count("- **Low**, `a.cpp:4`: no total.\n- **Medium**, `b.cpp:9`: race.\n"
+                              "- Low-level calls are fine.\nVerdict: findings")),
+                 QStringLiteral("0 High, 1 Medium, 1 Low, 0 Nit"));
+    }
+
+    // Round 2 lists round 1's findings again with what became of them; only open ones count.
+    void settledFindingsAreNotCounted() {
+        using verdict_line::count;
+        using verdict_line::counts;
+        QCOMPARE(counts(count("- L1 — Low — fixed in abc123.\n- **N1 (Nit)** ✅ fixed\n"
+                              "✅ **N2, Nit.** sorted.\n- N3 — Nit — still open: the doc.\n"
+                              "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 1 Nit"));
+        QCOMPARE(counts(count("- **L1, Low.** đã sửa.\nVerdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
+        QCOMPARE(counts(count("Counts — High: 0, Medium: 1, Low: 2\nVerdict: findings")),
+                 QStringLiteral("severity not stated"));
+        // T-62 r2 as it reached the board: the mark comes after the finding's text.
+        const QString settledLine =
+            "- **L1 (Low), xoá sạch thì trang mất tóm tắt:** ✅ **đã sửa.**\n";
+        QCOMPARE(counts(count(settledLine + settledLine + settledLine + "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 0 Nit"));
+        QCOMPARE(counts(count("- **L1 (Low), xoá sạch thì trang mất tóm tắt:** ✅ **đã sửa.**\n"
+                              "- **L2 (Low), danh sách vẫn giữ dòng cũ:** ❌ chưa sửa.\n"
+                              "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 1 Low, 0 Nit"));
+        // "fixed" in a finding's own words is not its mark.
+        QCOMPARE(counts(count("- **N1 (Nit), the docs say fixed-width:** still open.\n"
+                              "- **N2 (Nit), a.cpp:3:** fixed values are hard-coded.\n"
+                              "Verdict: findings")),
+                 QStringLiteral("0 High, 0 Medium, 0 Low, 2 Nit"));
+    }
+
+    // A summary of counts, or a severity with nothing under it, is no finding.
+    void summariesAndEmptySeveritiesAreNoFindings() {
+        using verdict_line::count;
+        for (const char* reply : {"High: 0, Medium: 1, Low: 2\nVerdict: findings",
+                                  "- High: 0\n- Medium: 1\n- Low: 2\nVerdict: findings",
+                                  "- **High**: không có.\n- **Medium**: none\nVerdict: findings"})
+            QVERIFY2(!count(QString::fromUtf8(reply)).any(), reply);
+        // Words after the severity are a finding, in either language.
+        QVERIFY(count("- **Low**: không có test cho trang.\nVerdict: findings").low == 1);
     }
 
     void anIdleLeaderReadsABurstAsOneDigestAfterTheQuietPeriod() {

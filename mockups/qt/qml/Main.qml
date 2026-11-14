@@ -5,6 +5,8 @@ import QtQuick.Layouts
 import Ket
 import KetPlusMock
 import KetPlusMock.Native
+import "schedules/ScheduleRules.js" as ScheduleRules
+import "schedules/ScheduleSamples.js" as ScheduleSamples
 
 // The KetPlus Pro window: the sidebar and the current screen, with the app-wide overlays
 // (Quick search, the repository picker, dialogs and toasts).
@@ -13,6 +15,8 @@ Basic.ApplicationWindow {
 
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
+        "schedules", "schedules/empty", "schedules/failure", "schedules/team",
+        "workspace/scheduled", "workspace/schedule-failure", "workspace/schedule-new", "workspace/schedule-repeat", "workspace/schedule-ready", "workspace/schedule-existing", "teams/scheduled", "teams/recurring",
         "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
         "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
@@ -20,7 +24,10 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "teams", "teams/task", "teams/large", "teams/empty",
+        "changes", "brand", "teams", "teams/task", "teams/large", "teams/two-reviewers", "teams/empty", "teams/ready", "teams/paused",
+        // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
+        "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
+        "workspace/team-verdict", "workspace/team-decision",
         "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -58,7 +65,6 @@ Basic.ApplicationWindow {
     // Paired devices have done something on this Mac (connections); none yet in
     // connections/no-activity.
     property bool remoteActivity: true
-    property string tagFilter
     // Teams (concept): folders in the sidebar; a team's name opens its page (teams).
     readonly property var teamList: teams.teams
     readonly property string currentTeam: teams.team ? teams.team.id : ""
@@ -88,13 +94,28 @@ Basic.ApplicationWindow {
         screen = "teams"
         teams.startRemove(id, number)
     }
+    // A team block's Open T-n: the task on its team's page.
+    function openTeamTask(taskId) {
+        teams.showTeam(Fixtures.teams[0].id)
+        screen = "teams"
+        teams.showTask(taskId)
+    }
+    // Which member reads which team block: the developer, the leader, the reviewer, the owner.
+    readonly property var teamTranscripts: ({ "team-assignment": "8213", "team-digest": "4821",
+                                              "team-review": "4583", "team-verdict": "8215",
+                                              "team-decision": "4821" })
     function openTeamMember(id, number) {
         teams.showTeam(id)
         teams.openConversation(number)
     }
     // Conversations the mock started (New team, Add member), by repository, beside the
     // fixtures' own. They outlive the team that started them.
-    property var started: ({})
+    property var started: ({ [Fixtures.repositories[0].name]: [Object.assign({}, Fixtures.repositories[0].conversations[0], {
+        number: "8116", title: "Recheck CI", transcript: "short", providerId: "codex", provider: "Codex",
+        status: KetTheme.ConversationStatus.Completed, hasPlan: false
+    })].concat(ScheduleSamples.waitingTeam(Fixtures.teams[0]).members.map(m => Object.assign({}, Fixtures.repositories[0].conversations[0], {
+        number: m.number, title: m.title, transcript: "welcome", status: KetTheme.ConversationStatus.NotStarted, hasPlan: false
+    }))) })
     property int startedCount: 0
     function conversationsOf(repository) {
         const fixture = Fixtures.repositories.find(r => r.name === repository)
@@ -118,7 +139,7 @@ Basic.ApplicationWindow {
             number = String(6101 + 7 * startedCount++)
         } while (findConversation(number))
         const conversation = Object.assign({}, blank || {}, {
-            number: number, title: title, tags: [], transcript: "welcome",
+            number: number, title: title, transcript: "welcome",
             status: KetTheme.ConversationStatus.NotStarted,
             provider: agent.label, providerId: agent.id, model: agent.model, effort: agent.effort })
         const next = Object.assign({}, started)
@@ -129,6 +150,14 @@ Basic.ApplicationWindow {
     // Run by --smoke after a pointer dragged a conversation onto a team's folder.
     function prepareTeamDrag() { sidebar.foldTeamsExcept("release") }
     function teamDragPoints() { return sidebar.dragCheckPoints("9410", "release") }
+    function brandChecks() {
+        const brand = sidebar.brandLockup
+        if (brand.x < 0 || brand.x + brand.width > sidebar.width || brand.height < brand.implicitHeight)
+            console.warn("QML brand check failed: sidebar lockup clips")
+    }
+    readonly property alias teamLanguageCheckDone: teams.languageCheckDone
+    readonly property alias teamLanguageProblems: teams.languageProblems
+    function startTeamLanguageChecks() { showScreen("teams"); teams.startLanguageChecks() }
     function teamChecks() {
         const failures = teams.selfCheck()
         if (sidebar.dragged)
@@ -136,6 +165,8 @@ Basic.ApplicationWindow {
         const joined = teamOf("9410")
         if (!joined || joined.id !== "release")
             failures.push("the pointer drag did not add 9410 to Release 1.4")
+        for (const problem of sidebar.layoutProblems())
+            failures.push("sidebar: " + problem)
         for (const failure of failures)
             console.warn("QML teams check failed: " + failure)
     }
@@ -156,7 +187,7 @@ Basic.ApplicationWindow {
         height = on ? Math.min(height, KetTheme.px(760, KetTheme.zoom)) : wideSize.height
     }
     property var archived: [
-        { number: "1022", title: "Spike the relay handshake", repository: "ketviet", when: "Oct 28" },
+        { number: "1022", title: "Spike the relay handshake", repository: "sample-project", when: "Oct 28" },
         { number: "0871", title: "Old onboarding copy", repository: "ketplus-desktop", when: "Oct 12" }
     ]
 
@@ -242,12 +273,84 @@ Basic.ApplicationWindow {
         }
     }
 
+    function px(v) { return KetTheme.px(v, KetTheme.zoom) }
+    // Schedules are a separate non-modal window; the primary navigation stays unchanged.
+    property alias scheduleStore: scheduleStore
+    readonly property var evidenceWindow: schedules.visible ? schedules : app
+    property bool scheduledTranscript: false
+    property string scheduledRunId: "web"
+    ScheduleStore { id: scheduleStore }
+    SchedulesWindow {
+        id: schedules; window: app; store: scheduleStore
+    }
+    function openSchedules(id, team) { schedules.showSchedule(id || "", team || "") }
+    function editExistingSchedule(entry) { schedules.edit(entry, entry.target, entry.conversation, false) }
+    function openScheduledConversation(number, scheduleId) {
+        scheduledRunId = scheduleId || "web"
+        const found = findConversation(number)
+        if (found) openConversation(found.repository, found.conversation)
+        else openConversation(Fixtures.repositories[0].name,
+            Object.assign({}, Fixtures.repositories[0].conversations[0], { number: number, title: "Daily website article", transcript: "short" }))
+        scheduledTranscript = true
+        raise(); requestActivate()
+    }
+    function showScheduleFailure(id, message) {
+        if (schedules.visible) schedules.showFailure(id, message)
+        else { scheduleToast.scheduleId = id; scheduleToast.show(message) }
+    }
+    function scheduleFailure() { showScheduleFailure("ci", "Schedule “Summarize failing CI” failed — Codex is not signed in.") }
+    function scheduleSkipped() { showScheduleFailure("retry", "Schedule “Recheck CI” skipped — The conversation is busy.") }
+    function scheduleChecks() {
+        const found = findConversation(conversation.number)
+        const entries = scheduleStore.entries
+        showScreen("workspace/welcome")
+        if (!workspace.scheduleChecks()) console.warn("QML schedule check: new conversation did not create its first-message schedule")
+        scheduleStore.entries = entries
+        if (found) openConversation(found.repository, found.conversation)
+        teams.scheduleChecks()
+        return schedules.checks()
+    }
+    function evidenceChecks() {
+        let valid = true
+        if (Mock.initialScreen === "schedules") valid = schedules.evidenceChecks(Mock.initialState)
+        if (Mock.initialScreen === "workspace" && ["schedule-new", "schedule-repeat", "schedule-ready", "schedule-more", "schedule-at", "schedule-weekly", "schedule-existing"].includes(Mock.initialState)) valid = workspace.scheduleEvidenceChecks(Mock.initialState)
+        if (Mock.initialScreen === "teams") valid = teams.scheduleEvidenceChecks(Mock.initialState, Mock.initialPanel)
+        if (!valid) console.warn("QML evidence check failed: " + Mock.initialScreen + "/" + Mock.initialState + "/" + Mock.initialPanel)
+        return valid
+    }
+    // Do not show native windows before --display has selected their monitor.
+    property bool presentationReady: false
+    function presentMock() { presentationReady = true; show(); schedules.present() }
+
     function openComposerPanel(name) {
         screen = "workspace"
         Qt.callLater(() => workspace.openComposerPanel(name))
     }
 
     function showScreen(id) {
+        schedules.hide()
+        scheduledTranscript = false
+        if (String(id).startsWith("schedules")) {
+            screen = "workspace"
+            schedules.showState(String(id).split("/")[1] || "")
+            return
+        }
+        if (["workspace/schedule-new", "workspace/schedule-repeat", "workspace/schedule-ready", "workspace/schedule-more", "workspace/schedule-at", "workspace/schedule-weekly"].includes(id)) {
+            showScreen("workspace/welcome")
+            Qt.callLater(() => workspace.openComposerPanel(id.split("/")[1]))
+            return
+        }
+        if (id === "workspace/schedule-existing") {
+            const found = findConversation("8116")
+            openConversation(found.repository, found.conversation)
+            Qt.callLater(() => workspace.openComposerPanel("schedule-existing"))
+            return
+        }
+        if (id === "workspace/scheduled" || id === "workspace/schedule-failure") {
+            openScheduledConversation("4821")
+            if (id === "workspace/schedule-failure") Qt.callLater(scheduleFailure)
+            return
+        }
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
@@ -263,6 +366,14 @@ Basic.ApplicationWindow {
             const repo = Fixtures.repositories[0]
             openConversation(repo.name, repo.conversations.find(c => c.number === "4821"))
             workspace.openPlan(state.slice(5))
+            return
+        }
+        if (name === "workspace" && teamTranscripts[state]) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            const repo = Fixtures.repositories[0]
+            const member = repo.conversations.find(c => c.number === teamTranscripts[state])
+            openConversation(repo.name, Object.assign({}, member, { transcript: state }))
             return
         }
         if (name === "workspace" && state.startsWith("setup-")) {
@@ -363,12 +474,12 @@ Basic.ApplicationWindow {
     height: 900
     minimumWidth: compact ? 360 : 1024
     minimumHeight: 640
-    visible: true
+    visible: false
     title: "KétPlus Pro · Mock"
     color: KetTheme.t.pageBg
     font.family: KetTheme.fontFamily
 
-    Component.onCompleted: {
+    function initializeMock() {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
@@ -381,6 +492,10 @@ Basic.ApplicationWindow {
             if (Mock.initialPanel === "device-focus")
                 Qt.callLater(() => Qt.callLater(() => connections.focusActivityRow(3)))
         }
+        else if (Mock.initialPanel === "view-menu")
+            Qt.callLater(() => viewMenu.open())
+        else if (Mock.initialPanel === "schedule-editor")
+            Qt.callLater(() => schedules.showState("edit"))
         else if (Mock.initialPanel === "rename")
             Qt.callLater(() => renameDialog.open())
         else if (Mock.initialPanel === "delete")
@@ -388,11 +503,11 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
-        else if (["repo-menu", "team-menu", "row-menu", "drag-member"].includes(Mock.initialPanel))
+        else if (["repo-menu", "team-menu", "row-menu", "drag-member", "repo-folded"].includes(Mock.initialPanel))
             Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
         else if (screen === "teams" && Mock.initialPanel)
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))
-        else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
+        else if (["pair", "linux", "linux-hostkey", "linux-relay", "linux-details", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
@@ -410,6 +525,24 @@ Basic.ApplicationWindow {
         sequence: "Ctrl+,"
         onActivated: app.showScreen("settings")
     }
+
+    menuBar: Basic.MenuBar {
+        KetMenu { title: "File"; KetMenuItem { text: "New Conversation"; onTriggered: app.showScreen("workspace/welcome") } }
+        KetMenu { title: "Edit"; KetMenuItem { text: "Settings…"; onTriggered: app.showScreen("settings") } }
+        KetMenu { title: "Go"; KetMenuItem { text: "Quick Open…"; onTriggered: spotlight.open() } }
+        KetMenu { title: "Git"; KetMenuItem { text: "Source Control"; onTriggered: app.showScreen("changes") } }
+        KetMenu {
+            id: viewMenu
+            title: "View"
+            KetMenuItem { text: "Agent Workspace"; onTriggered: app.showScreen("workspace") }
+            KetMenuItem { text: "Files & Editor"; onTriggered: app.showScreen("editor") }
+            KetMenuItem { text: "Source Control"; onTriggered: app.showScreen("changes") }
+            KetMenuItem { text: "Connections"; onTriggered: app.showScreen("connections") }
+            KetMenuSeparator {}
+            KetMenuItem { text: "Schedules…"; shortcut: "⇧⌘J"; iconName: "clock"; onTriggered: app.openSchedules() }
+        }
+    }
+    Shortcut { sequences: ["Ctrl+Shift+J", "Meta+Shift+J"]; onActivated: app.openSchedules() }
 
     RowLayout {
         anchors.fill: parent
@@ -434,9 +567,9 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: ["workspace", "editor", "changes", "connections", "settings",
-                           "atlas", "mobile-picker", "teams"].indexOf(app.screen)
+                           "atlas", "mobile-picker", "teams", "brand"].indexOf(app.screen)
 
-            WorkspaceScreen { id: workspace; window: app }
+            WorkspaceScreen { id: workspace; window: app; toastCoordinateSpace: toast.parent }
             EditorScreen { window: app }
             SourceControlScreen { window: app }
             ConnectionsScreen { id: connections; window: app }
@@ -444,6 +577,7 @@ Basic.ApplicationWindow {
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }
             TeamsScreen { id: teams; window: app }
+            BrandScreen { }
         }
     }
 
@@ -612,5 +746,13 @@ Basic.ApplicationWindow {
         }
     }
 
-    KetToast { id: toast }
+    ScheduleFailureToast {
+        id: scheduleToast
+        bottomAvoidance: app.screen === "workspace" ? workspace.toastBottomAvoidance : 0
+        onOpenRequested: id => app.openSchedules(id)
+    }
+    KetToast {
+        id: toast
+        bottomAvoidance: app.screen === "workspace" ? workspace.toastBottomAvoidance : 0
+    }
 }

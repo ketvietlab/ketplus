@@ -1,8 +1,10 @@
-// ADR 0112: the team_* tools per role, addressing by role and the role instructions, with
+// ADR 0114: the team_* tools per role, addressing by role and the role instructions, with
 // the scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"
+#include "agents/AgentBroker.h"
 #include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
+#include "teams/TeamRules.h"
 
 #include <QProcess>
 #include <QStandardPaths>
@@ -34,6 +36,9 @@ class TeamAgentToolsTest final : public QObject {
     Q_OBJECT
 
   private:
+    // The answer of the last create(), for a refusal.
+    QJsonObject lastCreated_;
+
     QJsonObject command(Fixture& fixture, const QString& type, const QJsonObject& payload) {
         return fixture.host->handleCommand(request(type, payload), "desktop-test");
     }
@@ -59,6 +64,7 @@ class TeamAgentToolsTest final : public QObject {
                                {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}},
                                                       QJsonObject{{"paths", QJsonArray{"api"}}}}}}},
                   {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
+        lastCreated_ = created;
         const QJsonArray members = created.value("team").toObject().value("members").toArray();
         if (members.size() != 4)
             return {};
@@ -176,10 +182,126 @@ class TeamAgentToolsTest final : public QObject {
                              {"reason", "docs too"}})
                     .value("ok")
                     .toBool());
+        // T-19: only the leader voids a review round or accepts a review; T-1 has neither.
+        for (const QString& member : {team.developer, team.reviewer})
+            for (const char* operation : {"agents.team_review_void", "agents.team_review_accept"})
+                QCOMPARE(fixture
+                             .agents(member, operation,
+                                     {{"task_id", "T-1"}, {"reason", "x"}, {"evidence", "y"}})
+                             .value("error_code")
+                             .toString(),
+                         QStringLiteral("role_forbidden"));
+        for (const char* operation : {"agents.team_review_void", "agents.team_review_accept"})
+            QCOMPARE(fixture
+                         .agents(team.leader, operation,
+                                 {{"task_id", "T-1"}, {"reason", "x"}, {"evidence", "y"}})
+                         .value("error_code")
+                         .toString(),
+                     QStringLiteral("invalid_transition"));
         // A conversation on no team has no team tools.
         const QString loner = fixture.start("codex", "alone");
         QCOMPARE(fixture.agents(loner, "agents.team_get").value("error_code").toString(),
                  QStringLiteral("not_on_team"));
+    }
+
+    // ADR 0114 §8: a member says what it waits for; a message it sent outside the team that
+    // failed comes back to it as a turn.
+    void aMemberWaitsAndHearsOfAFailedOutsideMessage() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(
+            fixture.agents(team.reviewer, "agents.team_wait", {{"reason", "CI"}, {"minutes", 5}})
+                .value("error_code")
+                .toString(),
+            QStringLiteral("role_forbidden"));
+        QCOMPARE(fixture.agents(team.developer, "agents.team_wait", {{"reason", "CI"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        const QJsonObject waiting =
+            fixture.agents(team.developer, "agents.team_wait", {{"reason", "CI"}, {"minutes", 5}});
+        QVERIFY2(waiting.value("ok").toBool(), qPrintable(text(waiting)));
+        QCOMPARE(waiting.value("wakes_in_minutes").toInt(), 5);
+
+        // The outside conversation's turn cannot start, so no answer will ever arrive.
+        const QString outside = fixture.start("claude", "outside");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(outside, "turn.completed"), 1, 5000);
+        const auto failed = [&] {
+            for (const AgentMessageRecord& message :
+                 fixture.journal->agentMessagesOf(team.leader, 1, 20))
+                if (message.kind == QStringLiteral("message_failed"))
+                    return message.body;
+            return QString{};
+        };
+        QVERIFY(failed().isEmpty());
+        const QJsonObject sent = fixture.agents(team.leader, "agents.send",
+                                                {{"to", "#" + fixture.number(outside)},
+                                                 {"text", "fail-start"},
+                                                 {"expect_reply", true}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        QTRY_VERIFY_WITH_TIMEOUT(!failed().isEmpty(), 5000);
+        QVERIFY(failed().contains("#" + fixture.number(outside)));
+        const auto request = fixture.journal->agentMessage(sent.value("message_id").toString());
+        QCOMPARE(request->state, QStringLiteral("failed"));
+        QCOMPARE(request->error, QStringLiteral("turn_failed"));
+    }
+
+    // T-23: a second reviewer is added in the settings; "reviewer" then names the one of the
+    // sender's work, and a sender with no such work is told to use a number.
+    void twoReviewersAreAddressedByTheirWork() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(command(fixture, "team.member.add",
+                         {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "codex"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("reviewer_unsupported"));
+        const QJsonObject added =
+            command(fixture, "team.member.add",
+                    {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}});
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        const QJsonArray members = added.value("team").toObject().value("members").toArray();
+        QCOMPARE(members.size(), 5);
+        const QJsonObject second = members.last().toObject();
+        QCOMPARE(second.value("role").toString(), QStringLiteral("reviewer"));
+        QCOMPARE(second.value("name").toString(), QStringLiteral("Reviewer 2"));
+        const QString secondReviewer = second.value("session_id").toString();
+        QCOMPARE(command(fixture, "team.member.add",
+                         {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("role_taken"));
+        // The team's description lists both.
+        const QJsonArray reviewers = fixture.agents(team.developer, "agents.whoami")
+                                         .value("team")
+                                         .toObject()
+                                         .value("reviewers")
+                                         .toArray();
+        QCOMPARE(reviewers.size(), 2);
+        QCOMPARE(reviewers.at(1).toObject().value("number").toString(),
+                 fixture.number(secondReviewer));
+        // No task of the developer is with either: it is told to use a number.
+        const QJsonObject unclear = fixture.agents(team.developer, "agents.send",
+                                                   {{"to", "reviewer"}, {"text", "Which one?"}});
+        QCOMPARE(unclear.value("error_code").toString(), QStringLiteral("ambiguous_role"));
+        const QString message = unclear.value("error_message").toString();
+        QVERIFY2(message.contains("#" + fixture.number(team.reviewer)) &&
+                     message.contains("#" + fixture.number(secondReviewer)),
+                 qPrintable(text(unclear)));
+        // Removing one of two is allowed, the last one is not.
+        QVERIFY(command(fixture, "team.member.remove",
+                        {{"team_id", team.id}, {"session_id", secondReviewer}})
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(command(fixture, "team.member.remove",
+                         {{"team_id", team.id}, {"session_id", team.reviewer}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("last_reviewer"));
     }
 
     void rolesAreAddressesInsideATeam() {
@@ -263,6 +385,40 @@ class TeamAgentToolsTest final : public QObject {
         QCOMPARE(fixture.count(team.reviewer, "user.message"), 0);
     }
 
+    // ADR 0114 §9: the longest goal of multi-byte text reaches the leader through the broker
+    // whole, in one message: nothing is shortened.
+    void aLongNonAsciiGoalReachesTheLeaderThroughTheBrokerWhole() {
+        Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const QString phrase = QStringLiteral("Thuế hoá đơn — giỏ hàng ✓ đồng bộ ✓ 購物 ");
+        QString goal = QStringLiteral("Hỏi @agent/8213 trước.\n");
+        while (goal.toUtf8().size() + phrase.toUtf8().size() <= teams::rules::maximumGoalBytes)
+            goal += phrase;
+        QVERIFY(goal.size() < teams::rules::maximumGoalCharacters);
+        const Team team = create(fixture, goal);
+        QVERIFY(!team.id.isEmpty());
+        QString body;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (const auto& message : fixture.journal->agentMessagesOf(team.leader, 1, 20))
+                    if (message.kind == QStringLiteral("team"))
+                        body = message.body;
+                return !body.isEmpty();
+            }(),
+            8000);
+        QVERIFY(body.contains(QStringLiteral("Goal: ") + goal.trimmed() + QLatin1Char('\n')));
+        QVERIFY(!body.contains(QStringLiteral("(shortened)")));
+        QVERIFY(body.toUtf8().size() <= AgentBroker::maximumBodyBytes);
+
+        // Fewer than 16,000 characters but more than one message holds: refused, not cut.
+        const QString over(12000, QChar(0x8CFC)); // 購, three bytes in UTF-8
+        QVERIFY(over.toUtf8().size() > AgentBroker::maximumBodyBytes);
+        QVERIFY(create(fixture, over).id.isEmpty());
+        const QJsonObject refused = lastCreated_;
+        QCOMPARE(refused.value("error_code").toString(), QStringLiteral("invalid_payload"));
+        QVERIFY(refused.value("error_message").toString().contains("bytes"));
+    }
+
     void toolsAreListedOnlyForAMember() {
         const auto listWith = [](const QJsonObject& whoami) {
             const QJsonObject answer = agent_mcp::handleMessage(
@@ -279,6 +435,9 @@ class TeamAgentToolsTest final : public QObject {
             listWith({{"ok", true}, {"team", QJsonObject{{"role", "leader"}}}});
         QVERIFY(member.contains("team_task_create"));
         QVERIFY(member.contains("team_decision_raise"));
+        QVERIFY(member.contains("team_task_close"));
+        QVERIFY(member.contains("team_review_void"));
+        QVERIFY(member.contains("team_review_accept"));
         const QStringList stranger = listWith({{"ok", true}, {"number", "1234"}});
         QVERIFY(!stranger.contains("team_get"));
         QVERIFY(stranger.contains("agents_send"));

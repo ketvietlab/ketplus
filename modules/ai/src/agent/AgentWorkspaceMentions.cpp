@@ -1,5 +1,6 @@
 #include "agent/AgentWorkspaceView.h"
 #include "agent/FileMentions.h"
+#include "agent/ProviderDisplay.h"
 
 #include <QCoreApplication>
 #include <QPointer>
@@ -78,7 +79,8 @@ QVariantList AgentWorkspaceView::fileMentionSuggestions(const QString& query) {
     return suggestions;
 }
 
-QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& query) const {
+QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& query,
+                                                                const QString& prefix) const {
     if (!conversationDirectory_)
         return {};
     const QString needle = query.trimmed();
@@ -91,7 +93,7 @@ QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& q
                                  !title.contains(needle, Qt::CaseInsensitive)))
             continue;
         const QString provider = conversation.value(QStringLiteral("provider")).toString();
-        QStringList detail{provider.left(1).toUpper() + provider.mid(1)};
+        QStringList detail{provider_display::name(provider)};
         if (conversation.value(QStringLiteral("running")).toBool())
             detail.append(tr("working"));
         if (const QString path = conversation.value(QStringLiteral("path")).toString();
@@ -99,8 +101,8 @@ QVariantList AgentWorkspaceView::conversationMentionSuggestions(const QString& q
             detail.append(path.section(QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty));
         suggestions.append(QVariantMap{
             {QStringLiteral("kind"), QStringLiteral("conversation")},
-            {QStringLiteral("name"), QLatin1Char('#') + number},
-            {QStringLiteral("mention"), QLatin1Char('#') + number},
+            {QStringLiteral("name"), prefix + number},
+            {QStringLiteral("mention"), prefix + number},
             {QStringLiteral("description"), title},
             {QStringLiteral("detail"), detail.join(QStringLiteral(" · "))},
         });

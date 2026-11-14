@@ -198,7 +198,7 @@ void InterfaceFontTest::agentThemeUsesKitAndEditorMono() {
                          ket::Tokens::color(u"page-bg", kit.theme()));
             QCOMPARE(view.quickView()->color(), ket::Tokens::color(u"page-bg", kit.theme()));
             QTRY_VERIFY(documentGeometryMatches());
-            auto* logo = findVisual(findVisual, root, "productBrandImage");
+            auto* logo = findVisual(findVisual, root, "productBrandLockup");
             QVERIFY(logo);
             QVERIFY(logo->x() >= 0 && logo->x() + logo->width() <= logo->parentItem()->width());
             const auto capture = qEnvironmentVariable("KETPLUS_THEME_AUTHORITY_CAPTURE");

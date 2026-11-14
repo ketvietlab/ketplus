@@ -1,8 +1,11 @@
 #include "AgentWorkspaceViewTest.h"
 
+#include "KetAppearance.h"
+
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/DaemonTranscriptProjection.h"
 
 #include <QAccessible>
 #include <QClipboard>
@@ -422,6 +425,77 @@ void AgentWorkspaceViewTest::streamedActivityJoinsGroupWithoutReset() {
     QCOMPARE(model->hiddenRowCount(), 2);
     QCOMPARE(model->count(), 2);
     QCOMPARE(resets.size(), 0);
+}
+
+void AgentWorkspaceViewTest::runningIndicatorLinesUpWithTheRows_data() {
+    QTest::addColumn<qreal>("zoom");
+    QTest::addColumn<int>("width");
+    QTest::newRow("default zoom") << 1.0 << 900;
+    QTest::newRow("default zoom, wide") << 1.0 << 1500;
+    QTest::newRow("zoom 125%") << 1.25 << 900;
+    QTest::newRow("zoom 125%, narrow") << 1.25 << 560;
+}
+
+// T-88: the dots of "Working…" start where the transcript's rows start: the group summary
+// above it ("Explored 3 files · Running") and the composer's box below it.
+void AgentWorkspaceViewTest::runningIndicatorLinesUpWithTheRows() {
+    QFETCH(qreal, zoom);
+    QFETCH(int, width);
+    auto& appearance = ket::Appearance::instance();
+    const qreal previousZoom = appearance.zoom();
+    appearance.setZoom(zoom);
+    const auto restoreZoom = qScopeGuard([&] { appearance.setZoom(previousZoom); });
+
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(width, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.resetMessages({textRow("u", "user", "Go"), readRow("c1", "ls"), readRow("c2", "pwd"),
+                        readRow("c3", "git status"), textRow("a", "assistant", "Looking.")},
+                       "workspace:run-status");
+    view.setSessionState("Run status", "Working…", true);
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+
+    QQuickItem* summary = nullptr;
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QQuickItem* dots = nullptr;
+    QTRY_VERIFY((dots = findVisualItem(root, "workingAnimationIcon")) != nullptr);
+    auto* composer = findVisualItem(root, "agentComposer");
+    QVERIFY(composer);
+    QQuickItem* answer = nullptr;
+    QTRY_VERIFY((answer = findVisualItem(delegateAt(transcript, 2), "messageSurface")) != nullptr);
+    const qreal dotsX = dots->mapToScene(QPointF{}).x();
+    const qreal summaryX = summary->mapToScene(QPointF{}).x();
+    const qreal answerX = answer->mapToScene(QPointF{}).x();
+    const qreal composerX = composer->mapToScene(QPointF{}).x();
+    // The rows themselves stay where they were: the reading column plus its inset.
+    const qreal pane = transcript->width();
+    const qreal inset = ket::Appearance::scale(20, zoom);
+    const qreal column = qMin<qreal>(
+        pane, ket::Appearance::scale(ketplus::AgentWorkspaceView::defaultConversationWidth, zoom) +
+                  2 * inset);
+    QCOMPARE(summaryX - transcript->mapToScene(QPointF{}).x(), (pane - column) / 2 + inset);
+    // The composer's box keeps its own ring outside the column.
+    QVERIFY(composerX >= summaryX);
+    // Opt-in capture for the pull request, dark and at the default zoom.
+    const QString capture = qEnvironmentVariable("KETPLUS_RUN_STATUS_CAPTURE");
+    if (!capture.isEmpty() && zoom == 1.0 && width == 900) {
+        auto& mode = ket::Appearance::instance();
+        const auto previousMode = mode.mode();
+        mode.setMode(ket::Appearance::Mode::Dark);
+        const auto restoreMode = qScopeGuard([&] { mode.setMode(previousMode); });
+        view.applyTheme(ketplus::currentThemePalette());
+        QTest::qWait(200);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    QVERIFY2(qAbs(dotsX - summaryX) <= 0.5,
+             qPrintable(QStringLiteral("dots at %1, rows at %2").arg(dotsX).arg(summaryX)));
+    QVERIFY2(qAbs(dotsX - answerX) <= 0.5,
+             qPrintable(QStringLiteral("dots at %1, answer at %2").arg(dotsX).arg(answerX)));
 }
 
 void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
@@ -1648,4 +1722,124 @@ void AgentWorkspaceViewTest::copiesMouseSelectionWithShortcut() {
     body->forceActiveFocus();
     QTest::keySequence(window, QKeySequence::Copy);
     QCOMPARE(QGuiApplication::clipboard()->text(), indented);
+}
+
+// T-91: a running group's heading is its latest step, live; once the agent writes, it is the
+// whole group.
+void AgentWorkspaceViewTest::runningGroupHeadingFollowsItsLatestStep() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.setSessionState("Heading", "Working…", true);
+    auto command = [](const QString& key, const QString& title, const bool running) {
+        QVariantMap row = readRow(key, title, running);
+        row.insert("subtype", "command");
+        row.insert("title", title);
+        return row;
+    };
+    view.resetMessages({textRow("u", "user", "Check the tree"),
+                        command("c1", "Ran git fetch", false), readRow("r1", "AGENTS.md"),
+                        command("c2", "Running git status --short --branch", true)},
+                       "workspace:heading");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QQuickItem* heading = nullptr;
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    const QString capture = qEnvironmentVariable("KETPLUS_GROUP_HEADING_CAPTURE");
+    const auto grab = [&](const QString& state) {
+        if (capture.isEmpty())
+            return;
+        auto& mode = ket::Appearance::instance();
+        const auto previous = mode.mode();
+        mode.setMode(ket::Appearance::Mode::Dark);
+        view.applyTheme(ketplus::currentThemePalette());
+        QTest::qWait(200);
+        QVERIFY(view.quickView()->grabWindow().save(capture + "-" + state + ".png"));
+        mode.setMode(previous);
+        view.applyTheme(ketplus::currentThemePalette());
+    };
+    grab("running");
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Running git status --short --branch"));
+
+    // A step joins: the heading follows it.
+    view.appendMessage(readRow("r2", "README.md", true));
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("README.md"));
+
+    // Between two steps none runs, but the group has not ended: the turn runs and nothing
+    // follows it. The heading keeps naming the last step (T-91 round 1, M1).
+    view.updateMessage(3, command("c2", "Ran git status --short --branch", false));
+    view.updateMessage(4, readRow("r2", "README.md", false));
+    QTest::qWait(100);
+    QCOMPARE(heading->property("text").toString(), QStringLiteral("README.md"));
+    view.appendMessage(command("c3", "Running git diff --stat", true));
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Running git diff --stat"));
+    view.updateMessage(5, command("c3", "Ran git diff --stat", false));
+    QTest::qWait(100);
+    QCOMPARE(heading->property("text").toString(), QStringLiteral("Ran git diff --stat"));
+
+    // The agent writes: the group has ended, and the heading counts all of it.
+    view.appendMessage(textRow("a", "assistant", "The tree is clean."));
+    QTRY_COMPARE(heading->property("text").toString(),
+                 QStringLiteral("Ran 3 commands, explored 2 files"));
+    grab("ended");
+}
+
+// T-91 round 1, M1: a group the turn stops on ends there, local or daemon, and a daemon group
+// between two steps keeps naming its last step as a local one does.
+void AgentWorkspaceViewTest::groupHeadingEndsWithTheTurnNotBetweenSteps() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    view.setSessionState("Heading", "Working…", true);
+    // A daemon group whose last step finished while the model thinks about the next one.
+    const QJsonObject between{
+        {"item_id", "activity-group:4"},
+        {"group_id", "4"},
+        {"count", 2},
+        {"running_count", 0},
+        {"families", QJsonArray{QJsonObject{{"family", "command"}, {"count", 2}}}},
+        {"latest", QJsonObject{{"item", QJsonObject{{"type", "commandExecution"},
+                                                    {"id", "cmd-2"},
+                                                    {"command", "git status --short --branch"},
+                                                    {"status", "completed"},
+                                                    {"exitCode", 0}}},
+                               {"completed", true}}}};
+    QVariantMap daemon = ketplus::agent_message::daemonActivityGroupMessage(between, 2);
+    daemon.insert("turnId", "t2");
+    const QString latest = daemon.value("groupLatest").toString();
+    QVERIFY(!latest.isEmpty());
+    QVERIFY(!daemon.value("groupRunning").toBool());
+    view.resetMessages({textRow("u", "user", "Check the tree"), daemon}, "workspace:daemon");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QQuickItem* heading = nullptr;
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QTRY_COMPARE(heading->property("text").toString(), latest);
+
+    // The turn stops on it: the group has ended, and the heading counts it.
+    view.setSessionState("Heading", QString{}, false);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran 2 commands"));
+
+    // A local group the turn stops on ends the same way.
+    view.setSessionState("Heading", "Working…", true);
+    auto command = [](const QString& key, const QString& title) {
+        QVariantMap row = readRow(key, title, false);
+        row.insert("subtype", "command");
+        row.insert("title", title);
+        return row;
+    };
+    view.resetMessages({textRow("u2", "user", "Again"), command("c1", "Ran git fetch"),
+                        command("c2", "Ran git pull")},
+                       "workspace:local");
+    QTRY_VERIFY((heading = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran git pull"));
+    view.setSessionState("Heading", QString{}, false);
+    QTRY_COMPARE(heading->property("text").toString(), QStringLiteral("Ran 2 commands"));
 }

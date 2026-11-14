@@ -188,8 +188,6 @@ void AgentSessionManager::startTurn(const SessionPtr& session) {
                                             .toString();
                       if (session->customTitle)
                           syncConversationTitle(session);
-                      // The daemon creates the conversation with its first turn.
-                      sendStartTags(session);
                       if (session->cancelRequested) {
                           cancelSession(session);
                       }

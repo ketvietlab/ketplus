@@ -4,12 +4,52 @@ if(APPLE)
 endif()
 
 add_library(ketplus_desktop_support STATIC
+    src/machine/MachineAttachmentPanel.cpp
+    src/machine/MachineAttachmentPanel.h
+    src/machine/MachineApprovalCards.cpp
+    src/machine/MachineApprovalCards.h
+    src/machine/MachineCatalog.cpp
+    src/machine/MachineCatalog.h
+    src/machine/MachineComposition.cpp
+    src/machine/MachineComposition.h
+    src/machine/MachineConversationActions.cpp
+    src/machine/MachineConversationActions.h
+    src/machine/MachineConversationSession.cpp
+    src/machine/MachineConversationSession.h
+    src/machine/MachineRichTranscript.cpp
+    src/machine/MachineRichTranscript.h
+    src/machine/MachineSelection.cpp
+    src/machine/MachineSelection.h
+    src/machine/MachineSidebar.cpp
+    src/machine/MachineSidebar.h
+    src/machine/MachineTranscript.cpp
+    src/machine/MachineTranscript.h
+    src/machine/MachineWorkspaceView.cpp
+    src/machine/MachineWorkspacePreparation.cpp
+    src/machine/MachineWorkspaceToast.cpp
+    src/machine/MachineWorkspaceView.h
     src/remote/PairingQrCode.h
     ${ketplus_pairing_qr_source}
     src/remote/RemoteControlView.cpp
     src/remote/RemoteControlView.h
+    src/remote/AccountEntitlements.h
+    src/remote/LinuxConnectDialog.cpp
+    src/remote/LinuxConnectDialog.h
+    src/remote/LinuxMachineModel.cpp
+    src/remote/LinuxMachineModel.h
+    src/remote/LinuxMachineRow.cpp
+    src/remote/LinuxMachineRow.h
+    src/remote/LinuxMachines.cpp
+    src/remote/LinuxMachines.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
+    src/remote/LinuxRelayMachines.cpp
+    src/remote/LinuxRelayMachines.h
+    src/remote/LinuxSshInstall.cpp
+    src/remote/LinuxDaemonInstallCard.cpp
+    src/remote/LinuxDaemonInstallCard.h
+    src/remote/LinuxSshMachines.cpp
+    src/remote/LinuxSshMachines.h
     src/remote/RemoteActivitySection.cpp
     src/remote/RemoteActivitySection.h
     src/remote/RemoteConnectionsIntro.cpp
@@ -30,14 +70,67 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
+    src/workspace/SidebarRepositoryListDetail.h
+    src/workspace/SidebarRepositoryListLayout.cpp
+    src/workspace/SidebarRepositoryListRows.cpp
+    src/workspace/SidebarRepositoryListTeams.cpp
+    src/workspace/SidebarRepositoryPins.cpp
+    src/workspace/SidebarRepositoryPins.h
+    src/workspace/SidebarPinMark.cpp
+    src/workspace/SidebarPinMark.h
+    src/teams/TeamDirectory.cpp
+    src/teams/TeamDirectory.h
+    src/schedules/ScheduleClient.cpp
+    src/schedules/ScheduleClient.h
+    src/schedules/ScheduleRules.cpp
+    src/schedules/ScheduleRules.h
+    src/schedules/ScheduleEditor.cpp
+    src/schedules/ScheduleEditor.h
+    src/schedules/ScheduleWindow.cpp
+    src/schedules/ScheduleWindow.h
+    src/schedules/ScheduleWindowView.cpp
+    src/schedules/ScheduleWindows.cpp
+    src/schedules/ScheduleWindows.h
+    src/teams/TeamMenus.cpp
+    src/teams/TeamMenus.h
+    src/teams/TeamAgentDialog.cpp
+    src/teams/TeamAgentDialog.h
+    src/teams/TeamDialogs.cpp
+    src/teams/TeamGoal.h
+    src/teams/TeamGoal.cpp
+    src/teams/TeamDialogs.h
+    src/teams/TeamPage.cpp
+    src/teams/TeamPage.h
+    src/teams/TeamPageParts.cpp
+    src/teams/TeamPageParts.h
+    src/teams/TeamPageSections.cpp
+    src/teams/TeamDecisionOther.cpp
+    src/teams/TeamPageTasks.cpp
+    src/teams/TeamPageStorage.cpp
+    src/teams/TeamWorktreeDialog.cpp
+    src/teams/TeamWorktreeRemoveAll.cpp
+    src/teams/TeamWorktreeDialog.h
+    src/teams/TeamCommands.cpp
+    src/teams/TeamTaskDialog.cpp
+    src/teams/TeamTaskDialog.h
+    src/teams/TeamTaskDialogActions.cpp
+    src/teams/TeamRepositorySettings.cpp
+    src/teams/TeamRepositorySettings.h
+    src/teams/TeamReviewSettings.cpp
+    src/teams/TeamReviewSettings.h
+    src/teams/TeamTurnBudget.cpp
+    src/teams/TeamTurnBudget.h
 )
 target_link_libraries(ketplus_desktop_support PUBLIC
     Qt6::Network
     Qt6::Sql
     Qt6::Svg
     Qt6::Widgets
+    ketplus_ai
     ketplus_remote
     ketplus_remote_control
+    ketplus_team_language
+    ketplus_remote_ssh_backend
     ketplus_typography
     KetPlusCM::git
     KetPlusCM::ui
@@ -106,6 +199,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowAgent.cpp
     src/app/MainWindowConversationActions.cpp
     src/app/ConversationMenu.cpp
+    src/app/MainWindowTeams.cpp
+    src/app/MainWindowSchedules.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp
     src/app/TranscriptFileType.h
@@ -118,6 +213,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowPanels.cpp
     src/app/MainWindowDetailActions.cpp
     src/app/MainWindowWorkReport.cpp
+    src/app/MainWindowMachine.cpp
     src/app/MainWindowRemote.cpp
     src/app/MainWindowSidebar.cpp
     src/app/MainWindowSearch.cpp
@@ -136,6 +232,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsStoragePage.cpp
     src/app/SettingsStorageOverview.cpp
     src/app/SettingsStoragePage.h
+    src/app/SettingsTeamsPage.cpp
+    src/app/SettingsTeamsPage.h
     src/app/ProviderSetupCard.cpp
     src/app/ProviderSetupCard.h
     src/app/SettingsProvidersPage.cpp
@@ -193,26 +291,18 @@ qt_add_executable(ketplus WIN32 MACOSX_BUNDLE
 target_link_libraries(ketplus PRIVATE ketplus_desktop_shell ketplus_product_version)
 ketplus_enable_warnings(ketplus)
 
-qt_add_resources(ketplus "ketplus_brand"
+# On the shell library, so its tests draw the same lockup mark as the app.
+qt_add_resources(ketplus_desktop_shell "ketplus_brand"
     PREFIX "/brand"
     BASE "${PROJECT_SOURCE_DIR}/assets/brand"
     FILES
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
-)
-
-qt_add_resources(ketplus "ketplus_wordmarks"
-    PREFIX "/brand"
-    BASE "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1"
-    FILES
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-256.png"
 )
 
 set_target_properties(ketplus PROPERTIES
     OUTPUT_NAME "KetPlus"
-    MACOSX_BUNDLE_BUNDLE_NAME "KétPlus Pro"
+    MACOSX_BUNDLE_BUNDLE_NAME "ketPlus Pro"
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.ketplus.editor"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
@@ -403,6 +493,7 @@ if(APPLE)
                 COMMAND "${CMAKE_COMMAND}" -E touch "${ketplus_browser_runtime_stamp}"
                 DEPENDS
                     "${ketplus_browser_app_dir}/scripts/package-runtime.mjs"
+                    "${ketplus_browser_app_dir}/scripts/runtime-smoke.mjs"
                     "${ketplus_browser_app_dir}/runtime/node-runtime.json"
                     "${ketplus_browser_app_dir}/package.json"
                     "${ketplus_browser_app_dir}/package-lock.json"
@@ -444,6 +535,14 @@ install(TARGETS ketplus
     RUNTIME DESTINATION bin
     COMPONENT Runtime
 )
+if(UNIX AND NOT APPLE)
+    # The desktop entry and the hicolor icons (assets/icons/generate-app-icons.sh).
+    install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/ketplus-pro.desktop"
+        DESTINATION share/applications COMPONENT Runtime)
+    install(DIRECTORY "${PROJECT_SOURCE_DIR}/packaging/linux/hicolor/"
+        DESTINATION share/icons/hicolor COMPONENT Runtime)
+    include("${PROJECT_SOURCE_DIR}/packaging/linux/DesktopRuntime.cmake")
+endif()
 
 if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)
     # After install(TARGETS ketplus): the bundle it copies embeds the runtime of its last build,

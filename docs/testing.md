@@ -15,12 +15,13 @@ Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_test
 test's own environment and the shell's, so a test run never opens windows on the screen. A
 test binary run directly needs it exported. This override does not cover Lite tests in
 `core/`. The Pro desktop build and Release
-characterization run on macOS only; Pro desktop builds on Ubuntu are paused to
-cut CI cost and must be restored before a Linux release. The headless daemon,
+characterization run on macOS. Linux Pro desktop packaging is restored on native
+Ubuntu 24.04 amd64/arm64 through the shared package recipe. The headless daemon,
 browser regression and design evidence checks still run on Ubuntu. Pro Windows
 CI remains deferred until the required Qt 6.11 WebView development packages are
-available from Qt's public repository. Pull requests into `integration` and
-branch pushes run no CI; run the targets for the area you changed before pushing
+available from Qt's public repository. Integration PRs have the public-tree guard;
+Linux packaging PRs additionally run the native ARM build-only job. Other native
+integration builds and branch-push builds remain local; run the targets for the area you changed before pushing
 and list them in the pull request. CI runs on promotion pull requests into
 `develop`, on pull requests into `main` and on pushes to `main`; a newer commit
 cancels the obsolete run. See `docs/release-process.md`.
@@ -50,6 +51,64 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+## VS Code importer fixtures
+
+`ketplus_vscode_import_tests` covers original dark/light/include themes, standard
+DOCTYPE tmTheme resources, explicit style resets, ordered fallback chains, ANSI16,
+semantic metadata without application, unsupported selectors and multi-variant
+VSIX. Failure cases cover unsafe paths/archives, malformed data, entity expansion,
+include cycles and shared byte/canonical-output limits. Fixture provenance is in
+`core/tests/fixtures/vscode/README.md`. Run importer, common I/O and canonical model
+targets with `QT_QPA_PLATFORM=offscreen`; no extension or provider runs.
+
+## Color scheme management UI
+
+`ketplus_scheme_library_tests` covers format dispatch, multi-variant choice,
+review-before-write and cancellation, native round-trip/export errors, catalog
+search, built-in deletion protection after selection/theme updates in both reserved
+ID namespaces, duplication/deletion, active and preferred fallback,
+selection locks, live selection, in-memory import preview restoration and the
+shared keyboard picker. It checks both minimum/large Appearance layouts at every
+supported zoom in light/dark. `ketplus_settings_tests` retains existing settings
+contracts; `ketplus_lite_window_tests` checks command registration.
+
+For native review, run only `appearanceLayoutAndReviewCaptures` with
+`KETPLUS_SCHEME_CAPTURE_NATIVE=1` and `KETPLUS_SCHEME_CAPTURE_DIR=<output directory>`
+on the scheme library test executable (without the offscreen QPA override).
+The harness refuses to show a native window unless the secondary DELL display is
+present, sets that screen before showing, captures light/dark/report, and removes
+its isolated test profile. The normal ctest path uses offscreen rendering and does
+not open a native window.
+
+## Bundled color-scheme fixtures
+
+Run `ketplus_builtin_scheme_tests`, `ketplus_color_scheme_tests`, and the two
+importer/common-input targets offscreen after changing bundled palettes or the
+catalog. These checks use embedded resources and committed import reports without
+network or provider access. Explicit source regeneration/byte verification is
+separate: follow `docs/color-schemes.md` with the locked upstream cache.
+
+## JetBrains importer fixtures
+
+`ketplus_jetbrains_import_tests` converts original synthetic dark/light `.icls`
+fixtures, a named-color UI theme referencing an editor scheme, and an in-memory
+multi-variant JAR. It checks primary-role precedence in alphabetic and reversed
+attribute order, missing-primary fallbacks, effect-color presence/validity in both
+option orders, syntax/style resets, all 16 console ANSI mappings,
+editor/diff tokens, canonical serialization, per-key omission reports, root-scoped
+resource references, palette cycles, malformed input, internal DTD/entity rejection and
+archive traversal rejection. Fixture provenance/license is in
+`core/tests/fixtures/jetbrains/README.md`. Run it and the common I/O/model tests
+with `QT_QPA_PLATFORM=offscreen`; no IDE, Java runtime or provider is invoked.
+
+## Theme input security fixtures
+
+`ketplus_theme_input_tests` runs headlessly with no provider or network access.
+It constructs small ZIP fixtures in memory, including patched hostile metadata,
+and tests JSONC comment/string boundaries and error locations, ZIP traversal,
+links/collisions/CRC failure, all four archive budgets, standard plist DOCTYPE acceptance without external resolution, internal DTD/entity rejection,
+and local/archive includes with cycles, escapes and the 16-level boundary.
+
 ## Target map
 
 | Area | Build/test target | Primary coverage |
@@ -59,6 +118,9 @@ version for the same reason. No job in the matrix uses provider quota.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Scheme consumer adapters | `ketplus_scheme_consumer_tests` (Lite) | Lexilla role/font style mapping, editor state parity and buffer/selection/undo preservation, terminal ANSI replacement and screen/selection preservation |
+| Theme selection store | `ketplus_theme_selection_tests` (Lite) | One-time migration, revisioned atomic commits, cross-process directory watcher updates, lock and config failure recovery |
+| Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, Remove clears an unreadable or invalid API or Admin entry but not a locked one, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
@@ -66,7 +128,9 @@ version for the same reason. No job in the matrix uses provider quota.
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior; complete selected-port readiness, malformed/truncated banners, stop-time suppression and repair/restart with a synthetic CLI |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
+| Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
+| Copilot desktop presentation | `ketplus_copilot_presentation_tests` | platform setup guides, daemon discovery/provider identity, transcript names, Teams availability, model permissions and missing/older-daemon states; native QML offscreen at wide and narrow zoomed layouts; `KETPLUS_COPILOT_CAPTURE` saves the wide picker screenshot; no provider invocation |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
 | Desktop zoom | `ketplus_desktop_zoom_tests` | repeated 90/100/110/125% zoom transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and merging with another window's newer settings |
@@ -94,9 +158,15 @@ version for the same reason. No job in the matrix uses provider quota.
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
 | Claude/Cursor framing | `ketplus_provider_framing_tests` | Coalesced real QProcess output, 16-MiB per-line boundary, aggregate valid frames, oversized complete/partial suffixes, failure drain and fresh-generation recovery; fixture process only |
 | Malformed provider frames | `ketplus_provider_malformed_frame_tests` | Fake Codex/Claude/Cursor processes: initialize and pending calls, UTF-8/binary/control/JSON failures, suffix quarantine, once-only error callbacks, payload-free diagnostics and fresh-generation recovery; an oversized Claude or Cursor line, in the initialize response or a later call, publishes one stop and one crash backoff; POSIX process fixtures skip on Windows |
+| Copilot adapter | `ketplus_daemon_copilot_adapter_tests`, `ketplus_copilot_cli_tests` | Discovery/overrides, Windows wrapper policy, fake ACP stream/cancel, explicit/nested/exit authentication failures, sanitized unrelated errors, fresh-process retry, startup deadline and host routing; no provider quota |
+| Copilot permissions/browser | `ketplus_daemon_copilot_tools_tests` | Fake ACP permission option IDs, no promotion to always, absent options, expiry/cancel, stale turn/process answers, forged browser identity, host approval cards, MCP setup/resume/disable, routing, image content and completion/failure/shutdown cleanup; no provider quota |
+| Copilot models | `ketplus_copilot_catalog_tests` | Config/grouped and advertised legacy catalogs, model/string/output bounds, fallback, cache/coalescing/expiry, timeout/stop cleanup, host model discovery, selected model before prompt, switches across turns, empty load state and explicit setter failures; native fixture executable only, no provider quota |
+| Shared ACP engine | `ketplus_daemon_acp_adapter_tests` | Provider-independent fake stdio process: initialize, MCP session creation/load fallback, assistant/tool/usage events, permission option IDs and forged MCP identity refusal, cancellation, pending-call shutdown and malformed-output restart |
 | ACP capability defaults | `ketplus_provider_compatibility_tests`, `ketplus_daemon_cursor_adapter_tests` | Missing/null/wrong-type capability fields, boolean controls/reset and actual session/load suppression; fake Cursor explicitly advertises implemented features |
 | Provider line scanning | `ketplus_provider_line_reader_tests` | Deep array/object streams, chunk/depth bounds, JSON escapes/Unicode, invalid metadata, dotted-key isolation, next-line/reset recovery and a fresh-child POSIX peak-memory bound; no live provider |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry, inherited macOS access-control entries removed from state, journal, media and refs and an exposed token replaced, a second daemon refused while the first holds hour-old locks |
+| Schedule protocol (ADR 0126) | `ketplus_schedule_protocol_tests` | schedule documents, requests and events for all four targets and run statuses; unknown fields, empty prompt, missing target and bad enums; server-owned `created_by`; timestamps must carry `Z` or a numeric offset |
+| Schedules window | `ketplus_schedule_client_tests`, `ketplus_schedule_window_tests` | one client applies schedule events without a reload; the manager is edit-only, validates before update, shows daemon errors, and View › Schedules… opens one window. `QT_QPA_PLATFORM=offscreen` and `KETPLUS_SCHEDULE_CAPTURE=<dir>` on the window test save light and dark grabs of the list, empty state, editor, validation, delete confirmation, 900×600 minimum and the View item |
 | Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration; legacy inline generated-image pixels removed one large payload per pass with prompt and path kept, only after acknowledgement and outside the latest 20 turns (ADR 0098), and with a session host, a 512 px JPEG preview of a real PNG kept as a media reference (ADR 0101); inline tool-result images replaced by `history_retention` placeholders in place, including rows trimmed by an earlier text pass and chunked payloads that contain an image, while text-only oversize payloads stay and probing a backlog of them is charged to the per-pass budget (ADR 0099) |
 | Acknowledged delivery cleanup (ADR 0049) | `ketplus_daemon_ack_retention_tests` | Qt backlog ACK, row/byte budgets and actual prepared plans; slowest/new client and generation fences; queue fairness/reopen; NUL/oversized/binary values; capability deferral; atomic ACK/queue writes and rollback/retry |
@@ -114,18 +184,20 @@ version for the same reason. No job in the matrix uses provider quota.
 | Conversation fork | `ketplus_daemon_session_fork_tests` | `threadFork` gating, Codex/Claude native fork, transcript copy at the same cursors, idempotent retry, active source isolation and unknown refusal, next turn resumes the forked thread; a fork of an archived conversation is unarchived and outlives its source's expiry (ADR 0100) |
 | Daemon Cursor adapter | `ketplus_daemon_cursor_adapter_tests` | ACP turns, login/install errors, approvals, an approval from a restarted process that reuses an unanswered question's request id is answered as an approval, missing/false/mistyped `loadSession` skips `session/load`, `agent models` fixtures |
 | Provider CLI compatibility | `ketplus_provider_compatibility_tests` | version parsing and statuses, manifest, Homebrew update command, version probe cache, outdated CLI blocked, untested CLI journaled once, `provider.runtime_status`, dialects and capabilities, `-32601` narrowing and steer gate, unknown Codex input (ignored notifications counted, protocol errors, declined requests, unknown item types) |
+| Copilot CLI policy | `ketplus_copilot_cli_tests` | injected macOS/Linux/Windows discovery, override precedence/refusal, PATH and fallback order, runnable-file checks, native and Windows wrapper invocation, authentication versus network/model/policy errors, and daemon `--copilot` parsing through `--build-info`; never launches Copilot; a local fake `.cmd` runs only on Windows |
 | Provider readiness | `ketplus_provider_readiness_tests` | version check before probes, Claude `runtime_missing`, probe `since` kept per state, reported failures outrank an account until a working turn, limits until reset, owner-only persistence across restarts, Codex `account/read` and Cursor `cli-config.json` probes, per-platform commands, `runtime.error` codes (structured first, the #170 messages), Check again keeps an unexpired limit; in `ketplus_provider_compatibility_tests`, a limited Codex turn is coded and keeps its reset, and a working turn clears a persisted failure |
 | Provider setup guide | `ketplus_provider_setup_guide_tests`, `ketplus_settings_integration_tests`, `ketplus_agent_tests` (`providerSetup*`, `claudeSignOutGuidesWithoutHoldingTheMessage`, `aHeldMessageGoesWithItsDraft`, `modelPickerOpensTheProviderSetupGuide`) | in the Agent Workspace, the guide above the composer holds the message until a fresh read lists the same provider without a guide (not a stopped daemon, not a guide that stops blocking), and lets it go when the draft is edited or another conversation opens; Hide and the model button, Type in Terminal, Check again with `still`; a coded failed turn shows the guide with the provider's words and Retry, and turns back into a notice once the user writes again; Claude's sign-out never holds a send; Model & context keeps a guided provider's tab without models, shows its banner, keeps Apply off there, and Show setup steps opens the guide dialog, which closes once the provider works; `KETPLUS_SETUP_CAPTURE_DIR` saves the composer, transcript, model picker and dialog captures; `everySetupStateRendersInBothThemesAndZooms` renders all ten #169 states in light and dark at zoom 1 and 1.25, and `KETPLUS_SETUP_MATRIX_DIR` saves them as `<state>-<theme>-<zoom>.png` to set beside the mock's `--screen=workspace --state=setup-<state> --zoom=… --screenshot=…`; `anAccountChangeClearsAReportedFailure` (provider compatibility tests) checks that Codex `account/updated` drops a reported failure; guide ids follow the mock for every state and error code, the daemon's commands and the provider's own words, empty rows left out, the limit reset text, a turn error over readiness; in Settings → Providers, the guided badge and card, Copy and Type in Terminal (never run), Check again sends `recheck` and shows `still`, a fixed provider loses its guide; `KETPLUS_SETTINGS_CAPTURE_DIR` saves `providers-setup-{light,dark}.png` |
 | App-wide toasts and update notice | `ketplus_settings_integration_tests` | status messages outside the editor show as the kit toast near the bottom, never the idle `Ready`; the sidebar reminder reads Review and install, then Restart to install; `KETPLUS_OVERLAYS_CAPTURE=<dir>` saves `toast.png` and `update-pill.png` to set beside `KetPlusMock --open=toast` and `--screen=workspace`. The app toast keeps the neutral icon on purpose: a status message may be a failure, while every mock toast is a confirmation |
 | Waiting for you (#125) | `ketplus_awaiting_reply_tests`, `ketplus_conversation_attention_tests` | the fake Claude `ask-approval` and `needs-approval` prompts set `awaiting_reply`; a plain summary does not; it survives a daemon restart and clears on a new message and `session.mark_done`; the desktop row reads AwaitingReply after `turn/completed` and clears on the next turn; the Dock badge counts a worktree once across windows |
-| Tag catalog (#429) | `ketplus_tag_catalog_tests`, `ketplus_desktop_session_discovery_tests`, `ketplus_agent_tests`, `ketplus_daemon_cloud_privacy_tests` | defaults until saved, restart persistence, invalid catalogs refused, renames kept and removals dropped on every conversation, `tags.changed` reaches a second window live, a label chosen before the first turn is stored with it, Manage tags… saves a draft with renames; sealed phone metadata carries tags and awaitingReply; `KETPLUS_MANAGE_TAGS_CAPTURE=<png>` saves the dialog beside `KetPlusMock --screen=workspace --open=manage-tags` |
-| Header openers and composer suggestions | `ketplus_agent_tests` (`changesPaneListsTheWorktreeChanges`, `composerPlaceholderTracksCaret`, reviewer picker), `ketplus_agent_shell_tests` (`headerChangesOpensTheDetailsPaneChangesTab`) | the header's Changes opens the details pane's Changes tab (the worktree's uncommitted files, each opening its diff, and Open Source Control); with the pane open, Changes, Terminal and Report leave the header for the pane's Open content menu, Open tabs lists the tabs and Hide content pane keeps them; the Reviewer menu names each provider's default model and lists Codex as unable to review (ADR 0067); `KETPLUS_CHANGES_PANE_CAPTURE` and `KETPLUS_MENTION_CAPTURE` save the Changes tab and the file mention popover, to set beside `KetPlusMock --screen=workspace --open=mention|agent-mention|skill|slash` |
+| Tag catalog (#429, ADR 0117) | `ketplus_tag_catalog_tests`, `ketplus_desktop_session_discovery_tests`, `ketplus_agent_tests`, `ketplus_workspace_tests`, `ketplus_daemon_cloud_privacy_tests` | daemon: defaults until saved, restart persistence, invalid catalogs refused, renames kept and removals dropped on every conversation; sealed phone metadata carries tags and awaitingReply. Desktop: lists no tags, takes another client's `tags.changed` without an error or a warning, and the header and sidebar draw no user tag, Add tag, Manage tags… or tag filter |
+| Header openers and composer suggestions | `ketplus_agent_tests` (`changesPaneListsTheWorktreeChanges`, `composerPlaceholderTracksCaret`, reviewer picker), `ketplus_agent_shell_tests` (`headerChangesOpensTheDetailsPaneChangesTab`) | the header's Changes opens the details pane's Changes tab (the worktree's uncommitted files, each opening its diff, and Open Source Control); Changes, Terminal and Report stay in the header with the pane open, beside its Open content menu; Open tabs lists the tabs and Hide content pane keeps them; the Reviewer menu names each provider's default model and lists Codex as unable to review (ADR 0067); `KETPLUS_CHANGES_PANE_CAPTURE` and `KETPLUS_MENTION_CAPTURE` save the Changes tab and the file mention popover, to set beside `KetPlusMock --screen=workspace --open=mention|agent-mention|skill|slash` |
 | Cursor catalog output | `ketplus_cursor_catalog_bounds_tests` | stdout/stderr draining before exit, shared 1-MiB boundary/excess, unsuccessful exit, coalesced callers/cache, timeout after output and failed launch; self-hosted CLI fixture only |
 | Codex protocol contract | `ketplus_codex_contract_tests` (Node) | declared Codex usage exists in every tested schema snapshot; daemon code names only declared methods |
 | Relay browser sign-in | `ketplus_daemon_browser_sign_in_tests` | relay paths appended to a base path, loopback redirect, PKCE S256 challenge, wrong state/path refused, one-time callback |
 | Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
+| First-turn remote attachments (ADR 0122) | `ketplus_session_preparation_store_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_machine_preparation_tests` | Private allocation/retry, atomic activation/cancel, restart/expiry and bounded receipts; authenticated Relay routing and creator-key barrier before ACK; encrypted staging through the first fake-provider turn; offscreen composer retry, visible/removable pending files during preparation/refusal, text-only recovery, late cancellation after view destruction, restart-safe durable cancellation and old-hosted/old-daemon fallback. Run the existing Machine attachment/conversation and SSH/Relay backend suites too. |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
 | Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle, deny list and work display, reverted toggle on save failure |
@@ -168,6 +240,18 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Review guard changes (ADR 0067 profiles) run `ketplus_claude_sidecar_tests`, which
+includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
+`ketplus_turn_review_tests`, `ketplus_team_review_tests` and
+`ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
+command and edit the guard allows, so a wrong allow changes the test checkout.
+
+A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
+`cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
+-clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into
+its own tree (for example a font or asset generator) in a copy of the checkout in the
+scratch directory. The turn points the usual cache variables into the scratch directory.
+
 Atlas tunnel completion (`ketplus_atlas_live_tunnel_tests`, ADR 0084) exercises
 per-frame, half-window and delayed full-window credits against a synthetic
 loopback origin. It requires complete binary response bytes and exactly one EOF
@@ -189,6 +273,14 @@ provider. Header changes require the full Pro matrix; keep the existing real
 KetAtlas lane opt-in and report its skip separately.
 
 ## Minimum verification
+
+Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
+the offscreen bundled-browser/Claude-adapter tests and production build-info
+checks through `packaging/linux/build-desktop.sh`. Verify both actual package
+formats in `Dockerfile.desktop-smoke` with `--network=none`, no SDK and fresh
+home/config/data directories. Run each native architecture separately; an amd64
+result is not ARM proof. See `linux-desktop-packaging.md` for the build commands
+and outstanding publication gates.
 
 Update-preparation changes run `python3 tests/packaging/test_update_archive_cli.py`
 for invalid notes/version, output collisions, cleanup after a failed signing step,
@@ -223,10 +315,58 @@ credential admission/preservation/repair at daemon startup and client hello,
 isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
-results). The normal full Desktop suite still covers the shared build/interface
+results), `ketplus_remote_control_projection_tests` (sealed metadata projection
+with tampered and unpinned rows, transcript paging across a large event, a tampered
+restore response, a changed host key version and an unpinned host key, against the
+synthetic loopback relay) and `ketplus_remote_ssh_tunnel_tests` (loopback `sshd` with throwaway
+keys: host-key accept, reject and mismatch, auth failure, missing daemon socket
+and reconnect), `ketplus_remote_ssh_backend_tests` (SSH machine backend states,
+identity fail-closed and re-trust, machine store) and
+`ketplus_remote_ssh_daemon_integration_tests` (a real `ketplus_daemon` with
+FakeCodex behind the loopback `sshd`; see [`ssh-transport.md`](ssh-transport.md)). The normal full Desktop suite still covers the shared build/interface
 changes. Also run the standalone Release cloud-privacy characterization, then
 stage/install and check the runtime outside the Qt SDK; see
 [`linux-headless-daemon.md`](linux-headless-daemon.md).
+
+The machine picker geometry regression also mounts the real ActivityBar at 240 px
+in light/dark and checks all four connection states remain readable before the
+trailing route/name is elided in the closed label; the popup stays name-first. `ketplus_remote_workspace_tests` checks that the
+signed-out Linux section shares the introduction's 24 px column at wide/narrow widths.
+
+`ketplus_machine_end_to_end_tests` (macOS Desktop, offscreen) is the #419
+acceptance: the real `MainWindow`, given the app's one `LinuxMachines` set
+through `useLinuxMachines()` as `main()` does, with SSH and Relay backends over
+the fixtures, selects a Linux machine in the picker through the window's own
+Connections wiring, starts a conversation in a remote
+worktree, answers an approval, sees the transcript update, survives a stopped
+daemon or relay with Reconnecting/Offline shown and automatic recovery, and
+returns to This Mac. The SSH case needs `sshd` (it skips without one) and uses a
+real `ketplus_daemon` with FakeCodex; the Relay case uses
+`tests/daemon/SyntheticRelay.h` and in-memory credentials. Set
+`KETPLUS_E2E_SCREENSHOTS=<folder>` to save the Connections page, the window and
+the open machine picker for each route (the PR evidence under
+`mockups/qt/evidence/linux-e2e/`).
+
+`ketplus_remote_relay_backend_tests` drives ADR 0119's `RelayMachineBackend`
+against a loopback relay whose replies are shaped like the deployed relay's
+session, worktree and command DTOs, with a synthetic host that decrypts each
+command, runs it once and signs its result: a full turn with an approval and a
+question, a session created in an empty host-verified worktree, per-worktree
+verification (a mismatched scope, an ungranted worktree, the bound), an outbox
+retry of the same ciphertext across a simulated restart, offline and
+reconnect, and a revoked credential that fences an in-flight result. It also
+covers lazy, cached and bounded worktree verification that never delays a
+listing, a backend destroyed mid-request, live events resuming after a fence
+during an events poll, requests held while reconnecting, a failure reported
+only for a command that is never sent (one the relay holds is queued and
+completes once), and a result applied only after its completion is recorded
+and re-read while the link stays up. A `pendingApprovals` read never reaches
+the outbox or a restart, a refusal without a code fails only its command while
+a 503 without a code keeps it for the link, event polls stop for twenty closed
+conversations (a read does not restart them) and stay bounded to the one that
+is open, and a worktree granted after a `worktree_not_granted` verdict appears
+once the verdict expires.
+No network, account or provider is used.
 
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`
 uses temporary repositories/journals and a fake Codex process;
@@ -394,8 +534,8 @@ python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibil
 
 `--visibility minimized` minimizes the window a second after `ready` and expects no
 held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
-`limits` to open that composer panel first, like the mock's `--open`, `--open=reviewer` or
-`tags` for the header's Reviewer or Add tag menu, `--open=composer` to focus the input, or
+`limits` to open that composer panel first, like the mock's `--open`, `--open=reviewer`
+for the header's Reviewer menu, `--open=composer` to focus the input, or
 `--open=welcome` for an empty conversation like the mock's `workspace/welcome`. `--open=viewer` opens the
 image viewer on the mock's sidebar capture, and `--open=tasks` shows the mock's three
 background tasks (running, completed and failed) like its `workspace/running` strip. With `--open`, the
@@ -579,7 +719,7 @@ Build `ketplus_atlas_live_tunnel_tests`, `ketplus_atlas_live_runtime_tests`, and
 
 The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite starts a temporary project and renderer, verifies live reads after changing source, reattaches with fresh keys and stable source/ports, and checks process cleanup.
 
-The separate relay checkout has `apps/ketsuite/atlas-gateway/native-fixture.mjs`, which launches only the fixture executable. The iOS test `nativeAtlasBridgeTransfersBinaryPostSSEAndWebSocketThroughIsolatedDaemonAndRelay` exercises the real Swift bridge and C++ tunnel through that gateway. Keep its descriptor in a temporary directory and stop the fixture after testing. The native worktree XCUITest uses a new disposable simulator; it is a UI fixture test, separately from daemon/relay integration.
+Companion relay and mobile acceptance procedures are maintained privately. The public fixture executable remains available for native daemon tests.
 
 Confirmation questions with one single-choice Yes/No (or Có/Không) pair submit the
 original option ID on one click. Other questions retain their choice/text flow.
@@ -923,3 +1063,113 @@ translucent 900×1200 PNG (one decoding item per pass, 512 px references after t
 1024×768 PNG. It expects one preview after the first pass (one decode per pass) and a
 512 px JPEG media reference on each eligible turn after the sweep. No
 installed journal or live provider is used.
+
+## Desktop update QA isolation
+
+A desktop QA launch must isolate native settings before any application code reads
+or writes them. On macOS, changing `HOME` and `CFFIXED_USER_HOME` alone is insufficient:
+QSettings NativeFormat can still use the logged-in user's preferences via cfprefsd.
+Use a separate OS user, or an external, uncommitted QA-only hook that selects
+QSettings IniFormat and an explicit disposable settings directory. Gate such a hook
+to a unique QA bundle identifier; never enable it in a shipping app.
+
+Before launch, a probe using the same setup must prove that `QSettings().fileName()`
+is inside the QA home and `contains("workspace/lastRoot")` is false. Sparkle defaults
+must also belong only to the unique QA bundle domain. Never write, delete or migrate
+preferences in the normal application domain during QA. Record only key namespaces
+and counts in public evidence; do not commit values, path-derived key suffixes or
+digests. Keep any necessary comparison evidence outside the repository.
+
+Use a throwaway EdDSA key, loopback-only feed and fake providers. Verify the complete
+bundle's destination before install/relaunch; it must be disposable and outside the
+normal installed app. Check the QA settings file for expected key names after each
+session, and stop if evidence indicates writes outside isolation. A running real app
+can change its own preferences, so timestamps alone cannot attribute a write to QA.
+Do not open real workspaces or consume provider quota for update tests.
+
+The compiled-feed delegate harness in `tests/updates` uses a unique test bundle
+identifier, starts no updater/network operation and restores only its own test domain.
+It verifies that restored staging and HTTP defaults cannot override the compiled feed.
+Run it with `QT_QPA_PLATFORM=offscreen`; production bundle installation and owner-run
+manual UI acceptance remain separate checks.
+
+`ketplus_machine_toast_tests` renders the production Machine composer in temporary
+INI settings, in light/dark. It checks the exact recipe gap after growth and window
+resize, composer/view hide and restore, and preservation of another composer's
+reservation during hide and destruction. It uses no backend or provider.
+
+`ketplus_scheme_manager_tests` covers one-time legacy migration, independent
+system preferences, built-in parity against live kit tokens, complete async
+publication, exact notification counts, preview cancellation/commit, stale-result
+suppression and external revision cancellation. `ketplus_git_diff_view_tests`
+also verifies model/selection identity and alpha-composited canonical diff colors.
+These offscreen checks do not replace native DELL or Pro chat acceptance.
+
+## Consented SSH daemon installation (ADR 0124)
+
+`ketplus_daemon_release_tests` verifies Ed25519 manifests and fail-closed build
+configuration. `ketplus_ssh_install_transaction_tests` exercises the actual
+Python transaction with disposable fixture runtimes: interrupted transfer,
+checksum/archive/runtime failures, decline/EOF rollback, ownership guards,
+busy stop refusal, downgrade refusal, upgrade rollback and data retention.
+`ketplus_daemon_upgrade_tests` covers the authenticated idle-only upgrade and
+`daemon.stop_if_idle` gates, including an active provider fixture.
+
+The Connections target is part of normal desktop test builds/ctest and reuses
+`KetQt::Widgets` from the desktop. Its consent/decline routing tests always run;
+the full host proof additionally needs the explicit QA inputs below.
+For the Linux Connections proof without the full editor's WebView/compat SDK,
+configure `KETPLUS_BUILD_DESKTOP=OFF`, `KETPLUS_BUILD_SSH_INSTALL_UI_TESTS=ON` and
+`KETPLUS_CONTROL_URL=http://127.0.0.1:9`. This optional test target compiles the
+actual Connections/controller/installer sources with Két Widgets. It needs Qt
+Widgets/Svg/Test, OpenSSL, Python 3.9+ and a non-root loopback sshd. Run ctest with
+`QT_QPA_PLATFORM=offscreen`; never run a real provider for this proof.
+
+The QA runtime must come from the task's complete `cmake --install` stage and
+have a clean exact build revision. Archive its top-level children directly
+(no `.` member/CPack wrapper; ADR 0124 layout v1). In a task-owned directory,
+generate an Ed25519 QA keypair, restrict the private file to 0600, and set:
+
+- `KETPLUS_T51_QA_KEY`: the QA private PEM file (outside the repository).
+- `KETPLUS_T51_QA_ARCHIVE`: the full staged runtime TGZ.
+- `KETPLUS_T51_QA_INFO`: JSON from that staged daemon's `--build-info`.
+- `KETPLUS_T51_QA_EVIDENCE`: an optional task-owned capture directory.
+- `TMPDIR`: a task-owned private temporary directory.
+
+Then run `ctest -R '^ketplus_ssh_install_ui_tests$' --output-on-failure` in the
+own build tree. Without the QA inputs this opt-in host proof reports a skip;
+a skip is not completion evidence. The test signs a local manifest, serves it
+on loopback, uses a fresh same-UID HOME/XDG profile through a loopback sshd,
+clicks the actual Connections controls, checks missing-key/signature failures and
+cancellation at runtime-ready, declines once, installs and verifies an authenticated
+`daemon.hello`, restarts without downloading again, then uninstalls through the idle gate and
+checks that user data survives. It creates no OS user or real relay registration.
+
+## Color-scheme rendering and native comparison
+
+`ketplus_scheme_rendering_tests` covers same-mode fenced-code color/font updates,
+Mermaid configuration cache invalidation and Markdown document/selection/scroll
+preservation. `ketplus_scheme_chat_tests` checks canonical syntax on an existing
+Quick text document and retains the Quick root, transcript model and selection.
+The related Pro streaming, shell and Mermaid targets exercise live updates with
+fake/local fixtures; they do not invoke providers.
+
+Native evidence is opt-in and refuses to show a window unless a DELL screen is
+found. Ordinary offscreen runs skip these two manual cases:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/lite-dev/core/ketplus_scheme_consumer_tests nativeBuiltinComparisonOnDell
+QT_QPA_PLATFORM=cocoa QSG_RHI_BACKEND=metal KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+  KETPLUS_NATIVE_SCHEME_CAPTURE_DIR=/tmp/ketplus-native-colors \
+  build/dev/ketplus_scheme_chat_tests nativeBuiltinComparisonOnDell
+```
+
+Review the widget pair captures and the legacy/canonical chat captures in both
+modes. The targeted macOS/Qt 6.11 check used DELL P2219H; both chat pairs had zero
+changed pixels. The captures contain synthetic test messages only.
+
+If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
+can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
+application's scheme persistence or publication. See Qt's [disk-cache
+configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).

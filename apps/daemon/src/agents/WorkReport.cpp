@@ -35,6 +35,18 @@ bool closed(const QJsonObject& item) {
     return status == QStringLiteral("done") || status == QStringLiteral("cancelled");
 }
 
+// An item another one took over: a duplicate the app hides and nothing counts.
+bool replaced(const QJsonObject& item) { return item.contains(QStringLiteral("replaced_by")); }
+
+// The turn an item was closed in, kept while it stays closed: later calls may reword a finished
+// item, and its age is when it finished. An item closed before this field existed has none.
+void stampClosedTurn(const QJsonObject& before, QJsonObject& item, const qint64 turn) {
+    if (!closed(item))
+        item.remove(QStringLiteral("closed_turn"));
+    else if (before.isEmpty() || !closed(before))
+        item.insert(QStringLiteral("closed_turn"), turn);
+}
+
 // One line of redacted text: the same redactions as the transcript, then the field's cap.
 QString clean(const QJsonValue& value, const qsizetype limit) {
     QString text = value.toString();
@@ -186,6 +198,7 @@ Merge merge(const QJsonObject& current, const QJsonObject& call, const qint64 tu
             result.error = error;
             return result;
         }
+        stampClosedTurn(existing ? before : QJsonObject{}, item, turn);
         if (existing) {
             if (item != before) {
                 item.insert(QStringLiteral("updated_turn"), turn);
@@ -197,6 +210,44 @@ Merge merge(const QJsonObject& current, const QJsonObject& call, const qint64 tu
             byKey.insert(key, items.size());
             items.append(item);
             ++result.added;
+        }
+    }
+    // Duplicates the call merges: the replacing item stands, the replaced ones are cancelled.
+    for (const QJsonValue& value : inputs) {
+        const QJsonObject input = value.toObject();
+        if (!input.contains(QStringLiteral("replaces")))
+            continue;
+        const QString key = input.value(QStringLiteral("key")).toString();
+        for (const QJsonValue& replaced : input.value(QStringLiteral("replaces")).toArray()) {
+            const QString old = replaced.toString();
+            const auto found = byKey.constFind(old);
+            if (old == key || seen.contains(old) || found == byKey.cend()) {
+                result.error =
+                    old == key || seen.contains(old)
+                        ? QStringLiteral("Item \"%1\" replaces \"%2\", which this call also "
+                                         "reports.")
+                              .arg(key, old)
+                        : QStringLiteral("Item \"%1\" replaces \"%2\", which is not in the "
+                                         "report.")
+                              .arg(key, old);
+                return result;
+            }
+            QJsonObject item = items.at(*found).toObject();
+            const QJsonObject before = item;
+            // Finished work keeps its status and evidence: a duplicate done item is only
+            // marked, so the app hides it and nothing counts it twice.
+            if (!closed(item)) {
+                item.insert(QStringLiteral("status"), QStringLiteral("cancelled"));
+                item.remove(QStringLiteral("next"));
+                item.remove(QStringLiteral("remaining"));
+                stampClosedTurn(before, item, turn);
+            }
+            item.insert(QStringLiteral("replaced_by"), key);
+            if (item == before)
+                continue;
+            item.insert(QStringLiteral("updated_turn"), turn);
+            items[*found] = item;
+            ++result.updated;
         }
     }
     result.ledger = current;
@@ -216,10 +267,12 @@ Merge merge(const QJsonObject& current, const QJsonObject& call, const qint64 tu
         qsizetype oldest = -1;
         for (qsizetype index = 0; index < items.size(); ++index) {
             const QJsonObject item = items.at(index).toObject();
-            if (closed(item) &&
-                (oldest < 0 ||
-                 item.value(QStringLiteral("updated_turn")).toInteger() <
-                     items.at(oldest).toObject().value(QStringLiteral("updated_turn")).toInteger()))
+            // Duplicates leave before real history, then the oldest closed items.
+            const auto rank = [](const QJsonObject& value) {
+                return std::pair{!replaced(value),
+                                 value.value(QStringLiteral("updated_turn")).toInteger()};
+            };
+            if (closed(item) && (oldest < 0 || rank(item) < rank(items.at(oldest).toObject())))
                 oldest = index;
         }
         if (oldest < 0) {
@@ -260,7 +313,7 @@ QJsonObject summary(const Merge& merge) {
     int open = 0;
     for (const QJsonValue& value : merge.ledger.value(QStringLiteral("items")).toArray()) {
         const QString status = value.toObject().value(QStringLiteral("status")).toString();
-        if (status == QStringLiteral("cancelled"))
+        if (status == QStringLiteral("cancelled") || replaced(value.toObject()))
             continue;
         ++counted;
         if (status == QStringLiteral("done"))
@@ -268,12 +321,86 @@ QJsonObject summary(const Merge& merge) {
         else
             ++open;
     }
-    return {{QStringLiteral("version"), merge.ledger.value(QStringLiteral("version"))},
-            {QStringLiteral("added"), merge.added},
-            {QStringLiteral("updated"), merge.updated},
-            {QStringLiteral("done"), done},
-            {QStringLiteral("total"), counted},
-            {QStringLiteral("open"), open}};
+    const qint64 turn = merge.ledger.value(QStringLiteral("turn")).toInteger();
+    QList<QJsonObject> openItems;
+    QList<QJsonObject> doneItems;
+    for (const QJsonValue& value : merge.ledger.value(QStringLiteral("items")).toArray()) {
+        const QJsonObject item = value.toObject();
+        if (!closed(item))
+            openItems.append(item);
+        else if (item.value(QStringLiteral("status")).toString() == QStringLiteral("done") &&
+                 !replaced(item))
+            doneItems.append(item);
+    }
+    const auto finishedTurn = [](const QJsonObject& item) {
+        return item.contains(QStringLiteral("closed_turn"))
+                   ? item.value(QStringLiteral("closed_turn")).toInteger()
+                   : item.value(QStringLiteral("updated_turn")).toInteger();
+    };
+    std::stable_sort(doneItems.begin(), doneItems.end(),
+                     [&](const QJsonObject& a, const QJsonObject& b) {
+                         return finishedTurn(a) > finishedTurn(b);
+                     });
+    QJsonArray listedDone;
+    for (const QJsonObject& item : std::as_const(doneItems)) {
+        if (listedDone.size() >= maximumListedDoneItems)
+            break;
+        listedDone.append(QJsonObject{
+            {QStringLiteral("key"), item.value(QStringLiteral("key"))},
+            {QStringLiteral("title"),
+             capCloudText(item.value(QStringLiteral("title")).toString(), maximumListedTitle)}});
+    }
+    std::stable_sort(openItems.begin(), openItems.end(),
+                     [](const QJsonObject& a, const QJsonObject& b) {
+                         return a.value(QStringLiteral("updated_turn")).toInteger() >
+                                b.value(QStringLiteral("updated_turn")).toInteger();
+                     });
+    QJsonArray listed;
+    int stale = 0;
+    for (const QJsonObject& item : std::as_const(openItems)) {
+        const qint64 updated = item.value(QStringLiteral("updated_turn")).toInteger();
+        const bool old = turn - updated >= staleTurns;
+        stale += old ? 1 : 0;
+        if (listed.size() >= maximumListedOpenItems)
+            continue;
+        QJsonObject entry{
+            {QStringLiteral("key"), item.value(QStringLiteral("key"))},
+            {QStringLiteral("status"), item.value(QStringLiteral("status"))},
+            {QStringLiteral("title"),
+             capCloudText(item.value(QStringLiteral("title")).toString(), maximumListedTitle)},
+            {QStringLiteral("updated_turn"), updated}};
+        if (old)
+            entry.insert(QStringLiteral("stale"), true);
+        listed.append(entry);
+    }
+    QJsonObject answer{{QStringLiteral("version"), merge.ledger.value(QStringLiteral("version"))},
+                       {QStringLiteral("added"), merge.added},
+                       {QStringLiteral("updated"), merge.updated},
+                       {QStringLiteral("done"), done},
+                       {QStringLiteral("total"), counted},
+                       {QStringLiteral("open"), open},
+                       {QStringLiteral("stale"), stale},
+                       {QStringLiteral("open_items"), listed},
+                       {QStringLiteral("done_items"), listedDone}};
+    QStringList reconcile;
+    if (open > 0)
+        reconcile.append(
+            QStringLiteral("open_items are all the open items of this report, also ones from "
+                           "earlier turns. Before ending the turn, report again by key each one "
+                           "that is finished (done), no longer wanted (cancelled) or the same work "
+                           "as another item (send that item with replaces). Confirm or close every "
+                           "stale item."));
+    if (!listedDone.isEmpty())
+        reconcile.append(
+            QStringLiteral("done_items are the most recently finished items. Do not report them "
+                           "again unless their result changed. When two of them, or a done and an "
+                           "open item, are the same work, send the one that stays with replaces; "
+                           "the duplicate is hidden."));
+    if (!reconcile.isEmpty()) {
+        reconcile.append(QStringLiteral("Never add a new key for work listed here."));
+        answer.insert(QStringLiteral("reconcile"), reconcile.join(QLatin1Char(' ')));
+    }
+    return answer;
 }
 
 } // namespace ketplus::daemon::work_report

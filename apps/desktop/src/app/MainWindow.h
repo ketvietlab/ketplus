@@ -22,6 +22,9 @@
 #include <memory>
 
 class QCloseEvent;
+namespace ketplus {
+class LinuxMachines;
+}
 class QEvent;
 class QShortcut;
 class QUrl;
@@ -56,6 +59,7 @@ class AgentWorktreeCreator;
 class AgentSessionManager;
 class AgentWorkspaceView;
 class FindReplaceBar;
+class MachineComposition;
 class ExplorerPanel;
 class GitChangesPanel;
 class GitService;
@@ -69,12 +73,20 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
+class TeamDirectory;
+class TeamPage;
+class ScheduleWindows;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 
   public:
+    // Shows the app's one set of Linux machines (ADR 0119) in this window: its picker,
+    // MachineSelection and Connections read from `machines`, which main() owns, attaches and
+    // starts once, so the picker lists them before Connections is opened. Windows that are not
+    // given a set (tests) make their own when Connections opens.
+    void useLinuxMachines(LinuxMachines* machines);
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
     ~MainWindow() override;
 
@@ -85,6 +97,10 @@ class MainWindow final : public QMainWindow {
     void switchToWorktree(const QString& path);
     void setFileContextWorktree(const QString& path);
     void followConversationCheckout();
+    // ADR 0119: the machines Connections registered and the one the picker selected.
+    MachineComposition* machineComposition();
+    // Opens the one Schedules window, selecting `scheduleId` when it is not empty.
+    void showSchedules(const QString& scheduleId = {});
 
   signals:
     void newWindowRequested();
@@ -136,6 +152,11 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
+    // ADR 0119: a remote machine is composed through its MachineBackend (MainWindowMachine).
+    void selectMachine(const QString& machineId);
+    void setMachineWorkspaceVisible(bool visible);
+    // Creates the Connections page, hidden, with its SSH and Relay backends (ADR 0119).
+    void ensureRemoteControl();
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
     void setShellMode(ActivityBar::Mode mode);
@@ -233,6 +254,33 @@ class MainWindow final : public QMainWindow {
     // Names the signed-in account on the sidebar identity button (ADR 0109).
     void setupSidebarAccount();
     [[nodiscard]] remote::DaemonClient* accountDaemon();
+    // ADR 0114 (#464): teams in the sidebar while the daemon advertises teams/1.
+    void setupTeams();
+    void setupSchedules();
+    // Takes the members of the repository's teams out of `conversations`, into their folders.
+    [[nodiscard]] QVector<SidebarTeam>
+    takeSidebarTeams(const QString& repository,
+                     QHash<QString, QVariantList>& conversationsByRepository) const;
+    // Each member conversation's role for the Agent Workspace header (#467).
+    void updateTeamRoles();
+    void showTeamMenu(const QString& teamId);
+    void openTeam(const QString& teamId);
+    // #466: the team page in the workspace, or the empty page of a repository without one.
+    void showTeamPage(const QString& teamId, const QString& repository);
+    void openTeamMember(const QString& sessionId);
+    // A goal's `@agent/<number>` mention, from the team page.
+    void openConversationNumber(const QString& number);
+    void openTeamTask(const QString& teamId, const QString& taskId);
+    void joinTeam(const QString& teamId, const QString& sessionId);
+    void leaveTeam(const QString& teamId, const QString& sessionId);
+    void deleteTeam(const QString& teamId);
+    void showNewTeamDialog(const QString& repository);
+    void showAddTeamMemberDialog(const QString& teamId);
+    void showAddTeamReviewerDialog(const QString& teamId);
+    // The conversation menu's team entries; true when `chosen` was one of them.
+    bool handleConversationTeamAction(QAction* chosen, const QString& sessionId);
+    [[nodiscard]] QString conversationSessionId(const QString& worktreePath,
+                                                const QString& conversationId) const;
     void showUpdateSettings();
     // Opens Settings on a section; an empty id keeps the section it shows.
     void showSettingsSection(const QString& id);
@@ -269,6 +317,8 @@ class MainWindow final : public QMainWindow {
     void typeInTerminal(const QString& command);
     void focusTerminal();
     void ensureAgentWorkspace();
+    // The conversation sessions a dialog needs, without opening the agent pane outside its mode.
+    void ensureAgentSessions();
     void syncAgentWorkspaceContext(bool loadTranscript);
     void createAgentWorktree();
     // Create worktree… in a conversation's picker: creates in `repository` and moves that
@@ -359,6 +409,7 @@ class MainWindow final : public QMainWindow {
     QAction* markdownPreviewAction_{nullptr};
     QAction* terminalAction_{nullptr};
     QAction* remoteControlAction_{nullptr};
+    QAction* schedulesAction_{nullptr};
     QAction* viewDiffAction_{nullptr};
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
@@ -424,12 +475,21 @@ class MainWindow final : public QMainWindow {
     QTabWidget* agentDetailTabs_{nullptr};
     // Hide content pane keeps its tabs; the next opener shows it again.
     bool agentDetailPaneHidden_{false};
+    // Whether the pane was last laid out as shown, and its share of the workspace width; the
+    // split is resized only when the pane appears, so a width the user drags to stays.
+    bool agentDetailPaneShown_{false};
+    double agentDetailPaneShare_{0.45};
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
+    QPointer<LinuxMachines> sharedLinuxMachines_;
     remote::DaemonClient* accountDaemon_{nullptr};
+    TeamDirectory* teams_{nullptr};
+    ScheduleWindows* schedules_{nullptr};
+    QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
+    MachineComposition* machines_{nullptr};
     // The Create worktree card asked to open Agent Workspace on what it creates.
     bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};
@@ -443,7 +503,6 @@ class MainWindow final : public QMainWindow {
     QHash<QString, QString> activeFileByWorktree_;
     QString workspaceRoot_;
     QString fileContextRoot_;
-    QString promotedSidebarRepository_;
     QString pendingTranscriptDiff_;
     QString pendingTranscriptDiffRoot_;
     QString repositoryDisplayRoot_;

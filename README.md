@@ -1,7 +1,10 @@
 # KetPlus
 
 <p align="center">
-  <img src="assets/brand/ketplus.svg" alt="KetPlus logo" width="144">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/ketplus-pro-lockup-dark.png">
+    <img src="assets/brand/ketplus-pro-lockup-light.png" alt="ketPlus Pro" height="72">
+  </picture>
 </p>
 
 KetPlus is an early-stage, fast, lightweight, cross-platform text editor for
@@ -14,6 +17,14 @@ Windows, macOS, and Linux. One source tree builds two editions:
 
 Both editions are open source under MPL 2.0. The KétPlus mobile apps and the
 hosted relay, gateway and account services are separate proprietary products.
+
+<p align="center">
+  <img src="docs/images/ketplus-pro-team.png" alt="A team page in KétPlus Pro: the decisions waiting for the user, the tasks with their owners, lanes and states, and the sidebar tree of repositories, teams and conversations" width="900">
+</p>
+
+A team in KétPlus Pro: a leader plans the tasks, developers work on them and a
+reviewer checks each one, while decisions wait for the user. The picture is the
+design mock in [`mockups/qt`](mockups/qt/README.md) with fixture data.
 
 The first milestone deliberately stays small: reliable file editing, tabs,
 UTF-8, syntax lexing, and a native desktop experience. Optional Atlas tabs use
@@ -226,3 +237,6 @@ Third-party components retain their respective licenses, and the KÉT Sans font
 is fetched from its official release at build time under its own license. See
 [docs/licensing.md](docs/licensing.md) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The ketPlus and ketPlus Pro names, the ketPlus mark and its lockups are trademarks,
+all rights reserved; the MPL grants no licence to them. See [TRADEMARKS.md](TRADEMARKS.md).

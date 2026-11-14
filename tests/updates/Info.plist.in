@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>dev.ketplus.tests.updater-feed</string>
+    <key>CFBundleExecutable</key><string>@MACOSX_BUNDLE_EXECUTABLE_NAME@</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>SUFeedURL</key><string>https://updates.example.invalid/production/arm64/appcast.xml</string>
+</dict></plist>

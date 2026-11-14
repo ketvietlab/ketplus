@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QKeySequence>
 #include <QMap>
+#include <QPointer>
 #include <QSet>
 #include <QSize>
 #include <QUrl>
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 
 class QQuickView;
 class QQuickItem;
@@ -111,10 +113,8 @@ class AgentWorkspaceView final : public QWidget {
     // builder's "Ask for a change to <flow>…". Empty keeps the composer's wording.
     Q_PROPERTY(
         QString composerHint READ composerHint WRITE setComposerHint NOTIFY composerHintChanged)
-    // The details pane is open: its Open content menu replaces the header's openers.
+    // The details pane is open; the header's openers then switch its tab.
     Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
-    // #429: the labels the header's Add tag menu offers, each as {label, color}.
-    Q_PROPERTY(QVariantList tagCatalog READ tagCatalog NOTIFY tagCatalogChanged)
     Q_PROPERTY(
         bool compactWindow READ compactWindow WRITE setCompactWindow NOTIFY compactWindowChanged)
     Q_PROPERTY(bool productSidebarVisible READ productSidebarVisible WRITE setProductSidebarVisible
@@ -122,6 +122,8 @@ class AgentWorkspaceView final : public QWidget {
     // Unscaled pixels; 0 lets the conversation fill the pane.
     Q_PROPERTY(int conversationWidth READ conversationWidth WRITE setConversationWidth NOTIFY
                    conversationWidthChanged)
+    // ketplus#598: only the transcript is shown (a conversation on another machine).
+    Q_PROPERTY(bool transcriptOnly READ transcriptOnly NOTIFY transcriptOnlyChanged)
   public:
     static constexpr int defaultConversationWidth = 760;
 
@@ -328,7 +330,9 @@ class AgentWorkspaceView final : public QWidget {
     // a listing lands, so a binding that reads it asks again.
     Q_INVOKABLE QVariantList fileMentionSuggestions(const QString& query);
     // ADR 0027: `#` completes conversation numbers from the directory below.
-    Q_INVOKABLE QVariantList conversationMentionSuggestions(const QString& query) const;
+    // `prefix` is how the user started the mention, "#" or "@agent/"; suggestions insert it.
+    Q_INVOKABLE QVariantList conversationMentionSuggestions(
+        const QString& query, const QString& prefix = QStringLiteral("#")) const;
     Q_INVOKABLE void refreshFileMentions();
     int fileMentionRevision() const { return fileMentionRevision_; }
     Q_INVOKABLE void chooseAttachments();
@@ -360,12 +364,19 @@ class AgentWorkspaceView final : public QWidget {
     // Refresh renderer colours and editor mono preferences. Interface zoom is owned
     // by ket::Appearance; the legacy size argument is retained for shell callers.
     void applyTheme(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void applyColorScheme(const ColorScheme& scheme, int interfaceFontSizePixels = 14);
     void focusPrompt();
     void openModelPicker();
     void setAgentAvailable(bool available);
     void setRestoring(bool restoring);
     void setCompactMode(bool compact);
     void setProductSidebarVisible(bool visible);
+    // ketplus#598: shows only the transcript, without the sidebar, header, composer or local
+    // panes, for a conversation that lives on another machine. Actions that need this Mac's
+    // files or panes (open, diff, reveal, report, team task) report `localActionReason`
+    // through composerErrorOccurred() instead of acting on a local path.
+    void setTranscriptOnly(const QString& localActionReason);
+    [[nodiscard]] bool transcriptOnly() const { return !localActionReason_.isEmpty(); }
     void setCompactWindow(bool compact);
     [[nodiscard]] bool compactWindow() const { return compactWindow_; }
     [[nodiscard]] bool detailsOpen() const { return detailsOpen_; }
@@ -442,7 +453,10 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
     // ADR 0106: opens the details pane's Report tab for the active conversation.
-    Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
+    Q_INVOKABLE void requestWorkReport() {
+        if (!localActionRefused())
+            emit workReportRequested();
+    }
     [[nodiscard]] QVariantMap turnWorkReport() const { return turnWorkReport_; }
     // Set while the active conversation's turn runs; a new turn or conversation clears it.
     void setTurnWorkReport(const QVariantMap& report) {
@@ -457,25 +471,22 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void requestSettings(const QString& section = {}) {
         emit settingsRequested(section);
     }
-    Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
-    [[nodiscard]] QVariantList tagCatalog() const;
-    void setTagCatalog(const QVariantList& catalog) {
-        if (tagCatalogSet_ && catalog == tagCatalog_)
-            return;
-        tagCatalogSet_ = true;
-        tagCatalog_ = catalog;
-        emit tagCatalogChanged();
+    // ADR 0114 (#467): each member conversation's role, by daemon session id, as
+    // {team_id, team_name, role, label, color}. The header shows it locked and has no Reviewer.
+    Q_PROPERTY(QVariantMap teamRoles READ teamRoles NOTIFY teamRolesChanged)
+    QVariantMap teamRoles() const { return teamRoles_; }
+    void setTeamRoles(const QVariantMap& roles) {
+        if (teamRoles_ != roles) {
+            teamRoles_ = roles;
+            emit teamRolesChanged();
+        }
     }
-    // Manage tags… saves the whole catalog; renames maps an old label to its new one.
-    Q_INVOKABLE void requestTagCatalogSave(const QVariantList& tags, const QVariantMap& renames) {
-        emit tagCatalogSaveRequested(tags, renames);
-    }
-    Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
-                                            bool tagged) {
-        emit conversationTagRequested(conversationId, label, tagged);
-    }
+    Q_INVOKABLE void requestTeam(const QString& teamId) { emit teamRequested(teamId); }
+    // #468: a team block's Open T-n. The task is of the open conversation's team, or else of
+    // the member team named in the block.
+    Q_INVOKABLE void requestTeamTask(const QString& teamName, const QString& taskId);
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
-        if (!destination.isEmpty())
+        if (!destination.isEmpty() && !localActionRefused())
             emit productNavigationRequested(destination);
     }
     Q_INVOKABLE void requestAddWorktree();
@@ -490,7 +501,7 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE QString displayFilePath(const QString& path) const;
     Q_INVOKABLE QString revealFileActionText() const;
     Q_INVOKABLE QString revealableFilePath(const QString& path) const;
-    Q_INVOKABLE void revealFile(const QString& path) const;
+    Q_INVOKABLE void revealFile(const QString& path);
     // True once a background check found no file or directory at `path`. Never blocks: an
     // unchecked or stale path is queued for a batched off-thread check and reads as present
     // until that check lands; pathStateRevision changes only when an answer flips.
@@ -505,6 +516,9 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title);
     // The viewer's Fullscreen tool turns the top-level window, not the embedded Quick one.
     Q_INVOKABLE void toggleWindowFullScreen();
+    // The top-level window's area in screen coordinates. The workspace is a Quick window
+    // inside it, so the image viewer opens its own window over this area to cover all of it.
+    Q_INVOKABLE QRect hostWindowGeometry() const;
     Q_INVOKABLE void copySelectedText(QString text);
     Q_INVOKABLE QString composerDraft(const QString& scope) const;
     Q_INVOKABLE void saveComposerDraft(const QString& scope, const QString& text) const;
@@ -566,8 +580,9 @@ class AgentWorkspaceView final : public QWidget {
     }
 
   signals:
-    void tagFilterRequested(const QString& tag);
-    void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
+    void teamRolesChanged();
+    void teamRequested(const QString& teamId);
+    void teamTaskRequested(const QString& teamId, const QString& taskId);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
     void findActionsProvidedChanged();
@@ -589,6 +604,7 @@ class AgentWorkspaceView final : public QWidget {
     void steeringPromptSubmitted(const QString& prompt, const QVariantList& attachments,
                                  const QString& displayText);
     void composerErrorOccurred(const QString& message);
+    void transcriptOnlyChanged();
     void fileMentionsChanged();
     // The worktree file list that inline-code links resolve against arrived or changed.
     void fileLinksChanged();
@@ -641,8 +657,6 @@ class AgentWorkspaceView final : public QWidget {
     void productSidebarVisibleChanged();
     void compactWindowChanged();
     void detailsOpenChanged();
-    void tagCatalogChanged();
-    void tagCatalogSaveRequested(const QVariantList& tags, const QVariantMap& renames);
     void compactWindowRequested();
     void conversationWidthChanged();
     void conversationConfigurationRequested(const QString& model, const QString& effort,
@@ -678,6 +692,17 @@ class AgentWorkspaceView final : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
+    // Emits the transcript-only reason and returns true when local actions are unavailable.
+    bool localActionRefused();
+    void setupToastAvoidance();
+    void refreshToastAncestors();
+    void stopToastAvoidance();
+    void updateToastAvoidance();
+
+    QString localActionReason_;
+    QList<QPointer<QWidget>> toastAncestors_;
+    QPointer<QWidget> toastHost_;
+    bool toastAvoidanceTeardown_{false};
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};
@@ -693,7 +718,9 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap historyState_;
     QQuickItem* transcriptPolish_{nullptr};
     MermaidRenderer* mermaidRenderer_{nullptr};
+    void applyDocumentPalette(const ThemePalette& palette, bool forceSyntax = false);
     ThemePalette mermaidPalette_;
+    std::shared_ptr<const ColorScheme> colorScheme_;
     QSet<QString> mermaidImages_;
     QString workingChangesRoot_;
     QSet<QString> workingChanges_;
@@ -761,6 +788,7 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap heldMessageStates_;
     QString heldMessageScope_;
     QVariantMap reviewerState_;
+    QVariantMap teamRoles_;
     QString reviewerScope_;
     QVariantMap backgroundTaskOutput_;
     QVariantList skills_;
@@ -811,8 +839,6 @@ class AgentWorkspaceView final : public QWidget {
     bool productSidebarVisible_{true};
     bool compactWindow_{false};
     bool detailsOpen_{false};
-    QVariantList tagCatalog_;
-    bool tagCatalogSet_{false};
     int conversationWidth_{defaultConversationWidth};
     qint64 conversationConfigurationRevision_{0};
     QVariant conversationCompactWindow_;

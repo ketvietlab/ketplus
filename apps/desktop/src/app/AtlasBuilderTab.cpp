@@ -229,6 +229,10 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
     chatFrame_->setObjectName(QStringLiteral("atlasBuilderChatFrame"));
     chatFrame_->setFrameShape(QFrame::StyledPanel);
     chatFrame_->setAutoFillBackground(true);
+    // Native so it stays above the Atlas web view. Its ancestors must not turn native with it:
+    // they would get native windows above the Agent Workspace's QQuickView, which stays parented
+    // to the top-level window, and the conversation would draw blank after an Atlas was opened.
+    chatFrame_->setAttribute(Qt::WA_DontCreateNativeAncestors);
     chatFrame_->setAttribute(Qt::WA_NativeWindow);
 
     auto* chatLayout = new QVBoxLayout(chatFrame_);

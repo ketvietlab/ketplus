@@ -1,31 +1,17 @@
 #include "control/ControlV2Client.h"
+#include "control/ControlV2Content.h"
 #include <QJsonDocument>
 #include <QSet>
 namespace ketplus::remote {
+using control_v2::contentScope;
+using control_v2::segment;
+using control_v2::validContent;
 namespace {
-QString segment(const QString& value) { return QString::fromUtf8(QUrl::toPercentEncoding(value)); }
 QJsonObject sessionScope(const QJsonObject& intent) {
     return {{"id", intent.value("sessionId")},
             {"generation", intent.value("sessionGeneration")},
             {"workspaceId", intent.value("workspaceId")},
             {"machineId", intent.value("machineId")}};
-}
-bool validContent(const QJsonObject& content, const QString& session, qint64 generation,
-                  qsizetype maximum) {
-    const auto bytes = [&](const char* field) {
-        return daemon::CloudCrypto::fromBase64Url(content.value(QLatin1String(field)).toString());
-    };
-    return content.value("version").toInt() == 1 &&
-           content.value("algorithm").toString() == "A256GCM" &&
-           content.value("keyEpoch").toInt() == 1 &&
-           content.value("keyId").toString() == QString("%1:%2:1").arg(session).arg(generation) &&
-           content.value("senderKeyVersion").toInt() > 0 && bytes("nonce").size() == 12 &&
-           bytes("tag").size() == 16 && bytes("signature").size() == 64 &&
-           bytes("ciphertext").size() <= maximum;
-}
-QJsonArray contentScope(const QJsonObject& content) {
-    return {content.value("keyId"), content.value("keyEpoch"), content.value("senderDeviceId"),
-            content.value("senderKeyVersion")};
 }
 } // namespace
 QByteArray ControlV2Client::commandAssociatedData(const QJsonObject& command) {
@@ -43,13 +29,39 @@ QByteArray ControlV2Client::commandAssociatedData(const QJsonObject& command) {
                       command.value("kind")};
     for (const auto& value : contentScope(content))
         fields.append(value);
+    // As the host reads a restore request (CloudControlClient::commandAssociatedData).
+    if (command.value("kind").toString() == "transcript.restore_window")
+        for (const auto& value : QJsonArray{
+                 command.value("credentialEpoch"), command.value("ownerSubjectId"),
+                 command.value("snapshotCursor"), command.value("requestedByteCap"),
+                 command.value("continuationOfRequestId").toString(),
+                 command.value("continuationSequence").toInteger(0),
+                 command.value("continuationDigest").toString(), command.value("deadlineAt")})
+            fields.append(value);
     if (command.value("kind").toString().startsWith("workspace.files."))
         for (const auto* key : {"repositoryId", "worktreeId", "workspaceRevision"})
             fields.append(command.value(QLatin1String(key)).toString());
+    // Sealed to the machine before a conversation exists (CloudControlClient isWorktreeCommand).
+    if (control_v2::worktreeScoped(command.value("kind").toString())) {
+        for (const auto* key : {"ownerSubjectId", "repositoryId", "worktreeId",
+                                "expectedCatalogRevision", "expectedLifecycleRevision"})
+            fields.append(command.value(QLatin1String(key)));
+        for (const auto* key : {"recipientDeviceId", "recipientKeyVersion", "ephemeralPublicKey"})
+            fields.append(content.value(QLatin1String(key)));
+    }
     return daemon::CloudCrypto::canonical(fields);
 }
 void ControlV2Client::senderKey(const QString& id, int version,
                                 std::function<void(const QByteArray&, const QString&)> done) {
+    hostKeys(id, version, [done = std::move(done)](const QJsonObject& keys, const QString& error) {
+        done(error.isEmpty()
+                 ? daemon::CloudCrypto::fromBase64Url(keys.value("signingPublicKey").toString())
+                 : QByteArray{},
+             error);
+    });
+}
+void ControlV2Client::hostKeys(const QString& id, int version,
+                               std::function<void(const QJsonObject&, const QString&)> done) {
     authorized(
         "GET", "/v2/mobile/device-keys/" + segment(id) + "/" + QString::number(version), {},
         [this, id, version, done = std::move(done)](const QJsonValue& value, const QString& error) {
@@ -77,11 +89,17 @@ void ControlV2Client::senderKey(const QString& id, int version,
                     return;
                 }
             } else if (hostPins_.value(pin).toString() != fingerprint) {
-                done({}, "This host is not paired with this computer.");
+                done({}, QString::fromLatin1(control_v2::hostNotPaired));
                 return;
             }
-            done(signing, {});
+            done(keys, {});
         });
+}
+bool ControlV2Client::signedByVerifiedKey(const QString& sessionId, qint64 generation,
+                                          const QJsonObject& content) const {
+    const auto version =
+        signerVersions_.value(QStringLiteral("%1:%2").arg(sessionId).arg(generation));
+    return version > 0 && content.value("senderKeyVersion").toInt() == version;
 }
 void ControlV2Client::sessionKeys(const QJsonObject& session,
                                   std::function<void(const QByteArray&, const QString&)> done) {
@@ -112,19 +130,23 @@ void ControlV2Client::sessionKeys(const QJsonObject& session,
                     envelope.value("senderDeviceId").toString() != machine ||
                     envelope.value("keyEpoch").toInt() != 1)
                     continue;
-                senderKey(machine, envelope.value("senderKeyVersion").toInt(),
-                          [this, envelope, done = std::move(done)](const QByteArray& signing,
-                                                                   const QString& failure) {
-                              QString error = failure;
-                              if (error.isEmpty() &&
-                                  !crypto_.importSessionKey(envelope, signing, deviceId_,
-                                                            keyVersion_, &error))
-                                  error = error.isEmpty() ? "Unable to import session key." : error;
-                              done(error.isEmpty() ? signing : QByteArray{}, error);
-                          });
+                senderKey(
+                    machine, envelope.value("senderKeyVersion").toInt(),
+                    [this, id, generation, envelope,
+                     done = std::move(done)](const QByteArray& signing, const QString& failure) {
+                        QString error = failure;
+                        if (error.isEmpty() &&
+                            !crypto_.importSessionKey(envelope, signing, deviceId_, keyVersion_,
+                                                      &error))
+                            error = error.isEmpty() ? "Unable to import session key." : error;
+                        if (error.isEmpty())
+                            signerVersions_.insert(QStringLiteral("%1:%2").arg(id).arg(generation),
+                                                   envelope.value("senderKeyVersion").toInt());
+                        done(error.isEmpty() ? signing : QByteArray{}, error);
+                    });
                 return;
             }
-            done({}, "No host-signed session key was granted to this device.");
+            done({}, QString::fromLatin1(control_v2::noSessionKeyGrant));
         });
 }
 void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback done) {
@@ -184,6 +206,10 @@ void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback 
                                       event.value("cursor"),
                                       event.value("turnSequence"),
                                       event.value("eventType")};
+                    if (!signedByVerifiedKey(id, generation, content)) {
+                        done({}, "The host signing key changed; pair this host again.");
+                        return;
+                    }
                     for (const auto& field : contentScope(content))
                         fields.append(field);
                     QString error;
@@ -209,15 +235,27 @@ void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback 
 }
 void ControlV2Client::prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext,
                                      Callback done) {
-    static const QSet<QString> supported{
-        "session.start_turn",         "session.steer",
-        "session.interrupt",          "session.rename",
-        "approval.resolve",           "question.answer",
-        "session.configuration.read", "session.configuration.apply",
-        "session.pending_approvals",  "session.execution_policy.apply",
-        "session.mode.apply",         "workspace.files.tree",
-        "workspace.files.search",     "workspace.files.file",
-        "workspace.files.diff"};
+    static const QSet<QString> supported{"attachment.stage.begin",
+                                         "attachment.stage.chunk",
+                                         "attachment.stage.commit",
+                                         "attachment.stage.cancel",
+                                         "session.prepare.cancel",
+                                         "session.start_turn",
+                                         "session.steer",
+                                         "session.interrupt",
+                                         "session.rename",
+                                         "session.fork",
+                                         "approval.resolve",
+                                         "question.answer",
+                                         "session.configuration.read",
+                                         "session.configuration.apply",
+                                         "session.pending_approvals",
+                                         "session.execution_policy.apply",
+                                         "session.mode.apply",
+                                         "workspace.files.tree",
+                                         "workspace.files.search",
+                                         "workspace.files.file",
+                                         "workspace.files.diff"};
     if (!supported.contains(intent.value("kind").toString()) ||
         intent.value("id").toString().isEmpty() ||
         intent.value("idempotencyKey").toString().isEmpty() ||

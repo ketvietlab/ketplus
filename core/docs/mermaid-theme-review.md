@@ -2,7 +2,7 @@
 
 The light/dark configuration snapshots come from the public Két Design System
 0.1.44 `runtime/mermaid-theme.js` and its resolved token palette at upstream
-revision `e8adee2da3bf` (ketviet PR #2177, Két Blue). Full revision and source
+the published 0.1.44 package (Két Blue). Full revision and source
 hashes live in `resources/mermaid/SOURCE.json`; the publisher's MIT license is
 bundled there. The iOS companion consumes byte-identical snapshots.
 
@@ -10,7 +10,7 @@ To refresh them, load the pinned `foundations/tokens.css` in Chromium, run
 `createMermaidTheme(readMermaidPalette(element))` on a `data-kv-design-system`
 element with `data-theme="light"` and then `"dark"`, and write each result as
 `JSON.stringify(config, null, 2)` plus a newline. Re-running this on the
-previous revision `4a5f82df06d5` reproduced the 0.1.41 snapshots byte for byte.
+previous revision the 0.1.41 package reproduced the 0.1.41 snapshots byte for byte.
 
 Snapshots retain the upstream configuration: KÉT Sans (then Inter) 13px, 12px
 node corners, rounded connectors, compact flow/sequence geometry and semantic
@@ -21,9 +21,9 @@ diagrams.
 
 ## Verification
 
-Két Blue update (0.1.44, `e8adee2d`):
+Két Blue update (0.1.44, published package):
 
-- Regenerating 0.1.41 from `4a5f82df06d5` with the procedure above matched both
+- Regenerating 0.1.41 from the 0.1.41 package with the procedure above matched both
   committed snapshots byte for byte before the new ones were written.
 - All 16 Lite test groups pass. The fake `mmdc` in `MarkdownPreviewPaneTest` now
   expects the dark `primaryColor` `#202c4b`.

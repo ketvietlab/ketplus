@@ -27,7 +27,8 @@
         "KETPLUS_EDITION": "pro",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
-        "KETPLUS_BUILD_TESTS": "OFF"
+        "KETPLUS_BUILD_TESTS": "OFF",
+        "KETPLUS_PRODUCTION_RELEASE": "ON"
       }
     },
     {
@@ -49,7 +50,8 @@
       "binaryDir": "${sourceDir}/build/daemon-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "KETPLUS_BUILD_TESTS": "OFF"
+        "KETPLUS_BUILD_TESTS": "OFF",
+        "KETPLUS_PRODUCTION_RELEASE": "ON"
       }
     },
     {

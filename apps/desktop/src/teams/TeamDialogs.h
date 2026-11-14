@@ -1,0 +1,176 @@
+#pragma once
+
+#include "teams/TeamAgentDialog.h"
+#include "teams/TeamGoal.h"
+
+#include <QHash>
+#include <QJsonObject>
+#include <QVariantList>
+#include <QWidget>
+
+class QBoxLayout;
+class QLabel;
+
+namespace ket {
+class Button;
+class Checkbox;
+class Choice;
+class Dialog;
+class FieldRow;
+class Radio;
+class SegmentedControl;
+class Select;
+class TextArea;
+class TextField;
+} // namespace ket
+
+namespace ketplus {
+
+class TeamDirectory;
+class TeamReviewFields;
+
+// #465: a whole team in one dialog. One team.create; on a refusal the dialog stays open with
+// what was typed and the error at the role it names.
+class NewTeamForm final : public QWidget {
+    Q_OBJECT
+
+  public:
+    NewTeamForm(TeamDirectory* teams, const QString& repository, const QVariantList& models,
+                team_goal::ConversationDirectory conversations = {}, QWidget* parent = nullptr);
+
+    [[nodiscard]] QJsonObject payload() const;
+    [[nodiscard]] int memberCount() const;
+    // Marks what is missing; true when the request can be sent.
+    bool validate();
+    // Sends team.create; `created` runs with the new team on success.
+    void submit(std::function<void(const QJsonObject& team)> created);
+
+    [[nodiscard]] ket::TextField* nameField() const { return name_; }
+    [[nodiscard]] ket::TextArea* goalField() const { return goal_; }
+    [[nodiscard]] ket::TextField* budgetField() const { return budget_; }
+    [[nodiscard]] ket::SegmentedControl* developerCount() const { return developers_; }
+    [[nodiscard]] ket::Select* languageField() const { return language_; }
+    [[nodiscard]] TeamAgent agent(const QString& role) const { return agents_.value(role); }
+    void setAgent(const QString& role, const TeamAgent& agent);
+    [[nodiscard]] ket::Button* agentButton(const QString& role) const {
+        return agentButtons_.value(role);
+    }
+    [[nodiscard]] QString error(const QString& role) const { return errors_.value(role); }
+    [[nodiscard]] QString hint() const;
+
+    static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QString& repository,
+                                const QVariantList& models,
+                                std::function<void(const QJsonObject& team)> created = {},
+                                team_goal::ConversationDirectory conversations = {});
+
+  signals:
+    void memberCountChanged(int count);
+
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+  private:
+    void chooseAgent(const QString& role);
+    void showErrors(const QJsonObject& refusal);
+    void clearErrors();
+    void describePermissions();
+    // The form follows the width of `viewport`, the scroll area it is shown in.
+    void follow(QWidget* viewport);
+    void fit();
+    void setCompact(bool compact);
+
+    TeamDirectory* teams_;
+    QString repository_;
+    QVariantList models_;
+    ket::TextField* name_;
+    ket::TextArea* goal_;
+    TeamGoalEditor* goalEditor_;
+    ket::TextField* branch_;
+    ket::Radio* leaderMerges_;
+    ket::Radio* userMerges_;
+    ket::Select* permissions_;
+    // T-56: the team's language; a choice the user made is kept over the goal's letters.
+    ket::Select* language_{nullptr};
+    bool languageChosen_{false};
+    ket::FieldRow* permissionsRow_{nullptr};
+    // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
+    ket::TextField* budget_{nullptr};
+    TeamReviewFields* review_{nullptr};
+    ket::SegmentedControl* developers_;
+    // T-23: one or two reviewers; two review two tasks at the same time.
+    ket::SegmentedControl* reviewers_;
+    ket::Checkbox* requirements_;
+    QLabel* hint_;
+    QLabel* error_;
+    QHash<QString, TeamAgent> agents_;
+    QHash<QString, ket::Button*> agentButtons_;
+    QHash<QString, ket::FieldRow*> rows_;
+    // By role, or "name" and "" for the dialog.
+    QHash<QString, QString> errors_;
+    // The rows that hold two controls side by side.
+    QBoxLayout* mergeRow_{nullptr};
+    QBoxLayout* developerRow_{nullptr};
+    QBoxLayout* reviewerRow_{nullptr};
+    QWidget* viewport_{nullptr};
+    bool fitting_{false};
+};
+
+// #465: one more developer, never an existing conversation (those join by drag or menu).
+// T-23: or the team's second reviewer, chosen by Role as the mock's Add a member does.
+class AddMemberForm final : public QWidget {
+    Q_OBJECT
+
+  public:
+    AddMemberForm(TeamDirectory* teams, const QJsonObject& team, const QVariantList& models,
+                  const QString& role = QStringLiteral("developer"), QWidget* parent = nullptr);
+
+    [[nodiscard]] QJsonObject payload() const;
+    bool validate();
+    void submit(std::function<void()> added);
+    // The chosen role has no room left: five developers, or two reviewers.
+    [[nodiscard]] bool isFull() const;
+    // The team starts its members with Full access, so a Codex reviewer may join (ketplus#295).
+    [[nodiscard]] bool fullAccessTeam() const;
+    [[nodiscard]] bool canAdd(const QString& role) const;
+    [[nodiscard]] QString role() const { return role_; }
+    void setRole(const QString& role);
+    [[nodiscard]] QString hint() const;
+    [[nodiscard]] ket::TextField* nameField() const { return name_; }
+    [[nodiscard]] ket::TextField* laneField() const { return lane_; }
+    [[nodiscard]] ket::TextField* pathsField() const { return paths_; }
+    [[nodiscard]] QString error() const;
+    void setAgent(const TeamAgent& agent);
+
+    // `role` preselects Developer or Reviewer (the second one).
+    static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QJsonObject& team,
+                                const QVariantList& models,
+                                const QString& role = QStringLiteral("developer"));
+
+  signals:
+    void roleChanged(const QString& role);
+
+  private:
+    void describe();
+
+    TeamDirectory* teams_;
+    QJsonObject team_;
+    QVariantList models_;
+    QString role_;
+    // Each role keeps its own agent: a reviewer is on Claude.
+    QHash<QString, TeamAgent> agents_;
+    ket::Choice* developerChoice_;
+    ket::Choice* reviewerChoice_;
+    ket::TextField* name_;
+    ket::TextField* lane_;
+    ket::TextField* paths_;
+    ket::Button* agentButton_;
+    ket::FieldRow* roleRow_;
+    ket::FieldRow* laneRow_;
+    ket::FieldRow* pathsRow_;
+    ket::FieldRow* agentRow_;
+    ket::FieldRow* nameRow_;
+    QLabel* hint_;
+    QLabel* error_;
+};
+
+} // namespace ketplus

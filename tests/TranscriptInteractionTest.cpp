@@ -123,7 +123,7 @@ void AgentWorkspaceViewTest::browserEvidenceStaysVisible() {
     auto* preview = root->findChild<QObject*>("imagePreview");
     QVERIFY(preview);
     QTRY_VERIFY(preview->property("visible").toBool());
-    QTest::keyClick(view.quickView(), Qt::Key_Escape);
+    QTest::keyClick(imageWindow(root), Qt::Key_Escape);
     // Replayed history keeps screenshots outside collapsed activity groups too.
     view.resetMessages({before, completed, after}, "browser-replay");
     QTRY_COMPARE(view.messageModel()->rowCount(), 1);
@@ -497,6 +497,46 @@ void AgentWorkspaceViewTest::browserStepsReadAsTheMock() {
              running);
 }
 
+// A screenshot in a daemon activity group, as restored history shows one, opens the lightbox.
+void AgentWorkspaceViewTest::daemonGroupScreenshotsOpenTheLightbox() {
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    QImage image(640, 320, QImage::Format_RGB32);
+    image.fill(QColor("#c9dcff"));
+    const QString imagePath = media.filePath("page.png");
+    QVERIFY(image.save(imagePath));
+    const QVariantMap step{{"messageKey", "shot"},
+                           {"subtype", "mcpTool"},
+                           {"title", "Opened website"},
+                           {"status", "completed"},
+                           {"images", QVariantList{QUrl::fromLocalFile(imagePath).toString()}}};
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1000, 800);
+    view.show();
+    view.resetMessages({QVariantMap{{"messageKey", "g"},
+                                    {"kind", "tool"},
+                                    {"subtype", "daemonGroup"},
+                                    {"turnId", "t"},
+                                    {"groupRole", "leader"},
+                                    {"groupKey", "g"},
+                                    {"groupSummary", "Opened 1 website"},
+                                    {"groupSize", 1},
+                                    {"details", QVariantMap{{"groupItems", QVariantList{step}}}}}},
+                       "daemon-group");
+    view.messageModel()->setGroupExpanded("g", true);
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* shot = nullptr;
+    QTRY_VERIFY((shot = findVisibleItem(root, "messageAttachmentImage")) &&
+                shot->property("status").toInt() == 1);
+    const QPointF centre = shot->mapToScene(QPointF(shot->width() / 2, shot->height() / 2));
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre.toPoint());
+    auto* lightbox = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(lightbox);
+    QTRY_VERIFY(lightbox->property("visible").toBool());
+    QCOMPARE(lightbox->property("imageSource").toUrl().toLocalFile(), imagePath);
+}
+
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QFETCH(int, width);
     QTemporaryDir media;
@@ -541,7 +581,7 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QCOMPARE(model->get(0).value("messageKey").toString(), "open");
     QCOMPARE(model->sourceCount(), rows.size());
     QCOMPARE(model->get(0).value("groupSummary").toString(),
-             QStringLiteral("Used ketplus_browser · 7 steps"));
+             QStringLiteral("Used ketplus_browser 7 times"));
     QVERIFY(view.transcriptCopyText().contains("Observed the page"));
     QVERIFY(view.transcriptCopyText().contains("Inspected the page"));
     auto* root = view.quickView()->rootObject();
@@ -567,6 +607,18 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     auto* browserOpen = findVisibleItem(root, "transcriptBrowserOpen");
     QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
     QTRY_COMPARE(galleries(), 2);
+    // Clicking a step's screenshot opens it in the workspace lightbox.
+    QQuickItem* shot = nullptr;
+    QTRY_VERIFY((shot = findVisibleItem(root, "messageAttachmentImage")) &&
+                shot->property("status").toInt() == 1);
+    const QPointF centre = shot->mapToScene(QPointF(shot->width() / 2, shot->height() / 2));
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre.toPoint());
+    auto* lightbox = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(lightbox);
+    QTRY_VERIFY(lightbox->property("visible").toBool());
+    QCOMPARE(lightbox->property("imageSource").toUrl().toLocalFile(), imagePath);
+    QVERIFY(QMetaObject::invokeMethod(lightbox, "close"));
+    QTRY_VERIFY(!lightbox->property("visible").toBool());
     const QString capturePrefix = qEnvironmentVariable("KETPLUS_BROWSER_GROUP_CAPTURE");
     if (!capturePrefix.isEmpty()) {
         QTest::qWait(150);
@@ -1106,7 +1158,7 @@ void AgentWorkspaceViewTest::activityGalleryLoadsInBatches() {
     QVERIFY(popup);
     QTRY_VERIFY(popup->property("visible").toBool());
     QCOMPARE(popup->property("imageSource").toUrl().toLocalFile(), path);
-    QTest::keyClick(view.quickView(), Qt::Key_Escape);
+    QTest::keyClick(imageWindow(root), Qt::Key_Escape);
     QTRY_VERIFY(!popup->property("visible").toBool());
 }
 
@@ -1119,9 +1171,9 @@ void AgentWorkspaceViewTest::describedCommandsReadAboveTheirCommand() {
     view.show();
     const QList<QPair<QString, QString>> commands{
         {"Inspect the runner volumes",
-         "ssh -o ConnectTimeout=10 -i ~/.ssh/ketviet runner docker inspect runner"},
+         "ssh -o ConnectTimeout=10 -i ~/.ssh/sample-project runner docker inspect runner"},
         {"Copy the new runner config",
-         "scp -q -i ~/.ssh/ketviet /tmp/runner.new runner:/etc/runner.json"},
+         "scp -q -i ~/.ssh/sample-project /tmp/runner.new runner:/etc/runner.json"},
         {"Check the dry-run job logs",
          "kubectl logs job/yolo-care-automation-dryrun-illon | grep -v page"},
     };

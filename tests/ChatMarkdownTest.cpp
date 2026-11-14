@@ -103,7 +103,7 @@ class ChatMarkdownTest final : public QObject {
     void preparesBareUrls_data() {
         QTest::addColumn<QString>("source");
         QTest::addColumn<QString>("expected");
-        const QString url = "http://127.0.0.1:60550/?flow=ketphone-device";
+        const QString url = "http://127.0.0.1:60550/?flow=sample-phone-device";
         const QString linked = '<' + url + '>';
         QTest::newRow("localhost query") << "Flow: " + url << "Flow: " + linked;
         QTest::newRow("https localhost") << QString("https://localhost:8080/a_b_c?x=1&y=2#part")
@@ -176,7 +176,7 @@ class ChatMarkdownTest final : public QObject {
         QFETCH(bool, dark);
         const QString url =
             QStringLiteral("http://127.0.0.1:60551/__atlas/crm/"
-                           "screen?screen=partner-detail&id=PARTNER-70&ketphone=away");
+                           "screen?screen=partner-detail&id=PARTNER-70&sample-phone=away");
         ketplus::AgentWorkspaceView view;
         view.resize(900, 700);
         ketplus::ThemeManager theme(*qApp);

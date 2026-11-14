@@ -1,7 +1,7 @@
-#include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlClient.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
 #include "cloud/WorktreeBranches.h"
@@ -79,6 +79,7 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.branches.read");
     const bool configuring =
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.configuration.read");
+    const bool preparing = command.value("kind") == "session.prepare";
     const QJsonObject newWorktree = payload.value(QStringLiteral("new_worktree")).toObject();
     const QString branch = newWorktree.value(QStringLiteral("branch")).toString().trimmed();
     const QString base = newWorktree.value(QStringLiteral("base")).toString().trimmed();
@@ -90,8 +91,9 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1) != 0 ||
         command.value(QStringLiteral("expectedLifecycleRevision")).toInteger(-1) != 0 ||
         worktreePath.isEmpty() || !QFileInfo(worktreePath).isDir() ||
-        (!listing && !configuring &&
+        (!listing && !configuring && !preparing &&
          payload.value(QStringLiteral("prompt")).toString().trimmed().isEmpty()) ||
+        (preparing && !newWorktree.isEmpty()) ||
         (!newWorktree.isEmpty() && (branch.isEmpty() || base.isEmpty()))) {
         acknowledgeCommand(
             command,
@@ -102,27 +104,49 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
             senderAgreementKey);
         return;
     }
+    if (preparing) {
+        auto localPayload = payload;
+        localPayload.insert("worktree_path", worktreePath);
+        const auto result =
+            host_->handleCommand({{"message_id", command.value("id")},
+                                  {"message_type", "session.prepare"},
+                                  {"_verified_sender_device_id", content.value("senderDeviceId")},
+                                  {"payload", localPayload}},
+                                 "cloud-control-v2");
+        if (result.value("ok").toBool())
+            publishPreparedSession(command, result, senderAgreementKey);
+        else
+            acknowledgeCommand(command, result, senderAgreementKey);
+        return;
+    }
     if (configuring) {
+        // The catalog scope this host holds for the worktree, inside the signed result: a paired
+        // Desktop verifies a worktree index entry with no conversation by it (ADR 0119). The
+        // host keeps no catalog or lifecycle revision (it accepts only 0), so none is echoed.
+        const QJsonObject scope = sourceContext(worktreePath, salt);
+        QJsonObject worktree;
+        for (const auto* key : {"repositoryId", "worktreeId", "repositoryLabel", "worktreeLabel"})
+            worktree.insert(QLatin1String(key), scope.value(QLatin1String(key)));
         // What the phone can choose before the first message: the models, efforts and
         // permissions a conversation started here would begin with.
         host_->handleProviderQuery(
             QJsonObject{
                 {QStringLiteral("message_type"), QStringLiteral("provider.configuration_catalog")},
                 {QStringLiteral("payload"), QJsonObject{}}},
-            [this, command, senderAgreementKey](const QJsonObject& models,
-                                                const QString& providerError) {
-                acknowledgeCommand(
-                    command,
+            [this, command, senderAgreementKey, worktree](const QJsonObject& models,
+                                                          const QString& providerError) {
+                QJsonObject result =
                     providerError.isEmpty()
                         ? host_->newConversationConfiguration(
                               models.value(QStringLiteral("catalog")).toArray())
-                        : QJsonObject{{QStringLiteral("ok"), false},
-                                      {QStringLiteral("error_code"),
-                                       QStringLiteral("provider_capabilities_unavailable")},
-                                      {QStringLiteral("error_message"),
-                                       QStringLiteral(
-                                           "The available settings could not be read.")}},
-                    senderAgreementKey);
+                        : QJsonObject{
+                              {QStringLiteral("ok"), false},
+                              {QStringLiteral("error_code"),
+                               QStringLiteral("provider_capabilities_unavailable")},
+                              {QStringLiteral("error_message"),
+                               QStringLiteral("The available settings could not be read.")}};
+                result.insert(QStringLiteral("worktree"), worktree);
+                acknowledgeCommand(command, result, senderAgreementKey);
             });
         return;
     }

@@ -742,31 +742,35 @@ void MainWindowSettingsTest::settingsUsesWorkspacePage() {
     auto* settingsNavigation =
         settingsPage->findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));
     QVERIFY(settingsNavigation != nullptr);
-    QCOMPARE(settingsNavigation->count(), 10);
-    QCOMPARE(settingsNavigation->item(8)->data(Qt::UserRole).toString(), QStringLiteral("storage"));
+    QCOMPARE(settingsNavigation->count(), 11);
+    QCOMPARE(settingsNavigation->item(9)->data(Qt::UserRole).toString(), QStringLiteral("storage"));
     auto* storageShortcut =
         activity->findChild<QAbstractButton*>(QStringLiteral("sidebarStorageSettings"));
     QVERIFY(storageShortcut != nullptr);
     storageShortcut->click();
     QTRY_VERIFY(
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceStorage"))->isVisible());
-    QCOMPARE(settingsNavigation->item(9)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
-    QCOMPARE(settingsNavigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
-    QCOMPARE(settingsNavigation->item(4)->text(), QStringLiteral("Browser"));
-    QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(),
-             QStringLiteral("computer"));
-    QCOMPARE(settingsNavigation->item(5)->text(), QStringLiteral("Computer use"));
+    QCOMPARE(settingsNavigation->item(10)->data(Qt::UserRole).toString(),
+             QStringLiteral("updates"));
+    // ADR 0114, open point 2: Teams follows Agent models, as in the mock.
+    QCOMPARE(settingsNavigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("teams"));
+    QCOMPARE(settingsNavigation->item(4)->text(), QStringLiteral("Teams"));
+    QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
+    QCOMPARE(settingsNavigation->item(5)->text(), QStringLiteral("Browser"));
     QCOMPARE(settingsNavigation->item(6)->data(Qt::UserRole).toString(),
+             QStringLiteral("computer"));
+    QCOMPARE(settingsNavigation->item(6)->text(), QStringLiteral("Computer use"));
+    QCOMPARE(settingsNavigation->item(7)->data(Qt::UserRole).toString(),
              QStringLiteral("providers"));
     auto* computerPage =
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceComputer"));
     QVERIFY(computerPage != nullptr);
-    settingsNavigation->setCurrentRow(5);
+    settingsNavigation->setCurrentRow(6);
     QTRY_VERIFY(computerPage->isVisible());
     auto* providersPage =
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceProviders"));
     QVERIFY(providersPage != nullptr);
-    settingsNavigation->setCurrentRow(6);
+    settingsNavigation->setCurrentRow(7);
     QTRY_VERIFY(providersPage->isVisible());
     QVERIFY(!computerPage->isVisible());
     settingsNavigation->setCurrentRow(0);
@@ -1056,7 +1060,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(reminder->isHidden());
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(!reminder->isHidden());
-    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("ketPlus Pro 0.1.18")));
     QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("Review and install")));
     // Downloaded, it reads as the mock's "Restart to install".
     updater.remind(QStringLiteral("0.1.18"), true);
@@ -1105,10 +1109,10 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
         return texts.join(QLatin1Char('\n'));
     };
     const auto badge = [card] { return card->findChild<ket::Badge*>()->text(); };
-    QCOMPARE(status->text(), QStringLiteral("KetPlus checks for updates every day and installs "
+    QCOMPARE(status->text(), QStringLiteral("ketPlus checks for updates every day and installs "
                                             "them when you restart."));
     QVERIFY(card->isVisible());
-    QVERIFY(cardText().contains(QStringLiteral("KetPlus has not checked for updates yet.")));
+    QVERIFY(cardText().contains(QStringLiteral("ketPlus has not checked for updates yet.")));
     QCOMPARE(badge(), QStringLiteral("Installed"));
     QVERIFY(!restart->isVisible());
     QCOMPARE(checkNow->text(), QStringLiteral("Check for updates"));
@@ -1142,7 +1146,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(!checkNow->isEnabled());
     updater.remind(QStringLiteral("0.1.18"));
     QCOMPARE(badge(), QStringLiteral("Available"));
-    QVERIFY(cardText().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(cardText().contains(QStringLiteral("ketPlus Pro 0.1.18")));
     QVERIFY(!restart->isVisible());
     updater.setCanCheck(true);
     updater.remind(QStringLiteral("0.1.18"), true);
@@ -1153,7 +1157,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QCOMPARE(updater.checks_, 5); // Sparkle's prompt installs and relaunches
     later->click();
     QVERIFY(!restart->isVisible());
-    QVERIFY(cardText().contains(QStringLiteral("installs the next time KetPlus restarts")));
+    QVERIFY(cardText().contains(QStringLiteral("installs the next time ketPlus restarts")));
     updater.remind({});
     updater.lastCheck_ = QDateTime::currentDateTime();
     updater.setCanCheck(true);

@@ -8,13 +8,19 @@ import KetPlusMock
 // Context & limits, opened from the composer's ring: a port of KetPlus desktop's
 // UsageLimitsPopover and ClaudeUsageSection. No title; sections split by rules: the
 // context window, then for Claude the conversation and organization usage, then the plan
-// limits shared across conversations. Codex offers Compact session instead.
+// limits shared across conversations. Codex offers Compact session instead. Without an API key
+// the conversation and organization figures wait behind one "Cost details" row, closed each
+// time the popover opens.
 Basic.Popup {
     id: popover
 
     property string provider: "claude"
     property real contextUsed: 0.156
     readonly property bool claude: provider === "claude"
+    // The conversation runs on an API key; the mock's fixture is runtime authentication.
+    property bool apiKey: false
+    property bool costExpanded: false
+    readonly property bool costFolds: claude && !apiKey
     readonly property color track: KetTheme.t.panelBorder
     // A provider's setup state can supply its own rows (Fixtures.providerSetup.limit).
     property var rows: null
@@ -30,6 +36,8 @@ Basic.Popup {
     property bool suppressReopen: false
 
     signal compactRequested()
+
+    onAboutToShow: costExpanded = false
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function fill(percent) {
@@ -161,20 +169,60 @@ Basic.Popup {
 
         Rule {}
 
-        // Claude: this conversation's runtime session and the Admin key's organization.
+        // Without an API key: one closed row in front of the two blocks below.
+        Rectangle {
+            id: costRow
+            visible: popover.costFolds
+            Layout.fillWidth: true
+            Layout.leftMargin: popover.px(10)
+            Layout.rightMargin: popover.px(10)
+            Layout.topMargin: popover.px(6)
+            Layout.bottomMargin: popover.costExpanded ? 0 : popover.px(6)
+            Layout.preferredHeight: popover.px(36)
+            radius: popover.px(5)
+            color: costArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
+            border.color: costRow.activeFocus ? KetTheme.t.accent : "transparent"
+            activeFocusOnTab: visible
+            Accessible.role: Accessible.Button
+            Accessible.name: "Cost details"
+            Accessible.description: popover.costExpanded ? "Expanded" : "Collapsed"
+            Keys.onSpacePressed: popover.costExpanded = !popover.costExpanded
+            Keys.onReturnPressed: popover.costExpanded = !popover.costExpanded
+            Row {
+                x: popover.px(6)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: popover.px(10)
+                KetIcon {
+                    name: popover.costExpanded ? "chevron-down" : "chevron-right"
+                    box: popover.px(14)
+                    color: KetTheme.t.textMuted
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Label { size: 14; text: "Cost details"; anchors.verticalCenter: parent.verticalCenter }
+            }
+            MouseArea {
+                id: costArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: popover.costExpanded = !popover.costExpanded
+            }
+        }
+
+        // Claude: this conversation's session and the Admin key's organization.
         ColumnLayout {
-            visible: popover.claude
+            visible: popover.claude && (!popover.costFolds || popover.costExpanded)
             Layout.fillWidth: true
             Layout.margins: popover.px(16)
             spacing: popover.px(8)
 
-            Label { Layout.fillWidth: true; text: "Conversation · Runtime authentication" }
+            Label { Layout.fillWidth: true; text: "Conversation · " + (popover.apiKey ? "API key" : "Runtime authentication") }
             Repeater {
                 model: [
                     { name: "SDK session estimate", value: "$139.6424" },
                     { name: "Input / output tokens", value: "22,383 / 1,561,880" },
                     { name: "Cache read / write", value: "400,672,151 / 3,522,600" },
-                    { name: "Query budget", value: "Managed by runtime" }
+                    { name: "Query budget", value: popover.apiKey ? "No query limit" : "Managed by runtime" }
                 ]
                 RowLayout {
                     required property var modelData
@@ -222,8 +270,9 @@ Basic.Popup {
             }
         }
 
-        // Plan limits, shared by every conversation on this provider.
+        // Plan limits, shared by every conversation on this provider. An API key has none.
         ColumnLayout {
+            visible: !popover.claude || !popover.apiKey
             Layout.fillWidth: true
             Layout.leftMargin: popover.px(16)
             Layout.rightMargin: popover.px(16)
@@ -257,6 +306,7 @@ Basic.Popup {
         Rule {}
 
         Note {
+            visible: !popover.claude || !popover.apiKey
             Layout.leftMargin: popover.px(16)
             Layout.rightMargin: popover.px(16)
             Layout.topMargin: popover.px(11)

@@ -269,36 +269,25 @@ class ProviderTranscriptTest : public QObject {
             if (entry.value("subtype") == "fileChange")
                 edits.append(entry.value("fileChanges").toList().first().toMap());
         }
-        const QStringList expected{"fileRead | Read: a/b.qml",
-                                   "codeSearch | Searched code: “Animation” in modules",
-                                   "fileSearch | Searched files: **/*.qml",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "webSearch | Searched the web: qt animation",
-                                   "webFetch | Fetched: doc.qt.io/x",
-                                   "toolsLoaded | Loaded tools: Read",
-                                   "skill | Used skill: ket-atlas",
-                                   "taskStopped | Stopped a background task",
-                                   "monitor | Waited",
-                                   "wake | Scheduled wake-up",
-                                   "subAgent | Ran a subagent: Audit icons",
-                                   "integration | Used ketplus_agents: agents_send",
-                                   "integration | Used node_repl: js",
-                                   "fileRead | Read: a.cpp L1–5",
-                                   "codeSearch | Searched code: “foo” in src",
-                                   "fileSearch | Listed files: src",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "fileChange | Edited 1 file",
-                                   "webSearch | Searched the web: qt",
-                                   "webSearch | Opened a page: doc.qt.io",
-                                   "webSearch | Found in page: “Timer” on doc.qt.io",
-                                   "imageView | Viewed an image",
-                                   "imageGeneration | Generated an image",
-                                   "thought | Thought",
-                                   "wait | Waited"};
-        QCOMPARE(steps, expected);
+        const QStringList expected{
+            "fileRead | Read: a/b.qml", "codeSearch | Searched code: “Animation” in modules",
+            "fileSearch | Searched files: **/*.qml", "fileChange | Edited 1 file",
+            "fileChange | Edited 1 file", "webSearch | Searched the web: qt animation",
+            "webFetch | Fetched: doc.qt.io/x", "toolsLoaded | Loaded tools: Read",
+            "skill | Used skill: ket-atlas", "taskStopped | Stopped a background task",
+            "monitor | Waited", "wake | Scheduled wake-up",
+            "subAgent | Ran a subagent: Audit icons",
+            // Agent sends have their own agent_message.state card, not a
+            // duplicate raw tool row (sentAgentMessagesAreOneNote).
+            "integration | Used node_repl: js", "fileRead | Read: a.cpp L1–5",
+            "codeSearch | Searched code: “foo” in src", "fileSearch | Listed files: src",
+            "fileChange | Edited 1 file", "fileChange | Edited 1 file",
+            "fileChange | Edited 1 file", "fileChange | Edited 1 file",
+            "webSearch | Searched the web: qt", "webSearch | Opened a page: doc.qt.io",
+            "webSearch | Found in page: “Timer” on doc.qt.io", "imageView | Viewed an image",
+            "imageGeneration | Generated an image", "thought | Thought", "wait | Waited"};
+        QVERIFY2(steps == expected,
+                 qPrintable(QStringLiteral("Actual steps:\n") + steps.join('\n')));
         // A thought is timed from its start to its completion, as the mock's "Thought · 14 s".
         const QJsonObject thought{{"id", "r1"}, {"type", "reasoning"}, {"text", "secret plan"}};
         const auto lifecycle = [&thought](qint64 cursor, const char* type, const char* at) {
@@ -678,7 +667,7 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(outgoingRows.first().toMap().value("title").toString(), "Message to @agent/1093");
         QCOMPARE(outgoingRows.first().toMap().value("meta").toString(),
                  "Held · waiting for approval there");
-        // As the mock's "From @agent/…"; an ordinary user message keeps "You".
+        // Ordinary owner input has no agent metadata and retains its bubble.
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});
         QCOMPARE(reply.value("meta").toString(), "From @agent/2044");
@@ -831,6 +820,9 @@ class ProviderTranscriptTest : public QObject {
         QTest::addColumn<QString>("meta");
         QTest::newRow("delivered") << "delivered" << "" << "Delivered";
         QTest::newRow("held") << "held" << "hop_limit" << "Held · waiting for approval there";
+        QTest::newRow("held by the team")
+            << "held" << "team_budget" << "Held · until the team continues";
+        QTest::newRow("released by the team") << "released" << "team_continued" << "Delivering";
         QTest::newRow("no reply") << "failed" << "no_reply" << "Delivered · no reply";
         QTest::newRow("turn stopped")
             << "failed" << "turn_interrupted" << "Delivered · stopped before replying";
@@ -895,11 +887,31 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(agentMessageStateText(
                      {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "no_changes"}}),
                  "No review: this turn changed no files.");
+        // ADR 0114 §2: inside a team its budget holds a message, and continuing it delivers.
+        QCOMPARE(agentMessageStateText({{"state", "held"},
+                                        {"reason", "team_budget"},
+                                        {"direction", "incoming"},
+                                        {"peer_number", "1093"}}),
+                 "A message from @agent/1093 is held because the team used its automatic turns. "
+                 "It is delivered when the team continues, or send a message here to read it "
+                 "now.");
+        QCOMPARE(agentMessageStateText({{"state", "held"},
+                                        {"reason", "team_paused"},
+                                        {"direction", "outgoing"},
+                                        {"peer_number", "1093"}}),
+                 "Message to @agent/1093 is held because the team is paused. It is delivered when "
+                 "the team continues.");
+        QCOMPARE(agentMessageStateText({{"state", "released"},
+                                        {"reason", "team_continued"},
+                                        {"direction", "incoming"},
+                                        {"peer_number", "1093"},
+                                        {"peer_title", "Developer 1"}}),
+                 "The team continued: the message from @agent/1093 · Developer 1 is delivered.");
         QCOMPARE(agentMessageStateText({{"state", "review_skipped"}, {"reason", "round_limit"}}),
                  "No review: this exchange used all its review rounds.");
         QCOMPARE(agentMessageStateText(
                      {{"state", "review_skipped"}, {"reason", "reviewer_unsupported"}}),
-                 "No review: only a Claude conversation can review turns.");
+                 "No review: only Claude, or Codex with Full access, can review turns.");
         QVERIFY(agentMessageStateText({{"state", "review_skipped"}, {"reason", "snapshot_failed"}})
                     .contains("next review includes them"));
         QCOMPARE(agentMessageStateText({{"state", "failed"},
@@ -907,7 +919,18 @@ class ProviderTranscriptTest : public QObject {
                                         {"reason", "reviewer_unsupported"},
                                         {"direction", "outgoing"},
                                         {"peer_number", "1093"}}),
-                 "@agent/1093 no longer runs on Claude, so it did not review this turn.");
+                 "@agent/1093 can no longer review (Claude, or Codex with Full access), so it did "
+                 "not review this turn.");
+        // ketplus#295: the branch changed during a Codex review.
+        QCOMPARE(agentMessageStateText({{"state", "review_tampered"},
+                                        {"kind", "review"},
+                                        {"reason", "review_tampered"},
+                                        {"direction", "outgoing"},
+                                        {"peer_number", "1093"},
+                                        {"peer_title", "Reviewer"},
+                                        {"summary", "HEAD: aaaaaaaaaaaa → bbbbbbbbbbbb"}}),
+                 "@agent/1093 · Reviewer changed the branch during its review, so the review does "
+                 "not count: HEAD: aaaaaaaaaaaa → bbbbbbbbbbbb. Nothing was reverted.");
         const auto skipped = agentMessageNotice(
             {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "reviewer_busy"}},
             "notice:7");
@@ -949,7 +972,7 @@ class ProviderTranscriptTest : public QObject {
         QVariantMap request{{"kind", "user"}};
         markAgentOrigin(request,
                         QJsonArray{QJsonObject{{"kind", "review"}, {"from_number", "4821"}}});
-        QCOMPARE(request.value("meta").toString(), "Review request from @agent/4821");
+        QCOMPARE(request.value("meta").toString(), "From @agent/4821 · Review request");
     }
 
     void cursorPartialToolUpdatesKeepInputsAndResults() {

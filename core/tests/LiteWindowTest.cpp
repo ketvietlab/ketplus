@@ -1,6 +1,8 @@
-// The KétPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
+// The ketPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
+#include "KetCommandPalette.h"
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
+#include "git/GitDiffView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
@@ -17,6 +19,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
@@ -89,6 +92,35 @@ class LiteWindowTest final : public QObject {
         QVERIFY(QDir(workspace_.path()).mkpath(QStringLiteral("docs")));
         write(workspace_.filePath(QStringLiteral("docs/guide.md")), "# Guide\n");
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
+    }
+
+    void colorSchemeCommandOpensKeyboardPicker() {
+        QTemporaryDir selection;
+        ketplus::ThemeManager theme(*qApp, nullptr, selection.path());
+        ketplus::MainWindow window(theme);
+        window.resize(1000, 800);
+        window.show();
+        auto* action = window.findChild<QAction*>(QStringLiteral("selectColorScheme"));
+        QVERIFY(action && action->isEnabled());
+        action->trigger();
+        auto* picker = window.findChild<ket::CommandPalette*>(QStringLiteral("schemeQuickPicker"));
+        QVERIFY(picker && picker->isOpen());
+        QTest::keyClick(picker->searchField(), Qt::Key_Escape);
+        QTRY_VERIFY(!theme.hasSchemePreview());
+    }
+
+    void themeChangeKeepsAnActiveDiffTab() {
+        QTemporaryDir selection;
+        ketplus::ThemeManager theme(*qApp, nullptr, selection.path());
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        ketplus::MainWindow window(theme);
+        auto* tabs = window.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        auto* diff = new ketplus::GitDiffView(tabs);
+        tabs->setCurrentIndex(tabs->addTab(diff, QStringLiteral("Diff")));
+        theme.setMode(ketplus::ThemeManager::Mode::Dark);
+        QCOMPARE(tabs->currentWidget(), diff);
+        QVERIFY(theme.palette().dark);
     }
 
     void openingAFolderDropsThePreviousSearch() {
@@ -271,7 +303,7 @@ class LiteWindowTest final : public QObject {
         for (auto* item : row->findChildren<ket::StatusItem*>())
             items.append(item->text());
         QVERIFY(items.contains(QStringLiteral("Ln 1, Col 1")));
-        QVERIFY(!items.contains(QStringLiteral("KétPlus")));
+        QVERIFY(!items.contains(QStringLiteral("ketPlus")));
         QStringList buttons;
         for (auto* button : row->findChildren<QAbstractButton*>())
             if (button->isVisibleTo(row))

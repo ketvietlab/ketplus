@@ -30,7 +30,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
     src/cloud/CloudControlUploadProgress.cpp
+    src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
+    src/cloud/CloudControlPreparations.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h
@@ -43,6 +45,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeBranches.h
     src/cloud/WorktreeRepositories.cpp
     src/cloud/WorktreeRepositories.h
+    src/cloud/WorktreeRevisionCache.cpp
+    src/cloud/WorktreeRevisionCache.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
     src/agents/WorkReport.cpp
@@ -53,13 +57,31 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/ipc/LocalIpcServer.h
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
+    src/protocol/ScheduleProtocol.cpp
+    src/protocol/ScheduleProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/CopilotCli.cpp
+    src/providers/CopilotCli.h
     src/providers/ProviderResponseEnvelope.h
     src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
+    src/providers/CopilotAdapter.cpp
+    src/providers/CopilotAdapter.h
+    src/providers/CopilotCatalog.cpp
+    src/providers/CopilotCatalog.h
     src/providers/CursorAdapter.cpp
-    src/providers/CursorBrowserSession.cpp
+    src/providers/CursorModelCatalog.cpp
+    src/providers/CursorModelConfig.cpp
+    src/providers/CursorModelVariant.h
+    src/providers/CursorRequests.cpp
+    src/providers/acp/AcpAdapter.h
+    src/providers/acp/AcpProcess.cpp
+    src/providers/acp/AcpProtocol.cpp
+    src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpPermissions.cpp
+    src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
     src/providers/CodexAdapter.h
@@ -87,6 +109,13 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentBroker.cpp
     src/agents/AgentBrokerRelease.cpp
     src/agents/AgentBrokerReviews.cpp
+    src/agents/AgentBrokerIntegrity.cpp
+    src/agents/AgentBrokerReplies.cpp
+    src/agents/GitProcess.cpp
+    src/agents/GitProcess.h
+    src/agents/ReviewIntegrity.cpp
+    src/agents/ReviewIntegrity.h
+    src/agents/ReviewerPolicy.h
     src/agents/AgentBroker.h
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
@@ -102,26 +131,66 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostWorkReports.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
+    src/storage/ScheduleRecord.h
+    src/storage/LocalJournalSchedules.cpp
     src/storage/LocalJournalReviewers.cpp
     src/storage/LocalJournalTeams.cpp
     src/teams/Team.cpp
     src/teams/Team.h
+    src/teams/TeamBranchNames.cpp
+    src/teams/TeamBranchNames.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
+    src/teams/TeamAgentTasks.cpp
+    src/teams/TeamAgentTasks.h
+    src/teams/TeamRemoteView.cpp
+    src/teams/TeamRemoteView.h
+    src/teams/TeamVerdictLine.cpp
+    src/teams/TeamVerdictLine.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorAssign.cpp
+    src/teams/TeamCoordinatorAllowedPaths.cpp
+    src/teams/TeamCoordinatorAttribution.cpp
+    src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorGit.cpp
+    src/teams/TeamCoordinatorStall.cpp
+    src/teams/TeamCoordinatorStorage.cpp
+    src/teams/TeamCoordinatorWaits.cpp
+    src/teams/TeamCoordinatorLanes.cpp
+    src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorSettings.cpp
+    src/teams/TeamCoordinatorDone.cpp
+    src/teams/TeamCoordinatorRelocations.cpp
+    src/teams/TeamCoordinatorBranchNames.cpp
+    src/teams/TeamCoordinatorRepository.cpp
+    src/teams/TeamCoordinatorReviews.cpp
+    src/teams/TeamCoordinatorReviewTools.cpp
+    src/teams/TeamCoordinatorTamper.cpp
+    src/teams/TeamCoordinatorReviewers.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
     src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
+    src/runtime/SessionHostSchedules.cpp
+    src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamsRemote.cpp
+    src/runtime/SessionHostTeamStorage.cpp
     src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/TeamGit.cpp
+    src/runtime/TeamGit.h
+    src/runtime/TeamWorktreeRemoval.cpp
+    src/runtime/TeamWorktreeRemoval.h
+    src/runtime/TeamPullRequests.cpp
+    src/runtime/TeamPullRequests.h
     src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/SessionHostPreparation.cpp
     src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
@@ -146,7 +215,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/service/DaemonService.h
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
+    src/storage/LocalJournalActivityLatest.cpp
     src/storage/LocalJournal.cpp
+    src/storage/LocalJournalPreparations.cpp
+    src/storage/SessionPreparation.h
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
     src/storage/LocalJournalHistoryPurge.cpp
@@ -180,4 +252,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/McpMediaReferences.cpp
     src/storage/McpMediaStore.cpp
     src/storage/McpMediaStore.h
+    src/schedule/ScheduleRule.cpp
+    src/schedule/ScheduleRule.h
+    src/schedule/JournalScheduleStore.cpp
+    src/schedule/JournalScheduleStore.h
+    src/schedule/ScheduleRunner.cpp
+    src/schedule/ScheduleRunner.h
 )

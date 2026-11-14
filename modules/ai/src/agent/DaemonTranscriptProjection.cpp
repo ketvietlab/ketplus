@@ -1,8 +1,11 @@
 #include "agent/DaemonTranscriptProjection.h"
+#include "TranscriptVisibility.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/ProviderDisplay.h"
+#include "agent/TeamTranscriptBlocks.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptNormalizer.h"
 
@@ -106,6 +109,8 @@ QString approvalToolLabel(const QJsonObject& details) {
         return QStringLiteral("Claude tool");
     if (type == "cursor_tool")
         return QStringLiteral("Cursor tool");
+    if (type == "copilot_tool")
+        return QStringLiteral("GitHub Copilot tool");
     return QStringLiteral("Tool");
 }
 
@@ -147,7 +152,8 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
     // A provider that went quiet: "<Provider> did not answer for 60 seconds…", as the mock's
     // workspace/error titles it.
     static const QRegularExpression silent(
-        QStringLiteral("^(Codex|Claude|Claude Code|Cursor) did not answer for \\d+ seconds\\b"));
+        QStringLiteral("^(Codex|Claude|Claude Code|Cursor|GitHub Copilot|Copilot) did not answer "
+                       "for \\d+ seconds\\b"));
     if (silent.match(message).hasMatch()) {
         entry.insert(QStringLiteral("title"), QStringLiteral("The provider stopped responding"));
         return;
@@ -158,6 +164,9 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
          QStringLiteral("Codex CLI exited")},
         {QRegularExpression(QStringLiteral("^The Cursor ACP process exited unexpectedly")),
          QStringLiteral("Cursor CLI exited")},
+        {QRegularExpression(
+             QStringLiteral("^The (GitHub )?Copilot ACP process exited unexpectedly")),
+         QStringLiteral("GitHub Copilot CLI exited")},
         {QRegularExpression(QStringLiteral("^The Claude sidecar exited unexpectedly")),
          QStringLiteral("Claude Code exited")}};
     for (const auto& [pattern, title] : exits) {
@@ -203,24 +212,28 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
     if (agentMessages.isEmpty())
         return;
     QStringList senders;
-    bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
-        const QString sender = QStringLiteral("@agent/") + message.value("from_number").toString();
-        if (!senders.contains(sender))
+        const QString number = message.value("from_number").toString();
+        const QString sender = number.isEmpty() ? message.value("from_title").toString()
+                                                : QStringLiteral("@agent/") + number;
+        if (!sender.isEmpty() && !senders.contains(sender))
             senders.append(sender);
-        reviews = reviews && message.value("kind").toString() == QStringLiteral("review");
     }
-    const QJsonObject first = agentMessages.first().toObject();
+    const QJsonObject first =
+        agentMessages.isEmpty() ? QJsonObject{} : agentMessages.first().toObject();
     // As the mock's "From @agent/8941 · DS Icon · Claude"; the sender's note says it replied.
-    QString label = (reviews ? QStringLiteral("Review request from ") : QStringLiteral("From ")) +
-                    senders.join(QStringLiteral(", "));
-    if (senders.size() == 1) {
+    QString label =
+        QStringLiteral("From ") +
+        (senders.isEmpty() ? QStringLiteral("System") : senders.join(QStringLiteral(", ")));
+    if (senders.size() == 1 && !first.value("from_number").toString().isEmpty()) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
         if (const QString provider = first.value("from_provider").toString(); !provider.isEmpty())
-            label += QStringLiteral(" · ") + provider.left(1).toUpper() + provider.mid(1);
+            label += QStringLiteral(" · ") + provider_display::name(provider);
     }
+    if (first.value("kind").toString() == QStringLiteral("review"))
+        label += QStringLiteral(" · Review request");
     entry.insert(QStringLiteral("subtype"), QStringLiteral("agentMessage"));
     entry.insert(QStringLiteral("meta"), label);
     entry.insert(QStringLiteral("title"), label);
@@ -245,7 +258,8 @@ QString agentMessageStateText(const QJsonObject& data) {
         if (reason == QStringLiteral("reviewer_busy"))
             return QStringLiteral("No review: the reviewer was busy with another turn.");
         if (reason == QStringLiteral("reviewer_unsupported"))
-            return QStringLiteral("No review: only a Claude conversation can review turns.");
+            return QStringLiteral(
+                "No review: only Claude, or Codex with Full access, can review turns.");
         if (reason == QStringLiteral("snapshot_failed"))
             return QStringLiteral("No review: KetPlus could not read this turn's changes. The "
                                   "next review includes them.");
@@ -280,6 +294,25 @@ QString agentMessageStateText(const QJsonObject& data) {
     if (state == "delivered")
         return outgoing ? QStringLiteral("Message delivered to %1.").arg(named)
                         : QStringLiteral("Received the authorized message from %1.").arg(named);
+    if (state == QStringLiteral("released"))
+        return outgoing ? QStringLiteral("The team continued: your message to %1 is delivered.")
+                              .arg(named)
+                        : QStringLiteral("The team continued: the message from %1 is delivered.")
+                              .arg(named);
+    // ADR 0114 §2: inside a team its budget holds messages, and continuing the team sends them.
+    if (state == QStringLiteral("held") &&
+        (reason == QStringLiteral("team_paused") || reason == QStringLiteral("team_budget"))) {
+        const QString why = reason == QStringLiteral("team_budget")
+                                ? QStringLiteral("the team used its automatic turns")
+                                : QStringLiteral("the team is paused");
+        return outgoing ? QStringLiteral("Message to %1 is held because %2. It is delivered when "
+                                         "the team continues.")
+                              .arg(peer, why)
+                        : QStringLiteral("A message from %1 is held because %2. It is delivered "
+                                         "when the team continues, or send a message here to "
+                                         "read it now.")
+                              .arg(peer, why);
+    }
     if (state == QStringLiteral("held")) {
         const QString why = reason == QStringLiteral("hop_limit")
                                 ? QStringLiteral("the agents exchanged too many messages")
@@ -300,8 +333,14 @@ QString agentMessageStateText(const QJsonObject& data) {
     if (reason == QStringLiteral("no_reply"))
         return QStringLiteral("%1 finished without a reply.").arg(peer);
     if (reason == QStringLiteral("reviewer_unsupported"))
-        return QStringLiteral("%1 no longer runs on Claude, so it did not review this turn.")
+        return QStringLiteral("%1 can no longer review (Claude, or Codex with Full access), so it "
+                              "did not review this turn.")
             .arg(named);
+    // ketplus#295: the daemon compared the branch before and after a Codex review.
+    if (state == QStringLiteral("review_tampered"))
+        return QStringLiteral("%1 changed the branch during its review, so the review does not "
+                              "count: %2. Nothing was reverted.")
+            .arg(named, data.value("summary").toString());
     if (reason.startsWith(QStringLiteral("turn_")))
         return QStringLiteral("%1 stopped before replying (%2).").arg(peer, reason.mid(5));
     return (outgoing ? QStringLiteral("Message to %1 failed: %2")
@@ -316,9 +355,10 @@ QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
             QStringLiteral("Review from @agent/") + data.value("peer_number").toString();
         if (const QString title = data.value("peer_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
-        label += data.value("verdict").toString() == QStringLiteral("no_findings")
-                     ? QStringLiteral(" · No findings")
-                     : QStringLiteral(" · Findings");
+        const QString verdict = data.value("verdict").toString();
+        label += verdict == QStringLiteral("no_findings")  ? QStringLiteral(" · No findings")
+                 : verdict == QStringLiteral("no_verdict") ? QStringLiteral(" · No verdict")
+                                                           : QStringLiteral(" · Findings");
         auto entry =
             message(QStringLiteral("user"), data.value("body").toString(), label, {}, itemId);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("agentMessage"));
@@ -344,9 +384,9 @@ void labelProvider(QVariantMap& entry, const QString& provider) {
     const QString meta = entry.value(QStringLiteral("meta")).toString();
     if (!meta.startsWith(QStringLiteral("Codex")))
         return;
-    const QString name = provider == QStringLiteral("claude")
-                             ? QStringLiteral("Claude")
-                             : provider.left(1).toUpper() + provider.mid(1);
+    const QString name = provider == QStringLiteral("copilot")  ? QStringLiteral("GitHub Copilot")
+                         : provider == QStringLiteral("claude") ? QStringLiteral("Claude")
+                                                                : provider_display::name(provider);
     entry.insert(QStringLiteral("meta"), name + meta.mid(5));
 }
 
@@ -436,6 +476,13 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     row.insert("groupLeaderKey", row.value("messageKey"));
     row.insert("groupRole", "leader");
     row.insert("groupSummary", activityTallySummary(tally));
+    // T-91: the step the group is on, worded as its own row, for a running group's heading.
+    const auto latest = data.value("latest").toObject();
+    const auto latestItem = latest.value("item").toObject();
+    row.insert("groupLatest", latestItem.isEmpty()
+                                  ? QString{}
+                                  : activityGroupLatest(activityMessage(
+                                        latestItem, latest.value("completed").toBool())));
     row.insert("groupSize", data.value("count").toInt());
     row.insert("groupRunning", data.value("running_count").toInt() > 0);
     row.insert("groupFailed", data.value("failed_count").toInt());
@@ -526,6 +573,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             turnReports.insert(sequence, data);
             continue;
         }
+        // Team plumbing and the task snapshot stay in the journal, out of the transcript.
+        if (ketplus::remote::transcript_visibility::hidden(type, data))
+            continue;
         auto notice = daemonEventNotice(
             type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage, turn);
         // The daemon repeats the report on turn.completed, so a page that starts after the
@@ -682,8 +732,19 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                 entry.insert("eventType", "turn.steered");
                 entry.insert("provider", data.value("provider").toString());
             }
-            if (data.value("origin").toString() == QStringLiteral("agent")) {
-                markAgentOrigin(entry, data.value("agent_messages").toArray());
+            if (const auto origin = data.value("origin").toString();
+                origin == "agent" || origin == "system" || origin == "team") {
+                auto senders = data.value("agent_messages").toArray();
+                if (senders.isEmpty())
+                    senders.append(QJsonObject{{"from_title", "System"}});
+                markAgentOrigin(entry, senders);
+                // #468: a team's own message is drawn as its block; the text stays the body.
+                if (const QVariantMap block =
+                        team_blocks::fromAgentMessages(data.value("agent_messages").toArray());
+                    !block.isEmpty()) {
+                    entry.insert(QStringLiteral("subtype"), QStringLiteral("teamMessage"));
+                    entry.insert(QStringLiteral("teamBlock"), block);
+                }
                 // The reply answers a note above it, which now reads Replied; a note in
                 // another page is marked when the pages merge.
                 const auto answered = agentRepliesTo(data.value("agent_messages").toArray());

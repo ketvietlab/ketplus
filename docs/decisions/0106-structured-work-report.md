@@ -101,6 +101,37 @@ cannot count it, filter it or show it anywhere else.
     the turn ends, when the end-of-turn card takes over. The desktop marks a
     `work_report.updated` of the running turn as current; a new turn or another
     conversation starts without it.
+- **Reconciling a long conversation.** The agent cannot read the stored ledger, so after
+  many turns and compactions it forgot keys: it reported the same work again under new
+  keys and never closed items from early turns (a team leader had 41 open items of 74 at
+  turn 156, eight of them untouched since turn 2). Therefore:
+  - The tool's answer lists every open item (key, status, title capped at 120 characters,
+    `updated_turn`), newest first, at most 100, with a `reconcile` instruction. An open
+    item no call changed for 20 turns (`staleTurns`) is marked `stale`, and `stale` counts
+    them. The response guidance asks the agent to close finished or obsolete items, confirm
+    or close stale ones and never add a new key for listed work; a team task's key is its
+    task id.
+  - An item may carry `replaces: [keys]`: the same work reported earlier under another key.
+    Each replaced item gets `replaced_by`: an open one also becomes `cancelled`, a done one
+    keeps its status and evidence. A replaced item is a duplicate: the answer's counts, the
+    card and the exported matrix skip it, and it leaves first when the ledger is trimmed. A
+    key the report does not have, or one the same call also reports, is refused in words.
+  - The card shows a stale item muted with "No update for N turns", and a stale item whose
+    next step is the user's does not make the report "Needs you".
+- **Finished history.** Listing only open items was not enough: a leader at turn 204 had 77
+  items, 45 of them done. Done items never leave before the ledger's limits, the agent
+  re-sent them each reconciliation, and when it re-keyed team work by task id it added done
+  work again under the new key (`t35-ios-name-sweep` and `t-35`), which `replaces` could not
+  merge. Therefore:
+  - An item records `closed_turn` when it becomes done or cancelled, keeps it while it stays
+    closed (rewording does not move it) and drops it when reopened.
+  - The answer also lists up to 50 done items (`done_items`: key and title), most recently
+    finished first, and `reconcile` asks the agent not to send them again unless their
+    result changed and to merge duplicates, done ones included, with `replaces`.
+  - In each group the card folds closed items finished 20 or more turns ago under
+    "Finished earlier (N)", beside the group's open and recent items; a group with nothing
+    recent shows its history unfolded. An item closed before `closed_turn` existed dates
+    from its `created_turn`. Items changed in the card's turn never fold.
 
 ## Consequences
 

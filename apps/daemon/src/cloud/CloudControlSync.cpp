@@ -66,6 +66,12 @@ void CloudControlClient::heartbeat() {
         const QList<StoredSession> stored = journal_->sessions();
         const QHash<QString, QString> repositories = resolveWorktreeRepositories(*journal_);
         QHash<QString, QJsonObject> agentMetadata;
+        // Only the sealed metadata carries this lifecycle hint. Explicit false clears a
+        // previous true on the next heartbeat; no message body or recipient is exported.
+        const QSet<QString> awaiting = journal_->sessionsAwaitingAgentReply();
+        for (const StoredSession& session : stored)
+            agentMetadata[session.id].insert(QStringLiteral("awaitingAgentReply"),
+                                             awaiting.contains(session.id));
         const QHash<QString, QString> numbers = journal_->conversationNumbers();
         for (auto it = numbers.cbegin(); it != numbers.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("number"), it.value());
@@ -80,22 +86,36 @@ void CloudControlClient::heartbeat() {
             host_ ? host_->agentTurnSenders() : QHash<QString, QJsonObject>{};
         for (auto it = senders.cbegin(); it != senders.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("agentTurn"), it.value());
+        // ADR 0116 §3: a member's team, its revision and the member's role; a conversation
+        // on no team has no `team` field.
+        const QHash<QString, QJsonObject> teams =
+            host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
+        for (auto it = teams.cbegin(); it != teams.cend(); ++it)
+            agentMetadata[it.key()].insert(QStringLiteral("team"), it.value());
         const quint64 requestEpoch = accountEpoch_;
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
         const QPointer<CloudControlClient> guard(this);
+        // Only one heartbeat runs at a time (heartbeatInFlight_), so the cache is handed to its
+        // thread and back without sharing.
+        WorktreeRevisionCache revisionCache = std::move(revisionCache_);
+        revisionCache_ = {};
         heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestEpoch,
-                              workspaceId, machineId, salt]() {
+                              workspaceId, machineId, salt,
+                              revisionCache = std::move(revisionCache)]() mutable {
             QHash<QString, QJsonObject> metadata;
+            revisionCache.retain(stored);
             const QList<QJsonArray> batches =
                 heartbeatSessionBatches(CloudControlClient::sessionSnapshots(
                     stored, workspaceId, machineId, salt, repositories, &metadata, agentMetadata,
-                    tagColors));
+                    tagColors, &revisionCache, QDateTime::currentMSecsSinceEpoch()));
             QMetaObject::invokeMethod(
                 guard,
-                [guard, batches, metadata, requestEpoch, workspaceId, machineId]() {
+                [guard, batches, metadata, requestEpoch, workspaceId, machineId,
+                 revisionCache = std::move(revisionCache)]() mutable {
                     if (!guard)
                         return;
+                    guard->revisionCache_ = std::move(revisionCache);
                     if (guard->accountEpoch_ != requestEpoch ||
                         guard->workspaceId_ != workspaceId || guard->machineId_ != machineId) {
                         guard->heartbeatInFlight_ = false;
@@ -134,7 +154,9 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
     QJsonObject body{
         {QStringLiteral("machineId"), machineId},
         {QStringLiteral("controlProtocolVersion"), 2},
-        {QStringLiteral("capabilities"), QJsonArray{"transport.webrtc/1"}},
+        // ADR 0116 §1: this daemon serves team commands and writes the `team` metadata.
+        {QStringLiteral("capabilities"),
+         QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1"}},
         {QStringLiteral("localProtocolVersion"), 0},
         {QStringLiteral("daemonVersion"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
         {QStringLiteral("observedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
@@ -368,8 +390,10 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                 EventUploadBackoff& backoff = eventUploadBackoff_[uploadKey];
                 backoff.failures += 1;
                 backoff.refused = eventUploadRefused(status);
+                backoff.gap =
+                    status == 409 && responseCode(value, {}) == QStringLiteral("event_cursor_gap");
                 const qint64 delay =
-                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused);
+                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused, backoff.gap);
                 backoff.retryAt.setRemainingTime(delay);
                 qWarning("event upload for session %s failed: %d %s; next attempt in %llds",
                          qUtf8Printable(sessionId), status, qUtf8Printable(lastError_),
@@ -400,6 +424,7 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                     eventUploadLimits_.insert(uploadKey, limit * 2);
             }
             if (accepted > 0) {
+                knownUploadedCursors_.insert(uploadKey, accepted);
                 QString storageError;
                 if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
                                                            accepted) ||
@@ -410,6 +435,7 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                                                  generation, accepted) ||
                     !journal_->pruneAcknowledgedCloudEvents()) {
                     registeredCloudCursors_.remove(uploadKey);
+                    knownUploadedCursors_.remove(uploadKey);
                     lastError_ = storageError.isEmpty() ? journal_->errorString() : storageError;
                     return;
                 }

@@ -26,6 +26,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHideEvent>
 #include <QIcon>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -168,7 +169,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
 
 // Native Qt mapping of @ketvietlab/design-system's public semantic contract.
 // Keep these roles aligned with packages/design-system/src/foundations/tokens.css;
-// the values below were verified against ketviet e8adee2d (design system 0.1.44).
+// the values below were verified against the published package (design system 0.1.44).
 struct KdsPalette final {
     QString page, panel, raised, hover, text, secondary, muted, disabled, border, strong, input;
     QString accent, accentHover, accentActive, accentSubtle, accentBorder, accentText;
@@ -242,7 +243,7 @@ QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"@mono@"; font
 QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
 QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{px:22}}px; font-weight:500; }
 QLabel#linuxMachinesNotice { color:@secondary@; font-size:{{body}}px; }
-QLabel#linuxMachinesNotice[remoteTone="danger"] { color:@danger@; }
+QLabel#linuxMachinesNotice[remoteTone="danger"], QLabel#linuxMachineError, QLabel#linuxDetailsError, QLabel#linuxSshFeedback[remoteTone="danger"] { color:@danger@; }
 QFrame[remoteRole="surface"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
 QFrame[remoteRole="surfaceAccent"] { border:1px solid @accentBorder@; border-radius:7px; background:@panel@; }
 QFrame[remoteRole="signInCard"] { border:1px solid @border@; border-radius:9px; background:@panel@; }
@@ -400,7 +401,15 @@ RemoteControlView::RemoteControlView(QWidget* parent)
     });
     connect(daemon_, &remote::DaemonClient::disconnected, this,
             [this](const QString& reason) { setNotice(reason, true); });
-    refreshTimer_->start();
+    // The status is polled while the page is shown (activate() starts it, hiding stops it): the
+    // window creates the page at launch for its Linux machines, before Connections is opened.
+}
+
+void RemoteControlView::hideEvent(QHideEvent* event) {
+    // A minimised window hides it spontaneously and shows it again without activate().
+    if (!event->spontaneous())
+        refreshTimer_->stop();
+    QWidget::hideEvent(event);
 }
 
 RemoteControlView::~RemoteControlView() {
@@ -521,7 +530,9 @@ QWidget* RemoteControlView::createControlPage() {
         // Linux pairing goes through its own account, so only phones wait for this Mac's relay.
         phone->setEnabled(!offline_ && !requestInFlight_);
         auto* linux = menu.addAction(tr("Connect a Linux machine"));
-        linux->setToolTip(tr("Through the KetPlus Relay"));
+        linux->setToolTip(linuxMachines_ && linuxMachines_->model()->backendsAttached()
+                              ? tr("Over SSH or the ketPlus Relay")
+                              : tr("Through the ketPlus Relay"));
         const auto* chosen = menu.exec(pairButton_->mapToGlobal(QPoint(0, pairButton_->height())));
         if (chosen == phone)
             createPairing();
@@ -865,12 +876,18 @@ QWidget* RemoteControlView::createControlPage() {
     connect(pairingDialog_, &ket::Dialog::finished, this, &RemoteControlView::closePairing);
     pairingDialog_->setBody(pairingPanel_);
     bodyLayout->addWidget(linkedContent_);
-    linuxMachines_ = new LinuxMachinesSection(body);
+    auto* linuxColumn = new QWidget(body);
+    linuxColumn->setObjectName(QStringLiteral("linuxMachinesColumn"));
+    linuxColumnLayout_ = new QVBoxLayout(linuxColumn);
+    chrome_geometry::margins(linuxColumnLayout_, 24, 0, 24, 0);
+    chrome_geometry::spacing(linuxColumnLayout_, 0);
+    linuxMachines_ = new LinuxMachinesSection(linuxColumn);
+    linuxColumnLayout_->addWidget(linuxMachines_);
     // The page's Add menu shows only once this Mac's relay is linked.
     linuxMachines_->setPairingEntryShown(!configured_);
     connect(linuxMachines_, &LinuxMachinesSection::machinesChanged, this,
             &RemoteControlView::machinesChanged);
-    bodyLayout->addWidget(linuxMachines_);
+    bodyLayout->addWidget(linuxColumn);
     bodyLayout->addWidget(linkedFooter_);
     bodyLayout->addStretch(1);
     auto* bodyHost = new QWidget;
@@ -889,6 +906,7 @@ QWidget* RemoteControlView::createControlPage() {
 void RemoteControlView::activate() {
     if (linuxMachines_)
         linuxMachines_->activate();
+    refreshTimer_->start();
     refreshStatus();
     if (!ticketId_.isEmpty())
         refreshPairing();
@@ -1053,6 +1071,9 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         }
     }
     pageHeader_->setVisible(configured_);
+    if (linuxColumnLayout_)
+        chrome_geometry::margins(linuxColumnLayout_, configured_ ? 0 : 24, 0, configured_ ? 0 : 24,
+                                 0);
     unlinkedContent_->setVisible(!configured_);
     linkedContent_->setVisible(configured_);
     linkedFooter_->setVisible(configured_);
@@ -1066,8 +1087,8 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         // Enrollments from before ADR 0109 have no name until the next sign-in.
         accountName_->setText(name.isEmpty() ? QStringLiteral("Signed in") : name);
         accountMeta_->setText(!username.isEmpty() && username != name
-                                  ? QStringLiteral("%1 · KétPlus Pro").arg(username)
-                                  : QStringLiteral("KétPlus Pro"));
+                                  ? QStringLiteral("%1 · ketPlus Pro").arg(username)
+                                  : QStringLiteral("ketPlus Pro"));
         accountAvatar_->setName(name);
         accountAvatar_->setVisible(!name.isEmpty());
         emit accountChanged(configured_ ? name : QString());

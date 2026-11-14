@@ -3,6 +3,7 @@
 #include "KetTokens.h"
 #include "agent/AgentMessageFormatter.h"
 #include "preview/MermaidRenderer.h"
+#include "ui/theme/ColorScheme.h"
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -113,6 +114,11 @@ QString configuredMonoFontFamily() {
 // focus on whichever widget had it (an open file, the sidebar). Selected transcript text
 // then looked selected while Cmd+C and Cmd+A went to that widget.
 bool AgentWorkspaceView::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ParentChange)
+        refreshToastAncestors();
+    if (event->type() == QEvent::Move || event->type() == QEvent::Resize ||
+        event->type() == QEvent::Show || event->type() == QEvent::Hide)
+        updateToastAvoidance();
     if (watched == view_ && event->type() == QEvent::MouseButtonPress && container_ != nullptr &&
         !container_->hasFocus())
         container_->setFocus(Qt::MouseFocusReason);
@@ -152,8 +158,10 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-            [this] { applyTheme(currentThemePalette()); });
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this, [this] {
+        if (!colorScheme_)
+            applyTheme(currentThemePalette());
+    });
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             &AgentWorkspaceView::documentStyleChanged);
     // Bootstrap from the same semantic palette as Widgets; no second hard-coded theme.
@@ -199,6 +207,7 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(container_);
+    setupToastAvoidance();
 }
 
 bool AgentWorkspaceView::layoutTraceEnabled() const { return transcript_trace::enabled(); }
@@ -215,6 +224,7 @@ AgentWorkspaceView::~AgentWorkspaceView() {
     removeRenderTranscripts(this);
     // Unload while the context object is still alive; otherwise bindings may run
     // once more against a destroyed agentHost during native-window teardown.
+    stopToastAvoidance();
     transcriptPolish_ = nullptr;
     view_->setSource(QUrl());
     if (mermaidInstaller_ && mermaidInstaller_->state() != QProcess::NotRunning) {
@@ -274,21 +284,38 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
 
 void AgentWorkspaceView::applyTheme(const ThemePalette& palette,
                                     const int /*interfaceFontSizePixels*/) {
+    const bool hadCanonicalSyntax = bool(colorScheme_);
+    colorScheme_.reset();
+    applyDocumentPalette(palette, hadCanonicalSyntax);
+}
+
+void AgentWorkspaceView::applyDocumentPalette(const ThemePalette& palette, bool forceSyntax) {
     // Appearance owns theme/zoom for both Widgets and Quick. The host retains only
     // user font preferences and the palette needed by the HTML/Mermaid renderer.
     const QString family = configuredMonoFontFamily();
-    if (themeApplied_ && palette == mermaidPalette_ && family == monoFontFamily_)
+    if (!forceSyntax && themeApplied_ && palette == mermaidPalette_ && family == monoFontFamily_)
         return;
     themeApplied_ = true;
     const bool fontChanged = family != monoFontFamily_;
     monoFontFamily_ = family;
     mermaidPalette_ = palette;
+    mermaidRenderer_->invalidateColors();
     ++mermaidRevision_;
     emit mermaidChanged();
     view_->setColor(ket::Tokens::color(u"page-bg", ket::Appearance::instance().theme()));
     if (fontChanged)
         emit monoFontFamilyChanged();
     emit documentStyleChanged();
+}
+
+void AgentWorkspaceView::applyColorScheme(const ColorScheme& scheme,
+                                          const int interfaceFontSizePixels) {
+    const auto resolved = resolveColorScheme(scheme);
+    const bool syntaxChanged = !colorScheme_ || colorScheme_->syntax != resolved.syntax ||
+                               colorScheme_->editor != resolved.editor;
+    Q_UNUSED(interfaceFontSizePixels);
+    colorScheme_ = std::make_shared<const ColorScheme>(resolved);
+    applyDocumentPalette(colorSchemePalette(resolved), syntaxChanged);
 }
 
 void AgentWorkspaceView::focusPrompt() {
@@ -689,6 +716,8 @@ void AgentWorkspaceView::openRelativeFile(const QString& path) {
         QDesktopServices::openUrl(url);
         return;
     }
+    if (localActionRefused())
+        return;
     if (executionContextSwitched_ && QDir::isRelativePath(path) && !url.isLocalFile()) {
         emit composerErrorOccurred(
             tr("This link has no verified worktree source. Open the file from Files instead."));
@@ -708,6 +737,8 @@ void AgentWorkspaceView::requestClearSession() { emit clearSessionRequested(); }
 void AgentWorkspaceView::requestCurrentFileDiff() { emit currentFileDiffRequested(); }
 
 void AgentWorkspaceView::requestFileDiff(const QString& path) {
+    if (localActionRefused())
+        return;
     if (executionContextSwitched_ && QDir::isRelativePath(path) && !QUrl(path).isLocalFile()) {
         emit composerErrorOccurred(
             tr("This link has no verified worktree source. Open the file from Files instead."));
@@ -772,7 +803,7 @@ QString AgentWorkspaceView::revealFileActionText() const {
 }
 
 QString AgentWorkspaceView::revealableFilePath(const QString& path) const {
-    if (path.isEmpty())
+    if (path.isEmpty() || transcriptOnly())
         return {};
     const QUrl url(path);
     if ((!url.scheme().isEmpty() && !url.isLocalFile() && !QDir::isAbsolutePath(path)) ||
@@ -785,7 +816,9 @@ QString AgentWorkspaceView::revealableFilePath(const QString& path) const {
                                            : QString{};
 }
 
-void AgentWorkspaceView::revealFile(const QString& path) const {
+void AgentWorkspaceView::revealFile(const QString& path) {
+    if (localActionRefused())
+        return;
     const QString absolutePath = revealableFilePath(path);
     if (!absolutePath.isEmpty())
         file_reveal::reveal(absolutePath);
@@ -799,7 +832,8 @@ constexpr int kPathStateLimit = 4096;
 } // namespace
 
 bool AgentWorkspaceView::pathMissing(const QString& path) {
-    if (path.isEmpty())
+    // Another machine's paths are not on this disk; they are not missing there.
+    if (path.isEmpty() || transcriptOnly())
         return false;
     const QUrl url(path);
     if (!url.scheme().isEmpty() && !url.isLocalFile() && !QDir::isAbsolutePath(path))

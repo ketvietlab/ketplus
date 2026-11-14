@@ -3,7 +3,8 @@ name: build
 permissions:
   contents: read
 
-# Integration has no CI: authors test what they change before merging there.
+# Integration authors test changes locally. The separate
+# lightweight public-tree workflow checks publication boundaries on every PR.
 # The build runs on promotion pull requests into develop, on release pull
 # requests into main and on the production main commit. The promotion pull
 # request already built the head that lands on develop.
@@ -24,6 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  linux-pro-packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    uses: ./.github/workflows/linux-pro-packages.yml
+    with:
+      architecture: ${{ matrix.architecture }}
+
   linux-daemon:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -39,10 +49,12 @@ jobs:
           version: "6.11.1"
           modules: qtwebsockets
           cache: true
+      - name: Guard public repository boundaries
+        run: python3 tests/hygiene/test_public_tree.py
       - name: Install headless build dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
       - name: Configure independent daemon
-        run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
+        run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
       - name: Build and test without a display or provider quota
         run: |
           cmake --build build/daemon --parallel 4
@@ -141,7 +153,7 @@ jobs:
       test-runners: '["macos-15", "macos-26"]'
       qt-version: "6.11.1"
       qt-modules: qt5compat qtwebsockets qtwebview
-      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
+      configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro
       node: true
       build-timeout: 60
       # One test at a time: the desktop/daemon integration tests time out when

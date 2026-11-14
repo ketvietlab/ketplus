@@ -6,6 +6,8 @@
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
 #include "storage/JournalStorageOptions.h"
+#include "storage/ScheduleRecord.h"
+#include "storage/SessionPreparation.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -40,8 +42,9 @@ struct StoredSession final {
     QString effort;
     QString executionPolicy{QStringLiteral("ask")};
     QString mode{QStringLiteral("default")};
-    // JSON object: provider id -> {"thread_id", "seen_cursor"} for providers this conversation
-    // has used besides the current one (whose thread is threadId).
+    // JSON object: provider id -> {"thread_id", "retired_thread_ids"} for providers this
+    // conversation has used besides the current one (whose thread is threadId). Earlier daemons
+    // also stored a "seen_cursor" number per provider; it is read and ignored.
     QString providerThreads{QStringLiteral("{}")};
     // Desktop sidebar read marker. Unread completed turns when lastSeenCursor < lastCursor.
     qint64 lastSeenCursor{0};
@@ -76,6 +79,8 @@ struct RemoteCommandAudit final {
     QString sessionId;
     QString resultCode;
     QDateTime recordedAt;
+    // ADR 0116 §5: the team a team command acted on, which names no conversation.
+    QString teamId;
 };
 
 // One staged fork's read snapshot and copy position. Destroying it releases the snapshot;
@@ -179,7 +184,7 @@ struct LargeEventFragment final {
     QString errorMessage;
 };
 
-// ADR 0112: one entry of a team's append-only Updates log.
+// ADR 0114: one entry of a team's append-only Updates log.
 struct TeamUpdateRecord final {
     qint64 id{0};
     qint64 teamId{0};
@@ -189,7 +194,7 @@ struct TeamUpdateRecord final {
     QString taskId;
     QString text;
     QJsonObject data;
-    // Starts the leader's digest (ADR 0112 §7); other updates ride along.
+    // Starts the leader's digest (ADR 0114 §7); other updates ride along.
     bool actionable{false};
     bool digested{false};
 };
@@ -209,6 +214,17 @@ class LocalJournal final {
     [[nodiscard]] QString databasePath() const { return database_.databaseName(); }
 
     bool upsertSession(const StoredSession& session);
+    // Inactive allocations have no sessions/events row until activation.
+    bool prepareSession(SessionPreparation& preparation, QString* error = nullptr);
+    [[nodiscard]] std::optional<SessionPreparation>
+    sessionPreparation(const QString& sessionId) const;
+    [[nodiscard]] QList<SessionPreparation> sessionPreparations() const;
+    bool pruneSessionPreparations(qint64 nowMs, int limit = 128);
+    bool activatePreparedSession(const StoredSession& session, const QString& owner, qint64 nowMs,
+                                 QString* error = nullptr);
+    bool discardPreparedSession(const QString& sessionId, const QString& owner, qint64 nowMs,
+                                QString* error = nullptr);
+
     // Advances last_seen_cursor with MAX so stale callers cannot move it backwards.
     bool markSessionSeen(const QString& sessionId, qint64 generation, qint64 cursor);
     bool deleteSession(const QString& sessionId, qint64 generation, QString* error = nullptr);
@@ -464,6 +480,9 @@ class LocalJournal final {
     // The latest messages a conversation sent or received, newest first.
     [[nodiscard]] QList<AgentMessageRecord> agentMessagesOf(const QString& sessionId,
                                                             qint64 generation, int limit) const;
+    // Current-generation senders with at least one unexpired, unanswered expect-reply message.
+    [[nodiscard]] QSet<QString>
+    sessionsAwaitingAgentReply(const QDateTime& when = QDateTime::currentDateTimeUtc()) const;
     // Turns started automatically by messages of one chain, or for one receiver since a time.
     [[nodiscard]] int automaticAgentTurnsInChain(const QString& chainId) const;
     [[nodiscard]] int automaticAgentTurnsSince(const QString& sessionId, qint64 generation,
@@ -482,7 +501,7 @@ class LocalJournal final {
     [[nodiscard]] bool isConversationReviewer(const QString& sessionId) const;
     // Review requests a conversation sent in one chain of turns.
     [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
-    // ADR 0112: teams. The document is the team's JSON; `sessions` are its members, each on at
+    // ADR 0114: teams. The document is the team's JSON; `sessions` are its members, each on at
     // most one team. insertTeam returns the new id, which is never reused.
     [[nodiscard]] std::optional<qint64> insertTeam(const QString& repository, QJsonObject document,
                                                    const QStringList& sessions,
@@ -491,13 +510,26 @@ class LocalJournal final {
     bool saveTeam(qint64 teamId, qint64 expectedRevision, const QJsonObject& document,
                   const QStringList& sessions, QString* error = nullptr);
     bool deleteTeam(qint64 teamId, QString* error = nullptr);
-    [[nodiscard]] QList<QJsonObject> teamDocuments() const;
+    // T-36: the whole text of a task history entry cut in the team's document, by entry index.
+    bool saveTeamHistoryText(qint64 teamId, const QString& taskId, qsizetype entry,
+                             const QString& text, QString* error = nullptr);
+    [[nodiscard]] std::optional<QString> teamHistoryText(qint64 teamId, const QString& taskId,
+                                                         qsizetype entry) const;
+    [[nodiscard]] QSet<qsizetype> teamHistoryTextEntries(qint64 teamId,
+                                                         const QString& taskId) const;
+    // `read` is false when the journal could not be read, which is not "no teams".
+    [[nodiscard]] QList<QJsonObject> teamDocuments(bool* read = nullptr) const;
+    // ADR 0114: the settings every new team starts from (Settings → Teams); empty when none
+    // were saved. `read` is false when the journal could not be read.
+    [[nodiscard]] QJsonObject teamSettings(bool* read = nullptr) const;
+    bool saveTeamSettings(const QJsonObject& settings, QString* error = nullptr);
     [[nodiscard]] std::optional<qint64> teamOfSession(const QString& sessionId) const;
     [[nodiscard]] std::optional<qint64> appendTeamUpdate(const TeamUpdateRecord& update,
                                                          QString* error = nullptr);
-    // Newest first, or with `undigestedOnly` the waiting ones oldest first.
-    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly,
-                                                      int limit) const;
+    // Newest first, or with `undigestedOnly` the waiting ones oldest first; with `beforeId`,
+    // only those older than it.
+    [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly, int limit,
+                                                      qint64 beforeId = 0) const;
     bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: the conversation's current work report ledger, empty before its first report.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
@@ -505,7 +537,47 @@ class LocalJournal final {
     bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
                          QString* error = nullptr);
 
+    // Scheduled runs. The tables are created on open. A journal from before them gains empty
+    // tables; existing rows stay. The format version stays put: an older daemon ignores the
+    // new tables (ADR 0095).
+    static constexpr int maximumScheduleRuns = 50;
+    bool createSchedule(const ScheduleRecord& schedule, QString* error = nullptr);
+    // No row and a failed read are both empty; errorString() is set only when the read failed.
+    [[nodiscard]] std::optional<ScheduleRecord> schedule(const QString& id) const;
+    [[nodiscard]] std::optional<QList<ScheduleRecord>>
+    schedules(const ScheduleFilter& filter) const;
+    bool updateSchedule(const ScheduleRecord& schedule, QString* error = nullptr);
+    bool deleteSchedule(const QString& id, QString* error = nullptr);
+    // Flips enabled. Refuses to enable a schedule whose conversation was deleted.
+    // `code`, when set, is a stable protocol code (target_deleted, schedule_not_found) or
+    // empty when the failure is a journal error. The message stays in `error`.
+    bool setScheduleEnabled(const QString& id, bool enabled, QString* error = nullptr,
+                            QString* code = nullptr);
+    // A live conversation row. A tombstone does not count.
+    [[nodiscard]] bool sessionExists(const QString& sessionId) const;
+    // A team row. `teamId` is the integer primary key, not a label.
+    [[nodiscard]] bool teamExists(qint64 teamId) const;
+    // Deletes team and team_start schedules for this team id, and their runs. deleteTeam does
+    // this for the journal's decimal team id.
+    bool deleteSchedulesForTeam(const QString& teamId, QString* error = nullptr);
+    // Disables conversation schedules that target this session and records status
+    // target_deleted. The rows stay. deleteSession does this in its own transaction.
+    bool disableSchedulesForSession(const QString& sessionId, QString* error = nullptr);
+    bool appendScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
+    bool updateScheduleRun(const ScheduleRunRecord& run, QString* error = nullptr);
+    // `limit` above maximumScheduleRuns is clamped to it. `beforeId` empty reads the newest page.
+    [[nodiscard]] std::optional<ScheduleRunPage> scheduleRuns(const QString& scheduleId, int limit,
+                                                              const QString& beforeId = {}) const;
+    // No row and a failed read are both empty; errorString() is set only when the read failed.
+    [[nodiscard]] std::optional<ScheduleRunRecord> scheduleRun(const QString& id) const;
+    [[nodiscard]] std::optional<ScheduleRunRecord>
+    queuedScheduleRun(const QString& scheduleId) const;
+    // Queued and running runs, oldest first. A restart closes the ones it cannot resume.
+    [[nodiscard]] QList<ScheduleRunRecord> unfinishedScheduleRuns() const;
+
   private:
+    bool initializeSchedules();
+    bool removeSchedulesForTeam(const QString& teamId, QString* error);
     bool initializeAgents();
     bool initializeTeams();
     bool writeTeamMembers(qint64 teamId, const QStringList& sessions, QString* error);
@@ -578,6 +650,8 @@ class LocalJournal final {
     [[nodiscard]] std::pair<qint64, bool> activityMembership(const QJsonObject& event,
                                                              const QString& itemId) const;
     [[nodiscard]] QJsonObject activityGroupSummary(const QJsonObject& event, qint64 group) const;
+    // The group's last step as {item, completed}, its item trimmed of output (T-91).
+    [[nodiscard]] QJsonObject activityGroupLatest(const QJsonObject& event, qint64 group) const;
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,
                               QString* error);

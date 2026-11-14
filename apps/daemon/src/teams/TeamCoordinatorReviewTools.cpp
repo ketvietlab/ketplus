@@ -1,0 +1,195 @@
+// T-19: the leader corrects the review record of a task. A verdict that should not have been
+// counted is voided; a review made outside the board, for example on the pull request, is
+// accepted. Both leave a task blocked by its review without a new commit.
+#include "teams/TeamCoordinator.h"
+
+#include <iterator>
+
+namespace ketplus::daemon::teams {
+namespace {
+
+TeamResult refused(const qint64 teamId, const QString& code, const QString& message) {
+    return {.error = TeamError{code, message}, .teamId = teamId};
+}
+
+// The newest verdict that counted a round, unless a void came after it.
+const HistoryEntry* lastCountedVerdict(const Task& task) {
+    for (qsizetype index = task.history.size() - 1; index >= 0; --index) {
+        const HistoryEntry& entry = task.history.at(index);
+        if (entry.kind == QStringLiteral("verdict_voided"))
+            return nullptr;
+        if (entry.kind != QStringLiteral("verdict"))
+            continue;
+        const QString verdict = entry.data.value(QStringLiteral("verdict")).toString();
+        if (verdict == QStringLiteral("findings") || verdict == QStringLiteral("no_findings"))
+            return &entry;
+    }
+    return nullptr;
+}
+
+void withdrawMerges(Team& team, const QString& taskId, const QString& reason) {
+    for (Decision& decision : team.decisions)
+        if (decision.kind == QStringLiteral("merge") && decision.taskId == taskId &&
+            decision.state == QStringLiteral("open")) {
+            decision.state = QStringLiteral("withdrawn");
+            decision.reason = reason;
+            decision.answeredAt = nowIso();
+        }
+}
+
+} // namespace
+
+bool TeamCoordinator::blockedByReview(const Task& task) {
+    if (task.state != state::blocked)
+        return false;
+    if (!task.reviewBlock.isEmpty())
+        return task.reviewBlock == QStringLiteral("round_limit") ||
+               task.reviewBlock == QStringLiteral("no_verdict");
+    // Older documents predate review_block. Recover only from the structured transition
+    // and verdict, never from either language's display text.
+    for (auto entry = task.history.crbegin(); entry != task.history.crend(); ++entry) {
+        if (entry->kind != QStringLiteral("state"))
+            continue;
+        if (entry->actor != QStringLiteral("daemon") ||
+            entry->data.value(QStringLiteral("from")).toString() != state::inReview ||
+            entry->data.value(QStringLiteral("to")).toString() != state::blocked)
+            return false;
+        for (auto verdict = std::next(entry); verdict != task.history.crend(); ++verdict) {
+            if (verdict->kind == QStringLiteral("verdict_voided"))
+                return false;
+            if (verdict->kind != QStringLiteral("verdict"))
+                continue;
+            const QString outcome = verdict->data.value(QStringLiteral("verdict")).toString();
+            return outcome == QStringLiteral("findings") ||
+                   (outcome == QStringLiteral("no_verdict") && task.missingVerdicts > 0);
+        }
+        return false;
+    }
+    return false;
+}
+
+TeamResult TeamCoordinator::voidReview(const qint64 teamId, const QString& taskId,
+                                       const QString& reason, const QString& actor) {
+    Team* team = mutableTeam(teamId);
+    if (!team)
+        return refused(teamId, QStringLiteral("team_not_found"),
+                       QStringLiteral("The team no longer exists."));
+    if (actorRole(*team, actor) != role::leader)
+        return refused(teamId, QStringLiteral("role_forbidden"),
+                       QStringLiteral("Only the team's leader voids a review round."));
+    const Task* found = std::as_const(*team).task(taskId);
+    if (!found)
+        return refused(teamId, QStringLiteral("task_not_found"),
+                       QStringLiteral("The team has no task %1.").arg(taskId));
+    if (reason.trimmed().isEmpty())
+        return refused(teamId, QStringLiteral("invalid_payload"),
+                       QStringLiteral("Say why the round is voided."));
+    if (found->state == state::done || found->state == state::inReview ||
+        team->reviewInFlight(taskId))
+        return refused(teamId, QStringLiteral("invalid_transition"),
+                       QStringLiteral("%1 has no verdict to void: it is %2.")
+                           .arg(taskId, found->state == state::done ? QStringLiteral("done")
+                                                                    : QStringLiteral("in review")));
+    const HistoryEntry* verdict = lastCountedVerdict(*found);
+    const int round = verdict ? verdict->data.value(QStringLiteral("round")).toInt() : 0;
+    if (!verdict || round != found->round || round < 1)
+        return refused(teamId, QStringLiteral("invalid_transition"),
+                       QStringLiteral("%1 has no recorded review round to void.").arg(taskId));
+    const Team before = *team;
+    Task* task = team->task(taskId);
+    const QString was = verdict->data.value(QStringLiteral("verdict")).toString();
+    const QString by = actorName(*team, actor);
+    const QString why = reason.trimmed().left(2000);
+    --task->round;
+    task->missingVerdicts = 0;
+    task->question.clear();
+    task->resumeState.clear();
+    addHistory(
+        *task, actor, QStringLiteral("verdict_voided"),
+        say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1's verdict (%2) voided by %3: %4"))
+            .arg(round)
+            .arg(was == QStringLiteral("no_findings")
+                     ? say(team->language, QT_TRANSLATE_NOOP("Team", "no findings"))
+                     : say(team->language, QT_TRANSLATE_NOOP("Team", "findings")),
+                 by, why),
+        {{QStringLiteral("round"), round},
+         {QStringLiteral("verdict"), was},
+         {QStringLiteral("by"), by},
+         {QStringLiteral("reason"), why}});
+    withdrawMerges(*team, taskId, QStringLiteral("The review of %1 was voided.").arg(taskId));
+    QList<Update> updates;
+    // Back to the state it had before the verdict; the review queue takes it again.
+    applyMove(*team, *task, state::inReview, actor,
+              say(team->language, QT_TRANSLATE_NOOP("Team", "round %1 voided")).arg(round),
+              updates);
+    if (auto error = commit(*team, before, actor, updates))
+        return {.error = error, .teamId = teamId};
+    return {.error = std::nullopt, .teamId = teamId};
+}
+
+TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& taskId,
+                                         const QString& evidence, const QString& reason,
+                                         const QString& actor) {
+    Team* team = mutableTeam(teamId);
+    if (!team)
+        return refused(teamId, QStringLiteral("team_not_found"),
+                       QStringLiteral("The team no longer exists."));
+    if (actorRole(*team, actor) != role::leader)
+        return refused(teamId, QStringLiteral("role_forbidden"),
+                       QStringLiteral("Only the team's leader accepts a review."));
+    const Task* found = std::as_const(*team).task(taskId);
+    if (!found)
+        return refused(teamId, QStringLiteral("task_not_found"),
+                       QStringLiteral("The team has no task %1.").arg(taskId));
+    if (found->state != state::inReview && !blockedByReview(*found))
+        return refused(teamId, QStringLiteral("invalid_transition"),
+                       QStringLiteral("%1 is %2: only a task in review, or blocked by its "
+                                      "review, can have a review accepted.")
+                           .arg(taskId, found->state));
+    if (evidence.trimmed().isEmpty() || reason.trimmed().isEmpty())
+        return refused(teamId, QStringLiteral("invalid_payload"),
+                       QStringLiteral("Give the evidence of the review (for example the pull "
+                                      "request review's URL) and the reason."));
+    const Team before = *team;
+    Task* task = team->task(taskId);
+    const QString by = actorName(*team, actor);
+    const QString proof = evidence.trimmed().left(2000);
+    const QString why = reason.trimmed().left(2000);
+    // A review of it that is queued or in flight is dropped; its answer is then ignored.
+    dropReview(*team, taskId);
+    task->missingVerdicts = 0;
+    task->question.clear();
+    task->resumeState.clear();
+    // T-40: a task reviewed on its pull request names the comment of its last round, so the
+    // acceptance says which findings it set aside.
+    const QString link = task->reviewPlace == place::pullRequest ? task->reviewComment : QString{};
+    QJsonObject data{{QStringLiteral("by"), by},
+                     {QStringLiteral("evidence"), proof},
+                     {QStringLiteral("reason"), why},
+                     {QStringLiteral("round"), task->round}};
+    if (!link.isEmpty())
+        data.insert(QStringLiteral("comment_url"), link);
+    addHistory(*task, actor, QStringLiteral("review_accepted"),
+               (link.isEmpty()
+                    ? say(team->language,
+                          QT_TRANSLATE_NOOP(
+                              "Team", "Review accepted by %1, made outside the board (%2): %3"))
+                          .arg(by, proof, why)
+                    : say(team->language,
+                          QT_TRANSLATE_NOOP(
+                              "Team", "Review accepted by %1 with the review on the pull request "
+                                      "(%2; last comment %3): %4"))
+                          .arg(by, proof, link, why)),
+               data);
+    QList<Update> updates;
+    applyMove(*team, *task, state::ready, actor,
+              say(team->language, QT_TRANSLATE_NOOP("Team", "review accepted by %1")).arg(by),
+              updates);
+    offerMerges(*team, updates);
+    // commit() sends the next review of a reviewer this one freed.
+    if (auto error = commit(*team, before, actor, updates))
+        return {.error = error, .teamId = teamId};
+    return {.error = std::nullopt, .teamId = teamId};
+}
+
+} // namespace ketplus::daemon::teams

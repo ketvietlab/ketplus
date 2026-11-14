@@ -8,12 +8,32 @@ talks to the daemon, Git, a provider or the network.
 
 ## Build and run
 
-Qt 6.8 or later with Quick, QuickControls2 and Svg.
+Qt 6.8 or later with Core, Gui, Qml, Quick, QuickControls2, Svg, Test and
+Widgets, and LinguistTools (`lrelease`). Tests are enabled by default
+(`BUILD_TESTING=ON`) and also require Python 3 and
+Qt's `qmltestrunner`, including its QtTest QML module. Install the Qt Quick Test
+tools with the SDK, or set `KETPLUS_MOCK_QMLTESTRUNNER` to the matching runner
+executable if it is not in the SDK bin directory or `PATH`.
 
 ```sh
 cmake -S mockups/qt -B build/mock -G Ninja -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build/mock
 build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock      # macOS
+```
+
+Run the deterministic model, team-language and screen smoke checks offscreen:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
+```
+
+For an interactive-only build without `qmltestrunner`, disable test registration
+in a separate build directory:
+
+```sh
+cmake -S mockups/qt -B build/mock-interactive -G Ninja \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DBUILD_TESTING=OFF
+cmake --build build/mock-interactive
 ```
 
 The kit is pinned by commit in `CMakeLists.txt`. Use a local checkout with
@@ -30,7 +50,23 @@ KetPlusMock --smoke --display=secondary                # on another display, lea
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
+KetPlusMock --screen=teams --state=vi --screenshot=teams-vi.png
+KetPlusMock --screen=teams --state=vi-paused --screenshot=teams-budget-vi.png
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits (limits-cost opens Cost details, limits-api-key has none), reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) toast (the app-wide toast, on any screen), or rename and delete (the conversation dialogs, on any screen)
+```
+
+Teams default to English; prefix a team state with `vi-` (or use `vi` for the
+default state) for Vietnamese. Changing Language in the team menu updates the
+page, board, decisions and their team controls live. The mock compiles the product's
+`ketplus_teams_vi.ts` catalog directly; only additional mock copy lives in
+`translations/mock_teams_vi.ts`. Provider/model names and authored fixture
+content stay as supplied. `--smoke` checks the rendered English/Vietnamese
+bindings and switching back; `--screen=teams --state=vi --check-state` runs the
+focused check. Run only the affected checks with:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock \
+  -R 'mock_(team_copy_catalog|team_language|smoke)$' --output-on-failure
 ```
 
 Screens and states (`--screen` / `--state`):
@@ -42,13 +78,14 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `teams` | `task`, `large`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team. `--open=new-team`, `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates |
-| `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
+| `teams` | `task`, `large`, `two-reviewers`, `empty`, `ready`, `paused`, `live`, `live-task`, `goal-open`, `disk-low`, `disk-stop` | Concept: a team's page (see Teams). `live` is a team as its members write it (choices that are sentences, a long Markdown task description, long lanes and paths, an update that is a paragraph) and `live-task` opens its first task; the page and the dialog must stay inside their width with it. `task` opens a task, `large` adds a fourth developer, `two-reviewers` has a second reviewer reviewing another task, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision with the team's own budget; the header shows the turns used of it). `--open=new-team-goal` shows New team with a long goal, a drawn mention and the picker open on the next one, `new-team-unknown` a mention no conversation has; the `goal-open` state opens the team page's folded goal. `--open=new-team` (with Permissions: what the leader and the developers may do without asking, Workspace unless chosen; the reviewer stays read-only; and Automatic turns, filled from Settings › Teams), `turn-budget` (the team's own automatic turns, changed while it runs), `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `add-reviewer`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates. `disk-low` and `disk-stop` show the disk warning under 20 GB and under 12 GB free (it names the free space; nothing is paused or removed), and the page lists the done tasks whose worktree is still on disk with path, size and Remove…; `--open=remove-worktree` is its confirmation, `remove-worktree-refused` the daemon's refusal in words, `remove-worktree-note` a removal after which a conversation could not be moved out of the folder |
+| `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard; `--open=linux` the Connect a Linux machine dialog (SSH), `--open=linux-hostkey` its first-use host key, `--open=linux-relay` its Relay pairing, `--open=linux-details` a machine's Details |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
-| `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
+| `settings` | `typography`, `account`, `teams`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), teams (automatic turns per team: what a new team's budget starts from), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
 | `workspace` | `plan-ready`, `plan-planning`, `plan-running`, `plan-continuing`, `plan-blocked`, `plan-paused`, `plan-limit`, `plan-complete` | Concept: Plan is a document tab in the existing right pane; the transcript and composer remain visible. Automatic planning from repository context, compact tasks and source references, daemon follow-up, Stop, blocker and budget states. See [the harness preview](marketing/plan-harness/README.md). |
 | `workspace` | `content-tabs`, `content-terminal`, `content-file` | Editor-style right pane with two files, two independent terminal sessions and the conversation plan. Closable tabs, horizontal overflow, `+` and open-documents menu (`--open=content-tabs`). |
+| `workspace` | `team-assignment`, `team-digest`, `team-review`, `team-verdict`, `team-decision` | What a team sends into its members' conversations, each as one block (`TeamTranscriptBlock`): the developer's assignment (criteria, lane, branch, who assigned it), the leader's digest (ten changes grouped by task, what needs the leader marked), the reviewer's request (criteria and the change in short), the owner's verdict (findings and the round) and the leader's answered decision. Open T-n, and a digest group's title, open the task on the team page |
 | `workspace` | `turn-report` | English marketing sample: end-of-turn status, evidence, blockers, next actions and owners. Uses the existing final-answer Markdown table renderer; all release data is fictional. |
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
 | `workspace` | `setup-cli-missing`, `setup-cli-outdated`, `setup-signed-out`, `setup-claude-signed-out`, `setup-sidecar-missing` | A provider that cannot start a turn: a new conversation with its setup guide above the composer, which keeps the draft (see Provider setup) |
@@ -87,8 +124,64 @@ showing it again opens a new tab. The Lite smoke checks this too.
 There is no Worktrees screen: a worktree is made when a conversation needs one
 (Repository & worktree → Create worktree…, or the New conversation card) and
 switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
-context menu (rename, fork, change worktree, archive, delete), tag filter
-(click a tag in the header), compact window (⇧⌘M), update notice and toasts.
+context menu (rename, fork, change worktree, archive, delete), compact window (⇧⌘M),
+update notice and toasts. Conversations carry no user tags (ADR 0117).
+
+## Scheduling design prototype
+
+The round-2 design creates schedules **only from New conversation or New team**.
+Schedules is a reusable **non-modal management window**, opened from **View → Schedules…**
+(⇧⌘J / Ctrl+Shift+J), the composer clock or an existing team schedule's management action.
+It provides list/detail/history, Run now, Pause/Resume, Edit and confirmed Delete. Its empty
+state explains where to create schedules. There is no create action in that window and no
+new sidebar navigation entry, sidebar clock or conversation-header clock.
+
+The composer clock sits immediately to the right of the Context/Limit ring, with the same
+visible diameter and vertical center. In a new, unsent conversation it opens Send now, At a
+time and Repeat options. With no applied schedule it always starts at **Send now**, hides
+the time/repeat fields and leaves the clock inactive. Reopening restores an applied choice;
+Cancel preserves it. More contains busy/missed policies. Applying a schedule activates
+the clock. Send keeps its normal appearance and label, and saves the schedule when pressed. Existing conversations show
+this clock only when they have a schedule, with Edit, Pause/Resume and Open in Schedules.
+
+New team's Schedule section combines Start (Now or Scheduled, 1 minute–30 days) and
+Repeat (Off, daily, weekdays, weekly or every N hours). The recurring work order follows
+the goal until edited. Existing locked roles, per-role model/effort and permissions remain.
+Team pages expose manage-only Schedules; a waiting team uses a separate, inactive fixture.
+
+`--screen=schedules` opens the manager. States: `empty`, `failure`, `team`, `edit`, `weekly`,
+`new-conversation` (edit an existing new-conversation target), `validation`, `policies`, `delete`.
+Workspace states: `schedule-new` (default Send now), `schedule-repeat` (explicit Repeat example), `schedule-at`, `schedule-more`, `schedule-weekly`,
+`schedule-ready`, `schedule-existing`, `scheduled` and `schedule-failure`. Team states:
+`scheduled` (waiting) and `recurring` (active history). New team dialogs use
+`--open=new-team`, `new-team-scheduled`, `new-team-repeat`, `new-team-members` or
+`new-team-start-invalid`.
+
+All scheduling UI and synthetic samples are English. The fixture clock is **13 November
+2026, 15:00 Asia/Ho_Chi_Minh**. Three fixed-offset zones make previews reproducible.
+Creating, editing, pausing, searching, deleting and running schedules change memory only.
+This prototype has no persistent scheduler, provider access, background execution or team
+wake-up integration.
+
+Run checks and capture evidence without visible windows:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/mock --output-on-failure
+QT_QPA_PLATFORM=offscreen build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock --edition=lite --smoke
+python3 mockups/qt/tools/capture_schedules.py build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock
+```
+
+`--check-state` validates a requested startup state and exits. Startup checks and screenshot
+captures reject QML errors and invalid evidence (including an incorrectly populated empty
+state, hidden policy controls or composer controls outside the minimum-width layout).
+
+Every native review run must pass `--display=secondary`. The mock places owned windows
+before showing them and refuses an unavailable requested display. `--screenshot` captures
+the schedule window when open; `--size` also sizes that window. The minimum main window
+is 1024 × 640; Schedules supports 900 × 600.
+
+See [the scheduling evidence index](evidence/schedules/README.md) for all 62 light/dark
+captures, minimum-size views, state arguments and a SHA-256 manifest.
 
 ## Transcript content types
 
@@ -130,20 +223,22 @@ A concept, not built in the app: several conversations that share one goal. Agen
 
 - **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
   the conversations that belong to no team. The folder lists its members' conversations (leader,
-  developers, reviewer), each with its role as its first tag. The icon folds it, the name opens
+  developers, reviewer), each with its role as its only tag. The icon folds it, the name opens
   the team's page, and the count is the decisions that wait for the user. A conversation belongs to one team at a time.
 - **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
   offers New conversation and New team…. A team has one leader and one reviewer, always; New team
   asks for a name, a goal, an integration branch, who merges a reviewed task into it (the leader or
   the user; the team menu changes it later), the number of developers (one to five) and the
   model and effort each role uses, from the app's Model & context dialog. The reviewer's dialog
-  offers Claude only, the provider that keeps a review read-only (ADR 0067). Create starts every
+  offers Claude, which keeps a review read-only (ADR 0067); Codex reviews only when the team
+  starts members with Full access, and KetPlus checks the branch after each review
+  (ketplus#295). Create starts every
   member as a named conversation (Lead *team*, Developer 1, Reviewer 1); developers have no lane
   until the leader gives one. Add member starts one more developer: its lane, its agent and a
   required name. A conversation that already exists joins without a dialog, as a developer:
   dragged onto the team's folder, or from its menu's Add to *team*. The role is the
-  conversation's first tag, in the sidebar and in its header; the team sets it, so the tag menu
-  lists it locked and cannot remove it. A member's header has no Reviewer choice: its
+  conversation's only tag, locked, in the sidebar and in its header; the team sets it and the
+  conversation cannot change it. A member's header has no Reviewer choice: its
   team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove
@@ -163,9 +258,11 @@ A concept, not built in the app: several conversations that share one goal. Agen
   acceptance criteria of each task) unless New team turns that off. It neither codes nor reviews.
 - **Developer**: owns a lane, a named set of path prefixes. An edit outside the lane is flagged on
   the task ("Outside its lane"); the leader decides who makes that change.
-- **Reviewer**: one conversation that checks every lane against the acceptance criteria and never
-  merges. It keeps up with two or three developers; at four the page says reviews will queue and
-  suggests a second team (`teams/large`).
+- **Reviewer**: one or two conversations that check the tasks against the acceptance criteria
+  and never merge. One keeps up with two or three developers. At four the page says reviews will
+  queue and offers a second reviewer (`teams/large`). With two, each task in review goes to one
+  of them. The page shows what each one reviews and its queue (`teams/two-reviewers`). New team
+  chooses one or two; Add a member adds the second (`--open=add-reviewer`).
 - **Task**: one owner, who also holds its worktree; To do, In progress, In review, Blocked or Done;
   its branch, worktree, pull request and what it depends on. Only the leader changes the
   acceptance criteria, and a change is recorded in the task's history. Hand over changes the owner,
@@ -174,9 +271,23 @@ A concept, not built in the app: several conversations that share one goal. Agen
   in one conversation. The answer goes to the leader and to the owner of the task it blocks.
 - **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
 
-Not drawn yet: the leader's digest and a task assignment in a transcript, and a team on the
-phone. Before the app builds this, ket-qt needs a group
-header whose name activates instead of folding, and Két Symbol a team icon (the mock uses `bot`).
+- **In a transcript**: the daemon's messages to a member (assignment, digest, review, verdict,
+  decision) are blocks, not paragraphs (`workspace/team-*`). Each is one accessible item named by
+  its kind and title. A client that does not know a kind shows the message body as text.
+- **Ready to merge**: a task that passed review with every criterion met. Under the `user` merge
+  setting the team asks "Merge T-n?" in Waiting for you (`teams/ready`).
+- **Paused**: a team that used its automatic turns says so above its decisions and asks whether to
+  go on (`teams/paused`).
+
+Not drawn yet: a team on the phone. ket-qt has the group header whose name activates instead of
+folding (ket-qt #47); Két Symbol still needs a team icon (the mock uses `bot`).
+
+- **Content as a team writes it** (`--state=live`). The page never scrolls sideways. A decision
+  whose choices are sentences (any choice over 28 characters) lists them as rows, one choice a
+  row, the recommended one marked and first; short choices stay buttons. A task's dialog is 640
+  wide and scrolls; its description is Markdown, cut at about seven lines with Show all. An
+  update shows three lines and Show more. Below 860 the role moves beside the member's name and
+  the status column goes; lanes, paths and titles elide.
 
 ## Provider setup
 
@@ -228,8 +339,7 @@ when either screen changes:
 
 - Desktop: `KetPlusMock --screen=workspace --state=question --light --screenshot=out.png` (and
   `--dark`), scaled to 1440 × 900.
-- Mobile: `ketplus-worktree-mobile.ketatlas/screens/conversation.html?thread=mobile-ui&question=pending&theme=light`
-  (and `theme=dark`) from `ketvietlab/ketplus-app` `develop`, at 393 × 852 CSS pixels and 2×,
+- Mobile: a private mobile mock, at 393 × 852 CSS pixels and 2×,
   with focus moved off the sheet's Close button.
 
 The desktop app's Connections page (`RemoteConnectionsIntro`) shows the same files as resources
@@ -253,8 +363,85 @@ A fence that is not one of these samples stays source only.
 
 ## Assets
 
-The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
-the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
-(`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
-trademark and is not licensed. The Mermaid renderings use the Két Mermaid theme from the Két
-Design System (MIT, `core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
+## Sidebar tree (concept)
+
+The repository list is a tree, drawn by mock-local parts until the design is approved; they
+then move into ket-qt (both layers) as a tree row beside `KetGroupHeader` and
+`KetConversationRow`. Two earlier concepts were dropped: second lines with tag chips (#535),
+and a flat list of labels without icons or guide lines. The tree follows Jay's design idea,
+without its "Teams (n)" level: a team is a branch of its repository, directly.
+
+- **A repository is the root** (`qml/shell/SidebarRepoHeader.qml`): a chevron that folds it,
+  a folder, the name in small capitals, and the count of its conversations, which stays.
+  Folded, one dot says that something inside waits for the user. `+` shows on hover or focus,
+  left of the count, and offers a new conversation or a new team.
+- **A team is a branch** (`qml/shell/TeamFolder.qml`): the chevron folds it, the name opens
+  the team's page, the count is its members. A warning mark before the count and a semibold
+  name say that a decision waits for the user. The highlight of a selected team starts right
+  of the chevron.
+- **"Conversations (n)"** (`qml/shell/SidebarSection.qml`) labels the conversations that
+  belong to no team, with `+` for a new one. It shows only where the repository also has
+  teams; a repository without a team lists its conversations directly.
+- **Every conversation is one line** (`qml/shell/SidebarRow.qml`): the state's own mark and
+  colour, the title, `#number`. Finished and unread is a dot and a semibold title. Role,
+  state in words, what started the turn and worktree are in the hint of a resting
+  pointer and in the accessible description.
+- **Guide lines** run under a chevron's centre for as long as what it holds: one for the
+  repository, one for each team. A row's highlight starts right of its guide line.
+- **Two text edges.** The repository's name, the "Conversations" label and the titles of its
+  own conversations start together; a team's name and its members' titles start together,
+  one level in, and a team's icon stands over its members' marks. `--smoke` checks these
+  edges and that every conversation is one line high (`Sidebar.layoutProblems`).
+- "Show N more" says how many it adds.
+
+`--open=repo-folded` folds every repository for a capture of the labels alone.
+
+The supplied KetPlusMark PNG is the approved mark in the sidebar,
+Settings and transcript (`assets/ketplus-mark-v2.png`). Its 64/128 px derivatives
+use explicit `-64` / `-128` names so Qt cannot select a small `@2x` image for the
+1024 px source on Retina displays. The mark, its derivatives and the ketPlus / ketPlus
+Pro lockups are trademarks, all rights reserved; no licence is granted, and the CC BY
+4.0 text in `assets/` covers the Két Symbol only (see [TRADEMARKS.md](../../TRADEMARKS.md)).
+
+The names ketPlus and ketPlus Pro are trademarks and are not licensed. The Mermaid renderings use
+the Két Mermaid theme from Két Design System (MIT,
+`core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
+
+## Approved brand reference
+
+Open **Brand** in the sidebar (`--screen=brand`). It compares Lite/iOS and Pro at
+17, 32 and 64 px on light and dark backgrounds, the mark at 16–128 px, 60 pt iOS
+icon tiles. Jay approved the new mark and **`ketPlus`** casing on 2026-11-12
+(team decision D-5). The wordmark uses Bold 700 and the mark is 1.45× the
+wordmark pixel size so the icon has more presence.
+
+The supplied KetPlusMark PNG is cropped to artwork bounds (alpha ≥ 8/255 ignores
+near-transparent isolated noise), centred in a square with a 4% margin on each
+side of the final square (rounded to whole pixels), and resampled to 1024, 128
+and 64 px. The artwork's hue is shifted from
+its original hue to the interface accent blue (hue 228.7°, the kit's `accent-text`); only
+hue changes, saturation, value and alpha are kept, and all three sizes come from
+the one 1024 px master.
+
+`BrandLockup` owns mark geometry and wordmark spacing. KÉT Sans Bold (700,
+registered by Qt as `KET Sans`) is embedded; smoke checks the resolved family,
+Bold face and weight. `ket` follows the main text colour, `Plus` the kit's
+`accent-text` token (`#1238DB` light, 7.4:1 on the sidebar `#F7F5F5`; `#9EB5FF`
+dark, 8.65:1 on `#171B20`), with −0.015 em letter spacing. Pro uses KÉT Sans Bold (700) at 0.6×,
+a transparent rounded frame with a 1.5 px stroke scaled with interface zoom,
+0.35 em horizontal / 0.12 em vertical padding, and a 0.3 em wordmark gap.
+The frame and Pro text use the same token; there is no separate brand colour.
+
+The Brand navigation entry retains the approved lockup specimens.
+The badge is centred on the wordmark’s x-height; its fractional
+stroke disables pixel alignment to preserve 1.5 px at 100% zoom. Jay’s direct
+review changed the original Black 900 requirement to Bold 700 and increased the
+mark relative to the wordmark. A further review tightened the icon-to-wordmark
+gap from 0.35× to 0.12× mark height. The unused Black face is no longer embedded.
+
+
+Agent message cards share the same bordered surface in both directions. Incoming
+headers use `From @agent/NNNN · Title · Provider`, or the system/team name;
+outgoing headers retain Message/Reply/Notice to. Bodies are selectable plain text,
+collapsed to four lines with explicit Expand/Collapse controls. Task links stay directly available in the collapsed card. Structured team
+details and task links appear on expansion. Owner input keeps its user bubble.

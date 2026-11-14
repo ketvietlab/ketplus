@@ -7,6 +7,9 @@
 #include "atlas/AtlasTab.h"
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
+#include "machine/MachineComposition.h"
+#include "machine/MachineConversationActions.h"
+#include "machine/MachineWorkspaceView.h"
 #include "workspace/AtlasIndex.h"
 
 #include "agent/AgentSessionManager.h"
@@ -90,7 +93,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     repositoryLookupPool_.setMaxThreadCount(2);
     theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
                              appearanceSettings_.interfaceZoomPercent);
-    setWindowTitle(QStringLiteral("KétPlus Pro"));
+    setWindowTitle(QStringLiteral("ketPlus Pro"));
     atlasIndex_ = new AtlasIndex(this);
     connect(atlasIndex_, &AtlasIndex::changed, this, &MainWindow::populateSpotlight);
     refreshAtlasIndex();
@@ -150,19 +153,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(activityBar_, &ActivityBar::quickSearchRequested, this, &MainWindow::showSpotlight);
     connect(activityBar_, &ActivityBar::repositoryRequested, this, &MainWindow::chooseFolder);
-    connect(activityBar_, &ActivityBar::machineRequested, this, [this](const QString& id) {
-        if (id == selectedMachineId_)
-            return;
-        selectedMachineId_ = id;
-        activityBar_->setRemoteMachineSelected(id != QStringLiteral("local"));
-        if (id == QStringLiteral("local")) {
-            refreshSidebarRepositories();
-            setAgentWorkspaceVisible(true);
-        } else {
-            activityBar_->setRepositories({});
-            setRemoteWorkspaceVisible(true);
-        }
-    });
+    connect(activityBar_, &ActivityBar::machineRequested, this, &MainWindow::selectMachine);
     connect(activityBar_, &ActivityBar::repositoryActivationRequested, this,
             [this](const QString& path) {
                 // Open in this window; the sidebar spans repositories.
@@ -171,6 +162,12 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             });
     connect(activityBar_, &ActivityBar::newConversationRequested, this,
             [this](const QString& repositoryPath) {
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    setMachineWorkspaceVisible(true);
+                    if (machines_->shown())
+                        machines_->existingView()->startNewConversation(repositoryPath);
+                    return;
+                }
                 // The action is offered on every repository; open another one in this window.
                 if (!repositoryPath.isEmpty() &&
                     normalizedPath(repositoryPath) != activeSidebarRepository())
@@ -182,11 +179,19 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             &MainWindow::openSidebarConversation);
     connect(activityBar_, &ActivityBar::conversationContextMenuRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    showMachineConversationMenu(machines_, conversationId, this);
+                    return;
+                }
                 ensureAgentWorkspace();
                 showAgentConversationContextMenu(normalizedPath(worktreePath), conversationId);
             });
     connect(activityBar_, &ActivityBar::conversationRenameRequested, this,
             [this](const QString& worktreePath, const QString& conversationId) {
+                if (selectedMachineId_ != QStringLiteral("local")) {
+                    renameMachineConversation(machines_, conversationId, this);
+                    return;
+                }
                 ensureAgentWorkspace();
                 // Leave the double-click event before running the modal dialog.
                 QMetaObject::invokeMethod(
@@ -197,6 +202,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                     Qt::QueuedConnection);
             });
     connect(activityBar_, &ActivityBar::settingsRequested, this, &MainWindow::showSettings);
+    setupTeams();
+    setupSchedules();
     // The status bar shows only with the editor; elsewhere its messages show as the mock's
     // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
@@ -475,7 +482,7 @@ void MainWindow::openFile(const QString& filePath) {
         initialEditor->deleteLater();
     }
 
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);
@@ -512,7 +519,7 @@ void MainWindow::openFolder(const QString& folderPath) {
         setExplorerVisible(true);
     }
     syncAgentWorkspaceContext(keepAgentWorkspace);
-    setWindowTitle(QStringLiteral("%1 — KétPlus Pro").arg(folder.fileName()));
+    setWindowTitle(QStringLiteral("%1 — ketPlus Pro").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
     if (!suppressWorkspaceRestore_ && !restoringWorkspaceState_) {

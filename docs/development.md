@@ -43,6 +43,34 @@ replacement bundles advance it so an older installed daemon can upgrade when its
 - `KETPLUS_USE_COMPILER_CACHE`: inherited from KetPlus CM and enabled by
   default. CMake selects `sccache`, then `ccache`, if installed.
 
+### Copilot CLI policy helpers
+
+`apps/daemon/src/providers/CopilotCli` implements the discovery, launch and
+authentication policy in [ADR 0120](decisions/0120-github-copilot-acp-provider.md).
+The daemon parser accepts `--copilot <absolute-path>` into
+`DaemonConfiguration::copilotExecutable`; `KETPLUS_COPILOT` is the next discovery
+override. Invalid overrides fail explicitly. Empty and relative `PATH` entries
+are skipped so discovery does not execute a CLI from the conversation's cwd.
+The resolver takes platform, environment, home and a runnable-file callback;
+`systemDiscoveryContext()` supplies the real host inputs.
+
+The launch result contains `program`, `arguments`, `nativeArguments` and an
+error. On Windows the adapter must apply `nativeArguments` through
+`QProcess::setNativeArguments` as well as the normal arguments: Qt's normal
+argument quoting does not implement `cmd.exe` parsing. Pass the daemon's
+environment to the builder so wrappers resolve under `SystemRoot/System32`,
+without searching the conversation's cwd. Command wrappers disable
+AutoRun and delayed expansion, quote the path, and reject percent/quote
+characters in that path rather than expanding them. See
+[Qt's process documentation](https://doc.qt.io/qt-6/qprocess.html#setNativeArguments)
+and [Microsoft's cmd reference](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd).
+
+These helpers and the configuration field do not register a Copilot provider or
+start a CLI. Adapter integration follows separately. Authentication detection
+requires an explicit diagnostic; an exit code or generic ACP server error alone
+is insufficient. stderr diagnostics are considered only after a nonzero exit.
+The guidance contains no copied provider output or credentials.
+
 Build only the affected target during iteration:
 
 ```sh
@@ -107,13 +135,32 @@ The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external
 integrations and are deliberately not copied into the application.
 
-Build an unsigned local DMG with:
+Build an unsigned production DMG with the `release` preset. This preset enables
+`KETPLUS_PRODUCTION_RELEASE=ON` and targets `https://api.ketplus.app`:
 
 ```sh
 cmake --preset release
 cmake --build --preset release
 cmake --build build/release --target package
 ```
+
+For a staging/QA DMG, use a new build directory and explicitly disable production
+mode and select the staging URL:
+
+```sh
+cmake --preset release -B build/staging-release \
+  -DKETPLUS_PRODUCTION_RELEASE=OFF \
+  -DKETPLUS_CONTROL_URL=https://ketplus-staging.ketviet.vn
+cmake --build build/staging-release
+cmake --build build/staging-release --target package
+```
+
+Do not reuse a production build directory for staging/QA. The control URL is
+cached: turning `KETPLUS_PRODUCTION_RELEASE` off does not reset the production URL
+already selected in that directory. Use a fresh directory and an explicit URL for
+each deployment, then verify the bundled daemon's `--build-info` before use.
+Any QA launch must also follow the native-settings isolation requirements in
+[`testing.md`](testing.md).
 
 For a macOS app-only build (no DMG), use
 `cmake --build --preset release --target ketplus_bundle_browser_runtime` so the app
@@ -160,7 +207,7 @@ preserves npm's relative symlinks so the bundle remains
 relocatable after the temporary install directory is removed. The macOS bundle
 layout check rejects broken or absolute links inside the sidecar.
 
-The sidecar pins Claude Agent SDK 0.3.289 in both package metadata and the lockfile.
+The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockfile.
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 
@@ -181,7 +228,11 @@ Configuring then downloads the pinned Sparkle release (set
 keys do not match the configuration. Never pass the private key to CMake.
 `packaging/macos/publish-update.sh` archives an installed app and regenerates
 the appcast with the key from the Keychain or from a file outside the
-repository. It does not upload. Without a feed, Settings → Updates says that
+repository (including resolving the final symlink). Supply explicit channel and
+architecture inputs and matching scoped output/feed paths; release mode requires
+Developer ID signing and a stapled ticket. See `docs/release-process.md` and the
+native-settings isolation procedure in `docs/testing.md` before local QA. It does not
+upload. Without a feed, Settings → Updates says that
 the build is not configured.
 
 The direct-download install flow is: open the KetSuite-provided DMG, drag
@@ -232,6 +283,30 @@ git diff --check
 
 Do not mechanically format vendored files or unrelated source. Check the final
 diff for generated data, absolute paths, and credentials.
+
+## Team translations
+
+A team works in English or Vietnamese (ADR 0125). English is the source text; the
+Vietnamese text is `modules/remote/translations/ketplus_teams_vi.ts`, which `lrelease`
+compiles into the build (Qt `LinguistTools`). After adding or changing a team text, in
+`apps/desktop/src/teams` (`tr()`) or `apps/daemon/src/teams`
+(`say(team.language, QT_TRANSLATE_NOOP("Team", "..."))`), refresh the catalog:
+
+```sh
+cmake --build <build-dir> --target ketplus_team_language_lupdate
+```
+
+It keeps every translation already written, drops texts no source uses, and prints how many
+texts have none. Write those in the `.ts` file (Qt Linguist or an editor), then run
+`ketplus_team_page_language_tests` and `ketplus_team_language_tests` offscreen.
+The source-freshness check extracts the texts again without rewriting the catalog:
+
+```sh
+QT_QPA_PLATFORM=offscreen ctest --test-dir <build-dir> -R ketplus_team_translation_catalog_tests --output-on-failure
+```
+
+It fails for a newly added source text without a finished translation, even if the
+checked-in catalog has not been refreshed, or for a stale catalog entry.
 
 ## External tools
 

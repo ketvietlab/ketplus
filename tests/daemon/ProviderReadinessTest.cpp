@@ -87,8 +87,13 @@ class ProviderReadinessTest final : public QObject {
         ProviderReadiness readiness;
         const auto claude = runtime("claude", compat::SupportStatus::Bundled);
         QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        // A subscription sign-in reports "none" as well, so it changes nothing.
         readiness.observeClaudeSource(QStringLiteral("none"));
-        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("signed_out"));
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("ready"));
+        readiness.observeClaudeSource(QStringLiteral("none"));
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("ready"));
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("signed_out"));
         readiness.observeClaudeSource(QStringLiteral("/login managed key"));
         QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("ready"));
         const QString expired = QStringLiteral(
@@ -233,6 +238,11 @@ class ProviderReadinessTest final : public QObject {
                                    QStringLiteral("Cursor blocked this model for the Cursor Agent "
                                                   "CLI account.")),
                  QStringLiteral("plan_blocked"));
+        QCOMPARE(providerErrorCode(QStringLiteral("cursor"), none,
+                                   QStringLiteral("Your team has reached its usage limit Please "
+                                                  "reach out to an admin, or return on "
+                                                  "11/15/2026 when your limit resets.")),
+                 QStringLiteral("limit_reached"));
         QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
                                    QStringLiteral("Claude Agent SDK sidecar was not found.")),
                  QStringLiteral("provider_unavailable"));

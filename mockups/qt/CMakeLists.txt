@@ -8,18 +8,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets LinguistTools)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
 
-# The kit, pinned to a merged develop commit. FETCHCONTENT_SOURCE_DIR_KETQT points at a
-# local checkout instead. KetQt::Widgets is only for ket::printImage(), the image viewer's
-# Print: the system print dialog is a widget, as in the app.
+# Match the app pin: develop includes #55 (multi-line fields/mentions) and #56
+# (toast bottom avoidance used by this mock). FETCHCONTENT_SOURCE_DIR_KETQT
+# points at a local checkout instead. KetQt::Widgets provides ket::printImage():
+# the image viewer uses the system widget print dialog, as in the app.
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 868c6ffed7303bf05fe1a75a9d9d94edb75df0f0 # ket-qt PR #38 (centred status items)
+    GIT_TAG 652685a8e36e95823011b93eb1f24113e41be7fa # Same revision as core/cmake/Dependencies.cmake
 )
 FetchContent_MakeAvailable(ketqt)
 
@@ -46,15 +47,22 @@ qt_add_executable(ketplus_qt_mock MACOSX_BUNDLE src/main.cpp src/MockController.
                   src/MockController.cpp)
 set_target_properties(ketplus_qt_mock PROPERTIES OUTPUT_NAME "KetPlusMock")
 
-file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml)
+# Share T-56's product wording; keep only additional mock copy in the local catalog.
+qt_add_lrelease(TS_FILES ../../modules/remote/translations/ketplus_teams_vi.ts
+                        translations/mock_teams_vi.ts
+                QM_FILES_OUTPUT_VARIABLE mock_team_qm_files)
+qt_add_resources(ketplus_qt_mock mock_team_translations
+    PREFIX "/mock/i18n" BASE "${CMAKE_CURRENT_BINARY_DIR}" FILES ${mock_team_qm_files})
+
+file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml qml/*.js)
 set_source_files_properties(qml/Fixtures.qml qml/TranscriptFixtures.qml PROPERTIES
                             QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(ketplus_qt_mock
     URI KetPlusMock
     VERSION 1.0
     QML_FILES ${mock_qml}
-    RESOURCES assets/ketplus-mark.svg assets/ketplus-mark-bare-dark.svg
-              assets/ketplus-mark-bare-light.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
+    RESOURCES assets/ketplus-mark-v2.png assets/ketplus-mark-v2-64.png assets/ketplus-mark-v2-128.png
+              assets/screenshot-sidebar.png assets/screenshot-editor.png
               assets/screenshot-settings.png
               assets/mermaid/shared-clock-light@2x.png assets/mermaid/shared-clock-dark@2x.png
               assets/mermaid/agent-turn-light@2x.png assets/mermaid/agent-turn-dark@2x.png
@@ -94,3 +102,39 @@ qt_add_resources(ketplus_qt_mock mock_docs
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
                                               Qt6::Qml Qt6::Test Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
+
+# Run the mock's existing deterministic QML model suites through CTest.
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME mock_team_copy_catalog
+             COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_team_copy.py")
+    add_test(NAME mock_team_language
+             COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --state=vi --check-state)
+    set_tests_properties(mock_team_copy_catalog mock_team_language PROPERTIES
+                         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
+                 HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
+    foreach(suite ContentTabsModel PlanRunModel ScheduleRules)
+        add_test(NAME mock_${suite}
+                 COMMAND "${KETPLUS_MOCK_QMLTESTRUNNER}" -input
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_${suite}.qml")
+        set_tests_properties(mock_${suite} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+    endforeach()
+    foreach(state empty policies)
+        add_test(NAME mock_schedule_${state}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=schedules --state=${state} --check-state)
+        set_tests_properties(mock_schedule_${state}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    endforeach()
+    foreach(state schedule-new schedule-repeat schedule-ready schedule-existing schedule-more schedule-at schedule-weekly)
+        add_test(NAME mock_${state}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=workspace --state=${state} --size=1024x640 --check-state)
+        set_tests_properties(mock_${state}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    endforeach()
+    add_test(NAME mock_scheduled_team_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --state=scheduled --check-state)
+    set_tests_properties(mock_scheduled_team_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    foreach(panel new-team-repeat new-team-members)
+        add_test(NAME mock_${panel}_startup COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=teams --open=${panel} --check-state)
+        set_tests_properties(mock_${panel}_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    endforeach()
+    add_test(NAME mock_smoke COMMAND $<TARGET_FILE:ketplus_qt_mock> --smoke)
+    set_tests_properties(mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+endif()

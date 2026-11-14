@@ -212,6 +212,129 @@ class WorkReportTest final : public QObject {
     }
 
     // Closing an item drops a next step the call does not repeat; it would read as work left.
+    // A long conversation forgets its keys. The answer lists every open item, newest first,
+    // marks the ones no call changed for staleTurns, and asks the agent to reconcile them.
+    void theAnswerListsOpenItemsAndMarksStaleOnes() {
+        work_report::Merge first = work_report::merge(
+            {},
+            call({item("first-assignments", "waiting"), item("t-13-signin", "active"),
+                  item("t-12", "done", {{"evidence", "PR #80 merged"}})}),
+            2);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        const work_report::Merge later = work_report::merge(
+            first.ledger, call({item("t-13", "active", {{"title", "T-13 sign-in"}})}),
+            2 + work_report::staleTurns);
+        QVERIFY2(later.error.isEmpty(), qPrintable(later.error));
+        const QJsonObject answer = work_report::summary(later);
+        QCOMPARE(answer.value("open").toInt(), 3);
+        QCOMPARE(answer.value("stale").toInt(), 2);
+        const QJsonArray listed = answer.value("open_items").toArray();
+        QCOMPARE(listed.size(), 3);
+        QCOMPARE(listed.at(0).toObject().value("key").toString(), "t-13");
+        QVERIFY(!listed.at(0).toObject().contains("stale"));
+        QCOMPARE(listed.at(1).toObject().value("key").toString(), "first-assignments");
+        QVERIFY(listed.at(1).toObject().value("stale").toBool());
+        QCOMPARE(listed.at(1).toObject().value("updated_turn").toInteger(), 2);
+        QVERIFY(answer.value("reconcile").toString().contains("Never add a new key"));
+        // Finished work is listed too, so it is not reported again under a new key.
+        const QJsonArray done = answer.value("done_items").toArray();
+        QCOMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).toObject().value("key").toString(), "t-12");
+        QVERIFY(answer.value("reconcile").toString().contains("done_items"));
+        // With nothing open, only the finished items are left to keep in mind.
+        const work_report::Merge closed = work_report::merge(
+            later.ledger,
+            call({item("t-13", "done", {{"evidence", "PR #77 merged"}}),
+                  item("first-assignments", "cancelled"), item("t-13-signin", "cancelled")}),
+            30);
+        const QJsonObject closedAnswer = work_report::summary(closed);
+        QCOMPARE(closedAnswer.value("open_items").toArray().size(), 0);
+        QCOMPARE(closedAnswer.value("done_items").toArray().at(0).toObject().value("key"), "t-13");
+        QVERIFY(!closedAnswer.value("reconcile").toString().contains("open_items"));
+        // An empty report has nothing to reconcile.
+        const work_report::Merge cancelled =
+            work_report::merge({}, call({item("gone", "cancelled")}), 1);
+        QVERIFY(!work_report::summary(cancelled).contains("reconcile"));
+    }
+
+    // An item records the turn it was closed in; rewording it later keeps that turn, reopening
+    // it drops it. The answer lists finished items by that turn, most recent first.
+    void closedItemsKeepTheTurnTheyFinishedIn() {
+        const auto first = work_report::merge(
+            {}, call({item("a", "active"), item("b", "done", {{"evidence", "PR #1"}})}), 4);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        QVERIFY(!found(first.ledger, "a").contains("closed_turn"));
+        QCOMPARE(found(first.ledger, "b").value("closed_turn").toInteger(), 4);
+        const auto finished =
+            work_report::merge(first.ledger, call({item("a", "done", {{"evidence", "PR #2"}})}), 7);
+        QCOMPARE(found(finished.ledger, "a").value("closed_turn").toInteger(), 7);
+        const auto reworded = work_report::merge(
+            finished.ledger, call({item("b", "done", {{"evidence", "PR #1 merged"}})}), 9);
+        QCOMPARE(found(reworded.ledger, "b").value("closed_turn").toInteger(), 4);
+        QCOMPARE(found(reworded.ledger, "b").value("updated_turn").toInteger(), 9);
+        const QJsonArray done = work_report::summary(reworded).value("done_items").toArray();
+        QCOMPARE(done.at(0).toObject().value("key").toString(), "a");
+        QCOMPARE(done.at(1).toObject().value("key").toString(), "b");
+        const auto reopened = work_report::merge(reworded.ledger, call({item("a", "active")}), 10);
+        QVERIFY(!found(reopened.ledger, "a").contains("closed_turn"));
+    }
+
+    // The same work reported under two keys: the item that replaces the others stands, the
+    // replaced open ones are cancelled with replaced_by and stop counting. A replaced done item
+    // keeps its status and evidence, but is marked and no longer counted or listed.
+    void replacesMergesTheSameWorkUnderAnotherKey() {
+        const work_report::Merge first = work_report::merge(
+            {},
+            call({item("t-13-signin", "waiting",
+                       {{"next", QJsonObject{{"action", "Review"}, {"owner", "user"}}},
+                        {"remaining", "Review"}}),
+                  item("t-12-old", "done", {{"evidence", "merged"}})}),
+            3);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        const work_report::Merge merged = work_report::merge(
+            first.ledger,
+            call({item("t-13", "active", {{"replaces", QJsonArray{"t-13-signin", "t-12-old"}}})}),
+            9);
+        QVERIFY2(merged.error.isEmpty(), qPrintable(merged.error));
+        QJsonObject replaced, kept;
+        for (const QJsonValue& value : merged.ledger.value("items").toArray()) {
+            if (value.toObject().value("key") == "t-13-signin")
+                replaced = value.toObject();
+            if (value.toObject().value("key") == "t-12-old")
+                kept = value.toObject();
+        }
+        QCOMPARE(replaced.value("status").toString(), "cancelled");
+        QCOMPARE(replaced.value("replaced_by").toString(), "t-13");
+        QVERIFY(!replaced.contains("next"));
+        QVERIFY(!replaced.contains("remaining"));
+        QCOMPARE(replaced.value("updated_turn").toInteger(), 9);
+        QCOMPARE(kept.value("status").toString(), "done");
+        QCOMPARE(kept.value("evidence").toString(), "merged");
+        QCOMPARE(kept.value("replaced_by").toString(), "t-13");
+        const QJsonObject answer = work_report::summary(merged);
+        QCOMPARE(answer.value("open").toInt(), 1);
+        QCOMPARE(answer.value("done").toInt(), 0);
+        QCOMPARE(answer.value("total").toInt(), 1);
+        QVERIFY(answer.value("done_items").toArray().isEmpty());
+        // Replacing it again changes nothing.
+        const auto again = work_report::merge(
+            merged.ledger, call({item("t-13", "active", {{"replaces", QJsonArray{"t-12-old"}}})}),
+            10);
+        QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+        QCOMPARE(again.updated, 0);
+        // A key the report does not have, or one the same call reports, is refused in words.
+        QVERIFY(
+            work_report::merge(
+                first.ledger, call({item("t-13", "active", {{"replaces", QJsonArray{"nope"}}})}), 9)
+                .error.contains("is not in the report"));
+        QVERIFY(work_report::merge(
+                    first.ledger,
+                    call({item("t-13", "active", {{"replaces", QJsonArray{"t-13-signin"}}}),
+                          item("t-13-signin", "active")}),
+                    9)
+                    .error.contains("which this call also reports"));
+    }
+
     void closingAnItemClearsItsStaleNextStep() {
         const auto first = work_report::merge(
             {},
@@ -526,7 +649,7 @@ class WorkReportTest final : public QObject {
               QJsonObject{{"name", "work_report"}, {"arguments", call({item("a", "active")})}}}},
             daemon);
         QVERIFY(!answer.value("result").toObject().value("isError").toBool());
-        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        // tools/list asks whoami whether to add the team tools (ADR 0114).
         QCOMPARE(operations, (QStringList{"agents.whoami", "agents.work_report"}));
         QVERIFY(AgentBroker::isOperation("agents.work_report"));
     }

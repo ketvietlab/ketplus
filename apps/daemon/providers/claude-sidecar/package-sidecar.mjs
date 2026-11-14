@@ -40,7 +40,7 @@ function runNpm(args, options) {
   execFileSync(npmCli || "npm", args, options);
 }
 
-const required = ["session-usage.mjs", "authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "package.json", "package-lock.json"];
+const required = ["session-usage.mjs", "authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "review-guard.mjs", "package.json", "package-lock.json"];
 for (const name of required) {
   const source = path.join(sidecarDir, name);
   if (!fs.existsSync(source)) {

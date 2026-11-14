@@ -1,4 +1,6 @@
 #include "app/MainWindow.h"
+#include "app/theme/SchemeQuickPicker.h"
+#include "ui/AboutDialog.h"
 
 #include "editor/DocumentFormatControls.h"
 
@@ -30,7 +32,6 @@
 #include <QSettings>
 #include <QShortcut>
 
-#include <ScintillaMessages.h>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -39,6 +40,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <ScintillaMessages.h>
 
 #include <algorithm>
 #include <functional>
@@ -60,8 +62,7 @@ void MainWindow::createActions() {
     connect(openFolderAction, &QAction::triggered, this, &MainWindow::chooseFolder);
 
     recentFoldersMenu_ = fileMenu->addMenu(QStringLiteral("Open Recent Folder"));
-    connect(recentFoldersMenu_, &QMenu::aboutToShow, this,
-            &MainWindow::rebuildRecentFoldersMenu);
+    connect(recentFoldersMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentFoldersMenu);
 
     recentFilesMenu_ = fileMenu->addMenu(QStringLiteral("Open Recent File"));
     connect(recentFilesMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentFilesMenu);
@@ -183,7 +184,7 @@ void MainWindow::createActions() {
     };
     const auto addViewOption = [this](QMenu* menu, const QString& label,
                                       const QKeySequence& shortcut,
-                                      bool EditorViewOptions::*field) {
+                                      bool EditorViewOptions::* field) {
         auto* action = menu->addAction(label);
         action->setCheckable(true);
         action->setChecked(viewOptions_.*field);
@@ -201,7 +202,8 @@ void MainWindow::createActions() {
     addEditorAction(lineMenu, QStringLiteral("&Duplicate Line"),
                     QKeySequence(QStringLiteral("Ctrl+Shift+D")),
                     [](EditorWidget& editor) { editor.duplicateLines(); });
-    addEditorAction(lineMenu, QStringLiteral("Move Line &Up"), QKeySequence(QStringLiteral("Alt+Up")),
+    addEditorAction(lineMenu, QStringLiteral("Move Line &Up"),
+                    QKeySequence(QStringLiteral("Alt+Up")),
                     [](EditorWidget& editor) { editor.moveLinesUp(); });
     addEditorAction(lineMenu, QStringLiteral("Move Line Dow&n"),
                     QKeySequence(QStringLiteral("Alt+Down")),
@@ -345,8 +347,7 @@ void MainWindow::createActions() {
     sourceControlAction_ = gitMenu_->addAction(QStringLiteral("Source Control"));
     sourceControlAction_->setCheckable(true);
     sourceControlAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+G")));
-    connect(sourceControlAction_, &QAction::toggled, this,
-            &MainWindow::setSourceControlVisible);
+    connect(sourceControlAction_, &QAction::toggled, this, &MainWindow::setSourceControlVisible);
 
     gitMenu_->addSeparator();
     viewDiffAction_ = gitMenu_->addAction(QStringLiteral("View Current File Diff"));
@@ -501,10 +502,10 @@ void MainWindow::createActions() {
         this, {.document = [this] { return documentOwner(); },
                .restyle =
                    [this](EditorWidget* editor) {
-                       editor->applyTheme(theme_.palette());
+                       editor->applyColorScheme(theme_.colorScheme());
                        if (editor == splitSource_ && splitEditor_ != nullptr) {
                            splitEditor_->shareDocumentWith(*editor);
-                           splitEditor_->applyTheme(theme_.palette());
+                           splitEditor_->applyColorScheme(theme_.colorScheme());
                        }
                    },
                .reopened =
@@ -519,6 +520,11 @@ void MainWindow::createActions() {
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
+    auto* schemeAction = appearanceMenu->addAction(tr("Color Scheme…"));
+    schemeAction->setObjectName(QStringLiteral("selectColorScheme"));
+    connect(schemeAction, &QAction::triggered, this,
+            [this] { showColorSchemePicker(theme_, this); });
+    appearanceMenu->addSeparator();
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
 
@@ -540,5 +546,18 @@ void MainWindow::createActions() {
             action->setChecked(action->data().toInt() == static_cast<int>(theme_.mode()));
         }
     });
+
+    // About sits in a trailing Help menu; on macOS, AboutRole moves it into the application
+    // menu instead, so it stays in Edit there rather than leaving an empty Help menu.
+#ifdef Q_OS_MACOS
+    QMenu* aboutMenu = editMenu;
+#else
+    QMenu* aboutMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+#endif
+    auto* aboutAction = aboutMenu->addAction(QStringLiteral("About ketPlus"));
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this,
+            [this] { showAboutDialog(this, BrandLockup::Edition::Lite); });
 }
 } // namespace ketplus

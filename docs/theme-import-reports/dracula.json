@@ -1,0 +1,2615 @@
+{
+    "counts": {
+        "approximated": 53,
+        "mapped": 47,
+        "skipped": 334
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "extension/theme/dracula.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extension/theme/dracula.json/$schema",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extension/theme/dracula.json/author",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extension/theme/dracula.json/dracula",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extension/theme/dracula.json/maintainers",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extension/theme/dracula.json/semanticClass",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.background",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.foreground",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.selectionBackground",
+            "targetPath": "editor.selection"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.foreground",
+            "targetPath": "editor.caret"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.background",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/editorLineNumber.foreground",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/titleBar.activeBackground",
+            "targetPath": "ui.chrome.appBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.background",
+            "targetPath": "ui.chrome.pageBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/panel.background",
+            "targetPath": "ui.chrome.panelBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/sideBarSectionHeader.background",
+            "targetPath": "ui.chrome.panelSubtle"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/foreground",
+            "targetPath": "ui.chrome.textMain"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/foreground",
+            "targetPath": "ui.chrome.textSecondary"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/panel.border",
+            "targetPath": "ui.chrome.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/focusBorder",
+            "targetPath": "ui.chrome.accent"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/errorForeground",
+            "targetPath": "ui.chrome.danger"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/sideBar.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/foreground",
+            "targetPath": "ui.sidebar.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/panel.border",
+            "targetPath": "ui.sidebar.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/input.background",
+            "targetPath": "ui.input.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/input.foreground",
+            "targetPath": "ui.input.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/input.border",
+            "targetPath": "ui.input.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/list.hoverBackground",
+            "targetPath": "ui.list.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/list.activeSelectionBackground",
+            "targetPath": "ui.list.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/list.activeSelectionForeground",
+            "targetPath": "ui.list.selectionFg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/foreground",
+            "targetPath": "ui.list.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.activeBackground",
+            "targetPath": "ui.tab.activeBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.activeForeground",
+            "targetPath": "ui.tab.activeFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.inactiveBackground",
+            "targetPath": "ui.tab.inactiveBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.inactiveForeground",
+            "targetPath": "ui.tab.inactiveFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/focusBorder",
+            "targetPath": "ui.focus.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/button.background",
+            "targetPath": "ui.button.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/button.foreground",
+            "targetPath": "ui.button.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/button.background",
+            "targetPath": "ui.button.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.background",
+            "targetPath": "terminal.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.foreground",
+            "targetPath": "terminal.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.foreground",
+            "targetPath": "terminal.cursor"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.selectionBackground",
+            "targetPath": "terminal.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBlack",
+            "targetPath": "terminal.ansi0"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiRed",
+            "targetPath": "terminal.ansi1"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiGreen",
+            "targetPath": "terminal.ansi2"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiYellow",
+            "targetPath": "terminal.ansi3"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBlue",
+            "targetPath": "terminal.ansi4"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiMagenta",
+            "targetPath": "terminal.ansi5"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiCyan",
+            "targetPath": "terminal.ansi6"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiWhite",
+            "targetPath": "terminal.ansi7"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightBlack",
+            "targetPath": "terminal.ansi8"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightRed",
+            "targetPath": "terminal.ansi9"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightGreen",
+            "targetPath": "terminal.ansi10"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightYellow",
+            "targetPath": "terminal.ansi11"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightBlue",
+            "targetPath": "terminal.ansi12"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightMagenta",
+            "targetPath": "terminal.ansi13"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightCyan",
+            "targetPath": "terminal.ansi14"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/terminal.ansiBrightWhite",
+            "targetPath": "terminal.ansi15"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/diffEditor.insertedTextBackground",
+            "targetPath": "diff.added"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extension/theme/dracula.json/colors/diffEditor.removedTextBackground",
+            "targetPath": "diff.removed"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBar.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBar.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBar.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBarBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/activityBarBadge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/badge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/badge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/breadcrumb.activeSelectionForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/breadcrumb.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/breadcrumb.focusForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/breadcrumb.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/breadcrumbPicker.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/button.secondaryBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/button.secondaryForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/button.secondaryHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/debugToolBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/dropdown.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/dropdown.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/dropdown.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.findMatchBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.findMatchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.findRangeHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.foldBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.hoverHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.lineHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.rangeHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.selectionHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.snippetFinalTabstopHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.snippetFinalTabstopHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.snippetTabstopHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.snippetTabstopHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.wordHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editor.wordHighlightStrongBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground2",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground3",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground4",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground5",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.foreground6",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorBracketHighlight.unexpectedBracket.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorCodeLens.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorError.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGroup.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGroupHeader.tabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGutter.addedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGutter.deletedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorGutter.modifiedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorHoverWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorHoverWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorIndentGuide.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorIndentGuide.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorLink.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorMarkerNavigation.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.addedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.currentContentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.deletedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.incomingContentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.infoForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.modifiedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.selectionHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.wordHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorOverviewRuler.wordHighlightStrongForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorRuler.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorSuggestWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorSuggestWidget.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorSuggestWidget.selectedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorWarning.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorWhitespace.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/editorWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/extensionButton.prominentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/extensionButton.prominentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/extensionButton.prominentHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/gitDecoration.conflictingResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/gitDecoration.deletedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/gitDecoration.ignoredResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/gitDecoration.modifiedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/gitDecoration.untrackedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/inlineChat.regionHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/input.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/inputOption.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/inputValidation.errorBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/inputValidation.infoBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/inputValidation.warningBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/list.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/list.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/list.focusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/list.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "extension/theme/dracula.json/colors/list.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/list.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/listFilterWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/listFilterWidget.noMatchesOutline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/listFilterWidget.outline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/merge.currentHeaderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/merge.incomingHeaderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/panelTitle.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/panelTitle.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/panelTitle.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekView.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewEditor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewEditor.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.fileForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.lineForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.selectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewResult.selectionForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewTitle.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewTitleDescription.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/peekViewTitleLabel.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/pickerGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/pickerGroup.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/progressBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/selection.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.checkboxBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.checkboxBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.checkboxForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.dropdownBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.dropdownBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.dropdownForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.headerForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.modifiedItemIndicator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.numberInputBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.numberInputBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.numberInputForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.textInputBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.textInputBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/settings.textInputForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/sideBarSectionHeader.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/sideBarTitle.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.debuggingBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.debuggingForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.noFolderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBar.noFolderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBarItem.prominentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBarItem.prominentHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBarItem.remoteBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/statusBarItem.remoteForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.activeBorderTop",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/tab.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/titleBar.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/titleBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/titleBar.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extension/theme/dracula.json/colors/walkThrough.embeddedEditorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/0/scope/emphasis",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/1/scope/strong",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/2/scope/header",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/3/scope/meta.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/3/scope/meta.diff.header",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/4/scope/markup.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/5/scope/markup.deleted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/6/scope/markup.changed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/7/scope/invalid",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/8/scope/invalid.deprecated",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/9/scope/entity.name.filename",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/10/scope/markup.error",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/11/scope/markup.underline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/12/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/13/scope/markup.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/14/scope/markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/15/scope/beginning.punctuation.definition.list.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/15/scope/beginning.punctuation.definition.quote.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/15/scope/punctuation.definition.link.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/16/scope/markup.inline.raw",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/16/scope/markup.raw.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/17/scope/markup.underline.link",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/17/scope/markup.underline.link.image",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/18/scope/meta.link.reference.def.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/18/scope/punctuation.definition.directive.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/18",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/19/scope/entity.name.directive.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/19/scope/markup.quote",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/20/scope/meta.separator.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/21/scope/fenced_code.block.language",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/21/scope/markup.raw.inner.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/21/scope/markup.fenced_code.block.markdown punctuation.definition.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/22/scope/punctuation.definition.constant.restructuredtext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/23/scope/markup.heading.markdown punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/23/scope/markup.heading.markdown punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/24/scope/meta.paragraph.markdown punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/24/scope/meta.paragraph.markdown punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/25/scope/markup.quote.markdown meta.paragraph.markdown punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/25/scope/markup.quote.markdown meta.paragraph.markdown punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported font effect (including strikethrough) omitted",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/26/fontStyle/normal",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/26",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/27/scope/variable.language punctuation.definition.variable.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/27",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/27",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/28/scope/entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/29/scope/punctuation.definition.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/29/scope/unused.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/29/scope/wildcard.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/29",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/30/scope/comment keyword.codetag.notation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/30/scope/comment.block.documentation keyword",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/30/scope/comment.block.documentation storage.type.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/31/scope/comment.block.documentation entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/32/scope/comment.block.documentation entity.name.type punctuation.definition.bracket",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/33/scope/comment.block.documentation variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/34",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/34",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/35",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/36/scope/entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/37",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/38",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39/scope/meta.function-call.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39/scope/meta.function-call.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39/scope/meta.function-call.static",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39/scope/meta.method-call.java meta.method",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39/scope/meta.method.groovy",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/39",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40/scope/entity.name.variable.parameter",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40/scope/meta.at-rule.function variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40/scope/meta.at-rule.mixin variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40/scope/meta.function.arguments variable.other.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40/scope/meta.selectionset.graphql meta.arguments.graphql variable.arguments.graphql",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/40",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/41/scope/meta.decorator variable.other.readwrite",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/41/scope/meta.decorator variable.other.property",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/42/scope/meta.decorator variable.other.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/43/scope/punctuation.definition.keyword",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/43",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/44",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/44",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/45/scope/meta.selector",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/46/scope/support",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/47/scope/support.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported font effect (including strikethrough) omitted",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/47/fontStyle/regular",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/47",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported font effect (including strikethrough) omitted",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/47/fontStyle/regular",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/47",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported font effect (including strikethrough) omitted",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/48/fontStyle/regular",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/48",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported font effect (including strikethrough) omitted",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/48/fontStyle/regular",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/48",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/constant.other.symbol.hashkey punctuation.definition.constant.ruby",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/entity.other.attribute-name.placeholder punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/entity.other.attribute-name.pseudo-class punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/entity.other.attribute-name.pseudo-element punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/meta.group.double.toml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/meta.group.toml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/meta.object-binding-pattern-variable punctuation.destructuring",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.colon.graphql",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.definition.block.scalar.folded.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.definition.block.scalar.literal.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.definition.block.sequence.item.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.definition.entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.function.swift",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.dictionary.key-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.hash",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.inheritance",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.key-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.key-value.mapping.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.namespace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.pointer-access",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.slice",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/string.unquoted.heredoc punctuation.definition.string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/support.other.chomping-indicator.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/49/scope/punctuation.separator.annotation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/meta.brace.round",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/meta.function-call punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.arguments.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.arguments.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.entity.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.entity.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.tag.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.type.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.definition.type.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.section.scope.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.section.scope.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/punctuation.terminator.expression.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/string.template meta.brace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50/scope/string.template punctuation.accessor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/50",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/meta.string-contents.quoted.double punctuation.definition.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.definition.interpolation.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.definition.interpolation.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.definition.template-expression.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.definition.template-expression.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.section.embedded.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.section.embedded.coffee",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.section.embedded.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.section.embedded.end source.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.section.embedded.end source.ruby",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/51/scope/punctuation.definition.variable.makefile",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/52/scope/entity.name.section.toml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/52/scope/entity.name.tag.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/52",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/52",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/53",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/54",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/55/scope/storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/55/scope/meta.implementation storage.type.objc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/55/scope/meta.interface-or-protocol storage.type.objc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/55/scope/source.groovy storage.type.def",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/meta.protocol-list.objc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/meta.return-type.objc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/source.go storage.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/source.groovy storage.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/source.java storage.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/source.powershell entity.other.attribute-name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56/scope/storage.class.std.rust",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/56",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/57/scope/meta.indexer.mappedtype.declaration entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/57/scope/meta.type.parameters entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/57",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/58",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/59",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/59",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/60/scope/punctuation.definition.group.capture.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/61/scope/string.regexp punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/61/scope/string.regexp punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/62/scope/punctuation.definition.character-class.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/63/scope/punctuation.definition.group.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/64/scope/punctuation.definition.group.assertion.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/64",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/65/scope/meta.assertion.look-ahead.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/66",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/67/scope/punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/67/scope/punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/68/scope/punctuation.support.type.property-name.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/68/scope/punctuation.support.type.property-name.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/69/scope/string.quoted.docstring.multi.python punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/69/scope/string.quoted.docstring.multi.python punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/69/scope/string.quoted.docstring.multi.python constant.character.escape",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/69",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/70/scope/support.variable.property",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/70",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/70",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/71/scope/meta.import variable.other.readwrite",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/71/scope/meta.variable.assignment.destructured.object.coffee variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/72/scope/meta.import variable.other.readwrite.alias",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/72/scope/meta.export variable.other.readwrite.alias",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/72/scope/meta.variable.assignment.destructured.object.coffee variable variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/73/scope/meta.selectionset.graphql variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/74/scope/meta.selectionset.graphql meta.arguments variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/75/scope/entity.name.fragment.graphql",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/75",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/meta.scope.for-loop.shell punctuation.definition.string.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/meta.scope.for-loop.shell punctuation.definition.string.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/meta.scope.for-loop.shell string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/punctuation.section.embedded.begin.tsx",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/punctuation.section.embedded.end.tsx",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/punctuation.section.embedded.begin.jsx",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/punctuation.section.embedded.end.jsx",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76/scope/punctuation.separator.list.comma.css",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/76",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/77/scope/source.shell variable.other",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/78/scope/support.constant",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/79/scope/meta.scope.prerequisites.makefile",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/80/scope/meta.attribute-selector.scss",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/81/scope/punctuation.definition.attribute-selector.end.bracket.square.scss",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/81/scope/punctuation.definition.attribute-selector.begin.bracket.square.scss",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/82/scope/meta.preprocessor.haskell",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/83/scope/log.error",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extension/theme/dracula.json/tokenColors/84/scope/log.warning",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Manifest uiTheme determines declared variant kind",
+            "sourcePath": "extension/theme/dracula.json/uiTheme",
+            "targetPath": "kind"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Lexilla uses shared roles, not TextMate scope stacks; rule order is parent first then child, later explicit fields override",
+            "sourcePath": "extension/theme/dracula.json",
+            "targetPath": "syntax"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Extension JavaScript, grammars, semantic token providers and UI contributions are never executed",
+            "sourcePath": "extension/theme/dracula.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Declared package license copied; no license verification is implied",
+            "sourcePath": "extension/package.json/license",
+            "targetPath": "metadata.license"
+        }
+    ]
+}

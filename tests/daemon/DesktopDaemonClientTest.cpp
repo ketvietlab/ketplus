@@ -106,10 +106,14 @@ class FakeDaemon final : public QObject {
     void answer(const QJsonObject& request, const QJsonObject& payload) {
         if (!current)
             return;
-        const QJsonObject envelope{
-            {QStringLiteral("correlation_id"), request.value(QStringLiteral("message_id"))},
-            {QStringLiteral("message_type"), request.value(QStringLiteral("message_type"))},
-            {QStringLiteral("payload"), payload}};
+        send({{QStringLiteral("correlation_id"), request.value(QStringLiteral("message_id"))},
+              {QStringLiteral("message_type"), request.value(QStringLiteral("message_type"))},
+              {QStringLiteral("payload"), payload}});
+    }
+
+    void send(const QJsonObject& envelope) {
+        if (!current)
+            return;
         const QByteArray body = QJsonDocument(envelope).toJson(QJsonDocument::Compact);
         QByteArray frame(4, Qt::Uninitialized);
         const auto size = static_cast<quint32>(body.size());
@@ -124,6 +128,8 @@ class FakeDaemon final : public QObject {
     QJsonArray capabilities;
     // Reported in the hello answer when set; an older version makes Desktop ask to replace it.
     QString daemonVersion;
+    // daemon.hello's host_key_fingerprint (ADR 0119), when set.
+    QString hostKeyFingerprint;
     bool listening{false};
     int connections{0};
     QPointer<QLocalSocket> current;
@@ -152,6 +158,8 @@ class FakeDaemon final : public QObject {
                                   {QStringLiteral("capabilities"), capabilities}};
                 if (!daemonVersion.isEmpty())
                     hello.insert(QStringLiteral("daemon_version"), daemonVersion);
+                if (!hostKeyFingerprint.isEmpty())
+                    hello.insert(QStringLiteral("host_key_fingerprint"), hostKeyFingerprint);
                 answer(request, hello);
                 if (afterHello)
                     afterHello(socket);
@@ -710,6 +718,70 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(ipc.connectionCount(), 1);
     }
 
+    void aChangedHostIdentityFailsClosedUntilItIsTrustedAgain() {
+        // ADR 0119 "Host key rotation": nothing queued may reach a machine whose daemon key is
+        // not the one this route trusted, and the client must not keep retrying it.
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        daemon.hostKeyFingerprint = QStringLiteral("rotated-key");
+        daemon.onRequest = [&daemon](const QJsonObject& request) {
+            daemon.answer(request, {{"ok", true}});
+        };
+        ketplus::remote::DaemonClient client;
+        client.setTrustedHostKeyFingerprint(QStringLiteral("trusted-key"));
+        QSignalSpy rejected(&client, &ketplus::remote::DaemonClient::hostIdentityRejected);
+        QString queuedError;
+        bool queuedAnswered = false;
+        client.call("session.list", {}, {}, 0, [&](const QJsonObject&, const QString& error) {
+            queuedAnswered = true;
+            queuedError = error;
+        });
+        QTRY_COMPARE_WITH_TIMEOUT(rejected.size(), 1, 5000);
+        QCOMPARE(rejected.first().first().toString(), QStringLiteral("rotated-key"));
+        QVERIFY(queuedAnswered);
+        QCOMPARE(queuedError, ketplus::remote::DaemonClient::identityRejectedReason());
+        QVERIFY(daemon.requests.isEmpty());
+        QVERIFY(!client.isReady());
+        QVERIFY(client.identityRejected());
+        // No retry loop against the unknown machine, and later calls fail at once.
+        const int connections = daemon.connections;
+        QTest::qWait(600);
+        QCOMPARE(daemon.connections, connections);
+        QString laterError;
+        client.call("session.list", {}, {}, 0,
+                    [&](const QJsonObject&, const QString& error) { laterError = error; });
+        QCOMPARE(laterError, ketplus::remote::DaemonClient::identityRejectedReason());
+        QVERIFY(daemon.requests.isEmpty());
+
+        // An explicit re-trust of the presented key connects again and requests flow.
+        client.setTrustedHostKeyFingerprint(QStringLiteral("rotated-key"));
+        QTRY_VERIFY_WITH_TIMEOUT(client.isReady(), 5000);
+        QCOMPARE(client.hostKeyFingerprint(), QStringLiteral("rotated-key"));
+        bool answered = false;
+        client.call("session.list", {}, {}, 0,
+                    [&](const QJsonObject& result, const QString& error) {
+                        answered = error.isEmpty() && result.value("ok").toBool();
+                    });
+        QTRY_VERIFY_WITH_TIMEOUT(answered, 5000);
+        QCOMPARE(rejected.size(), 1);
+    }
+
+    void aHelloWithoutAnIdentityIsRejectedWhenOneIsTrusted() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        ketplus::remote::DaemonClient client;
+        client.setTrustedHostKeyFingerprint(QStringLiteral("trusted-key"));
+        QSignalSpy rejected(&client, &ketplus::remote::DaemonClient::hostIdentityRejected);
+        client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&) {});
+        QTRY_COMPARE_WITH_TIMEOUT(rejected.size(), 1, 5000);
+        QVERIFY(rejected.first().first().toString().isEmpty());
+        QVERIFY(daemon.requests.isEmpty());
+    }
+
     void catalogRestartsForDeletionBehindCursorButDiscoveryReadsOnlyLiveSessions() {
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
@@ -1017,6 +1089,28 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!client.hasCapability(prefix + "read"));
         for (const auto& request : daemon.requests)
             QCOMPARE(request.value("message_type").toString(), "session.attach");
+    }
+
+    // ADR 0114: team.changed and team.removed carry no session and answer no request.
+    void teamEventsReachTheirOwnSignal() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        remote::DaemonClient client;
+        QTRY_VERIFY(client.isReady());
+        QSignalSpy teams(&client, &remote::DaemonClient::teamEventReceived);
+        QSignalSpy sessions(&client, &remote::DaemonClient::eventReceived);
+        daemon.send({{"message_type", "team.changed"},
+                     {"payload", QJsonObject{{"team", QJsonObject{{"id", "7"}}}}}});
+        daemon.send({{"message_type", "team.removed"}, {"payload", QJsonObject{{"team_id", "7"}}}});
+        QTRY_COMPARE(teams.size(), 2);
+        QCOMPARE(teams.at(0).at(0).toString(), QStringLiteral("team.changed"));
+        QCOMPARE(teams.at(0).at(1).toJsonObject().value("team").toObject().value("id").toString(),
+                 QStringLiteral("7"));
+        QCOMPARE(teams.at(1).at(0).toString(), QStringLiteral("team.removed"));
+        QCOMPARE(sessions.size(), 0);
+        QVERIFY(client.isReady());
     }
 
     void sentWritesAreFailedNotReplayedAfterDisconnect() {

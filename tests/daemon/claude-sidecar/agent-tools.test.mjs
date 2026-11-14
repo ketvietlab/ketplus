@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 // ADR 0027: the daemon's ketplus_agents server runs without a per-call prompt, only when injected.
 async function fixture(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'kp-agent-tools-'));
-  for (const name of ['session-usage.mjs', 'authentication.mjs', 'index.mjs', 'transcript.mjs', 'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs'])
+  for (const name of ['session-usage.mjs', 'authentication.mjs', 'index.mjs', 'transcript.mjs', 'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs', 'review-guard.mjs'])
     await copyFile(fileURLToPath(new URL(`../../../apps/daemon/providers/claude-sidecar/${name}`, import.meta.url)), path.join(dir, name));
   const sdk = path.join(dir, 'node_modules/@anthropic-ai/claude-agent-sdk');
   await mkdir(sdk, { recursive: true });

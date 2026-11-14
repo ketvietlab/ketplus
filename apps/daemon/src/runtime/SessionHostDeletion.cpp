@@ -19,9 +19,13 @@ std::optional<QJsonArray> threadsOf(const StoredSession& session) {
         const auto entry = provider.value().toObject();
         // Unknown fields may carry ownership in a newer format. Preserve them
         // for recovery instead of proving absence from a partial interpretation.
+        // `seen_cursor` is a read marker earlier daemons stored here; it names no thread.
         for (auto field = entry.begin(); field != entry.end(); ++field)
-            if (field.key() != "thread_id" && field.key() != "retired_thread_ids")
+            if (field.key() != "thread_id" && field.key() != "retired_thread_ids" &&
+                field.key() != "seen_cursor")
                 return std::nullopt;
+        if (entry.contains("seen_cursor") && !entry.value("seen_cursor").isDouble())
+            return std::nullopt;
         if (entry.contains("thread_id") && !entry.value("thread_id").isString())
             return std::nullopt;
         if (entry.contains("retired_thread_ids")) {

@@ -371,11 +371,16 @@ batch and retries from the same cursor, down to one event, and doubles it again
 after each accepted batch. Any other failed upload makes that session generation
 wait before its events are sent again, one second doubling on each consecutive
 failure: up to five minutes after a refusal (a 4xx other than 401, 408 and 429,
-such as `stale_generation` for a session the relay has deleted), and up to one
-minute when the relay cannot be reached or fails, a wait that the next successful
-heartbeat ends. New journal events do not shorten the wait; without it, every
+such as `stale_generation` for a session the relay has deleted), up to one hour
+after `409 event_cursor_gap` (the relay waits for a cursor this journal has
+already pruned, so retrying cannot fill the gap), and up to one minute when the
+relay cannot be reached or fails, a wait that the next successful heartbeat
+ends. New journal events do not shorten the wait; without it, every
 event of every session retried each refused upload. A 401 waits only for the next
-credential, and an accepted batch clears the wait. Streamed deltas and `item.completed` envelopes also
+credential, and an accepted batch clears the wait. The daemon remembers the
+cursor the relay accepted through for each session generation, so an upload
+pass (on every heartbeat and journaled event) skips sessions that are in
+flight, waiting, or have nothing newer without reading the journal. Streamed deltas and `item.completed` envelopes also
 carry a plaintext `itemKey` (a truncated SHA-256 of session, generation and
 item id, never the id itself), and a completion whose cloud payload holds the
 item's whole text carries `supersedesDeltas`, so the relay can drop the
@@ -585,7 +590,13 @@ for that session in the last 10 minutes is served from the worktree as it is
 now and answers with the requested revision, without running git again. Any
 other revision is recomputed with git before and after the read and fails as
 `stale_revision` when it differs. Heartbeats compute revisions on their own
-thread, so they never queue a phone's read.
+thread, so they never queue a phone's read. A heartbeat runs git for a worktree
+again only when a conversation on it recorded an event or changed state, git's
+`HEAD`, `logs/HEAD` or `index` file changed (found by walking up from the
+workspace, as for subfolders of a repository), or its revision is older than two minutes
+(edits made outside any conversation); otherwise it publishes the cached
+revision (`WorktreeRevisionCache`). A failed git run is not kept, so the next
+heartbeat tries again.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the
@@ -654,7 +665,7 @@ Protocol code should be transport-independent. The desktop and daemon may link
 
 ```text
 mobile app
-  -> Ketsuite Gateway
+  -> hosted gateway
      -> KetPlus Control API
      -> KetPlus Relay
         -> outbound daemon connection
@@ -693,8 +704,10 @@ contract and compatibility rules. This documents client behavior, not relay depl
 
 ### Relay address and sign-in
 
-The relay is the standalone KétPlus runtime (`https://ketplus-staging.ketviet.vn`
-by default), which serves `/v2/...` at the root of its host. A base URL may still
+Production packages compile `https://api.ketplus.app` into the desktop and daemon
+(`KETPLUS_PRODUCTION_RELEASE=ON`). Developer/staging defaults remain
+`https://ketplus-staging.ketviet.vn` until the separately approved staging cutover.
+The relay is the standalone KétPlus runtime, which serves `/v2/...` at the root of its host. A base URL may still
 carry a path, as the tenant gateway's `/native/ketplus` did before the staging
 cutover: every request and the `/v2/relay` socket append their path to that base
 (`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
@@ -927,8 +940,12 @@ without normalizing or deleting their stored values. Both the local source and
 retained catalog are checked; see
 [ADR 0057](decisions/0057-preserve-unsupported-provider-ownership.md).
 Cursor has no supported
-thread-deletion API in this integration: an unshared Cursor thread currently rejects
-permanent deletion with `provider_cleanup_unsupported` and retains its conversation.
+thread-deletion API in this integration, and its ACP sessions live in Cursor's own store
+outside KetPlus-owned paths. Deleting a Cursor conversation, or one of a provider this
+daemon does not know, removes its local transcript, journal entry, handoff and review
+scratch directories and media, and queues no provider cleanup: that provider's history
+stays with the provider, as the delete dialog says (T-60, 2026-11-12; it was rejected
+with `provider_cleanup_unsupported` before). Codex and Claude cleanup is unchanged.
 This change does not scan or delete already orphaned historical provider sessions.
 
 ## Agent messaging (ADR 0027)
@@ -947,7 +964,11 @@ reports a message the conversation sent (`sent`, with its delivery) or answered
 with its final message (`replied`), and held, failed and expired messages. While
 an automatic turn runs, the broker keeps its sender in memory: `session.list`
 adds it as `agent_turn` (`number`, `title`, `kind`) and the heartbeat seals it
-into the phone's session metadata as `agentTurn`, beside `number`.
+into the phone's session metadata as `agentTurn`, beside `number`. The sealed
+`awaitingAgentReply` Boolean reports current-generation, unexpired outbound
+`expect_reply` requests; the next heartbeat explicitly sends false after the
+last request is answered, fails or expires. It is distinct from `awaitingReply`
+(user input) and never appears in plaintext snapshots.
 
 The work report (ADR 0106) travels the same authenticated path:
 - the ketplus_agents server's `work_report` tool calls `agents.work_report`;
@@ -968,7 +989,11 @@ of the markdown matrix.
 broker diffs two snapshot trees of the worktree (written through a copy of its
 index) and sends the reviewer a `review` request with `expect_reply`. The
 reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
-in plan mode and denies every permission request. Review requests never join a
+in plan mode, and a `PreToolUse` hook refuses every tool but reading and the agents
+server, also against settings allow rules. A team's review round runs under
+the guard's verify profile instead (ADR 0067, `review-guard.mjs`): commands in the
+provider sandbox with writes limited to `review-scratch/<session id>` and the
+temporary directories, and a `PreToolUse` hook that refuses changes to the work. Review requests never join a
 user turn. The verdict line of the reply, whether it is the final answer or an
 `agents_send` reply, decides whether the working agent starts a fix turn or the
 reply is only recorded. `session.reviewer.get/set` are local Desktop operations;
@@ -1031,17 +1056,174 @@ a fully acknowledged session generation, verifies identity and SHA-256, and
 atomically replaces the replay manifest, cleans unreferenced chunks and advances
 projection revision. Images, legacy blobs and larger payloads remain retained.
 
-## Agent teams (ADR 0112)
+## Agent teams (ADR 0114)
 
 `apps/daemon/src/teams/` owns teams. `LocalJournalTeams.cpp` stores three tables:
 `teams` (one JSON document per team under a revision; `AUTOINCREMENT` ids are never
 reused), `team_members` (session id → team, the primary key enforces one team per
 conversation) and `team_updates` (the append-only log with its digest mark).
 `TeamRules` checks membership and task moves without side effects and returns the
-error code of ADR 0112; `TeamCoordinator` applies them, journals every change, emits
+error code of ADR 0114; `TeamCoordinator` applies them, journals every change, emits
 `team.changed` / `team.removed` to local clients, and decides which change starts a turn
 through its narrow `TeamHostPort` (conversation lookup, member scaffold, worktree
 switch, git queries, message posting through `AgentBroker`). `SessionHostTeams.cpp`
 dispatches the `team.*` requests of the `teams/1` and `teams.tasks/1` features and
 implements the port. Member agents reach the same coordinator through the `team_*`
 tools of the ketplus_agents server, with the caller's role checked by the daemon.
+What clients read is bounded by the size of the team, never by its age (ADR 0115):
+- `team.list` and `team.changed` carry the directory form (members only).
+- `team.get` carries a summary without history, with the newest page of Updates.
+- History, older Updates and older decisions come page by page.
+- `LocalIpcServer::send` replaces any message too large for one frame with a failure of
+  that request, or a `truncated` event, and never drops the client for it.
+
+### Consented SSH installer lifecycle
+
+ADR 0124 adds authenticated `daemon.stop_if_idle` for explicit uninstall of a
+receipt-owned SSH installation. It shares `daemon.prepare_upgrade`'s atomic
+`SessionHost::hasActiveSessions()` refusal and listener shutdown fence, without
+a replacement-version field. It cannot interrupt active turns or approvals.
+Upgrade continues to require a strictly newer `replacement_version`. An older
+daemon that lacks the stop operation refuses safely; the installer never sends
+a fake future version or kills an existing daemon as an uninstall fallback.
+
+## Scheduled runs (ADR 0126)
+
+The daemon owns schedules that send a prompt at a time or on a recurrence, including
+while the desktop window is closed. `daemon.hello` minor 1 advertises `schedules/1`
+now that the handlers below are registered.
+The shared documents are `ketplus::schedule::Schedule` and `Run` in
+`modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
+Wire names are snake_case. A schedule keeps its last 50 runs.
+
+`apps/daemon/src/protocol/ScheduleProtocol.h` validates the requests and events.
+Unknown fields, an empty prompt, a missing target and unknown enum values fail
+with a stable code (`unknown_field`, `empty_prompt`, `missing_target`,
+`invalid_enum`, and the codes in that header). The target is one of four kinds:
+
+- `conversation` — `{kind, session_id}`. The prompt is delivered into that conversation.
+- `new` — `{kind, workspace, provider, model, effort, isolated_worktree, title_template}`.
+  Each run creates a conversation. `workspace` is the repository path.
+- `team` — `{kind, team_id}`. The prompt is a work order for the team's leader. Any rule.
+- `team_start` — `{kind, team_id}`. No prompt, a `once` rule and `missed_policy` `run_once`.
+  This is the scheduled start of a team.
+
+`schedule.list` takes optional `target_kind`, `session_id` and `team_id` filters.
+The other requests are `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled`, `schedule.runNow` and `schedule.runs`
+(`id`, `limit` 1-50, `before_id`). Events are `schedule.changed`
+(`change`: `created`, `updated` or `deleted`, plus the schedule) and `schedule.run`
+(the run). `busy_policy` is `queue` or `skip`. `missed_policy` is `run_once` or `skip`.
+`rule` is an opaque JSON object string; the recurrence engine owns its schema, including
+daylight-saving behaviour (a skipped local time fires just after the gap; a repeated
+local time fires once, on the first occurrence). A team start's rule must say
+`"kind": "once"`.
+
+Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
+`has_more`, or `run`. A missing id is `schedule_not_found`. `schedule.runNow`
+calls `ScheduleRunner::runNow` through the journal store.
+
+### Runner
+
+`ScheduleRunner` (`apps/daemon/src/schedule/ScheduleRunner.h`) arms one timer for the
+earliest enabled `nextRunAt`. It re-arms when a schedule is created, updated, deleted
+or enabled, when a run completes, and when the clock jumps. It does not poll. The
+production alarm is a single one-shot `QTimer` (`Qt::PreciseTimer`) capped at 60
+minutes; a fire that is not yet due only re-arms the remainder. Tests inject the
+clock and the alarm.
+
+`SessionHost` starts the runner only after it has loaded conversations. A due or
+missed conversation therefore sees its session. A run still `running` when the
+process starts, and a `queued` run whose turn is gone (no session, or a session
+this startup marked `interrupted`), is stored as `failed` with `runtime_stopped`
+and `finished_at`, and emitted as `schedule.run`. That does not move `nextRunAt`.
+A queued run whose session is still idle is resumed. When a turn ends (`turn.completed`
+or `runtime.stopped`) the host calls `runFinished` for the run that started it and
+`turnFinished` so a queued run can start. System wake, and a wall-clock jump larger
+than the one-minute clock watch, call `noteClockChanged` so a sleep does not wait
+out the rest of a monotonic timer.
+
+A fire within 60 seconds of `nextRunAt` is on time. On daemon start or after a wake,
+anything later follows `missed_policy`: `run_once` delivers one catch-up and `skip`
+records one run with status `missed` and error `missed`. Intermediate slots are not
+replayed. `nextRunAt` then becomes the next fire after now.
+
+Before delivery the runner asks `ScheduleRuntime` whether the target is idle.
+`busy_policy` `queue` keeps one queued run and starts it when that turn ends
+(`turnFinished` or `runFinished`). A second fire while a run is already queued does
+not add another; the slot is still consumed. `skip` records status `skipped` and
+error `busy`.
+
+The runtime seam delivers the prompt. A `conversation` target starts a turn in the
+stored session. A `new` target creates a conversation in the stored workspace with
+that provider, model and effort. The user message the host journals comes from
+`scheduledUserMessage`: `text`, `schedule_id` and `run_id`, so a transcript can mark
+the prompt. `team` and `team_start` start a turn in the team's leader conversation;
+an empty team-start prompt is sent as "Start the team." The runner does not open
+the journal or call SessionHost. `JournalScheduleStore` and
+`SessionHostScheduleRuntime` plug in behind `ScheduleStore` and `ScheduleRuntime`.
+
+Provider not ready, signed out, a deleted target and a missing workspace record a
+`failed` run with `provider_not_ready`, `signed_out`, `target_deleted` or
+`workspace_missing`, and emit `schedule.run`. An unreadable rule records `invalid_rule`
+and disables the schedule so the timer cannot spin. A `once` schedule disables itself
+after a scheduled fire is consumed, including skip, miss and failure. `runNow` is an
+extra run: it ignores the rule, still honours `busy_policy`, returns the run id, and
+does not move `nextRunAt` or disable a once schedule. A `runNow` that queued because
+the conversation was busy still starts when that turn ends, including when the
+schedule is paused. Every transition persists
+`nextRunAt` and `lastRunAt`.
+
+An enabled schedule with an empty `nextRunAt` gets the next future fire, or is
+disabled when a once rule has none.
+
+Schedules are created only from New conversation and New team. `created_by` is
+set by the daemon from the connection (`user`, or the agent conversation id);
+a create that sends it is `unknown_field`. Agent-created schedules wait on the
+limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
+Phone and cloud sync are out of scope for v1. `SessionHostSchedules.cpp` handles
+`schedule.list`, `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled` and `schedule.runs` through this parser
+and the journal below. A successful create, update, delete or `setEnabled` emits
+`schedule.changed`. `schedule.runNow` calls the runner and returns the run. It does
+not answer `not_implemented`; that code remains only for older clients.
+
+### Storage
+
+`LocalJournalSchedules.cpp` creates `schedules` and `schedule_runs` on open with
+`CREATE TABLE IF NOT EXISTS`. A journal written before schedules gains the empty
+tables, and the rows it already had stay as they were. The tables are additive, so
+`journal_format::current` stays 1: an older daemon ignores them and does not rewrite
+them (ADR 0095). Open creates the tables before it records the format marker. A
+failure closes the journal, and the next open tries again.
+
+A schedule row stores its id, name, enabled flag, prompt, and one target. A
+`conversation` target stores the session id. A `new` target stores the protocol
+`workspace` (the repository path) plus provider, model, effort, the isolated-worktree
+flag and the title template. A `team` or `team_start` target stores the team id.
+The recurrence rule is opaque JSON. `busy_policy` is `queue` or `skip`,
+`missed_policy` is `run_once` or `skip`. The row also stores who created it, the
+created and updated times, `next_run_at` and `last_run_at`. List filters by target
+kind, session id and team id, together.
+
+`status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
+disables every `conversation` schedule that names that session and sets
+`target_deleted`. The rows and their runs stay, so the disable is visible rather than
+a silent drop. Each of those schedules is then sent as `schedule.changed` with
+`change` `updated`. The wire document includes `status` when it is `target_deleted`
+and omits it otherwise, so a schedule the user paused (`enabled: false`, no status)
+is distinct from one whose conversation is gone. Enabling such a schedule is refused
+with `target_deleted` until an update points it at a conversation that still exists.
+`schedule.create` and `schedule.update` refuse a conversation that is not in the
+journal, and a `team` or `team_start` whose `team_id` is not that team's decimal id,
+with `target_not_found`. Deleting a schedule deletes its runs in the same transaction.
+Deleting a team (`deleteTeam`) deletes `team` and `team_start` schedules whose team
+id is that team's decimal id, and their runs, and emits `schedule.changed` with
+`change` `deleted` for each. Other schedules are left alone.
+
+`schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
+`skipped` or `missed`), when it was due, when it started and finished, the session
+and turn it used, and any error. Runs are listed newest first, in pages. After each
+append the journal keeps the last 50 runs of that schedule
+(`LocalJournal::maximumScheduleRuns`) and deletes the older ones. Updating a run's
+status does not change that order.

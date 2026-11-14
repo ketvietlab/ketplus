@@ -1,4 +1,4 @@
-// ADR 0112: messages a team sends into its members' conversations.
+// ADR 0114: messages a team sends into its members' conversations.
 #include "agents/AgentBroker.h"
 #include "storage/LocalJournal.h"
 
@@ -10,12 +10,13 @@ namespace ketplus::daemon {
 QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& fromTitle,
                                      const QString& toSession, const QString& kind,
                                      const QString& body, const bool expectReply,
-                                     QString* messageId) {
+                                     QString* messageId, const QString& id) {
     const auto target = host_->agentConversation(toSession);
     if (!target)
         return QStringLiteral("The member's conversation no longer exists.");
     AgentMessageRecord message;
-    message.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // A team that must know the id before the message is sent chooses it.
+    message.id = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id;
     message.chainId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     message.hop = 1;
     if (const auto sender =
@@ -49,6 +50,29 @@ QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& 
     if (messageId)
         *messageId = message.id;
     return post(message);
+}
+
+void AgentBroker::releaseTeamHeldMessages(const QStringList& sessionIds) {
+    // What waited for the team, and what an earlier build's loop guard held inside it.
+    static const QStringList waitedForTeam{
+        QStringLiteral("team_paused"), QStringLiteral("team_budget"), QStringLiteral("hop_limit"),
+        QStringLiteral("chain_limit"), QStringLiteral("hourly_limit")};
+    for (const QString& sessionId : sessionIds) {
+        const auto receiver = host_->agentConversation(sessionId);
+        if (!receiver)
+            continue;
+        bool released = false;
+        for (AgentMessageRecord message :
+             journal_->agentMessagesTo(sessionId, receiver->generation, {QStringLiteral("held")})) {
+            if (!waitedForTeam.contains(message.error) || !host_->teamLimitsMessage(message))
+                continue;
+            markState(message, QStringLiteral("queued"), {});
+            notice(message, QStringLiteral("released"), QStringLiteral("team_continued"));
+            released = true;
+        }
+        if (released)
+            scheduleDelivery(sessionId);
+    }
 }
 
 } // namespace ketplus::daemon

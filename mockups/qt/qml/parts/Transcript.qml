@@ -18,7 +18,12 @@ Item {
     property int questionStep: 0
     readonly property var blocks: ({ claude: TranscriptFixtures.claude, codex: TranscriptFixtures.codex,
                                      cursor: TranscriptFixtures.cursor,
-                                     "turn-report": TranscriptFixtures.turnReport })[kind] || null
+                                     "turn-report": TranscriptFixtures.turnReport,
+                                     "team-assignment": TranscriptFixtures.teamAssignment,
+                                     "team-digest": TranscriptFixtures.teamDigest,
+                                     "team-review": TranscriptFixtures.teamReview,
+                                     "team-verdict": TranscriptFixtures.teamVerdict,
+                                     "team-decision": TranscriptFixtures.teamDecision })[kind] || null
 
     signal openDetails(string tab)
 
@@ -123,7 +128,7 @@ Item {
 
             Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                source: transcript.asset + "ketplus-mark.svg"
+                source: transcript.asset + "ketplus-mark-v2.png"
                 width: transcript.px(44)
                 height: width
                 sourceSize: Qt.size(width * 2, height * 2)

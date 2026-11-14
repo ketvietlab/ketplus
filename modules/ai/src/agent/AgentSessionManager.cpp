@@ -37,7 +37,8 @@ bool providerTurnAllowed(const QString& provider, const bool usesDaemon) {
     if (provider.isEmpty() || provider == QStringLiteral("codex"))
         return true;
     return usesDaemon &&
-           (provider == QStringLiteral("claude") || provider == QStringLiteral("cursor"));
+           (provider == QStringLiteral("claude") || provider == QStringLiteral("cursor") ||
+            provider == QStringLiteral("copilot"));
 }
 
 QString turnStartStatus(const QString& provider, const bool resume) {
@@ -45,6 +46,9 @@ QString turnStartStatus(const QString& provider, const bool resume) {
         return resume ? QStringLiteral("Resuming Claude…") : QStringLiteral("Starting Claude…");
     if (provider == QStringLiteral("cursor"))
         return resume ? QStringLiteral("Resuming Cursor…") : QStringLiteral("Starting Cursor…");
+    if (provider == QStringLiteral("copilot"))
+        return resume ? QStringLiteral("Resuming GitHub Copilot…")
+                      : QStringLiteral("Starting GitHub Copilot…");
     return resume ? QStringLiteral("Resuming Codex…") : QStringLiteral("Starting Codex…");
 }
 
@@ -229,7 +233,6 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
-    installTagCatalog();
     // A reviewer or work report read sent before the daemon listed its sessions is answered
     // "unknown session".
     connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
@@ -295,9 +298,8 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
-            {QStringLiteral("tags"), listedTags(session)},
-            // Before the first turn the labels wait here (#429); they go out with the start.
-            {QStringLiteral("tagsEditable"), server_->hasTagSupport()},
+            // The daemon session, which names the conversation on a team (ADR 0114).
+            {QStringLiteral("sessionId"), session->threadId},
             {QStringLiteral("agentTurnNumber"), session->agentTurnNumber},
             {QStringLiteral("agentTurnTitle"), session->agentTurnTitle},
             {QStringLiteral("agentTurnReply"), session->agentTurnReply},
@@ -336,6 +338,9 @@ QVariantList AgentSessionManager::numberedConversations() const {
                                   {QStringLiteral("title"), session->title},
                                   {QStringLiteral("provider"), listedProvider(session->options)},
                                   {QStringLiteral("running"), session->running},
+                                  // ketplus#295: a Codex reviewer needs Full access.
+                                  {QStringLiteral("full_access"),
+                                   session->permission == QStringLiteral("danger-full-access")},
                                   {QStringLiteral("path"), session->executionPath.isEmpty()
                                                                ? session->path
                                                                : session->executionPath}});
@@ -595,6 +600,10 @@ void AgentSessionManager::loadModels(const QString& cursor) {
                                                    model.value("provider").toString()));
                               if (!model.contains("defaultPermission"))
                                   model.insert("defaultPermission", "workspace-write");
+                              // Copilot permission modes must come from its daemon adapter.
+                              if (model.value("provider") == "copilot" &&
+                                  model.value("permissions").toList().isEmpty())
+                                  continue;
                               models_.append(model);
                           }
                       }
@@ -773,13 +782,27 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
         readOnlyMode ? QStringLiteral("read-only")
                      : options.value("permission", "workspace-write").toString();
     bool permissionValid = false;
-    for (const auto& profile : CodexAppServer::permissionProfilesFor(provider))
+    QVariantList profiles = CodexAppServer::permissionProfilesFor(provider);
+    if (provider == "copilot") {
+        const auto modelId = options.value("model").toString().trimmed();
+        for (const auto& value : models_) {
+            const auto model = value.toMap();
+            if (model.value("provider") == provider &&
+                (model.value("model") == modelId || model.value("id") == modelId)) {
+                profiles = model.value("permissions").toList();
+                break;
+            }
+        }
+    }
+    for (const auto& profile : profiles)
         if (profile.toMap().value("id").toString() == requestedPermission)
             permissionValid = true;
     if (!permissionValid) {
         const QString name = provider == QStringLiteral("claude")   ? QStringLiteral("Claude")
                              : provider == QStringLiteral("cursor") ? QStringLiteral("Cursor")
-                                                                    : QStringLiteral("Codex");
+                             : provider == QStringLiteral("copilot")
+                                 ? QStringLiteral("GitHub Copilot")
+                                 : QStringLiteral("Codex");
         emit errorOccurred(QStringLiteral("Unsupported permission for %1.").arg(name));
         return;
     }
@@ -803,7 +826,9 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
     const QVariant savedCompact = session->options.value("compactWindow");
     session->options = options;
     if (compactSaved && !options.contains("compactWindow")) {
-        session->options.insert("compactWindow", provider == "cursor" ? QVariant{} : savedCompact);
+        session->options.insert("compactWindow", provider == "cursor" || provider == "copilot"
+                                                     ? QVariant{}
+                                                     : savedCompact);
     }
     session->options.remove(QStringLiteral("skills"));
     session->options.remove(QStringLiteral("mode"));
@@ -1579,10 +1604,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
                                         {"adapter", stored.value("adapter")}});
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
-    // A change of this desktop's own is on its way; its answer carries the newer list.
     session->awaitingReply = stored.value(QStringLiteral("awaiting_reply")).toBool();
-    if (stored.contains(QStringLiteral("tags")) && !session->tagSyncPending)
-        session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();
     session->agentTurnNumber = agentTurn.value(QStringLiteral("number")).toString();
     session->agentTurnTitle = agentTurn.value(QStringLiteral("title")).toString();

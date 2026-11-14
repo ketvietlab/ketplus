@@ -48,9 +48,19 @@ namespace {
 // Scoped to a catalog worktree rather than a session, and sealed to this Mac.
 bool isWorktreeCommand(const QJsonObject& command) {
     const QString kind = command.value(QStringLiteral("kind")).toString();
-    return kind == QStringLiteral("session.create") ||
+    return kind == QStringLiteral("session.create") || kind == QStringLiteral("session.prepare") ||
            kind == QStringLiteral("worktree.branches.read") ||
            kind == QStringLiteral("worktree.configuration.read");
+}
+
+// ADR 0116 §2: a team command has no conversation either, and is sealed to this Mac too.
+bool isTeamCommand(const QJsonObject& command) {
+    return command.value(QStringLiteral("kind")).toString().startsWith(QStringLiteral("team."));
+}
+
+// Sealed to this Mac and answered sealed to the device that sent it.
+bool isSealedToMac(const QJsonObject& command) {
+    return isWorktreeCommand(command) || isTeamCommand(command);
 }
 
 } // namespace
@@ -168,6 +178,14 @@ QByteArray CloudControlClient::commandAssociatedData(const QJsonObject& command)
         values.append(command.value(QStringLiteral("expectedLifecycleRevision")));
         values.append(command.value(QStringLiteral("deletionChallengeId")));
     }
+    if (isTeamCommand(command)) {
+        values.append(command.value(QStringLiteral("ownerSubjectId")));
+        values.append(command.value(QStringLiteral("repositoryId")).toString());
+        values.append(command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1));
+        values.append(content.value(QStringLiteral("recipientDeviceId")));
+        values.append(content.value(QStringLiteral("recipientKeyVersion")));
+        values.append(content.value(QStringLiteral("ephemeralPublicKey")));
+    }
     return CloudCrypto::canonical(values);
 }
 
@@ -218,6 +236,13 @@ QByteArray CloudControlClient::commandResultAssociatedData(const QJsonObject& co
         values.append(command.value(QStringLiteral("repositoryId")));
         values.append(command.value(QStringLiteral("worktreeId")));
         values.append(command.value(QStringLiteral("workspaceRevision")));
+    }
+    // ADR 0116 §2: the result is for the device that sent the command, and no other.
+    if (isTeamCommand(command)) {
+        const QJsonObject sent = command.value(QStringLiteral("content")).toObject();
+        values.append(command.value(QStringLiteral("ownerSubjectId")));
+        values.append(sent.value(QStringLiteral("senderDeviceId")));
+        values.append(sent.value(QStringLiteral("senderKeyVersion")));
     }
     return CloudCrypto::canonical(values);
 }
@@ -313,13 +338,18 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
             const qint64 generation =
                 command.value(QStringLiteral("sessionGeneration")).toInteger();
             // A conversation's first command, and the branch list read to start one, come
-            // before any session key exists, so they are sealed to this Mac.
-            const bool creating = isWorktreeCommand(command);
+            // before any session key exists, so they are sealed to this Mac. So is a team
+            // command, which spans conversations (ADR 0116 §2).
+            const bool creating = isSealedToMac(command);
             const QJsonObject content = command.value(QStringLiteral("content")).toObject();
+            const QString sealedId = command.value(QStringLiteral("id")).toString();
             const QByteArray plaintext =
-                creating ? crypto_.decryptSealed(content, commandAssociatedData(command), senderKey,
-                                                 command.value(QStringLiteral("id")).toString(),
-                                                 &cryptoError)
+                creating ? crypto_.decryptSealedAs(
+                               content, commandAssociatedData(command), senderKey, sealedId,
+                               (isTeamCommand(command) ? QStringLiteral("team-command:%1")
+                                                       : QStringLiteral("session-create:%1"))
+                                   .arg(sealedId),
+                               &cryptoError)
                          : crypto_.decrypt(content, commandAssociatedData(command), senderKey,
                                            sessionId, generation, &cryptoError);
             const QJsonDocument decoded = QJsonDocument::fromJson(plaintext);
@@ -333,6 +363,10 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                      cryptoError.isEmpty() ? QStringLiteral("The command body is invalid.")
                                            : cryptoError}};
             } else {
+                if (isTeamCommand(command)) {
+                    executeTeamCommand(command, decoded.object(), senderAgreementKey);
+                    return;
+                }
                 if (creating) {
                     executeWorktreeCommand(command, decoded.object(), senderAgreementKey);
                     return;
@@ -796,7 +830,8 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     QStringLiteral("question.answer"), QStringLiteral("attachment.stage.begin"),
                     QStringLiteral("attachment.stage.chunk"),
                     QStringLiteral("attachment.stage.commit"),
-                    QStringLiteral("attachment.stage.cancel")};
+                    QStringLiteral("attachment.stage.cancel"),
+                    QStringLiteral("session.prepare.cancel")};
                 if (!remoteOperations.contains(kind)) {
                     acknowledgeCommand(
                         command,
@@ -811,6 +846,7 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     {QStringLiteral("protocol_version"), 0},
                     {QStringLiteral("message_id"), command.value(QStringLiteral("id"))},
                     {QStringLiteral("message_type"), kind},
+                    {QStringLiteral("_verified_sender_device_id"), senderId},
                     {QStringLiteral("session_id"), sessionId},
                     {QStringLiteral("session_generation"), generation},
                     {QStringLiteral("sent_at"), protocol::timestamp()},
@@ -894,7 +930,8 @@ void CloudControlClient::acknowledgeCommand(const QJsonObject& command,
     const QString sessionId = command.value(QStringLiteral("sessionId")).toString();
     const qint64 generation = command.value(QStringLiteral("sessionGeneration")).toInteger();
     const int attempt = command.value(QStringLiteral("attempt")).toInt();
-    const bool creating = isWorktreeCommand(command);
+    const bool creating = isSealedToMac(command);
+    const bool team = isTeamCommand(command);
     const QString commandId = command.value(QStringLiteral("id")).toString();
     const QString kind = command.value(QStringLiteral("kind")).toString();
     if (remoteCommandMayChange(kind)) {
@@ -909,7 +946,9 @@ void CloudControlClient::acknowledgeCommand(const QJsonObject& command,
                  sessionId.isEmpty() ? localResult.value(QStringLiteral("session_id")).toString()
                                      : sessionId,
                  resultCode,
-                 {}}))
+                 {},
+                 // A team command names no conversation; the audit names its team (ADR 0116 §5).
+                 team ? command.value(QStringLiteral("_teamId")).toString() : QString{}}))
             qWarning("Remote command %s was not audited: %s", qUtf8Printable(commandId),
                      qUtf8Printable(journal_->errorString()));
     }
@@ -918,31 +957,34 @@ void CloudControlClient::acknowledgeCommand(const QJsonObject& command,
           qUtf8Printable(command.value(QStringLiteral("kind")).toString()), qUtf8Printable(status),
           qUtf8Printable(resultCode),
           startedAt > 0 ? QDateTime::currentMSecsSinceEpoch() - startedAt : -1LL);
-    const QJsonObject shell{{QStringLiteral("keyId"),
-                             creating ? QStringLiteral("session-create:%1")
-                                            .arg(command.value(QStringLiteral("id")).toString())
-                                      : QStringLiteral("%1:%2:1").arg(sessionId).arg(generation)},
-                            {QStringLiteral("keyEpoch"), 1},
-                            {QStringLiteral("senderDeviceId"), machineId_},
-                            {QStringLiteral("senderKeyVersion"), machineKeyVersion_}};
+    const QString sealedKeyId =
+        (team ? QStringLiteral("team-result:%1") : QStringLiteral("session-create:%1"))
+            .arg(commandId);
+    const QJsonObject shell{
+        {QStringLiteral("keyId"),
+         creating ? sealedKeyId : QStringLiteral("%1:%2:1").arg(sessionId).arg(generation)},
+        {QStringLiteral("keyEpoch"), 1},
+        {QStringLiteral("senderDeviceId"), machineId_},
+        {QStringLiteral("senderKeyVersion"), machineKeyVersion_}};
     const QByteArray aad = commandResultAssociatedData(command, attempt, status, resultCode, shell);
     QString cryptoError;
     const QJsonObject encrypted =
-        creating ? crypto_.encryptSealed(QJsonDocument(localResult).toJson(QJsonDocument::Compact),
-                                         aad, recipientAgreementKey,
-                                         command.value(QStringLiteral("id")).toString(),
-                                         command.value(QStringLiteral("content"))
-                                             .toObject()
-                                             .value(QStringLiteral("senderDeviceId"))
-                                             .toString(),
-                                         command.value(QStringLiteral("content"))
-                                             .toObject()
-                                             .value(QStringLiteral("senderKeyVersion"))
-                                             .toInt(),
-                                         machineId_, machineKeyVersion_, &cryptoError)
-                 : crypto_.encrypt(QJsonDocument(localResult).toJson(QJsonDocument::Compact), aad,
-                                   sessionId, generation, 1, machineId_, machineKeyVersion_,
-                                   &cryptoError);
+        creating
+            ? crypto_.encryptSealedAs(QJsonDocument(localResult).toJson(QJsonDocument::Compact),
+                                      aad, recipientAgreementKey,
+                                      command.value(QStringLiteral("id")).toString(), sealedKeyId,
+                                      command.value(QStringLiteral("content"))
+                                          .toObject()
+                                          .value(QStringLiteral("senderDeviceId"))
+                                          .toString(),
+                                      command.value(QStringLiteral("content"))
+                                          .toObject()
+                                          .value(QStringLiteral("senderKeyVersion"))
+                                          .toInt(),
+                                      machineId_, machineKeyVersion_, &cryptoError)
+            : crypto_.encrypt(QJsonDocument(localResult).toJson(QJsonDocument::Compact), aad,
+                              sessionId, generation, 1, machineId_, machineKeyVersion_,
+                              &cryptoError);
     if (encrypted.isEmpty()) {
         lastError_ = cryptoError;
         return;

@@ -664,8 +664,12 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
     message->setWordWrap(true);
     layout->addWidget(message);
     // What stays elsewhere, so "removed" is not read as removed everywhere.
-    auto* retained = new QLabel(tr("Provider history is not deleted, and any encrypted relay "
-                                   "copy remains until its retention expires."),
+    // T-60: the daemon deletes the Codex and Claude threads only this conversation used;
+    // another provider's history (Cursor's) stays in that provider's own store.
+    auto* retained = new QLabel(tr("Codex and Claude threads only this conversation used are "
+                                   "deleted with it. Other providers, such as Cursor, keep "
+                                   "their own history. Any encrypted relay copy remains until "
+                                   "its retention expires."),
                                 this);
     retained->setObjectName(QStringLiteral("conversationDeleteRetained"));
     retained->setWordWrap(true);

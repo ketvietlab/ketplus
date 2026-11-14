@@ -116,7 +116,7 @@ TerminalPanel* MainWindow::ensureTerminal() {
     }
 
     terminal_ = new TerminalPanel(mainSplit_);
-    terminal_->applyTheme(theme_.palette());
+    terminal_->applyColorScheme(theme_.colorScheme());
     applyTerminalTypography(terminal_);
     mainSplit_->addWidget(terminal_);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(workspaceSplit_), 1);
@@ -158,7 +158,16 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
     agentDetailTabs_->setTabsClosable(true);
     agentDetailTabs_->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     agentDetailPane_->hide();
+    // An explicit minimum lets the splitter go below the tabs' content hint (a diff's toolbar).
+    agentDetailPane_->setMinimumWidth(240);
     workspaceSplit_->addWidget(agentDetailPane_);
+    connect(workspaceSplit_, &QSplitter::splitterMoved, this, [this] {
+        if (agentDetailPane_ == nullptr || !agentDetailPane_->isVisible())
+            return;
+        const int total = agentDetailPane_->width() + agentWorkspace_->width();
+        if (total > 0)
+            agentDetailPaneShare_ = double(agentDetailPane_->width()) / total;
+    });
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(agentWorkspace_), 1);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(agentDetailPane_), 1);
     connect(agentDetailTabs_, &QTabWidget::tabCloseRequested, this,
@@ -174,7 +183,9 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
 TerminalPanel* MainWindow::openAgentTerminalTab() {
     auto* detailTabs = ensureAgentDetailTabs();
     auto* terminal = new TerminalPanel(detailTabs);
-    terminal->applyTheme(theme_.palette());
+    // The detail tab is the terminal's tab, so the panel's own tab bar would be a second one.
+    terminal->setSingleSession(true);
+    terminal->applyColorScheme(theme_.colorScheme());
     applyTerminalTypography(terminal);
     terminal->start(workspaceRoot_.isEmpty() ? QDir::homePath() : workspaceRoot_);
     connect(terminal, &TerminalPanel::closeRequested, this, [this, terminal] {
@@ -294,15 +305,20 @@ void MainWindow::updateAgentDetailTabs() {
     agentDetailPane_->setVisible(agentWorkspaceMode_ && hasTabs);
     if (agentWorkspace_ != nullptr)
         agentWorkspace_->setDetailsOpen(agentWorkspaceMode_ && hasTabs);
-    if (agentWorkspaceMode_ && agentWorkspace_ != nullptr) {
+    // Laid out only when the pane appears or leaves: switching or refreshing its tabs keeps the
+    // width the user dragged to. It opens at 45% of the workspace, the transcript at 55%.
+    const bool shown = agentWorkspaceMode_ && hasTabs;
+    if (agentWorkspaceMode_ && agentWorkspace_ != nullptr && shown != agentDetailPaneShown_) {
         QList<int> sizes(workspaceSplit_->count(), 0);
         const int width = qMax(800, workspaceSplit_->width());
-        sizes[workspaceSplit_->indexOf(agentWorkspace_)] = hasTabs ? width / 2 : width;
+        const int detail = hasTabs ? qRound(width * agentDetailPaneShare_) : 0;
+        sizes[workspaceSplit_->indexOf(agentWorkspace_)] = width - detail;
         if (hasTabs) {
-            sizes[workspaceSplit_->indexOf(agentDetailPane_)] = width - width / 2;
+            sizes[workspaceSplit_->indexOf(agentDetailPane_)] = detail;
         }
         workspaceSplit_->setSizes(sizes);
     }
+    agentDetailPaneShown_ = shown;
 
     bool terminalSelected = false;
     if (hasTabs) {
@@ -348,7 +364,7 @@ bool MainWindow::showAgentFile(const QString& filePath) {
         return true;
     }
 
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     const int index = detailTabs->addTab(editor, editor->document().displayName());
     detailTabs->setTabToolTip(index, absolutePath);
     detailTabs->setCurrentIndex(index);
@@ -369,6 +385,7 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
         if (existing != nullptr && normalizedPath(existing->filePath()) == absolutePath &&
             existing->mode() == mode) {
             existing->setDiff(absolutePath, mode, diff, theme_.palette());
+            existing->applyColorScheme(theme_.colorScheme());
             detailTabs->setCurrentIndex(index);
             updateAgentDetailTabs();
             statusBar()->showMessage(QStringLiteral("Updated Git diff"), 2000);
@@ -379,6 +396,7 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
     auto* diffView = new GitDiffView(detailTabs);
     diffView->applyEditorSettings(appearanceSettings_.editor);
     diffView->setDiff(absolutePath, mode, diff, theme_.palette());
+    diffView->applyColorScheme(theme_.colorScheme());
     connect(diffView, &GitDiffView::openFileRequested, this, &MainWindow::openFile);
     connect(diffView, &GitDiffView::refreshRequested, this,
             [this](const QString& path, const GitDiffMode requestedMode) {

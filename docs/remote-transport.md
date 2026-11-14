@@ -3,21 +3,32 @@
 Status: host phase 3 implemented; native client phase 4 and forward-only rollout
 remain pending. ADRs [0024](decisions/0024-webrtc-transport-and-forward-only-relay.md)
 and [0025](decisions/0025-remote-transport-protocol.md) define the target protocol.
-The daemon advertises only `transport.webrtc/1` in this phase, so it continues
+The daemon advertises `transport.webrtc/1` and `teams.remote/1` in this phase, so it continues
 legacy encrypted event uploads and mailbox processing for existing clients.
 Same-machine Desktop keeps IPC. No current iPhone release is claimed to use P2P.
+A Desktop that can already reach a Linux host over OpenSSH can instead use the
+SSH route in [`ssh-transport.md`](ssh-transport.md), which bypasses the relay.
+Desktop reaches a paired Linux host over the Relay today through Control v2
+(`RelayMachineBackend`, ADR 0119, `linux-headless-daemon.md`); this document's
+WebRTC transport is a later, direct path for that same route and changes
+nothing in how Desktop composes the machine.
 
 This document specifies how a paired remote client and the daemon agree on the transport, set up a
 WebRTC connection through the relay, authenticate it, and exchange frames, and how both ends
-structure the code. Field names follow Control v2; exact relay endpoints are settled in `ketviet`
+structure the code. Field names follow Control v2; exact relay endpoints are settled in the private relay service
 in phase 2.
 
 ## Terms
 
+When the relay definitively refuses a machine challenge with HTTP 404 and
+`machine_not_found`, the host signs out, drops peer and Atlas access, and stops
+retrying that enrollment. Local sessions and project files remain. Transient
+failures and unrelated 404 responses keep the enrollment for retry.
+
 - **Host**: the daemon of one machine.
 - **Client**: a paired device (iOS, Android, or Desktop on another machine). Desktop on the same
   machine keeps local IPC and is not a client here.
-- **Relay**: the Control v2 service, the `ketplus` tenant in `ketviet`.
+- **Relay**: the Control v2 service, the `ketplus` tenant in the private relay service.
 - **Path**: a direct WebRTC connection, a WebRTC connection through TURN, or the relay.
 - **Connection**: one WebRTC peer connection between a host and a client, named by a
   relay-issued `connectionId`.
@@ -32,6 +43,8 @@ Features are gated by capability name, never by version number, as on local IPC:
 | --- | --- |
 | `transport.webrtc/1` | Signals through `/v2/relay`, obtains TURN credentials and speaks the frames below. |
 | `events.forward_only/1` | Reads transcript events only from frames and host pages, never from stored events. |
+| `teams.remote/1` | Answers sealed `team.*` commands through the mailbox and adds `team` to session metadata (ADR 0116). |
+| `session.prepare/1` | Allocates a private inactive attachment scope before a conversation's first turn (ADR 0122). |
 
 Each party advertises its own set:
 
@@ -40,6 +53,14 @@ Each party advertises its own set:
   after an app update.
 - The relay answers each heartbeat with the names it enables for that machine
   (`compatibility.capabilities`) and shows clients the same set in each `/v2/machines` entry.
+
+The desktop offers first-turn attachments only when the target daemon and relay both
+advertise `session.prepare/1`. Preparation and its cancellation use the encrypted
+mailbox; existing-session attachment commands keep their current route and format.
+Before reporting preparation success, the host publishes private routing and a key
+wrap only for the creating device. The scope stays out of conversation lists until
+the first real turn. Cancel discards inactive files; abandoned scopes expire after
+a fixed 24 hours. See [ADR 0122](decisions/0122-first-turn-remote-attachments.md).
 
 The relay enables `transport.webrtc/1` for a machine when it and the host both support it. A client
 tries WebRTC only when it supports the name too.
@@ -103,7 +124,7 @@ database or logs, and it forgets a connection 60 seconds after its last signal o
 
 ## TURN credentials
 
-`iceServers` carries coturn REST credentials, the scheme `ketviewer_control` already issues:
+`iceServers` carries coturn REST credentials, the scheme the private relay service already issues:
 username `<expiry>:<random id>` and credential `base64(HMAC-SHA1(secret, username))`. The ID is
 random per issue, so TURN logs name neither a device nor a machine.
 
@@ -238,6 +259,17 @@ Events are the `SessionEvent` envelopes the host uploads today, from the same cl
 verify and decrypt them the way they already do. `hello` and `welcome` carry capability names, so
 later frames are gated by name like everything else.
 
+The projection marks an event the transcript never shows with `transcript: "hidden"` in its
+payload (`modules/remote/src/TranscriptVisibility.h`): KetPlus's own agents tools
+(`ketplus_agents`, `mcp__ketplus_agents__*`, or Cursor's `providerIdentifier`), and the
+`tasks.changed` background task snapshot. Desktop applies the same rule to its live view, its
+history windows and the daemon's activity groups, and clients hide those rows. The events stay in
+the journal and in the stream: the task bar still reads `tasks.changed`, and an older client that
+ignores the marker draws them as before. A journal grouped before this rule existed is grouped
+again once on open, for each session where such a call had joined a group (`activity_rules` row
+`internal_steps_hidden`, run by the bounded passes after open of ADR 0097). A large item's stub
+carries no marker; the phone hides that call by its tool name once it fetches the item.
+
 ## Resume and retry
 
 - **Events.** A client keeps a durable cursor per conversation in its cache and subscribes after it
@@ -271,7 +303,7 @@ With `events.forward_only/1`:
 - This path refuses frames over 64 KiB. Large results keep the mailbox's continuation
   (`requestedByteCap`).
 
-The forwarding is built in `ketviet` in phase 2. `AtlasLiveTunnel` keeps its own `/v2/atlas/tunnel`
+The forwarding is built in the private relay service in phase 2. `AtlasLiveTunnel` keeps its own `/v2/atlas/tunnel`
 socket.
 
 ## Code structure
@@ -309,6 +341,17 @@ notices, in the change that ships them.
   close reason and counts.
 - The relay sees candidate addresses in memory only, as it already sees client addresses.
 
+The daemon reports `ice-path local=<type> remote=<type> turn=<transport>
+epoch=<number> event=<open|ice-connected|path-changed> at=<UTC time>` when its data channels
+open and when ICE reconnects after checking/disconnection. If completion changes
+the selected candidate types without a reconnect, it logs `path-changed`, not a second `open`. Types are allowlisted
+(`host`, `srflx`, `prflx`, `relay`, `unknown`). `turn` describes the **local**
+client-to-TURN leg only: this libjuice backend supports UDP, so it is `udp` for
+a local relayed candidate, `unknown` when the local type is unavailable, otherwise `none`. A remote relayed candidate does not
+reveal that remote client's TURN transport; correlate its own diagnostics instead
+of guessing from its candidate protocol. Native errors and raw candidates never
+enter this log line.
+
 ## Tests
 
 Tests consume no provider quota:
@@ -334,6 +377,34 @@ Tests consume no provider quota:
   credential lifetime in phase 2.
 - Bulk isolation on real networks, and a physical iPhone on Wi-Fi and LTE.
 - The content-free push signal of ADR 0024.
+
+## Teams on paired devices
+
+ADR [0116](decisions/0116-teams-on-paired-devices.md) defines the contract; the fixture is
+`tests/daemon/fixtures/team-remote-v1.json`. The daemon side works as follows:
+
+- `team.*` commands travel through the command mailbox only. A WebRTC peer that sends one is
+  refused, and the session host keeps refusing `team.*` from the plain cloud path.
+- A command is sealed to the Mac (`keyId` `team-command:<id>`, `sessionId` empty, generation
+  0). Its additional data appends `ownerSubjectId`, `repositoryId` or empty,
+  `expectedCatalogRevision` or -1, `recipientDeviceId`, `recipientKeyVersion` and
+  `ephemeralPublicKey`. The result is sealed to the sending device (`team-result:<id>`), with
+  `ownerSubjectId`, that device's id and key version appended.
+- The sender must be a device pinned on this Mac. The command must name this Mac and its
+  current key version, and carry `teams.read` for reads and `teams.write` for changes.
+  Otherwise it is refused with `team_scope_forbidden`.
+- `team.create` names its repository by the catalog's `repositoryId`. A path in any payload is
+  refused. Results name repositories and worktrees by their salted ids, never by path.
+- Each command runs through `TeamCoordinator`, the same rules a local client meets. Changes carry
+  `expected_revision` and are fenced per part (settings, members, each task, each decision).
+  A newer part is refused with `stale_team` and the current summary. A changing result is kept
+  under the command id, so a retried command acts once.
+- A result is at most 384 KiB. Past that, the daemon drops answered decisions first, then
+  updates, then done tasks, and flags each `<part>_truncated`; otherwise `response_too_large`.
+- Session metadata carries `team {id, revision, role}` for each member. After a team change the
+  daemon sends a heartbeat, at most one every 2 seconds, so the phone sees the new revision.
+  A deleted team leaves the metadata.
+- Every changing command is written to the remote audit with its `team_id`; reads are not.
 
 ## Phase 3 host implementation and wire details
 

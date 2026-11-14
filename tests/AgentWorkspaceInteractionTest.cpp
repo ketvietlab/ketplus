@@ -1758,6 +1758,45 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
     QCOMPARE(prompt->property("text").toString(), QStringLiteral("look at @src/app/main.cpp "));
 }
 
+// `@agent/4821` names a conversation as its header does; it completes like `#4821`.
+void AgentWorkspaceViewTest::agentMentionsCompleteConversations() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setActivePath(QDir::tempPath());
+    view.setConversationDirectory([] {
+        return QVariantList{
+            QVariantMap{{"number", "4821"}, {"title", "Parser"}, {"provider", "claude"}},
+            QVariantMap{{"number", "5302"}, {"title", "Icons"}, {"provider", "codex"}}};
+    });
+    view.resize(900, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    auto* prompt = root->findChild<QQuickItem*>(QStringLiteral("agentPrompt"));
+    QVERIFY(prompt);
+    const auto complete = [&](const QString& text, const QString& expected) {
+        prompt->setProperty("text", text);
+        prompt->setProperty("cursorPosition", int(text.size()));
+        QTRY_COMPARE(root->property("visibleSkillSuggestions").toList().size(), 1);
+        const QVariantMap suggestion =
+            root->property("visibleSkillSuggestions").toList().constFirst().toMap();
+        QCOMPARE(suggestion.value("kind").toString(), QStringLiteral("conversation"));
+        QMetaObject::invokeMethod(root, "applySkillSuggestion",
+                                  Q_ARG(QVariant, QVariant(suggestion)));
+        QCOMPARE(prompt->property("text").toString(), expected);
+    };
+    complete(QStringLiteral("ask @agent/48"), QStringLiteral("ask @agent/4821 "));
+    complete(QStringLiteral("ask #53"), QStringLiteral("ask #5302 "));
+
+    // The mention is not a worktree path, so sending it is not refused.
+    QSignalSpy configured(&view, &ketplus::AgentWorkspaceView::configuredPromptSubmitted);
+    QSignalSpy rejected(&view, &ketplus::AgentWorkspaceView::composerErrorOccurred);
+    view.submitConfiguredPrompt(QStringLiteral("ask @agent/4821 about it"), {});
+    QCOMPARE(configured.count(), 1);
+    QCOMPARE(rejected.count(), 0);
+}
+
 void AgentWorkspaceViewTest::claudeUsageBudget() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

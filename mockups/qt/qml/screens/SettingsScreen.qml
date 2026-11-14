@@ -22,6 +22,7 @@ Item {
         { id: "typography", text: "Typography", icon: "text-size" },
         { id: "account", text: "Account & devices", icon: "display" },
         { id: "agent-models", text: "Agent models", icon: "sliders" },
+        { id: "teams", text: "Teams", icon: "bot" },
         { id: "browser", text: "Browser", icon: "globe" },
         { id: "computer", text: "Computer use", icon: "display" },
         { id: "providers", text: "Providers", icon: "package" },
@@ -46,6 +47,8 @@ Item {
         id: settingRow
         property string label
         property string help
+        // A refusal in words, under the help.
+        property string error
         default property alias control: slot.data
         readonly property var recipe: KetTheme.fieldRowRecipe(KetTheme.dark, KetTheme.zoom)
         width: parent.width
@@ -72,6 +75,15 @@ Item {
                 text: settingRow.help
                 wrapMode: Text.WordWrap
                 color: settingRow.recipe.help
+                font.family: KetTheme.fontFamily
+                font.pixelSize: settingRow.recipe.helpPixels
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: settingRow.error
+                wrapMode: Text.WordWrap
+                color: KetTheme.t.danger
                 font.family: KetTheme.fontFamily
                 font.pixelSize: settingRow.recipe.helpPixels
             }
@@ -175,7 +187,7 @@ Item {
                     Loader {
                         width: parent.width
                         sourceComponent: ({ appearance: appearance, typography: typography, account: account,
-                                            browser: browser, computer: computer, providers: providers,
+                                            teams: teams, browser: browser, computer: computer, providers: providers,
                                             archived: archived, storage: storage,
                                             updates: updates })[screen.current.id]
                     }
@@ -267,7 +279,7 @@ Item {
                             x: screen.px(16)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: screen.px(8)
-                            Image { source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark.svg"; width: screen.px(18); height: width; sourceSize: Qt.size(width * 2, height * 2) }
+                            Image { source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-v2.png"; width: screen.px(18); height: width; sourceSize: Qt.size(width * 2, height * 2) }
                             Text { text: "Ready for your next idea."; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
                         }
                         KetBadge { anchors.right: parent.right; anchors.rightMargin: screen.px(16); anchors.verticalCenter: parent.verticalCenter; text: "Completed"; tone: KetTheme.BadgeTone.Success }
@@ -332,6 +344,33 @@ Item {
                 KetButton { text: "Manage connections"; iconName: "network"; onClicked: screen.window.showScreen("connections") }
                 KetButton { text: "Sign out"; iconName: "log-out"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.window.notify("Signed out of the demo account") }
             }
+        }
+    }
+
+    // ADR 0114, open point 2: what a new team's automatic-turn budget starts from. The daemon
+    // keeps it, so a team created from a phone or by an agent gets it too.
+    Component {
+        id: teams
+        Column {
+            spacing: screen.px(14)
+            Body { text: "Agent teams work on their own: members start turns when a task, a review or a message reaches them. After a number of these automatic turns the team pauses and asks you whether to continue." }
+            SettingRow {
+                id: budgetRow
+                label: "Automatic turns per team"
+                help: "New teams start with this; change it for one team in its settings. Changing it here leaves existing teams as they are."
+                error: Fixtures.turnBudgetError(budgetField.text)
+                KetTextField {
+                    id: budgetField
+                    objectName: "settingsTurnBudget"
+                    width: parent.width
+                    Accessible.name: "Automatic turns per team"
+                    text: String(Fixtures.turnBudget)
+                    invalid: budgetRow.error !== ""
+                    // Applies as it is typed, as every setting of this page does.
+                    onTextEdited: if (Fixtures.turnBudgetError(text) === "") Fixtures.turnBudget = Number(text.trim())
+                }
+            }
+            Help { text: "A whole number from " + Fixtures.fewestTurns + " to " + Fixtures.mostTurns + ". The default is 40." }
         }
     }
 

@@ -237,6 +237,47 @@ class HeadlessDaemonTest final : public QObject {
                     .toBool());
         QVERIFY(journal.worktreePaths().isEmpty());
     }
+    void workspaceListNamesTheRepositoryOfALinkedWorktree() {
+        // ADR 0119 "Repository grain": a linked worktree names its main checkout, read from its
+        // `.git` file and the gitdir's `commondir`, so Desktop groups both under one repository.
+        QTemporaryDir directory;
+        QVERIFY(QDir(directory.path()).mkpath("app/.git/worktrees/fix"));
+        QVERIFY(QDir(directory.path()).mkpath("app-fix"));
+        QVERIFY(QDir(directory.path()).mkpath("broken"));
+        const auto write = [&](const QString& relative, const QByteArray& content) {
+            QFile file(directory.filePath(relative));
+            return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
+        };
+        const auto main = QFileInfo(directory.filePath("app")).canonicalFilePath();
+        QVERIFY(write("app-fix/.git", "gitdir: " + main.toUtf8() + "/.git/worktrees/fix\n"));
+        QVERIFY(write("app/.git/worktrees/fix/commondir", "../..\n"));
+        QVERIFY(write("broken/.git", "not a gitdir line\n"));
+        const auto linked = QFileInfo(directory.filePath("app-fix")).canonicalFilePath();
+        const auto broken = QFileInfo(directory.filePath("broken")).canonicalFilePath();
+        LocalJournal journal(directory.filePath("journal.db"));
+        QVERIFY(journal.rememberWorktree(main));
+        QVERIFY(journal.rememberWorktree(linked));
+        QVERIFY(journal.rememberWorktree(broken));
+        CodexAdapter adapter("/nonexistent/ketplus-test-codex");
+        SessionHost host(&journal, &adapter);
+        QHash<QString, QString> repositoryOf;
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            repositoryOf.insert(value.toObject().value("path").toString(),
+                                value.toObject().value("repository_path").toString());
+        QCOMPARE(repositoryOf.value(main), main);
+        QCOMPARE(repositoryOf.value(linked), main);
+        QCOMPARE(repositoryOf.value(broken), broken);
+
+        // A main checkout remembered through a symlink names its canonical repository too.
+        QVERIFY(QFile::link(main, directory.filePath("app-link")));
+        const auto linkPath = QDir(directory.path()).filePath("app-link");
+        QVERIFY(journal.rememberWorktree(linkPath));
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            if (value.toObject().value("path").toString() == linkPath)
+                QCOMPARE(value.toObject().value("repository_path").toString(), main);
+    }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.db"));
@@ -276,6 +317,59 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(configuration.statePath, directory.filePath("daemon/journal.sqlite3"));
         QCOMPARE(configuration.tokenPath, directory.filePath("daemon/local.token"));
     }
+    void helloNamesTheHostKeyWithoutSignInAndKeepsItAcrossRestarts() {
+#if defined(Q_OS_UNIX)
+        // ADR 0119 "Machine identity": an SSH client names a Linux machine by the fingerprint the
+        // daemon reports at daemon.hello. A fresh, never signed-in host must have one, and the
+        // same one after a restart, or every reconnect would look like a different machine.
+        QTemporaryDir directory("/tmp/kp-identity-XXXXXX");
+        QVERIFY(directory.isValid());
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        environment.insert("KETPLUS_DAEMON_SOCKET", directory.filePath("socket"));
+        QMap<QByteArray, QByteArray> saved;
+        for (const auto& key : {"KETPLUS_DAEMON_TOKEN_FILE", "KETPLUS_DAEMON_SOCKET",
+                                "KETPLUS_DAEMON_DATA_DIR", "KETPLUS_DISABLE_DAEMON_AUTOSTART"})
+            saved.insert(key, qgetenv(key));
+        const auto restore = qScopeGuard([&] {
+            for (auto it = saved.cbegin(); it != saved.cend(); ++it)
+                it.value().isNull() ? qunsetenv(it.key().constData())
+                                    : qputenv(it.key().constData(), it.value());
+        });
+        qputenv("KETPLUS_DAEMON_DATA_DIR", directory.path().toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", directory.filePath("socket").toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", directory.filePath("daemon/local.token").toUtf8());
+        qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+        const auto fingerprintOfOneRun = [&]() -> QString {
+            QProcess daemon;
+            daemon.setProcessEnvironment(environment);
+            daemon.start(KETPLUS_TEST_DAEMON,
+                         {"--codex", "/nonexistent/codex", "--claude", "/nonexistent/claude",
+                          "--cursor", "/nonexistent/agent"});
+            if (!daemon.waitForStarted())
+                return {};
+            const auto stop = qScopeGuard([&] {
+                daemon.terminate();
+                if (!daemon.waitForFinished(5000)) {
+                    daemon.kill();
+                    daemon.waitForFinished();
+                }
+            });
+            ketplus::remote::DaemonClient client;
+            client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&) {});
+            if (!QTest::qWaitFor([&] { return client.isReady(); }, 10000))
+                return {};
+            if (!client.hasFeature(QStringLiteral("daemon.host_identity/1")))
+                return {};
+            return client.hostKeyFingerprint();
+        };
+        const QString first = fingerprintOfOneRun();
+        // base64url(SHA-256) of the host's key set, as a pairing QR code carries it.
+        QCOMPARE(first.size(), 43);
+        QCOMPARE(fingerprintOfOneRun(), first);
+#endif
+    }
+
     void administratorCliAuthenticatesAndSigtermLeavesTheJournalUsable() {
 #if defined(Q_OS_UNIX)
         QTemporaryDir directory("/tmp/kp-headless-XXXXXX");

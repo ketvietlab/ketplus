@@ -1,4 +1,5 @@
 #include "workspace/ActivityBar.h"
+#include "ui/BrandLockup.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 #include "ui/SymbolIcon.h"
@@ -34,12 +35,35 @@
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStyle>
+#include <QStyleOptionComboBox>
+#include <QStylePainter>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
 namespace {
+// Keep the popup name-first, but preserve the state in the narrow closed label.
+class MachineSelect final : public QComboBox {
+  public:
+    using QComboBox::QComboBox;
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QStylePainter painter(this);
+        QStyleOptionComboBox option;
+        initStyleOption(&option);
+        const QString closed = currentData(Qt::UserRole + 1).toString();
+        if (!closed.isEmpty()) {
+            const QRect text = style()->subControlRect(QStyle::CC_ComboBox, &option,
+                                                       QStyle::SC_ComboBoxEditField, this);
+            option.currentText = fontMetrics().elidedText(closed, Qt::ElideRight, text.width());
+        }
+        painter.drawComplexControl(QStyle::CC_ComboBox, option);
+        painter.drawControl(QStyle::CE_ComboBoxLabel, option);
+    }
+};
+
 // The sidebar's journal banner opens Settings → Storage when clicked, as in the mock; the
 // banner draws itself and lets the clicks through to this button.
 class StorageNoticeButton final : public QAbstractButton {
@@ -127,12 +151,12 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* brandLayout = new QHBoxLayout(brand);
     chrome_geometry::margins(brandLayout, 4, 0, 2, 0);
     chrome_geometry::spacing(brandLayout, 6);
-    brandWordmark_ = new QLabel(brand);
-    brandWordmark_->setObjectName(QStringLiteral("productBrandWordmark"));
-    // The KétPlus Pro wordmark is 4:1 and already names the edition.
-    chrome_geometry::fixedSize(brandWordmark_, 120, 30);
-    brandWordmark_->setAccessibleName(QStringLiteral("KétPlus Pro"));
-    brandLayout->addWidget(brandWordmark_);
+    // The approved ketPlus Pro lockup at the mock sidebar's 17 px wordmark; it follows the
+    // theme and the interface zoom itself.
+    brandLockup_ = new BrandLockup(BrandLockup::Edition::Pro, brand);
+    brandLockup_->setObjectName(QStringLiteral("productBrandLockup"));
+    brandLockup_->setWordSize(17);
+    brandLayout->addWidget(brandLockup_, 0, Qt::AlignVCenter);
     brandLayout->addStretch();
     layout->addWidget(brand);
 
@@ -207,7 +231,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     auto* machineLayout = new QHBoxLayout(machineRow);
     chrome_geometry::margins(machineLayout, 8, 0, 8, 0);
     chrome_geometry::spacing(machineLayout, 4);
-    machineSelect_ = new QComboBox(machineRow);
+    machineSelect_ = new MachineSelect(machineRow);
     machineSelect_->setObjectName(QStringLiteral("productMachineSelect"));
     machineSelect_->setAccessibleName(tr("Machine for repositories"));
     machineSelect_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -257,18 +281,6 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
             &ActivityBar::conversationContextMenuRequested);
     connect(repositoryList_, &SidebarRepositoryList::conversationRenameRequested, this,
             &ActivityBar::conversationRenameRequested);
-    // The mock's active tag filter: set from a tag in the conversation header, cleared here.
-    tagFilter_ = new SidebarTagFilterChip(context);
-    connect(tagFilter_, &SidebarTagFilterChip::cleared, this,
-            [this] { repositoryList_->setTagFilter({}); });
-    auto* tagFilterRow = new QWidget(context);
-    auto* tagFilterLayout = new QVBoxLayout(tagFilterRow);
-    chrome_geometry::margins(tagFilterLayout, 6, 0, 6, 6);
-    tagFilterLayout->addWidget(tagFilter_);
-    tagFilterRow->setVisible(false);
-    connect(tagFilter_, &SidebarTagFilterChip::cleared, tagFilterRow, &QWidget::hide);
-    tagFilterRow_ = tagFilterRow;
-    contextLayout->addWidget(tagFilterRow);
     contextLayout->addWidget(repositoryList_);
     contextLayout->addStretch();
     contextScroll->setWidget(context);
@@ -407,8 +419,8 @@ void ActivityBar::setStorageStatus(const QVariantMap& result) {
 
 void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded) {
     updateReadyButton_->setDetail(downloaded
-                                      ? tr("KétPlus Pro %1 · Restart to install").arg(version)
-                                      : tr("KétPlus Pro %1 · Review and install").arg(version));
+                                      ? tr("ketPlus Pro %1 · Restart to install").arg(version)
+                                      : tr("ketPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
@@ -425,7 +437,7 @@ void ActivityBar::setAccount(const QString& name) {
 
 void ActivityBar::refreshIdentityText() {
     // A long name ends in "…" before the chevron; the tooltip keeps all of it.
-    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    const QString full = accountName_.isEmpty() ? tr("ketPlus") : accountName_;
     QString name = full;
     // Before it is laid out the label has no width yet; the button's resize elides again.
     if (identityButton_->isVisible() && identityName_->width() > 0)
@@ -506,15 +518,36 @@ void ActivityBar::setMachines(const QStringList& ids, const QStringList& names,
         return;
     const QSignalBlocker blocker(machineSelect_);
     machineSelect_->clear();
-    for (int i = 0; i < ids.size(); ++i)
-        machineSelect_->addItem(names.at(i), ids.at(i));
+    for (int i = 0; i < ids.size(); ++i) {
+        const QString label = names.at(i);
+        machineSelect_->addItem(label, ids.at(i));
+        auto parts = label.split(QStringLiteral(" · "));
+        if (parts.size() >= 3) {
+            QString state = parts.takeLast();
+            while (state.endsWith(QLatin1Char('.')) || state.endsWith(QChar(0x2026)))
+                state.chop(1);
+            const QString route = parts.takeLast();
+            machineSelect_->setItemData(i,
+                                        state + QStringLiteral(" · ") + route +
+                                            QStringLiteral(" · ") +
+                                            parts.join(QStringLiteral(" · ")),
+                                        Qt::UserRole + 1);
+        }
+    }
     const int selected = machineSelect_->findData(selectedId);
     machineSelect_->setCurrentIndex(selected >= 0 ? selected : 0);
 }
 
 void ActivityBar::setRemoteMachineSelected(const bool selected) {
+    remoteMachineSelected_ = selected;
     repositoryAction_->setEnabled(!selected);
-    machineNotice_->setVisible(selected);
+    refreshMachineNotice();
+}
+
+void ActivityBar::refreshMachineNotice() {
+    // A remote machine's repositories list here once its backend answers (ADR 0119); until
+    // then, or while it has none, the notice says so.
+    machineNotice_->setVisible(remoteMachineSelected_ && repositoryCount_ == 0);
 }
 
 void ActivityBar::setSourceControlAvailable(const bool available) {
@@ -526,15 +559,10 @@ void ActivityBar::setSourceControlCount(const int count) {
     sourceControlButton_->setCount(count > 0 ? std::optional<int>(count) : std::nullopt);
 }
 
-void ActivityBar::setTagFilter(const QString& tag) {
-    tagFilter_->setTag(tag.trimmed());
-    tagFilterRow_->setVisible(!tagFilter_->tag().isEmpty());
-    repositoryList_->setTagFilter(tagFilter_->tag());
-}
-
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
-    repositoryList_->setTagFilter(tagFilter_->tag());
+    repositoryCount_ = static_cast<int>(repositories.size());
+    refreshMachineNotice();
 }
 
 ket::NavItem* ActivityBar::addModeButton(const QByteArray& symbol, const QString& label,

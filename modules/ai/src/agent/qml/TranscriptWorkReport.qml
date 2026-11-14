@@ -6,7 +6,9 @@ import Ket as Kit
 // agent reports items through work_report and the daemon merges them by key. This card groups
 // them and computes every count, the progress and the state, so the numbers always match the
 // items. `report` is the daemon ledger: { title, turn, items: [{ key, group, title, status,
-// evidence, remaining, next: { action, owner }, verified, created_turn, updated_turn }] }.
+// evidence, remaining, next: { action, owner }, verified, created_turn, updated_turn,
+// closed_turn, replaced_by }] }. An item another one replaced is a duplicate: never shown or
+// counted. Finished items from long ago fold under "Finished earlier" in their group.
 Rectangle {
     id: card
 
@@ -22,7 +24,7 @@ Rectangle {
     property bool animate: running
     property string openItem
     property bool showClosed: true
-    readonly property var items: report && report.items ? report.items : []
+    readonly property var items: report && report.items ? report.items.filter(item => !item.replaced_by) : []
     readonly property int turn: report && report.turn ? report.turn : 0
     readonly property var groups: {
         const order = []
@@ -41,13 +43,34 @@ Rectangle {
     }
     // Groups with new, changed, active or blocked items open; finished groups stay closed.
     property var closedGroups: Object.create(null)
+    // Groups whose "Finished earlier" fold the user opened.
+    property var openEarlier: Object.create(null)
+    // A closed item finished this many turns ago folds away, so a long conversation shows its
+    // open and recent work instead of its whole history. An item closed before closed_turn
+    // existed dates from when it was added.
+    readonly property int earlierTurns: 20
     readonly property int total: counted(items).length
     readonly property int finished: done(items)
-    readonly property bool needsYou: items.some(item => !closed(item) && item.next && item.next.owner === "user")
+    // An open item no call changed for this many turns (work_report::staleTurns): likely
+    // forgotten by the agent, so it reads muted and does not make the report need you.
+    readonly property int staleTurns: 20
+    readonly property bool needsYou: items.some(item => !closed(item) && !stale(item) && item.next && item.next.owner === "user")
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function closed(item) { return item.status === "done" || item.status === "cancelled" }
+    function stale(item) { return !closed(item) && turn - (item.updated_turn || 0) >= staleTurns }
     function counted(list) { return list.filter(item => item.status !== "cancelled") }
+    function earlier(item) {
+        if (!closed(item) || change(item) !== "")
+            return false
+        const finished = item.closed_turn !== undefined ? item.closed_turn : (item.created_turn || 0)
+        return turn - finished >= earlierTurns
+    }
+    function toggleEarlier(group) {
+        const next = Object.assign(Object.create(null), openEarlier)
+        next[group.title] = !openEarlier[group.title]
+        openEarlier = next
+    }
     function done(list) { return counted(list).filter(item => item.status === "done").length }
     function change(item) {
         if (item.created_turn === turn)
@@ -197,6 +220,10 @@ Rectangle {
                 required property var modelData
                 readonly property bool open: card.groupOpen(modelData)
                 readonly property var shown: modelData.items.filter(item => card.showClosed || !card.closed(item))
+                // Folded only beside recent work: a group of old finished items shows them all.
+                readonly property var recent: shown.filter(item => !card.earlier(item))
+                readonly property var folded: recent.length > 0 ? shown.filter(item => card.earlier(item)) : []
+                readonly property bool earlierOpen: card.openEarlier[modelData.title] === true
                 visible: shown.length > 0
                 width: parent.width
                 spacing: card.px(2)
@@ -266,13 +293,15 @@ Rectangle {
 
                 // The group's items, each opening its evidence and next step.
                 Repeater {
-                    model: group.open ? group.shown : []
+                    model: !group.open ? [] : group.folded.length === 0 ? group.shown
+                         : group.earlierOpen ? group.recent.concat(group.folded) : group.recent
                     Column {
                         id: entry
                         required property var modelData
                         readonly property bool expanded: card.openItem === modelData.key
                         readonly property string change: card.change(modelData)
                         readonly property var next: modelData.next || null
+                        readonly property bool stale: card.stale(modelData)
                         width: parent.width
                         spacing: 0
 
@@ -309,17 +338,19 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: entry.modelData.title
                                     elide: Text.ElideRight
-                                    color: entry.modelData.status === "cancelled" ? KetTheme.t.textMuted : KetTheme.t.textMain
+                                    color: entry.modelData.status === "cancelled" || entry.stale ? KetTheme.t.textMuted : KetTheme.t.textMain
                                     font.strikeout: entry.modelData.status === "cancelled"
                                     font.family: KetTheme.fontFamily
                                     font.pixelSize: card.px(13)
                                 }
                                 Kit.KetBadge {
                                     id: changeBadge
-                                    visible: entry.change !== ""
+                                    objectName: "workReportItemBadge"
+                                    visible: entry.change !== "" || entry.stale
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: entry.change === "new" ? qsTr("New") : qsTr("Updated")
-                                    tone: KetTheme.BadgeTone.Info
+                                    text: entry.change === "new" ? qsTr("New") : entry.change !== "" ? qsTr("Updated")
+                                        : qsTr("No update for %1 turns").arg(card.turn - (entry.modelData.updated_turn || 0))
+                                    tone: entry.change !== "" ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral
                                 }
                             }
                             Text {
@@ -329,7 +360,7 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: card.closed(entry.modelData) || !entry.next
                                       ? card.statusLabel(entry.modelData.status) : card.owner(entry.next.owner)
-                                color: !card.closed(entry.modelData) && entry.next && entry.next.owner === "user"
+                                color: !card.closed(entry.modelData) && !entry.stale && entry.next && entry.next.owner === "user"
                                        ? KetTheme.t.warning : KetTheme.t.textMuted
                                 font.family: KetTheme.fontFamily
                                 font.pixelSize: card.px(12)
@@ -401,6 +432,47 @@ Rectangle {
                                 }
                             }
                         }
+                    }
+                }
+
+                // The group's finished history, folded.
+                Rectangle {
+                    id: earlierRow
+                    objectName: "workReportEarlier"
+                    visible: group.open && group.folded.length > 0
+                    width: parent.width
+                    height: card.px(28)
+                    radius: card.px(5)
+                    color: earlierArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
+                    border.color: earlierRow.activeFocus ? KetTheme.t.focusBorder : "transparent"
+                    activeFocusOnTab: visible
+                    Accessible.role: Accessible.Button
+                    Accessible.name: earlierText.text
+                    Accessible.description: group.earlierOpen ? qsTr("Expanded") : qsTr("Collapsed")
+                    Accessible.onPressAction: card.toggleEarlier(group.modelData)
+                    Keys.onSpacePressed: card.toggleEarlier(group.modelData)
+                    Keys.onReturnPressed: card.toggleEarlier(group.modelData)
+                    Row {
+                        x: card.px(30)
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: card.px(8)
+                        Kit.KetIcon { name: group.earlierOpen ? "chevron-down" : "chevron-right"; box: card.px(12); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
+                        Text {
+                            id: earlierText
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: group.earlierOpen ? qsTr("Hide earlier finished items")
+                                : qsTr("Finished earlier (%1)").arg(group.folded.length)
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: card.px(12)
+                        }
+                    }
+                    MouseArea {
+                        id: earlierArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: card.toggleEarlier(group.modelData)
                     }
                 }
             }

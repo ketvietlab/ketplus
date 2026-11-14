@@ -15,6 +15,11 @@ ketplus_enable_warnings(ketplus_daemon_client_upgrade_policy_tests)
 add_test(NAME ketplus_daemon_client_upgrade_policy_tests
     COMMAND ketplus_daemon_client_upgrade_policy_tests)
 
+qt_add_executable(ketplus_machine_backend_tests MachineBackendTest.cpp)
+target_link_libraries(ketplus_machine_backend_tests PRIVATE Qt6::Test ketplus_remote)
+ketplus_enable_warnings(ketplus_machine_backend_tests)
+add_test(NAME ketplus_machine_backend_tests COMMAND ketplus_machine_backend_tests)
+
 ketplus_add_daemon_test(ketplus_headless_daemon_tests HeadlessDaemonTest.cpp)
 target_compile_definitions(ketplus_headless_daemon_tests PRIVATE
     KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>" KETPLUS_TEST_CTL="$<TARGET_FILE:ketplusctl>")
@@ -26,11 +31,57 @@ target_sources(ketplus_atlas_access_tests PRIVATE cloud-privacy/MemoryCredential
 ketplus_add_daemon_test(ketplus_remote_control_client_tests RemoteControlClientTest.cpp)
 target_sources(ketplus_remote_control_client_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_link_libraries(ketplus_remote_control_client_tests PRIVATE ketplus_remote_control)
+ketplus_add_daemon_test(ketplus_remote_control_projection_tests RemoteControlProjectionTest.cpp)
+target_sources(ketplus_remote_control_projection_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_link_libraries(ketplus_remote_control_projection_tests PRIVATE ketplus_remote_control)
+ketplus_add_daemon_test(ketplus_remote_relay_backend_tests RemoteRelayBackendTest.cpp)
+target_sources(ketplus_remote_relay_backend_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_link_libraries(ketplus_remote_relay_backend_tests PRIVATE ketplus_remote_control)
+
+# ADR 0124 release trust and installer state machine; no provider traffic.
+qt_add_executable(ketplus_daemon_release_tests DaemonReleaseTest.cpp)
+target_link_libraries(ketplus_daemon_release_tests PRIVATE Qt6::Test ketplus_remote_ssh)
+ketplus_enable_warnings(ketplus_daemon_release_tests)
+add_test(NAME ketplus_daemon_release_tests COMMAND ketplus_daemon_release_tests)
+include(${CMAKE_CURRENT_SOURCE_DIR}/SshInstallTransactionTest.cmake)
+
+qt_add_executable(ketplus_remote_ssh_tunnel_tests SshTunnelTest.cpp)
+ketplus_enable_warnings(ketplus_remote_ssh_tunnel_tests)
+target_link_libraries(ketplus_remote_ssh_tunnel_tests PRIVATE Qt6::Test ketplus_remote_ssh)
+add_test(NAME ketplus_remote_ssh_tunnel_tests COMMAND ketplus_remote_ssh_tunnel_tests)
+
+qt_add_executable(ketplus_remote_known_hosts_tests KnownHostsFileTest.cpp)
+ketplus_enable_warnings(ketplus_remote_known_hosts_tests)
+target_link_libraries(ketplus_remote_known_hosts_tests PRIVATE Qt6::Test ketplus_remote_ssh)
+add_test(NAME ketplus_remote_known_hosts_tests COMMAND ketplus_remote_known_hosts_tests)
+
+qt_add_executable(ketplus_remote_ssh_backend_tests SshMachineBackendTest.cpp)
+ketplus_enable_warnings(ketplus_remote_ssh_backend_tests)
+target_link_libraries(ketplus_remote_ssh_backend_tests PRIVATE Qt6::Test ketplus_remote_ssh_backend)
+add_test(NAME ketplus_remote_ssh_backend_tests COMMAND ketplus_remote_ssh_backend_tests)
+
+# ADR 0119 over SSH with a real ketplus_daemon behind a loopback sshd and FakeCodex.
+qt_add_executable(ketplus_remote_ssh_daemon_integration_tests SshDaemonIntegrationTest.cpp)
+ketplus_enable_warnings(ketplus_remote_ssh_daemon_integration_tests)
+target_link_libraries(ketplus_remote_ssh_daemon_integration_tests PRIVATE
+    Qt6::Test ketplus_remote_ssh_backend)
+target_compile_definitions(ketplus_remote_ssh_daemon_integration_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
+add_dependencies(ketplus_remote_ssh_daemon_integration_tests ketplus_daemon)
+add_test(NAME ketplus_remote_ssh_daemon_integration_tests
+    COMMAND ketplus_remote_ssh_daemon_integration_tests)
 
 ketplus_add_daemon_test(ketplus_atlas_live_runtime_tests AtlasLiveRuntimeTest.cpp)
 ketplus_add_daemon_test(ketplus_atlas_live_tunnel_tests AtlasLiveTunnelTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_catalog_cache_tests ProviderCatalogCacheTest.cpp)
+ketplus_add_daemon_test(ketplus_copilot_cli_tests CopilotCliTest.cpp)
+target_compile_definitions(ketplus_copilot_cli_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
+add_dependencies(ketplus_copilot_cli_tests ketplus_daemon)
 ketplus_add_daemon_test(ketplus_daemon_protocol_tests DaemonProtocolTest.cpp)
+ketplus_add_daemon_test(ketplus_schedule_rule_tests ScheduleRuleTest.cpp)
+ketplus_add_daemon_test(ketplus_schedule_protocol_tests ScheduleProtocolTest.cpp)
+ketplus_add_daemon_test(ketplus_schedule_runner_tests ScheduleRunnerTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_media_preview_tests McpMediaPreviewTest.cpp)
 ketplus_add_daemon_test(ketplus_context_harness_tests ContextHarnessTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_deletion_tests ProviderDeletionTest.cpp)
@@ -60,15 +111,57 @@ ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cp
 ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
 ketplus_add_daemon_test(ketplus_computer_provider_integration_tests ComputerProviderIntegrationTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_handoff_tests ProviderHandoffTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_adapter_tests CopilotAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_copilot_tools_tests CopilotToolsTest.cpp)
+ketplus_add_daemon_test(ketplus_copilot_catalog_tests CopilotCatalogTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_acp_adapter_tests AcpAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_messaging_tests AgentMessagingTest.cpp)
+ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
+ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
+# T-36: team_tasks rows, history pages and whole entries for agents.
+ketplus_add_daemon_test(ketplus_team_agent_tasks_tests TeamAgentTasksTest.cpp)
 ketplus_add_daemon_test(ketplus_team_flow_tests TeamFlowTest.cpp)
+ketplus_add_daemon_test(ketplus_team_goal_tests TeamGoalTest.cpp)
+ketplus_add_daemon_test(ketplus_team_title_tests TeamTitleTest.cpp)
+ketplus_add_daemon_test(ketplus_team_reply_tests TeamReplyTest.cpp)
+ketplus_add_daemon_test(ketplus_team_stall_tests TeamStallTest.cpp)
+ketplus_add_daemon_test(ketplus_team_wait_tests TeamWaitTest.cpp)
+ketplus_add_daemon_test(ketplus_team_review_tests TeamReviewTest.cpp)
+ketplus_add_daemon_test(ketplus_team_review_place_tests TeamReviewPlaceTest.cpp)
+ketplus_add_daemon_test(ketplus_team_verdict_tests TeamVerdictTest.cpp)
+ketplus_add_daemon_test(ketplus_team_reviewers_tests TeamReviewersTest.cpp)
+ketplus_add_daemon_test(ketplus_team_lane_tests TeamLaneTest.cpp)
+ketplus_add_daemon_test(ketplus_team_payload_tests TeamPayloadTest.cpp)
+ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
+# ADR 0114, open point 2: the global automatic-turn budget and each team's own.
+ketplus_add_daemon_test(ketplus_team_budget_tests TeamBudgetTest.cpp)
+# T-56: a team's language, its Updates, decisions and digests in it.
+ketplus_add_daemon_test(ketplus_team_language_tests TeamLanguageTest.cpp)
+ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)
+# ADR 0118: done by a merged pull request or by the leader.
+ketplus_add_daemon_test(ketplus_team_done_tests TeamDoneTest.cpp)
+# ADR 0114 §10: the disk warning and the removal of a done task's worktree.
+ketplus_add_daemon_test(ketplus_team_storage_tests TeamStorageTest.cpp)
+# T-90 (ADR 0123): the team's repository changes; a task works in a repository of its own.
+ketplus_add_daemon_test(ketplus_team_repository_tests TeamRepositoryTest.cpp)
+ketplus_add_daemon_test(ketplus_team_branch_name_tests TeamBranchNameTest.cpp)
+# T-38: tracked changes only, allowed paths, and a head only from the task's own branch.
+ketplus_add_daemon_test(ketplus_team_attribution_tests TeamAttributionTest.cpp)
+# ADR 0116: team commands from paired phones, checked against the contract's fixture.
+ketplus_add_daemon_test(ketplus_team_remote_tests TeamRemoteTest.cpp)
+target_compile_definitions(ketplus_team_remote_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+ketplus_add_daemon_test(ketplus_team_remote_cloud_tests TeamRemoteCloudTest.cpp)
+target_sources(ketplus_team_remote_cloud_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_compile_definitions(ketplus_team_remote_cloud_tests PRIVATE
+    KETPLUS_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 ketplus_add_daemon_test(ketplus_work_report_tests WorkReportTest.cpp)
 ketplus_add_daemon_test(ketplus_awaiting_reply_tests AwaitingReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_tag_catalog_tests TagCatalogTest.cpp)
@@ -82,10 +175,13 @@ ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformed
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_worktree_revision_cache_tests WorktreeRevisionCacheTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
     JournalMigrationRecoveryTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_schedule_storage_tests ScheduleStorageTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_schedule_host_tests ScheduleHostTest.cpp)
 # Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
 find_package(SQLite3)
 if(TARGET SQLite::SQLite3)
@@ -127,6 +223,9 @@ add_dependencies(ketplus_desktop_daemon_client_tests ketplus_daemon)
 ketplus_add_daemon_test(ketplus_desktop_transcript_window_tests DesktopTranscriptWindowTest.cpp)
 target_link_libraries(ketplus_desktop_transcript_window_tests PRIVATE ketplus_ai)
 
+ketplus_add_daemon_test(ketplus_desktop_transcript_internal_steps_tests DesktopTranscriptInternalStepsTest.cpp)
+target_link_libraries(ketplus_desktop_transcript_internal_steps_tests PRIVATE ketplus_ai)
+
 ketplus_add_daemon_test(ketplus_conversation_attention_daemon_tests ConversationAttentionDaemonTest.cpp)
 target_link_libraries(ketplus_conversation_attention_daemon_tests PRIVATE ketplus_ai)
 
@@ -157,7 +256,9 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs")
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")
     add_test(NAME ketplus_codex_contract_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/contract.test.mjs")
 endif()
@@ -180,3 +281,17 @@ set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 
 ketplus_tests_offscreen()
+# #468: the daemon's team texts, read by the desktop's transcript blocks.
+ketplus_add_daemon_test(ketplus_team_transcript_contract_tests TeamTranscriptContractTest.cpp)
+target_sources(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src/agent/TeamTranscriptBlocks.cpp)
+target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src)
+
+ketplus_add_daemon_test(ketplus_relay_attachment_host_tests RelayAttachmentHostTest.cpp)
+target_sources(ketplus_relay_attachment_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+
+ketplus_add_daemon_test(ketplus_session_preparation_store_tests SessionPreparationStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_session_preparation_host_tests SessionPreparationHostTest.cpp)
+ketplus_add_daemon_test(ketplus_relay_preparation_host_tests RelayPreparationHostTest.cpp)
+target_sources(ketplus_relay_preparation_host_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)

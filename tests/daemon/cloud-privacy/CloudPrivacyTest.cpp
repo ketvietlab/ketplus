@@ -403,6 +403,52 @@ class CloudPrivacyTest final : public QObject {
             QVERIFY(!request.attribute(QNetworkRequest::Http2AllowedAttribute, true).toBool());
     }
 
+    void removedRelayEnrollmentSignsOutWithoutRetryingOrDeletingLocalWork_data() {
+        QTest::addColumn<int>("status");
+        QTest::addColumn<QByteArray>("body");
+        QTest::addColumn<bool>("signedOut");
+        QTest::addColumn<bool>("storageFailure");
+        QTest::newRow("removed-machine")
+            << 404 << QByteArray(R"({"code":"machine_not_found"})") << true << false;
+        QTest::newRow("removed-machine-storage-failure")
+            << 404 << QByteArray(R"({"code":"machine_not_found"})") << true << true;
+        QTest::newRow("temporary-failure")
+            << 503 << QByteArray(R"({"code":"machine_not_found"})") << false << false;
+        QTest::newRow("unrelated-not-found")
+            << 404 << QByteArray(R"({"code":"not_found"})") << false << false;
+    }
+
+    void removedRelayEnrollmentSignsOutWithoutRetryingOrDeletingLocalWork() {
+        QFETCH(int, status);
+        QFETCH(QByteArray, body);
+        QFETCH(bool, signedOut);
+        QFETCH(bool, storageFailure);
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        r03::failRemovals = storageFailure;
+        const auto resetFailure = qScopeGuard([] { r03::failRemovals = false; });
+        const QString path = QStringLiteral("/v2/daemon/challenges");
+        c.transport.statusForPath.insert(path, status);
+        c.transport.responseForPath.insert(path, body);
+        int callbacks = 0;
+        Access::credential(*c.client, [&](const bool ready, const QString&) {
+            QVERIFY(!ready);
+            ++callbacks;
+        });
+        QTRY_COMPARE(callbacks, 1);
+        QCOMPARE(Access::status(*c.client).value("configured").toBool(), !signedOut);
+        QCOMPARE(c.journal.sessions().size(), 1);
+        if (signedOut) {
+            const qsizetype requests = c.transport.requests.size();
+            Access::upload(*c.client);
+            Access::pollCommands(*c.client);
+            QCoreApplication::processEvents();
+            QCOMPARE(c.transport.requests.size(), requests);
+            QCOMPARE(callbacks, 1);
+        }
+    }
+
     void freshUploadDecryptsToCommandMetadataOnly() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
@@ -1126,6 +1172,84 @@ class CloudPrivacyTest final : public QObject {
                  qPrintable(error));
         Access::uploadAll(*c.client);
         QTRY_COMPARE(appends(), 3);
+    }
+
+    // The relay waits for a cursor this journal pruned: no retry can fill it, so the session waits
+    // on the long gap cap, while another refusal keeps the shorter one.
+    void cursorGapWaitsOnItsOwnCap() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("gap.sqlite"));
+        QString error;
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "first"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        c.start();
+        c.transport.statusForPath.insert("/v2/events:append", 409);
+        c.transport.responseForPath.insert("/v2/events:append", R"({"code":"event_cursor_gap"})");
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::uploadWaitsOnGap(*c.client), 1);
+
+        Access::expireUploadBackoff(*c.client);
+        c.transport.responseForPath.insert("/v2/events:append", R"({"code":"stale_generation"})");
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::uploadWaitsOnGap(*c.client), 0);
+    }
+
+    // Once the relay accepted every event of a session, later passes skip it without reading the
+    // journal until it records another event.
+    void acceptedSessionIsSkippedUntilItsCursorMoves() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("known.sqlite"));
+        QString error;
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "first"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        c.start();
+        c.transport.statusForPath.insert("/v2/events:append", 202);
+        c.transport.responseForPath.insert(
+            "/v2/events:append",
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":1}]})");
+        const auto appends = [&c] {
+            int count = 0;
+            for (const QNetworkRequest& request : c.transport.requests)
+                count += request.url().path() == "/v2/events:append";
+            return count;
+        };
+        // The journal still holds event 1 unsent. A known cursor at the session's last event
+        // skips it before the journal is read, or the event would go out.
+        QVERIFY(Access::registerCursors(*c.client));
+        Access::setKnownUploadedCursor(*c.client, 1);
+        for (int i = 0; i < 5; ++i)
+            Access::uploadAll(*c.client);
+        QTest::qWait(50);
+        QCOMPARE(appends(), 0);
+
+        // A known cursor behind the session's last event reads the journal and uploads.
+        Access::setKnownUploadedCursor(*c.client, 0);
+        Access::uploadAll(*c.client);
+        QTRY_COMPARE(appends(), 1);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::knownUploadedCursor(*c.client), 1);
+        Access::uploadAll(*c.client);
+        QTest::qWait(50);
+        QCOMPARE(appends(), 1);
+
+        c.transport.responseForPath.insert(
+            "/v2/events:append",
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":2}]})");
+        QVERIFY2(c.journal.appendEvent("session-synthetic", 1, "user.message", {{"text", "next"}},
+                                       &error) > 0,
+                 qPrintable(error));
+        Access::uploadAll(*c.client);
+        QTRY_COMPARE(appends(), 2);
+        QTRY_COMPARE(Access::knownUploadedCursor(*c.client), 2);
+
+        // A session the journal no longer stores drops its cursor.
+        QVERIFY2(c.journal.deleteSession("session-synthetic", 1, &error), qPrintable(error));
+        Access::uploadAll(*c.client);
+        QCOMPARE(Access::knownUploadedCursor(*c.client), -1);
     }
 
     void deletionHeartbeatRetriesUntilTheExactOperationIsAcknowledged() {
@@ -2183,6 +2307,155 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(outcome(QStringLiteral("running"), 2).isNull());
     }
 
+    void awaitingAgentReplyTracksDurablePendingRequests() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        StoredSession sender{QStringLiteral("sender-synthetic"),
+                             directory.path(),
+                             QStringLiteral("codex"),
+                             {},
+                             {},
+                             QStringLiteral("ready")};
+        sender.generation = 1;
+        QVERIFY(journal.upsertSession(sender));
+        const QDateTime now =
+            QDateTime::fromString(QStringLiteral("2026-01-01T12:00:00.000Z"), Qt::ISODateWithMs);
+        AgentMessageRecord message;
+        message.id = QStringLiteral("request-synthetic");
+        message.chainId = QStringLiteral("chain-synthetic");
+        message.fromSession = sender.id;
+        message.fromGeneration = 1;
+        message.fromNumber = QStringLiteral("1234");
+        message.toSession = QStringLiteral("receiver-synthetic");
+        message.toGeneration = 1;
+        message.toNumber = QStringLiteral("5678");
+        message.kind = QStringLiteral("request");
+        message.expectReply = true;
+        message.body = QStringLiteral("Synthetic request");
+        message.state = QStringLiteral("queued");
+        message.createdAt = now.toString(Qt::ISODateWithMs);
+        message.expiresAt = now.addSecs(3600).toString(Qt::ISODateWithMs);
+        const auto waiting = [&] { return journal.sessionsAwaitingAgentReply(now); };
+        QVERIFY(waiting().isEmpty());
+        QVERIFY(journal.insertAgentMessage(message));
+        for (const QString& state : {QStringLiteral("queued"), QStringLiteral("held"),
+                                     QStringLiteral("releasing"), QStringLiteral("delivered")}) {
+            message.state = state;
+            QVERIFY(journal.updateAgentMessage(message));
+            QCOMPARE(waiting(), QSet<QString>{sender.id});
+        }
+        for (const QString& state :
+             {QStringLiteral("answered"), QStringLiteral("failed"), QStringLiteral("expired")}) {
+            message.state = state;
+            QVERIFY(journal.updateAgentMessage(message));
+            QVERIFY(waiting().isEmpty());
+        }
+        // Request attributes are immutable: updateAgentMessage changes delivery state only.
+        AgentMessageRecord notification = message;
+        notification.id = QStringLiteral("notification-synthetic");
+        notification.state = QStringLiteral("delivered");
+        notification.expectReply = false;
+        QVERIFY(journal.insertAgentMessage(notification));
+        QVERIFY(waiting().isEmpty());
+        message.state = QStringLiteral("delivered");
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(journal.sessionsAwaitingAgentReply(now.addSecs(3600)).isEmpty());
+        QVERIFY(waiting().contains(sender.id));
+        AgentMessageRecord second = message;
+        second.id = QStringLiteral("second-request-synthetic");
+        QVERIFY(journal.insertAgentMessage(second));
+        message.state = QStringLiteral("answered");
+        QVERIFY(journal.updateAgentMessage(message));
+        QVERIFY(waiting().contains(sender.id));
+        second.state = QStringLiteral("failed");
+        QVERIFY(journal.updateAgentMessage(second));
+        QVERIFY(waiting().isEmpty());
+        message.state = QStringLiteral("delivered");
+        QVERIFY(journal.updateAgentMessage(message));
+        sender.generation = 2;
+        QVERIFY(journal.upsertSession(sender));
+        QVERIFY(waiting().isEmpty());
+    }
+
+    void heartbeatClearsAnsweredAgentReplyInItsSealedSnapshot() {
+        QTemporaryDir directory;
+        Context c(directory.filePath("pending-heartbeat.sqlite"));
+        AgentMessageRecord request;
+        request.id = "heartbeat-request-synthetic";
+        request.chainId = "heartbeat-chain-synthetic";
+        request.fromSession = "session-synthetic";
+        request.fromGeneration = 1;
+        request.fromNumber = "1234";
+        request.toSession = "receiver-synthetic";
+        request.toGeneration = 1;
+        request.toNumber = "5678";
+        request.kind = "request";
+        request.expectReply = true;
+        request.body = "Synthetic request";
+        request.state = "delivered";
+        request.createdAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+        request.expiresAt =
+            QDateTime::currentDateTimeUtc().addSecs(3600).toString(Qt::ISODateWithMs);
+        QVERIFY(c.journal.insertAgentMessage(request));
+        c.start();
+        c.transport.statusForPath.insert("/v2/daemon/heartbeat", 202);
+        c.transport.responseForPath.insert("/v2/daemon/heartbeat",
+                                           R"({"ok":true,"accepted":true})");
+        const auto heartbeats = [&] {
+            QList<QJsonObject> result;
+            for (int i = 0; i < c.transport.requests.size(); ++i)
+                if (c.transport.requests.at(i).url().path() == "/v2/daemon/heartbeat")
+                    result.append(QJsonDocument::fromJson(c.transport.bodies.at(i)).object());
+            return result;
+        };
+        for (const bool pending : {true, false}) {
+            if (!pending) {
+                request.state = "answered";
+                QVERIFY(c.journal.updateAgentMessage(request));
+            }
+            const auto before = heartbeats().size();
+            Access::publishHeartbeat(*c.client);
+            QTRY_VERIFY_WITH_TIMEOUT(
+                heartbeats().size() == before + 1 && Access::heartbeatIdle(*c.client), 5000);
+            const QJsonObject snapshot =
+                heartbeats().last().value("sessions").toArray().first().toObject();
+            QVERIFY(!snapshot.contains("awaitingAgentReply"));
+            const QJsonObject envelope = snapshot.value("encryptedMetadata").toObject();
+            const QJsonObject content = envelope.value("content").toObject();
+            QVERIFY(!content.isEmpty());
+            const QByteArray aad = CloudCrypto::canonical(
+                {"ketplus", 2, "session-metadata", "workspace-synthetic", "machine-synthetic",
+                 snapshot.value("id"), snapshot.value("generation"), envelope.value("cursor"),
+                 envelope.value("turnSequence"), content.value("keyId"), content.value("keyEpoch"),
+                 content.value("senderDeviceId"), content.value("senderKeyVersion")});
+            const auto signing = CloudCrypto::fromBase64Url(
+                Access::crypto(*c.client).publicKeys().value("signingPublicKey").toString());
+            QString error;
+            const auto plaintext = Access::crypto(*c.client).decrypt(
+                content, aad, signing, "session-synthetic", 1, &error);
+            QVERIFY2(!plaintext.isEmpty(), qPrintable(error));
+            const auto metadata = QJsonDocument::fromJson(plaintext).object();
+            QVERIFY(metadata.value("awaitingAgentReply").isBool());
+            QCOMPARE(metadata.value("awaitingAgentReply").toBool(), pending);
+        }
+    }
+
+    void awaitingAgentReplyRemainsInsideSealedMetadata() {
+        StoredSession session;
+        session.id = QStringLiteral("session-synthetic");
+        session.worktreePath = QStringLiteral("/synthetic/worktree");
+        for (const bool waiting : {true, false}) {
+            const auto sealed = Access::metadata(
+                session, {{session.id, {{QStringLiteral("awaitingAgentReply"), waiting}}}});
+            QCOMPARE(sealed.value(QStringLiteral("awaitingAgentReply")).toBool(), waiting);
+            QVERIFY(!Access::snapshots({session}).first().toObject().contains(
+                QStringLiteral("awaitingAgentReply")));
+        }
+        QVERIFY(!Access::metadata(session).contains(QStringLiteral("awaitingAgentReply")));
+    }
+
     // ADR 0027: the phone shows the conversation number, which the relay never reads.
     void sealedMetadataCarriesTheConversationNumber() {
         StoredSession session;
@@ -2628,6 +2901,81 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(quota.reserve("repo-a", hour, 1000).isEmpty());
         QVERIFY(!quota.reserve("repo-a", hour + 5, 1000).isEmpty());
         QVERIFY(quota.reserve("repo-a", hour + 10, 1000).isEmpty());
+    }
+
+    // ADR 0119: a paired Desktop verifies a worktree index entry with no conversation by the
+    // catalog scope the host signs inside a worktree.configuration.read result.
+    void aConfigurationReadEchoesTheHostCatalogScopeInsideItsSignedResult() {
+        QTemporaryDir dir;
+        const QString repository = dir.filePath("echo-repo");
+        QVERIFY(QDir().mkpath(repository));
+        QCOMPARE(QProcess::execute("git", {"-C", repository, "init", "-q", "-b", "main"}), 0);
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const auto canonical = QFileInfo(repository).canonicalFilePath();
+        QVERIFY(c.journal.rememberWorktree(canonical));
+        const QByteArray salt(32, 's');
+        Access::pathSalt(*c.client, salt);
+        const auto id = [&](const QByteArray& label) {
+            return QString::fromLatin1(
+                QMessageAuthenticationCode::hash(label + '\n' + canonical.toUtf8(), salt,
+                                                 QCryptographicHash::Sha256)
+                    .toHex());
+        };
+        CredentialStore phoneStore("echo-phone");
+        CloudCrypto phone(&phoneStore);
+        const QByteArray phoneAgreement =
+            CloudCrypto::fromBase64Url(phone.publicKeys().value("agreementPublicKey").toString());
+        const QJsonObject command{
+            {"id", "command-configuration-echo"},
+            {"kind", "worktree.configuration.read"},
+            {"attempt", 1},
+            {"workspaceId", "workspace-synthetic"},
+            {"sessionGeneration", 0},
+            {"expectedCatalogRevision", 0},
+            {"expectedLifecycleRevision", 0},
+            {"repositoryId", id("repository")},
+            {"worktreeId", id("worktree")},
+            {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
+                                    {"recipientKeyVersion", 1},
+                                    {"senderDeviceId", "echo-phone"},
+                                    {"senderKeyVersion", 1}}}};
+        const qsizetype before = c.transport.requests.size();
+        Access::worktreeCommand(*c.client, command, {}, phoneAgreement);
+        const QString ack = "/v2/commands/command-configuration-echo/ack";
+        QTRY_VERIFY_WITH_TIMEOUT(
+            std::any_of(c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                        [&ack](const auto& request) { return request.url().path() == ack; }),
+            30000);
+        QJsonObject body;
+        for (qsizetype i = before; i < c.transport.requests.size(); ++i)
+            if (c.transport.requests.at(i).url().path() == ack)
+                body = QJsonDocument::fromJson(c.transport.bodies.at(i)).object();
+        const auto content = body.value("encryptedResult").toObject();
+        QCOMPARE(content.value("keyId").toString(),
+                 QStringLiteral("session-create:command-configuration-echo"));
+        QString error;
+        const auto plaintext = phone.decryptSealedAs(
+            content,
+            Access::resultAad(*c.client, command, 1, body.value("status").toString(),
+                              body.value("resultCode").toString(), content),
+            CloudCrypto::fromBase64Url(
+                Access::crypto(*c.client).publicKeys().value("signingPublicKey").toString()),
+            "command-configuration-echo", "session-create:command-configuration-echo", &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        // Without providers the result reports provider_capabilities_unavailable; a success and
+        // that failure carry the same echo.
+        const auto worktree =
+            QJsonDocument::fromJson(plaintext).object().value("worktree").toObject();
+        QCOMPARE(worktree.value("repositoryId").toString(), id("repository"));
+        QCOMPARE(worktree.value("worktreeId").toString(), id("worktree"));
+        QVERIFY(!worktree.value("repositoryLabel").toString().isEmpty());
+        QVERIFY(!worktree.value("worktreeLabel").toString().isEmpty());
+        // The host keeps no catalog revision, so it echoes none (ADR 0119).
+        QVERIFY(!worktree.contains("catalogRevision"));
+        QVERIFY(!worktree.contains("lifecycleRevision"));
+        // The host path never leaves the machine.
+        QVERIFY(!plaintext.contains(canonical.toUtf8()));
     }
 
     void aRedeliveredNewWorktreeAnswersWithItsFirstResultAndCreationIsBounded() {

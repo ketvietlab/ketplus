@@ -1,11 +1,13 @@
 #include "runtime/SessionHost.h"
 
+#include "agents/ReviewerPolicy.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/CursorAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/CompactWindowPolicy.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -18,8 +20,17 @@ bool reviewGuard(const QJsonObject& options) {
     return options.value(QStringLiteral("review_guard")).toBool();
 }
 
+// ketplus#295: a Codex reviewer reviews with its own Full access, never with less; the broker
+// checks the reviewed branch after the turn instead of guarding each tool call.
+bool fullAccessReview(const QJsonObject& options) {
+    return reviewGuard(options) &&
+           reviewer::supported(options.value(QStringLiteral("provider")).toString(),
+                               options.value(QStringLiteral("execution_policy")).toString()) &&
+           reviewer::checksBranch(options.value(QStringLiteral("provider")).toString());
+}
+
 QString sandboxName(const QJsonObject& options) {
-    if (reviewGuard(options))
+    if (reviewGuard(options) && !fullAccessReview(options))
         return QStringLiteral("read-only");
     if (options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full"))
         return QStringLiteral("danger-full-access");
@@ -33,7 +44,7 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
-    // Defence in depth: reviews only reach Claude (AgentBroker::enforcesReviewGuard).
+    // Defence in depth: reviews reach only Claude or Codex with Full access (ReviewerPolicy.h).
     if (reviewGuard(options))
         return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")
@@ -100,8 +111,9 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
         beginClaudeTurn(sessionId, generation, input, options);
         return;
     }
-    if (it->stored.adapter == QStringLiteral("cursor")) {
-        beginCursorTurn(sessionId, generation, input, options);
+    if (it->stored.adapter == QStringLiteral("cursor") ||
+        it->stored.adapter == QStringLiteral("copilot")) {
+        beginAcpTurn(sessionId, generation, input, options);
         return;
     }
     if (it->stored.threadId.isEmpty()) {
@@ -192,8 +204,20 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                        // reaches the agent as its prompt-free mode, not only Codex's sandbox.
                        {QStringLiteral("permission"), sandboxName(options)},
                        {QStringLiteral("images"), imagePaths(input)}};
-    if (reviewGuard(options))
+    if (reviewGuard(options)) {
         params.insert(QStringLiteral("reviewGuard"), true);
+        // ADR 0114 §2: a team's review round verifies; anything else stays read-only.
+        const QString scratch = reviewScratchDirectory(sessionId);
+        if (options.value(QStringLiteral("review_profile")).toString() ==
+                QStringLiteral("verify") &&
+            QDir().mkpath(scratch)) {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("verify"));
+            params.insert(QStringLiteral("scratchDirectory"),
+                          QFileInfo(scratch).canonicalFilePath());
+        } else {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("read"));
+        }
+    }
     params.insert(QStringLiteral("freshContext"), it->stored.threadId.isEmpty());
     // The handoff transcript lives outside the worktree; Claude may read it without asking.
     const QString handoff = handoffDirectory(sessionId);
@@ -248,15 +272,18 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         });
 }
 
-void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generation,
-                                  const QJsonArray& input, const QJsonObject& options) {
+void SessionHost::beginAcpTurn(const QString& sessionId, const qint64 generation,
+                               const QJsonArray& input, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
-    ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
-    if (it == sessions_.end() || it->stored.generation != generation || cursor == nullptr)
+    ProviderAdapter* const target = it == sessions_.end() ? nullptr : provider(it->stored.adapter);
+    if (it == sessions_.end() || it->stored.generation != generation || target == nullptr)
         return;
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
-        failTurnStart(*it, QStringLiteral("Cursor turn has no prompt."));
+        failTurnStart(*it, QStringLiteral("%1 turn has no prompt.")
+                               .arg(it->stored.adapter == QStringLiteral("copilot")
+                                        ? QStringLiteral("GitHub Copilot")
+                                        : QStringLiteral("Cursor")));
         return;
     }
     QJsonObject params{{QStringLiteral("sessionId"), sessionId},
@@ -277,7 +304,7 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("agentMcpServer"), agent_tools::acpServer(*launch));
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
-    cursor->call(
+    target->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);
@@ -373,7 +400,12 @@ void SessionHost::failTurnStart(Session& session, const QString& message) {
     releaseTurnAttachments(session);
     session.stored.state = QStringLiteral("failed");
     journal_->upsertSession(session.stored);
-    appendEvent(session, QStringLiteral("runtime.error"), {{QStringLiteral("message"), message}});
+    // The turn never ran and no turn.completed follows: said on the event, with the turn,
+    // so the broker ends the requests that turn carried (ADR 0114 §8).
+    appendEvent(session, QStringLiteral("runtime.error"),
+                {{QStringLiteral("message"), message},
+                 {QStringLiteral("turn_start_failed"), true},
+                 {QStringLiteral("turn_sequence"), session.stored.currentTurnSequence}});
 }
 
 void SessionHost::providerStopped(const QString& adapterName, const QString& reason) {
@@ -463,6 +495,12 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     session.lastAnswerText.clear();
     session.decisionRequested = false;
     return completed;
+}
+
+QString SessionHost::reviewScratchDirectory(const QString& sessionId) const {
+    return QFileInfo(journal_->databasePath())
+        .dir()
+        .filePath(QStringLiteral("review-scratch/%1").arg(sessionId));
 }
 
 } // namespace ketplus::daemon

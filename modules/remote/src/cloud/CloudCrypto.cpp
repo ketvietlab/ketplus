@@ -366,11 +366,19 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
 QByteArray CloudCrypto::decryptSealed(const QJsonObject& content, const QByteArray& associatedData,
                                       const QByteArray& senderSigningKey, const QString& requestId,
                                       QString* error) {
+    return decryptSealedAs(content, associatedData, senderSigningKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), error);
+}
+
+QByteArray CloudCrypto::decryptSealedAs(const QJsonObject& content,
+                                        const QByteArray& associatedData,
+                                        const QByteArray& senderSigningKey,
+                                        const QString& requestId, const QString& keyId,
+                                        QString* error) {
     if (content.value(QStringLiteral("version")).toInt() != 1 ||
         content.value(QStringLiteral("algorithm")).toString() != QStringLiteral("A256GCM") ||
         content.value(QStringLiteral("keyEpoch")).toInt() != 1 ||
-        content.value(QStringLiteral("keyId")).toString() !=
-            QStringLiteral("session-create:%1").arg(requestId)) {
+        content.value(QStringLiteral("keyId")).toString() != keyId) {
         if (error)
             *error = QStringLiteral("The sealed command envelope is invalid.");
         return {};
@@ -417,6 +425,28 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
                                        const QString& requestId, const QString& recipientDeviceId,
                                        const int recipientKeyVersion, const QString& senderDeviceId,
                                        const int senderKeyVersion, QString* error) {
+    return encryptSealedAs(plaintext, associatedData, recipientAgreementKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), recipientDeviceId,
+                           recipientKeyVersion, senderDeviceId, senderKeyVersion, error);
+}
+
+QJsonObject
+CloudCrypto::encryptSealedAs(const QByteArray& plaintext, const QByteArray& associatedData,
+                             const QByteArray& recipientAgreementKey, const QString& requestId,
+                             const QString& keyId, const QString& recipientDeviceId,
+                             const int recipientKeyVersion, const QString& senderDeviceId,
+                             const int senderKeyVersion, QString* error) {
+    return encryptSealedBound(
+        plaintext, [&associatedData](const QJsonObject&) { return associatedData; },
+        recipientAgreementKey, requestId, keyId, recipientDeviceId, recipientKeyVersion,
+        senderDeviceId, senderKeyVersion, error);
+}
+
+QJsonObject CloudCrypto::encryptSealedBound(
+    const QByteArray& plaintext, const SealedAssociatedData& associatedDataFor,
+    const QByteArray& recipientAgreementKey, const QString& requestId, const QString& keyId,
+    const QString& recipientDeviceId, const int recipientKeyVersion, const QString& senderDeviceId,
+    const int senderKeyVersion, QString* error) {
     PKeyContext context(EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, nullptr), EVP_PKEY_CTX_free);
     EVP_PKEY* generated = nullptr;
     if (!context || EVP_PKEY_keygen_init(context.get()) != 1 ||
@@ -432,6 +462,17 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
                                     reinterpret_cast<unsigned char*>(publicBytes.data()),
                                     &publicSize) != 1)
         return {};
+    QJsonObject envelope{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("algorithm"), QStringLiteral("A256GCM")},
+        {QStringLiteral("keyId"), keyId},
+        {QStringLiteral("keyEpoch"), 1},
+        {QStringLiteral("senderDeviceId"), senderDeviceId},
+        {QStringLiteral("senderKeyVersion"), senderKeyVersion},
+        {QStringLiteral("recipientDeviceId"), recipientDeviceId},
+        {QStringLiteral("recipientKeyVersion"), recipientKeyVersion},
+        {QStringLiteral("ephemeralPublicKey"), QString::fromLatin1(base64Url(publicBytes))}};
+    const QByteArray associatedData = associatedDataFor(envelope);
     const QByteArray key = derive(privateBytes, recipientAgreementKey, requestId.toUtf8(), error);
     const QByteArray nonce = randomBytes(12, error);
     QByteArray tag;
@@ -444,19 +485,11 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
     const QByteArray signature = sign(input, error);
     if (key.size() != 32 || nonce.size() != 12 || tag.size() != 16 || signature.size() != 64)
         return {};
-    return {{QStringLiteral("version"), 1},
-            {QStringLiteral("algorithm"), QStringLiteral("A256GCM")},
-            {QStringLiteral("keyId"), QStringLiteral("session-create:%1").arg(requestId)},
-            {QStringLiteral("keyEpoch"), 1},
-            {QStringLiteral("senderDeviceId"), senderDeviceId},
-            {QStringLiteral("senderKeyVersion"), senderKeyVersion},
-            {QStringLiteral("recipientDeviceId"), recipientDeviceId},
-            {QStringLiteral("recipientKeyVersion"), recipientKeyVersion},
-            {QStringLiteral("ephemeralPublicKey"), QString::fromLatin1(base64Url(publicBytes))},
-            {QStringLiteral("nonce"), QString::fromLatin1(base64Url(nonce))},
-            {QStringLiteral("ciphertext"), QString::fromLatin1(base64Url(ciphertext))},
-            {QStringLiteral("tag"), QString::fromLatin1(base64Url(tag))},
-            {QStringLiteral("signature"), QString::fromLatin1(base64Url(signature))}};
+    envelope.insert(QStringLiteral("nonce"), QString::fromLatin1(base64Url(nonce)));
+    envelope.insert(QStringLiteral("ciphertext"), QString::fromLatin1(base64Url(ciphertext)));
+    envelope.insert(QStringLiteral("tag"), QString::fromLatin1(base64Url(tag)));
+    envelope.insert(QStringLiteral("signature"), QString::fromLatin1(base64Url(signature)));
+    return envelope;
 }
 
 QByteArray CloudCrypto::derive(const QByteArray& privateBytes, const QByteArray& peerPublicKey,

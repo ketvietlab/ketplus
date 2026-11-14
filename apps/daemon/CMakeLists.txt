@@ -5,7 +5,7 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeAccountUsage.cpp src/providers/ClaudeAccountUsage.h
     src/providers/ClaudeKeychain.cpp)
 if(APPLE)
-    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation")
+    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit")
 endif()
 target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Concurrent
@@ -16,6 +16,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Sql
     OpenSSL::Crypto
     ketplus_remote
+    ketplus_team_language
     ketplus_control_crypto
     ketplus_browser_tools
     ketplus_computer_tools
@@ -114,6 +115,7 @@ else()
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/input.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/tasks.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/resume.mjs"
+            "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/review-guard.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/session-delete.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package.json"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package-lock.json"
@@ -146,7 +148,7 @@ add_custom_command(TARGET ketplus_daemon POST_BUILD
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
     install(TARGETS ketplus_daemon RUNTIME DESTINATION bin COMPONENT Runtime)
     install(DIRECTORY "${KETPLUS_CLAUDE_SIDECAR_STAGE}/"
-        DESTINATION lib/ketplus/claude-sidecar COMPONENT Runtime)
+        DESTINATION lib/ketplus/claude-sidecar USE_SOURCE_PERMISSIONS COMPONENT Runtime)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"
         DESTINATION lib/ketplus COMPONENT Runtime)
 endif()
@@ -157,14 +159,15 @@ ketplus_enable_warnings(ketplusctl)
 install(TARGETS ketplusctl RUNTIME DESTINATION bin COMPONENT Runtime)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include("${PROJECT_SOURCE_DIR}/packaging/linux/RuntimePlugins.cmake")
     # Qt 6.11 adds the default QPA plugins even when their type is excluded.
     qt_generate_deploy_app_script(TARGET ketplus_daemon OUTPUT_SCRIPT ketplus_daemon_deploy
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
-        EXCLUDE_PLUGINS qxcb qoffscreen)
+        EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_daemon_deploy}" COMPONENT Runtime)
     qt_generate_deploy_app_script(TARGET ketplusctl OUTPUT_SCRIPT ketplus_ctl_deploy
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
-        EXCLUDE_PLUGINS qxcb qoffscreen)
+        EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_ctl_deploy}" COMPONENT Runtime)
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/ketplus-daemon.service"
         DESTINATION share/systemd/user COMPONENT Runtime)

@@ -1,4 +1,4 @@
-// ADR 0112: the team store and the membership rules, on a real journal with a fake runtime.
+// ADR 0114: the team store and the membership rules, on a real journal with a fake runtime.
 // No provider is started.
 #include "storage/LocalJournal.h"
 #include "teams/TeamCoordinator.h"
@@ -24,6 +24,11 @@ class FakeHost final : public TeamHostPort {
         return it.value();
     }
 
+    // A conversation of these tests stands in its repository's main worktree.
+    QString conversationRepository(const QString& sessionId) const override {
+        return conversations.value(sessionId).worktree;
+    }
+
     void add(const QString& id, const QString& provider = QStringLiteral("codex"),
              const QString& repository = QStringLiteral("/repo")) {
         conversations.insert(id, {.sessionId = id,
@@ -32,7 +37,6 @@ class FakeHost final : public TeamHostPort {
                                   .title = id,
                                   .provider = provider,
                                   .worktree = repository,
-                                  .repository = repository,
                                   .idle = true});
     }
 
@@ -86,6 +90,7 @@ class TeamStoreTest final : public QObject {
             host_.add(id);
         host_.add(QStringLiteral("rev"), QStringLiteral("claude"));
         host_.add(QStringLiteral("rev2"), QStringLiteral("claude"));
+        host_.add(QStringLiteral("rev3"), QStringLiteral("claude"));
         host_.add(QStringLiteral("elsewhere"), QStringLiteral("codex"), QStringLiteral("/other"));
     }
 
@@ -97,7 +102,7 @@ class TeamStoreTest final : public QObject {
             teams.load();
             QSignalSpy changed(&teams, &TeamCoordinator::teamChanged);
             const auto result = teams.create(standard(), QStringLiteral("user"));
-            QVERIFY2(result.ok(), qPrintable(result.error->message));
+            QVERIFY2(result.ok(), qPrintable(result.error.value_or(TeamError{}).message));
             id = result.teamId;
             // Creating, then the leader's first turn with the goal (#458).
             QVERIFY(changed.size() >= 1);
@@ -133,7 +138,7 @@ class TeamStoreTest final : public QObject {
         QTest::newRow("codex reviewer") << 6 << "reviewer_unsupported";
         QTest::newRow("overlapping lanes") << 7 << "lane_overlap";
         QTest::newRow("same conversation twice") << 8 << "already_member";
-        QTest::newRow("second reviewer") << 9 << "role_taken";
+        QTest::newRow("third reviewer") << 9 << "role_taken";
         QTest::newRow("empty name") << 10 << "invalid_payload";
     }
 
@@ -175,7 +180,9 @@ class TeamStoreTest final : public QObject {
             team.members[2].sessionId = QStringLiteral("dev1");
             break;
         case 9:
+            // T-23: two reviewers are allowed, a third is not.
             team.members.append(member("rev2", role::reviewer, "Second reviewer"));
+            team.members.append(member("rev3", role::reviewer, "Third reviewer"));
             break;
         case 10:
             team.members[1].name = QStringLiteral("  ");
@@ -201,15 +208,18 @@ class TeamStoreTest final : public QObject {
                             member("rev2", role::reviewer, "R")});
         QCOMPARE(teams.create(other, "user").error.value_or(TeamError{}).code,
                  QStringLiteral("already_member"));
-        // The leader and the reviewer stay; the team is deleted instead.
+        // The leader and the last reviewer stay; the team is deleted instead.
         QCOMPARE(teams.removeMember(id, "lead", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("role_required"));
         QCOMPARE(teams.removeMember(id, "rev", "user").error.value_or(TeamError{}).code,
-                 QStringLiteral("role_required"));
-        QCOMPARE(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user")
+                 QStringLiteral("last_reviewer"));
+        // T-23: a second reviewer joins, a third does not.
+        QVERIFY(teams.addMember(id, member("rev2", role::reviewer, "R2"), "user").ok());
+        QCOMPARE(teams.addMember(id, member("rev3", role::reviewer, "R3"), "user")
                      .error.value_or(TeamError{})
                      .code,
                  QStringLiteral("role_taken"));
+        QVERIFY(teams.removeMember(id, "rev2", "user").ok());
         QCOMPARE(teams.addMember(id, member("elsewhere", role::developer, "E", {"z"}), "user")
                      .error.value_or(TeamError{})
                      .code,
@@ -241,6 +251,14 @@ class TeamStoreTest final : public QObject {
         QVERIFY(!teams.isMember("dev2"));
         QVERIFY(!teams.archiveRefusal("dev2"));
         QCOMPARE(teams.archiveRefusal("dev1")->code, QStringLiteral("team_member"));
+        // The message says what can be done: a developer is removed, the leader and the
+        // reviewer stay as long as the team does.
+        QVERIFY(teams.archiveRefusal("dev1")->message.contains("Remove it from the team"));
+        const Team& made = *teams.team(id);
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::leader)->sessionId)
+                    ->message.contains("Delete the team"));
+        QVERIFY(teams.archiveRefusal(made.memberWithRole(role::reviewer)->sessionId)
+                    ->message.contains("another reviewer"));
         QVERIFY(!journal.teamUpdates(id, false, 100).isEmpty());
     }
 
@@ -304,6 +322,76 @@ class TeamStoreTest final : public QObject {
         teams.load();
         QVERIFY(teams.teams().isEmpty());
         QVERIFY(teams.create(standard(), "user").ok());
+    }
+
+    // A journal that cannot be read is not a journal without teams: the coordinator says it
+    // has not loaded, keeps what it knew, and reads again when asked.
+    void anUnreadableJournalIsNotAnEmptyOne() {
+        LocalJournal journal(journalPath());
+        TeamCoordinator teams(&journal, &host_);
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QVERIFY(teams.create(standard(), "user").ok());
+        const auto sql = [this](const QString& statement) {
+            bool ran = false;
+            {
+                auto database = QSqlDatabase::addDatabase("QSQLITE", "break-journal");
+                database.setDatabaseName(journalPath());
+                ran = database.open() && QSqlQuery(database).exec(statement);
+                database.close();
+            }
+            QSqlDatabase::removeDatabase("break-journal");
+            return ran;
+        };
+        QVERIFY(sql("ALTER TABLE teams RENAME TO teams_away"));
+        QTest::ignoreMessage(QtWarningMsg, "Unable to read the teams from the journal.");
+        teams.load();
+        QVERIFY(!teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+        QVERIFY(sql("ALTER TABLE teams_away RENAME TO teams"));
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+    }
+
+    // The read can also stop on a later row: SQLite hands out the first team and then fails.
+    // Half a list is not the list.
+    void aReadThatStopsPartWayKeepsTheTeamsItHad() {
+        LocalJournal journal(journalPath());
+        TeamCoordinator teams(&journal, &host_);
+        teams.load();
+        QVERIFY(teams.create(standard(), "user").ok());
+        const auto sql = [this](const QString& statement) {
+            bool ran = false;
+            {
+                auto database = QSqlDatabase::addDatabase("QSQLITE", "later-row");
+                database.setDatabaseName(journalPath());
+                ran = database.open() && QSqlQuery(database).exec(statement);
+                database.close();
+            }
+            QSqlDatabase::removeDatabase("later-row");
+            return ran;
+        };
+        QVERIFY(sql("INSERT INTO teams (id, repository, document, revision, created_at, "
+                    "changed_at) SELECT id + 1, repository, document, revision, created_at, "
+                    "changed_at FROM teams"));
+        QVERIFY(sql("ALTER TABLE teams RENAME TO teams_saved"));
+        QVERIFY(sql("CREATE VIEW teams AS SELECT id, CASE WHEN id = (SELECT MAX(id) FROM "
+                    "teams_saved) THEN json_extract('invalid-json', '$') ELSE document END AS "
+                    "document FROM teams_saved"));
+        bool read = true;
+        QVERIFY(journal.teamDocuments(&read).isEmpty());
+        QVERIFY(!read);
+        QTest::ignoreMessage(QtWarningMsg, "Unable to read the teams from the journal.");
+        teams.load();
+        QVERIFY(!teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
+        QVERIFY(sql("DROP VIEW teams"));
+        QVERIFY(sql("DELETE FROM teams_saved WHERE id = (SELECT MAX(id) FROM teams_saved)"));
+        QVERIFY(sql("ALTER TABLE teams_saved RENAME TO teams"));
+        teams.load();
+        QVERIFY(teams.isLoaded());
+        QCOMPARE(teams.teams().size(), 1);
     }
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "providers/ProviderAdapter.h"
+#include "providers/ProviderExecutable.h"
 
 #include "providers/ProviderLineReader.h"
 #include "providers/compat/ProviderCapabilities.h"
@@ -108,7 +109,7 @@ class CodexAdapter final : public ProviderAdapter {
     [[nodiscard]] QStringList browserArguments() const;
     [[nodiscard]] static QString findExecutable();
 
-    QString executable_;
+    ProviderExecutable executable_;
     QProcess* process_{nullptr};
     ProviderLineReader stdoutReader_;
     QByteArray stderrBuffer_;
