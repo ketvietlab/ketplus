@@ -19,6 +19,8 @@ struct Candidate final {
     QString sessionId;
     QString repository;
     QString provider;
+    // A Codex reviewer needs "full" (ketplus#295).
+    QString executionPolicy;
     // The team it is on already, 0 for none.
     qint64 teamId{0};
 };
@@ -26,8 +28,6 @@ struct Candidate final {
 // Membership rules, without side effects. Each returns the first rule the change breaks.
 namespace rules {
 
-// Only Claude enforces the read-only review guard (ADR 0067).
-[[nodiscard]] bool reviewerProviderSupported(const QString& provider);
 // A lane's prefixes, normalised: relative, '/' separated, no "." or "..", no trailing '/'.
 // Nothing when a prefix is invalid.
 [[nodiscard]] std::optional<QStringList> normalisedPaths(const QStringList& paths);

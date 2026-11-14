@@ -93,8 +93,19 @@ team's document stores this as `reviews` (`reviewer`, `reviewing`, `reviewing_me
 task. The daemon reads the diff off its event loop before the review
 starts and stores nothing until it has it: the task stays queued meanwhile, a restart asks
 again, and a diff that is no longer for the next task or the team's integration branch is
-read again. The reviewer is therefore a Claude conversation, the only
-provider that enforces the review guard. A team's review round runs under the guard's
+read again. The reviewer is a Claude conversation, the provider that enforces the review
+guard, or (ketplus#295) a Codex conversation with Full access: a new Codex reviewer takes
+the team's `execution_policy` only when it is `full`, and is refused with
+`reviewer_unsupported` ("Codex can review only with Full access.") otherwise. A Codex review
+round runs with that Full access, and the daemon compares the task's worktree HEAD,
+symbolic ref, porcelain status, `head_commit` and remote branch head before and after it
+(ADR 0067, "Codex reviews with Full access", including its residual risk). A change voids
+the round: it is not counted, the task stays In review, its history gets a
+`review_tampered` entry with each field before and after, the leader gets an actionable
+`review_tampered` update, the owner's conversation a notice, and nothing is reverted. Like
+a reply without a verdict, the reviewer is asked again once; a second change blocks the
+task for the leader (`review_block` `review_tampered`, back to In review when answered),
+and `team_review_accept` does not accept it. A Claude team review round runs under the guard's
 **verify** profile (ADR 0067): the reviewer may build, run tests and use the browser
 without a prompt and write only in its own scratch directory; it cannot change a
 tracked file, commit, push, merge, approve or close a pull request, delete a branch or
@@ -632,8 +643,10 @@ revision) and `team.removed` go to every local client.
 what the leader and the developers may do without asking. `full` needs
 `risk_acknowledged`, as it does for one conversation (`execution_policy_denied` otherwise). It is the execution policy of
 those conversations when the team starts them, at creation and for a developer added
-later; the user changes one member in its conversation. The reviewer is not in it: its
-review turns run under the verify profile whatever its conversation's policy is (ADR 0067).
+later; the user changes one member in its conversation. A Claude reviewer is not in it:
+its review turns run under the verify profile whatever its conversation's policy is (ADR
+0067). A Codex reviewer is started with `full` when the team's policy is `full`, and is
+refused otherwise (ketplus#295).
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document

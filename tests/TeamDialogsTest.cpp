@@ -25,6 +25,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -301,9 +302,28 @@ class TeamDialogsTest final : public QObject {
         dialog->reject();
     }
 
+    void theReviewerChoosesCodexOnlyWithFullAccess() {
+        // ketplus#295: without Full access Codex is listed, disabled, and Claude is kept.
+        TeamAgentChooser chooser(bothProviders, {"codex", "gpt-5", {}}, AgentChoice::reviewer);
+        QCOMPARE(chooser.providers()->count(), 2);
+        QCOMPARE(chooser.providers()->currentData().toString(), QStringLiteral("claude"));
+        QVERIFY(!chooser.providers()->isEnabled());
+        QVERIFY(chooser.hasChoice());
+        const auto* items = qobject_cast<QStandardItemModel*>(chooser.providers()->model());
+        QVERIFY(items);
+        QVERIFY(!items->item(chooser.providers()->findData("codex"))->isEnabled());
+        // With Full access Codex can be chosen.
+        TeamAgentChooser full(bothProviders, {"codex", "gpt-5", {}},
+                              AgentChoice::fullAccessReviewer);
+        QCOMPARE(full.providers()->count(), 2);
+        QVERIFY(full.providers()->isEnabled());
+        QCOMPARE(full.agent().provider, QStringLiteral("codex"));
+    }
+
     void theReviewerChoosesClaudeOnly() {
-        TeamAgentChooser chooser(bothProviders, {"claude", "opus", "medium"}, "claude");
-        QCOMPARE(chooser.providers()->count(), 1);
+        TeamAgentChooser chooser(bothProviders, {"claude", "opus", "medium"},
+                                 AgentChoice::reviewer);
+        QCOMPARE(chooser.providers()->count(), 2);
         QCOMPARE(chooser.providers()->currentData().toString(), QStringLiteral("claude"));
         QVERIFY(!chooser.providers()->isEnabled());
         QCOMPARE(chooser.modelSelect()->count(), 2);

@@ -129,6 +129,8 @@ class AddMemberForm final : public QWidget {
     void submit(std::function<void()> added);
     // The chosen role has no room left: five developers, or two reviewers.
     [[nodiscard]] bool isFull() const;
+    // The team starts its members with Full access, so a Codex reviewer may join (ketplus#295).
+    [[nodiscard]] bool fullAccessTeam() const;
     [[nodiscard]] bool canAdd(const QString& role) const;
     [[nodiscard]] QString role() const { return role_; }
     void setRole(const QString& role);

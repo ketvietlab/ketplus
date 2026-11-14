@@ -82,6 +82,16 @@ the product install. This adds no code to `core/`.
 
 ### Qt modules
 
+Linux Pro engineering packages dynamically deploy the Qt 6.11.1 SDK, including
+WebView/WebEngine, and add the pinned AppImage type2 runtime. The runtime's full
+upstream license inventory is in `AppImage-runtime.txt`; its MIT license does not
+replace the licenses of statically linked musl, libfuse, squashfuse, zstd and zlib.
+Before public binary distribution, provide the exact Qt/Chromium third-party
+notices and source offer and satisfy the runtime's static dependency source and
+relink requirements. The preliminary SPDX inventory deliberately records these
+unresolved conclusions as `NOASSERTION` and sets no publication authorization.
+Package creation and local smoke testing do not waive these release gates.
+
 The current CMake configuration references these Qt modules:
 
 ```text

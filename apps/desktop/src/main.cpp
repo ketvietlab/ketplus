@@ -13,7 +13,10 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
+#include <QProcess>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
@@ -32,6 +35,33 @@ int main(int argc, char* argv[]) {
     QtWebView::initialize();
     ketplus::applyApplicationAttributes();
     QApplication app(argc, argv);
+#ifdef Q_OS_LINUX
+    // Installed-package diagnostic: inspect a real child, never the app's own
+    // environment, and do not print unrelated variables (tokens, credentials).
+    if (app.arguments().contains(QStringLiteral("--check-child-environment"))) {
+        QProcess child;
+        child.start(QStringLiteral("/usr/bin/env"), {QStringLiteral("-0")});
+        if (!child.waitForFinished(5000) || child.exitStatus() != QProcess::NormalExit ||
+            child.exitCode() != 0) {
+            std::fprintf(stderr, "Child environment probe failed\n");
+            return 1;
+        }
+        QJsonObject environment;
+        for (const auto& entry : child.readAllStandardOutput().split('\0')) {
+            const auto separator = entry.indexOf('=');
+            if (separator < 0)
+                continue;
+            const auto name = entry.left(separator);
+            if (name == "LD_LIBRARY_PATH" || name == "QT_PLUGIN_PATH" || name.startsWith("QML") ||
+                name.startsWith("QTWEBENGINE")) {
+                environment.insert(QString::fromUtf8(name),
+                                   QString::fromUtf8(entry.mid(separator + 1)));
+            }
+        }
+        std::puts(QJsonDocument(environment).toJson(QJsonDocument::Compact).constData());
+        return 0;
+    }
+#endif
     // The name keeps the settings location of existing installs; users see ketPlus Pro.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ketPlus Pro"));

@@ -1,5 +1,7 @@
 #include "teams/TeamRules.h"
 
+#include "agents/ReviewerPolicy.h"
+
 #include <QRegularExpression>
 #include <QSet>
 
@@ -12,10 +14,6 @@ namespace {
 TeamError refusal(const QString& code, const QString& message) { return {code, message}; }
 
 } // namespace
-
-bool reviewerProviderSupported(const QString& provider) {
-    return provider == QStringLiteral("claude");
-}
 
 std::optional<QStringList> normalisedPaths(const QStringList& paths) {
     QStringList result;
@@ -232,10 +230,10 @@ std::optional<TeamError> canAddMember(const Team& team, const Member& member,
     if (member.role == role::reviewer && team.count(role::reviewer) >= maximumReviewers)
         return refusal(QStringLiteral("role_taken"),
                        QStringLiteral("The team has two reviewers, the most a team has."));
-    if (member.role == role::reviewer && !reviewerProviderSupported(candidate.provider))
+    if (member.role == role::reviewer &&
+        !reviewer::supported(candidate.provider, candidate.executionPolicy))
         return refusal(QStringLiteral("reviewer_unsupported"),
-                       QStringLiteral("The reviewer must be a Claude conversation, the provider "
-                                      "that keeps a review read-only."));
+                       reviewer::unsupportedMessage(candidate.provider));
     if (member.role == role::developer) {
         if (team.count(role::developer) >= maximumDevelopers)
             return refusal(QStringLiteral("team_full"),

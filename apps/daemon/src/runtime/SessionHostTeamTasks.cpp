@@ -277,6 +277,19 @@ void SessionHost::teamRequestFinished(const QString& sessionId, const AgentMessa
                                failure);
 }
 
+std::optional<review_integrity::Scope>
+SessionHost::teamReviewScope(const QString& reviewerSession, const QString& requestId) const {
+    if (!teams_)
+        return std::nullopt;
+    return teams_->reviewScope(reviewerSession, requestId);
+}
+
+void SessionHost::teamReviewTampered(const QString& reviewerSession,
+                                     const AgentMessageRecord& request, const QJsonArray& changes) {
+    if (teams_)
+        teams_->reviewTampered(reviewerSession, request.id, changes);
+}
+
 // ADR 0114 §8: a member that asked a conversation outside its team would wait for an answer
 // that never comes. Messages inside the team are the team's own and are handled there.
 void SessionHost::agentMessageFailed(const AgentMessageRecord& message, const QString& reason) {

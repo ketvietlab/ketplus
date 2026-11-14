@@ -245,6 +245,26 @@ for line in sys.stdin:
                     'id': 'tool-' + turn_id, 'type': 'mcpToolCall', 'server': server,
                     'tool': 'browser_pages', 'arguments': {}, 'status': status}}})
             finish(thread_id, turn_id)
+        elif 'KetPlus records the reviewed branch' in text:
+            # ketplus#295: a review with Full access. A test may leave a shell command in
+            # `<log>.review` that the review runs in its worktree (a commit, a dirty file...),
+            # and the reply in `<log>.reply`.
+            action = log_path + '.review'
+            if os.path.exists(action):
+                with open(action, encoding='utf-8') as source:
+                    command = source.read()
+                os.remove(action)
+                import subprocess
+                subprocess.run(command, shell=True, cwd=message['params'].get('cwd') or '.')
+            reply = 'Verdict: no findings'
+            if os.path.exists(log_path + '.reply'):
+                with open(log_path + '.reply', encoding='utf-8') as source:
+                    reply = source.read()
+            log('review-turn')
+            emit({'method': 'item/agentMessage/delta', 'params': {
+                'threadId': thread_id, 'itemId': 'answer-' + turn_id, 'delta': reply}})
+            emit({'method': 'turn/completed', 'params': {
+                'threadId': thread_id, 'turn': {'id': turn_id, 'status': 'completed'}}})
         elif text == 'ask' and default_mode_request_user_input:
             request_id = 900 + turns
             approvals[request_id] = ('input', thread_id, turn_id)

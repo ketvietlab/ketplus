@@ -227,6 +227,7 @@ std::optional<Candidate> TeamCoordinator::candidate(const QString& sessionId) co
     return Candidate{.sessionId = sessionId,
                      .repository = host_->conversationRepository(sessionId),
                      .provider = conversation->provider,
+                     .executionPolicy = conversation->executionPolicy,
                      .teamId = current ? current->id : 0};
 }
 

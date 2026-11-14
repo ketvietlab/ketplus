@@ -142,6 +142,7 @@ SessionHost::teamConversation(const QString& sessionId) const {
                                    .model = it->stored.model,
                                    .effort = it->stored.effort,
                                    .worktree = it->stored.worktreePath,
+                                   .executionPolicy = it->stored.executionPolicy,
                                    .idle = agent.idle};
 }
 
