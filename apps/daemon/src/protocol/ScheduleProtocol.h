@@ -44,7 +44,7 @@ inline constexpr auto scheduleTargetDeletedCode = "target_deleted";
 // create or update named a conversation or team the journal does not have.
 // A team id must be that team's decimal id, the same text deleteTeam cascades on.
 inline constexpr auto scheduleTargetNotFoundCode = "target_not_found";
-// schedule.runNow answers this until the runtime that fires a schedule exists.
+// Kept for clients that still branch on it. schedule.runNow now reaches the runner.
 inline constexpr auto scheduleNotImplementedCode = "not_implemented";
 
 struct MessageValidation final {

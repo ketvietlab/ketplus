@@ -652,4 +652,38 @@ std::optional<ScheduleRunPage> LocalJournal::scheduleRuns(const QString& schedul
     return result;
 }
 
+std::optional<ScheduleRunRecord> LocalJournal::scheduleRun(const QString& id) const {
+    setError({});
+    if (id.isEmpty())
+        return std::nullopt;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT %1 FROM schedule_runs WHERE id = ?").arg(runColumns));
+    query.addBindValue(id);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return readRun(query, 0);
+}
+
+std::optional<ScheduleRunRecord> LocalJournal::queuedScheduleRun(const QString& scheduleId) const {
+    setError({});
+    if (scheduleId.isEmpty())
+        return std::nullopt;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT %1 FROM schedule_runs WHERE schedule_id = ? AND "
+                                 "status = 'queued' ORDER BY rowid DESC LIMIT 1")
+                      .arg(runColumns));
+    query.addBindValue(scheduleId);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return readRun(query, 0);
+}
+
 } // namespace ketplus::daemon

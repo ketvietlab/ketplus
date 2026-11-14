@@ -329,6 +329,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
+    startScheduleRunner();
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
     teamBranchNames_.setMaxThreadCount(1);

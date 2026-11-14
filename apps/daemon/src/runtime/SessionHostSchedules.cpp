@@ -218,6 +218,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleCreatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -274,6 +275,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -294,6 +296,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!journal_->deleteSchedule(*id, &error))
             return journalError(error);
         changed(QString::fromLatin1(protocol::scheduleDeletedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDeletedResult(*id);
     }
 
@@ -325,14 +328,15 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
     if (type == QLatin1String(protocol::scheduleRunNowType)) {
-        if (!protocol::parseScheduleId(payload, &failure))
+        const auto id = protocol::parseScheduleId(payload, &failure);
+        if (!id)
             return failed(failure);
-        return failed(QString::fromLatin1(protocol::scheduleNotImplementedCode),
-                      QStringLiteral("schedule.runNow is not implemented yet."));
+        return runScheduleNow(*id);
     }
 
     if (type == QLatin1String(protocol::scheduleRunsType)) {
@@ -374,11 +378,156 @@ void SessionHost::publishDisabledSessionSchedules(const QString& sessionId) {
     for (const ScheduleRecord& record : *rows)
         if (record.target.kind == QLatin1String("conversation"))
             publishScheduleChange(QString::fromLatin1(protocol::scheduleUpdatedChange), record);
+    noteSchedulesChanged();
 }
 
 void SessionHost::schedulesDeleted(const QList<ScheduleRecord>& schedules) {
     for (const ScheduleRecord& record : schedules)
         publishScheduleChange(QString::fromLatin1(protocol::scheduleDeletedChange), record);
+    noteSchedulesChanged();
+}
+
+} // namespace ketplus::daemon
+
+#include "schedule/JournalScheduleStore.h"
+#include "schedule/ScheduleRunner.h"
+
+#include <QFileInfo>
+
+namespace ketplus::daemon {
+
+class HostScheduleRuntime final : public schedule::ScheduleRuntime {
+  public:
+    explicit HostScheduleRuntime(SessionHost* host) : host_(host) {}
+
+    schedule::Inspection inspect(const ::ketplus::schedule::Schedule& schedule) const override {
+        schedule::Inspection inspection;
+        using Kind = ::ketplus::schedule::TargetKind;
+        if (schedule.target.kind == Kind::Conversation) {
+            if (!host_->journal_->sessionExists(schedule.target.sessionId)) {
+                inspection.state = schedule::ConversationState::Missing;
+                return inspection;
+            }
+            const auto it = host_->sessions_.constFind(schedule.target.sessionId);
+            if (it == host_->sessions_.cend()) {
+                inspection.state = schedule::ConversationState::ProviderNotReady;
+                return inspection;
+            }
+            const QString state = it->stored.state;
+            if (it->startingTurn || state == QLatin1String("running") ||
+                state == QLatin1String("starting")) {
+                inspection.state = schedule::ConversationState::Busy;
+                inspection.sessionId = schedule.target.sessionId;
+                return inspection;
+            }
+            return inspection;
+        }
+        if (schedule.target.kind == Kind::NewConversation) {
+            if (schedule.target.workspace.trimmed().isEmpty() ||
+                !QFileInfo(schedule.target.workspace).isDir())
+                inspection.state = schedule::ConversationState::WorkspaceMissing;
+            else
+                inspection.state = schedule::ConversationState::ProviderNotReady;
+            return inspection;
+        }
+        inspection.state = schedule::ConversationState::ProviderNotReady;
+        return inspection;
+    }
+
+    schedule::Delivery deliver(const ::ketplus::schedule::Schedule& schedule,
+                               const ::ketplus::schedule::Run& run) override {
+        schedule::Delivery delivery;
+        const auto it = host_->sessions_.constFind(schedule.target.sessionId);
+        if (schedule.target.kind != ::ketplus::schedule::TargetKind::Conversation ||
+            it == host_->sessions_.cend()) {
+            delivery.errorCode = QString::fromLatin1(schedule::providerNotReadyCode);
+            delivery.errorMessage = QStringLiteral("The provider is not ready.");
+            return delivery;
+        }
+        const QJsonObject result = host_->startTurn(
+            {{QStringLiteral("message_type"), QStringLiteral("session.start_turn")},
+             {QStringLiteral("session_id"), schedule.target.sessionId},
+             {QStringLiteral("session_generation"), it->stored.generation},
+             {QStringLiteral("payload"),
+              QJsonObject{
+                  {QStringLiteral("prompt"), schedule.prompt},
+                  {QStringLiteral("display_text"), schedule.prompt},
+                  {QStringLiteral("schedule_id"), schedule.id},
+                  {QStringLiteral("run_id"), run.id},
+                  {QStringLiteral("expected_context_revision"), it->stored.contextRevision}}}},
+            true);
+        if (!result.value(QStringLiteral("ok")).toBool()) {
+            delivery.errorCode = result.value(QStringLiteral("error_code"))
+                                     .toString(QString::fromLatin1(schedule::providerNotReadyCode));
+            delivery.errorMessage = result.value(QStringLiteral("error_message")).toString();
+            if (delivery.errorMessage.isEmpty())
+                delivery.errorMessage = QStringLiteral("The provider is not ready.");
+            return delivery;
+        }
+        delivery.sessionId =
+            result.value(QStringLiteral("session_id")).toString(schedule.target.sessionId);
+        delivery.turnId = result.value(QStringLiteral("turn_id")).toString();
+        return delivery;
+    }
+
+    void emitRun(const ::ketplus::schedule::Run& run) override {
+        emit host_->scheduleEvent(QString::fromLatin1(protocol::scheduleRunEvent),
+                                  protocol::scheduleRunPayload(run));
+    }
+
+    void emitChanged(const QString& change,
+                     const ::ketplus::schedule::Schedule& schedule) override {
+        emit host_->scheduleEvent(QString::fromLatin1(protocol::scheduleChangedEvent),
+                                  protocol::scheduleChangedPayload(change, schedule));
+    }
+
+  private:
+    SessionHost* host_;
+};
+
+struct SessionHost::ScheduleEngine {
+    schedule::SystemScheduleClock clock;
+    schedule::QtScheduleAlarm alarm;
+    JournalScheduleStore store;
+    HostScheduleRuntime runtime;
+    schedule::ScheduleRunner runner;
+
+    ScheduleEngine(SessionHost* host, LocalJournal* journal)
+        : store(journal), runtime(host), runner(clock, alarm, store, runtime) {}
+};
+
+void SessionHost::startScheduleRunner() {
+    if (scheduleEngine_ != nullptr || journal_ == nullptr)
+        return;
+    scheduleEngine_ = new ScheduleEngine(this, journal_);
+    scheduleEngine_->runner.start();
+}
+
+void SessionHost::stopScheduleRunner() {
+    delete scheduleEngine_;
+    scheduleEngine_ = nullptr;
+}
+
+void SessionHost::noteSchedulesChanged() {
+    if (scheduleEngine_ != nullptr)
+        scheduleEngine_->runner.schedulesChanged();
+}
+
+QJsonObject SessionHost::runScheduleNow(const QString& id) {
+    if (scheduleEngine_ == nullptr)
+        startScheduleRunner();
+    const schedule::RunNowResult result = scheduleEngine_->runner.runNow(id);
+    if (!result.ok)
+        return {{QStringLiteral("ok"), false},
+                {QStringLiteral("error_code"), result.code},
+                {QStringLiteral("error_message"), result.message}};
+    const auto run = scheduleEngine_->store.run(result.runId);
+    if (!run)
+        return {
+            {QStringLiteral("ok"), false},
+            {QStringLiteral("error_code"), QStringLiteral("journal_error")},
+            {QStringLiteral("error_message"), QStringLiteral("The schedule run was not stored.")}};
+    return protocol::scheduleRunResult(*run);
 }
 
 } // namespace ketplus::daemon

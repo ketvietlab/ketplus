@@ -91,7 +91,7 @@ class ScheduleHostTest final : public QObject {
         QVERIFY(!id.isEmpty());
         QCOMPARE(schedule.value(QStringLiteral("created_by")).toString(), QStringLiteral("user"));
         QCOMPARE(schedule.value(QStringLiteral("next_run_at")).toString(), QString{});
-        QCOMPARE(events.count(), 1);
+        QCOMPARE(events.count(), 2);
         QCOMPARE(events.at(0).at(0).toString(),
                  QString::fromLatin1(protocol::scheduleChangedEvent));
         const auto changed = events.at(0).at(1).toJsonObject();
@@ -124,7 +124,7 @@ class ScheduleHostTest final : public QObject {
         QVERIFY(!refused.value(QStringLiteral("ok")).toBool());
         QCOMPARE(refused.value(QStringLiteral("error_code")).toString(),
                  QStringLiteral("target_deleted"));
-        QCOMPARE(events.count(), 2);
+        QCOMPARE(events.count(), 3);
 
         const auto renamed = command(
             host, QStringLiteral("update-2"), QString::fromLatin1(protocol::scheduleUpdateType),
@@ -283,8 +283,18 @@ class ScheduleHostTest final : public QObject {
                                  {{QStringLiteral("id"), QStringLiteral("missing-schedule")}});
         QVERIFY(!now.value(QStringLiteral("ok")).toBool());
         QCOMPARE(now.value(QStringLiteral("error_code")).toString(),
-                 QString::fromLatin1(protocol::scheduleNotImplementedCode));
+                 QString::fromLatin1(protocol::scheduleNotFoundCode));
         QVERIFY(!journal.schedule(QStringLiteral("missing-schedule")));
+        const auto fired = command(host, QStringLiteral("now-2"),
+                                   QString::fromLatin1(protocol::scheduleRunNowType),
+                                   {{QStringLiteral("id"), id}});
+        QVERIFY2(accepted(fired, QString::fromLatin1(protocol::scheduleRunNowType), &why),
+                 qPrintable(why));
+        QVERIFY(!fired.value(QStringLiteral("run"))
+                     .toObject()
+                     .value(QStringLiteral("id"))
+                     .toString()
+                     .isEmpty());
     }
 
     void rejectsInvalidRequests() {
@@ -372,8 +382,8 @@ class ScheduleHostTest final : public QObject {
                  qPrintable(removed.value(QStringLiteral("error_code")).toString() +
                             QLatin1Char(' ') +
                             removed.value(QStringLiteral("error_message")).toString()));
-        QCOMPARE(events.count(), 2);
-        const auto disabled = events.at(1).at(1).toJsonObject();
+        QCOMPARE(events.count(), 3);
+        const auto disabled = events.at(2).at(1).toJsonObject();
         QCOMPARE(disabled.value(QStringLiteral("change")).toString(),
                  QString::fromLatin1(protocol::scheduleUpdatedChange));
         const auto disabledSchedule = disabled.value(QStringLiteral("schedule")).toObject();
@@ -396,8 +406,8 @@ class ScheduleHostTest final : public QObject {
                     {{QStringLiteral("team_id"), teamKey}});
         QVERIFY2(teamGone.value(QStringLiteral("ok")).toBool(),
                  qPrintable(teamGone.value(QStringLiteral("error_message")).toString()));
-        QCOMPARE(events.count(), 4);
-        const auto deleted = events.at(3).at(1).toJsonObject();
+        QCOMPARE(events.count(), 6);
+        const auto deleted = events.at(5).at(1).toJsonObject();
         QCOMPARE(deleted.value(QStringLiteral("change")).toString(),
                  QString::fromLatin1(protocol::scheduleDeletedChange));
         QCOMPARE(journal.schedules(ScheduleFilter{.teamId = teamKey})

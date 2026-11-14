@@ -1121,9 +1121,8 @@ local time fires once, on the first occurrence). A team start's rule must say
 `"kind": "once"`.
 
 Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
-`has_more`, or `run`. A missing id is `schedule_not_found`. The protocol handler
-still answers `not_implemented` for `schedule.runNow` until SessionHost calls the
-runner below.
+`has_more`, or `run`. A missing id is `schedule_not_found`. `schedule.runNow`
+calls `ScheduleRunner::runNow` through the journal store.
 
 ### Runner
 
