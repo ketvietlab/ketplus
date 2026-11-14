@@ -597,7 +597,7 @@ Item {
             id: scheduleClock
             objectName: "composerScheduleClock"
             readonly property var bridge: agentHost.scheduleBridge
-            visible: !!bridge && bridge.clockVisible && root.scheduleContextRevision >= 0
+            visible: !!bridge && bridge.clockVisible
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: usageRingButton.implicitWidth
             Layout.preferredHeight: usageRingButton.implicitHeight
@@ -649,48 +649,39 @@ Item {
         onWidthChanged: if (visible) area.placeAboveClock(schedulePopover)
         onHeightChanged: if (visible) area.placeAboveClock(schedulePopover)
     }
-    Popup {
+    KetMenu {
         id: existingScheduleMenu
         objectName: "existingScheduleMenu"
         parent: Basic.Overlay.overlay
+        modal: true
         onAboutToShow: area.placeAboveClock(existingScheduleMenu)
         onOpened: area.placeAboveClock(existingScheduleMenu)
         onWidthChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
         onHeightChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
-        padding: 8
-        modal: true
-        contentItem: Column {
-            spacing: 4
-            Label {
-                text: "Schedule"
-                font.bold: true
+        KetMenuSection { text: scheduleClock.bridge ? scheduleClock.bridge.existingName : "Schedule" }
+        KetMenuItem {
+            text: "Edit"
+            iconName: "edit"
+            onTriggered: {
+                if (scheduleClock.bridge)
+                    scheduleClock.bridge.edit()
+                existingScheduleMenu.close()
             }
-            Button {
-                text: "Edit"
-                flat: true
-                onClicked: {
-                    if (scheduleClock.bridge)
-                        scheduleClock.bridge.edit()
-                    existingScheduleMenu.close()
-                }
+        }
+        KetMenuItem {
+            text: scheduleClock.bridge && scheduleClock.bridge.clockActive ? "Pause" : "Resume"
+            onTriggered: {
+                if (scheduleClock.bridge)
+                    scheduleClock.bridge.pause()
+                existingScheduleMenu.close()
             }
-            Button {
-                text: scheduleClock.bridge && scheduleClock.bridge.clockActive ? "Pause" : "Resume"
-                flat: true
-                onClicked: {
-                    if (scheduleClock.bridge)
-                        scheduleClock.bridge.pause()
-                    existingScheduleMenu.close()
-                }
-            }
-            Button {
-                text: "Open in Schedules"
-                flat: true
-                onClicked: {
-                    if (scheduleClock.bridge)
-                        scheduleClock.bridge.openSchedules()
-                    existingScheduleMenu.close()
-                }
+        }
+        KetMenuItem {
+            text: "Open in Schedules"
+            onTriggered: {
+                if (scheduleClock.bridge)
+                    scheduleClock.bridge.openSchedules()
+                existingScheduleMenu.close()
             }
         }
     }

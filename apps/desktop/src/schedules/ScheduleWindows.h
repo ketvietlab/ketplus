@@ -25,6 +25,7 @@ class ScheduleWindows final : public QObject {
     [[nodiscard]] QAction* createAction(QObject* parent);
 
     void show(const QString& scheduleId = {});
+    void edit(const QString& scheduleId);
 
   signals:
     void conversationRequested(const QString& sessionId);

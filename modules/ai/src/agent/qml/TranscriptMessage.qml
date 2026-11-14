@@ -325,34 +325,45 @@ Item {
         wrapMode: Text.Wrap
         horizontalAlignment: Text.AlignRight
     }
-    Text {
-        id: scheduleRunMarker
-        objectName: "scheduledRunMarker"
-        readonly property string scheduleId: {
-            const bridge = agentHost.scheduleBridge
-            return kind === "user" && bridge ? bridge.markerScheduleId(payloadData) : ""
-        }
-        visible: text.length > 0
-        text: {
-            const bridge = agentHost.scheduleBridge
-            return kind === "user" && bridge ? bridge.markerText(payloadData) : ""
-        }
+    Row {
+        id: scheduleRunRow
+        readonly property string scheduleId: scheduleRunMarker.scheduleId
+        visible: scheduleRunMarker.text.length > 0
+        spacing: KetTheme.px(4, KetTheme.zoom)
         x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - implicitWidth - shell.transcriptRowInset
         y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + userLead.gap
-        color: KetTheme.t.accentText
-        font.underline: scheduleRunHover.containsMouse
-        font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
-        MouseArea {
-            id: scheduleRunHover
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
+        KetIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            name: "clock"
+            box: KetTheme.px(12, KetTheme.zoom)
+            color: KetTheme.t.accentText
+        }
+        Text {
+            id: scheduleRunMarker
+            objectName: "scheduledRunMarker"
+            readonly property string scheduleId: {
                 const bridge = agentHost.scheduleBridge
-                if (bridge)
-                    bridge.openSchedule(scheduleRunMarker.scheduleId)
+                return kind === "user" && bridge ? bridge.markerScheduleId(payloadData) : ""
+            }
+            text: {
+                const bridge = agentHost.scheduleBridge
+                return kind === "user" && bridge ? bridge.markerText(payloadData) : ""
+            }
+            color: KetTheme.t.accentText
+            font.underline: scheduleRunHover.containsMouse
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            MouseArea {
+                id: scheduleRunHover
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    const bridge = agentHost.scheduleBridge
+                    if (bridge)
+                        bridge.openSchedule(scheduleRunMarker.scheduleId)
+                }
             }
         }
     }
@@ -366,7 +377,7 @@ Item {
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
         x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - shell.transcriptRowInset : messageDelegate.contentColumnX + shell.transcriptRowInset
-        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) + scheduleRunMarker.height - messageDelegate.firstRowLift
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) + scheduleRunRow.height - messageDelegate.firstRowLift
         width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - 2 * shell.transcriptRowInset
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0

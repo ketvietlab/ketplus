@@ -102,6 +102,7 @@ class MainWindow final : public QMainWindow {
     MachineComposition* machineComposition();
     // Opens the one Schedules window, selecting `scheduleId` when it is not empty.
     void showSchedules(const QString& scheduleId = {});
+    void editSchedule(const QString& scheduleId);
 
   signals:
     void newWindowRequested();

@@ -9,6 +9,8 @@
 #include <QTime>
 #include <QTimeZone>
 
+#include <cstdlib>
+
 namespace ketplus {
 namespace {
 
@@ -21,10 +23,15 @@ QJsonObject objectFrom(const QString& json) {
     return document.isObject() ? document.object() : QJsonObject{};
 }
 
-QString clock(const QString& iso) {
-    if (iso.size() >= 16 && iso.at(10) == QLatin1Char('T'))
-        return iso.left(10) + QStringLiteral(" ") + iso.mid(11, 5);
-    return iso;
+QStringList zoneChoices(const QString& current) {
+    QStringList zones{QStringLiteral("Asia/Ho_Chi_Minh"), QStringLiteral("UTC"),
+                      QStringLiteral("Asia/Bangkok"),     QStringLiteral("Asia/Singapore"),
+                      QStringLiteral("Asia/Tokyo"),       QStringLiteral("Europe/London"),
+                      QStringLiteral("America/New_York"), QStringLiteral("America/Los_Angeles"),
+                      QStringLiteral("Australia/Sydney")};
+    if (!current.isEmpty() && !zones.contains(current))
+        zones.prepend(current);
+    return zones;
 }
 
 bool recent(const QString& iso) {
@@ -144,6 +151,154 @@ void ComposerSchedule::setMissedPolicy(const QString& policy) {
     publish();
 }
 
+int ComposerSchedule::repeatIndex() const {
+    if (repeatKind_ == QLatin1String("weekdays"))
+        return 1;
+    if (repeatKind_ == QLatin1String("weekly"))
+        return 2;
+    if (repeatKind_ == QLatin1String("interval"))
+        return 3;
+    return 0;
+}
+
+void ComposerSchedule::setRepeatIndex(const int index) {
+    static const QStringList kinds{QStringLiteral("daily"), QStringLiteral("weekdays"),
+                                   QStringLiteral("weekly"), QStringLiteral("interval")};
+    if (index < 0 || index >= kinds.size())
+        return;
+    setRepeatKind(kinds.at(index));
+}
+
+int ComposerSchedule::busyIndex() const { return busyPolicy_ == QLatin1String("skip") ? 1 : 0; }
+
+void ComposerSchedule::setBusyIndex(const int index) {
+    setBusyPolicy(index == 1 ? QStringLiteral("skip") : QStringLiteral("queue"));
+}
+
+int ComposerSchedule::missedIndex() const { return missedPolicy_ == QLatin1String("skip") ? 1 : 0; }
+
+void ComposerSchedule::setMissedIndex(const int index) {
+    setMissedPolicy(index == 1 ? QStringLiteral("skip") : QStringLiteral("run_once"));
+}
+
+QStringList ComposerSchedule::zones() const { return zoneChoices(zone_); }
+
+int ComposerSchedule::zoneIndex() const {
+    const int index = static_cast<int>(zones().indexOf(zone_));
+    return index < 0 ? 0 : index;
+}
+
+void ComposerSchedule::setZoneIndex(const int index) {
+    const QStringList choices = zones();
+    if (index < 0 || index >= choices.size())
+        return;
+    setZone(choices.at(index));
+}
+
+QString ComposerSchedule::localClock(const QString& iso) const {
+    QDateTime when = QDateTime::fromString(iso, Qt::ISODateWithMs);
+    if (!when.isValid())
+        when = QDateTime::fromString(iso, Qt::ISODate);
+    if (!when.isValid())
+        return iso;
+    return when.toLocalTime().toString(QStringLiteral("dd/MM HH:mm"));
+}
+
+QString ComposerSchedule::offsetLabel(const QTimeZone& zone) const {
+    const int seconds = zone.offsetFromUtc(QDateTime::currentDateTimeUtc());
+    const int hours = seconds / 3600;
+    const int minutes = std::abs(seconds % 3600) / 60;
+    if (hours == 0 && minutes == 0)
+        return QStringLiteral("GMT");
+    const QString sign = seconds >= 0 ? QStringLiteral("+") : QStringLiteral("-");
+    if (minutes == 0)
+        return QStringLiteral("GMT%1%2").arg(sign).arg(std::abs(hours));
+    return QStringLiteral("GMT%1%2:%3")
+        .arg(sign)
+        .arg(std::abs(hours), 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'));
+}
+
+QString ComposerSchedule::nextLabel() const {
+    const QTime time = QTime::fromString(time_, QStringLiteral("HH:mm"));
+    if (!time.isValid())
+        return QStringLiteral("choose a time");
+    QTimeZone zone(zone_.toUtf8());
+    if (!zone.isValid())
+        zone = QTimeZone::UTC;
+    const QDateTime now = QDateTime::currentDateTimeUtc().toTimeZone(zone);
+    if (mode_ == 2 && repeatKind_ == QLatin1String("interval")) {
+        const QDateTime at = now.addSecs(static_cast<qint64>(everyHours_) * 3600);
+        const int delta = now.date().daysTo(at.date());
+        const QString day = delta <= 0   ? QStringLiteral("today")
+                            : delta == 1 ? QStringLiteral("tomorrow")
+                                         : at.toString(QStringLiteral("dd/MM"));
+        return day + QLatin1Char(' ') + at.toString(QStringLiteral("HH:mm"));
+    }
+    static const QStringList keys{
+        QStringLiteral("mon"), QStringLiteral("tue"), QStringLiteral("wed"), QStringLiteral("thu"),
+        QStringLiteral("fri"), QStringLiteral("sat"), QStringLiteral("sun")};
+    for (int day = 0; day < 8; ++day) {
+        const QDateTime at(now.date().addDays(day), time, zone);
+        if (at <= now)
+            continue;
+        const int weekday = at.date().dayOfWeek();
+        if (mode_ == 2 && repeatKind_ == QLatin1String("weekdays") && weekday >= 6)
+            continue;
+        if (mode_ == 2 && repeatKind_ == QLatin1String("weekly") &&
+            !weekDays_.contains(keys.at(weekday - 1)))
+            continue;
+        const int delta = now.date().daysTo(at.date());
+        const QString label = delta == 0   ? QStringLiteral("today")
+                              : delta == 1 ? QStringLiteral("tomorrow")
+                                           : at.toString(QStringLiteral("dd/MM"));
+        return label + QLatin1Char(' ') + time_;
+    }
+    return QStringLiteral("choose a day");
+}
+
+QString ComposerSchedule::liveSummary() const {
+    QString label;
+    if (mode_ == 1)
+        label = QStringLiteral("Once · %1 %2").arg(date_, time_);
+    else if (repeatKind_ == QLatin1String("weekdays"))
+        label = QStringLiteral("Weekdays %1").arg(time_);
+    else if (repeatKind_ == QLatin1String("weekly"))
+        label = QStringLiteral("Weekly %1").arg(time_);
+    else if (repeatKind_ == QLatin1String("interval"))
+        label = everyHours_ == 1 ? QStringLiteral("Every hour")
+                                 : QStringLiteral("Every %1 hours").arg(everyHours_);
+    else
+        label = QStringLiteral("Daily %1").arg(time_);
+    QTimeZone zone(zone_.toUtf8());
+    if (!zone.isValid())
+        zone = QTimeZone::UTC;
+    return QStringLiteral("%1 (%2) · next: %3").arg(label, offsetLabel(zone), nextLabel());
+}
+
+QString ComposerSchedule::atTimeHint() const {
+    return QStringLiteral("→ The first message will be sent at %1").arg(time_);
+}
+
+QString ComposerSchedule::existingName() const {
+    const QString name = existing().value(QStringLiteral("name")).toString();
+    return name.isEmpty() ? QStringLiteral("Schedule") : name;
+}
+
+void ComposerSchedule::applyPreset(const QString& preset) {
+    QTimeZone zone(zone_.toUtf8());
+    if (!zone.isValid())
+        zone = QTimeZone::systemTimeZone();
+    const QDate today = QDateTime::currentDateTimeUtc().toTimeZone(zone).date();
+    if (preset == QLatin1String("tomorrow")) {
+        setDate(today.addDays(1).toString(QStringLiteral("yyyy-MM-dd")));
+        setTime(QStringLiteral("08:00"));
+        return;
+    }
+    setDate(today.toString(QStringLiteral("yyyy-MM-dd")));
+    setTime(QStringLiteral("22:00"));
+}
+
 void ComposerSchedule::setContext(const bool fresh, const QString& sessionId,
                                   const QString& workspace, const QString& provider,
                                   const QString& model, const QString& effort) {
@@ -187,7 +342,7 @@ QString ComposerSchedule::summary() const {
         if (!schedule.value(QStringLiteral("enabled")).toBool())
             return QStringLiteral("Paused");
         const QString next = schedule.value(QStringLiteral("next_run_at")).toString();
-        return next.isEmpty() ? QStringLiteral("Scheduled") : clock(next);
+        return next.isEmpty() ? QStringLiteral("Scheduled") : localClock(next);
     }
     if (!scheduleSet_)
         return {};
@@ -370,7 +525,9 @@ void ComposerSchedule::pause() {
          {QStringLiteral("enabled"), !schedule.value(QStringLiteral("enabled")).toBool()}});
 }
 
-void ComposerSchedule::edit() { openSchedules(); }
+void ComposerSchedule::edit() {
+    emit editRequested(existing().value(QStringLiteral("id")).toString());
+}
 
 void ComposerSchedule::openSchedules() {
     const QJsonObject schedule = existing();
@@ -389,29 +546,35 @@ QString ComposerSchedule::markerText(const QString& payloadJson) const {
     if (id.isEmpty())
         return {};
     QString name = QStringLiteral("Schedule");
-    QString when = clock(payload.value(QStringLiteral("scheduled_for")).toString());
+    QString when = localClock(payload.value(QStringLiteral("scheduled_for")).toString());
+    const QString runId = payload.value(QStringLiteral("run_id")).toString();
     if (client_ != nullptr) {
         if (const auto schedule = client_->schedule(id)) {
             if (!schedule->name.isEmpty())
                 name = schedule->name;
-            if (when.isEmpty())
-                when = clock(schedule->nextRunAt);
         }
-        const schedule::Run run = client_->latestRun(id);
-        if (when.isEmpty())
-            when = clock(run.scheduledFor);
+        if (when.isEmpty() && !runId.isEmpty()) {
+            if (const auto run = client_->run(runId))
+                when = localClock(run->scheduledFor);
+        }
     }
     if (when.isEmpty())
         return QStringLiteral("Scheduled run: %1").arg(name);
     return QStringLiteral("Scheduled run: %1 · %2").arg(name, when);
 }
 
-QString ComposerSchedule::toastText(const QString& status, const QString& reason) const {
+QString ComposerSchedule::failureSentence(const QString& name, const QString& status,
+                                          const QString& reason) const {
     if (status != QStringLiteral("failed") && status != QStringLiteral("skipped") &&
         status != QStringLiteral("missed"))
         return {};
     const QString detail = reason.trimmed().isEmpty() ? status : reason.trimmed();
-    return detail;
+    const QString title = name.isEmpty() ? QStringLiteral("Schedule") : name;
+    return QStringLiteral("Schedule “%1” %2 — %3").arg(title, status, detail);
+}
+
+QString ComposerSchedule::toastText(const QString& status, const QString& reason) const {
+    return failureSentence(QStringLiteral("Schedule"), status, reason);
 }
 
 void ComposerSchedule::observeRun(const QJsonObject& run) {
@@ -420,7 +583,15 @@ void ComposerSchedule::observeRun(const QJsonObject& run) {
         return;
     seenRuns_.insert(id);
     const QString status = run.value(QStringLiteral("status")).toString();
-    const QString text = toastText(status, run.value(QStringLiteral("error_message")).toString());
+    QString name = QStringLiteral("Schedule");
+    if (client_ != nullptr) {
+        if (const auto schedule =
+                client_->schedule(run.value(QStringLiteral("schedule_id")).toString()))
+            if (!schedule->name.isEmpty())
+                name = schedule->name;
+    }
+    const QString text =
+        failureSentence(name, status, run.value(QStringLiteral("error_message")).toString());
     if (text.isEmpty() || !recent(run.value(QStringLiteral("finished_at")).toString()))
         return;
     emit toastRequested(text, run.value(QStringLiteral("schedule_id")).toString());

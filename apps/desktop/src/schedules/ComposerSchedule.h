@@ -6,6 +6,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QTimeZone>
 
 namespace ketplus {
 
@@ -36,6 +37,14 @@ class ComposerSchedule final : public QObject {
     Q_PROPERTY(bool newEachRun READ newEachRun WRITE setNewEachRun NOTIFY changed)
     Q_PROPERTY(QString busyPolicy READ busyPolicy WRITE setBusyPolicy NOTIFY changed)
     Q_PROPERTY(QString missedPolicy READ missedPolicy WRITE setMissedPolicy NOTIFY changed)
+    Q_PROPERTY(int repeatIndex READ repeatIndex WRITE setRepeatIndex NOTIFY changed)
+    Q_PROPERTY(int busyIndex READ busyIndex WRITE setBusyIndex NOTIFY changed)
+    Q_PROPERTY(int missedIndex READ missedIndex WRITE setMissedIndex NOTIFY changed)
+    Q_PROPERTY(int zoneIndex READ zoneIndex WRITE setZoneIndex NOTIFY changed)
+    Q_PROPERTY(QStringList zones READ zones NOTIFY changed)
+    Q_PROPERTY(QString liveSummary READ liveSummary NOTIFY changed)
+    Q_PROPERTY(QString atTimeHint READ atTimeHint NOTIFY changed)
+    Q_PROPERTY(QString existingName READ existingName NOTIFY changed)
     Q_PROPERTY(QString actionLabel READ actionLabel CONSTANT)
 
   public:
@@ -73,7 +82,20 @@ class ComposerSchedule final : public QObject {
     void setBusyPolicy(const QString& policy);
     [[nodiscard]] QString missedPolicy() const { return missedPolicy_; }
     void setMissedPolicy(const QString& policy);
+    [[nodiscard]] int repeatIndex() const;
+    void setRepeatIndex(int index);
+    [[nodiscard]] int busyIndex() const;
+    void setBusyIndex(int index);
+    [[nodiscard]] int missedIndex() const;
+    void setMissedIndex(int index);
+    [[nodiscard]] int zoneIndex() const;
+    void setZoneIndex(int index);
+    [[nodiscard]] QStringList zones() const;
+    [[nodiscard]] QString liveSummary() const;
+    [[nodiscard]] QString atTimeHint() const;
+    [[nodiscard]] QString existingName() const;
     [[nodiscard]] static QString actionLabel() { return QStringLiteral("Open schedule"); }
+    Q_INVOKABLE void applyPreset(const QString& preset);
 
     // A conversation with no messages yet can create a schedule. Any other
     // conversation only shows the clock when one of its schedules matches.
@@ -101,11 +123,17 @@ class ComposerSchedule final : public QObject {
     void sendFailed(const QString& error);
     void toastRequested(const QString& text, const QString& scheduleId);
     void openRequested(const QString& scheduleId);
+    void editRequested(const QString& scheduleId);
 
   private:
     [[nodiscard]] QJsonObject existing() const;
     [[nodiscard]] QString ruleText() const;
     [[nodiscard]] QString validate() const;
+    [[nodiscard]] QString localClock(const QString& iso) const;
+    [[nodiscard]] QString failureSentence(const QString& name, const QString& status,
+                                          const QString& reason) const;
+    [[nodiscard]] QString offsetLabel(const QTimeZone& zone) const;
+    [[nodiscard]] QString nextLabel() const;
     [[nodiscard]] QJsonObject createPayload() const;
     void rememberRuns(bool announce);
     void publish();

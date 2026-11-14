@@ -60,6 +60,8 @@ void MainWindow::attachComposerSchedule() {
         composerSchedule_->setClient(schedules_->client());
         connect(composerSchedule_, &ComposerSchedule::openRequested, this,
                 &MainWindow::showSchedules);
+        connect(composerSchedule_, &ComposerSchedule::editRequested, this,
+                &MainWindow::editSchedule);
     }
     agentWorkspace_->setScheduleBridge(composerSchedule_);
 }
@@ -67,6 +69,11 @@ void MainWindow::attachComposerSchedule() {
 void MainWindow::showSchedules(const QString& scheduleId) {
     if (schedules_ != nullptr)
         schedules_->show(scheduleId);
+}
+
+void MainWindow::editSchedule(const QString& scheduleId) {
+    if (schedules_ != nullptr)
+        schedules_->edit(scheduleId);
 }
 
 } // namespace ketplus

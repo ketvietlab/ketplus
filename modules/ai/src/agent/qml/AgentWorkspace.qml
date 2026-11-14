@@ -731,34 +731,35 @@ Item {
         function onCreated() { prompt.clear() }
         function onSendFailed(message) { workspaceToast.show(message) }
         function onToastRequested(message, scheduleId) {
-            scheduleFailureToast.reason = message
             scheduleFailureToast.scheduleId = scheduleId
-            scheduleFailureToast.open()
+            scheduleFailureToast.show(message)
         }
     }
-    Popup {
+    Kit.KetToast {
         id: scheduleFailureToast
         objectName: "scheduleFailureToast"
-        property string reason: ""
         property string scheduleId: ""
-        modal: false
-        padding: 12
-        width: Math.min(420, parent ? parent.width - 24 : 420)
-        x: parent ? parent.width - width - 16 : 0
-        y: parent ? parent.height - height - 24 : 0
-        contentItem: Row {
-            spacing: 8
+        bottomAvoidance: workspaceToast.bottomAvoidance
+        contentItem: RowLayout {
+            spacing: scheduleFailureToast.recipe.spacing
+            KetIcon {
+                Layout.alignment: Qt.AlignVCenter
+                name: "error"
+                box: scheduleFailureToast.recipe.iconSize
+                color: scheduleFailureToast.recipe.text
+            }
             Text {
                 objectName: "scheduleFailureReason"
-                width: Math.min(260, scheduleFailureToast.width - 140)
-                text: scheduleFailureToast.reason
+                Layout.maximumWidth: Math.max(KetTheme.px(180, KetTheme.zoom), Math.min(KetTheme.px(520, KetTheme.zoom), (scheduleFailureToast.parent ? scheduleFailureToast.parent.width : 900) - KetTheme.px(220, KetTheme.zoom)))
+                text: scheduleFailureToast.text
                 wrapMode: Text.Wrap
-                color: KetTheme.t.text
+                color: scheduleFailureToast.recipe.text
+                font.family: KetTheme.fontFamily
+                font.pixelSize: scheduleFailureToast.recipe.fontPixels
             }
-            Button {
+            KetButton {
                 objectName: "scheduleFailureOpen"
                 text: "Open schedule"
-                flat: true
                 onClicked: {
                     const bridge = agentHost.scheduleBridge
                     if (bridge)
@@ -1395,10 +1396,10 @@ Item {
         revealLatestAfterSubmit()
     }
 
-    readonly property int scheduleContextRevision: {
+    function syncScheduleContext() {
         const bridge = agentHost.scheduleBridge
         if (!bridge)
-            return 0
+            return
         const count = agentHost.messageModel ? agentHost.messageModel.count : 0
         let sessionId = ""
         for (const conversation of agentHost.conversations || []) {
@@ -1407,7 +1408,21 @@ Item {
         }
         bridge.setContext(count === 0, sessionId, agentHost.activePath || "", selectedProvider,
                           selectedModel, selectedEffort)
-        return count + selectedProvider.length
+    }
+    Component.onCompleted: syncScheduleContext()
+    onSelectedProviderChanged: syncScheduleContext()
+    onSelectedModelChanged: syncScheduleContext()
+    onSelectedEffortChanged: syncScheduleContext()
+    Connections {
+        target: agentHost
+        function onConversationsChanged() { root.syncScheduleContext() }
+        function onActivePathChanged() { root.syncScheduleContext() }
+        function onMessageModelChanged() { root.syncScheduleContext() }
+        function onScheduleBridgeChanged() { root.syncScheduleContext() }
+    }
+    Connections {
+        target: agentHost.messageModel
+        function onCountChanged() { root.syncScheduleContext() }
     }
 
     function submitCurrentPrompt() {
