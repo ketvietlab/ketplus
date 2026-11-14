@@ -159,4 +159,11 @@ std::optional<documents::Run> JournalScheduleStore::queuedRun(const QString& sch
     return fromRun(*record);
 }
 
+QList<documents::Run> JournalScheduleStore::unfinishedRuns() const {
+    QList<documents::Run> runs;
+    for (const ScheduleRunRecord& record : journal_->unfinishedScheduleRuns())
+        runs.append(fromRun(record));
+    return runs;
+}
+
 } // namespace ketplus::daemon

@@ -20,6 +20,7 @@ class JournalScheduleStore final : public schedule::ScheduleStore {
     [[nodiscard]] std::optional<::ketplus::schedule::Run> run(const QString& id) const override;
     [[nodiscard]] std::optional<::ketplus::schedule::Run>
     queuedRun(const QString& scheduleId) const override;
+    [[nodiscard]] QList<::ketplus::schedule::Run> unfinishedRuns() const override;
 
   private:
     LocalJournal* journal_;

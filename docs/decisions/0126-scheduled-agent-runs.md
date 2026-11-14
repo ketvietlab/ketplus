@@ -70,7 +70,11 @@ manages; it does not create.
 5. **Busy and missed.** `queue` waits when the target conversation is already in
    a turn; `skip` drops that fire. `run_once` catches up a single fire the daemon
    missed while it was off or asleep; `skip` drops missed fires. A team start
-   always uses `run_once`.
+   always uses `run_once`. A restart does not leave a run `running`. Each run
+   still `running`, and each `queued` run whose turn no longer exists, becomes
+   `failed` with `runtime_stopped` and `finished_at`, and is emitted as
+   `schedule.run`. `next_run_at` stays where it was. A queued run for a session
+   that is idle is resumed.
 
 6. **Requests and events.** Payloads are strict: an unknown field, a missing
    target, an empty prompt (except a team start) and an unknown enum value fail

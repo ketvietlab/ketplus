@@ -25,6 +25,8 @@ inline constexpr auto providerNotReadyCode = "provider_not_ready";
 inline constexpr auto signedOutCode = "signed_out";
 inline constexpr auto targetDeletedCode = "target_deleted";
 inline constexpr auto workspaceMissingCode = "workspace_missing";
+// A run left running, or queued for a turn this process no longer has.
+inline constexpr auto runtimeStoppedCode = "runtime_stopped";
 
 // A fire this close to nextRunAt is on time, including a restart inside the minute.
 inline constexpr std::chrono::milliseconds onTimeGrace{60'000};
@@ -109,6 +111,8 @@ class ScheduleStore {
     [[nodiscard]] virtual std::optional<::ketplus::schedule::Run> run(const QString& id) const = 0;
     [[nodiscard]] virtual std::optional<::ketplus::schedule::Run>
     queuedRun(const QString& scheduleId) const = 0;
+    // Runs still queued or running. A restart closes the ones whose turn is gone.
+    [[nodiscard]] virtual QList<::ketplus::schedule::Run> unfinishedRuns() const = 0;
 };
 
 class ScheduleRuntime {
@@ -141,6 +145,11 @@ class ScheduleRunner final {
 
     // Arm the timer, catch up missed fires, and resume a stored queued run.
     void start();
+    // Fail every running run, and every queued run whose turn is gone, with
+    // runtime_stopped. Does not move nextRunAt. A queued run whose turn is still
+    // in progress stays queued.
+    void abandonRunsWithoutATurn(
+        const std::function<bool(const ::ketplus::schedule::Run&)>& turnStillExists);
     // Wake, or a wall-clock jump. One catch-up or one missed record per schedule.
     void noteClockChanged();
     // schedule.create, update, delete or setEnabled.

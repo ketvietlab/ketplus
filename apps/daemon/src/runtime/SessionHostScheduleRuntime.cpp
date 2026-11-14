@@ -341,6 +341,14 @@ void SessionHost::startScheduleRunner() {
     if (scheduleEngine_ != nullptr || journal_ == nullptr)
         return;
     scheduleEngine_ = new ScheduleEngine(this, journal_);
+    // Sessions that were running are already interrupted, so their turn id is gone.
+    // A queued run for one of those turns must not start; an idle session still owes
+    // its queued run and runner.start resumes that one.
+    scheduleEngine_->runner.abandonRunsWithoutATurn([this](const ::ketplus::schedule::Run& run) {
+        const auto session = sessions_.constFind(run.sessionId);
+        return !run.sessionId.isEmpty() && session != sessions_.cend() &&
+               session->stored.state != QStringLiteral("interrupted");
+    });
     scheduleEngine_->runner.start();
     scheduleEngine_->watchClock(this);
 }

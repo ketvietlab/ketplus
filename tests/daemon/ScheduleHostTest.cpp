@@ -4,8 +4,11 @@
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 
+#include "FakeCodex.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -61,6 +64,39 @@ QJsonObject createPayload(const QString& name, const QJsonObject& target, const 
     if (!prompt.isNull())
         payload.insert(QStringLiteral("prompt"), prompt);
     return payload;
+}
+
+const QString dailyRule = QStringLiteral(R"({"kind":"daily","time_zone":"UTC","time":"08:00"})");
+
+bool userMessageCarries(LocalJournal& journal, const QString& sessionId, const QString& scheduleId,
+                        const QString& runId) {
+    for (const QJsonValue& value : journal.eventsAfter(sessionId, 1, 0)) {
+        const QJsonObject event = value.toObject();
+        if (event.value(QStringLiteral("event_type")).toString() != QLatin1String("user.message"))
+            continue;
+        const QJsonObject payload = event.value(QStringLiteral("payload")).toObject();
+        if (payload.value(QStringLiteral("schedule_id")).toString() == scheduleId &&
+            payload.value(QStringLiteral("run_id")).toString() == runId)
+            return true;
+    }
+    return false;
+}
+
+std::optional<StoredSession> findSession(const LocalJournal& journal, const QString& id) {
+    for (const StoredSession& session : journal.sessions()) {
+        if (session.id == id)
+            return session;
+    }
+    return std::nullopt;
+}
+
+QString newestRunStatus(SessionHost& host, const QString& scheduleId) {
+    const auto page = command(host, QStringLiteral("status-") + scheduleId,
+                              QString::fromLatin1(protocol::scheduleRunsType),
+                              {{QStringLiteral("id"), scheduleId}});
+    const QJsonArray runs = page.value(QStringLiteral("runs")).toArray();
+    return runs.isEmpty() ? QString()
+                          : runs.at(0).toObject().value(QStringLiteral("status")).toString();
 }
 } // namespace
 
@@ -414,6 +450,225 @@ class ScheduleHostTest final : public QObject {
                      .value_or(QList<ScheduleRecord>{})
                      .size(),
                  0);
+    }
+
+    void scheduledTurnFollowsTheHost() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFakeCodex(dir.filePath(QStringLiteral("fake-codex")),
+                               dir.filePath(QStringLiteral("codex.log"))));
+        LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.errorString().isEmpty());
+        CodexAdapter adapter(dir.filePath(QStringLiteral("fake-codex")));
+        const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
+        SessionHost host(&journal, &adapter);
+        QString why;
+
+        const QJsonObject fresh{{QStringLiteral("kind"), QStringLiteral("new")},
+                                {QStringLiteral("workspace"), dir.path()},
+                                {QStringLiteral("provider"), QStringLiteral("codex")},
+                                {QStringLiteral("model"), QString{}},
+                                {QStringLiteral("effort"), QString{}},
+                                {QStringLiteral("isolated_worktree"), false},
+                                {QStringLiteral("title_template"), QString{}}};
+        const auto created = command(
+            host, QStringLiteral("new-schedule"), QString::fromLatin1(protocol::scheduleCreateType),
+            createPayload(QStringLiteral("Fresh"), fresh, QStringLiteral("Say hello"), dailyRule,
+                          QStringLiteral("skip")));
+        QVERIFY2(accepted(created, QString::fromLatin1(protocol::scheduleCreateType), &why),
+                 qPrintable(why));
+        const QString freshId = created.value(QStringLiteral("schedule"))
+                                    .toObject()
+                                    .value(QStringLiteral("id"))
+                                    .toString();
+        const QString nextRunAt = journal.schedule(freshId)->nextRunAt;
+        QVERIFY(!nextRunAt.isEmpty());
+        const auto fired = command(host, QStringLiteral("new-now"),
+                                   QString::fromLatin1(protocol::scheduleRunNowType),
+                                   {{QStringLiteral("id"), freshId}});
+        QVERIFY2(accepted(fired, QString::fromLatin1(protocol::scheduleRunNowType), &why),
+                 qPrintable(why));
+        const QJsonObject freshRun = fired.value(QStringLiteral("run")).toObject();
+        const QString freshRunId = freshRun.value(QStringLiteral("id")).toString();
+        const QString freshSession = freshRun.value(QStringLiteral("session_id")).toString();
+        QVERIFY(!freshRunId.isEmpty());
+        QVERIFY(!freshSession.isEmpty());
+        QCOMPARE(journal.sessions().size(), 1);
+        QTRY_VERIFY(userMessageCarries(journal, freshSession, freshId, freshRunId));
+        QTRY_COMPARE(newestRunStatus(host, freshId), QStringLiteral("succeeded"));
+        QCOMPARE(journal.schedule(freshId)->nextRunAt, nextRunAt);
+
+        const auto hung = host.handleCommand(
+            {{QStringLiteral("protocol_version"), protocol::currentVersion},
+             {QStringLiteral("message_id"), QStringLiteral("hang-turn")},
+             {QStringLiteral("message_type"), QStringLiteral("session.start_turn")},
+             {QStringLiteral("sent_at"), QStringLiteral("2026-11-13T09:00:00.000Z")},
+             {QStringLiteral("payload"),
+              QJsonObject{{QStringLiteral("worktree_path"), dir.path()},
+                          {QStringLiteral("prompt"), QStringLiteral("hang")}}}},
+            QStringLiteral("desktop-test"));
+        QVERIFY2(hung.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(hung.value(QStringLiteral("error_message")).toString()));
+        const QString busySession = hung.value(QStringLiteral("session_id")).toString();
+        QTRY_COMPARE(findSession(journal, busySession)->state, QStringLiteral("running"));
+
+        const auto queuedSchedule =
+            command(host, QStringLiteral("queue-schedule"),
+                    QString::fromLatin1(protocol::scheduleCreateType),
+                    createPayload(QStringLiteral("Later"), conversationTarget(busySession),
+                                  QStringLiteral("Say hello"), dailyRule, QStringLiteral("skip")));
+        QVERIFY2(accepted(queuedSchedule, QString::fromLatin1(protocol::scheduleCreateType), &why),
+                 qPrintable(why));
+        const QString queuedId = queuedSchedule.value(QStringLiteral("schedule"))
+                                     .toObject()
+                                     .value(QStringLiteral("id"))
+                                     .toString();
+        const auto queuedNow = command(host, QStringLiteral("queue-now"),
+                                       QString::fromLatin1(protocol::scheduleRunNowType),
+                                       {{QStringLiteral("id"), queuedId}});
+        QVERIFY2(accepted(queuedNow, QString::fromLatin1(protocol::scheduleRunNowType), &why),
+                 qPrintable(why));
+        QCOMPARE(queuedNow.value(QStringLiteral("run")).toObject().value(QStringLiteral("status")),
+                 QStringLiteral("queued"));
+        const QString queuedRunId = queuedNow.value(QStringLiteral("run"))
+                                        .toObject()
+                                        .value(QStringLiteral("id"))
+                                        .toString();
+        const auto busy = findSession(journal, busySession);
+        QVERIFY(busy);
+        emit adapter.notificationReceived(
+            QStringLiteral("turn/completed"),
+            {{QStringLiteral("threadId"), busy->threadId},
+             {QStringLiteral("turn"),
+              QJsonObject{{QStringLiteral("id"), busy->turnId},
+                          {QStringLiteral("status"), QStringLiteral("completed")}}}});
+        QTRY_COMPARE(newestRunStatus(host, queuedId), QStringLiteral("succeeded"));
+        QTRY_VERIFY(userMessageCarries(journal, busySession, queuedId, queuedRunId));
+
+        const auto stoppedSchedule =
+            command(host, QStringLiteral("stop-schedule"),
+                    QString::fromLatin1(protocol::scheduleCreateType),
+                    createPayload(QStringLiteral("Stop"), conversationTarget(freshSession),
+                                  QStringLiteral("hang"), dailyRule, QStringLiteral("skip")));
+        QVERIFY2(accepted(stoppedSchedule, QString::fromLatin1(protocol::scheduleCreateType), &why),
+                 qPrintable(why));
+        const QString stoppedId = stoppedSchedule.value(QStringLiteral("schedule"))
+                                      .toObject()
+                                      .value(QStringLiteral("id"))
+                                      .toString();
+        const auto stoppedNow = command(host, QStringLiteral("stop-now"),
+                                        QString::fromLatin1(protocol::scheduleRunNowType),
+                                        {{QStringLiteral("id"), stoppedId}});
+        QVERIFY2(accepted(stoppedNow, QString::fromLatin1(protocol::scheduleRunNowType), &why),
+                 qPrintable(why));
+        const QString stoppedRunId = stoppedNow.value(QStringLiteral("run"))
+                                         .toObject()
+                                         .value(QStringLiteral("id"))
+                                         .toString();
+        QTRY_COMPARE(findSession(journal, freshSession)->state, QStringLiteral("running"));
+        emit adapter.stopped(QStringLiteral("provider exited"));
+        QTRY_COMPARE(newestRunStatus(host, stoppedId), QStringLiteral("failed"));
+        const auto failedPage = command(host, QStringLiteral("stop-runs"),
+                                        QString::fromLatin1(protocol::scheduleRunsType),
+                                        {{QStringLiteral("id"), stoppedId}});
+        const QJsonObject failedRun =
+            failedPage.value(QStringLiteral("runs")).toArray().at(0).toObject();
+        QCOMPARE(failedRun.value(QStringLiteral("id")).toString(), stoppedRunId);
+        QCOMPARE(failedRun.value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("runtime_stopped"));
+    }
+
+    void restartFailsStaleRuns() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.errorString().isEmpty());
+        StoredSession ready;
+        ready.id = QStringLiteral("ready");
+        ready.state = QStringLiteral("ready");
+        ready.adapter = QStringLiteral("codex");
+        ready.worktreePath = dir.path();
+        StoredSession dead;
+        dead.id = QStringLiteral("dead");
+        dead.state = QStringLiteral("running");
+        dead.turnId = QStringLiteral("turn-old");
+        dead.adapter = QStringLiteral("codex");
+        dead.worktreePath = dir.path();
+        QVERIFY(journal.upsertSession(ready));
+        QVERIFY(journal.upsertSession(dead));
+
+        const auto make = [](const QString& id, const QString& sessionId) {
+            ScheduleRecord schedule;
+            schedule.id = id;
+            schedule.name = id;
+            schedule.enabled = true;
+            schedule.prompt = QStringLiteral("Say hello");
+            schedule.target.kind = QStringLiteral("conversation");
+            schedule.target.sessionId = sessionId;
+            schedule.ruleJson = QStringLiteral(R"({"kind":"daily"})");
+            schedule.busyPolicy = QStringLiteral("queue");
+            schedule.missedPolicy = QStringLiteral("skip");
+            schedule.createdBy = QStringLiteral("user");
+            schedule.createdAt = QStringLiteral("2026-11-13T00:00:00.000Z");
+            schedule.updatedAt = schedule.createdAt;
+            schedule.nextRunAt = QStringLiteral("2099-01-01T00:00:00.000Z");
+            return schedule;
+        };
+        QVERIFY(journal.createSchedule(
+            make(QStringLiteral("running-schedule"), QStringLiteral("ready"))));
+        QVERIFY(
+            journal.createSchedule(make(QStringLiteral("dead-schedule"), QStringLiteral("dead"))));
+        QVERIFY(
+            journal.createSchedule(make(QStringLiteral("live-schedule"), QStringLiteral("ready"))));
+        QVERIFY(
+            journal.createSchedule(make(QStringLiteral("done-schedule"), QStringLiteral("ready"))));
+        const auto run = [](const QString& id, const QString& scheduleId, const QString& sessionId,
+                            const QString& status) {
+            ScheduleRunRecord record;
+            record.id = id;
+            record.scheduleId = scheduleId;
+            record.sessionId = sessionId;
+            record.scheduledFor = QStringLiteral("2026-11-13T08:00:00.000Z");
+            record.status = status;
+            if (status == QLatin1String("running") || status == QLatin1String("succeeded"))
+                record.startedAt = QStringLiteral("2026-11-13T08:00:01.000Z");
+            if (status == QLatin1String("succeeded"))
+                record.finishedAt = QStringLiteral("2026-11-13T08:05:00.000Z");
+            return record;
+        };
+        QVERIFY(journal.appendScheduleRun(run(QStringLiteral("run-running"),
+                                              QStringLiteral("running-schedule"),
+                                              QStringLiteral("ready"), QStringLiteral("running"))));
+        QVERIFY(journal.appendScheduleRun(run(QStringLiteral("run-dead"),
+                                              QStringLiteral("dead-schedule"),
+                                              QStringLiteral("dead"), QStringLiteral("queued"))));
+        QVERIFY(journal.appendScheduleRun(run(QStringLiteral("run-live"),
+                                              QStringLiteral("live-schedule"),
+                                              QStringLiteral("ready"), QStringLiteral("queued"))));
+        QVERIFY(journal.appendScheduleRun(
+            run(QStringLiteral("run-done"), QStringLiteral("done-schedule"),
+                QStringLiteral("ready"), QStringLiteral("succeeded"))));
+
+        CodexAdapter adapter(dir.filePath(QStringLiteral("never-start-provider")));
+        SessionHost host(&journal, &adapter);
+        const auto failed = [](const std::optional<ScheduleRunRecord>& record) {
+            return record && record->status == QLatin1String("failed") &&
+                   record->errorCode == QLatin1String("runtime_stopped") &&
+                   !record->finishedAt.isEmpty();
+        };
+        QVERIFY(failed(journal.scheduleRun(QStringLiteral("run-running"))));
+        QVERIFY(failed(journal.scheduleRun(QStringLiteral("run-dead"))));
+        QCOMPARE(journal.scheduleRun(QStringLiteral("run-done"))->status,
+                 QStringLiteral("succeeded"));
+        QCOMPARE(journal.scheduleRun(QStringLiteral("run-done"))->finishedAt,
+                 QStringLiteral("2026-11-13T08:05:00.000Z"));
+        for (const QString& id :
+             {QStringLiteral("running-schedule"), QStringLiteral("dead-schedule"),
+              QStringLiteral("live-schedule"), QStringLiteral("done-schedule")})
+            QCOMPARE(journal.schedule(id)->nextRunAt, QStringLiteral("2099-01-01T00:00:00.000Z"));
+        const auto live = journal.scheduleRun(QStringLiteral("run-live"));
+        QVERIFY(live);
+        QVERIFY(live->errorCode != QLatin1String("runtime_stopped"));
     }
 };
 
