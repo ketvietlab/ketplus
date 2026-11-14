@@ -628,16 +628,35 @@ Item {
             }
         }
     }
+    function placeAboveClock(popup) {
+        const overlay = popup.parent
+        if (!overlay)
+            return
+        const origin = scheduleClock.mapToItem(overlay, 0, 0)
+        const width = popup.width > 0 ? popup.width : popup.implicitWidth
+        const height = popup.height > 0 ? popup.height : popup.implicitHeight
+        popup.x = Math.max(8, Math.min(origin.x + scheduleClock.width - width, overlay.width - width - 8))
+        const above = origin.y - height - 8
+        popup.y = above >= 8 ? above : origin.y + scheduleClock.height + 8
+    }
     ComposerSchedulePopover {
         id: schedulePopover
         objectName: "scheduleFirstMessagePopover"
         bridge: scheduleClock.bridge
         parent: Basic.Overlay.overlay
+        onAboutToShow: area.placeAboveClock(schedulePopover)
+        onOpened: area.placeAboveClock(schedulePopover)
+        onWidthChanged: if (visible) area.placeAboveClock(schedulePopover)
+        onHeightChanged: if (visible) area.placeAboveClock(schedulePopover)
     }
     Popup {
         id: existingScheduleMenu
         objectName: "existingScheduleMenu"
         parent: Basic.Overlay.overlay
+        onAboutToShow: area.placeAboveClock(existingScheduleMenu)
+        onOpened: area.placeAboveClock(existingScheduleMenu)
+        onWidthChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
+        onHeightChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
         padding: 8
         modal: true
         contentItem: Column {

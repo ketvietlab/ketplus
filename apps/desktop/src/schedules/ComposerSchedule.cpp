@@ -162,11 +162,10 @@ void ComposerSchedule::setContext(const bool fresh, const QString& sessionId,
 QJsonObject ComposerSchedule::existing() const {
     if (client_ == nullptr || sessionId_.isEmpty())
         return {};
-    for (const QJsonObject& schedule : client_->schedules()) {
-        const QJsonObject target = schedule.value(QStringLiteral("target")).toObject();
-        if (target.value(QStringLiteral("kind")).toString() == QStringLiteral("conversation") &&
-            target.value(QStringLiteral("session_id")).toString() == sessionId_)
-            return schedule;
+    for (const schedule::Schedule& schedule : client_->schedules()) {
+        if (schedule.target.kind == schedule::TargetKind::Conversation &&
+            schedule.target.sessionId == sessionId_)
+            return schedule::toJson(schedule);
     }
     return {};
 }
@@ -393,15 +392,14 @@ QString ComposerSchedule::markerText(const QString& payloadJson) const {
     QString when = clock(payload.value(QStringLiteral("scheduled_for")).toString());
     if (client_ != nullptr) {
         if (const auto schedule = client_->schedule(id)) {
-            const QString stored = schedule->value(QStringLiteral("name")).toString();
-            if (!stored.isEmpty())
-                name = stored;
+            if (!schedule->name.isEmpty())
+                name = schedule->name;
             if (when.isEmpty())
-                when = clock(schedule->value(QStringLiteral("next_run_at")).toString());
+                when = clock(schedule->nextRunAt);
         }
-        const QJsonObject run = client_->latestRun(id);
+        const schedule::Run run = client_->latestRun(id);
         if (when.isEmpty())
-            when = clock(run.value(QStringLiteral("scheduled_for")).toString());
+            when = clock(run.scheduledFor);
     }
     if (when.isEmpty())
         return QStringLiteral("Scheduled run: %1").arg(name);
@@ -431,18 +429,15 @@ void ComposerSchedule::observeRun(const QJsonObject& run) {
 void ComposerSchedule::rememberRuns(const bool announce) {
     if (client_ == nullptr)
         return;
-    for (const QJsonObject& schedule : client_->schedules()) {
-        const QString id = schedule.value(QStringLiteral("id")).toString();
-        const QJsonObject run = client_->latestRun(id);
-        if (run.isEmpty())
+    for (const schedule::Schedule& schedule : client_->schedules()) {
+        const schedule::Run run = client_->latestRun(schedule.id);
+        if (run.id.isEmpty())
             continue;
         if (!announce) {
-            const QString runId = run.value(QStringLiteral("id")).toString();
-            if (!runId.isEmpty())
-                seenRuns_.insert(runId);
+            seenRuns_.insert(run.id);
             continue;
         }
-        observeRun(run);
+        observeRun(schedule::toJson(run));
     }
     publish();
 }

@@ -157,7 +157,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
+        BackgroundTaskBar AgentComposer ComposerSchedulePopover AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
