@@ -213,7 +213,9 @@ A concept, not built in the app: several conversations that share one goal. Agen
   asks for a name, a goal, an integration branch, who merges a reviewed task into it (the leader or
   the user; the team menu changes it later), the number of developers (one to five) and the
   model and effort each role uses, from the app's Model & context dialog. The reviewer's dialog
-  offers Claude only, the provider that keeps a review read-only (ADR 0067). Create starts every
+  offers Claude, which keeps a review read-only (ADR 0067); Codex reviews only when the team
+  starts members with Full access, and KetPlus checks the branch after each review
+  (ketplus#295). Create starts every
   member as a named conversation (Lead *team*, Developer 1, Reviewer 1); developers have no lane
   until the leader gives one. Add member starts one more developer: its lane, its agent and a
   required name. A conversation that already exists joins without a dialog, as a developer:

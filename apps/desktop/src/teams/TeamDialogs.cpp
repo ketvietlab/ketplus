@@ -330,8 +330,10 @@ void NewTeamForm::setAgent(const QString& role, const TeamAgent& agent) {
 void NewTeamForm::chooseAgent(const QString& role) {
     const QPointer<NewTeamForm> alive(this);
     TeamAgentChooser::present(window(), team_roles::label(role), models_, agents_.value(role),
-                              role == reviewer ? QLatin1String(team_agents::reviewerProvider)
-                                               : QString{},
+                              role != reviewer ? AgentChoice::member
+                              : permissions_->currentData().toString() == QStringLiteral("full")
+                                  ? AgentChoice::fullAccessReviewer
+                                  : AgentChoice::reviewer,
                               [alive, role](const TeamAgent& agent) {
                                   if (alive)
                                       alive->setAgent(role, agent);
@@ -347,7 +349,7 @@ void NewTeamForm::describePermissions() {
                                                                  "commands.");
     permissionsRow_->setHelp(
         tr("%1 The leader and the developers start with this; change it for one member in its "
-           "conversation. The reviewer stays read-only.")
+           "conversation. A Claude reviewer stays read-only; a Codex reviewer needs Full access.")
             .arg(what));
 }
 
@@ -410,6 +412,11 @@ bool NewTeamForm::validate() {
                                      ? tr("The reviewer needs Claude. Set up Claude in "
                                           "Settings → Agents.")
                                      : tr("Choose an agent."));
+    // ketplus#295: the daemon refuses it too; say it on the row before asking.
+    if (agents_.value(reviewer).provider ==
+            QLatin1String(team_agents::fullAccessReviewerProvider) &&
+        permissions_->currentData().toString() != QStringLiteral("full"))
+        errors_.insert(reviewer, tr("Codex can review only with Full access."));
     for (auto it = errors_.cbegin(); it != errors_.cend(); ++it)
         rows_.value(it.key())->setError(it.value());
     if (!errors_.value(QStringLiteral("name")).isEmpty())
@@ -613,8 +620,9 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
     connect(agentButton_, &QAbstractButton::clicked, this, [this] {
         const QPointer<AddMemberForm> alive(this);
         TeamAgentChooser::present(window(), team_roles::label(role_), models_, agents_.value(role_),
-                                  role_ == reviewer ? QLatin1String(team_agents::reviewerProvider)
-                                                    : QString{},
+                                  role_ != reviewer  ? AgentChoice::member
+                                  : fullAccessTeam() ? AgentChoice::fullAccessReviewer
+                                                     : AgentChoice::reviewer,
                                   [alive](const TeamAgent& agent) {
                                       if (alive)
                                           alive->setAgent(agent);
@@ -647,6 +655,10 @@ bool AddMemberForm::canAdd(const QString& role) const {
 
 bool AddMemberForm::isFull() const { return !canAdd(role_); }
 
+bool AddMemberForm::fullAccessTeam() const {
+    return team_.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full");
+}
+
 void AddMemberForm::setRole(const QString& role) {
     if (role == role_)
         return;
@@ -665,8 +677,12 @@ void AddMemberForm::describe() {
     agentButton_->setObjectName(reviewing ? QStringLiteral("teamAgent_reviewer")
                                           : QStringLiteral("teamAgent_developer"));
     setAgentLabel(agentButton_, team_agents::label(models_, agents_.value(role_)));
-    agentRow_->setHelp(reviewing ? tr("A reviewer runs on Claude, the provider that keeps a review "
-                                      "read-only.")
+    agentRow_->setHelp(reviewing ? (fullAccessTeam()
+                                        ? tr("A reviewer runs on Claude, which keeps a review "
+                                             "read-only, or on Codex, which reviews with Full "
+                                             "access; KetPlus checks the branch after each review.")
+                                        : tr("A reviewer runs on Claude, which keeps a review "
+                                             "read-only. Codex can review only with Full access."))
                                  : tr("The new conversation's provider, model and effort."));
     agentRow_->setError({});
     nameRow_->setError({});
@@ -721,8 +737,14 @@ bool AddMemberForm::validate() {
     nameRow_->setError(named ? QString{} : tr("Name the developer."));
     if (!named)
         name_->setFocus();
-    const bool chosen = !agents_.value(role_).isEmpty();
-    if (!chosen) {
+    bool chosen = !agents_.value(role_).isEmpty();
+    // ketplus#295: a member chosen before the team lost Full access.
+    if (reviewing &&
+        agents_.value(role_).provider == QLatin1String(team_agents::fullAccessReviewerProvider) &&
+        !fullAccessTeam()) {
+        agentRow_->setError(tr("Codex can review only with Full access."));
+        chosen = false;
+    } else if (!chosen) {
         if (reviewing)
             agentRow_->setError(tr("The reviewer needs Claude. Set up Claude in Settings → "
                                    "Agents."));

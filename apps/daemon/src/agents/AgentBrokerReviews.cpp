@@ -1,6 +1,8 @@
 // ADR 0067: automatic review of a conversation's finished turns by its chosen reviewer.
 #include "agents/AgentBroker.h"
+#include "agents/GitProcess.h"
 #include "agents/ReviewVerdict.h"
+#include "agents/ReviewerPolicy.h"
 #include "storage/LocalJournal.h"
 
 #include <QDateTime>
@@ -18,7 +20,6 @@
 
 namespace ketplus::daemon {
 namespace {
-constexpr int gitTimeoutMs = 10'000;
 constexpr qsizetype userRequestBytes = 4 * 1024;
 constexpr qsizetype fileListBytes = 4 * 1024;
 
@@ -35,38 +36,6 @@ QString utf8Prefix(const QString& text, const qsizetype maximumBytes) {
 }
 
 qsizetype utf8Size(const QString& text) { return text.toUtf8().size(); }
-
-// Runs git off the event loop; `done` receives stdout, or nothing when git failed. With
-// `indexFile`, git uses that index instead of the worktree's own.
-void runGit(QObject* owner, const QString& directory, const QStringList& arguments,
-            std::function<void(std::optional<QString>)> done, const QString& indexFile = {}) {
-    auto* process = new QProcess(owner);
-    process->setWorkingDirectory(directory);
-    if (!indexFile.isEmpty()) {
-        auto environment = QProcessEnvironment::systemEnvironment();
-        environment.insert(QStringLiteral("GIT_INDEX_FILE"), indexFile);
-        process->setProcessEnvironment(environment);
-    }
-    auto finish = std::make_shared<std::function<void(std::optional<QString>)>>(std::move(done));
-    QObject::connect(process, &QProcess::finished, owner,
-                     [process, finish](const int code, const QProcess::ExitStatus status) {
-                         const bool ok = status == QProcess::NormalExit && code == 0;
-                         (*finish)(ok ? std::optional<QString>(
-                                            QString::fromUtf8(process->readAllStandardOutput()))
-                                      : std::nullopt);
-                         process->deleteLater();
-                     });
-    QObject::connect(process, &QProcess::errorOccurred, owner,
-                     [process, finish](const QProcess::ProcessError error) {
-                         if (error != QProcess::FailedToStart)
-                             return;
-                         (*finish)(std::nullopt);
-                         process->deleteLater();
-                     });
-    QTimer::singleShot(gitTimeoutMs, process, [process] { process->kill(); });
-    process->start(QStringLiteral("git"),
-                   QStringList{QStringLiteral("--no-optional-locks")} + arguments);
-}
 
 // `git diff --name-status` lines as "path (added)", "old → new (renamed)" and so on.
 QStringList changedFiles(const QString& nameStatus) {
@@ -181,12 +150,16 @@ QString reviewBody(const AgentConversation& working, const QString& base, const 
 
 } // namespace
 
-// A snapshot is the tree of every tracked and untracked (not ignored) file, written through
-// a copy of the worktree's index so neither the worktree nor its index changes.
+bool AgentBroker::canReview(const AgentConversation& conversation) {
+    return reviewer::supported(conversation.provider, conversation.executionPolicy);
+}
+
 bool AgentBroker::verdictHasNoFindings(const QString& text) {
     return reviewVerdict(text) == ReviewVerdict::noFindings;
 }
 
+// A snapshot is the tree of every tracked and untracked (not ignored) file, written through
+// a copy of the worktree's index so neither the worktree nor its index changes.
 void AgentBroker::snapshotWorktree(const QString& worktree,
                                    std::function<void(std::optional<QString>)> done) {
     QPointer<AgentBroker> self(this);
@@ -325,7 +298,7 @@ void AgentBroker::postReview(const QString& sessionId, const qint64 generation,
     const auto target = host_->agentConversation(reviewer->reviewerSessionId);
     if (!target)
         return skip(QStringLiteral("reviewer_missing"));
-    if (!enforcesReviewGuard(target->provider))
+    if (!canReview(*target))
         return skip(QStringLiteral("reviewer_unsupported"));
     if (!target->idle)
         return skip(QStringLiteral("reviewer_busy"));

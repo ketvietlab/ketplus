@@ -222,8 +222,8 @@ Lane nào cũng được: %2</translation>
             <translation>%1 vòng review</translation>
         </message>
         <message>
-            <source>%1 The leader and the developers start with this; change it for one member in its conversation. The reviewer stays read-only.</source>
-            <translation>%1 Leader và các developer bắt đầu với quyền này; đổi cho từng thành viên trong conversation của nó. Reviewer luôn chỉ đọc.</translation>
+            <source>%1 The leader and the developers start with this; change it for one member in its conversation. A Claude reviewer stays read-only; a Codex reviewer needs Full access.</source>
+            <translation>%1 Leader và các developer bắt đầu với quyền này; đổi cho từng thành viên trong conversation của nó. Reviewer Claude luôn chỉ đọc; reviewer Codex cần Toàn quyền.</translation>
         </message>
         <message>
             <source>%1 waiting</source>
@@ -322,8 +322,12 @@ Lane nào cũng được: %2</translation>
             <translation>; một mức còn lượt sẽ cho team chạy tiếp.</translation>
         </message>
         <message>
-            <source>A reviewer runs on Claude, the provider that keeps a review read-only.</source>
-            <translation>Reviewer chạy trên Claude, provider giữ cho việc review chỉ đọc.</translation>
+            <source>A reviewer runs on Claude, which keeps a review read-only, or on Codex, which reviews with Full access; KetPlus checks the branch after each review.</source>
+            <translation>Reviewer chạy trên Claude, giữ cho việc review chỉ đọc, hoặc trên Codex, review với Toàn quyền; KetPlus kiểm tra branch sau mỗi lượt review.</translation>
+        </message>
+        <message>
+            <source>A reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access.</source>
+            <translation>Reviewer chạy trên Claude, giữ cho việc review chỉ đọc. Codex chỉ review được khi có Toàn quyền.</translation>
         </message>
         <message>
             <source>A role has no member. Add one, then resume.</source>
@@ -332,10 +336,6 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>A second reviewer shortens the queue: each task in review goes to one of the two.</source>
             <translation>Reviewer thứ hai rút ngắn hàng chờ: mỗi task đang review được giao cho một trong hai.</translation>
-        </message>
-        <message>
-            <source>A team has at most five developers and two reviewers.</source>
-            <translation>Một team có tối đa năm developer và hai reviewer.</translation>
         </message>
         <message>
             <source>A team has at most five developers.</source>
@@ -576,6 +576,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>Close</source>
             <translation>Đóng</translation>
+        </message>
+        <message>
+            <source>Codex can review only with Full access.</source>
+            <translation>Codex chỉ review được khi có Toàn quyền.</translation>
         </message>
         <message>
             <source>Continue (%1 more turns)</source>
@@ -1242,12 +1246,20 @@ Lane nào cũng được: %2</translation>
             <translation>Review mọi lane</translation>
         </message>
         <message>
+            <source>Reviews with Full access; KetPlus checks the branch after each review.</source>
+            <translation>Review với Toàn quyền; KetPlus kiểm tra branch sau mỗi lượt review.</translation>
+        </message>
+        <message>
             <source>Review…</source>
             <translation>Review…</translation>
         </message>
         <message>
             <source>Role</source>
             <translation>Vai trò</translation>
+        </message>
+        <message>
+            <source>Round %1 does not count: %2 changed the branch during the review (%3). Nothing was reverted.</source>
+            <translation>Vòng %1 không được tính: %2 đã thay đổi branch trong lúc review (%3). Không có gì bị hoàn tác.</translation>
         </message>
         <message>
             <source>round %1 voided</source>
@@ -1482,6 +1494,10 @@ Lane nào cũng được: %2</translation>
             <translation>Conversation của người nhận trước rời %1 khi lượt của nó kết thúc: %2</translation>
         </message>
         <message>
+            <source>The review of round %1 changed the branch again, so it does not count. Check the branch, then hand the task to review again or hand it over.</source>
+            <translation>Lượt review của vòng %1 lại thay đổi branch nên không được tính. Hãy kiểm tra branch, rồi chuyển task sang review lại hoặc bàn giao nó.</translation>
+        </message>
+        <message>
             <source>The review of round %1 did not finish (%2). Hand the task to review again, or hand it over.</source>
             <translation>Review vòng %1 chưa xong (%2). Hãy gửi review lại task, hoặc chuyển giao nó.</translation>
         </message>
@@ -1502,8 +1518,8 @@ Lane nào cũng được: %2</translation>
             <translation>Reviewer đọc cùng diff, chỉ đọc. Các lỗi tìm thấy được đăng thành bình luận trên pull request của task; board giữ kết luận và link. Task không có pull request được review trên board.</translation>
         </message>
         <message>
-            <source>The reviewer runs on Claude, the agent that keeps a review read-only.</source>
-            <translation>Reviewer chạy trên Claude, agent giữ cho việc review chỉ đọc.</translation>
+            <source>The reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access.</source>
+            <translation>Reviewer chạy trên Claude, giữ cho việc review chỉ đọc. Codex chỉ review được khi có Toàn quyền.</translation>
         </message>
         <message>
             <source>The reviewer's findings are kept in the task's history on the board.</source>
@@ -1524,6 +1540,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>The team has two reviewers, the most a team has.</source>
             <translation>Team đã có hai reviewer, mức tối đa của một team.</translation>
+        </message>
+        <message>
+            <source>The team is full: at most five developers and two reviewers.</source>
+            <translation>Team đã đủ người: tối đa năm developer và hai reviewer.</translation>
         </message>
         <message>
             <source>The team now works in %1.</source>
