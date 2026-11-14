@@ -1651,6 +1651,7 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
                                  &journalError, cleanup)) {
         return error(QStringLiteral("journal_error"), journalError);
     }
+    publishDisabledSessionSchedules(sessionId);
     if (!threadId.isEmpty())
         sessionsByThread_.remove(threadId);
     QDir(handoffDirectory(sessionId)).removeRecursively();

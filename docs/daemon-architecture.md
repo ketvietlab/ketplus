@@ -1155,11 +1155,17 @@ kind, session id and team id, together.
 `status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
 disables every `conversation` schedule that names that session and sets
 `target_deleted`. The rows and their runs stay, so the disable is visible rather than
-a silent drop. Enabling such a schedule is refused until an update clears the status.
-The wire document does not carry `status`; clients see `enabled: false`. Deleting a
-schedule deletes its runs in the same transaction. Deleting a team (`deleteTeam`)
-deletes `team` and `team_start` schedules whose team id is that team's decimal id,
-and their runs. Other schedules are left alone.
+a silent drop. Each of those schedules is then sent as `schedule.changed` with
+`change` `updated`. The wire document includes `status` when it is `target_deleted`
+and omits it otherwise, so a schedule the user paused (`enabled: false`, no status)
+is distinct from one whose conversation is gone. Enabling such a schedule is refused
+with `target_deleted` until an update points it at a conversation that still exists.
+`schedule.create` and `schedule.update` refuse a conversation that is not in the
+journal, and a `team` or `team_start` whose `team_id` is not that team's decimal id,
+with `target_not_found`. Deleting a schedule deletes its runs in the same transaction.
+Deleting a team (`deleteTeam`) deletes `team` and `team_start` schedules whose team
+id is that team's decimal id, and their runs, and emits `schedule.changed` with
+`change` `deleted` for each. Other schedules are left alone.
 
 `schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
 `skipped` or `missed`), when it was due, when it started and finished, the session

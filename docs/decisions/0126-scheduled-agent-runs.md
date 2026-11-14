@@ -27,7 +27,9 @@ manages; it does not create.
    - `Schedule`: `id`, `name`, `enabled`, `prompt` (text only; attachments are out
      of scope), `target`, `rule`, `busy_policy` (`queue` | `skip`), `missed_policy`
      (`run_once` | `skip`), `created_by` (`user` or an agent conversation id),
-     `created_at`, `updated_at`, `next_run_at`, `last_run_at`.
+     `created_at`, `updated_at`, `next_run_at`, `last_run_at`, and `status` when it
+     is `target_deleted`. `status` is omitted while empty. It is server-owned: a
+     client that sends it is `unknown_field`.
    - `ScheduleRun`: `id`, `schedule_id`, `scheduled_for`, `started_at`, `finished_at`,
      `status` (`queued` | `running` | `succeeded` | `failed` | `skipped` | `missed`),
      `session_id`, `turn_id` (the conversation turn, when the run has one),
@@ -106,7 +108,10 @@ manages; it does not create.
 
    Stable codes: `unknown_field`, `empty_prompt`, `missing_target`, `invalid_enum`,
    `invalid_payload`, `invalid_rule`, `prompt_not_allowed`, `team_start_constraint`,
-   `schedule_not_found`, `not_implemented`.
+   `schedule_not_found`, `target_deleted`, `target_not_found`, `not_implemented`.
+   `target_deleted` refuses to enable a schedule whose conversation was deleted.
+   `target_not_found` refuses a create or update whose conversation is not in the
+   journal, or whose team id is not that team's decimal id.
 
 7. **Who may create one.** The product creates a schedule only from New
    conversation and New team (mock pull request #681). Agent-created schedules
@@ -115,9 +120,10 @@ manages; it does not create.
 
 8. **Journal.** A following change stores the documents above: deleting a schedule
    deletes its runs; deleting a team deletes its `team` and `team_start`
-   schedules; deleting a conversation disables schedules that target it and
-   records that status. Existing journals open unchanged. This decision does not
-   add those tables.
+   schedules and emits `schedule.changed` (`deleted`) for each; deleting a
+   conversation disables schedules that target it, records `status`
+   `target_deleted`, and emits `schedule.changed` (`updated`) for each. Existing
+   journals open unchanged. This decision does not add those tables.
 
 ## Consequences
 

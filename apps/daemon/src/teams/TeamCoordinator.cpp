@@ -644,9 +644,20 @@ std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {
     const Team* team = this->team(teamId);
     if (!team)
         return notFound();
+    QList<ScheduleRecord> removedSchedules;
+    if (const auto rows = journal_->schedules(ScheduleFilter{.teamId = QString::number(teamId)})) {
+        for (const ScheduleRecord& row : *rows)
+            if (row.target.kind == QLatin1String("team") ||
+                row.target.kind == QLatin1String("team_start"))
+                removedSchedules.append(row);
+    } else if (!journal_->errorString().isEmpty()) {
+        return journalError(journal_->errorString());
+    }
     QString error;
     if (!journal_->deleteTeam(teamId, &error))
         return journalError(error);
+    if (host_)
+        host_->schedulesDeleted(removedSchedules);
     const QString repository = team->repository;
     for (const QString& session : team->memberSessions()) {
         cancelWait(session);

@@ -366,6 +366,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                     teams::StorageDone done) override;
     void askRemoveWorktree(const QString& repository, const QString& worktree,
                            teams::RemovalDone done) override;
+    void schedulesDeleted(const QList<ScheduleRecord>& schedules) override;
     [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
     [[nodiscard]] QList<teams::FolderConversation>
     conversationsIn(const QString& path) const override;
@@ -408,6 +409,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0126, in SessionHostSchedules.cpp. Parses with the shared schedule contract,
     // then reads and writes LocalJournal. schedule.runNow stays not_implemented.
     [[nodiscard]] QJsonObject scheduleCommand(const QString& type, const QJsonObject& request);
+    void publishScheduleChange(const QString& change, const ScheduleRecord& record);
+    void publishDisabledSessionSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
     // Has the git a task command will ask for read off the event loop, then calls `then`,
     // where the command runs as always: a client's request, and a member's team_task_* tool.

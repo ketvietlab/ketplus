@@ -41,6 +41,15 @@ QJsonObject conversationTarget(const QString& sessionId) {
             {QStringLiteral("session_id"), sessionId}};
 }
 
+bool seedSession(LocalJournal& journal, const QString& id) {
+    StoredSession session;
+    session.id = id;
+    session.state = QStringLiteral("ready");
+    session.adapter = QStringLiteral("codex");
+    session.worktreePath = journal.databasePath();
+    return journal.upsertSession(session);
+}
+
 QJsonObject createPayload(const QString& name, const QJsonObject& target, const QString& prompt,
                           const QString& rule, const QString& missed) {
     QJsonObject payload{{QStringLiteral("name"), name},
@@ -63,6 +72,8 @@ class ScheduleHostTest final : public QObject {
         QVERIFY(dir.isValid());
         LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY(journal.errorString().isEmpty());
+        QVERIFY(seedSession(journal, QStringLiteral("session-a")));
+        QVERIFY(seedSession(journal, QStringLiteral("session-b")));
         CodexAdapter adapter(dir.filePath(QStringLiteral("never-start-provider")));
         SessionHost host(&journal, &adapter);
         QSignalSpy events(&host, &SessionHost::scheduleEvent);
@@ -120,6 +131,11 @@ class ScheduleHostTest final : public QObject {
             {{QStringLiteral("id"), id}, {QStringLiteral("name"), QStringLiteral("Still gone")}});
         QVERIFY2(accepted(renamed, QString::fromLatin1(protocol::scheduleUpdateType), &why),
                  qPrintable(why));
+        QCOMPARE(renamed.value(QStringLiteral("schedule"))
+                     .toObject()
+                     .value(QStringLiteral("status"))
+                     .toString(),
+                 QStringLiteral("target_deleted"));
         const auto stillRefused = command(
             host, QStringLiteral("enable-2"), QString::fromLatin1(protocol::scheduleSetEnabledType),
             {{QStringLiteral("id"), id}, {QStringLiteral("enabled"), true}});
@@ -165,6 +181,14 @@ class ScheduleHostTest final : public QObject {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
+        QString teamError;
+        const auto teamId = journal.insertTeam(
+            QStringLiteral("/tmp/repo"),
+            {{QStringLiteral("name"), QStringLiteral("Website")},
+             {QStringLiteral("created_at"), QStringLiteral("2026-11-13T00:00:00.000Z")}},
+            {}, &teamError);
+        QVERIFY2(teamId.has_value(), qPrintable(teamError));
+        const QString teamKey = QString::number(*teamId);
         CodexAdapter adapter(dir.filePath(QStringLiteral("never-start-provider")));
         SessionHost host(&journal, &adapter);
         QString why;
@@ -186,7 +210,7 @@ class ScheduleHostTest final : public QObject {
                                .value(QStringLiteral("id"))
                                .toString();
         const QJsonObject team{{QStringLiteral("kind"), QStringLiteral("team")},
-                               {QStringLiteral("team_id"), QStringLiteral("7")}};
+                               {QStringLiteral("team_id"), teamKey}};
         QVERIFY2(accepted(command(host, QStringLiteral("team-1"),
                                   QString::fromLatin1(protocol::scheduleCreateType),
                                   createPayload(QStringLiteral("Standup"), team,
@@ -196,7 +220,7 @@ class ScheduleHostTest final : public QObject {
                           QString::fromLatin1(protocol::scheduleCreateType), &why),
                  qPrintable(why));
         const QJsonObject start{{QStringLiteral("kind"), QStringLiteral("team_start")},
-                                {QStringLiteral("team_id"), QStringLiteral("7")}};
+                                {QStringLiteral("team_id"), teamKey}};
         QVERIFY2(accepted(command(host, QStringLiteral("start-1"),
                                   QString::fromLatin1(protocol::scheduleCreateType),
                                   createPayload(QStringLiteral("Kickoff"), start, QString{},
@@ -207,7 +231,7 @@ class ScheduleHostTest final : public QObject {
 
         const auto teamRows = command(host, QStringLiteral("list-team"),
                                       QString::fromLatin1(protocol::scheduleListType),
-                                      {{QStringLiteral("team_id"), QStringLiteral("7")}});
+                                      {{QStringLiteral("team_id"), teamKey}});
         QVERIFY2(accepted(teamRows, QString::fromLatin1(protocol::scheduleListType), &why),
                  qPrintable(why));
         QCOMPARE(teamRows.value(QStringLiteral("schedules")).toArray().size(), 2);
@@ -290,6 +314,96 @@ class ScheduleHostTest final : public QObject {
         QCOMPARE(other.value(QStringLiteral("error_code")).toString(),
                  QString::fromLatin1(ketplus::schedule::invalidPayloadCode));
         QCOMPARE(journal.schedules(ScheduleFilter{}).value_or(QList<ScheduleRecord>{}).size(), 0);
+        const auto missingSession =
+            command(host, QStringLiteral("missing-session"),
+                    QString::fromLatin1(protocol::scheduleCreateType),
+                    createPayload(QStringLiteral("Nightly"),
+                                  conversationTarget(QStringLiteral("no-such-session")),
+                                  QStringLiteral("Summarise"),
+                                  QStringLiteral("{\"kind\":\"daily\"}"), QStringLiteral("skip")));
+        QCOMPARE(missingSession.value(QStringLiteral("error_code")).toString(),
+                 QString::fromLatin1(protocol::scheduleTargetNotFoundCode));
+        const auto missingTeam = command(
+            host, QStringLiteral("missing-team"), QString::fromLatin1(protocol::scheduleCreateType),
+            createPayload(QStringLiteral("Standup"),
+                          {{QStringLiteral("kind"), QStringLiteral("team")},
+                           {QStringLiteral("team_id"), QStringLiteral("website")}},
+                          QStringLiteral("Ask the leader"), QStringLiteral("{\"kind\":\"daily\"}"),
+                          QStringLiteral("skip")));
+        QCOMPARE(missingTeam.value(QStringLiteral("error_code")).toString(),
+                 QString::fromLatin1(protocol::scheduleTargetNotFoundCode));
+    }
+
+    void cascadesEmitScheduleChanged() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(seedSession(journal, QStringLiteral("session-a")));
+        QString teamError;
+        const auto teamId = journal.insertTeam(
+            QStringLiteral("/tmp/repo"),
+            {{QStringLiteral("name"), QStringLiteral("Website")},
+             {QStringLiteral("created_at"), QStringLiteral("2026-11-13T00:00:00.000Z")}},
+            {}, &teamError);
+        QVERIFY2(teamId.has_value(), qPrintable(teamError));
+        const QString teamKey = QString::number(*teamId);
+        CodexAdapter adapter(dir.filePath(QStringLiteral("never-start-provider")));
+        SessionHost host(&journal, &adapter);
+        QSignalSpy events(&host, &SessionHost::scheduleEvent);
+        QString why;
+        const auto created = command(
+            host, QStringLiteral("create-1"), QString::fromLatin1(protocol::scheduleCreateType),
+            createPayload(QStringLiteral("Nightly"),
+                          conversationTarget(QStringLiteral("session-a")),
+                          QStringLiteral("Summarise the inbox"),
+                          QStringLiteral("{\"kind\":\"daily\"}"), QStringLiteral("skip")));
+        QVERIFY2(accepted(created, QString::fromLatin1(protocol::scheduleCreateType), &why),
+                 qPrintable(why));
+        const auto removed = host.handleCommand(
+            {{QStringLiteral("protocol_version"), protocol::currentVersion},
+             {QStringLiteral("message_id"), QStringLiteral("delete-session")},
+             {QStringLiteral("message_type"), QStringLiteral("session.delete")},
+             {QStringLiteral("session_id"), QStringLiteral("session-a")},
+             {QStringLiteral("session_generation"), 1},
+             {QStringLiteral("sent_at"), QStringLiteral("2026-11-13T09:00:00.000Z")},
+             {QStringLiteral("payload"), QJsonObject{}}},
+            QStringLiteral("desktop-test"));
+        QVERIFY2(removed.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(removed.value(QStringLiteral("error_code")).toString() +
+                            QLatin1Char(' ') +
+                            removed.value(QStringLiteral("error_message")).toString()));
+        QCOMPARE(events.count(), 2);
+        const auto disabled = events.at(1).at(1).toJsonObject();
+        QCOMPARE(disabled.value(QStringLiteral("change")).toString(),
+                 QString::fromLatin1(protocol::scheduleUpdatedChange));
+        const auto disabledSchedule = disabled.value(QStringLiteral("schedule")).toObject();
+        QCOMPARE(disabledSchedule.value(QStringLiteral("status")).toString(),
+                 QStringLiteral("target_deleted"));
+        QVERIFY(!disabledSchedule.value(QStringLiteral("enabled")).toBool());
+
+        QVERIFY2(accepted(command(host, QStringLiteral("team-1"),
+                                  QString::fromLatin1(protocol::scheduleCreateType),
+                                  createPayload(QStringLiteral("Standup"),
+                                                {{QStringLiteral("kind"), QStringLiteral("team")},
+                                                 {QStringLiteral("team_id"), teamKey}},
+                                                QStringLiteral("Ask the leader"),
+                                                QStringLiteral("{\"kind\":\"daily\"}"),
+                                                QStringLiteral("skip"))),
+                          QString::fromLatin1(protocol::scheduleCreateType), &why),
+                 qPrintable(why));
+        const auto teamGone =
+            command(host, QStringLiteral("team-delete"), QStringLiteral("team.delete"),
+                    {{QStringLiteral("team_id"), teamKey}});
+        QVERIFY2(teamGone.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(teamGone.value(QStringLiteral("error_message")).toString()));
+        QCOMPARE(events.count(), 4);
+        const auto deleted = events.at(3).at(1).toJsonObject();
+        QCOMPARE(deleted.value(QStringLiteral("change")).toString(),
+                 QString::fromLatin1(protocol::scheduleDeletedChange));
+        QCOMPARE(journal.schedules(ScheduleFilter{.teamId = teamKey})
+                     .value_or(QList<ScheduleRecord>{})
+                     .size(),
+                 0);
     }
 };
 
