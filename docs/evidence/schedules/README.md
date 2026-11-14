@@ -6,7 +6,8 @@ follow the approved mock in `mockups/qt/evidence/schedules/`. A team id uses the
 alphabet, so the sample reads `Release.1.4` rather than the mock's display name.
 
 The editor target is read-only. An empty prompt is shown under the prompt, with a red
-border. `01-view-menu` shows Schedules… in a View menu, shortcut ⇧⌘J.
+border. The form scrolls above Cancel and Save, and the rule summary stays in the form.
+`01-view-menu` shows Schedules… in a View menu, shortcut ⇧⌘J.
 
 | Files | State |
 | --- | --- |

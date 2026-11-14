@@ -40,6 +40,22 @@ QStringList zoneChoices(const QString& current) {
     return zones;
 }
 
+// Reports the form's height so the card grows, while staying shrinkable so a
+// short window keeps Cancel and Save inside the card and scrolls the form.
+class FormScroll : public QScrollArea {
+  public:
+    using QScrollArea::QScrollArea;
+
+    QSize sizeHint() const override {
+        const QWidget* form = widget();
+        if (form == nullptr)
+            return QScrollArea::sizeHint();
+        return form->sizeHint() + QSize(frameWidth() * 2, frameWidth() * 2);
+    }
+
+    QSize minimumSizeHint() const override { return {0, 0}; }
+};
+
 ket::FieldRow* stackedRow(const QString& label, QWidget* control, QWidget* parent) {
     auto* row = new ket::FieldRow(label, control, {}, parent);
     row->setStacked(true);
@@ -181,16 +197,16 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     summary_->setWordWrap(true);
     column->addWidget(summary_);
 
-    // The card cannot grow past the window. A squeezed column clips the bottom
-    // border of every field, so the form keeps its height and scrolls instead.
+    // The card stops at the window, and a minimum taller than that paints over
+    // the footer. The form keeps its own height and scrolls above Cancel/Save.
     body->adjustSize();
-    const int natural = body->sizeHint().height();
-    body->setMinimumHeight(natural);
-    auto* scroll = new QScrollArea;
+    body->setMinimumHeight(body->sizeHint().height());
+    auto* scroll = new FormScroll;
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll->setMinimumHeight(natural);
+    scroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    scroll->setMinimumHeight(0);
     scroll->setWidget(body);
     dialog_->setBody(scroll);
     auto* cancel = dialog_->addButton(tr("Cancel"));
@@ -333,8 +349,6 @@ void ScheduleEditor::showIssue(const QString& code, const QString& message, cons
         form->setMinimumHeight(0);
         const int natural = form->sizeHint().height();
         form->setMinimumHeight(natural);
-        if (auto* scroll = qobject_cast<QScrollArea*>(form->parentWidget()->parentWidget()))
-            scroll->setMinimumHeight(natural);
     }
     const bool banner = !message.isEmpty() && resolved.isEmpty();
     banner_->setText(banner ? message : QString{});
