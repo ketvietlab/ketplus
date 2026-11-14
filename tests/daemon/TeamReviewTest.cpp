@@ -266,6 +266,35 @@ class TeamReviewTest final : public QObject {
         QVERIFY(firstReviews(team()).reviewing.isEmpty());
     }
 
+    // ketplus#295: a review that changed the branch is not counted and is asked again once;
+    // a second one waits for the leader, who cannot accept it as a verdict.
+    void aReviewThatChangedTheBranchTwiceWaitsForTheLeader() {
+        const QString id = inReview("Cart", "dev1");
+        const QJsonArray changes{
+            QJsonObject{{"field", "head"}, {"before", "aaa"}, {"after", "bbb"}}};
+        QVERIFY(teams_->reviewScope("rev", "other-request") == std::nullopt);
+        const auto scope = teams_->reviewScope("rev", firstReviews(team()).message);
+        QVERIFY(scope.has_value());
+        QCOMPARE(scope->workingSession, QStringLiteral("dev1"));
+        teams_->reviewTampered("rev", "other-request", changes); // not the bound request
+        QCOMPARE(task(id).history.last().kind == QStringLiteral("review_tampered"), false);
+        teams_->reviewTampered("rev", firstReviews(team()).message, changes);
+        QCOMPARE(task(id).state, state::inReview);
+        QCOMPARE(task(id).round, 1); // the round asked again, not a new one
+        QCOMPARE(reviewsTo("rev").size(), 2);
+        bool recorded = false;
+        for (const HistoryEntry& entry : task(id).history)
+            recorded = recorded || (entry.kind == QStringLiteral("review_tampered") &&
+                                    entry.data.value("changes").toArray() == changes);
+        QVERIFY(recorded);
+        teams_->reviewTampered("rev", firstReviews(team()).message, changes);
+        QCOMPARE(task(id).state, state::blocked);
+        QCOMPARE(task(id).reviewBlock, QStringLiteral("review_tampered"));
+        QCOMPARE(task(id).resumeState, state::inReview);
+        QCOMPARE(task(id).round, 0);
+        QVERIFY(!teams_->acceptReview(team_, id, "checked", "looked at it", "lead").ok());
+    }
+
     void onlyTheReviewerFinishesAReview() {
         const QString id = inReview("Cart", "dev1");
         finishReview(*teams_, "dev1", "Verdict: no findings", true);
@@ -458,6 +487,145 @@ class TeamReviewTest final : public QObject {
             QCOMPARE(received.first().state, QStringLiteral("delivered"));
             QVERIFY(received.first().body.contains("found issues"));
         }
+    }
+
+    // ketplus#295: a Codex reviewer reviews with the team's Full access, and the daemon compares
+    // the task's branch before and after each review turn. A change voids that round (not
+    // counted, nothing reverted), the history and the leader say what changed, and the reviewer
+    // is asked again; the next, clean review counts.
+    void aCodexReviewerIsCheckedAroundEachReview_data() {
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<QString>("field");
+        QTest::newRow("unchanged") << QString{} << QString{};
+        QTest::newRow("new commit") << "cd '%1' && git -c user.email=t@example.com -c user.name=T "
+                                       "commit -q --allow-empty -m tampered"
+                                    << "head";
+        QTest::newRow("dirty worktree") << "cd '%1' && echo dirty > dirty.txt" << "status";
+        QTest::newRow("switched branch") << "cd '%1' && git checkout -q -b elsewhere"
+                                         << "symbolic_ref";
+        QTest::newRow("moved remote head") << "cd '%1' && git push -q origin HEAD:refs/heads/%2"
+                                           << "remote_head";
+    }
+
+    void aCodexReviewerIsCheckedAroundEachReview() {
+        QFETCH(QString, action);
+        QFETCH(QString, field);
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const QString origin = fixture.directory.filePath("origin.git");
+        git(fixture.directory.path(), {"init", "-q", "--bare", origin});
+        const QString repository = fixture.directory.filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
+                         "--allow-empty", "-m", "start"});
+        git(repository, {"remote", "add", "origin", origin});
+        git(repository, {"push", "-q", "origin", "integration"});
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QJsonObject plan{{"leader", QJsonObject{{"provider", "codex"}}},
+                               {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
+                               {"reviewer", QJsonObject{{"provider", "codex"}}}};
+        // Without Full access the team refuses a Codex reviewer, with the reason.
+        const QJsonObject refused = command("team.create", {{"repository", repository},
+                                                            {"name", "Shop"},
+                                                            {"integration_branch", "integration"},
+                                                            {"plan", plan}});
+        QCOMPARE(refused.value("error_code").toString(), QStringLiteral("reviewer_unsupported"));
+        QCOMPARE(refused.value("error_message").toString(),
+                 QStringLiteral("Codex can review only with Full access."));
+        const QJsonObject created = command("team.create", {{"repository", repository},
+                                                            {"name", "Shop"},
+                                                            {"integration_branch", "integration"},
+                                                            {"execution_policy", "full"},
+                                                            {"risk_acknowledged", true},
+                                                            {"plan", plan}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString teamId = created.value("team").toObject().value("id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        const QString reviewer = members.at(2).toObject().value("session_id").toString();
+        QVERIFY(command("team.task.create", {{"team_id", teamId},
+                                             {"title", "Cart"},
+                                             {"criteria", QJsonArray{"Adds an item"}}})
+                    .value("ok")
+                    .toBool());
+        const QJsonObject assigned = command(
+            "team.task.assign", {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}});
+        QVERIFY2(assigned.value("ok").toBool(), qPrintable(agent_test::text(assigned)));
+        const QString worktree = assigned.value("task").toObject().value("worktree").toString();
+        const QString branch = assigned.value("task").toObject().value("branch").toString();
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") >= 1, 8000);
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_progress"}})
+                    .value("ok")
+                    .toBool());
+        QVERIFY(QDir(worktree).mkpath("web"));
+        QFile file(QDir(worktree).filePath("web/cart.txt"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("cart\n");
+        file.close();
+        git(worktree, {"add", "web/cart.txt"});
+        git(worktree,
+            {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q", "-m", "Cart"});
+        // The first review turn runs this in its worktree; the fake answers "no findings".
+        if (!action.isEmpty()) {
+            QFile script(fixture.codexLog + ".review");
+            QVERIFY(script.open(QIODevice::WriteOnly));
+            script.write(action.arg(worktree, branch).toUtf8());
+        }
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_review"}})
+                    .value("ok")
+                    .toBool());
+        const auto task = [&] {
+            return command("team.task.get", {{"team_id", teamId}, {"task_id", "T-1"}})
+                .value("task")
+                .toObject();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(task().value("state").toString(), QStringLiteral("ready"), 15000);
+        // The review turns ran with Full access, never read-only.
+        const QByteArray log = agent_test::logText(fixture.codexLog);
+        QVERIFY(log.contains("review-turn"));
+        QVERIFY2(!log.contains("\"readOnly\""), log.constData());
+        QJsonObject tampered;
+        for (const QJsonValue& entry : task().value("history").toArray())
+            if (entry.toObject().value("kind").toString() == QStringLiteral("review_tampered"))
+                tampered = entry.toObject();
+        const auto reviews = fixture.journal->agentMessagesOf(reviewer, 1, 10);
+        if (field.isEmpty()) {
+            // Counted once, as usual.
+            QVERIFY(tampered.isEmpty());
+            QCOMPARE(task().value("round").toInt(), 1);
+            QCOMPARE(reviews.size(), 1);
+            return;
+        }
+        // Voided, then asked again: the round that counted is the clean one.
+        QVERIFY2(!tampered.isEmpty(), qPrintable(agent_test::text(task())));
+        QCOMPARE(task().value("round").toInt(), 1);
+        QCOMPARE(reviews.size(), 2);
+        int voided = 0;
+        for (const auto& review : reviews)
+            if (review.state == QStringLiteral("failed") &&
+                review.error == QStringLiteral("review_tampered"))
+                ++voided;
+        QCOMPARE(voided, 1);
+        bool named = false;
+        for (const QJsonValue& change :
+             tampered.value("data").toObject().value("changes").toArray())
+            if (change.toObject().value("field").toString() == field)
+                named = !change.toObject().value("before").toString().isEmpty() ||
+                        !change.toObject().value("after").toString().isEmpty();
+        QVERIFY2(named, qPrintable(agent_test::text(tampered)));
+        QVERIFY(tampered.value("text").toString().contains("Nothing was reverted"));
+        // The working conversation reads what changed.
+        bool told = false;
+        for (const QJsonObject& notice : fixture.payloads(developer, "agent_message.state"))
+            told = told || notice.value("state").toString() == QStringLiteral("review_tampered");
+        QVERIFY(told);
     }
 };
 

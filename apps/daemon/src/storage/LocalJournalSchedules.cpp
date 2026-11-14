@@ -381,11 +381,16 @@ bool LocalJournal::deleteSchedule(const QString& id, QString* error) {
     return true;
 }
 
-bool LocalJournal::setScheduleEnabled(const QString& id, const bool enabled, QString* error) {
-    const auto reject = [&](const QString& message) {
+bool LocalJournal::setScheduleEnabled(const QString& id, const bool enabled, QString* error,
+                                      QString* code) {
+    if (code)
+        *code = {};
+    const auto reject = [&](const QString& message, const char* stable = nullptr) {
         setError(message);
         if (error)
             *error = message;
+        if (code)
+            *code = stable ? QString::fromLatin1(stable) : QString{};
         return false;
     };
     if (id.isEmpty())
@@ -396,9 +401,10 @@ bool LocalJournal::setScheduleEnabled(const QString& id, const bool enabled, QSt
     if (!current.exec())
         return reject(current.lastError().text());
     if (!current.next())
-        return reject(QStringLiteral("Schedule was not found."));
+        return reject(QStringLiteral("Schedule was not found."), "schedule_not_found");
     if (enabled && current.value(0).toString() == QLatin1String("target_deleted"))
-        return reject(QStringLiteral("This schedule's conversation was deleted."));
+        return reject(QStringLiteral("This schedule's conversation was deleted."),
+                      "target_deleted");
     current.finish();
     QSqlQuery update(database_);
     update.prepare(QStringLiteral("UPDATE schedules SET enabled = ?, updated_at = ? WHERE id = ?"));
@@ -459,6 +465,24 @@ bool LocalJournal::deleteSchedulesForTeam(const QString& teamId, QString* error)
     open = false;
     setError({});
     return true;
+}
+
+bool LocalJournal::sessionExists(const QString& sessionId) const {
+    if (sessionId.isEmpty())
+        return false;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT 1 FROM sessions WHERE id = ?"));
+    query.addBindValue(sessionId);
+    return query.exec() && query.next();
+}
+
+bool LocalJournal::teamExists(const qint64 teamId) const {
+    if (teamId <= 0)
+        return false;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT 1 FROM teams WHERE id = ?"));
+    query.addBindValue(teamId);
+    return query.exec() && query.next();
 }
 
 bool LocalJournal::disableSchedulesForSession(const QString& sessionId, QString* error) {
@@ -663,6 +687,40 @@ std::optional<ScheduleRunPage> LocalJournal::scheduleRuns(const QString& schedul
             result.nextBefore = result.runs.last().id;
     }
     return result;
+}
+
+std::optional<ScheduleRunRecord> LocalJournal::scheduleRun(const QString& id) const {
+    setError({});
+    if (id.isEmpty())
+        return std::nullopt;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT %1 FROM schedule_runs WHERE id = ?").arg(runColumns));
+    query.addBindValue(id);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return readRun(query, 0);
+}
+
+std::optional<ScheduleRunRecord> LocalJournal::queuedScheduleRun(const QString& scheduleId) const {
+    setError({});
+    if (scheduleId.isEmpty())
+        return std::nullopt;
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("SELECT %1 FROM schedule_runs WHERE schedule_id = ? AND "
+                                 "status = 'queued' ORDER BY rowid DESC LIMIT 1")
+                      .arg(runColumns));
+    query.addBindValue(scheduleId);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return readRun(query, 0);
 }
 
 } // namespace ketplus::daemon

@@ -344,19 +344,22 @@ std::optional<Target> targetFromJson(const QJsonObject& json, Failure* failure) 
 }
 
 QJsonObject toJson(const Schedule& schedule) {
-    return {{QStringLiteral("id"), schedule.id},
-            {QStringLiteral("name"), schedule.name},
-            {QStringLiteral("enabled"), schedule.enabled},
-            {QStringLiteral("prompt"), schedule.prompt},
-            {QStringLiteral("target"), toJson(schedule.target)},
-            {QStringLiteral("rule"), schedule.rule},
-            {QStringLiteral("busy_policy"), nameOf(schedule.busyPolicy)},
-            {QStringLiteral("missed_policy"), nameOf(schedule.missedPolicy)},
-            {QStringLiteral("created_by"), schedule.createdBy},
-            {QStringLiteral("created_at"), schedule.createdAt},
-            {QStringLiteral("updated_at"), schedule.updatedAt},
-            {QStringLiteral("next_run_at"), schedule.nextRunAt},
-            {QStringLiteral("last_run_at"), schedule.lastRunAt}};
+    QJsonObject json{{QStringLiteral("id"), schedule.id},
+                     {QStringLiteral("name"), schedule.name},
+                     {QStringLiteral("enabled"), schedule.enabled},
+                     {QStringLiteral("prompt"), schedule.prompt},
+                     {QStringLiteral("target"), toJson(schedule.target)},
+                     {QStringLiteral("rule"), schedule.rule},
+                     {QStringLiteral("busy_policy"), nameOf(schedule.busyPolicy)},
+                     {QStringLiteral("missed_policy"), nameOf(schedule.missedPolicy)},
+                     {QStringLiteral("created_by"), schedule.createdBy},
+                     {QStringLiteral("created_at"), schedule.createdAt},
+                     {QStringLiteral("updated_at"), schedule.updatedAt},
+                     {QStringLiteral("next_run_at"), schedule.nextRunAt},
+                     {QStringLiteral("last_run_at"), schedule.lastRunAt}};
+    if (!schedule.status.isEmpty())
+        json.insert(QStringLiteral("status"), schedule.status);
+    return json;
 }
 
 std::optional<Schedule> scheduleFromJson(const QJsonObject& json, Failure* failure) {
@@ -366,7 +369,7 @@ std::optional<Schedule> scheduleFromJson(const QJsonObject& json, Failure* failu
                               QStringLiteral("busy_policy"), QStringLiteral("missed_policy"),
                               QStringLiteral("created_by"),  QStringLiteral("created_at"),
                               QStringLiteral("updated_at"),  QStringLiteral("next_run_at"),
-                              QStringLiteral("last_run_at")};
+                              QStringLiteral("last_run_at"), QStringLiteral("status")};
     if (const QString extra = firstUnknown(json, allowed); !extra.isEmpty()) {
         fail(failure, unknownFieldCode, QStringLiteral("Unknown field \"%1\".").arg(extra));
         return std::nullopt;
@@ -481,6 +484,18 @@ std::optional<Schedule> scheduleFromJson(const QJsonObject& json, Failure* failu
     schedule.updatedAt = *updatedAt;
     schedule.nextRunAt = *nextRunAt;
     schedule.lastRunAt = *lastRunAt;
+    if (json.contains(QStringLiteral("status"))) {
+        if (!json.value(QStringLiteral("status")).isString()) {
+            fail(failure, invalidPayloadCode, QStringLiteral("status must be a string."));
+            return std::nullopt;
+        }
+        schedule.status = json.value(QStringLiteral("status")).toString();
+        if (!schedule.status.isEmpty() && schedule.status != QStringLiteral("target_deleted")) {
+            fail(failure, invalidEnumCode,
+                 QStringLiteral("status \"%1\" is not a known value.").arg(schedule.status));
+            return std::nullopt;
+        }
+    }
     accept(failure);
     return schedule;
 }

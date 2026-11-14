@@ -82,8 +82,43 @@ std::optional<schedule::Schedule> fromRecord(const ScheduleRecord& record,
     schedule.updatedAt = record.updatedAt;
     schedule.nextRunAt = record.nextRunAt;
     schedule.lastRunAt = record.lastRunAt;
+    schedule.status = record.status;
     // Re-check the stored document with the shared parser so a bad row is not sent.
     return schedule::scheduleFromJson(schedule::toJson(schedule), failure);
+}
+
+std::optional<qint64> canonicalTeamId(const QString& text) {
+    if (text.isEmpty() || !text.front().isDigit())
+        return std::nullopt;
+    bool ok = false;
+    const qint64 value = text.toLongLong(&ok);
+    if (!ok || value <= 0 || QString::number(value) != text)
+        return std::nullopt;
+    return value;
+}
+
+// A conversation or team target must name a row the cascade can find. A schedule whose
+// conversation is already recorded as deleted may still be renamed or pointed elsewhere.
+QJsonObject requireLiveTarget(LocalJournal& journal, const schedule::Schedule& schedule,
+                              const ScheduleRecord* previous) {
+    if (schedule.target.kind == schedule::TargetKind::Conversation) {
+        const bool recordedGone =
+            previous && previous->status == QLatin1String(protocol::scheduleTargetDeletedCode) &&
+            previous->target.kind == QLatin1String("conversation") &&
+            previous->target.sessionId == schedule.target.sessionId;
+        if (!recordedGone && !journal.sessionExists(schedule.target.sessionId))
+            return failed(QString::fromLatin1(protocol::scheduleTargetNotFoundCode),
+                          QStringLiteral("This schedule's conversation does not exist."));
+        return {};
+    }
+    if (schedule.target.kind != schedule::TargetKind::Team &&
+        schedule.target.kind != schedule::TargetKind::TeamStart)
+        return {};
+    const auto teamId = canonicalTeamId(schedule.target.teamId);
+    if (!teamId || !journal.teamExists(*teamId))
+        return failed(QString::fromLatin1(protocol::scheduleTargetNotFoundCode),
+                      QStringLiteral("This schedule's team does not exist."));
+    return {};
 }
 
 schedule::Run fromRun(const ScheduleRunRecord& record) {
@@ -168,6 +203,9 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         // accepted on a person's connection, so this is "user". An agent
         // conversation id belongs to a later agent tool, not this request.
         created->createdBy = QStringLiteral("user");
+        if (const QJsonObject missing = requireLiveTarget(*journal_, *created, nullptr);
+            !missing.isEmpty())
+            return missing;
         QString error;
         if (!journal_->createSchedule(toRecord(*created), &error))
             return journalError(error);
@@ -180,6 +218,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleCreatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -213,13 +252,16 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         auto checked = schedule::scheduleFromJson(schedule::toJson(*merged), &failure);
         if (!checked)
             return failed(failure);
+        if (const QJsonObject missing = requireLiveTarget(*journal_, *checked, &(*record));
+            !missing.isEmpty())
+            return missing;
         ScheduleRecord next = toRecord(*checked);
         const bool sameConversation = checked->target.kind == schedule::TargetKind::Conversation &&
                                       record->target.kind == QLatin1String("conversation") &&
                                       checked->target.sessionId == record->target.sessionId;
         next.status = sameConversation ? record->status : QString{};
-        if (next.status == QLatin1String("target_deleted") && next.enabled)
-            return failed(QStringLiteral("target_deleted"),
+        if (next.status == QLatin1String(protocol::scheduleTargetDeletedCode) && next.enabled)
+            return failed(QString::fromLatin1(protocol::scheduleTargetDeletedCode),
                           QStringLiteral("This schedule's conversation was deleted."));
         QString error;
         if (!journal_->updateSchedule(next, &error))
@@ -233,6 +275,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
@@ -253,6 +296,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!journal_->deleteSchedule(*id, &error))
             return journalError(error);
         changed(QString::fromLatin1(protocol::scheduleDeletedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDeletedResult(*id);
     }
 
@@ -267,10 +311,11 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
             return failed(QString::fromLatin1(protocol::scheduleNotFoundCode),
                           QStringLiteral("Schedule was not found."));
         QString error;
-        if (!journal_->setScheduleEnabled(enabled->id, enabled->enabled, &error)) {
-            if (error == QLatin1String("This schedule's conversation was deleted."))
-                return failed(QStringLiteral("target_deleted"), error);
-            if (error == QLatin1String("Schedule was not found."))
+        QString code;
+        if (!journal_->setScheduleEnabled(enabled->id, enabled->enabled, &error, &code)) {
+            if (code == QLatin1String(protocol::scheduleTargetDeletedCode))
+                return failed(QString::fromLatin1(protocol::scheduleTargetDeletedCode), error);
+            if (code == QLatin1String(protocol::scheduleNotFoundCode))
                 return failed(QString::fromLatin1(protocol::scheduleNotFoundCode), error);
             return journalError(error);
         }
@@ -283,14 +328,15 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
+        noteSchedulesChanged();
         return protocol::scheduleDocumentResult(*schedule);
     }
 
     if (type == QLatin1String(protocol::scheduleRunNowType)) {
-        if (!protocol::parseScheduleId(payload, &failure))
+        const auto id = protocol::parseScheduleId(payload, &failure);
+        if (!id)
             return failed(failure);
-        return failed(QString::fromLatin1(protocol::scheduleNotImplementedCode),
-                      QStringLiteral("schedule.runNow is not implemented yet."));
+        return runScheduleNow(*id);
     }
 
     if (type == QLatin1String(protocol::scheduleRunsType)) {
@@ -314,6 +360,31 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
 
     return failed(QString::fromLatin1(schedule::invalidPayloadCode),
                   QStringLiteral("Unknown schedule request."));
+}
+
+void SessionHost::publishScheduleChange(const QString& change, const ScheduleRecord& record) {
+    schedule::Failure failure;
+    const auto schedule = fromRecord(record, &failure);
+    if (!schedule)
+        return;
+    emit scheduleEvent(QString::fromLatin1(protocol::scheduleChangedEvent),
+                       protocol::scheduleChangedPayload(change, *schedule));
+}
+
+void SessionHost::publishDisabledSessionSchedules(const QString& sessionId) {
+    const auto rows = journal_->schedules(ScheduleFilter{.sessionId = sessionId});
+    if (!rows)
+        return;
+    for (const ScheduleRecord& record : *rows)
+        if (record.target.kind == QLatin1String("conversation"))
+            publishScheduleChange(QString::fromLatin1(protocol::scheduleUpdatedChange), record);
+    noteSchedulesChanged();
+}
+
+void SessionHost::schedulesDeleted(const QList<ScheduleRecord>& schedules) {
+    for (const ScheduleRecord& record : schedules)
+        publishScheduleChange(QString::fromLatin1(protocol::scheduleDeletedChange), record);
+    noteSchedulesChanged();
 }
 
 } // namespace ketplus::daemon

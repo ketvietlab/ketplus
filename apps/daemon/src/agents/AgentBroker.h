@@ -1,5 +1,6 @@
 #pragma once
 
+#include "agents/ReviewIntegrity.h"
 #include "storage/AgentMessageRecord.h"
 
 #include <QHash>
@@ -25,6 +26,8 @@ struct AgentConversation final {
     QString provider;
     QString model;
     QString worktree;
+    // "ask", "full" or "read-only": a Codex reviewer needs "full" (ketplus#295).
+    QString executionPolicy;
     QString state;
     QString lastActivity;
     // No open turn, background task or pending provider request: a message may start a turn.
@@ -100,6 +103,21 @@ class AgentHostPort {
         (void)request;
         (void)text;
         (void)failure;
+    }
+    // ketplus#295: what the team's review request to `reviewerSession` reviews (the task's
+    // worktree, branch, head_commit and owner); nothing when it reviews no task now.
+    [[nodiscard]] virtual std::optional<review_integrity::Scope>
+    teamReviewScope(const QString& reviewerSession, const QString& requestId) const {
+        (void)reviewerSession;
+        (void)requestId;
+        return std::nullopt;
+    }
+    // ketplus#295: the reviewer changed the branch during its review; the verdict does not count.
+    virtual void teamReviewTampered(const QString& reviewerSession,
+                                    const AgentMessageRecord& request, const QJsonArray& changes) {
+        (void)reviewerSession;
+        (void)request;
+        (void)changes;
     }
     // A message a conversation sent failed, expired or was never answered (`reason`).
     virtual void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) {
@@ -194,11 +212,8 @@ class AgentBroker final : public QObject {
     void noteReviewerAssigned(const QString& sessionId);
     // ADR 0067: the reviewer's last "Verdict:" line says "no findings".
     [[nodiscard]] static bool verdictHasNoFindings(const QString& text);
-    // ADR 0067: only Claude enforces the read-only review guard on every tool call. Codex keeps
-    // process-wide MCP servers (the browser) that approve themselves; Cursor forwards prompts.
-    [[nodiscard]] static bool enforcesReviewGuard(const QString& provider) {
-        return provider == QStringLiteral("claude");
-    }
+    // ADR 0067, ketplus#295: Claude, or Codex with Full access (agents/ReviewerPolicy.h).
+    [[nodiscard]] static bool canReview(const AgentConversation& conversation);
 
   private:
     struct TurnOrigin final {
@@ -214,6 +229,20 @@ class AgentBroker final : public QObject {
         bool review{false};
         // The sequence of the turn the broker started; 0 for the user's own turn.
         qint64 turn{0};
+        // ketplus#295: for each review request of a Codex reviewer, what it reviews and how
+        // that was before the turn. Empty for any other turn.
+        QHash<QString, review_integrity::Scope> scopes;
+        QHash<QString, review_integrity::Snapshot> before;
+    };
+    // ketplus#295: the reviewed branches recorded for a Codex reviewer's next review turn.
+    struct RecordedBranches final {
+        QStringList messageIds;
+        // The receiver's turn sequence when recorded: a turn between voids the record.
+        qint64 turn{0};
+        quint64 token{0};
+        int pending{0};
+        QHash<QString, review_integrity::Scope> scopes;
+        QHash<QString, review_integrity::Snapshot> before;
     };
 
     [[nodiscard]] QJsonObject whoami(const AgentConversation& caller) const;
@@ -230,6 +259,9 @@ class AgentBroker final : public QObject {
     // Tracks the tool calls of a running turn from its item events.
     void noteToolCall(const QString& sessionId, const QString& type, const QJsonObject& payload);
     void finishTurn(const QString& sessionId, qint64 generation, const QString& status);
+    // Answers the turn's expect_reply requests, except the `voided` ones.
+    void answerRequests(const QString& sessionId, qint64 generation, const QString& status,
+                        const TurnOrigin& origin, const QSet<QString>& voided);
     void expireOverdue();
     // Keeps the oldest messages that fit one turn; one that never fits is marked failed.
     void keepOneTurn(QList<AgentMessageRecord>& messages);
@@ -247,6 +279,22 @@ class AgentBroker final : public QObject {
                     const QString& base, const QString& diff, const QStringList& files);
     // Records a review reply that should not start a turn. False when it is delivered as usual.
     bool recordReviewReply(AgentMessageRecord& reply, const AgentMessageRecord& request);
+    // ketplus#295, in AgentBrokerIntegrity.cpp. True when the turn may start: no Codex review
+    // in it, or its reviewed branches are recorded. Otherwise starts recording them and
+    // delivers again when done.
+    [[nodiscard]] bool branchesRecorded(const QString& sessionId, const AgentConversation& receiver,
+                                        const QList<AgentMessageRecord>& deliverable);
+    // Moves the record into the turn's origin; returns the provider text to start it with.
+    [[nodiscard]] QString takeRecordedBranches(const QString& sessionId, TurnOrigin& origin,
+                                               const QString& providerText);
+    [[nodiscard]] std::optional<review_integrity::Scope>
+    reviewScope(const AgentConversation& receiver, const AgentMessageRecord& request) const;
+    // Records the branches again after the turn and answers its requests; a request whose
+    // branch changed is voided.
+    void checkReviewedBranches(const QString& sessionId, qint64 generation, const QString& status,
+                               const TurnOrigin& origin);
+    void reviewTampered(const QString& sessionId, AgentMessageRecord& request,
+                        const review_integrity::Scope& scope, const QJsonArray& changes);
 
     LocalJournal* journal_{nullptr};
     AgentHostPort* host_{nullptr};
@@ -266,6 +314,8 @@ class AgentBroker final : public QObject {
     QHash<QString, qint64> snapshotEpochs_;
     // The latest request a user typed in each conversation, for its review.
     QHash<QString, QString> userRequests_;
+    QHash<QString, RecordedBranches> recordedBranches_;
+    quint64 recordToken_{0};
     QTimer deliveryTimer_;
     QTimer expiryTimer_;
 };

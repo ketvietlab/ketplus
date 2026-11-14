@@ -109,6 +109,13 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentBroker.cpp
     src/agents/AgentBrokerRelease.cpp
     src/agents/AgentBrokerReviews.cpp
+    src/agents/AgentBrokerIntegrity.cpp
+    src/agents/AgentBrokerReplies.cpp
+    src/agents/GitProcess.cpp
+    src/agents/GitProcess.h
+    src/agents/ReviewIntegrity.cpp
+    src/agents/ReviewIntegrity.h
+    src/agents/ReviewerPolicy.h
     src/agents/AgentBroker.h
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
@@ -161,6 +168,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorRepository.cpp
     src/teams/TeamCoordinatorReviews.cpp
     src/teams/TeamCoordinatorReviewTools.cpp
+    src/teams/TeamCoordinatorTamper.cpp
     src/teams/TeamCoordinatorReviewers.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
@@ -169,6 +177,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostSchedules.cpp
     src/runtime/SessionHostAgentSchedules.cpp
+    src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamStorage.cpp
@@ -247,6 +256,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/McpMediaStore.h
     src/schedule/ScheduleRule.cpp
     src/schedule/ScheduleRule.h
+    src/schedule/JournalScheduleStore.cpp
+    src/schedule/JournalScheduleStore.h
     src/schedule/ScheduleRunner.cpp
     src/schedule/ScheduleRunner.h
 )

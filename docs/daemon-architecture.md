@@ -1120,17 +1120,24 @@ local time fires once, on the first occurrence). A team start's rule must say
 `"kind": "once"`.
 
 Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
-`has_more`, or `run`. A missing id is `schedule_not_found`. The protocol handler
-still answers `not_implemented` for `schedule.runNow` until SessionHost calls the
-runner below.
+`has_more`, or `run`. A missing id is `schedule_not_found`. `schedule.runNow`
+calls `ScheduleRunner::runNow` through the journal store.
 
 ### Runner
 
 `ScheduleRunner` (`apps/daemon/src/schedule/ScheduleRunner.h`) arms one timer for the
 earliest enabled `nextRunAt`. It re-arms when a schedule is created, updated, deleted
 or enabled, when a run completes, and when the clock jumps. It does not poll. The
-production alarm is a single one-shot `QTimer` capped at 60 minutes; a fire that is
-not yet due only re-arms the remainder. Tests inject the clock and the alarm.
+production alarm is a single one-shot `QTimer` (`Qt::PreciseTimer`) capped at 60
+minutes; a fire that is not yet due only re-arms the remainder. Tests inject the
+clock and the alarm.
+
+`SessionHost` starts the runner only after it has loaded conversations. A due or
+missed conversation therefore sees its session. When a turn ends (`turn.completed`
+or `runtime.stopped`) the host calls `runFinished` for the run that started it and
+`turnFinished` so a queued run can start. System wake, and a wall-clock jump larger
+than the one-minute clock watch, call `noteClockChanged` so a sleep does not wait
+out the rest of a monotonic timer.
 
 A fire within 60 seconds of `nextRunAt` is on time. On daemon start or after a wake,
 anything later follows `missed_policy`: `run_once` delivers one catch-up and `skip`
@@ -1143,12 +1150,14 @@ Before delivery the runner asks `ScheduleRuntime` whether the target is idle.
 not add another; the slot is still consumed. `skip` records status `skipped` and
 error `busy`.
 
-The runtime seam delivers the prompt. A `conversation` target uses the stored session.
-A `new` target creates a conversation from the stored workspace, provider, model,
-effort and worktree settings. The user message the host journals is
-`scheduledUserMessage`: `text`, `schedule_id` and `run_id`. `team` and `team_start`
-use the same seam. The runner does not open the journal or call SessionHost. Storage
-and `SessionHostSchedules` plug in behind `ScheduleStore` and `ScheduleRuntime`.
+The runtime seam delivers the prompt. A `conversation` target starts a turn in the
+stored session. A `new` target creates a conversation in the stored workspace with
+that provider, model and effort. The user message the host journals comes from
+`scheduledUserMessage`: `text`, `schedule_id` and `run_id`, so a transcript can mark
+the prompt. `team` and `team_start` start a turn in the team's leader conversation;
+an empty team-start prompt is sent as "Start the team." The runner does not open
+the journal or call SessionHost. `JournalScheduleStore` and
+`SessionHostScheduleRuntime` plug in behind `ScheduleStore` and `ScheduleRuntime`.
 
 Provider not ready, signed out, a deleted target and a missing workspace record a
 `failed` run with `provider_not_ready`, `signed_out`, `target_deleted` or
@@ -1156,7 +1165,9 @@ Provider not ready, signed out, a deleted target and a missing workspace record 
 and disables the schedule so the timer cannot spin. A `once` schedule disables itself
 after a scheduled fire is consumed, including skip, miss and failure. `runNow` is an
 extra run: it ignores the rule, still honours `busy_policy`, returns the run id, and
-does not move `nextRunAt` or disable a once schedule. Every transition persists
+does not move `nextRunAt` or disable a once schedule. A `runNow` that queued because
+the conversation was busy still starts when that turn ends, including when the
+schedule is paused. Every transition persists
 `nextRunAt` and `lastRunAt`.
 
 An enabled schedule with an empty `nextRunAt` gets the next future fire, or is
@@ -1174,8 +1185,8 @@ Phone and cloud sync are out of scope for v1. `SessionHostSchedules.cpp` handles
 `schedule.list`, `schedule.get`, `schedule.create`, `schedule.update`,
 `schedule.delete`, `schedule.setEnabled` and `schedule.runs` through this parser
 and the journal below. A successful create, update, delete or `setEnabled` emits
-`schedule.changed`. `schedule.runNow` answers `not_implemented` until the runner
-exists.
+`schedule.changed`. `schedule.runNow` calls the runner and returns the run. It does
+not answer `not_implemented`; that code remains only for older clients.
 
 ### Storage
 
@@ -1198,11 +1209,17 @@ kind, session id and team id, together.
 `status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
 disables every `conversation` schedule that names that session and sets
 `target_deleted`. The rows and their runs stay, so the disable is visible rather than
-a silent drop. Enabling such a schedule is refused until an update clears the status.
-The wire document does not carry `status`; clients see `enabled: false`. Deleting a
-schedule deletes its runs in the same transaction. Deleting a team (`deleteTeam`)
-deletes `team` and `team_start` schedules whose team id is that team's decimal id,
-and their runs. Other schedules are left alone.
+a silent drop. Each of those schedules is then sent as `schedule.changed` with
+`change` `updated`. The wire document includes `status` when it is `target_deleted`
+and omits it otherwise, so a schedule the user paused (`enabled: false`, no status)
+is distinct from one whose conversation is gone. Enabling such a schedule is refused
+with `target_deleted` until an update points it at a conversation that still exists.
+`schedule.create` and `schedule.update` refuse a conversation that is not in the
+journal, and a `team` or `team_start` whose `team_id` is not that team's decimal id,
+with `target_not_found`. Deleting a schedule deletes its runs in the same transaction.
+Deleting a team (`deleteTeam`) deletes `team` and `team_start` schedules whose team
+id is that team's decimal id, and their runs, and emits `schedule.changed` with
+`change` `deleted` for each. Other schedules are left alone.
 
 `schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
 `skipped` or `missed`), when it was due, when it started and finished, the session

@@ -338,6 +338,9 @@ QVariantList AgentSessionManager::numberedConversations() const {
                                   {QStringLiteral("title"), session->title},
                                   {QStringLiteral("provider"), listedProvider(session->options)},
                                   {QStringLiteral("running"), session->running},
+                                  // ketplus#295: a Codex reviewer needs Full access.
+                                  {QStringLiteral("full_access"),
+                                   session->permission == QStringLiteral("danger-full-access")},
                                   {QStringLiteral("path"), session->executionPath.isEmpty()
                                                                ? session->path
                                                                : session->executionPath}});

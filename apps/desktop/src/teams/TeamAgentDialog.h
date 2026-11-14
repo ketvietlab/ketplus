@@ -42,26 +42,34 @@ struct Defaults final {
     bool singleProvider{false};
 };
 [[nodiscard]] Defaults defaults(const QVariantList& models);
-// The reviewer reviews read-only, which only Claude keeps (ADR 0067).
+// A new reviewer starts on Claude, which keeps a review read-only (ADR 0067).
 inline constexpr char reviewerProvider[] = "claude";
+// ketplus#295: Codex reviews only with Full access; KetPlus checks the branch after each review.
+inline constexpr char fullAccessReviewerProvider[] = "codex";
 } // namespace team_agents
 
+// Which providers the chooser offers: any for a leader or developer; Claude for a reviewer, and
+// Codex too when its team starts members with Full access (listed but disabled otherwise).
+enum class AgentChoice { member, reviewer, fullAccessReviewer };
+
 // The Model & context choice of one role, as the conversation's dialog offers it: a provider,
-// its models and their efforts. `lockedProvider` keeps the reviewer on Claude and says why.
+// its models and their efforts. A reviewer's choice is limited and says why.
 class TeamAgentChooser final : public QWidget {
     Q_OBJECT
 
   public:
     TeamAgentChooser(const QVariantList& models, const TeamAgent& current,
-                     const QString& lockedProvider = {}, QWidget* parent = nullptr);
+                     AgentChoice choice = AgentChoice::member, QWidget* parent = nullptr);
 
     [[nodiscard]] TeamAgent agent() const;
     [[nodiscard]] ket::Select* providers() const { return providers_; }
     [[nodiscard]] ket::Select* modelSelect() const { return models_; }
+    // Whether any provider offered can be chosen.
+    [[nodiscard]] bool hasChoice() const;
 
     // Opens the chooser in a dialog over `anchor`; `chosen` runs on Use.
     static ket::Dialog* present(QWidget* anchor, const QString& role, const QVariantList& models,
-                                const TeamAgent& current, const QString& lockedProvider,
+                                const TeamAgent& current, AgentChoice choice,
                                 std::function<void(const TeamAgent&)> chosen);
 
   private:

@@ -366,6 +366,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                     teams::StorageDone done) override;
     void askRemoveWorktree(const QString& repository, const QString& worktree,
                            teams::RemovalDone done) override;
+    void schedulesDeleted(const QList<ScheduleRecord>& schedules) override;
     [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
     [[nodiscard]] QList<teams::FolderConversation>
     conversationsIn(const QString& path) const override;
@@ -380,6 +381,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                                           const teams::Task& task) const override;
     [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team,
                                                const teams::Task& task) const override;
+    [[nodiscard]] std::optional<review_integrity::Scope>
+    teamReviewScope(const QString& reviewerSession, const QString& requestId) const override;
+    void teamReviewTampered(const QString& reviewerSession, const AgentMessageRecord& request,
+                            const QJsonArray& changes) override;
     void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                              const QString& text, const QString& failure) override;
     void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) override;
@@ -406,8 +411,20 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
     // ADR 0126, in SessionHostSchedules.cpp. Parses with the shared schedule contract,
-    // then reads and writes LocalJournal. schedule.runNow stays not_implemented.
+    // then reads and writes LocalJournal. schedule.runNow calls the runner.
     [[nodiscard]] QJsonObject scheduleCommand(const QString& type, const QJsonObject& request);
+    void startScheduleRunner();
+    void stopScheduleRunner();
+    void noteSchedulesChanged();
+    Q_INVOKABLE void noteScheduleClockChanged();
+    void noteScheduleTurnEnded(const QString& sessionId, bool succeeded, const QString& errorCode,
+                               const QString& errorMessage);
+    [[nodiscard]] QJsonObject runScheduleNow(const QString& id);
+    friend class HostScheduleRuntime;
+    struct ScheduleEngine;
+    ScheduleEngine* scheduleEngine_{nullptr};
+    void publishScheduleChange(const QString& change, const ScheduleRecord& record);
+    void publishDisabledSessionSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
     // Has the git a task command will ask for read off the event loop, then calls `then`,
     // where the command runs as always: a client's request, and a member's team_task_* tool.

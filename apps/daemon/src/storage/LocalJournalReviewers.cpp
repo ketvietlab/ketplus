@@ -61,8 +61,10 @@ bool LocalJournal::isConversationReviewer(const QString& sessionId) const {
 
 int LocalJournal::reviewRequestsInChain(const QString& chainId, const QString& sessionId) const {
     QSqlQuery query(database_);
+    // ketplus#295: a review voided because the reviewer changed the branch uses no round.
     query.prepare(QStringLiteral("SELECT COUNT(*) FROM agent_messages WHERE chain_id = ? AND "
-                                 "from_session = ? AND kind = 'review'"));
+                                 "from_session = ? AND kind = 'review' AND "
+                                 "COALESCE(error, '') != 'review_tampered'"));
     query.addBindValue(chainId);
     query.addBindValue(sessionId);
     return query.exec() && query.next() ? query.value(0).toInt() : 0;

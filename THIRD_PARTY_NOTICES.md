@@ -11,6 +11,7 @@ not covered by any licence listed here; see `TRADEMARKS.md` at the repository ro
 | --- | --- | --- |
 | KetPlus CM | `cm-v0.3.6` — https://github.com/ketvietlab/ketplus/tree/cm-v0.3.6 | `KetPlus-CM-MPL-2.0.txt` |
 | Qt | 6.11 or later | Generated from the exact deployed Qt build before release |
+| AppImage type2 runtime (Linux engineering packages) | `fedfad51acc2860b2916a1eef32ba4a500ff31ef` — https://github.com/AppImage/type2-runtime | `AppImage-runtime.txt`; lists static dependencies; their corresponding source/relink obligations remain a publication gate |
 | KetPlus Syntax | `cb7435c1e9237ee32d3459a58917b0e84b8b6025` — https://github.com/ketvietlab/ketplus-syntax/tree/cb7435c1e9237ee32d3459a58917b0e84b8b6025 | `KetPlus-Syntax-MPL-2.0.txt` |
 | Scintilla | `a1c86144eed9e3d2187e3a8b391d11ca909f00d2` | `Scintilla.txt` |
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` | `Lexilla.txt` |

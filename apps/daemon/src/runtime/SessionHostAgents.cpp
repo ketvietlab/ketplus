@@ -80,6 +80,7 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.provider = stored.adapter;
     conversation.model = stored.model;
     conversation.worktree = stored.worktreePath;
+    conversation.executionPolicy = stored.executionPolicy;
     conversation.state = stored.state;
     conversation.lastActivity = stored.lastTurnStartedAt;
     const QString& state = stored.state;

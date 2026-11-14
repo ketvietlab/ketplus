@@ -550,7 +550,14 @@ class LocalJournal final {
     bool updateSchedule(const ScheduleRecord& schedule, QString* error = nullptr);
     bool deleteSchedule(const QString& id, QString* error = nullptr);
     // Flips enabled. Refuses to enable a schedule whose conversation was deleted.
-    bool setScheduleEnabled(const QString& id, bool enabled, QString* error = nullptr);
+    // `code`, when set, is a stable protocol code (target_deleted, schedule_not_found) or
+    // empty when the failure is a journal error. The message stays in `error`.
+    bool setScheduleEnabled(const QString& id, bool enabled, QString* error = nullptr,
+                            QString* code = nullptr);
+    // A live conversation row. A tombstone does not count.
+    [[nodiscard]] bool sessionExists(const QString& sessionId) const;
+    // A team row. `teamId` is the integer primary key, not a label.
+    [[nodiscard]] bool teamExists(qint64 teamId) const;
     // Deletes team and team_start schedules for this team id, and their runs. deleteTeam does
     // this for the journal's decimal team id.
     bool deleteSchedulesForTeam(const QString& teamId, QString* error = nullptr);
@@ -565,6 +572,9 @@ class LocalJournal final {
     // `limit` above maximumScheduleRuns is clamped to it. `beforeId` empty reads the newest page.
     [[nodiscard]] std::optional<ScheduleRunPage> scheduleRuns(const QString& scheduleId, int limit,
                                                               const QString& beforeId = {}) const;
+    // No row and a failed read are both empty; errorString() is set only when the read failed.
+    [[nodiscard]] std::optional<ScheduleRunRecord> scheduleRun(const QString& id) const;
+    [[nodiscard]] std::optional<ScheduleRunRecord> queuedScheduleRun(const QString& scheduleId) const;
 
   private:
     bool initializeSchedules();
