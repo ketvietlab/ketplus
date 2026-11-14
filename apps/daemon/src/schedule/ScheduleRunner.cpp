@@ -340,7 +340,8 @@ ScheduleRunner::Run ScheduleRunner::deliverNew(Schedule schedule, const QDateTim
 
 void ScheduleRunner::promote(Schedule schedule, Run run) {
     // A paused schedule still owes a run that runNow already accepted. Leaving it queued
-    // blocks every later runNow, which returns that same row.
+    // blocks every later runNow, which returns that same row. A once team start is disabled
+    // when its fire is queued, and that queued run still starts when the team is idle.
     const auto current = store_.queuedRun(schedule.id);
     if (!current || current->id != run.id)
         return;
@@ -373,6 +374,13 @@ ScheduleRunner::Run ScheduleRunner::applyDelivery(Run run, const Delivery& deliv
         run.finishedAt = stamp(now);
         run.errorCode = delivery.errorCode;
         run.errorMessage = delivery.errorMessage;
+    } else if (delivery.finished) {
+        run.status = documents::RunStatus::Succeeded;
+        run.finishedAt = stamp(now);
+        run.sessionId = delivery.sessionId;
+        run.turnId = delivery.turnId;
+        run.errorCode.clear();
+        run.errorMessage.clear();
     } else {
         run.status = documents::RunStatus::Running;
         run.sessionId = delivery.sessionId;

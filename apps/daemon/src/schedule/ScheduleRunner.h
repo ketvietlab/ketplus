@@ -91,6 +91,9 @@ struct Delivery final {
     QString turnId;
     QString errorCode;
     QString errorMessage;
+    // The delivery finished inside deliver, so the run does not stay running.
+    // A team start has no later provider turn.
+    bool finished{false};
 };
 
 class ScheduleStore {
