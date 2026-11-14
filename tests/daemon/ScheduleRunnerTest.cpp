@@ -120,6 +120,16 @@ class MemoryStore final : public schedule::ScheduleStore {
         return std::nullopt;
     }
 
+    [[nodiscard]] QList<documents::Run> unfinishedRuns() const override {
+        QList<documents::Run> open;
+        for (const auto& run : runs_) {
+            if (run.status == documents::RunStatus::Queued ||
+                run.status == documents::RunStatus::Running)
+                open.append(run);
+        }
+        return open;
+    }
+
     [[nodiscard]] QList<documents::Run> runsFor(const QString& scheduleId) const {
         QList<documents::Run> found;
         for (const auto& run : runs_) {
@@ -231,6 +241,7 @@ class ScheduleRunnerTest final : public QObject {
     void earlyAlarmDoesNotFire();
     void fillsNextWhenCreated();
     void resumesQueuedRunOnStart();
+    void restartFailsARunningRunAndAQueuedRunWhoseTurnIsGone();
     void deliversTeamTargets();
     void capsTheAlarmDelay();
     void qtAlarmCanArmAndDisarm();
@@ -677,6 +688,54 @@ void ScheduleRunnerTest::resumesQueuedRunOnStart() {
     QCOMPARE(world.store.runsFor(QStringLiteral("s1")).first().status,
              documents::RunStatus::Running);
     QCOMPARE(world.runtime.deliveries.size(), 1);
+}
+
+void ScheduleRunnerTest::restartFailsARunningRunAndAQueuedRunWhoseTurnIsGone() {
+    World world;
+    auto schedule = makeDaily(QStringLiteral("s1"));
+    schedule.nextRunAt = nextDay;
+    world.store.save(schedule);
+    documents::Run running;
+    running.id = QStringLiteral("running");
+    running.scheduleId = QStringLiteral("s1");
+    running.status = documents::RunStatus::Running;
+    running.sessionId = QStringLiteral("session-1");
+    running.scheduledFor = QStringLiteral("2026-11-13T08:00:00.000Z");
+    running.startedAt = QStringLiteral("2026-11-13T08:00:01.000Z");
+    world.store.insertRun(running);
+    documents::Run gone;
+    gone.id = QStringLiteral("queued-gone");
+    gone.scheduleId = QStringLiteral("s1");
+    gone.status = documents::RunStatus::Queued;
+    gone.sessionId = QStringLiteral("session-gone");
+    gone.scheduledFor = QStringLiteral("2026-11-13T08:00:00.000Z");
+    world.store.insertRun(gone);
+    documents::Run waiting;
+    waiting.id = QStringLiteral("queued-live");
+    waiting.scheduleId = QStringLiteral("s1");
+    waiting.status = documents::RunStatus::Queued;
+    waiting.sessionId = QStringLiteral("session-1");
+    waiting.scheduledFor = QStringLiteral("2026-11-13T08:05:00.000Z");
+    world.store.insertRun(waiting);
+
+    world.runner.abandonRunsWithoutATurn(
+        [](const documents::Run& run) { return run.sessionId == QStringLiteral("session-1"); });
+
+    const auto failedRunning = world.store.run(QStringLiteral("running"));
+    const auto failedGone = world.store.run(QStringLiteral("queued-gone"));
+    const auto stillQueued = world.store.run(QStringLiteral("queued-live"));
+    QVERIFY(failedRunning && failedGone && stillQueued);
+    QCOMPARE(failedRunning->status, documents::RunStatus::Failed);
+    QCOMPARE(failedGone->status, documents::RunStatus::Failed);
+    QCOMPARE(failedRunning->errorCode, QString::fromLatin1(schedule::runtimeStoppedCode));
+    QCOMPARE(failedGone->errorCode, QString::fromLatin1(schedule::runtimeStoppedCode));
+    QVERIFY(!failedRunning->finishedAt.isEmpty());
+    QVERIFY(!failedGone->finishedAt.isEmpty());
+    QCOMPARE(stillQueued->status, documents::RunStatus::Queued);
+    QCOMPARE(world.store.schedule(QStringLiteral("s1"))->nextRunAt, nextDay);
+    QCOMPARE(world.runtime.events.size(), 2);
+    QCOMPARE(world.runtime.events.first().id, QStringLiteral("running"));
+    QCOMPARE(world.runtime.events.last().id, QStringLiteral("queued-gone"));
 }
 
 void ScheduleRunnerTest::deliversTeamTargets() {

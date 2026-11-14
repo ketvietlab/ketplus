@@ -1133,7 +1133,11 @@ minutes; a fire that is not yet due only re-arms the remainder. Tests inject the
 clock and the alarm.
 
 `SessionHost` starts the runner only after it has loaded conversations. A due or
-missed conversation therefore sees its session. When a turn ends (`turn.completed`
+missed conversation therefore sees its session. A run still `running` when the
+process starts, and a `queued` run whose turn is gone (no session, or a session
+this startup marked `interrupted`), is stored as `failed` with `runtime_stopped`
+and `finished_at`, and emitted as `schedule.run`. That does not move `nextRunAt`.
+A queued run whose session is still idle is resumed. When a turn ends (`turn.completed`
 or `runtime.stopped`) the host calls `runFinished` for the run that started it and
 `turnFinished` so a queued run can start. System wake, and a wall-clock jump larger
 than the one-minute clock watch, call `noteClockChanged` so a sleep does not wait

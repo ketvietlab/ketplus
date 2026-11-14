@@ -570,7 +570,10 @@ class LocalJournal final {
                                                               const QString& beforeId = {}) const;
     // No row and a failed read are both empty; errorString() is set only when the read failed.
     [[nodiscard]] std::optional<ScheduleRunRecord> scheduleRun(const QString& id) const;
-    [[nodiscard]] std::optional<ScheduleRunRecord> queuedScheduleRun(const QString& scheduleId) const;
+    [[nodiscard]] std::optional<ScheduleRunRecord>
+    queuedScheduleRun(const QString& scheduleId) const;
+    // Queued and running runs, oldest first. A restart closes the ones it cannot resume.
+    [[nodiscard]] QList<ScheduleRunRecord> unfinishedScheduleRuns() const;
 
   private:
     bool initializeSchedules();
