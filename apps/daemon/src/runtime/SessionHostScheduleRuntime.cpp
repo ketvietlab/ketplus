@@ -3,6 +3,7 @@
 #include "protocol/ScheduleProtocol.h"
 #include "schedule/JournalScheduleStore.h"
 #include "schedule/ScheduleRunner.h"
+#include "schedule/TeamStartRuntime.h"
 #include "teams/Team.h"
 
 #include <QDateTime>
@@ -69,16 +70,18 @@ class HostScheduleRuntime final : public schedule::ScheduleRuntime {
             return conversation(schedule.target.sessionId);
         if (schedule.target.kind == Kind::NewConversation)
             return fresh(schedule);
+        if (schedule.target.kind == Kind::TeamStart)
+            return schedule::inspectTeamStart(host_->teams_, schedule);
         return leader(schedule);
     }
 
     schedule::Delivery deliver(const ::ketplus::schedule::Schedule& schedule,
                                const ::ketplus::schedule::Run& run) override {
         using Kind = ::ketplus::schedule::TargetKind;
+        if (schedule.target.kind == Kind::TeamStart)
+            return schedule::deliverTeamStart(host_->teams_, schedule);
         const QJsonObject tagged = schedule::scheduledUserMessage(schedule, run);
         QString prompt = tagged.value(QStringLiteral("text")).toString();
-        if (prompt.isEmpty() && schedule.target.kind == Kind::TeamStart)
-            prompt = QStringLiteral("Start the team.");
         if (schedule.target.kind == Kind::NewConversation)
             return deliverNew(schedule, run, prompt);
         const QString sessionId = schedule.target.kind == Kind::Conversation
@@ -291,6 +294,11 @@ void SessionHost::startScheduleRunner() {
 void SessionHost::stopScheduleRunner() {
     delete scheduleEngine_;
     scheduleEngine_ = nullptr;
+}
+
+void SessionHost::scheduledTeamMayStart(const qint64 teamId) {
+    if (scheduleEngine_ != nullptr)
+        scheduleEngine_->runner.turnFinished(QStringLiteral("team:") + QString::number(teamId));
 }
 
 void SessionHost::noteSchedulesChanged() {
