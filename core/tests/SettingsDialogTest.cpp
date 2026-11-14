@@ -483,6 +483,7 @@ void SettingsDialogTest::zoomDuringExtensionRebuildKeepsNavigationAlive() {
 // the dialog; a section page's destruction then applied the deleted controls (0.1.56 crash).
 void SettingsDialogTest::closingTheWorkspaceLeavesTheDialogQuiet() {
     ketplus::ThemeManager theme(*qApp);
+    theme.setMode(ketplus::ThemeManager::Mode::Light);
     auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
     auto* section = new TestSettingsPage(QStringLiteral("private/section"));
     auto* watcher = new TestSettingsPage(QStringLiteral("private/watcher"));
@@ -495,9 +496,14 @@ void SettingsDialogTest::closingTheWorkspaceLeavesTheDialogQuiet() {
         if (alive)
             watcher->probe = &readsWhileClosing;
     });
+    // Destroying the scheme panel cancels its preview synchronously. The dialog must
+    // stop listening before that can update controls partway through destruction.
+    theme.previewMode(ketplus::ThemeManager::Mode::Dark);
+    QVERIFY(theme.palette().dark);
     delete workspace;
     QVERIFY(alive.isNull());
     QCOMPARE(readsWhileClosing, 0);
+    QVERIFY(!theme.palette().dark);
 }
 
 QTEST_MAIN(SettingsDialogTest)

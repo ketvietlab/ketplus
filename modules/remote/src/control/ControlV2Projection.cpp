@@ -237,7 +237,7 @@ void ControlV2Client::finishProjection(const std::shared_ptr<ProjectionState>& s
         verifying_.clear();
         verdictEpoch_ = epoch_;
     }
-    const auto now = QDateTime::currentMSecsSinceEpoch();
+    const auto now = worktreeVerificationNow();
     int scheduled = 0;
     QSet<QString> seen;
     for (const auto& value : std::as_const(state->worktrees)) {
@@ -286,6 +286,11 @@ QString ControlV2Client::worktreeVerdictKey(const QJsonObject& entry) {
     return parts.join('\n');
 }
 
+qint64 ControlV2Client::worktreeVerificationNow() const {
+    return worktreeVerificationClock_ ? worktreeVerificationClock_()
+                                      : QDateTime::currentMSecsSinceEpoch();
+}
+
 void ControlV2Client::queueWorktreeVerification(const QJsonObject& entry) {
     const auto key = worktreeVerdictKey(entry);
     if (verifying_.contains(key))
@@ -318,13 +323,11 @@ void ControlV2Client::pumpWorktreeVerification() {
                             // Grants change without a scope change: asked again later, so a
                             // worktree granted afterwards appears without a new sign-in.
                             verdict.reason = QStringLiteral("worktree_not_granted");
-                            verdict.until =
-                                QDateTime::currentMSecsSinceEpoch() + verifyRetryMilliseconds_;
+                            verdict.until = worktreeVerificationNow() + verifyRetryMilliseconds_;
                         } else {
                             // No answer: tried again in a later listing, not on every one.
                             verdict.reason = QStringLiteral("verification_failed");
-                            verdict.until =
-                                QDateTime::currentMSecsSinceEpoch() + verifyRetryMilliseconds_;
+                            verdict.until = worktreeVerificationNow() + verifyRetryMilliseconds_;
                         }
                     } else {
                         // The host's own catalog scope for the worktree, inside its signed

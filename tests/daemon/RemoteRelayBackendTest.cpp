@@ -1214,12 +1214,14 @@ class RemoteRelayBackendTest final : public QObject {
 
     void aWorktreeGrantedLaterAppearsWithoutANewSignIn() {
         QTemporaryDir dir;
+        qint64 verificationNow = 1000;
         FixtureTransport network;
         ControlV2Client client(QUrl{origin});
         EncryptedFixture fixture(client, network);
         SyntheticRelay relay(network, fixture, client);
         RemoteControlTestAccess::restorePoll(client, 10);
         RemoteControlTestAccess::verifyRetry(client, 100);
+        RemoteControlTestAccess::verificationClock(client, [&] { return verificationNow; });
         relay.worktrees.append(worktreeDto("wt-locked", "locked"));
         relay.ungranted.insert("wt-locked");
         RelayMachineBackend backend(&client, "linux-host",
@@ -1230,7 +1232,10 @@ class RemoteRelayBackendTest final : public QObject {
         QCOMPARE(rejection(listing, "wt-locked"), "worktree_not_granted");
         // The grant arrives; the same scope is asked again once the verdict expires.
         relay.ungranted.clear();
-        QTest::qWait(150);
+        verificationNow += 99;
+        settledListing(backend, &listing);
+        QCOMPARE(rejection(listing, "wt-locked"), "worktree_not_granted");
+        ++verificationNow; // Exactly at expiry, independent of host/runner scheduling.
         settledListing(backend, &listing);
         QCOMPARE(worktreeNamed(listing, "wt-locked").value("verified").toString(), "host_read");
         QVERIFY(rejection(listing, "wt-locked").isEmpty());

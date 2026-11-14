@@ -92,8 +92,11 @@ class ClaudeCredentialsSettingsTest : public QObject {
             page.show();
             auto* key = page.findChild<QLineEdit*>("claudeApiKey");
             QTRY_VERIFY(key && key->isVisible());
-            QTRY_VERIFY(page.findChild<QAbstractButton*>("claudeCredentialsSave")->isEnabled());
+            auto* save = page.findChild<QAbstractButton*>("claudeCredentialsSave");
+            QVERIFY(save);
+            QTRY_VERIFY(save->isEnabled());
             const auto* form = page.findChild<SettingsClaudeCredentials*>();
+            QVERIFY(form);
             for (auto* widget : form->findChildren<QWidget*>()) {
                 if (!widget->isVisible())
                     continue;

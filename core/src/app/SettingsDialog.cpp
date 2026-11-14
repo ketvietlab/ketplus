@@ -69,6 +69,10 @@ SettingsDialog::SettingsDialog(const EditorSettings& settings, QWidget* parent) 
 }
 
 SettingsDialog::~SettingsDialog() {
+    // A scheme panel cancels its preview while QWidget deletes the children. By
+    // then our control lists have already been destroyed, so stop theme callbacks now.
+    if (theme_)
+        disconnect(theme_, nullptr, this, nullptr);
     for (SettingsPage* page : std::as_const(extensionPages_)) {
         disconnect(page, nullptr, this, nullptr);
     }

@@ -1109,10 +1109,10 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
         return texts.join(QLatin1Char('\n'));
     };
     const auto badge = [card] { return card->findChild<ket::Badge*>()->text(); };
-    QCOMPARE(status->text(), QStringLiteral("KetPlus checks for updates every day and installs "
+    QCOMPARE(status->text(), QStringLiteral("ketPlus checks for updates every day and installs "
                                             "them when you restart."));
     QVERIFY(card->isVisible());
-    QVERIFY(cardText().contains(QStringLiteral("KetPlus has not checked for updates yet.")));
+    QVERIFY(cardText().contains(QStringLiteral("ketPlus has not checked for updates yet.")));
     QCOMPARE(badge(), QStringLiteral("Installed"));
     QVERIFY(!restart->isVisible());
     QCOMPARE(checkNow->text(), QStringLiteral("Check for updates"));
@@ -1157,7 +1157,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QCOMPARE(updater.checks_, 5); // Sparkle's prompt installs and relaunches
     later->click();
     QVERIFY(!restart->isVisible());
-    QVERIFY(cardText().contains(QStringLiteral("installs the next time KetPlus restarts")));
+    QVERIFY(cardText().contains(QStringLiteral("installs the next time ketPlus restarts")));
     updater.remind({});
     updater.lastCheck_ = QDateTime::currentDateTime();
     updater.setCanCheck(true);
