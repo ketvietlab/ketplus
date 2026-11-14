@@ -87,7 +87,7 @@ void ScheduleClientTest::summarizesDailyInTheRuleZone() {
     QCOMPARE(scheduleRuleSummary(conversationSchedule().value(QStringLiteral("rule")).toString()),
              QStringLiteral("Daily 08:00 (GMT+7)"));
     QCOMPARE(scheduleTargetLabel(conversationSchedule().value(QStringLiteral("target")).toObject()),
-             QStringLiteral("Conversation · sess-1"));
+             QStringLiteral("#sess-1"));
 }
 
 void ScheduleClientTest::rejectsEmptyPromptBadIntervalAndTeamStartConstraints() {
@@ -179,14 +179,12 @@ void ScheduleClientTest::eventsUpdateTheCacheWithoutAnotherList() {
     client.applyEvent(QStringLiteral("schedule.changed"),
                       {{QStringLiteral("change"), QStringLiteral("updated")},
                        {QStringLiteral("schedule"), created}});
-    QCOMPARE(client.schedule(QStringLiteral("morning"))->value(QStringLiteral("name")).toString(),
-             QStringLiteral("Renamed"));
+    QCOMPARE(client.schedule(QStringLiteral("morning"))->name, QStringLiteral("Renamed"));
     QCOMPARE(lists, 1);
 
     client.applyEvent(QStringLiteral("schedule.run"),
                       {{QStringLiteral("run"), run(QStringLiteral("r1"))}});
-    QCOMPARE(client.latestRun(QStringLiteral("morning")).value(QStringLiteral("id")).toString(),
-             QStringLiteral("r1"));
+    QCOMPARE(client.latestRun(QStringLiteral("morning")).id, QStringLiteral("r1"));
     QCOMPARE(client.runs(QStringLiteral("morning")).size(), 0);
 
     client.applyEvent(QStringLiteral("schedule.changed"),
@@ -233,8 +231,7 @@ void ScheduleClientTest::pagesRunsAndIgnoresADuplicateEvent() {
     QCOMPARE(client.runs(QStringLiteral("morning")).size(), 3);
     client.applyEvent(QStringLiteral("schedule.run"),
                       {{QStringLiteral("run"), run(QStringLiteral("r4"))}});
-    QCOMPARE(client.runs(QStringLiteral("morning")).first().value(QStringLiteral("id")).toString(),
-             QStringLiteral("r4"));
+    QCOMPARE(client.runs(QStringLiteral("morning")).first().id, QStringLiteral("r4"));
 }
 
 void ScheduleClientTest::notImplementedLeavesTheScheduleInPlace() {
@@ -266,8 +263,7 @@ void ScheduleClientTest::notImplementedLeavesTheScheduleInPlace() {
     QCOMPARE(scheduleFailureText({{QStringLiteral("error_code"), code}}, error),
              QStringLiteral("Run now is not available yet."));
     QCOMPARE(client.schedules().size(), 1);
-    QCOMPARE(client.schedule(QStringLiteral("morning"))->value(QStringLiteral("name")).toString(),
-             QStringLiteral("Morning"));
+    QCOMPARE(client.schedule(QStringLiteral("morning"))->name, QStringLiteral("Morning"));
 }
 
 QTEST_MAIN(ScheduleClientTest)

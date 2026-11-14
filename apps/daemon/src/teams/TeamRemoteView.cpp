@@ -218,10 +218,10 @@ qsizetype size(const QJsonObject& json) {
 
 bool isWarning(const QJsonObject& update) {
     static const QSet<QString> kinds{
-        QStringLiteral("blocked"),      QStringLiteral("round_limit"),
-        QStringLiteral("outside_lane"), QStringLiteral("merged_unreviewed"),
-        QStringLiteral("stalled"),      QStringLiteral("message_failed"),
-        QStringLiteral("merge_waiting")};
+        QStringLiteral("blocked"),       QStringLiteral("round_limit"),
+        QStringLiteral("outside_lane"),  QStringLiteral("merged_unreviewed"),
+        QStringLiteral("stalled"),       QStringLiteral("message_failed"),
+        QStringLiteral("merge_waiting"), QStringLiteral("review_tampered")};
     const QString kind = update.value(QStringLiteral("kind")).toString();
     return kinds.contains(kind) ||
            (kind == QStringLiteral("state") &&

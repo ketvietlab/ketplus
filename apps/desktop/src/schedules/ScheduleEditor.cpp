@@ -15,8 +15,10 @@
 #include "KetTokens.h"
 #include "Schedule.h"
 
+#include <QFrame>
 #include <QLabel>
 #include <QPalette>
+#include <QScrollArea>
 #include <QTextEdit>
 #include <QTimeZone>
 #include <QVBoxLayout>
@@ -38,10 +40,35 @@ QStringList zoneChoices(const QString& current) {
     return zones;
 }
 
+// Reports the form's height so the card grows, while staying shrinkable so a
+// short window keeps Cancel and Save inside the card and scrolls the form.
+class FormScroll : public QScrollArea {
+  public:
+    using QScrollArea::QScrollArea;
+
+    QSize sizeHint() const override {
+        const QWidget* form = widget();
+        if (form == nullptr)
+            return QScrollArea::sizeHint();
+        return form->sizeHint() + QSize(frameWidth() * 2, frameWidth() * 2);
+    }
+
+    QSize minimumSizeHint() const override { return {0, 0}; }
+};
+
 ket::FieldRow* stackedRow(const QString& label, QWidget* control, QWidget* parent) {
     auto* row = new ket::FieldRow(label, control, {}, parent);
     row->setStacked(true);
     return row;
+}
+
+// The scroll area stretches the form to the viewport. Pin the minimum to the
+// visible size hint so hidden rows cannot leave spare height in the fields.
+void fitForm(QWidget* form) {
+    if (form == nullptr)
+        return;
+    form->setMinimumHeight(0);
+    form->setMinimumHeight(form->sizeHint().height());
 }
 
 void choose(ket::Select* select, const QVariant& value) {
@@ -88,6 +115,13 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     if (teamStart_)
         promptRow_->setHelp(tr("A team start has no prompt."));
     column->addWidget(promptRow_);
+    // A word-wrapped note with no width reports a huge height and the card then
+    // squeezes every field until its bottom border disappears. Keep one reserved line.
+    promptNote_ = new QLabel(body);
+    promptNote_->setObjectName(QStringLiteral("schedulePromptError"));
+    promptNote_->setFixedHeight(qRound(ket::Appearance::instance().scaled(20)));
+    promptNote_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    column->addWidget(promptNote_);
 
     repeat_ = new ket::SegmentedControl(
         {tr("Once"), tr("Daily"), tr("Weekdays"), tr("Weekly"), tr("Every N hours")}, body);
@@ -171,8 +205,17 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     summary_->setObjectName(QStringLiteral("scheduleRuleSummary"));
     summary_->setWordWrap(true);
     column->addWidget(summary_);
-
-    dialog_->setBody(body);
+    // Extra viewport height stays below the fields. Without this, a stacked
+    // FieldRow parks the spare space between its label and its control.
+    column->addStretch(1);
+    auto* scroll = new FormScroll;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    scroll->setMinimumHeight(0);
+    scroll->setWidget(body);
+    dialog_->setBody(scroll);
     auto* cancel = dialog_->addButton(tr("Cancel"));
     connect(cancel, &QAbstractButton::clicked, dialog_, &ket::Dialog::reject);
     auto* save = dialog_->addButton(tr("Save"), ket::ButtonVariant::Primary);
@@ -255,6 +298,7 @@ void ScheduleEditor::applyKind() {
     anchorRow_->setVisible(edit && kind == 4);
     zoneRow_->setVisible(edit);
     raw_->setVisible(preserved_);
+    fitForm(promptNote_ == nullptr ? nullptr : promptNote_->parentWidget());
 }
 
 ScheduleRule ScheduleEditor::collect() const {
@@ -283,43 +327,37 @@ void ScheduleEditor::updateSummary() {
     summary_->setText(scheduleRuleSummary(scheduleRuleText(collect())));
 }
 
-void ScheduleEditor::showIssue(const QString& code, const QString& message) {
-    QString field;
-    if (code == QLatin1String(schedule::emptyPromptCode) ||
-        code == QLatin1String(schedule::promptNotAllowedCode))
-        field = QStringLiteral("prompt");
-    else if (code == QLatin1String(schedule::invalidRuleCode))
-        field = QStringLiteral("rule");
-    else if (code == QLatin1String(schedule::teamStartConstraintCode))
-        field = QStringLiteral("missed_policy");
-    else if (code == QLatin1String(schedule::invalidPayloadCode) &&
-             message.contains(QStringLiteral("name")))
-        field = QStringLiteral("name");
-    else if (code == QLatin1String(schedule::invalidEnumCode) &&
-             message.contains(QStringLiteral("busy_policy")))
-        field = QStringLiteral("busy_policy");
-    else if (code == QLatin1String(schedule::invalidEnumCode) &&
-             message.contains(QStringLiteral("missed_policy")))
-        field = QStringLiteral("missed_policy");
-    nameRow_->setError(field == QLatin1String("name") ? message : QString{});
-    promptRow_->setError(field == QLatin1String("prompt") ? message : QString{});
-    ruleRow_->setError(field == QLatin1String("rule") ? message : QString{});
-    busyRow_->setError(field == QLatin1String("busy_policy") ? message : QString{});
-    missedRow_->setError(field == QLatin1String("missed_policy") ? message : QString{});
-    // The prompt's note sits under the native text editor, so the message also leads the card.
-    banner_->setText(message);
-    if (!message.isEmpty()) {
-        QPalette palette = banner_->palette();
+void ScheduleEditor::showIssue(const QString& code, const QString& message, const QString& field) {
+    QString resolved = field;
+    if (resolved.isEmpty()) {
+        if (code == QLatin1String(schedule::emptyPromptCode) ||
+            code == QLatin1String(schedule::promptNotAllowedCode))
+            resolved = QStringLiteral("prompt");
+        else if (code == QLatin1String(schedule::invalidRuleCode))
+            resolved = QStringLiteral("rule");
+        else if (code == QLatin1String(schedule::teamStartConstraintCode))
+            resolved = QStringLiteral("missed_policy");
+    }
+    nameRow_->setError(resolved == QLatin1String("name") ? message : QString{});
+    promptRow_->setError({});
+    ruleRow_->setError(resolved == QLatin1String("rule") ? message : QString{});
+    busyRow_->setError(resolved == QLatin1String("busy_policy") ? message : QString{});
+    missedRow_->setError(resolved == QLatin1String("missed_policy") ? message : QString{});
+    const bool promptError = resolved == QLatin1String("prompt") && !message.isEmpty();
+    prompt_->setInvalid(promptError);
+    promptNote_->setText(promptError ? message : QString{});
+    if (promptError) {
+        QPalette palette = promptNote_->palette();
         const QColor danger = ket::Tokens::color(u"danger", ket::Appearance::instance().theme());
         for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
             palette.setColor(group, QPalette::WindowText, danger);
-        banner_->setPalette(palette);
+        promptNote_->setPalette(palette);
     }
-    const bool show = !message.isEmpty();
-    const bool moved = banner_->isVisible() != show;
-    banner_->setVisible(show);
-    if (moved)
-        dialog_->setCardWidth(560);
+    fitForm(promptNote_->parentWidget());
+    const bool banner = !message.isEmpty() && resolved.isEmpty();
+    banner_->setText(banner ? message : QString{});
+    banner_->setVisible(banner);
+    dialog_->setCardWidth(560);
 }
 
 void ScheduleEditor::save() {
@@ -334,7 +372,7 @@ void ScheduleEditor::save() {
         edit.rule = collect();
     const EditIssue invalid = validateScheduleEdit(schedule_, edit);
     if (!invalid.ok()) {
-        showIssue(invalid.code, invalid.message);
+        showIssue(invalid.code, invalid.message, invalid.field);
         return;
     }
     showIssue({}, {});

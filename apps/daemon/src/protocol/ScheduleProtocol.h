@@ -39,6 +39,11 @@ inline constexpr auto scheduleDeletedChange = "deleted";
 
 // Handler codes. The request parser does not return these.
 inline constexpr auto scheduleNotFoundCode = "schedule_not_found";
+// The conversation this schedule names was deleted, so it cannot be enabled again.
+inline constexpr auto scheduleTargetDeletedCode = "target_deleted";
+// create or update named a conversation or team the journal does not have.
+// A team id must be that team's decimal id, the same text deleteTeam cascades on.
+inline constexpr auto scheduleTargetNotFoundCode = "target_not_found";
 // schedule.runNow answers this until the runtime that fires a schedule exists.
 inline constexpr auto scheduleNotImplementedCode = "not_implemented";
 

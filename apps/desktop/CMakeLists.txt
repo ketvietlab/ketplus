@@ -495,6 +495,7 @@ if(APPLE)
                 COMMAND "${CMAKE_COMMAND}" -E touch "${ketplus_browser_runtime_stamp}"
                 DEPENDS
                     "${ketplus_browser_app_dir}/scripts/package-runtime.mjs"
+                    "${ketplus_browser_app_dir}/scripts/runtime-smoke.mjs"
                     "${ketplus_browser_app_dir}/runtime/node-runtime.json"
                     "${ketplus_browser_app_dir}/package.json"
                     "${ketplus_browser_app_dir}/package-lock.json"
@@ -542,6 +543,7 @@ if(UNIX AND NOT APPLE)
         DESTINATION share/applications COMPONENT Runtime)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/packaging/linux/hicolor/"
         DESTINATION share/icons/hicolor COMPONENT Runtime)
+    include("${PROJECT_SOURCE_DIR}/packaging/linux/DesktopRuntime.cmake")
 endif()
 
 if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)

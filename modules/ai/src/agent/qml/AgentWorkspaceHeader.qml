@@ -414,11 +414,13 @@ Item {
             iconName: "bot"
             onTriggered: agentHost.chooseReviewer("", "claude")
         }
-        // ADR 0067: Codex cannot be held read only yet, so it is listed but cannot review.
+        // ketplus#295: Codex reviews only with Full access, and a new reviewer starts read only,
+        // so a new Codex reviewer is listed but cannot be chosen; pick a Codex conversation with
+        // Full access below.
         Kit.KetMenuItem {
             objectName: "newCodexReviewerItem"
             text: header.reviewerTitle("codex", "Codex")
-            description: "Cannot review yet: Codex cannot be held read only"
+            description: "Codex can review only with Full access. Choose a Codex conversation with Full access below."
             iconName: "bot"
             enabled: false
         }
@@ -430,7 +432,7 @@ Item {
             model: reviewerMenu.candidates.length > 0 ? reviewerMenu.candidates : [
                 {
                     number: "",
-                    title: "No other Claude conversation"
+                    title: "No other Claude or Codex conversation"
                 }
             ]
             onObjectAdded: (index, object) => reviewerMenu.addItem(object)
@@ -439,9 +441,9 @@ Item {
                 required property var modelData
                 readonly property string reviewerNumber: String(modelData.number)
                 objectName: "existingReviewerItem_" + reviewerNumber
-                enabled: reviewerNumber.length > 0
+                enabled: reviewerNumber.length > 0 && modelData.enabled !== false
                 text: modelData.title
-                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.worktree].filter(part => part).join(" · ") : ""
+                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.worktree, modelData.reason].filter(part => part).join(" · ") : ""
                 iconName: "chat"
                 checkable: reviewerNumber.length > 0
                 onTriggered: agentHost.chooseReviewer(reviewerNumber, "")

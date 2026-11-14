@@ -1,5 +1,6 @@
 #include "runtime/SessionHost.h"
 
+#include "agents/ReviewerPolicy.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/CursorAdapter.h"
@@ -19,8 +20,17 @@ bool reviewGuard(const QJsonObject& options) {
     return options.value(QStringLiteral("review_guard")).toBool();
 }
 
+// ketplus#295: a Codex reviewer reviews with its own Full access, never with less; the broker
+// checks the reviewed branch after the turn instead of guarding each tool call.
+bool fullAccessReview(const QJsonObject& options) {
+    return reviewGuard(options) &&
+           reviewer::supported(options.value(QStringLiteral("provider")).toString(),
+                               options.value(QStringLiteral("execution_policy")).toString()) &&
+           reviewer::checksBranch(options.value(QStringLiteral("provider")).toString());
+}
+
 QString sandboxName(const QJsonObject& options) {
-    if (reviewGuard(options))
+    if (reviewGuard(options) && !fullAccessReview(options))
         return QStringLiteral("read-only");
     if (options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full"))
         return QStringLiteral("danger-full-access");
@@ -34,7 +44,7 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
-    // Defence in depth: reviews only reach Claude (AgentBroker::enforcesReviewGuard).
+    // Defence in depth: reviews reach only Claude or Codex with Full access (ReviewerPolicy.h).
     if (reviewGuard(options))
         return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")

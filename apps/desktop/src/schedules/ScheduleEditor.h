@@ -41,7 +41,7 @@ class ScheduleEditor final : public QObject {
     void applyKind();
     void updateSummary();
     void save();
-    void showIssue(const QString& code, const QString& message);
+    void showIssue(const QString& code, const QString& message, const QString& field = {});
     [[nodiscard]] ScheduleRule collect() const;
 
     ScheduleClient* client_;
@@ -55,6 +55,7 @@ class ScheduleEditor final : public QObject {
     ket::TextField* name_{nullptr};
     ket::FieldRow* promptRow_{nullptr};
     ket::TextArea* prompt_{nullptr};
+    QLabel* promptNote_{nullptr};
     ket::FieldRow* ruleRow_{nullptr};
     ket::SegmentedControl* repeat_{nullptr};
     ket::TextField* date_{nullptr};

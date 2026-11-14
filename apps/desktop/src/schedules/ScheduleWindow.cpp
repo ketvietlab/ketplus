@@ -115,7 +115,12 @@ void ScheduleWindow::build() {
     list_->setObjectName(QStringLiteral("schedulesList"));
     list_->setFrameShape(QFrame::NoFrame);
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setSpacing(0);
     list_->setMinimumWidth(scaled(320));
+    // The row paints its own selection. The item highlight was covering the checkbox frame.
+    list_->setStyleSheet(
+        QStringLiteral("QListWidget::item { background: transparent; border: none; }"
+                       "QListWidget::item:selected { background: transparent; }"));
     connect(list_, &QListWidget::currentItemChanged, this,
             [this](QListWidgetItem* current, QListWidgetItem*) {
                 if (rebuilding_ || current == nullptr)
@@ -168,6 +173,7 @@ void ScheduleWindow::build() {
     connect(showMore_, &QAbstractButton::clicked, this,
             [this] { client_->loadRuns(selectedId_, true); });
     detailColumn->addWidget(showMore_, 0, Qt::AlignLeft);
+    detailColumn->addStretch(1);
 
     auto* actions = new QHBoxLayout;
     runNowButton_ = new ket::Button(tr("Run now"), ket::ButtonVariant::Primary, detail_);
@@ -191,16 +197,19 @@ void ScheduleWindow::build() {
     actions->addWidget(edit_);
     actions->addWidget(remove_);
     actions->addStretch(1);
-    detailColumn->addLayout(actions);
-    detailColumn->addStretch(1);
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidget(detail_);
+    auto* pane = new QWidget;
+    auto* paneLayout = new QVBoxLayout(pane);
+    paneLayout->setContentsMargins(scaled(16), scaled(12), scaled(16), scaled(12));
+    paneLayout->addWidget(scroll, 1);
+    paneLayout->addLayout(actions);
     auto* splitter = new QSplitter;
     splitter->addWidget(list_);
-    splitter->addWidget(scroll);
+    splitter->addWidget(pane);
     splitter->setStretchFactor(1, 1);
     stack_->addWidget(splitter);
     root->addWidget(stack_, 1);
@@ -305,7 +314,7 @@ void ScheduleWindow::refreshBanner() {
 
 QJsonObject ScheduleWindow::selectedSchedule() const {
     const auto schedule = client_->schedule(selectedId_);
-    return schedule ? *schedule : QJsonObject{};
+    return schedule ? schedule::toJson(*schedule) : QJsonObject{};
 }
 
 } // namespace ketplus

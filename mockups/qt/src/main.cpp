@@ -44,6 +44,21 @@ void countQmlProblems(QtMsgType type, const QMessageLogContext& context, const Q
     previousHandler(type, context, message);
 }
 
+bool checkTeamLanguages(QQuickWindow* window) {
+    if (window->metaObject()->indexOfMethod("startTeamLanguageChecks()") < 0)
+        return true;
+    QMetaObject::invokeMethod(window, "startTeamLanguageChecks");
+    if (!QTest::qWaitFor([window] { return window->property("teamLanguageCheckDone").toBool(); },
+                         3000)) {
+        qWarning("QML team language check did not finish");
+        return false;
+    }
+    const QVariantList failures = window->property("teamLanguageProblems").toList();
+    for (const QVariant& failure : failures)
+        qWarning("QML team language check failed: %s", qPrintable(failure.toString()));
+    return failures.isEmpty();
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -226,8 +241,11 @@ int main(int argc, char* argv[]) {
         return invoked && valid.toBool();
     };
     if (parser.isSet(checkState)) {
-        QTimer::singleShot(1200, window, [evidenceValid] {
-            QApplication::exit(evidenceValid() && qmlProblems == 0 ? 0 : 1);
+        const bool checkLanguage = controller.initialScreen == QLatin1String("teams") &&
+                                   controller.initialState.startsWith(QLatin1String("vi"));
+        QTimer::singleShot(1200, window, [window, evidenceValid, checkLanguage] {
+            const bool languageValid = !checkLanguage || checkTeamLanguages(window);
+            QApplication::exit(evidenceValid() && languageValid && qmlProblems == 0 ? 0 : 1);
         });
         return QApplication::exec();
     }
@@ -267,6 +285,7 @@ int main(int argc, char* argv[]) {
                     "QML teams check failed: no conversation row or team folder to drag between");
             }
             QMetaObject::invokeMethod(window, "teamChecks");
+            checkTeamLanguages(window);
             QTest::qWait(100);
         }
         if (window->metaObject()->indexOfMethod("scheduleChecks()") >= 0) {

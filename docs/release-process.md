@@ -1,5 +1,13 @@
 # Release process
 
+Linux Pro engineering packages use the native Docker recipe in
+[linux-desktop-packaging.md](linux-desktop-packaging.md). Build AppImage and deb
+on each native architecture, verify installed `--build-info`, run the SDK-free
+smoke for both formats, and retain SHA-256 checksums and metadata. These unsigned
+build-only artifacts must not be published until the Qt/AppImage source and
+notice audit and release approval are complete. Debian repository signing is a
+separate follow-up; no production signing material belongs in the build image.
+
 ## Branch policy
 
 Three long-lived branches carry every change (ADR 0030):
@@ -14,7 +22,9 @@ feature/fix -> test what you changed -> pull request into integration -> merge
                                              release: main fast-forwards to develop
 ```
 
-- `integration` receives every feature and fix pull request and has no CI.
+- `integration` receives every feature and fix pull request. Only its lightweight
+  public-tree guard runs on PRs; native Linux packaging runs through the normal
+  promotion/release build workflow, not integration PRs (ADR 0030).
   Before pushing, the author runs the tests for the part they changed (see
   `docs/testing.md`) and records the commands and results in the pull request.
 - `develop` is verified. It receives only promotion pull requests whose head is

@@ -148,7 +148,7 @@ add_custom_command(TARGET ketplus_daemon POST_BUILD
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
     install(TARGETS ketplus_daemon RUNTIME DESTINATION bin COMPONENT Runtime)
     install(DIRECTORY "${KETPLUS_CLAUDE_SIDECAR_STAGE}/"
-        DESTINATION lib/ketplus/claude-sidecar COMPONENT Runtime)
+        DESTINATION lib/ketplus/claude-sidecar USE_SOURCE_PERMISSIONS COMPONENT Runtime)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"
         DESTINATION lib/ketplus COMPONENT Runtime)
 endif()
@@ -159,14 +159,15 @@ ketplus_enable_warnings(ketplusctl)
 install(TARGETS ketplusctl RUNTIME DESTINATION bin COMPONENT Runtime)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include("${PROJECT_SOURCE_DIR}/packaging/linux/RuntimePlugins.cmake")
     # Qt 6.11 adds the default QPA plugins even when their type is excluded.
     qt_generate_deploy_app_script(TARGET ketplus_daemon OUTPUT_SCRIPT ketplus_daemon_deploy
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
-        EXCLUDE_PLUGINS qxcb qoffscreen)
+        EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_daemon_deploy}" COMPONENT Runtime)
     qt_generate_deploy_app_script(TARGET ketplusctl OUTPUT_SCRIPT ketplus_ctl_deploy
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
-        EXCLUDE_PLUGINS qxcb qoffscreen)
+        EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_ctl_deploy}" COMPONENT Runtime)
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/ketplus-daemon.service"
         DESTINATION share/systemd/user COMPONENT Runtime)

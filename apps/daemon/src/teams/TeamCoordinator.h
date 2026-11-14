@@ -1,5 +1,7 @@
 #pragma once
 
+#include "agents/ReviewIntegrity.h"
+#include "storage/ScheduleRecord.h"
 #include "teams/Team.h"
 #include "teams/TeamRules.h"
 #include "teams/TeamStorage.h"
@@ -31,6 +33,7 @@ struct TeamConversation final {
     QString model;
     QString effort;
     QString worktree;
+    QString executionPolicy;
     bool idle{false};
 };
 
@@ -333,6 +336,8 @@ class TeamHostPort {
         (void)path;
         return {};
     }
+    // team and team_start schedules removed with the team, so the desktop can drop them.
+    virtual void schedulesDeleted(const QList<ScheduleRecord>& schedules) { (void)schedules; }
 };
 
 // A new task as the leader or the user writes it.
@@ -550,6 +555,13 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] static QString reviewerFor(const Team& team, const QString& sessionId);
     void reviewFinished(const QString& reviewerSession, const QString& messageId,
                         const QString& text, bool noFindings, const QString& failure = {});
+    // ketplus#295 (TeamCoordinatorTamper.cpp): what the review bound to `messageId` reviews;
+    // nothing when that review is not in flight.
+    [[nodiscard]] std::optional<review_integrity::Scope>
+    reviewScope(const QString& reviewerSession, const QString& messageId) const;
+    // The reviewer changed the branch during that review: its verdict does not count.
+    void reviewTampered(const QString& reviewerSession, const QString& messageId,
+                        const QJsonArray& changes);
     // T-19 (TeamCoordinatorReviewTools.cpp), the leader's: void the last recorded verdict of
     // a task, which goes back to In review with its round counted once less; or accept a
     // review made outside the board, which makes a task in review, or blocked by its review,

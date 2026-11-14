@@ -102,6 +102,7 @@ QJsonObject createPayload(const Schedule& schedule) {
     payload.remove(QStringLiteral("updated_at"));
     payload.remove(QStringLiteral("next_run_at"));
     payload.remove(QStringLiteral("last_run_at"));
+    payload.remove(QStringLiteral("status"));
     return payload;
 }
 
@@ -118,16 +119,18 @@ class ScheduleProtocolTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void featureWaitsForHandlers() {
-        // Advertising schedules/1 before a handler exists makes every schedule.*
-        // request unsupported. The handler change adds the feature with the routes.
-        QVERIFY(!protocol::features(1).contains(QString(protocol::schedulesFeature)));
+    void featureIsAdvertised() {
+        QVERIFY(protocol::features(1).contains(QString(protocol::schedulesFeature)));
         QVERIFY(!protocol::features(0).contains(QString(protocol::schedulesFeature)));
         QCOMPARE(maximumRetainedRuns, 50);
     }
 
     void documentsRoundTripEveryTarget() {
         expectRoundTrip(conversationSchedule());
+        Schedule deleted = conversationSchedule();
+        deleted.enabled = false;
+        deleted.status = QStringLiteral("target_deleted");
+        expectRoundTrip(deleted);
         expectRoundTrip(newSchedule());
         expectRoundTrip(teamSchedule());
         expectRoundTrip(teamStartSchedule());
@@ -166,6 +169,11 @@ class ScheduleProtocolTest final : public QObject {
         document.remove(QStringLiteral("target"));
         QVERIFY(!scheduleFromJson(document, &failure));
         QCOMPARE(failure.code, QString(missingTargetCode));
+
+        document = toJson(conversationSchedule());
+        document.insert(QStringLiteral("status"), QStringLiteral("paused"));
+        QVERIFY(!scheduleFromJson(document, &failure));
+        QCOMPARE(failure.code, QString(invalidEnumCode));
 
         document = toJson(conversationSchedule());
         document.insert(QStringLiteral("busy_policy"), QStringLiteral("drop"));

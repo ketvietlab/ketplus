@@ -2,6 +2,8 @@
 #include "runtime/SessionHost.h"
 #include "teams/TeamRules.h"
 
+#include "agents/ReviewerPolicy.h"
+
 #include "protocol/DaemonProtocol.h"
 
 #include <QSet>
@@ -26,6 +28,13 @@ QJsonObject failure(const teams::TeamError& error) { return failure(error.code, 
 bool knownProvider(const QString& provider) {
     return provider == QStringLiteral("codex") || provider == QStringLiteral("claude") ||
            provider == QStringLiteral("cursor") || provider == QStringLiteral("copilot");
+}
+
+// A new reviewer's own policy: a Codex one takes the team's Full access, so it may review
+// (ketplus#295); any other keeps a conversation's default.
+QString newReviewerPolicy(const QString& provider, const QString& teamPolicy) {
+    return reviewer::checksBranch(provider) && teamPolicy == QStringLiteral("full") ? teamPolicy
+                                                                                    : QString{};
 }
 
 QStringList strings(const QJsonValue& value) {
@@ -240,19 +249,19 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                            reviewer ? QStringLiteral("Choose the reviewer's agent.")
                                     : QStringLiteral("Choose the developer's agent."),
                            plan.role);
-        if (reviewer && !teams::rules::reviewerProviderSupported(plan.provider))
+        // ketplus#295: a new Codex reviewer takes the team's Full access; Claude keeps its own.
+        const QString reviewerPolicy = newReviewerPolicy(plan.provider, team->executionPolicy);
+        if (reviewer && !reviewer::supported(plan.provider, reviewerPolicy))
             return failure(QStringLiteral("reviewer_unsupported"),
-                           QStringLiteral("The reviewer must be a Claude conversation, the "
-                                          "provider that keeps a review read-only."),
-                           plan.role);
+                           reviewer::unsupportedMessage(plan.provider), plan.role);
         if (plan.provider != QStringLiteral("codex") && !availableProvider(plan.provider))
             return failure(QStringLiteral("provider_unavailable"),
                            missingProviderMessage(plan.provider), plan.role);
         QString problem;
-        // A reviewer keeps its own mode; its review turns are read-only (ADR 0114 §2).
+        // A Claude reviewer keeps its own mode; its review turns are read-only (ADR 0114 §2).
         const QString sessionId = createMemberConversation(
             team->repository, plan.provider, plan.model, plan.effort, plan.name, &problem,
-            reviewer ? QString{} : team->executionPolicy);
+            reviewer ? reviewerPolicy : team->executionPolicy);
         if (sessionId.isEmpty())
             return failure(QStringLiteral("member_unavailable"), problem, plan.role);
         const auto result = teams_->addMember(
@@ -369,12 +378,14 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
             return failure(QStringLiteral("provider_unavailable"),
                            QStringLiteral("Choose the agent of the %1.").arg(member.role),
                            member.role);
+        // The team's policy is validated below; a Codex reviewer needs it to be Full access.
         if (member.role == teams::role::reviewer &&
-            !teams::rules::reviewerProviderSupported(member.provider))
+            !reviewer::supported(
+                member.provider,
+                newReviewerPolicy(member.provider,
+                                  payload.value(QStringLiteral("execution_policy")).toString())))
             return failure(QStringLiteral("reviewer_unsupported"),
-                           QStringLiteral("The reviewer must be a Claude conversation, the "
-                                          "provider that keeps a review read-only."),
-                           member.role);
+                           reviewer::unsupportedMessage(member.provider), member.role);
         if (member.provider != QStringLiteral("codex") && !availableProvider(member.provider))
             return failure(QStringLiteral("provider_unavailable"),
                            missingProviderMessage(member.provider), member.role);
@@ -453,8 +464,10 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         QString problem;
         const QString sessionId = createMemberConversation(
             repository, member.provider, member.model, member.effort, member.name, &problem,
-            // The reviewer keeps a conversation's default; its review turns are read-only.
-            member.role == teams::role::reviewer ? QString{} : draft.executionPolicy);
+            // A Claude reviewer keeps a conversation's default; its review turns are read-only.
+            member.role == teams::role::reviewer
+                ? newReviewerPolicy(member.provider, draft.executionPolicy)
+                : draft.executionPolicy);
         if (sessionId.isEmpty()) {
             for (const QString& id : std::as_const(started))
                 discardMemberConversation(id);

@@ -82,6 +82,7 @@ QStringList bundledBrowserRuntimeCandidates(const QString& applicationDirPath) {
         QDir::cleanPath(appDir.filePath(QStringLiteral("../Resources/") + name)),
         QDir::cleanPath(appDir.filePath(QStringLiteral("../Helpers/") + name)),
         QDir::cleanPath(appDir.filePath(name)),
+        QDir::cleanPath(appDir.filePath(QStringLiteral("../lib/ketplus/") + name)),
     };
     candidates.removeDuplicates();
     return candidates;
@@ -120,8 +121,8 @@ std::optional<ToolLaunch> BundledRuntimeProvider::resolve(const QString& toolId,
     // Codex starts MCP servers with the inherited environment plus this map, which can only
     // add or override. Empty values neutralize preloads (--require/--import) and Playwright's
     // download host overrides for the bundled node (ADR 0009).
-    for (const auto* name : {"NODE_OPTIONS", "PLAYWRIGHT_DOWNLOAD_HOST",
-                             "PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"})
+    for (const auto* name :
+         {"NODE_OPTIONS", "PLAYWRIGHT_DOWNLOAD_HOST", "PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"})
         launch.env.insert(QLatin1String(name), QString());
     if (!browserCacheDir_.isEmpty()) {
         // The Chrome for Testing cache holds an executable: owner-only.

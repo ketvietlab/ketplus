@@ -138,9 +138,11 @@ QString scheduleRuleSummary(const QString& rule) {
     if (!parsed)
         return QStringLiteral("Custom rule");
     QString body;
-    if (parsed->kind == QLatin1String("once"))
-        body = QStringLiteral("Once · %1").arg(parsed->at);
-    else if (parsed->kind == QLatin1String("daily"))
+    if (parsed->kind == QLatin1String("once")) {
+        QString at = parsed->at;
+        at.replace(QLatin1Char('T'), QLatin1Char(' '));
+        body = QStringLiteral("Once · %1").arg(at);
+    } else if (parsed->kind == QLatin1String("daily"))
         body = QStringLiteral("Daily %1").arg(parsed->time);
     else if (parsed->kind == QLatin1String("weekdays"))
         body = QStringLiteral("Weekdays %1").arg(parsed->time);
@@ -163,19 +165,32 @@ QString scheduleRuleSummary(const QString& rule) {
     return QStringLiteral("%1 (%2)").arg(body, zoneOffset(parsed->timezone));
 }
 
-QString scheduleTargetLabel(const QJsonObject& target) {
+QString scheduleTargetLabel(const QJsonObject& target, const QString& createdBy) {
     const QString kind = target.value(QStringLiteral("kind")).toString();
-    if (kind == QLatin1String("conversation"))
-        return QStringLiteral("Conversation · %1")
-            .arg(target.value(QStringLiteral("session_id")).toString());
-    if (kind == QLatin1String("new"))
-        return QStringLiteral("New conversation · %1")
-            .arg(target.value(QStringLiteral("workspace")).toString());
+    if (kind == QLatin1String("conversation")) {
+        const QString session = target.value(QStringLiteral("session_id")).toString();
+        if (!createdBy.isEmpty() && createdBy != QLatin1String("user"))
+            return QStringLiteral("#%1 · agent-created").arg(session);
+        return QStringLiteral("#%1").arg(session);
+    }
+    if (kind == QLatin1String("new")) {
+        const QString provider = target.value(QStringLiteral("provider")).toString();
+        QString name = provider;
+        if (provider == QLatin1String("claude"))
+            name = QStringLiteral("Claude");
+        else if (provider == QLatin1String("codex"))
+            name = QStringLiteral("Codex");
+        else if (provider == QLatin1String("cursor"))
+            name = QStringLiteral("Cursor");
+        else if (name.isEmpty())
+            name = target.value(QStringLiteral("workspace")).toString();
+        return QStringLiteral("New conversation each run · %1").arg(name);
+    }
     if (kind == QLatin1String("team"))
-        return QStringLiteral("Team · %1").arg(target.value(QStringLiteral("team_id")).toString());
-    if (kind == QLatin1String("team_start"))
-        return QStringLiteral("Team start · %1")
+        return QStringLiteral("Team %1 → leader")
             .arg(target.value(QStringLiteral("team_id")).toString());
+    if (kind == QLatin1String("team_start"))
+        return QStringLiteral("Team start · once");
     return kind;
 }
 

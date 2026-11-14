@@ -2,6 +2,7 @@
 import QtQuick
 import Ket
 import KetPlusMock
+import KetPlusMock.Native
 
 // The goal of New team (ADR 0114), as the app's TeamGoalEditor sets ket::TextArea up: six
 // lines that grow to fourteen and then scroll, a 16,000-character count, and `@agent/`
@@ -10,6 +11,8 @@ import KetPlusMock
 // colours and named in `problem`, which the form shows before the team can start.
 KetTextArea {
     id: goal
+    property string language: "en"
+    function copy(source) { return Mock.teamText(language, source) }
 
     readonly property int limit: 16000
     // Every numbered conversation of the mock's repositories.
@@ -40,11 +43,11 @@ KetTextArea {
         return total
     }
     readonly property string problem: count > limit
-        ? "The goal has " + count.toLocaleString(Qt.locale("en_US"), "f", 0) + " characters; a team keeps at most 16,000. Shorten it, or link to the details instead."
+        ? goal.copy("The goal has ") + count.toLocaleString(Qt.locale("en_US"), "f", 0) + goal.copy(" characters; a team keeps at most 16,000. Shorten it, or link to the details instead.")
         : bytes > byteLimit
-        ? "The goal is too long to reach the leader in one message: it takes " + bytes.toLocaleString(Qt.locale("en_US"), "f", 0) + " of 24,576 bytes, as accented letters, other scripts and emoji take more than one each. Shorten it, or link to the details instead."
-        : unknown.length === 1 ? "@agent/" + unknown[0] + " is not a conversation on this computer. Correct the number or remove the mention."
-        : unknown.length > 1 ? unknown.map(n => "@agent/" + n).join(", ") + " are not conversations on this computer. Correct the numbers or remove the mentions."
+        ? goal.copy("The goal is too long to reach the leader in one message: it takes ") + bytes.toLocaleString(Qt.locale("en_US"), "f", 0) + goal.copy(" of 24,576 bytes, as accented letters, other scripts and emoji take more than one each. Shorten it, or link to the details instead.")
+        : unknown.length === 1 ? "@agent/" + unknown[0] + goal.copy(" is not a conversation on this computer. Correct the number or remove the mention.")
+        : unknown.length > 1 ? unknown.map(n => "@agent/" + n).join(", ") + goal.copy(" are not conversations on this computer. Correct the numbers or remove the mentions.")
         : ""
 
     minimumLines: 6
@@ -52,8 +55,8 @@ KetTextArea {
     maxLength: limit
     invalid: unknown.length > 0
     unknownMentions: unknown
-    placeholderText: "What should the team reach? Add the context, links and issues the leader needs, and type @ to mention a conversation the leader can ask."
-    Accessible.name: "Goal"
+    placeholderText: goal.copy("What should the team reach? Add the context, links and issues the leader needs, and type @ to mention a conversation the leader can ask.")
+    Accessible.name: goal.copy("Goal")
 
     onMentionQuery: query => {
         const needle = query.trim().toLowerCase()

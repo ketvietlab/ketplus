@@ -1,12 +1,13 @@
 # Schedules window
 
 Offscreen grabs of the production Schedules window, with `ket::Style` installed and the
-theme pinned to Light or Dark. The schedules are synthetic. These are not the mock
-renders in `mockups/qt/evidence/schedules/`.
+theme pinned to Light or Dark. The schedules are synthetic. The list, detail and editor
+follow the approved mock in `mockups/qt/evidence/schedules/`. A team id uses the protocol
+alphabet, so the sample reads `Release.1.4` rather than the mock's display name.
 
-The editor target is read-only. An empty prompt is reported on the card, because the
-field note sits under the native text editor. `01-view-menu` is the View action in an
-offscreen menu; the rest of the workspace chrome belongs to other tasks.
+The editor target is read-only. An empty prompt is shown under the prompt, with a red
+border. The form scrolls above Cancel and Save, and the rule summary stays in the form.
+`01-view-menu` shows Schedules… in a View menu, shortcut ⇧⌘J.
 
 | Files | State |
 | --- | --- |

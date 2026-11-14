@@ -50,7 +50,11 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
                         {"provider", "claude"},
                         {"path", "/work/parser"}},
             QVariantMap{{"number", "2044"}, {"title", "Cursor"}, {"provider", "cursor"}},
-            QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}}};
+            QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}},
+            QVariantMap{{"number", "4066"},
+                        {"title", "Codex full"},
+                        {"provider", "codex"},
+                        {"full_access", true}}};
     });
     view.resize(1200, 700); // room for the full Reviewer label beside the product sidebar
     view.show();
@@ -77,11 +81,24 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QTRY_VERIFY(button->isVisible());
     QCOMPARE(button->property("text").toString(), QStringLiteral("Reviewer  ▾"));
 
-    // Only other Claude conversations can review.
+    // Other Claude conversations review; Codex only with Full access (ketplus#295), and
+    // without it is listed with the reason. Cursor is never listed.
     const auto candidates = view.reviewerCandidates();
-    QCOMPARE(candidates.size(), 1);
+    QCOMPARE(candidates.size(), 3);
     QCOMPARE(candidates.first().toMap().value("number").toString(), QStringLiteral("1093"));
     QCOMPARE(candidates.first().toMap().value("worktree").toString(), QStringLiteral("parser"));
+    QVERIFY(candidates.first().toMap().value("enabled").toBool());
+    const QVariantMap lowered = candidates.at(1).toMap();
+    QCOMPARE(lowered.value("number").toString(), QStringLiteral("3055"));
+    QVERIFY(!lowered.value("enabled").toBool());
+    QCOMPARE(lowered.value("reason").toString(),
+             QStringLiteral("Codex can review only with Full access."));
+    const QVariantMap full = candidates.at(2).toMap();
+    QCOMPARE(full.value("number").toString(), QStringLiteral("4066"));
+    QVERIFY(full.value("enabled").toBool());
+    QCOMPARE(
+        full.value("reason").toString(),
+        QStringLiteral("Reviews with Full access; KetPlus checks the branch after each review."));
 
     auto* header = findVisualItem(root, "agentWorkspaceHeader");
     QVERIFY(header);
@@ -93,8 +110,10 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     auto* existing = menuItem(menu, "existingReviewerItem_1093");
     QVERIFY(existing);
     QVERIFY(!menuItem(menu, "existingReviewerItem_2044"));
-    QVERIFY(!menuItem(menu, "existingReviewerItem_3055"));
-    // ADR 0067: Codex is listed, as the mock, but cannot review; Claude names its model.
+    QVERIFY(!menuItem(menu, "existingReviewerItem_3055")->property("enabled").toBool());
+    QVERIFY(menuItem(menu, "existingReviewerItem_4066")->property("enabled").toBool());
+    // A new reviewer starts read only, so a new Codex one is listed but cannot review; Claude
+    // names its model.
     auto* codex = menuItem(menu, "newCodexReviewerItem");
     QVERIFY(codex && !codex->property("enabled").toBool());
     QCOMPARE(menuItem(menu, "newClaudeReviewerItem")->property("text").toString(),

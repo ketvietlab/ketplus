@@ -79,7 +79,7 @@ LocalJournal::LocalJournal(const QString& path)
     // Operations reset their own errors. Keep failed startup unusable even if a later
     // operation clears that diagnostic; recovery requires a freshly initialized journal.
     if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
-        !initializeTeams() || !markFormat())
+        !initializeTeams() || !initializeSchedules() || !markFormat())
         database_.close();
 }
 
@@ -939,6 +939,14 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
                          ? QStringLiteral("The session no longer exists.")
                          : session.lastError().text();
         return false;
+    }
+    // The conversation is gone. Schedules that name it stay, disabled, with a recorded status.
+    if (!sessionId.isEmpty()) {
+        if (QString scheduleError; !disableSchedulesForSession(sessionId, &scheduleError)) {
+            if (error != nullptr)
+                *error = scheduleError;
+            return false;
+        }
     }
     if (!database_.commit()) {
         if (error != nullptr)
