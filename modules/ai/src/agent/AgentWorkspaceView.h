@@ -75,6 +75,9 @@ class AgentWorkspaceView final : public QWidget {
     // The provider an already started conversation is bound to; empty for a new one.
     Q_PROPERTY(QString conversationProvider READ conversationProvider NOTIFY
                    conversationConfigurationChanged)
+    // Desktop schedule clock. Null until the shell attaches ComposerSchedule.
+    Q_PROPERTY(QObject* scheduleBridge READ scheduleBridge WRITE setScheduleBridge NOTIFY
+                   scheduleBridgeChanged)
 
     Q_PROPERTY(qint64 conversationConfigurationRevision READ conversationConfigurationRevision
                    NOTIFY conversationConfigurationChanged)
@@ -390,6 +393,13 @@ class AgentWorkspaceView final : public QWidget {
     void setConversationWidth(int pixels);
     void setConversations(const QVariantList& conversations);
     void setSessionState(const QString& title, const QString& status, bool running);
+    [[nodiscard]] QObject* scheduleBridge() const { return scheduleBridge_; }
+    void setScheduleBridge(QObject* bridge) {
+        if (bridge == scheduleBridge_)
+            return;
+        scheduleBridge_ = bridge;
+        emit scheduleBridgeChanged();
+    }
     void setConversationConfiguration(const QVariantMap& configuration);
     void resetMessages(const QVariantList& messages, const QString& conversationScope = {});
     void appendMessage(const QVariantMap& message);
@@ -580,6 +590,7 @@ class AgentWorkspaceView final : public QWidget {
     }
 
   signals:
+    void scheduleBridgeChanged();
     void teamRolesChanged();
     void teamRequested(const QString& teamId);
     void teamTaskRequested(const QString& teamId, const QString& taskId);
@@ -822,6 +833,7 @@ class AgentWorkspaceView final : public QWidget {
     bool themeApplied_{false};
     QString activePath_;
     QString repositoryName_;
+    QObject* scheduleBridge_{nullptr};
     QString sessionTitle_{QStringLiteral("New conversation")};
     QString sessionStatus_{QStringLiteral("Ready")};
     QString workingDetail_;

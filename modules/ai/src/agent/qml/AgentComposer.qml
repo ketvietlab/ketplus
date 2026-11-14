@@ -593,5 +593,105 @@ Item {
                 }
             }
         }
+        Kit.KetIconButton {
+            id: scheduleClock
+            objectName: "composerScheduleClock"
+            readonly property var bridge: agentHost.scheduleBridge
+            visible: !!bridge && bridge.clockVisible && root.scheduleContextRevision >= 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: usageRingButton.implicitWidth
+            Layout.preferredHeight: usageRingButton.implicitHeight
+            controlSize: Kit.KetTheme.ControlSize.Small
+            glyphSize: Math.max(1, usageRingButton.implicitWidth * 1.24)
+            iconName: Kit.KetTheme.iconForLucide("clock")
+            checkable: true
+            checked: !!bridge && bridge.clockActive
+            Accessible.name: bridge ? bridge.tooltip : "Schedule first message"
+            onClicked: {
+                checked = Qt.binding(() => !!scheduleClock.bridge && scheduleClock.bridge.clockActive)
+                skillsPopup.close()
+                permissionMenu.close()
+                modelPopup.close()
+                if (usageLimitsPopover.close)
+                    usageLimitsPopover.close()
+                if (!bridge)
+                    return
+                if (bridge.newConversation)
+                    schedulePopover.open()
+                else
+                    existingScheduleMenu.open()
+            }
+            KetToolTip {
+                objectName: "ketToolTip"
+                visible: scheduleClock.hovered && !schedulePopover.visible && !existingScheduleMenu.visible
+                text: scheduleClock.Accessible.name
+            }
+        }
+    }
+    function placeAboveClock(popup) {
+        const overlay = popup.parent
+        if (!overlay)
+            return
+        const origin = scheduleClock.mapToItem(overlay, 0, 0)
+        const width = popup.width > 0 ? popup.width : popup.implicitWidth
+        const height = popup.height > 0 ? popup.height : popup.implicitHeight
+        popup.x = Math.max(8, Math.min(origin.x + scheduleClock.width - width, overlay.width - width - 8))
+        const above = origin.y - height - 8
+        popup.y = above >= 8 ? above : origin.y + scheduleClock.height + 8
+    }
+    ComposerSchedulePopover {
+        id: schedulePopover
+        objectName: "scheduleFirstMessagePopover"
+        bridge: scheduleClock.bridge
+        parent: Basic.Overlay.overlay
+        onAboutToShow: area.placeAboveClock(schedulePopover)
+        onOpened: area.placeAboveClock(schedulePopover)
+        onWidthChanged: if (visible) area.placeAboveClock(schedulePopover)
+        onHeightChanged: if (visible) area.placeAboveClock(schedulePopover)
+    }
+    Popup {
+        id: existingScheduleMenu
+        objectName: "existingScheduleMenu"
+        parent: Basic.Overlay.overlay
+        onAboutToShow: area.placeAboveClock(existingScheduleMenu)
+        onOpened: area.placeAboveClock(existingScheduleMenu)
+        onWidthChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
+        onHeightChanged: if (visible) area.placeAboveClock(existingScheduleMenu)
+        padding: 8
+        modal: true
+        contentItem: Column {
+            spacing: 4
+            Label {
+                text: "Schedule"
+                font.bold: true
+            }
+            Button {
+                text: "Edit"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.edit()
+                    existingScheduleMenu.close()
+                }
+            }
+            Button {
+                text: scheduleClock.bridge && scheduleClock.bridge.clockActive ? "Pause" : "Resume"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.pause()
+                    existingScheduleMenu.close()
+                }
+            }
+            Button {
+                text: "Open in Schedules"
+                flat: true
+                onClicked: {
+                    if (scheduleClock.bridge)
+                        scheduleClock.bridge.openSchedules()
+                    existingScheduleMenu.close()
+                }
+            }
+        }
     }
 }
