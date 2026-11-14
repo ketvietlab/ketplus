@@ -1,6 +1,7 @@
 #include "providers/ClaudeAdapter.h"
 #include "BrowserAgentInstructions.h"
 #include "BrowserToolLaunch.h"
+#include "BundledBrowserRuntime.h"
 #include "ComputerAgentInstructions.h"
 #include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
@@ -569,14 +570,10 @@ QString ClaudeAdapter::findNode() {
             return info.absoluteFilePath();
         }
     }
-    const QDir executableDirectory(QCoreApplication::applicationDirPath());
-    const QStringList candidates{
-        executableDirectory.filePath(QStringLiteral("../Resources/ketplus-browser/bin/node")),
-        executableDirectory.filePath(QStringLiteral("../Helpers/ketplus-browser/bin/node")),
-        executableDirectory.filePath(QStringLiteral("ketplus-browser/bin/node")),
-    };
-    for (const QString& candidate : candidates) {
-        const QFileInfo info(candidate);
+    const auto roots =
+        browser_tools::bundledBrowserRuntimeCandidates(QCoreApplication::applicationDirPath());
+    for (const QString& root : roots) {
+        const QFileInfo info(QDir(root).filePath(QStringLiteral("bin/node")));
         if (info.isFile() && info.isExecutable()) {
             return info.canonicalFilePath();
         }
