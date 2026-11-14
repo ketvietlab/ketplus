@@ -32,6 +32,8 @@ class ScheduleWindow final : public QWidget {
     ScheduleWindow(ScheduleClient* client, QWidget* parent = nullptr);
 
     void present(const QString& scheduleId);
+    // Selects the schedule and opens its editor. The list window stays behind it.
+    void editSchedule(const QString& scheduleId);
     [[nodiscard]] int raiseCount() const { return raiseCount_; }
     void noteRaised() { ++raiseCount_; }
 

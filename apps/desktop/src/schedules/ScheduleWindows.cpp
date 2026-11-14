@@ -36,4 +36,10 @@ void ScheduleWindows::show(const QString& scheduleId) {
     window_->noteRaised();
 }
 
+void ScheduleWindows::edit(const QString& scheduleId) {
+    show(scheduleId);
+    if (window_ != nullptr)
+        window_->editSchedule(scheduleId);
+}
+
 } // namespace ketplus

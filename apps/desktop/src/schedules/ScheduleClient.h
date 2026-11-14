@@ -47,6 +47,8 @@ class ScheduleClient final : public QObject {
     [[nodiscard]] bool runsLoaded(const QString& id) const;
     [[nodiscard]] bool runsHaveMore(const QString& id) const;
     [[nodiscard]] schedule::Run latestRun(const QString& id) const;
+    // The run a transcript marker names, from a loaded page or the latest event.
+    [[nodiscard]] std::optional<schedule::Run> run(const QString& runId) const;
 
   signals:
     void changed();

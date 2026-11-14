@@ -317,6 +317,8 @@ target_link_libraries(ketplus_linux_relay_machines_tests PRIVATE
 )
 
 ketplus_add_gui_test(ketplus_schedule_client_tests ScheduleClientTest.cpp)
+ketplus_add_gui_test(ketplus_composer_schedule_tests ComposerScheduleTest.cpp)
+target_link_libraries(ketplus_composer_schedule_tests PRIVATE Qt6::Test Qt6::Quick ketplus_desktop_support)
 target_link_libraries(ketplus_schedule_client_tests PRIVATE Qt6::Test ketplus_desktop_support)
 
 ketplus_add_gui_test(ketplus_schedule_window_tests ScheduleWindowTest.cpp)
