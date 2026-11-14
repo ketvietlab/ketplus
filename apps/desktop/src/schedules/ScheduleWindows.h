@@ -20,6 +20,8 @@ class ScheduleWindows final : public QObject {
     explicit ScheduleWindows(QObject* parent = nullptr);
 
     [[nodiscard]] ScheduleClient* client() const { return client_; }
+    // Defined in the cpp. QPointer's conversion needs a complete ScheduleWindow, and this
+    // header is reachable from Pro translation units that only forward-declare it.
     [[nodiscard]] ScheduleWindow* window() const;
     // The View menu item. Triggering it opens the window, or raises it when it is already open.
     [[nodiscard]] QAction* createAction(QObject* parent);
