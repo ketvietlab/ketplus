@@ -1,5 +1,6 @@
 #include "schedule/TeamStartRuntime.h"
 
+#include "schedule/ScheduleRule.h"
 #include "teams/TeamCoordinator.h"
 
 namespace ketplus::daemon::schedule {
@@ -65,10 +66,48 @@ Delivery deliverTeamStart(teams::TeamCoordinator* teams, const documents::Schedu
 }
 
 Inspection TeamStartRuntime::inspect(const documents::Schedule& schedule) const {
+    if (schedule.target.kind == documents::TargetKind::Team) {
+        if (!teams_)
+            return {ConversationState::Missing, {}};
+        const teams::TeamCoordinator::TeamRunLook look =
+            teams_->lookAtTeamRun(schedule.target.teamId.toLongLong());
+        if (look.gate == teams::TeamCoordinator::TeamRunGate::Busy)
+            return {ConversationState::Busy, look.sessionId};
+        if (look.gate == teams::TeamCoordinator::TeamRunGate::Missing)
+            return {ConversationState::Missing, {}};
+        return {ConversationState::Idle, {}};
+    }
     return inspectTeamStart(teams_, schedule);
 }
 
 Delivery TeamStartRuntime::deliver(const documents::Schedule& schedule, const documents::Run& run) {
+    if (schedule.target.kind == documents::TargetKind::Team) {
+        Delivery delivery;
+        if (!teams_) {
+            delivery.errorCode = QString::fromLatin1(targetDeletedCode);
+            delivery.errorMessage = QStringLiteral("The schedule target no longer exists.");
+            return delivery;
+        }
+        QString when;
+        QDateTime due = QDateTime::fromString(run.scheduledFor, Qt::ISODateWithMs);
+        if (!due.isValid())
+            due = QDateTime::fromString(run.scheduledFor, Qt::ISODate);
+        if (due.isValid()) {
+            due = due.toUTC();
+            const auto parsed = parseRule(schedule.rule.toUtf8());
+            if (parsed.ok())
+                due = due.toTimeZone(parsed.rule->timeZone);
+            when = due.toString(QStringLiteral("yyyy-MM-dd"));
+        }
+        const teams::TeamCoordinator::TeamRunDelivery sent =
+            teams_->deliverTeamRun(schedule.target.teamId.toLongLong(), schedule.name,
+                                   schedule.prompt, when, schedule.id, run.id);
+        delivery.sessionId = sent.sessionId;
+        delivery.errorCode = sent.errorCode;
+        delivery.errorMessage = sent.errorMessage;
+        delivery.finished = sent.errorCode.isEmpty();
+        return delivery;
+    }
     (void)run;
     return deliverTeamStart(teams_, schedule);
 }

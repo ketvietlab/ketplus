@@ -614,6 +614,14 @@ class TeamProtocolTest final : public QObject {
              {"plan", plan()},
              {"start_at", QJsonObject{{"at", "2026-11-14T09:00"}, {"timezone", "Not/AZone"}}}});
         QCOMPARE(bad.value("error_code").toString(), QStringLiteral("start_at_invalid"));
+        const auto repeat = command(
+            fixture, "team.create",
+            {{"name", "Checkout"},
+             {"repository", "/tmp/not-a-repo"},
+             {"plan", plan()},
+             {"repeat", QJsonObject{{"rule", QJsonObject{{"kind", "daily"}}},
+                                     {"work_order", "Write the post."}}}});
+        QCOMPARE(repeat.value("error_code").toString(), QStringLiteral("invalid_rule"));
     }
 };
 

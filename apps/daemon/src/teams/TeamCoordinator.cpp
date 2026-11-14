@@ -1,6 +1,7 @@
 // ADR 0114: the team store and the membership rules.
 #include "teams/TeamCoordinator.h"
 
+#include "teams/TeamRepeat.h"
 #include "teams/TeamStart.h"
 
 #include <QTimer>
@@ -334,9 +335,11 @@ Decision& TeamCoordinator::raiseDecision(Team& team, const QString& kind, const 
 
 QString storeTeamStart(LocalJournal& journal, const Team& team, const TeamStartPlan& plan,
                        QString* error);
+QString storeTeamRepeat(LocalJournal& journal, const Team& team, const TeamRepeatPlan& plan,
+                        QString* error);
 
 TeamResult TeamCoordinator::create(Team draft, const QString& actor, const QJsonObject& startAt,
-                                   const QDateTime& now) {
+                                   const QDateTime& now, const QJsonObject& repeat) {
     QList<Candidate> candidates;
     for (Member& member : draft.members) {
         member.name = member.name.trimmed();
@@ -391,6 +394,11 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor, const QJson
         draft.startAt = request.at;
         draft.startTimeZone = request.timeZone;
     }
+    TeamRepeatPlan repeatPlan;
+    if (!repeat.isEmpty()) {
+        if (const auto invalid = parseTeamRepeat(repeat, now, &repeatPlan))
+            return {.error = *invalid};
+    }
     QString error;
     const auto id =
         journal_->insertTeam(draft.repository, toJson(draft), draft.memberSessions(), &error);
@@ -409,13 +417,16 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor, const QJson
          .text = say(draft.language, QT_TRANSLATE_NOOP("Team", "Team %1 created with %2 members."))
                      .arg(draft.name)
                      .arg(draft.members.size())});
+    const auto forget = [&] {
+        (void)journal_->deleteTeam(draft.id);
+        teams_.remove(draft.id);
+        for (const QString& session : draft.memberSessions())
+            teamBySession_.remove(session);
+    };
     if (draft.startWaiting) {
         const QString scheduleId = storeTeamStart(*journal_, draft, startPlan, &error);
         if (scheduleId.isEmpty()) {
-            (void)journal_->deleteTeam(draft.id);
-            teams_.remove(draft.id);
-            for (const QString& session : draft.memberSessions())
-                teamBySession_.remove(session);
+            forget();
             return {.error = journalError(error)};
         }
         Team& stored = teams_[draft.id];
@@ -424,21 +435,24 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor, const QJson
         if (const auto failed = commit(stored, before, actor, {})) {
             // The schedule row is already in the journal. Drop the team with it, or the
             // caller's discarded member conversations leave an orphan team behind.
-            const qint64 id = draft.id;
-            const QStringList sessions = draft.memberSessions();
-            QString ignored;
-            (void)journal_->deleteTeam(id, &ignored);
-            teams_.remove(id);
-            for (const QString& session : sessions)
-                teamBySession_.remove(session);
+            forget();
             return {.error = failed};
         }
-        if (host_)
-            host_->schedulesChanged();
-    } else {
-        emit teamChanged(directoryJson(draft));
+    }
+    if (!repeat.isEmpty()) {
+        const QString scheduleId =
+            storeTeamRepeat(*journal_, teams_.value(draft.id), repeatPlan, &error);
+        if (scheduleId.isEmpty()) {
+            forget();
+            return {.error = journalError(error)};
+        }
+    }
+    if (!draft.startWaiting) {
+        emit teamChanged(directoryJson(teams_.value(draft.id)));
         startLeader(draft.id);
     }
+    if ((draft.startWaiting || !repeat.isEmpty()) && host_)
+        host_->schedulesChanged();
     return {.teamId = draft.id};
 }
 

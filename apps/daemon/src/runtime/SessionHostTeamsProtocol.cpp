@@ -1,5 +1,6 @@
 // ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
+#include "teams/TeamRepeat.h"
 #include "teams/TeamRules.h"
 #include "teams/TeamStart.h"
 
@@ -345,6 +346,17 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                 teams::planTeamStart(request, QDateTime::currentDateTimeUtc(), &plan))
             return failure(invalid->code, invalid->message);
     }
+    QJsonObject repeat;
+    if (payload.contains(QStringLiteral("repeat"))) {
+        const QJsonValue value = payload.value(QStringLiteral("repeat"));
+        if (!value.isObject())
+            return failure(QStringLiteral("repeat_invalid"),
+                           QStringLiteral("repeat must be an object."));
+        repeat = value.toObject();
+        if (const auto invalid =
+                teams::parseTeamRepeat(repeat, QDateTime::currentDateTimeUtc(), nullptr))
+            return failure(invalid->code, invalid->message);
+    }
     const QString repository =
         repositoryOf(normalizedWorktree(payload.value(QStringLiteral("repository")).toString()));
     if (repository.isEmpty())
@@ -499,7 +511,7 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         started.append(sessionId);
         draft.members[index].sessionId = sessionId;
     }
-    const auto result = teams_->create(draft, QStringLiteral("user"), startAt);
+    const auto result = teams_->create(draft, QStringLiteral("user"), startAt, {}, repeat);
     if (!result.ok()) {
         for (const QString& id : std::as_const(started))
             discardMemberConversation(id);

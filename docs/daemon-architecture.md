@@ -1073,6 +1073,13 @@ A paused team keeps that run queued until it is resumed. `team.start` starts it 
 and leaves the team waiting for a manual start (`status` `waiting`, no `start_at`).
 Deleting the team deletes the schedule. No member receives a turn before the leader
 starts, and a team created to start now is not held back while it still has no goal.
+`team.create` may also carry `repeat` `{rule, work_order}` (ADR 0126). That stores
+one `team` schedule. Each fire sends the leader `Scheduled run: <name> (<date>):
+<work order>` on the existing team message path and writes `Scheduled run: <name>`
+on the Updates feed. A busy leader queues or skips that fire with the schedule's
+busy policy. A team that has not started, is paused, or is out of turn budget
+records a failed run and does not start a turn. Missed fires follow `run_once` or
+`skip`, one catch-up at most. Deleting the team deletes that schedule too.
 `TeamRules` checks membership and task moves without side effects and returns the
 error code of ADR 0114; `TeamCoordinator` applies them, journals every change, emits
 `team.changed` / `team.removed` to local clients, and decides which change starts a turn

@@ -300,9 +300,18 @@ void SessionHost::agentMessageFailed(const AgentMessageRecord& message, const QS
 }
 
 QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
+    QString body = message.body;
+    if (!message.scheduleId.isEmpty() || !message.runId.isEmpty()) {
+        body += QLatin1Char('\n');
+        body += QStringLiteral("schedule_id: ");
+        body += message.scheduleId;
+        body += QLatin1Char('\n');
+        body += QStringLiteral("run_id: ");
+        body += message.runId;
+    }
     return agents_->postTeamMessage(
         message.fromSession, QStringLiteral("Team %1").arg(message.teamName), message.toSession,
-        message.kind, message.body, message.expectReply, nullptr, message.id);
+        message.kind, body, message.expectReply, nullptr, message.id);
 }
 
 bool SessionHost::teamLimitsMessage(const AgentMessageRecord& message) const {

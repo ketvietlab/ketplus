@@ -150,6 +150,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorStart.cpp
+    src/teams/TeamRepeat.cpp
+    src/teams/TeamRepeat.h
     src/teams/TeamStart.cpp
     src/teams/TeamStart.h
     src/teams/TeamCoordinatorAssign.cpp

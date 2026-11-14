@@ -67,7 +67,7 @@ struct TeamMessage final {
     // The member it comes from, or empty for the team itself (a digest, a decision).
     QString fromSession;
     // "assignment", "digest", "review", "decision", "nudge", "stall", "wait",
-    // "message_failed" or "team".
+    // "message_failed", "team" or "schedule".
     QString kind;
     QString taskId;
     QString body;
@@ -77,6 +77,9 @@ struct TeamMessage final {
     QString id;
     // An assignment: the worktree its receiver is pointed at before the message is sent.
     QString pointAt;
+    // A scheduled team run. The body stays the sentence the leader reads; these tag it.
+    QString scheduleId;
+    QString runId;
 };
 
 // The session runtime as the coordinator sees it. SessionHost implements it; tests fake it.
@@ -418,8 +421,26 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     // `startAt` empty starts the leader now. Otherwise it is {at, timezone}: the team is
     // stored and the leader waits for that team_start schedule. `now` empty is the clock.
+    // `repeat` empty stores no team schedule. Otherwise it is {rule, work_order}.
     TeamResult create(Team draft, const QString& actor, const QJsonObject& startAt = {},
-                      const QDateTime& now = {});
+                      const QDateTime& now = {}, const QJsonObject& repeat = {});
+    // What the team-schedule runner may do with a {kind: team} row.
+    enum class TeamRunGate { Deliver, Busy, Missing };
+    struct TeamRunLook {
+        TeamRunGate gate{TeamRunGate::Missing};
+        QString sessionId;
+    };
+    [[nodiscard]] TeamRunLook lookAtTeamRun(qint64 teamId) const;
+    // Posts one scheduled work order, or refuses it without holding a turn.
+    // Empty code means the leader was messaged.
+    struct TeamRunDelivery {
+        QString sessionId;
+        QString errorCode;
+        QString errorMessage;
+    };
+    TeamRunDelivery deliverTeamRun(qint64 teamId, const QString& name, const QString& workOrder,
+                                   const QString& when, const QString& scheduleId,
+                                   const QString& runId);
     // Starts a waiting team now and drops its team_start schedule.
     TeamResult startNow(qint64 teamId, const QString& actor);
     TeamResult updateStartAt(qint64 teamId, const QJsonObject& startAt, const QString& actor,

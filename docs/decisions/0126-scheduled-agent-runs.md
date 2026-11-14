@@ -138,6 +138,24 @@ manages; it does not create.
    `start_at_too_soon`, `start_at_too_late`, `team_already_started`,
    `start_not_scheduled`, `goal_required`.
 
+10. **A team can repeat a work order.** `team.create` accepts an optional `repeat`
+    next to `start_at`: `{rule, work_order}`, with optional `busy_policy`
+    (`queue` or `skip`, default `queue`) and `missed_policy` (`run_once` or
+    `skip`, default `run_once`). It is stored as one schedule whose target is
+    `{kind: "team", team_id}` and whose prompt is the work order. This is the
+    way the product creates a team schedule. `schedule.update`, `setEnabled` and
+    `delete` still manage it, and `schedule.list` filters it by `team_id`.
+    Deleting the team deletes it. On each fire the leader receives one message,
+    `Scheduled run: <name> (<date>): <work order>`, through the same team
+    message path, tagged with `schedule_id` and `run_id`. The run records the
+    leader's conversation. `queue` waits until that conversation's turn ends;
+    `skip` records the fire as skipped. A team that has not started, is paused,
+    or has used its automatic turns records the run as failed (`team_not_started`,
+    `team_paused`, `team_budget`) and does not start a turn, assign a task, or
+    approve the plan. A missed fire follows the schedule's `missed_policy` and
+    never catches up more than once. The team's Updates feed gains
+    `Scheduled run: <name>`. Stable codes also include `repeat_invalid`.
+
 ## Consequences
 
 - Desktop and the daemon share one JSON document, so a later screen does not
