@@ -565,8 +565,8 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         sessionId, receiver->generation, QDateTime::currentDateTimeUtc().addSecs(-3600));
     QList<AgentMessageRecord> deliverable;
     for (AgentMessageRecord& message : queued) {
-        // The receiver may have switched provider since the review was requested.
-        if (reviewRequest(message) && !enforcesReviewGuard(receiver->provider)) {
+        // The receiver may have switched provider or lowered its policy since the request.
+        if (reviewRequest(message) && !canReview(*receiver)) {
             markState(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             notice(message, QStringLiteral("failed"), QStringLiteral("reviewer_unsupported"));
             continue;
@@ -607,17 +607,16 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     if (deliverable.isEmpty())
         return;
     keepOneTurn(deliverable);
-    if (deliverable.isEmpty())
+    if (deliverable.isEmpty() || !branchesRecorded(sessionId, *receiver, deliverable))
         return;
     const auto teammate = [this](const AgentMessageRecord& message) {
         return sentByAgent(message) && host_->teamLimitsMessage(message);
     };
     const bool teamTurn =
-        authorizedBatch.isEmpty() &&
-        std::all_of(deliverable.cbegin(), deliverable.cend(),
-                    [this](const AgentMessageRecord& message) {
-                        return host_->teamLimitsMessage(message);
-                    });
+        authorizedBatch.isEmpty() && std::all_of(deliverable.cbegin(), deliverable.cend(),
+                                                 [this](const AgentMessageRecord& message) {
+                                                     return host_->teamLimitsMessage(message);
+                                                 });
     // One turn that teammates' messages start counts once against the team's budget. A
     // paused team, or one whose budget is used up, keeps them until it continues.
     if (authorizedBatch.isEmpty() &&
@@ -678,10 +677,11 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         origin.chainId = newId();
     }
     origin.turn = host_->agentTurnSequence(sessionId) + 1;
+    const QString text =
+        takeRecordedBranches(sessionId, origin, agent_messaging::deliveryText(deliverable));
     turns_.insert(sessionId, origin);
     const QString error =
-        host_->startAgentTurn(sessionId, receiver->generation,
-                              agent_messaging::deliveryText(deliverable), originJson(deliverable));
+        host_->startAgentTurn(sessionId, receiver->generation, text, originJson(deliverable));
     if (!error.isEmpty()) {
         turns_.remove(sessionId);
         for (AgentMessageRecord& message : deliverable) {
@@ -863,80 +863,6 @@ void AgentBroker::noteEvent(const QString& sessionId, const qint64 generation, c
         scheduleDelivery(sessionId);
 }
 
-void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
-                             const QString& status) {
-    const auto found = turns_.constFind(sessionId);
-    if (found == turns_.cend())
-        return;
-    const TurnOrigin origin = found.value();
-    turns_.erase(found);
-    if (!origin.review)
-        reviewFinishedTurn(sessionId, generation, status, origin);
-    if (!origin.automatic || origin.expectReply.isEmpty())
-        return;
-    const bool completed = status.isEmpty() || status == QStringLiteral("completed");
-    const auto receiver = host_->agentConversation(sessionId);
-    const QString text = origin.lastText.trimmed();
-    for (const QString& id : origin.expectReply) {
-        auto request = journal_->agentMessage(id);
-        if (!request || request->state != QStringLiteral("delivered"))
-            continue;
-        if (!completed || text.isEmpty() || !receiver || receiver->generation != generation) {
-            const QString reason =
-                completed ? QStringLiteral("no_reply") : QStringLiteral("turn_") + status;
-            markState(*request, QStringLiteral("failed"), reason);
-            if (request->fromSession.isEmpty()) {
-                host_->teamRequestFinished(sessionId, *request, {}, reason);
-                continue;
-            }
-            notice(*request, QStringLiteral("failed"), reason);
-            continue;
-        }
-        markState(*request, QStringLiteral("answered"));
-        if (request->fromSession.isEmpty()) {
-            // ADR 0114: the team sent it; the team reads the answer.
-            host_->teamRequestFinished(sessionId, *request, text, {});
-            continue;
-        }
-        const auto sender = host_->agentConversation(request->fromSession);
-        if (!sender || sender->generation != request->fromGeneration)
-            continue;
-        AgentMessageRecord reply;
-        reply.id = newId();
-        reply.chainId = request->chainId;
-        reply.hop = qMax(request->hop, origin.hop) + 1;
-        reply.fromSession = sessionId;
-        reply.fromGeneration = generation;
-        reply.fromNumber = receiver->number;
-        reply.fromTitle = receiver->title;
-        reply.fromProvider = receiver->provider;
-        reply.toSession = request->fromSession;
-        reply.toGeneration = request->fromGeneration;
-        reply.toNumber = request->fromNumber;
-        reply.kind = QStringLiteral("reply");
-        reply.replyTo = request->id;
-        reply.body = truncatedUtf8(text, maximumBodyBytes);
-        reply.state = QStringLiteral("queued");
-        reply.createdAt = nowIso();
-        if (recordReviewReply(reply, *request)) {
-            // Recorded in the working conversation without starting its turn.
-        } else if (const QString error = post(reply); !error.isEmpty()) {
-            qWarning("Unable to queue the reply to agent message %s: %s", qUtf8Printable(id),
-                     qUtf8Printable(error));
-            continue;
-        }
-        // The answer left this conversation; say so under it.
-        host_->appendAgentNotice(sessionId, generation,
-                                 {{QStringLiteral("message_id"), reply.id},
-                                  {QStringLiteral("kind"), reply.kind},
-                                  {QStringLiteral("state"), QStringLiteral("replied")},
-                                  {QStringLiteral("reply_to"), request->id},
-                                  {QStringLiteral("direction"), QStringLiteral("outgoing")},
-                                  {QStringLiteral("peer_number"), request->fromNumber},
-                                  {QStringLiteral("peer_title"), request->fromTitle}});
-    }
-}
-
 QHash<QString, QJsonObject> AgentBroker::automaticTurnSenders() const {
     QHash<QString, QJsonObject> senders;
     for (auto it = turns_.cbegin(); it != turns_.cend(); ++it)
@@ -1023,6 +949,7 @@ void AgentBroker::forget(const QString& sessionId) {
     reviewSnapshots_.remove(sessionId);
     snapshotEpochs_.remove(sessionId);
     userRequests_.remove(sessionId);
+    recordedBranches_.remove(sessionId);
 }
 
 void AgentBroker::resume() {

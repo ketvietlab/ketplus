@@ -922,7 +922,7 @@ class ProviderTranscriptTest : public QObject {
                  "No review: this exchange used all its review rounds.");
         QCOMPARE(agentMessageStateText(
                      {{"state", "review_skipped"}, {"reason", "reviewer_unsupported"}}),
-                 "No review: only a Claude conversation can review turns.");
+                 "No review: only Claude, or Codex with Full access, can review turns.");
         QVERIFY(agentMessageStateText({{"state", "review_skipped"}, {"reason", "snapshot_failed"}})
                     .contains("next review includes them"));
         QCOMPARE(agentMessageStateText({{"state", "failed"},
@@ -930,7 +930,18 @@ class ProviderTranscriptTest : public QObject {
                                         {"reason", "reviewer_unsupported"},
                                         {"direction", "outgoing"},
                                         {"peer_number", "1093"}}),
-                 "@agent/1093 no longer runs on Claude, so it did not review this turn.");
+                 "@agent/1093 can no longer review (Claude, or Codex with Full access), so it did "
+                 "not review this turn.");
+        // ketplus#295: the branch changed during a Codex review.
+        QCOMPARE(agentMessageStateText({{"state", "review_tampered"},
+                                        {"kind", "review"},
+                                        {"reason", "review_tampered"},
+                                        {"direction", "outgoing"},
+                                        {"peer_number", "1093"},
+                                        {"peer_title", "Reviewer"},
+                                        {"summary", "HEAD: aaaaaaaaaaaa → bbbbbbbbbbbb"}}),
+                 "@agent/1093 · Reviewer changed the branch during its review, so the review does "
+                 "not count: HEAD: aaaaaaaaaaaa → bbbbbbbbbbbb. Nothing was reverted.");
         const auto skipped = agentMessageNotice(
             {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "reviewer_busy"}},
             "notice:7");

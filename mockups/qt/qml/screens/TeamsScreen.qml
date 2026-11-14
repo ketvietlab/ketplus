@@ -2155,7 +2155,7 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Agent"
-                help: addMemberDialog.reviewer ? "A reviewer runs on Claude, the provider that keeps a review read-only."
+                help: addMemberDialog.reviewer ? "A reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access."
                                                : "The new conversation's provider, model and effort."
                 KetButton {
                     width: parent.width
@@ -2223,9 +2223,10 @@ Item {
         provider: planned ? planned.provider : addMemberDialog.agentProvider
         model: planned ? planned.model : addMemberDialog.agentModel
         effort: planned ? planned.effort : addMemberDialog.agentEffort
-        // A review must stay read-only, and Claude is the provider that enforces it (ADR 0067).
+        // Claude keeps a review read-only (ADR 0067). Codex reviews only when the team starts
+        // members with Full access (ketplus#295); the mock's team does not, so Claude only.
         onlyProvider: target === "reviewer" || (target === "" && addMemberDialog.reviewer) ? "claude" : ""
-        onlyReason: "A team's reviewer runs on Claude, the provider that keeps a review read-only."
+        onlyReason: "The reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access."
         onChosen: (provider, model, effort) => {
             if (target !== "") {
                 newTeamDialog.plan = newTeamDialog.withRole(target, { provider: provider, model: model, effort: effort })
@@ -2359,7 +2360,7 @@ Item {
                 width: parent.width
                 label: "Permissions"
                 help: Fixtures.permissionModes[teamPermission.currentIndex].description
-                      + ". The leader and the developers start with this; change it for one member in its conversation. The reviewer stays read-only."
+                      + ". The leader and the developers start with this; change it for one member in its conversation. A Claude reviewer stays read-only; a Codex reviewer needs Full access."
                 KetSelect {
                     id: teamPermission
                     width: parent.width

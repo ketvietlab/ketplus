@@ -290,10 +290,11 @@ Rectangle {
             checked: header.reviewer === text
             onTriggered: header.chooseReviewer(text)
         }
-        // As the app (ADR 0067): Codex cannot be held read only yet, so it cannot review.
+        // As the app (ADR 0067, ketplus#295): Codex reviews only with Full access, and a new
+        // reviewer starts read only, so a new Codex reviewer is listed but disabled.
         KetMenuItem {
             text: "Codex · GPT-5.6 Sol"
-            description: "Cannot review yet: Codex cannot be held read only"
+            description: "Codex can review only with Full access. Choose a Codex conversation with Full access below."
             iconName: "bot"
             enabled: false
         }

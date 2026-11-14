@@ -378,6 +378,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                                           const teams::Task& task) const override;
     [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team,
                                                const teams::Task& task) const override;
+    [[nodiscard]] std::optional<review_integrity::Scope>
+    teamReviewScope(const QString& reviewerSession, const QString& requestId) const override;
+    void teamReviewTampered(const QString& reviewerSession, const AgentMessageRecord& request,
+                            const QJsonArray& changes) override;
     void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                              const QString& text, const QString& failure) override;
     void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) override;

@@ -7,6 +7,7 @@
 
 #include <QCoreApplication>
 #include <QLabel>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -22,6 +23,11 @@ QVariantList modelsOf(const QVariantList& models, const QString& provider) {
             (provider != "copilot" || !value.toMap().value("permissions").toList().isEmpty()))
             result.append(value);
     return result;
+}
+
+bool providerEnabled(const QComboBox* providers, const int index) {
+    const auto* items = qobject_cast<const QStandardItemModel*>(providers->model());
+    return !items || !items->item(index) || items->item(index)->isEnabled();
 }
 
 QVariantMap entry(const QVariantList& models, const TeamAgent& agent) {
@@ -113,7 +119,7 @@ team_agents::Defaults team_agents::defaults(const QVariantList& models) {
 }
 
 TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& current,
-                                   const QString& lockedProvider, QWidget* parent)
+                                   const AgentChoice choice, QWidget* parent)
     : QWidget(parent), entries_(models), providers_(new ket::Select(this)),
       models_(new ket::Select(this)), efforts_(new ket::Select(this)) {
     auto* layout = new QVBoxLayout(this);
@@ -121,20 +127,35 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
     providers_->setObjectName(QStringLiteral("teamAgentProvider"));
     models_->setObjectName(QStringLiteral("teamAgentModel"));
     efforts_->setObjectName(QStringLiteral("teamAgentEffort"));
-    for (const QString& provider : team_agents::readyProviders(models))
-        if (lockedProvider.isEmpty() || provider == lockedProvider)
-            providers_->addItem(team_agents::providerLabel(provider), provider);
+    const QLatin1String claude(team_agents::reviewerProvider);
+    const QLatin1String codex(team_agents::fullAccessReviewerProvider);
+    for (const QString& provider : team_agents::readyProviders(models)) {
+        if (choice != AgentChoice::member && provider != claude && provider != codex)
+            continue;
+        providers_->addItem(team_agents::providerLabel(provider), provider);
+        // ketplus#295: listed, so the reviewer sees why it cannot be chosen.
+        if (choice == AgentChoice::reviewer && provider == codex)
+            if (auto* items = qobject_cast<QStandardItemModel*>(providers_->model()))
+                items->item(providers_->count() - 1)->setEnabled(false);
+    }
     QString help;
-    if (!lockedProvider.isEmpty()) {
-        providers_->setEnabled(false);
-        help = tr("The reviewer runs on Claude, the agent that keeps a review read-only.");
-        if (providers_->count() == 0)
+    if (choice != AgentChoice::member) {
+        providers_->setEnabled(choice == AgentChoice::fullAccessReviewer &&
+                               providers_->count() > 1);
+        help = choice == AgentChoice::fullAccessReviewer
+                   ? tr("Claude keeps a review read-only. Codex reviews with Full access; KetPlus "
+                        "checks the branch after each review.")
+                   : tr("The reviewer runs on Claude, which keeps a review read-only. Codex can "
+                        "review only with Full access.");
+        if (!hasChoice())
             help = tr("The reviewer needs Claude. Set up Claude in Settings → Agents.");
     }
     layout->addWidget(new ket::FieldRow(tr("Agent"), providers_, help, this));
     layout->addWidget(new ket::FieldRow(tr("Model"), models_, {}, this));
     layout->addWidget(new ket::FieldRow(tr("Effort"), efforts_, {}, this));
-    const int index = providers_->findData(current.provider);
+    int index = providers_->findData(current.provider);
+    if (index < 0 || !providerEnabled(providers_, index))
+        index = providers_->findData(claude);
     providers_->setCurrentIndex(index >= 0 ? index : 0);
     fillModels(current.model);
     fillEfforts(current.effort);
@@ -176,6 +197,13 @@ void TeamAgentChooser::fillEfforts(const QString& effort) {
     efforts_->setEnabled(efforts_->count() > 1);
 }
 
+bool TeamAgentChooser::hasChoice() const {
+    for (int index = 0; index < providers_->count(); ++index)
+        if (providerEnabled(providers_, index))
+            return true;
+    return false;
+}
+
 TeamAgent TeamAgentChooser::agent() const {
     return {providers_->currentData().toString(), models_->currentData().toString(),
             efforts_->currentData().toString()};
@@ -183,19 +211,19 @@ TeamAgent TeamAgentChooser::agent() const {
 
 ket::Dialog* TeamAgentChooser::present(QWidget* anchor, const QString& role,
                                        const QVariantList& models, const TeamAgent& current,
-                                       const QString& lockedProvider,
+                                       const AgentChoice choice,
                                        std::function<void(const TeamAgent&)> chosen) {
     auto* dialog = new ket::Dialog(tr("Model & context · %1").arg(role), anchor);
     dialog->setObjectName(QStringLiteral("teamAgentDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    auto* chooser = new TeamAgentChooser(models, current, lockedProvider);
+    auto* chooser = new TeamAgentChooser(models, current, choice);
     dialog->setBody(chooser);
     dialog->setCardWidth(420);
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     auto* use = dialog->addButton(tr("Use"), ket::ButtonVariant::Primary);
     use->setObjectName(QStringLiteral("teamAgentUse"));
-    use->setEnabled(chooser->providers()->count() > 0);
+    use->setEnabled(chooser->hasChoice());
     QObject::connect(use, &QAbstractButton::clicked, dialog,
                      [dialog, chooser, chosen = std::move(chosen)] {
                          chosen(chooser->agent());

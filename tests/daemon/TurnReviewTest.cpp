@@ -245,6 +245,137 @@ class TurnReviewTest final : public QObject {
         QCOMPARE(fixture.count(reviewer, "turn.completed"), 2);
     }
 
+    // ketplus#295: Codex may review only with Full access, checked when it is chosen and again
+    // when a review is requested or delivered.
+    void aCodexReviewerNeedsFullAccess() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString worktree = repository(fixture);
+        QVERIFY(!worktree.isEmpty());
+        const QString working = fixture.start("claude", "working", {}, worktree);
+        const QString asking = fixture.start("codex", "asking", {}, worktree);
+        const QString full = fixture.start("codex", "full", {}, worktree, "danger-full-access");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(asking, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(full, "turn.completed"), 1, 5000);
+        const QJsonObject lowered =
+            setReviewer(fixture, working, {{"reviewer_session_id", asking}});
+        QCOMPARE(lowered.value("error_code").toString(), "invalid_reviewer");
+        QCOMPARE(lowered.value("error_message").toString(),
+                 "Codex can review only with Full access.");
+        // A new reviewer starts read-only, so it cannot be Codex.
+        QCOMPARE(setReviewer(fixture, working, {{"new_provider", "codex"}})
+                     .value("error_message")
+                     .toString(),
+                 "Codex can review only with Full access.");
+        const QJsonObject chosen = setReviewer(fixture, working, {{"reviewer_session_id", full}});
+        QVERIFY2(chosen.value("ok").toBool(), qPrintable(text(chosen)));
+        // Lowered after it was chosen: the next turn gets no review.
+        QVERIFY(!fixture.start("codex", "lower", full, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(full, "turn.completed"), 2, 5000);
+        QVERIFY(write(worktree + "/README.md", "Lowered\n"));
+        QVERIFY(!fixture.start("claude", "Change it", working, worktree).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            lastNotice(fixture, working, "review_skipped").value("reason").toString() ==
+                "reviewer_unsupported",
+            10000);
+        QCOMPARE(fixture.count(full, "turn.completed"), 2);
+    }
+
+    // ketplus#295: a Codex review turn runs with the conversation's own Full access, and the
+    // daemon compares the worktree before and after it. A change voids the verdict.
+    void aCodexReviewIsCheckedAroundTheTurn_data() {
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<QString>("field");
+        QTest::newRow("unchanged") << QString{} << QString{};
+        QTest::newRow("new commit") << "git commit -qam tampered" << "head";
+        QTest::newRow("dirty worktree") << "echo dirty > dirty.txt" << "status";
+        QTest::newRow("switched branch") << "git checkout -q -b elsewhere" << "symbolic_ref";
+    }
+
+    void aCodexReviewIsCheckedAroundTheTurn() {
+        QFETCH(QString, action);
+        QFETCH(QString, field);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString worktree = repository(fixture);
+        QVERIFY(!worktree.isEmpty());
+        const QString working = fixture.start("claude", "working", {}, worktree);
+        const QString reviewer =
+            fixture.start("codex", "reviewer", {}, worktree, "danger-full-access");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
+        QVERIFY(setReviewer(fixture, working, {{"reviewer_session_id", reviewer}})
+                    .value("ok")
+                    .toBool());
+        QTest::qWait(300); // The baseline snapshot after assignment.
+        QVERIFY(write(worktree + "/README.md", "Base\nParser fix\n"));
+        if (!action.isEmpty())
+            QVERIFY(write(fixture.codexLog + ".review", action.toUtf8()));
+        QVERIFY(!fixture.start("claude", "Fix the parser", working, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 10000);
+        // Full access, with the review role in the prompt only.
+        const QByteArray log = logText(fixture.codexLog);
+        QVERIFY(log.contains("review-turn"));
+        const qsizetype last = log.lastIndexOf("turn-start:");
+        const QByteArray start = log.mid(last, log.indexOf('\n', last) - last);
+        QVERIFY2(start.contains("dangerFullAccess") && start.contains("\"never\""),
+                 start.constData());
+        const QJsonObject delivered = fixture.payloads(reviewer, "user.message").last();
+        QVERIFY(delivered.value("review_guard").toBool());
+        if (field.isEmpty()) {
+            QTRY_VERIFY_WITH_TIMEOUT(
+                lastNotice(fixture, working, "review_recorded").value("verdict").toString() ==
+                    "no_findings",
+                10000);
+            QVERIFY(lastNotice(fixture, working, "review_tampered").isEmpty());
+            return;
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!lastNotice(fixture, working, "review_tampered").isEmpty(), 10000);
+        const QJsonObject notice = lastNotice(fixture, working, "review_tampered");
+        bool named = false;
+        for (const QJsonValue& change : notice.value("changes").toArray())
+            named = named || change.toObject().value("field").toString() == field;
+        QVERIFY2(named, qPrintable(text(notice)));
+        QVERIFY(!notice.value("summary").toString().isEmpty());
+        // Not counted: no verdict was recorded, and nothing was reverted.
+        QTest::qWait(300);
+        QVERIFY(lastNotice(fixture, working, "review_recorded").isEmpty());
+        const auto request = fixture.journal->agentMessage(notice.value("message_id").toString());
+        QVERIFY(request);
+        QCOMPARE(request->state, "failed");
+        QCOMPARE(request->error, "review_tampered");
+        if (field == "status")
+            QVERIFY(QFileInfo::exists(worktree + "/dirty.txt"));
+    }
+
+    // The Claude guard is unchanged: a Claude review still runs read-only and is not checked.
+    void aClaudeReviewIsNotBranchChecked() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString worktree = repository(fixture);
+        QVERIFY(!worktree.isEmpty());
+        const QString working = fixture.start("claude", "working", {}, worktree);
+        const QString reviewer =
+            fixture.start("claude", "reviewer", {}, worktree, "danger-full-access");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
+        QVERIFY(setReviewer(fixture, working, {{"reviewer_session_id", reviewer}})
+                    .value("ok")
+                    .toBool());
+        QTest::qWait(300);
+        QVERIFY(write(worktree + "/README.md", "Base\nClaude\n"));
+        QVERIFY(!fixture.start("claude", "Fix it", working, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 10000);
+        const QByteArray log = logText(fixture.claudeLog);
+        bool readOnly = false;
+        for (const QByteArray& line : log.split('\n'))
+            if (line.startsWith("setup:") && line.contains("\"reviewGuard\": true"))
+                readOnly = line.contains("\"permission\": \"read-only\"");
+        QVERIFY2(readOnly, log.constData());
+        QVERIFY(!log.contains("KetPlus records the reviewed branch"));
+    }
+
     void aPendingReviewNeverJoinsTheReviewersOwnTurn() {
         Fixture fixture;
         QVERIFY(fixture.open());

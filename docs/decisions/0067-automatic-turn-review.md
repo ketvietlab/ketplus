@@ -45,15 +45,43 @@ tools other than `ketplus_agents`. Read, search and the agents server stay
 available. The user therefore cannot accidentally grant a reviewer write, push,
 merge or approve access from a prompt.
 
-Codex and Cursor are not reviewers. Codex 0.154 launches the browser MCP server
-for the whole app-server process with `default_tools_approval_mode = "approve"`,
-and `turn/start` has no per-turn control over MCP servers. A read-only sandbox
-would therefore still leave browser actions available. Cursor forwards permission
-prompts. Codex can return once a per-thread guard is verified with a live
-provider. Because a conversation can hand off to another provider after it was
-chosen, the broker checks the provider again when it asks for a review and when
-it delivers one. A reviewer that no longer enforces the guard gets no review:
-the request is skipped or fails with `reviewer_unsupported`.
+Cursor is not a reviewer: it forwards permission prompts.
+
+### Codex reviews with Full access (ketplus#295, 2026-11-14)
+
+Codex cannot be held read-only. Codex 0.154 launches the browser MCP server for the
+whole app-server process with `default_tools_approval_mode = "approve"`, and
+`turn/start` has no per-turn control over MCP servers, so a read-only sandbox would
+still leave browser actions available. Instead of a guard that does not hold, a Codex
+conversation may review only when its own stored `execution_policy` is `full`, and its
+review turns run with that Full access (`danger-full-access`, approval policy `never`).
+The review role ("build and test in a scratch copy; do not edit, commit, push, merge,
+approve or comment") is in the prompt only. A new reviewer starts read-only, so it is
+always Claude; a Codex reviewer is an existing Codex conversation with Full access. The
+refusal reads "Codex can review only with Full access.". Claude's guard is unchanged.
+
+The daemon checks the reviewed branch around each Codex review turn instead. Before the
+turn starts it records, off the event loop, for each review request: the reviewed
+worktree's HEAD, its symbolic ref and a SHA-256 of `git status --porcelain=v2
+--untracked-files=all`; for a team's task also its `head_commit` and the remote branch
+head (`git ls-remote origin <branch>`, best effort: a remote that does not answer is
+logged and not compared). After the turn ends, with any status, it records them again.
+If anything changed, the verdict does not count: the request fails with
+`review_tampered`, no review is recorded and no round is used, and the working
+conversation gets a `review_tampered` notice that lists each field before and after.
+Nothing is reverted. If nothing changed, the verdict counts as usual.
+
+Residual risk, accepted: the check sees only the reviewed worktree and branch. It does
+not detect what the reviewer does with the user's credentials elsewhere: pushes to other
+branches or repositories, `gh pr merge`, a pull request review or comment, browser
+actions (`ketplus_browser` approves itself under Codex), or reading or sending secrets.
+A pull request merged that way shows up later on the board, not as a tamper notice. A
+change the working conversation itself makes while the review runs also voids it.
+
+Because a conversation can hand off to another provider or lower its policy after it
+was chosen, the broker checks provider and policy again when it asks for a review and
+when it delivers one. A reviewer that no longer qualifies gets no review: the request
+is skipped or fails with `reviewer_unsupported`.
 
 The guard applies only to review requests, and a review request runs only in such
 a turn. A queued review waits for the reviewer's next own turn rather than joining

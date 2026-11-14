@@ -86,13 +86,13 @@ struct Fixture final {
     }
 
     QString start(const QString& provider, const QString& prompt, const QString& sessionId = {},
-                  const QString& worktree = {}) {
+                  const QString& worktree = {},
+                  const QString& permission = QStringLiteral("workspace-write")) {
         const QJsonObject result = host->handleCommand(
             request("session.start_turn",
                     {{"worktree_path", worktree.isEmpty() ? directory.path() : worktree},
                      {"prompt", prompt},
-                     {"options",
-                      QJsonObject{{"provider", provider}, {"permission", "workspace-write"}}}},
+                     {"options", QJsonObject{{"provider", provider}, {"permission", permission}}}},
                     sessionId, sessionId.isEmpty() ? -1 : 1),
             "desktop-test");
         return result.value("ok").toBool() ? result.value("session_id").toString() : QString{};

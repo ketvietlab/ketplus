@@ -258,7 +258,8 @@ QString agentMessageStateText(const QJsonObject& data) {
         if (reason == QStringLiteral("reviewer_busy"))
             return QStringLiteral("No review: the reviewer was busy with another turn.");
         if (reason == QStringLiteral("reviewer_unsupported"))
-            return QStringLiteral("No review: only a Claude conversation can review turns.");
+            return QStringLiteral(
+                "No review: only Claude, or Codex with Full access, can review turns.");
         if (reason == QStringLiteral("snapshot_failed"))
             return QStringLiteral("No review: KetPlus could not read this turn's changes. The "
                                   "next review includes them.");
@@ -332,8 +333,14 @@ QString agentMessageStateText(const QJsonObject& data) {
     if (reason == QStringLiteral("no_reply"))
         return QStringLiteral("%1 finished without a reply.").arg(peer);
     if (reason == QStringLiteral("reviewer_unsupported"))
-        return QStringLiteral("%1 no longer runs on Claude, so it did not review this turn.")
+        return QStringLiteral("%1 can no longer review (Claude, or Codex with Full access), so it "
+                              "did not review this turn.")
             .arg(named);
+    // ketplus#295: the daemon compared the branch before and after a Codex review.
+    if (state == QStringLiteral("review_tampered"))
+        return QStringLiteral("%1 changed the branch during its review, so the review does not "
+                              "count: %2. Nothing was reverted.")
+            .arg(named, data.value("summary").toString());
     if (reason.startsWith(QStringLiteral("turn_")))
         return QStringLiteral("%1 stopped before replying (%2).").arg(peer, reason.mid(5));
     return (outgoing ? QStringLiteral("Message to %1 failed: %2")
