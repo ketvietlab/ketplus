@@ -15,8 +15,10 @@
 #include "KetTokens.h"
 #include "Schedule.h"
 
+#include <QFrame>
 #include <QLabel>
 #include <QPalette>
+#include <QScrollArea>
 #include <QTextEdit>
 #include <QTimeZone>
 #include <QVBoxLayout>
@@ -88,10 +90,12 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     if (teamStart_)
         promptRow_->setHelp(tr("A team start has no prompt."));
     column->addWidget(promptRow_);
+    // A word-wrapped note with no width reports a huge height and the card then
+    // squeezes every field until its bottom border disappears. Keep one reserved line.
     promptNote_ = new QLabel(body);
     promptNote_->setObjectName(QStringLiteral("schedulePromptError"));
-    promptNote_->setWordWrap(true);
-    promptNote_->hide();
+    promptNote_->setFixedHeight(qRound(ket::Appearance::instance().scaled(20)));
+    promptNote_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     column->addWidget(promptNote_);
 
     repeat_ = new ket::SegmentedControl(
@@ -177,7 +181,18 @@ ScheduleEditor::ScheduleEditor(ScheduleClient* client, const QJsonObject& schedu
     summary_->setWordWrap(true);
     column->addWidget(summary_);
 
-    dialog_->setBody(body);
+    // The card cannot grow past the window. A squeezed column clips the bottom
+    // border of every field, so the form keeps its height and scrolls instead.
+    body->adjustSize();
+    const int natural = body->sizeHint().height();
+    body->setMinimumHeight(natural);
+    auto* scroll = new QScrollArea;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setMinimumHeight(natural);
+    scroll->setWidget(body);
+    dialog_->setBody(scroll);
     auto* cancel = dialog_->addButton(tr("Cancel"));
     connect(cancel, &QAbstractButton::clicked, dialog_, &ket::Dialog::reject);
     auto* save = dialog_->addButton(tr("Save"), ket::ButtonVariant::Primary);
@@ -307,13 +322,19 @@ void ScheduleEditor::showIssue(const QString& code, const QString& message, cons
     const bool promptError = resolved == QLatin1String("prompt") && !message.isEmpty();
     prompt_->setInvalid(promptError);
     promptNote_->setText(promptError ? message : QString{});
-    promptNote_->setVisible(promptError);
     if (promptError) {
         QPalette palette = promptNote_->palette();
         const QColor danger = ket::Tokens::color(u"danger", ket::Appearance::instance().theme());
         for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
             palette.setColor(group, QPalette::WindowText, danger);
         promptNote_->setPalette(palette);
+    }
+    if (QWidget* form = promptNote_->parentWidget()) {
+        form->setMinimumHeight(0);
+        const int natural = form->sizeHint().height();
+        form->setMinimumHeight(natural);
+        if (auto* scroll = qobject_cast<QScrollArea*>(form->parentWidget()->parentWidget()))
+            scroll->setMinimumHeight(natural);
     }
     const bool banner = !message.isEmpty() && resolved.isEmpty();
     banner_->setText(banner ? message : QString{});

@@ -12,12 +12,14 @@
 #include "KetTextArea.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "KetTokens.h"
 
 #include <algorithm>
 
 #include <QLabel>
 #include <QLayout>
 #include <QListWidget>
+#include <QPainter>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -33,15 +35,7 @@ class ScheduleRow final : public QWidget {
 
     ScheduleRow(const QJsonObject& schedule, const QJsonObject& latest, const bool selected,
                 QWidget* parent)
-        : QWidget(parent) {
-        if (selected) {
-            setAutoFillBackground(true);
-            QPalette wash = palette();
-            QColor accent = wash.color(QPalette::Highlight);
-            accent.setAlpha(40);
-            wash.setColor(QPalette::Window, accent);
-            setPalette(wash);
-        }
+        : QWidget(parent), selected_(selected) {
         auto* row = new QHBoxLayout(this);
         row->setContentsMargins(scaled(12), scaled(8), scaled(12), scaled(8));
         row->setSpacing(scaled(8));
@@ -93,6 +87,19 @@ class ScheduleRow final : public QWidget {
         row->addLayout(text, 1);
         row->addWidget(enabled, 0, Qt::AlignTop);
     }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        const auto theme = ket::Appearance::instance().theme();
+        if (selected_)
+            painter.fillRect(rect(), ket::Tokens::color(u"nav-selected", theme));
+        painter.setPen(ket::Tokens::color(u"panel-border", theme));
+        painter.drawLine(0, height() - 1, width() - 1, height() - 1);
+    }
+
+  private:
+    bool selected_{false};
 };
 
 void clearLayout(QLayout* layout) {
