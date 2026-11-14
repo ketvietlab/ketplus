@@ -1,5 +1,6 @@
 #include "agents/AgentSchedule.h"
 
+#include "runtime/ScheduleFromRecord.h"
 #include "schedule/ScheduleRule.h"
 #include "storage/LocalJournal.h"
 #include "storage/ScheduleRecord.h"
@@ -41,26 +42,9 @@ bool zoned(const QString& text) {
 }
 
 QJsonObject document(const ScheduleRecord& record) {
-    ketplus::schedule::Schedule schedule;
-    schedule.id = record.id;
-    schedule.name = record.name;
-    schedule.enabled = record.enabled;
-    schedule.prompt = record.prompt;
-    schedule.target.kind = ketplus::schedule::TargetKind::Conversation;
-    schedule.target.sessionId = record.target.sessionId;
-    schedule.rule = record.ruleJson;
-    schedule.busyPolicy = record.busyPolicy == QLatin1String("skip")
-                              ? ketplus::schedule::BusyPolicy::Skip
-                              : ketplus::schedule::BusyPolicy::Queue;
-    schedule.missedPolicy = record.missedPolicy == QLatin1String("skip")
-                                ? ketplus::schedule::MissedPolicy::Skip
-                                : ketplus::schedule::MissedPolicy::RunOnce;
-    schedule.createdBy = record.createdBy;
-    schedule.createdAt = record.createdAt;
-    schedule.updatedAt = record.updatedAt;
-    schedule.nextRunAt = record.nextRunAt;
-    schedule.lastRunAt = record.lastRunAt;
-    return ketplus::schedule::toJson(schedule);
+    ketplus::schedule::Failure failure;
+    const auto schedule = scheduleFromRecord(record, &failure);
+    return schedule ? ketplus::schedule::toJson(*schedule) : QJsonObject{};
 }
 
 } // namespace
@@ -125,7 +109,8 @@ QJsonObject createAgentSchedule(LocalJournal& journal, const QString& sessionId,
             return failed(ketplus::schedule::invalidPayloadCode,
                           QStringLiteral("at must be an ISO-8601 timestamp with a UTC offset."));
     }
-    const QDateTime earliest = now.toUTC().addSecs(minimumLeadMinutes * 60);
+    // The once rule fires on the minute, so the one-minute lead is a whole minute too.
+    const QDateTime earliest = minute(now).addSecs(minimumLeadMinutes * 60);
     const QDateTime latest = now.toUTC().addDays(maximumLeadDays);
     if (fire < earliest)
         return failed(tooSoonCode, QStringLiteral("A schedule must be at least 1 minute ahead."));

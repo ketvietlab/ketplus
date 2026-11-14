@@ -1,50 +1,14 @@
 #include "runtime/SessionHost.h"
 
 #include "protocol/ScheduleProtocol.h"
+#include "runtime/ScheduleFromRecord.h"
 
 #include <QUuid>
 
 namespace ketplus::daemon {
-namespace {
 
-QJsonObject failed(const QString& code, const QString& message) {
-    return {{QStringLiteral("ok"), false},
-            {QStringLiteral("error_code"), code},
-            {QStringLiteral("error_message"), message}};
-}
-
-QJsonObject failed(const schedule::Failure& failure) {
-    return failed(failure.code, failure.message);
-}
-
-ScheduleRecord toRecord(const schedule::Schedule& schedule) {
-    ScheduleRecord record;
-    record.id = schedule.id;
-    record.name = schedule.name;
-    record.enabled = schedule.enabled;
-    record.prompt = schedule.prompt;
-    record.ruleJson = schedule.rule;
-    record.busyPolicy = schedule::nameOf(schedule.busyPolicy);
-    record.missedPolicy = schedule::nameOf(schedule.missedPolicy);
-    record.createdBy = schedule.createdBy;
-    record.createdAt = schedule.createdAt;
-    record.updatedAt = schedule.updatedAt;
-    record.nextRunAt = schedule.nextRunAt;
-    record.lastRunAt = schedule.lastRunAt;
-    record.target.kind = schedule::nameOf(schedule.target.kind);
-    record.target.sessionId = schedule.target.sessionId;
-    record.target.teamId = schedule.target.teamId;
-    record.target.workspacePath = schedule.target.workspace;
-    record.target.provider = schedule.target.provider;
-    record.target.model = schedule.target.model;
-    record.target.effort = schedule.target.effort;
-    record.target.isolatedWorktree = schedule.target.isolatedWorktree;
-    record.target.titleTemplate = schedule.target.titleTemplate;
-    return record;
-}
-
-std::optional<schedule::Schedule> fromRecord(const ScheduleRecord& record,
-                                             schedule::Failure* failure) {
+std::optional<schedule::Schedule> scheduleFromRecord(const ScheduleRecord& record,
+                                                     schedule::Failure* failure) {
     schedule::Schedule schedule;
     const auto kind = schedule::targetKindFromName(record.target.kind);
     if (!kind) {
@@ -85,6 +49,44 @@ std::optional<schedule::Schedule> fromRecord(const ScheduleRecord& record,
     schedule.status = record.status;
     // Re-check the stored document with the shared parser so a bad row is not sent.
     return schedule::scheduleFromJson(schedule::toJson(schedule), failure);
+}
+
+namespace {
+
+QJsonObject failed(const QString& code, const QString& message) {
+    return {{QStringLiteral("ok"), false},
+            {QStringLiteral("error_code"), code},
+            {QStringLiteral("error_message"), message}};
+}
+
+QJsonObject failed(const schedule::Failure& failure) {
+    return failed(failure.code, failure.message);
+}
+
+ScheduleRecord toRecord(const schedule::Schedule& schedule) {
+    ScheduleRecord record;
+    record.id = schedule.id;
+    record.name = schedule.name;
+    record.enabled = schedule.enabled;
+    record.prompt = schedule.prompt;
+    record.ruleJson = schedule.rule;
+    record.busyPolicy = schedule::nameOf(schedule.busyPolicy);
+    record.missedPolicy = schedule::nameOf(schedule.missedPolicy);
+    record.createdBy = schedule.createdBy;
+    record.createdAt = schedule.createdAt;
+    record.updatedAt = schedule.updatedAt;
+    record.nextRunAt = schedule.nextRunAt;
+    record.lastRunAt = schedule.lastRunAt;
+    record.target.kind = schedule::nameOf(schedule.target.kind);
+    record.target.sessionId = schedule.target.sessionId;
+    record.target.teamId = schedule.target.teamId;
+    record.target.workspacePath = schedule.target.workspace;
+    record.target.provider = schedule.target.provider;
+    record.target.model = schedule.target.model;
+    record.target.effort = schedule.target.effort;
+    record.target.isolatedWorktree = schedule.target.isolatedWorktree;
+    record.target.titleTemplate = schedule.target.titleTemplate;
+    return record;
 }
 
 std::optional<qint64> canonicalTeamId(const QString& text) {
@@ -170,7 +172,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
             return journalError({});
         QList<schedule::Schedule> schedules;
         for (const ScheduleRecord& record : *records) {
-            const auto schedule = fromRecord(record, &failure);
+            const auto schedule = scheduleFromRecord(record, &failure);
             if (!schedule)
                 return failed(failure);
             schedules.append(*schedule);
@@ -188,7 +190,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!record)
             return failed(QString::fromLatin1(protocol::scheduleNotFoundCode),
                           QStringLiteral("Schedule was not found."));
-        const auto schedule = fromRecord(*record, &failure);
+        const auto schedule = scheduleFromRecord(*record, &failure);
         if (!schedule)
             return failed(failure);
         return protocol::scheduleDocumentResult(*schedule);
@@ -214,7 +216,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
             return failed(failure);
         if (!record)
             return journalError(QStringLiteral("The schedule was not stored."));
-        const auto schedule = fromRecord(*record, &failure);
+        const auto schedule = scheduleFromRecord(*record, &failure);
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleCreatedChange), *schedule);
@@ -232,7 +234,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!record)
             return failed(QString::fromLatin1(protocol::scheduleNotFoundCode),
                           QStringLiteral("Schedule was not found."));
-        auto merged = fromRecord(*record, &failure);
+        auto merged = scheduleFromRecord(*record, &failure);
         if (!merged)
             return failed(failure);
         if (update->name)
@@ -271,7 +273,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
             return failed(failure);
         if (!stored)
             return journalError(QStringLiteral("The schedule was not stored."));
-        const auto schedule = fromRecord(*stored, &failure);
+        const auto schedule = scheduleFromRecord(*stored, &failure);
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
@@ -289,7 +291,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
         if (!record)
             return failed(QString::fromLatin1(protocol::scheduleNotFoundCode),
                           QStringLiteral("Schedule was not found."));
-        const auto schedule = fromRecord(*record, &failure);
+        const auto schedule = scheduleFromRecord(*record, &failure);
         if (!schedule)
             return failed(failure);
         QString error;
@@ -324,7 +326,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
             return failed(failure);
         if (!stored)
             return journalError(QStringLiteral("The schedule was not stored."));
-        const auto schedule = fromRecord(*stored, &failure);
+        const auto schedule = scheduleFromRecord(*stored, &failure);
         if (!schedule)
             return failed(failure);
         changed(QString::fromLatin1(protocol::scheduleUpdatedChange), *schedule);
@@ -364,7 +366,7 @@ QJsonObject SessionHost::scheduleCommand(const QString& type, const QJsonObject&
 
 void SessionHost::publishScheduleChange(const QString& change, const ScheduleRecord& record) {
     schedule::Failure failure;
-    const auto schedule = fromRecord(record, &failure);
+    const auto schedule = scheduleFromRecord(record, &failure);
     if (!schedule)
         return;
     emit scheduleEvent(QString::fromLatin1(protocol::scheduleChangedEvent),

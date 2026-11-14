@@ -1,6 +1,12 @@
 #include "agents/AgentSchedule.h"
+#include "protocol/DaemonProtocol.h"
+#include "protocol/ScheduleProtocol.h"
+#include "providers/CodexAdapter.h"
+#include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 
+#include <QJsonDocument>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -39,7 +45,9 @@ class AgentScheduleTest final : public QObject {
   private slots:
     void createsListsAndCancelsOnlyItsOwn();
     void rejectsTheLeadTheLimitAndExtraFields();
+    void oneMinuteLeadIgnoresTheSeconds();
     void archiveDisablesWithoutDeletingTheTarget();
+    void brokerCreateArmsTheRunnerAndArchiveKeepsPolicies();
 };
 
 void AgentScheduleTest::createsListsAndCancelsOnlyItsOwn() {
@@ -121,6 +129,29 @@ void AgentScheduleTest::rejectsTheLeadTheLimitAndExtraFields() {
              QStringLiteral("schedule_limit"));
 }
 
+void AgentScheduleTest::oneMinuteLeadIgnoresTheSeconds() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite")));
+    QVERIFY(journal.isOpen());
+    const QDateTime now =
+        QDateTime::fromString(QStringLiteral("2026-11-14T08:00:30Z"), Qt::ISODate);
+    const auto code = [&](const QJsonObject& payload) {
+        return agent_schedule::createAgentSchedule(journal, QStringLiteral("sess-1"), payload, now)
+            .value(QStringLiteral("error_code"))
+            .toString();
+    };
+    QCOMPARE(code({{QStringLiteral("prompt"), QStringLiteral("In a minute")},
+                   {QStringLiteral("inMinutes"), 1}}),
+             QString{});
+    QCOMPARE(code({{QStringLiteral("prompt"), QStringLiteral("At the same minute")},
+                   {QStringLiteral("at"), QStringLiteral("2026-11-14T08:01:30Z")}}),
+             QString{});
+    QCOMPARE(code({{QStringLiteral("prompt"), QStringLiteral("This minute")},
+                   {QStringLiteral("at"), QStringLiteral("2026-11-14T08:00:30Z")}}),
+             QStringLiteral("too_soon"));
+}
+
 void AgentScheduleTest::archiveDisablesWithoutDeletingTheTarget() {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -140,6 +171,71 @@ void AgentScheduleTest::archiveDisablesWithoutDeletingTheTarget() {
     QVERIFY(stored.has_value());
     QVERIFY(!stored->enabled);
     QVERIFY(stored->status.isEmpty());
+}
+
+void AgentScheduleTest::brokerCreateArmsTheRunnerAndArchiveKeepsPolicies() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite")));
+    QVERIFY(journal.isOpen());
+    StoredSession session;
+    session.id = QStringLiteral("sess-1");
+    session.state = QStringLiteral("ready");
+    session.adapter = QStringLiteral("codex");
+    session.worktreePath = dir.path();
+    QVERIFY(journal.upsertSession(session));
+    CodexAdapter adapter(dir.filePath(QStringLiteral("never-start-provider")));
+    SessionHost host(&journal, &adapter);
+    QSignalSpy events(&host, &SessionHost::scheduleEvent);
+    QVERIFY(!host.scheduleAlarmArmed());
+
+    const QString token = host.agentToken(session.id);
+    QVERIFY(!token.isEmpty());
+    const QJsonObject created =
+        host.handleAgentCommand(token, QStringLiteral("agents.schedule_create"),
+                                {{QStringLiteral("prompt"), QStringLiteral("Check the build")},
+                                 {QStringLiteral("inMinutes"), 60}});
+    QVERIFY2(created.value(QStringLiteral("ok")).toBool(),
+             qPrintable(created.value(QStringLiteral("error_message")).toString()));
+    const QString id =
+        created.value(QStringLiteral("schedule")).toObject().value(QStringLiteral("id")).toString();
+    QVERIFY(host.scheduleAlarmArmed());
+    QCOMPARE(events.count(), 1);
+    QCOMPARE(events.at(0).at(0).toString(), QString::fromLatin1(protocol::scheduleChangedEvent));
+    QCOMPARE(events.at(0).at(1).toJsonObject().value(QStringLiteral("change")).toString(),
+             QStringLiteral("created"));
+
+    auto stored = journal.schedule(id);
+    QVERIFY(stored.has_value());
+    stored->busyPolicy = QStringLiteral("skip");
+    stored->missedPolicy = QStringLiteral("skip");
+    QString error;
+    QVERIFY(journal.updateSchedule(*stored, &error));
+
+    const QJsonObject archived = host.handleCommand(
+        {{QStringLiteral("protocol_version"), protocol::currentVersion},
+         {QStringLiteral("message_id"), QStringLiteral("archive-1")},
+         {QStringLiteral("message_type"), QStringLiteral("session.set_archived")},
+         {QStringLiteral("sent_at"), QStringLiteral("2026-11-14T08:00:00.000Z")},
+         {QStringLiteral("session_id"), session.id},
+         {QStringLiteral("session_generation"), session.generation},
+         {QStringLiteral("payload"), QJsonObject{{QStringLiteral("archived"), true}}}},
+        QStringLiteral("desktop-test"));
+    QVERIFY2(archived.value(QStringLiteral("ok")).toBool(),
+             qPrintable(QJsonDocument(archived).toJson(QJsonDocument::Compact)));
+    const auto disabled = journal.schedule(id);
+    QVERIFY(disabled.has_value());
+    QVERIFY(!disabled->enabled);
+    QCOMPARE(disabled->busyPolicy, QStringLiteral("skip"));
+    QCOMPARE(disabled->status, QString{});
+    QCOMPARE(events.count(), 2);
+    const QJsonObject changed = events.at(1).at(1).toJsonObject();
+    QCOMPARE(changed.value(QStringLiteral("change")).toString(), QStringLiteral("updated"));
+    const QJsonObject body = changed.value(QStringLiteral("schedule")).toObject();
+    QCOMPARE(body.value(QStringLiteral("busy_policy")).toString(), QStringLiteral("skip"));
+    QCOMPARE(body.value(QStringLiteral("missed_policy")).toString(), QStringLiteral("skip"));
+    QVERIFY(!body.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!host.scheduleAlarmArmed());
 }
 
 QTEST_MAIN(AgentScheduleTest)

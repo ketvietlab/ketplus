@@ -2,6 +2,7 @@
 
 #include "agents/AgentSchedule.h"
 #include "protocol/ScheduleProtocol.h"
+#include "runtime/ScheduleFromRecord.h"
 #include "storage/LocalJournal.h"
 
 #include <QDateTime>
@@ -36,6 +37,9 @@ QJsonObject SessionHost::agentSchedule(const QString& sessionId, const QString& 
                                                      ? QStringLiteral("created")
                                                      : QStringLiteral("deleted"),
                                                  *document));
+        // The runner may already have disarmed. A new or removed schedule has to re-arm it,
+        // or the only schedule never fires and a nearer one waits for the old alarm.
+        noteSchedulesChanged();
     }
     return result;
 }
@@ -46,22 +50,15 @@ void SessionHost::disableAgentSchedules(const QString& sessionId) {
         const auto record = journal_->schedule(id);
         if (!record)
             continue;
-        ::ketplus::schedule::Schedule schedule;
-        schedule.id = record->id;
-        schedule.name = record->name;
-        schedule.enabled = record->enabled;
-        schedule.prompt = record->prompt;
-        schedule.target.kind = ::ketplus::schedule::TargetKind::Conversation;
-        schedule.target.sessionId = record->target.sessionId;
-        schedule.rule = record->ruleJson;
-        schedule.createdBy = record->createdBy;
-        schedule.createdAt = record->createdAt;
-        schedule.updatedAt = record->updatedAt;
-        schedule.nextRunAt = record->nextRunAt;
-        schedule.lastRunAt = record->lastRunAt;
+        ::ketplus::schedule::Failure failure;
+        const auto schedule = scheduleFromRecord(*record, &failure);
+        if (!schedule)
+            continue;
         emit scheduleEvent(QString::fromLatin1(protocol::scheduleChangedEvent),
-                           protocol::scheduleChangedPayload(QStringLiteral("updated"), schedule));
+                           protocol::scheduleChangedPayload(QStringLiteral("updated"), *schedule));
     }
+    if (!ids.isEmpty())
+        noteSchedulesChanged();
 }
 
 } // namespace ketplus::daemon

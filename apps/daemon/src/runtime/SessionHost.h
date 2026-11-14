@@ -126,6 +126,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void handleAgentCommandDeferred(const QString& token, const QString& type,
                                     const QJsonObject& payload, CommandCallback done);
     [[nodiscard]] QString agentToken(const QString& sessionId);
+    // True while the schedule runner is waiting for its next fire.
+    [[nodiscard]] bool scheduleAlarmArmed() const;
 
   signals:
     void eventReady(const QJsonObject& event);
