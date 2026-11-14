@@ -1264,7 +1264,7 @@ Item {
                         visible: screen.shownTasks.length === 0
                         width: parent.width
                         iconName: "filter"
-                        title: screen.copy("No task is ") + (screen.filter ? screen.states[screen.filter].label.toLowerCase() : "here")
+                        title: screen.copy("No task is ") + (screen.filter ? screen.states[screen.filter].label.toLowerCase() : screen.copy("here"))
                         actionText: screen.copy("Show all tasks")
                         onActionTriggered: screen.filter = ""
                     }

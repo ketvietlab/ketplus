@@ -958,5 +958,9 @@
             <source>at</source>
             <translation>lúc</translation>
         </message>
+        <message>
+            <source>here</source>
+            <translation>ở đây</translation>
+        </message>
     </context>
 </TS>
