@@ -71,6 +71,7 @@ class QtScheduleAlarm final : public ScheduleAlarm {
 
     void arm(std::chrono::milliseconds delay) override;
     void disarm() override;
+    [[nodiscard]] bool armed() const;
 
   private:
     struct Timer;

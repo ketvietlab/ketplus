@@ -958,7 +958,7 @@ class AgentMessagingTest final : public QObject {
                 .toObject()
                 .value("tools")
                 .toArray();
-        QCOMPARE(tools.size(), 6); // with work_report and request_user_decision
+        QCOMPARE(tools.size(), 9); // work_report, request_user_decision and schedule_*
         const QJsonObject whoami = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"},
              {"id", 3},
@@ -994,6 +994,23 @@ class AgentMessagingTest final : public QObject {
                  -32602);
         // tools/list asks whoami whether to add the team tools (ADR 0114).
         QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send"}));
+        const auto callSchedule = [&](int id, const QString& name, const QJsonObject& arguments) {
+            agent_mcp::handleMessage(
+                {{"jsonrpc", "2.0"},
+                 {"id", id},
+                 {"method", "tools/call"},
+                 {"params", QJsonObject{{"name", name}, {"arguments", arguments}}}},
+                call);
+        };
+        callSchedule(6, QStringLiteral("schedule_create"),
+                     {{QStringLiteral("prompt"), QStringLiteral("Check")},
+                      {QStringLiteral("inMinutes"), 1}});
+        callSchedule(7, QStringLiteral("schedule_list"), {});
+        callSchedule(8, QStringLiteral("schedule_cancel"),
+                     {{QStringLiteral("id"), QStringLiteral("sched-1")}});
+        QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send",
+                                          "agents.schedule_create", "agents.schedule_list",
+                                          "agents.schedule_cancel"}));
     }
 };
 

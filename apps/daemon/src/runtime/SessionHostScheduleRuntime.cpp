@@ -298,6 +298,10 @@ void SessionHost::noteSchedulesChanged() {
         scheduleEngine_->runner.schedulesChanged();
 }
 
+bool SessionHost::scheduleAlarmArmed() const {
+    return scheduleEngine_ != nullptr && scheduleEngine_->alarm.armed();
+}
+
 void SessionHost::noteScheduleClockChanged() {
     if (scheduleEngine_ != nullptr)
         scheduleEngine_->runner.noteClockChanged();
