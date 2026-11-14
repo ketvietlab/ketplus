@@ -6,6 +6,7 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 import "../schedules/ScheduleSamples.js" as ScheduleSamples
+import "../parts/TeamLanguageChecks.js" as TeamLanguageChecks
 
 // Teams (concept): several conversations with one goal. The page answers, in order, what waits
 // for the user, who is on the team and what each member holds, and where every task stands.
@@ -24,25 +25,25 @@ Item {
     property var handover: null
 
     readonly property var states: ({
-        todo: { label: "To do", tone: KetTheme.BadgeTone.Neutral },
-        doing: { label: "In progress", tone: KetTheme.BadgeTone.Accent },
-        review: { label: "In review", tone: KetTheme.BadgeTone.Info },
+        todo: { label: copy("To do"), tone: KetTheme.BadgeTone.Neutral },
+        doing: { label: copy("In progress"), tone: KetTheme.BadgeTone.Accent },
+        review: { label: copy("In review"), tone: KetTheme.BadgeTone.Info },
         // Passed review with every criterion met; waits for whoever merges (#463).
-        ready: { label: "Ready to merge", tone: KetTheme.BadgeTone.Success },
-        blocked: { label: "Blocked", tone: KetTheme.BadgeTone.Warning },
-        done: { label: "Done", tone: KetTheme.BadgeTone.Success }
+        ready: { label: copy("Ready to merge"), tone: KetTheme.BadgeTone.Success },
+        blocked: { label: copy("Blocked"), tone: KetTheme.BadgeTone.Warning },
+        done: { label: copy("Done"), tone: KetTheme.BadgeTone.Success }
     })
     readonly property var filters: ["", "doing", "review", "ready", "blocked", "done"]
     readonly property var roles: ({
-        leader: { label: "Leader · Requirements", tone: KetTheme.BadgeTone.Accent },
-        developer: { label: "Developer", tone: KetTheme.BadgeTone.Neutral },
-        reviewer: { label: "Reviewer", tone: KetTheme.BadgeTone.Info }
+        leader: { label: copy("Leader · Requirements"), tone: KetTheme.BadgeTone.Accent },
+        developer: { label: copy("Developer"), tone: KetTheme.BadgeTone.Neutral },
+        reviewer: { label: copy("Reviewer"), tone: KetTheme.BadgeTone.Info }
     })
     readonly property var memberStates: ({
-        working: { label: "Working", color: KetTheme.t.accentText },
-        waiting: { label: "Waiting for review", color: KetTheme.t.textSecondary },
-        blocked: { label: "Blocked", color: KetTheme.t.warning },
-        idle: { label: "Idle", color: KetTheme.t.textMuted }
+        working: { label: copy("Working"), color: KetTheme.t.accentText },
+        waiting: { label: copy("Waiting for review"), color: KetTheme.t.textSecondary },
+        blocked: { label: copy("Blocked"), color: KetTheme.t.warning },
+        idle: { label: copy("Idle"), color: KetTheme.t.textMuted }
     })
 
     readonly property var members: team ? team.members : []
@@ -63,7 +64,7 @@ Item {
     function gb(value) { return value.toFixed(1) + " GB" }
     readonly property var scheduledUpdates: team && window.scheduleStore.find("web")
         && window.scheduleStore.find("web").teamId === team.id
-        ? [{ icon: "clock", text: "Scheduled run: Daily website article → leader", detail: "Schedule · @agent/4821", when: "08:00" }] : []
+        ? [{ icon: "clock", text: copy("Scheduled run: Daily website article → leader"), detail: copy("Schedule · @agent/4821"), when: "08:00" }] : []
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
     readonly property var leader: members.find(m => m.role === "leader") || null
@@ -79,18 +80,39 @@ Item {
     // Hides the secondary columns when the page is narrow.
     readonly property bool wide: content.width >= px(860)
 
+    function copy(source) { return Mock.teamText(screen.teamLanguage, source) }
+    property bool languageCheckDone: true
+    property var languageProblems: []
+    function startLanguageChecks() {
+        languageCheckDone = false
+        TeamLanguageChecks.run(screen, problems => {
+            languageProblems = problems
+            languageCheckDone = true
+        })
+    }
+
+    function whenText(value) {
+        if (value === "Just now") return copy("Just now")
+        if (value.indexOf("Today, ") === 0) return copy("Today, %1").arg(value.slice(7))
+        let match = /^(\d+) min ago$/.exec(value)
+        if (match) return copy("%1 min ago").arg(match[1])
+        match = /^(\d+) hours? ago$/.exec(value)
+        if (match) return (Number(match[1]) === 1 ? copy("%1 hour ago") : copy("%1 hours ago")).arg(match[1])
+        return value
+    }
+
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    function reference(number) { return number ? "@agent/" + number : "Unassigned" }
+    function reference(number) { return number ? "@agent/" + number : copy("Unassigned") }
     function member(number) { return members.find(m => m.number === number) || null }
-    function count(n, one, many) { return n + " " + (n === 1 ? one : many) }
+    function count(n, one, many) { return n + " " + copy(n === 1 ? one : many) }
     // T-23: what a reviewer reviews now and what waits for it.
     function reviewingText(reviewer) {
-        return reviewer.reviewing ? "Reviewing " + reviewer.reviewing
-             : (reviewer.reviews || []).length > 0 ? "Reviews " + reviewer.reviews.join(", ") : "Reviews every lane"
+        return reviewer.reviewing ? copy("Reviewing %1").arg(reviewer.reviewing)
+             : (reviewer.reviews || []).length > 0 ? copy("Reviews %1").arg(reviewer.reviews.join(", ")) : copy("Reviews every lane")
     }
     function queueText(reviewer) {
         const queue = reviewer.queue || []
-        return queue.length === 0 ? "Nothing queued" : "Queued: " + queue.join(", ")
+        return queue.length === 0 ? copy("Nothing queued") : copy("Queued: %1").arg(queue.join(", "))
     }
 
     // Replaces the current team with a changed copy, so every binding follows.
@@ -111,11 +133,14 @@ Item {
     // `teams/ready`: the user merges, and T-1 passed review: "Merge T-1?" waits for the user.
     // `teams/paused`: the team used its automatic turns and waits for the user to go on.
     function showState(state) {
+        const vietnamese = state === "vi" || state.indexOf("vi-") === 0
+        if (vietnamese) state = state === "vi" ? "" : state.slice(3)
         teams = state === "empty" ? [] : Fixtures.teams.concat([ScheduleSamples.waitingTeam(Fixtures.teams[0])])
         // `teams/live`: content as a team writes it: long choices, descriptions, lanes, updates.
         if (state === "live")
             teams = [Fixtures.liveTeam]
         teamIndex = 0
+        if (vietnamese) change({ language: "vi" })
         filter = ""
         if (state === "scheduled") {
             teamIndex = teams.findIndex(t => t.id === "website")
@@ -123,7 +148,7 @@ Item {
         if (state === "large" || state === "two-reviewers")
             change({ members: members.concat([{ number: "9079", title: "Check this worktree", role: "developer",
                 provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["apps/desktop/src/onboarding/"],
-                state: "idle", now: "No task yet" }]) })
+                state: "idle", now: copy("No task yet") }]) })
         // `teams/two-reviewers` (T-23): the large team with a second reviewer; each reviews one
         // task of its own, so T-1 and T-6 are reviewed at the same time.
         if (state === "two-reviewers")
@@ -143,29 +168,33 @@ Item {
             change({ merges: "user",
                 tasks: tasks.map(t => t.id !== "T-1" ? t : Object.assign({}, t, { state: "ready",
                     history: t.history.concat([
-                        { when: "Today, 12:20", text: "@agent/4583 passed round 1 of 3 with no findings" },
-                        { when: "Today, 12:20", text: "Every criterion is met: Ready to merge" }]) })),
+                        { when: "Today, 12:20", text: copy("@agent/4583 passed round 1 of 3 with no findings") },
+                        { when: "Today, 12:20", text: copy("Every criterion is met: Ready to merge") }]) })),
                 decisions: [mergeDecision].concat(decisions) })
         // `teams/disk-low` and `teams/disk-stop` (T-37): the two levels of the disk warning.
         if (state === "disk-low" || state === "disk-stop")
             change({ storage: Object.assign({}, storage, { free: state === "disk-low" ? 18.4 : 9.6 }) })
         if (state === "paused")
             change({ paused: true, pausedReason: "budget", automaticTurns: turnBudget,
-                decisions: [budgetDecision].concat(decisions),
+                decisions: [makeBudgetDecision(vietnamese ? "vi" : "en", turnBudget)].concat(decisions),
                 members: members.map(m => m.state === "working"
-                    ? Object.assign({}, m, { state: "idle", now: "Waits: the team is paused" }) : m) })
+                    ? Object.assign({}, m, { state: "idle", now: copy("Waits: the team is paused") }) : m) })
     }
     // What the daemon raises itself (#463, #459): a merge under the user setting, and the budget.
-    readonly property var mergeDecision: ({ id: "D-3", kind: "merge", question: "Merge T-1 into release/1.4?",
-        detail: "The review passed with no findings and every criterion is met. You chose to merge each task yourself.",
-        askedBy: "", task: "T-1", when: "Just now", options: ["Merge", "Not yet"], recommended: 0 })
+    readonly property var mergeDecision: ({ id: "D-3", kind: "merge", question: copy("Merge T-1 into release/1.4?"),
+        detail: copy("The review passed with no findings and every criterion is met. You chose to merge each task yourself."),
+        askedBy: "", task: "T-1", when: "Just now", options: ["Merge", copy("Not yet")], recommended: 0 })
     // The daemon words it with the team's own budget (ADR 0114, open point 2).
     readonly property int turnBudget: team && team.turnBudget ? team.turnBudget : Fixtures.turnBudget
     readonly property int automaticTurns: team && team.automaticTurns ? team.automaticTurns : 0
-    readonly property var budgetDecision: ({ id: "D-4", kind: "budget",
-        question: "The team used its " + turnBudget + " automatic turns. Continue?",
-        detail: "No member starts a turn on its own until you answer. Messages wait and arrive in order.",
-        askedBy: "", task: "", when: "Just now", options: ["Continue (" + turnBudget + " more turns)", "Stop"], recommended: 0 })
+    readonly property var budgetDecision: makeBudgetDecision(screen.teamLanguage, turnBudget)
+    function makeBudgetDecision(language, budget) {
+        const copy = source => Mock.teamText(language, source)
+        return ({ id: "D-4", kind: "budget",
+        question: copy("The team used its %1 automatic turns. Continue?").arg(budget),
+        detail: copy("No member starts a turn on its own until you answer. Messages wait and arrive in order."),
+        askedBy: "", task: "", when: "Just now", options: [copy("Continue (%1 more turns)").arg(budget), copy("Stop")], recommended: 0 })
+    }
     // T-40: how the team reviews. The review passes per PR are one to five (two by default),
     // counting every reviewer's pass; the place is the board or the task's pull request. A
     // change applies from the next review request: a task already past a lowered limit is
@@ -173,17 +202,17 @@ Item {
     readonly property int reviewRounds: team && team.reviewRounds ? team.reviewRounds : 2
     readonly property string reviewPlace: team && team.reviewPlace ? team.reviewPlace : "board"
     function reviewText(rounds, place) {
-        return (rounds === 1 ? "1 review pass" : rounds + " review passes")
-            + (place === "pull_request" ? " on the pull request" : " on the board")
+        return (rounds === 1 ? copy("1 review pass") : copy("%1 review passes").arg(rounds))
+            + (place === "pull_request" ? copy(" on the pull request") : copy(" on the board"))
     }
     function changeReview(rounds, place) {
         if (rounds === reviewRounds && place === reviewPlace)
             return
         change({ reviewRounds: rounds, reviewPlace: place,
-            updates: [{ icon: "eye", text: "Max review passes: " + rounds
-                            + (place === "pull_request" ? ", on the pull request" : ", on the board")
-                            + ", from the next review request",
-                        detail: "You · the team", when: "Just now" }].concat(team.updates) })
+            updates: [{ icon: "eye", text: copy("Max review passes: ") + rounds
+                            + (place === "pull_request" ? copy(", on the pull request") : copy(", on the board"))
+                            + copy(", from the next review request"),
+                        detail: copy("You · the team"), when: "Just now" }].concat(team.updates) })
         window.notify(team.name + ": " + reviewText(rounds, place).toLowerCase())
     }
     // A new budget applies from the next automatic turn; the turns used stay counted. One that
@@ -194,10 +223,10 @@ Item {
             paused: resumes ? false : team.paused,
             pausedReason: resumes ? "" : team.pausedReason,
             decisions: resumes ? decisions.filter(d => d.kind !== "budget") : decisions,
-            updates: [{ icon: "clock", text: "Automatic turns: " + budget + ", " + automaticTurns + " used",
-                        detail: "You · the team", when: "Just now" }].concat(team.updates) })
-        window.notify(resumes ? "Resumed " + team.name + ": " + automaticTurns + " of " + budget + " turns used"
-                              : team.name + " has " + budget + " automatic turns")
+            updates: [{ icon: "clock", text: copy("Automatic turns: %1, %2 used").arg(budget).arg(automaticTurns),
+                        detail: copy("You · the team"), when: "Just now" }].concat(team.updates) })
+        window.notify(resumes ? copy("Resumed ") + team.name + ": " + automaticTurns + copy(" of ") + budget + copy(" turns used")
+                              : team.name + copy(" has ") + budget + copy(" automatic turns"))
     }
 
     Timer {
@@ -292,7 +321,7 @@ Item {
             openOther(decisions[0].id)
             otherText = "Neither: keep the current flow until the pilot ends."
             if (name === "decision-other-refused")
-                otherError = "The decision " + decisions[0].id + " was already answered."
+                otherError = copy("The decision ") + decisions[0].id + copy(" was already answered.")
         }
         else if (name === "task")
             showTask(tasks.some(t => t.id === "T-3") && team.id !== "pilot" ? "T-3" : tasks[0].id)
@@ -366,7 +395,7 @@ Item {
         if (!entry)
             return false
         change({ storage: Object.assign({}, storage, { worktrees: doneWorktrees.filter(w => w.id !== id) }) })
-        changeTask(id, { worktree: "" }, "You removed the worktree " + entry.path)
+        changeTask(id, { worktree: "" }, copy("You removed the worktree ") + entry.path)
         // A summary that still says this one was kept is not true any more.
         if (!removingAll && removalOutcome && removalOutcome.kept[id] !== undefined)
             removalOutcome = null
@@ -390,8 +419,8 @@ Item {
         if (!outcome)
             return ""
         const kept = Object.keys(outcome.kept).length
-        const done = "Removed " + count(outcome.removed.length, "worktree", "worktrees") + "."
-        return kept === 0 ? done : done + " Kept " + kept + (kept === 1 ? " with its reason." : " with their reasons.")
+        const done = copy("Removed ") + count(outcome.removed.length, "worktree", "worktrees") + "."
+        return kept === 0 ? done : done + copy(" Kept ") + kept + (kept === 1 ? copy(" with its reason.") : copy(" with their reasons."))
     }
     function totalSize(entries) {
         return entries.reduce((sum, e) => sum + parseFloat(e.size), 0).toFixed(1) + " GB"
@@ -431,12 +460,12 @@ Item {
                 automaticTurns: decision.kind === "budget" && yes ? 0 : automaticTurns,
                 pausedReason: decision.kind === "budget" && yes ? "" : team.pausedReason,
                 tasks: tasks.map(t => t.id !== decision.task || !yes ? t : Object.assign({}, t, { state: "done",
-                    history: t.history.concat([{ when: "Just now", text: "You merged " + t.id + " into " + team.branch }]) })),
-                updates: [{ icon: "check", text: decision.id + " decided: " + option, detail: "You · the team", when: "Just now" }]
+                    history: t.history.concat([{ when: "Just now", text: copy("You merged ") + t.id + copy(" into ") + team.branch }]) })),
+                updates: [{ icon: "check", text: decision.id + copy(" decided: ") + option, detail: copy("You · the team"), when: "Just now" }]
                     .concat(team.updates)
             })
-            screen.window.notify(decision.kind === "merge" ? (yes ? "Merged " + decision.task : "Kept " + decision.task + " ready")
-                                                           : (yes ? "Resumed " + team.name : "The team stays paused"))
+            screen.window.notify(decision.kind === "merge" ? (yes ? copy("Merged ") + decision.task : copy("Kept ") + decision.task + copy(" ready"))
+                                                           : (yes ? copy("Resumed ") + team.name : copy("The team stays paused")))
             return
         }
         const task = tasks.find(t => t.id === decision.task)
@@ -445,15 +474,15 @@ Item {
             decisions: decisions.filter(d => d.id !== decision.id),
             tasks: tasks.map(t => t.id !== decision.task ? t : Object.assign({}, t, {
                 state: blocked ? "doing" : t.state, decision: "",
-                history: t.history.concat([{ when: "Just now", text: "You decided " + decision.id + ": " + option }]) })),
+                history: t.history.concat([{ when: "Just now", text: copy("You decided ") + decision.id + ": " + option }]) })),
             members: members.map(m => blocked && m.number === task.owner
-                ? Object.assign({}, m, { state: "working", now: task.id + " · resumed with your decision" }) : m),
-            updates: [{ icon: "check", text: decision.id + " decided: " + option,
-                        detail: "You · sent to " + reference(decision.askedBy)
-                                + (task && task.owner && task.owner !== decision.askedBy ? " and " + reference(task.owner) : ""),
+                ? Object.assign({}, m, { state: "working", now: task.id + copy(" · resumed with your decision") }) : m),
+            updates: [{ icon: "check", text: decision.id + copy(" decided: ") + option,
+                        detail: copy("You · sent to ") + reference(decision.askedBy)
+                                + (task && task.owner && task.owner !== decision.askedBy ? copy(" and ") + reference(task.owner) : ""),
                         when: "Just now" }].concat(team.updates)
         })
-        screen.window.notify("Sent to " + reference(decision.askedBy))
+        screen.window.notify(copy("Sent to ") + reference(decision.askedBy))
     }
 
     // T-55: "Other…", the user's own answer written on the card. One card writes at a time;
@@ -506,8 +535,8 @@ Item {
         return { number: conversation.number, title: name, role: role,
                  provider: agent.label + " · " + agent.model, lane: lane || "", paths: paths || [],
                  reviews: [], state: "idle",
-                 now: role === "leader" ? "Waiting for the goal" : role === "reviewer" ? "No review yet"
-                    : lane ? "No task yet" : "No lane yet" }
+                 now: role === "leader" ? copy("Waiting for the goal") : role === "reviewer" ? copy("No review yet")
+                    : lane ? copy("No task yet") : copy("No lane yet") }
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
     // `budget` is the team's own automatic turns; without one it takes Settings → Teams.
@@ -526,7 +555,7 @@ Item {
             id = "team-" + (++teamsCreated)
         } while (teams.some(t => t.id === id))
         teams = teams.concat([{
-            id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
+            id: id, name: name, goal: goal || copy("No goal yet."), repository: repository, branch: branch,
             paused: false, merges: merges || "leader", permission: permission || "Workspace",
             turnBudget: budget || Fixtures.turnBudget, automaticTurns: 0,
             reviewRounds: review && review.rounds >= 1 && review.rounds <= 5 ? review.rounds : 2,
@@ -535,7 +564,7 @@ Item {
             tasks: [], decisions: [], updates: [] }])
         teamIndex = teams.length - 1
         filter = ""
-        window.notify("Created " + name + " and started " + members.length + " conversations")
+        window.notify(copy("Created ") + name + copy(" and started ") + members.length + copy(" conversations"))
         return id
     }
     // One more developer for the current team, as a new conversation.
@@ -544,7 +573,7 @@ Item {
             return ""
         const member = newMember(team.repository, "developer", name, agent, lane, paths)
         change({ members: members.concat([member]) })
-        window.notify("Added " + reference(member.number) + " as a developer")
+        window.notify(copy("Added ") + reference(member.number) + copy(" as a developer"))
         return member.number
     }
     // A second reviewer for the current team, as a new conversation (T-23): each task in
@@ -554,7 +583,7 @@ Item {
             return ""
         const member = newMember(team.repository, "reviewer", name || "Reviewer " + (reviewers + 1), agent)
         change({ members: members.concat([member]) })
-        window.notify("Added " + reference(member.number) + " as a second reviewer")
+        window.notify(copy("Added ") + reference(member.number) + copy(" as a second reviewer"))
         return member.number
     }
     // A conversation that exists joins from the sidebar (dropped on the folder, or from its
@@ -566,27 +595,27 @@ Item {
         const target = teams[index]
         const found = window.conversationsOf(target.repository).find(c => c.number === number)
         if (!found) {
-            window.notify("Only a conversation of " + target.repository + " can join " + target.name)
+            window.notify(copy("Only a conversation of ") + target.repository + copy(" can join ") + target.name)
             return false
         }
         if (developersOf(target) >= Fixtures.mostDevelopers) {
-            window.notify(target.name + " already has " + Fixtures.mostDevelopers + " developers")
+            window.notify(target.name + copy(" already has ") + Fixtures.mostDevelopers + copy(" developers"))
             return false
         }
         const next = teams.slice()
         next[index] = Object.assign({}, target, { members: target.members.concat([{
             number: found.number, title: found.title, role: "developer",
             provider: (found.provider || "Claude") + " · " + (found.model || "Opus 5.5"),
-            lane: "", paths: [], reviews: [], state: "idle", now: "No lane yet" }]) })
+            lane: "", paths: [], reviews: [], state: "idle", now: copy("No lane yet") }]) })
         teams = next
-        window.notify("Added @agent/" + number + " to " + target.name + " as a developer")
+        window.notify(copy("Added @agent/") + number + copy(" to ") + target.name + copy(" as a developer"))
         return true
     }
     // Why a member of the current team cannot be removed; "" when it can.
     function keeps(who) {
-        return !who ? "" : who.role === "leader" ? "A team keeps its leader"
-             : who.role === "reviewer" ? (reviewers <= 1 ? "A team keeps at least one reviewer: add another before removing this one" : "")
-             : developers <= 1 ? "A team keeps at least one developer" : ""
+        return !who ? "" : who.role === "leader" ? copy("A team keeps its leader")
+             : who.role === "reviewer" ? (reviewers <= 1 ? copy("A team keeps at least one reviewer: add another before removing this one") : "")
+             : developers <= 1 ? copy("A team keeps at least one developer") : ""
     }
     // The conversation stays, among its repository's own; its open tasks become unassigned.
     function removeMember(number) {
@@ -598,9 +627,9 @@ Item {
                 .map(m => m.role !== "reviewer" ? m : Object.assign({}, m, { reviews: (m.reviews || []).filter(l => l !== who.lane) })),
             tasks: tasks.map(t => t.owner !== who.number || t.state === "done" ? t : Object.assign({}, t, {
                 owner: "", state: t.state === "review" ? "review" : "todo",
-                history: t.history.concat([{ when: "Just now", text: "You removed " + reference(who.number) + " from the team; the task is unassigned" }]) }))
+                history: t.history.concat([{ when: "Just now", text: copy("You removed ") + reference(who.number) + copy(" from the team; the task is unassigned") }]) }))
         })
-        window.notify("Removed " + reference(who.number) + " from " + team.name)
+        window.notify(copy("Removed ") + reference(who.number) + copy(" from ") + team.name)
         return true
     }
     // Its conversations stay, among their repository's own.
@@ -609,7 +638,7 @@ Item {
         const next = teams.filter((t, i) => i !== teamIndex)
         teamIndex = 0
         teams = next
-        window.notify("Deleted " + name)
+        window.notify(copy("Deleted ") + name)
     }
 
     // --smoke runs these after its pointer drag; each entry of the result is a broken rule.
@@ -828,9 +857,9 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width - screen.px(84), screen.px(520))
         iconName: "bot"
-        title: "No team yet"
-        message: "A team gives several conversations one goal. A leader assigns the tasks, each developer owns a part of the code, and a reviewer checks their pull requests."
-        actionText: "Create a team"
+        title: screen.copy("No team yet")
+        message: screen.copy("A team gives several conversations one goal. A leader assigns the tasks, each developer owns a part of the code, and a reviewer checks their pull requests.")
+        actionText: screen.copy("Create a team")
         actionIcon: "plus"
         onActionTriggered: screen.startNewTeam("")
     }
@@ -859,11 +888,11 @@ Item {
 
             PageHeading {
                 width: parent.width
-                eyebrow: screen.team && screen.team.paused ? "TEAM · PAUSED" : "TEAM"
+                eyebrow: screen.team && screen.team.paused ? screen.copy("TEAM · PAUSED") : screen.copy("TEAM")
                 title: screen.team ? screen.team.name : ""
                 KetButton {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "Add member"
+                    text: screen.copy("Add member")
                     iconName: "plus"
                     enabled: !screen.full
                     onClicked: addMemberDialog.open()
@@ -872,17 +901,18 @@ Item {
                     id: moreButton
                     anchors.verticalCenter: parent.verticalCenter
                     iconName: "more"
-                    text: "Team actions"
+                    text: screen.copy("Team actions")
                     onClicked: teamMenu.popup(moreButton, moreButton.width - teamMenu.width, moreButton.height + screen.px(4))
                 }
             }
 
-            TeamSchedules { width: parent.width; window: screen.window; team: screen.team }
+            TeamSchedules { width: parent.width; window: screen.window; team: screen.team; language: screen.teamLanguage }
 
             // The goal whole, folded after three lines (ADR 0114); a mention opens its
             // conversation. Everywhere else the goal keeps one line.
             KetExpandableText {
                 id: teamGoalText
+                toggleButton.text: expanded ? screen.copy("Show less") : screen.copy("Show more")
                 objectName: "teamPageGoal"
                 width: parent.width
                 visible: text !== ""
@@ -914,7 +944,7 @@ Item {
                 Row {
                     spacing: screen.px(6)
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "pull-request"; box: screen.px(13); color: KetTheme.t.textMuted }
-                    Label { text: screen.team && screen.team.merges === "user" ? "You merge tasks" : "The leader merges tasks"; color: KetTheme.t.textSecondary }
+                    Label { text: screen.team && screen.team.merges === "user" ? screen.copy("You merge tasks") : screen.copy("The leader merges tasks"); color: KetTheme.t.textSecondary }
                 }
                 Row {
                     spacing: screen.px(6)
@@ -930,13 +960,13 @@ Item {
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "clock"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Label {
                         objectName: "teamTurns"
-                        text: screen.automaticTurns + " of " + screen.turnBudget + " automatic turns used"
+                        text: screen.automaticTurns + screen.copy(" of ") + screen.turnBudget + screen.copy(" automatic turns used")
                         color: KetTheme.t.textSecondary
                     }
                 }
                 Label {
                     visible: screen.tasks.length > 0
-                    text: screen.doneTasks + " of " + screen.count(screen.tasks.length, "task", "tasks") + " done"
+                    text: screen.doneTasks + screen.copy(" of ") + screen.count(screen.tasks.length, "task", "tasks") + screen.copy(" done")
                     color: KetTheme.t.textSecondary
                 }
             }
@@ -947,13 +977,13 @@ Item {
                 visible: !!screen.team && screen.team.paused
                 tone: KetTheme.BannerTone.Warning
                 title: screen.team && screen.team.pausedReason === "budget"
-                       ? "Paused: the team used its automatic turns" : "Paused"
-                message: "No member starts a turn on its own. Messages to members wait and arrive in order when you resume."
-                actionText: "Resume"
+                       ? screen.copy("Paused: the team used its automatic turns") : screen.copy("Paused")
+                message: screen.copy("No member starts a turn on its own. Messages to members wait and arrive in order when you resume.")
+                actionText: screen.copy("Resume")
                 onActionTriggered: {
                     screen.change({ paused: false, pausedReason: "",
                         decisions: screen.decisions.filter(d => d.kind !== "budget") })
-                    screen.window.notify("Resumed " + screen.team.name)
+                    screen.window.notify(screen.copy("Resumed ") + screen.team.name)
                 }
             }
 
@@ -961,9 +991,9 @@ Item {
                 width: parent.width
                 visible: screen.reviewQueue
                 tone: KetTheme.BannerTone.Info
-                title: screen.count(screen.developers, "developer", "developers") + " share one reviewer"
-                message: "Reviews will queue. A reviewer keeps up with two or three developers; a second reviewer shortens the queue."
-                actionText: "Add a second reviewer"
+                title: screen.count(screen.developers, "developer", "developers") + screen.copy(" share one reviewer")
+                message: screen.copy("Reviews will queue. A reviewer keeps up with two or three developers; a second reviewer shortens the queue.")
+                actionText: screen.copy("Add a second reviewer")
                 onActionTriggered: screen.openDialog("add-reviewer")
             }
 
@@ -974,18 +1004,18 @@ Item {
                 visible: screen.diskLevel !== ""
                 tone: screen.diskLevel === "stop" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
                 title: screen.diskLevel === "stop"
-                       ? "Builds should stop: " + screen.gb(screen.storage.free) + " free"
-                       : screen.diskLevel === "low" ? "Disk space is low: " + screen.gb(screen.storage.free) + " free" : ""
+                       ? screen.copy("Builds should stop: ") + screen.gb(screen.storage.free) + screen.copy(" free")
+                       : screen.diskLevel === "low" ? screen.copy("Disk space is low: ") + screen.gb(screen.storage.free) + screen.copy(" free") : ""
                 message: screen.diskLevel === "stop"
-                         ? "The disk that holds this team's worktrees has less than " + Fixtures.diskStopGb + " GB free, so a build may fill it. Free space before the next build; nothing is paused or removed for you."
-                         : "The disk that holds this team's worktrees has less than " + Fixtures.diskWarnGb + " GB free. Remove the worktrees of done tasks below, or free space, before builds fill it."
+                         ? screen.copy("The disk that holds this team's worktrees has less than ") + Fixtures.diskStopGb + screen.copy(" GB free, so a build may fill it. Free space before the next build; nothing is paused or removed for you.")
+                         : screen.copy("The disk that holds this team's worktrees has less than ") + Fixtures.diskWarnGb + screen.copy(" GB free. Remove the worktrees of done tasks below, or free space, before builds fill it.")
             }
 
             Item { width: 1; height: screen.px(4) }
 
             // What only the user can answer. An answer goes to the leader and unblocks its task.
             SectionTitle {
-                title: "Waiting for you"
+                title: screen.copy("Waiting for you")
                 count: screen.decisions.length > 0 ? screen.count(screen.decisions.length, "decision", "decisions") : ""
             }
             Panel {
@@ -996,7 +1026,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: screen.px(10)
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "check"; box: screen.px(14); color: KetTheme.t.success }
-                    Label { text: "Nothing waits for you. The leader asks here when a choice changes the product."; color: KetTheme.t.textSecondary }
+                    Label { text: screen.copy("Nothing waits for you. The leader asks here when a choice changes the product."); color: KetTheme.t.textSecondary }
                 }
             }
             Repeater {
@@ -1035,7 +1065,7 @@ Item {
                                     width: parent.width
                                     height: choiceLine.implicitHeight + screen.px(20)
                                     hoverEnabled: true
-                                    Accessible.name: modelData + (best ? ", recommended" : "")
+                                    Accessible.name: modelData + (best ? screen.copy(", recommended") : "")
                                     onClicked: screen.decide(card.modelData, modelData)
                                     background: Rectangle {
                                         radius: screen.px(6)
@@ -1061,7 +1091,7 @@ Item {
                                                 lineHeight: 1.3
                                                 font.weight: choiceRow.best ? Font.Medium : Font.Normal
                                             }
-                                            KetBadge { visible: choiceRow.best; text: "Recommended"; tone: KetTheme.BadgeTone.Accent }
+                                            KetBadge { visible: choiceRow.best; text: screen.copy("Recommended"); tone: KetTheme.BadgeTone.Accent }
                                             KetIcon { name: "chevron-right"; box: screen.px(14); color: KetTheme.t.textMuted }
                                         }
                                     }
@@ -1075,7 +1105,7 @@ Item {
                                 width: parent.width
                                 height: otherLine.implicitHeight + screen.px(20)
                                 hoverEnabled: true
-                                Accessible.name: "Write another answer"
+                                Accessible.name: screen.copy("Write another answer")
                                 onClicked: screen.openOther(card.modelData.id)
                                 background: Rectangle {
                                     radius: screen.px(6)
@@ -1091,7 +1121,7 @@ Item {
                                         width: parent.width - screen.px(26)
                                         anchors.verticalCenter: parent.verticalCenter
                                         spacing: screen.px(12)
-                                        Label { Layout.fillWidth: true; text: "Other…"; lineHeight: 1.3 }
+                                        Label { Layout.fillWidth: true; text: screen.copy("Other…"); lineHeight: 1.3 }
                                         KetIcon { name: "chevron-right"; box: screen.px(14); color: KetTheme.t.textMuted }
                                     }
                                 }
@@ -1107,7 +1137,7 @@ Item {
                                 KetButton {
                                     required property string modelData
                                     required property int index
-                                    text: modelData + (index === card.modelData.recommended ? " (Recommended)" : "")
+                                    text: modelData + (index === card.modelData.recommended ? screen.copy(" (Recommended)") : "")
                                     variant: index === card.modelData.recommended ? KetTheme.ButtonVariant.Primary : KetTheme.ButtonVariant.Secondary
                                     onClicked: screen.decide(card.modelData, modelData)
                                 }
@@ -1116,17 +1146,17 @@ Item {
                             KetButton {
                                 objectName: "decisionOther"
                                 visible: !card.sentences && !card.writing
-                                text: "Other…"
+                                text: screen.copy("Other…")
                                 variant: KetTheme.ButtonVariant.Secondary
-                                Accessible.name: "Write another answer"
+                                Accessible.name: screen.copy("Write another answer")
                                 onClicked: screen.openOther(card.modelData.id)
                             }
                             Label {
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignRight
                                 elide: Text.ElideLeft
-                                text: card.modelData.id + " · " + (card.modelData.askedBy ? screen.reference(card.modelData.askedBy) : "The team") + " · " + card.modelData.when
-                                      + (card.task ? " · " + (card.task.state === "blocked" ? "Blocks " : "For ") + card.task.id : "")
+                                text: card.modelData.id + " · " + (card.modelData.askedBy ? screen.reference(card.modelData.askedBy) : screen.copy("The team")) + " · " + screen.whenText(card.modelData.when)
+                                      + (card.task ? " · " + (card.task.state === "blocked" ? screen.copy("Blocks ") : screen.copy("For ")) + card.task.id : "")
                                 color: KetTheme.t.textMuted
                                 font.pixelSize: screen.px(12)
                             }
@@ -1146,8 +1176,8 @@ Item {
                                 minimumLines: 2
                                 maximumLines: 8
                                 maxLength: 4000
-                                placeholderText: "Write your answer…"
-                                Accessible.name: "Your answer"
+                                placeholderText: screen.copy("Write your answer…")
+                                Accessible.name: screen.copy("Your answer")
                                 text: card.writing ? screen.otherText : ""
                                 onTextChanged: if (card.writing) screen.otherText = text
                                 Keys.onEscapePressed: screen.cancelOther()
@@ -1166,20 +1196,20 @@ Item {
                                 spacing: screen.px(8)
                                 Label {
                                     Layout.fillWidth: true
-                                    text: "Enter sends · Shift+Enter adds a line · Esc cancels"
+                                    text: screen.copy("Enter sends · Shift+Enter adds a line · Esc cancels")
                                     color: KetTheme.t.textMuted
                                     font.pixelSize: screen.px(12)
                                     elide: Text.ElideRight
                                 }
                                 KetButton {
                                     objectName: "decisionOtherCancel"
-                                    text: "Cancel"
+                                    text: screen.copy("Cancel")
                                     variant: KetTheme.ButtonVariant.Ghost
                                     onClicked: screen.cancelOther()
                                 }
                                 KetButton {
                                     objectName: "decisionOtherSend"
-                                    text: "Send"
+                                    text: screen.copy("Send")
                                     variant: KetTheme.ButtonVariant.Primary
                                     enabled: screen.otherText.trim() !== ""
                                     onClicked: screen.sendOther(card.modelData, screen.otherText)
@@ -1193,11 +1223,11 @@ Item {
             Item { width: 1; height: screen.px(4) }
 
             SectionTitle {
-                title: "Tasks"
-                count: screen.tasks.length > 0 ? screen.doneTasks + " of " + screen.tasks.length + " done" : ""
+                title: screen.copy("Tasks")
+                count: screen.tasks.length > 0 ? screen.doneTasks + screen.copy(" of ") + screen.tasks.length + screen.copy(" done") : ""
                 KetSegmentedControl {
                     visible: screen.tasks.length > 0
-                    options: screen.filters.map(f => f === "" ? "All " + screen.tasks.length
+                    options: screen.filters.map(f => f === "" ? screen.copy("All ") + screen.tasks.length
                         : screen.states[f].label + " " + screen.tasks.filter(t => t.state === f).length)
                     currentIndex: screen.filters.indexOf(screen.filter)
                     onActivated: index => screen.filter = screen.filters[index]
@@ -1207,9 +1237,9 @@ Item {
                 visible: screen.tasks.length === 0
                 width: parent.width
                 iconName: "view-list"
-                title: "No task yet"
-                message: "The leader breaks the goal into tasks, writes what done means for each, then assigns them. Open the leader to start."
-                actionText: "Open the leader"
+                title: screen.copy("No task yet")
+                message: screen.copy("The leader breaks the goal into tasks, writes what done means for each, then assigns them. Open the leader to start.")
+                actionText: screen.copy("Open the leader")
                 onActionTriggered: screen.openConversation(screen.leader.number)
             }
             Panel {
@@ -1223,19 +1253,19 @@ Item {
                         width: parent.width - screen.px(36)
                         height: screen.px(34)
                         spacing: screen.px(16)
-                        Label { Layout.fillWidth: true; text: "Task"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
-                        Label { Layout.preferredWidth: screen.px(52); text: "Criteria"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
-                        Label { Layout.preferredWidth: screen.px(104); text: "Owner"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
-                        Label { visible: screen.wide; Layout.preferredWidth: screen.px(140); text: "Lane"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
-                        Label { Layout.preferredWidth: screen.px(96); text: "State"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { Layout.fillWidth: true; text: screen.copy("Task"); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { Layout.preferredWidth: screen.px(52); text: screen.copy("Criteria"); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { Layout.preferredWidth: screen.px(104); text: screen.copy("Owner"); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { visible: screen.wide; Layout.preferredWidth: screen.px(140); text: screen.copy("Lane"); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { Layout.preferredWidth: screen.px(96); text: screen.copy("State"); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
                         Label { Layout.preferredWidth: screen.px(44); text: "PR"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
                     }
                     KetEmptyState {
                         visible: screen.shownTasks.length === 0
                         width: parent.width
                         iconName: "filter"
-                        title: "No task is " + (screen.filter ? screen.states[screen.filter].label.toLowerCase() : "here")
-                        actionText: "Show all tasks"
+                        title: screen.copy("No task is ") + (screen.filter ? screen.states[screen.filter].label.toLowerCase() : "here")
+                        actionText: screen.copy("Show all tasks")
                         onActionTriggered: screen.filter = ""
                     }
                     Repeater {
@@ -1278,7 +1308,7 @@ Item {
                                         visible: !!taskRow.modelData.outsideLane
                                         spacing: screen.px(5)
                                         KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "warning"; box: screen.px(13); color: KetTheme.t.warning }
-                                        Label { text: "Outside its lane"; color: KetTheme.t.warning; font.pixelSize: screen.px(12); font.weight: Font.Medium }
+                                        Label { text: screen.copy("Outside its lane"); color: KetTheme.t.warning; font.pixelSize: screen.px(12); font.weight: Font.Medium }
                                     }
                                 }
                                 Label {
@@ -1295,7 +1325,7 @@ Item {
                                 Label {
                                     visible: screen.wide
                                     Layout.preferredWidth: screen.px(140)
-                                    text: taskRow.modelData.lane || "Whole epic"
+                                    text: taskRow.modelData.lane || screen.copy("Whole epic")
                                     color: KetTheme.t.textSecondary
                                 }
                                 Item {
@@ -1320,15 +1350,15 @@ Item {
             // T-62: it stays for the summary after "Remove all…" removed every one.
             SectionTitle {
                 visible: screen.doneWorktrees.length > 0 || screen.removalOutcome !== null
-                title: "Worktrees of done tasks"
+                title: screen.copy("Worktrees of done tasks")
                 count: screen.doneWorktrees.length > 0
-                       ? screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + " on disk"
-                       : "None left on disk"
+                       ? screen.count(screen.doneWorktrees.length, "worktree", "worktrees") + screen.copy(" on disk")
+                       : screen.copy("None left on disk")
                 // T-62: one confirmation for every listed worktree.
                 KetButton {
                     objectName: "teamDoneWorktreesRemoveAll"
                     visible: screen.doneWorktrees.length > 0
-                    text: "Remove all…"
+                    text: screen.copy("Remove all…")
                     iconName: "trash"
                     variant: KetTheme.ButtonVariant.Ghost
                     enabled: !screen.removingAll
@@ -1394,7 +1424,7 @@ Item {
                                 }
                                 Label { text: worktreeRow.modelData.size; color: KetTheme.t.textSecondary }
                                 KetButton {
-                                    text: "Remove…"
+                                    text: screen.copy("Remove…")
                                     iconName: "trash"
                                     variant: KetTheme.ButtonVariant.Ghost
                                     enabled: !screen.removingAll
@@ -1409,9 +1439,9 @@ Item {
             Item { width: 1; height: screen.px(4) }
 
             SectionTitle {
-                title: "Members"
-                count: "1 leader · " + screen.count(screen.developers, "developer", "developers")
-                       + (screen.full ? " (the most a team has)" : "") + " · "
+                title: screen.copy("Members")
+                count: screen.copy("1 leader · ") + screen.count(screen.developers, "developer", "developers")
+                       + (screen.full ? screen.copy(" (the most a team has)") : "") + " · "
                        + screen.count(screen.reviewers, "reviewer", "reviewers")
             }
             Panel {
@@ -1487,9 +1517,9 @@ Item {
                                     spacing: screen.px(5)
                                     Label {
                                         width: parent.width
-                                        text: memberRow.modelData.role === "developer" ? memberRow.modelData.lane || "No lane yet"
+                                        text: memberRow.modelData.role === "developer" ? memberRow.modelData.lane || screen.copy("No lane yet")
                                             : memberRow.modelData.role === "reviewer" ? screen.reviewingText(memberRow.modelData)
-                                            : "Assigns tasks, orders the merges"
+                                            : screen.copy("Assigns tasks, orders the merges")
                                         color: memberRow.modelData.role === "developer" ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                     }
                                     Mono {
@@ -1517,15 +1547,15 @@ Item {
                                     Label { width: parent.width; text: memberRow.modelData.now; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
                                 }
                                 KetButton {
-                                    text: "Open"
+                                    text: screen.copy("Open")
                                     variant: KetTheme.ButtonVariant.Ghost
-                                    Accessible.name: "Open " + screen.reference(memberRow.modelData.number)
+                                    Accessible.name: screen.copy("Open ") + screen.reference(memberRow.modelData.number)
                                     onClicked: screen.openConversation(memberRow.modelData.number)
                                 }
                                 KetIconButton {
                                     id: memberMore
                                     iconName: "more"
-                                    text: "Member actions"
+                                    text: screen.copy("Member actions")
                                     onClicked: {
                                         memberMenu.who = memberRow.modelData
                                         memberMenu.popup(memberMore, memberMore.width - memberMenu.width, memberMore.height + screen.px(4))
@@ -1542,8 +1572,8 @@ Item {
             // Task changes wake nobody. The leader reads them as one digest when its turn ends.
             SectionTitle {
                 visible: updatesPanel.visible
-                title: "Updates"
-                count: "Since the leader's last turn"
+                title: screen.copy("Updates")
+                count: screen.copy("Since the leader's last turn")
             }
             Panel {
                 id: updatesPanel
@@ -1600,7 +1630,7 @@ Item {
                                         Basic.AbstractButton {
                                             id: updateMore
                                             visible: updateText.truncated || updateRow.expanded
-                                            text: updateRow.expanded ? "Show less" : "Show more"
+                                            text: updateRow.expanded ? screen.copy("Show less") : screen.copy("Show more")
                                             Accessible.name: text
                                             onClicked: updateRow.expanded = !updateRow.expanded
                                             contentItem: Label {
@@ -1617,7 +1647,7 @@ Item {
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignTop
-                                    text: updateRow.modelData.when
+                                    text: screen.whenText(updateRow.modelData.when)
                                     color: KetTheme.t.textMuted
                                     font.pixelSize: screen.px(12)
                                 }
@@ -1630,7 +1660,7 @@ Item {
                 visible: updatesPanel.visible
                 spacing: screen.px(8)
                 KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "info"; box: screen.px(13); color: KetTheme.t.textMuted }
-                Label { text: "These woke nobody. The leader gets them as one digest when its turn ends."; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                Label { text: screen.copy("These woke nobody. The leader gets them as one digest when its turn ends."); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             }
         }
     }
@@ -1638,75 +1668,75 @@ Item {
     KetMenu {
         id: teamMenu
         KetMenuItem {
-            text: "Add member…"
-            description: screen.full ? "A team has at most " + Fixtures.mostDevelopers + " developers" : ""
+            text: screen.copy("Add member…")
+            description: screen.full ? screen.copy("A team has at most ") + Fixtures.mostDevelopers + screen.copy(" developers") : ""
             iconName: "plus"
             enabled: !screen.full
             onTriggered: addMemberDialog.open()
         }
-        KetMenuItem { text: "New team…"; iconName: "bot"; onTriggered: screen.startNewTeam(screen.team.repository) }
+        KetMenuItem { text: screen.copy("New team…"); iconName: "bot"; onTriggered: screen.startNewTeam(screen.team.repository) }
         KetMenuItem {
-            text: screen.team && screen.team.paused ? "Resume automatic turns" : "Pause automatic turns"
-            description: "Members finish their turn, then wait for you"
+            text: screen.team && screen.team.paused ? screen.copy("Resume automatic turns") : screen.copy("Pause automatic turns")
+            description: screen.copy("Members finish their turn, then wait for you")
             iconName: screen.team && screen.team.paused ? "resume" : "pause-circle"
             onTriggered: {
                 const paused = !screen.team.paused
                 screen.change({ paused: paused })
-                screen.window.notify(paused ? "Paused " + screen.team.name : "Resumed " + screen.team.name)
+                screen.window.notify(paused ? screen.copy("Paused ") + screen.team.name : screen.copy("Resumed ") + screen.team.name)
             }
         }
         KetMenuItem {
-            text: "Automatic turns…"
-            description: screen.automaticTurns + " of " + screen.turnBudget + " used"
+            text: screen.copy("Automatic turns…")
+            description: screen.automaticTurns + screen.copy(" of ") + screen.turnBudget + screen.copy(" used")
             iconName: "clock"
             onTriggered: turnBudgetDialog.open()
         }
         KetMenuItem {
-            text: "Review…"
+            text: screen.copy("Review…")
             description: screen.reviewText(screen.reviewRounds, screen.reviewPlace)
             iconName: "eye"
             onTriggered: reviewDialog.open()
         }
         KetMenuItem {
             readonly property bool mine: !!screen.team && screen.team.merges === "user"
-            text: mine ? "Let the leader merge tasks" : "Merge tasks myself"
-            description: mine ? "Once the reviewer passes a task" : "Each reviewed task waits for you"
+            text: mine ? screen.copy("Let the leader merge tasks") : screen.copy("Merge tasks myself")
+            description: mine ? screen.copy("Once the reviewer passes a task") : screen.copy("Each reviewed task waits for you")
             iconName: "pull-request"
             onTriggered: {
                 screen.change({ merges: mine ? "leader" : "user" })
-                screen.window.notify(mine ? "The leader merges reviewed tasks" : "Reviewed tasks wait for you to merge")
+                screen.window.notify(mine ? screen.copy("The leader merges reviewed tasks") : screen.copy("Reviewed tasks wait for you to merge"))
             }
         }
         // T-56 (ADR 0125): the language the team page, its updates and decisions use.
         KetMenuItem {
             text: "English"
-            description: screen.teamLanguage === "en" ? "The team works in it" : ""
+            description: screen.teamLanguage === "en" ? screen.copy("The team works in it") : ""
             iconName: screen.teamLanguage === "en" ? "check" : ""
             onTriggered: if (screen.teamLanguage !== "en") {
                 screen.change({ language: "en" })
-                screen.window.notify("The team now works in English")
+                screen.window.notify(screen.copy("The team now works in English"))
             }
         }
         KetMenuItem {
             text: "Tiếng Việt"
-            description: screen.teamLanguage === "vi" ? "The team works in it" : ""
+            description: screen.teamLanguage === "vi" ? screen.copy("The team works in it") : ""
             iconName: screen.teamLanguage === "vi" ? "check" : ""
             onTriggered: if (screen.teamLanguage !== "vi") {
                 screen.change({ language: "vi" })
-                screen.window.notify("The team now works in Tiếng Việt")
+                screen.window.notify(screen.copy("The team now works in Tiếng Việt"))
             }
         }
         KetMenuSeparator {}
-        KetMenuItem { text: "Delete team…"; iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
+        KetMenuItem { text: screen.copy("Delete team…"); iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
     }
 
     KetMenu {
         id: memberMenu
         property var who: null
-        KetMenuItem { text: "Open conversation"; iconName: "chat"; onTriggered: screen.openConversation(memberMenu.who.number) }
+        KetMenuItem { text: screen.copy("Open conversation"); iconName: "chat"; onTriggered: screen.openConversation(memberMenu.who.number) }
         KetMenuSeparator {}
         KetMenuItem {
-            text: "Remove from team…"
+            text: screen.copy("Remove from team…")
             description: screen.keeps(memberMenu.who)
             iconName: "trash"
             danger: true
@@ -1720,17 +1750,17 @@ Item {
         id: removeDialog
         property var who: null
         readonly property var owned: who ? screen.tasks.filter(t => t.owner === who.number && t.state !== "done") : []
-        title: "Remove " + (who ? screen.reference(who.number) : "") + " from " + (screen.team ? screen.team.name : "") + "?"
+        title: screen.copy("Remove ") + (who ? screen.reference(who.number) : "") + screen.copy(" from ") + (screen.team ? screen.team.name : "") + "?"
         // KetDialog lays its body out; a column gives the text its width.
         Column {
             width: removeDialog.availableWidth
             Label {
                 width: parent.width
-                text: (removeDialog.who ? "“" + removeDialog.who.title + "” stays as a conversation of the repository, with its worktree and branch. " : "")
+                text: (removeDialog.who ? "“" + removeDialog.who.title + screen.copy("” stays as a conversation of the repository, with its worktree and branch. ") : "")
                       + (removeDialog.owned.length > 0
-                         ? screen.count(removeDialog.owned.length, "open task", "open tasks") + " ("
-                           + removeDialog.owned.map(t => t.id).join(", ") + ") become unassigned for the leader to assign again."
-                         : "It owns no open task.")
+                         ? screen.count(removeDialog.owned.length, screen.copy("open task"), screen.copy("open tasks")) + " ("
+                           + removeDialog.owned.map(t => t.id).join(", ") + screen.copy(") become unassigned for the leader to assign again.")
+                         : screen.copy("It owns no open task."))
                 color: KetTheme.t.textSecondary
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
@@ -1738,9 +1768,9 @@ Item {
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: removeDialog.reject() },
             KetButton {
-                text: "Remove"
+                text: screen.copy("Remove")
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
                     const number = removeDialog.who.number
@@ -1760,14 +1790,14 @@ Item {
         property string refusal: ""
         // Said after a removal: a conversation that could not be moved out of the folder.
         property string note: ""
-        title: "Remove the worktree of " + (entry ? entry.id : "") + "?"
+        title: screen.copy("Remove the worktree of ") + (entry ? entry.id : "") + "?"
         Column {
             width: removeWorktreeDialog.availableWidth
             spacing: screen.px(10)
             Label {
                 width: parent.width
                 text: removeWorktreeDialog.entry
-                      ? "Its folder is deleted from disk, freeing " + removeWorktreeDialog.entry.size + ". The task's branch and its commits stay."
+                      ? screen.copy("Its folder is deleted from disk, freeing ") + removeWorktreeDialog.entry.size + screen.copy(". The task's branch and its commits stay.")
                       : ""
                 color: KetTheme.t.textSecondary
                 wrapMode: Text.Wrap
@@ -1782,7 +1812,7 @@ Item {
             }
             Label {
                 width: parent.width
-                text: "ketPlus runs git worktree remove, without force, and then git worktree prune from the repository's main checkout. It refuses a worktree with uncommitted or untracked changes or with commits on no remote branch, the main checkout, and the folder of a conversation that is running or waits for you. An idle conversation in the folder moves to the main checkout."
+                text: screen.copy("ketPlus runs git worktree remove, without force, and then git worktree prune from the repository's main checkout. It refuses a worktree with uncommitted or untracked changes or with commits on no remote branch, the main checkout, and the folder of a conversation that is running or waits for you. An idle conversation in the folder moves to the main checkout.")
                 color: KetTheme.t.textMuted
                 font.pixelSize: screen.px(12)
                 wrapMode: Text.Wrap
@@ -1794,7 +1824,7 @@ Item {
                 width: parent.width
                 visible: removeWorktreeDialog.refusal !== ""
                 tone: KetTheme.BannerTone.Danger
-                title: "Not removed"
+                title: screen.copy("Not removed")
                 message: removeWorktreeDialog.refusal
             }
             KetBanner {
@@ -1802,14 +1832,14 @@ Item {
                 width: parent.width
                 visible: removeWorktreeDialog.note !== ""
                 tone: KetTheme.BannerTone.Warning
-                title: "Removed, but a conversation stayed"
+                title: screen.copy("Removed, but a conversation stayed")
                 message: removeWorktreeDialog.note
             }
         }
         actions: [
-            KetButton { text: removeWorktreeDialog.note !== "" ? "Close" : "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeWorktreeDialog.reject() },
+            KetButton { text: removeWorktreeDialog.note !== "" ? screen.copy("Close") : screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: removeWorktreeDialog.reject() },
             KetButton {
-                text: "Remove worktree"
+                text: screen.copy("Remove worktree")
                 visible: removeWorktreeDialog.note === ""
                 variant: KetTheme.ButtonVariant.Danger
                 enabled: removeWorktreeDialog.refusal === ""
@@ -1817,7 +1847,7 @@ Item {
                     const id = removeWorktreeDialog.entry.id
                     removeWorktreeDialog.accept()
                     if (screen.removeWorktree(id))
-                        screen.window.notify("Removed the worktree of " + id)
+                        screen.window.notify(screen.copy("Removed the worktree of ") + id)
                 }
             }
         ]
@@ -1828,14 +1858,14 @@ Item {
         id: removeAllDialog
         objectName: "removeAllWorktreesDialog"
         readonly property int total: screen.doneWorktrees.length
-        title: "Remove " + screen.count(total, "worktree", "worktrees") + "?"
+        title: screen.copy("Remove ") + screen.count(total, "worktree", "worktrees") + "?"
         Column {
             width: removeAllDialog.availableWidth
             spacing: screen.px(10)
             Label {
                 width: parent.width
-                text: "The folders of " + screen.doneWorktrees.map(w => w.id).join(", ") + " are deleted from disk, freeing "
-                      + screen.totalSize(screen.doneWorktrees) + " in total. The tasks' branches and their commits stay."
+                text: screen.copy("The folders of ") + screen.doneWorktrees.map(w => w.id).join(", ") + screen.copy(" are deleted from disk, freeing ")
+                      + screen.totalSize(screen.doneWorktrees) + screen.copy(" in total. The tasks' branches and their commits stay.")
                 color: KetTheme.t.textSecondary
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
@@ -1843,7 +1873,7 @@ Item {
             }
             Label {
                 width: parent.width
-                text: "Each one goes through the same checks as Remove…, one after another: a worktree with uncommitted or untracked changes, with commits on no remote branch, or the folder of a conversation that is running or waits for you is kept with the reason, and the others are still removed."
+                text: screen.copy("Each one goes through the same checks as Remove…, one after another: a worktree with uncommitted or untracked changes, with commits on no remote branch, or the folder of a conversation that is running or waits for you is kept with the reason, and the others are still removed.")
                 color: KetTheme.t.textMuted
                 font.pixelSize: screen.px(12)
                 wrapMode: Text.Wrap
@@ -1852,9 +1882,9 @@ Item {
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeAllDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: removeAllDialog.reject() },
             KetButton {
-                text: removeAllDialog.total === 1 ? "Remove worktree" : "Remove " + removeAllDialog.total + " worktrees"
+                text: removeAllDialog.total === 1 ? screen.copy("Remove worktree") : screen.copy("Remove ") + removeAllDialog.total + screen.copy(" worktrees")
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
                     removeAllDialog.accept()
@@ -1881,19 +1911,19 @@ Item {
                 width: parent.width
                 spacing: screen.px(8)
                 KetBadge { text: screen.states[taskDialog.task.state].label; tone: screen.states[taskDialog.task.state].tone }
-                KetBadge { text: taskDialog.task.lane || "Whole epic" }
-                KetBadge { visible: !!taskDialog.task.decision; text: "Waits for " + taskDialog.task.decision; tone: KetTheme.BadgeTone.Warning }
+                KetBadge { text: taskDialog.task.lane || screen.copy("Whole epic") }
+                KetBadge { visible: !!taskDialog.task.decision; text: screen.copy("Waits for ") + taskDialog.task.decision; tone: KetTheme.BadgeTone.Warning }
             }
             KetBanner {
                 visible: !!taskDialog.task.outsideLane
                 width: parent.width
                 tone: KetTheme.BannerTone.Warning
-                title: "Edited a file outside its lane"
+                title: screen.copy("Edited a file outside its lane")
                 message: taskDialog.task.outsideLane
-                    ? taskDialog.task.outsideLane.path + " belongs to " + taskDialog.task.outsideLane.lane
-                      + " (" + screen.reference(taskDialog.task.outsideLane.owner) + "). The leader decides who makes the change."
+                    ? taskDialog.task.outsideLane.path + screen.copy(" belongs to ") + taskDialog.task.outsideLane.lane
+                      + " (" + screen.reference(taskDialog.task.outsideLane.owner) + screen.copy("). The leader decides who makes the change.")
                     : ""
-                actionText: "Open the leader"
+                actionText: screen.copy("Open the leader")
                 onActionTriggered: { taskDialog.accept(); screen.openConversation(screen.leader.number) }
             }
             GridLayout {
@@ -1901,12 +1931,12 @@ Item {
                 columns: 2
                 columnSpacing: screen.px(16)
                 rowSpacing: screen.px(14)
-                Fact { label: "Owner"; value: taskDialog.task.owner ? screen.reference(taskDialog.task.owner) : "Unassigned"; mono: !!taskDialog.task.owner }
-                Fact { label: "Reviewer"; value: taskDialog.reviewer ? screen.reference(taskDialog.reviewer.number) : ""; mono: true }
-                Fact { label: "Pull request"; value: taskDialog.task.pr || ""; mono: true }
-                Fact { label: "Branch"; value: taskDialog.task.branch || ""; mono: true }
-                Fact { label: "Worktree"; value: taskDialog.task.worktree || ""; mono: true }
-                Fact { label: "Depends on"; value: taskDialog.task.dependsOn || ""; mono: true }
+                Fact { label: screen.copy("Owner"); value: taskDialog.task.owner ? screen.reference(taskDialog.task.owner) : screen.copy("Unassigned"); mono: !!taskDialog.task.owner }
+                Fact { label: screen.copy("Reviewer"); value: taskDialog.reviewer ? screen.reference(taskDialog.reviewer.number) : ""; mono: true }
+                Fact { label: screen.copy("Pull request"); value: taskDialog.task.pr || ""; mono: true }
+                Fact { label: screen.copy("Branch"); value: taskDialog.task.branch || ""; mono: true }
+                Fact { label: screen.copy("Worktree"); value: taskDialog.task.worktree || ""; mono: true }
+                Fact { label: screen.copy("Depends on"); value: taskDialog.task.dependsOn || ""; mono: true }
             }
             Rectangle { visible: descriptionBlock.visible; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
             // What the leader wrote for the owner, as Markdown. A long one is cut with a fade.
@@ -1916,7 +1946,7 @@ Item {
                 visible: !!taskDialog.task.description
                 width: parent.width
                 spacing: screen.px(8)
-                Label { text: "Description"; font.pixelSize: screen.px(14); font.weight: Font.Medium }
+                Label { text: screen.copy("Description"); font.pixelSize: screen.px(14); font.weight: Font.Medium }
                 Item {
                     width: parent.width
                     height: descriptionBlock.cut && !taskDialog.wholeDescription ? screen.px(150) : descriptionText.implicitHeight
@@ -1940,7 +1970,7 @@ Item {
                 }
                 KetButton {
                     visible: descriptionBlock.cut
-                    text: taskDialog.wholeDescription ? "Show less" : "Show all"
+                    text: taskDialog.wholeDescription ? screen.copy("Show less") : screen.copy("Show all")
                     variant: KetTheme.ButtonVariant.Ghost
                     controlSize: KetTheme.ControlSize.Small
                     onClicked: taskDialog.wholeDescription = !taskDialog.wholeDescription
@@ -1952,10 +1982,10 @@ Item {
                 spacing: screen.px(10)
                 Row {
                     spacing: screen.px(8)
-                    Label { text: "Acceptance criteria"; font.pixelSize: screen.px(14); font.weight: Font.Medium }
+                    Label { text: screen.copy("Acceptance criteria"); font.pixelSize: screen.px(14); font.weight: Font.Medium }
                     Label {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: taskDialog.task.criteria.filter(c => c.done).length + " of " + taskDialog.task.criteria.length + " met"
+                        text: taskDialog.task.criteria.filter(c => c.done).length + screen.copy(" of ") + taskDialog.task.criteria.length + screen.copy(" met")
                         color: KetTheme.t.textSecondary
                     }
                 }
@@ -1971,7 +2001,7 @@ Item {
                             name: modelData.done ? "check" : "circle"
                             box: screen.px(14)
                             color: modelData.done ? KetTheme.t.success : KetTheme.t.textMuted
-                            Accessible.name: modelData.done ? "Met" : "Not met yet"
+                            Accessible.name: modelData.done ? screen.copy("Met") : screen.copy("Not met yet")
                         }
                         Label { Layout.fillWidth: true; text: modelData.text; wrapMode: Text.Wrap; elide: Text.ElideNone; lineHeight: 1.3 }
                     }
@@ -1981,7 +2011,7 @@ Item {
                     KetIcon { y: screen.px(2); name: "lock"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Label {
                         width: parent.parent.width - screen.px(21)
-                        text: taskDialog.task.criteriaNote || "Only the leader changes these. The reviewer checks the pull request against them."
+                        text: taskDialog.task.criteriaNote || screen.copy("Only the leader changes these. The reviewer checks the pull request against them.")
                         color: KetTheme.t.textMuted
                         font.pixelSize: screen.px(12)
                         wrapMode: Text.Wrap
@@ -1993,14 +2023,14 @@ Item {
             Column {
                 width: parent.width
                 spacing: screen.px(8)
-                Label { text: "History"; font.pixelSize: screen.px(14); font.weight: Font.Medium }
+                Label { text: screen.copy("History"); font.pixelSize: screen.px(14); font.weight: Font.Medium }
                 Repeater {
                     model: taskDialog.task.history
                     RowLayout {
                         required property var modelData
                         width: parent.width
                         spacing: screen.px(12)
-                        Label { Layout.preferredWidth: screen.px(104); Layout.alignment: Qt.AlignTop; text: modelData.when; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+                        Label { Layout.preferredWidth: screen.px(104); Layout.alignment: Qt.AlignTop; text: screen.whenText(modelData.when); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
                         Label { Layout.fillWidth: true; text: modelData.text; color: KetTheme.t.textSecondary; wrapMode: Text.Wrap; elide: Text.ElideNone }
                     }
                 }
@@ -2009,16 +2039,16 @@ Item {
         actions: [
             KetButton {
                 visible: taskDialog.task.state !== "done"
-                text: taskDialog.task.owner ? "Hand over…" : "Assign…"
+                text: taskDialog.task.owner ? screen.copy("Hand over…") : screen.copy("Assign…")
                 variant: KetTheme.ButtonVariant.Ghost
                 onClicked: { const task = taskDialog.task; taskDialog.accept(); screen.startHandover(task) }
             },
             KetButton {
                 visible: !!taskDialog.task.owner
-                text: "Open the owner"
+                text: screen.copy("Open the owner")
                 onClicked: { const owner = taskDialog.task.owner; taskDialog.accept(); screen.openConversation(owner) }
             },
-            KetButton { text: "Close"; variant: KetTheme.ButtonVariant.Primary; onClicked: taskDialog.accept() }
+            KetButton { text: screen.copy("Close"); variant: KetTheme.ButtonVariant.Primary; onClicked: taskDialog.accept() }
         ]
     }
 
@@ -2027,18 +2057,18 @@ Item {
         id: handoverDialog
         readonly property var task: screen.handover || ({ id: "", title: "", owner: "", lane: "" })
         readonly property var candidates: screen.members.filter(m => m.role !== "reviewer" && m.number !== task.owner)
-        title: (task.owner ? "Hand over " : "Assign ") + task.id
+        title: (task.owner ? screen.copy("Hand over ") : screen.copy("Assign ")) + task.id
         Column {
             width: handoverDialog.availableWidth
             spacing: screen.px(14)
             Label { width: parent.width; text: handoverDialog.task.title; font.pixelSize: screen.px(14); font.weight: Font.Medium; wrapMode: Text.Wrap; elide: Text.ElideNone }
             KetFieldRow {
                 width: parent.width
-                label: "New owner"
+                label: screen.copy("New owner")
                 help: handoverDialog.task.owner
-                    ? "Gets the task's history, pull request, branch, worktree and the decisions made for it. "
-                      + screen.reference(handoverDialog.task.owner) + " can no longer write to the worktree."
-                    : "Gets the acceptance criteria and a new worktree for the task."
+                    ? screen.copy("Gets the task's history, pull request, branch, worktree and the decisions made for it. ")
+                      + screen.reference(handoverDialog.task.owner) + screen.copy(" can no longer write to the worktree.")
+                    : screen.copy("Gets the acceptance criteria and a new worktree for the task.")
                 KetSelect {
                     id: newOwner
                     width: parent.width
@@ -2052,25 +2082,25 @@ Item {
                          && handoverDialog.task.lane !== ""
                 width: parent.width
                 tone: KetTheme.BannerTone.Warning
-                title: "Another lane"
-                message: chosen ? "This task is in " + handoverDialog.task.lane + "; " + screen.reference(chosen.number)
-                                  + " owns " + chosen.lane + ". Its edits here will be flagged." : ""
+                title: screen.copy("Another lane")
+                message: chosen ? screen.copy("This task is in ") + handoverDialog.task.lane + "; " + screen.reference(chosen.number)
+                                  + screen.copy(" owns ") + chosen.lane + screen.copy(". Its edits here will be flagged.") : ""
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: handoverDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: handoverDialog.reject() },
             KetButton {
-                text: handoverDialog.task.owner ? "Hand over" : "Assign"
+                text: handoverDialog.task.owner ? screen.copy("Hand over") : screen.copy("Assign")
                 variant: KetTheme.ButtonVariant.Primary
                 enabled: handoverDialog.candidates.length > 0
                 onClicked: {
                     const next = handoverDialog.candidates[newOwner.currentIndex]
                     const task = handoverDialog.task
                     screen.changeTask(task.id, { owner: next.number },
-                        task.owner ? "You handed the task over from " + screen.reference(task.owner) + " to " + screen.reference(next.number)
-                                   : "You assigned " + screen.reference(next.number))
+                        task.owner ? screen.copy("You handed the task over from ") + screen.reference(task.owner) + screen.copy(" to ") + screen.reference(next.number)
+                                   : screen.copy("You assigned ") + screen.reference(next.number))
                     handoverDialog.accept()
-                    screen.window.notify(task.id + " now belongs to " + screen.reference(next.number))
+                    screen.window.notify(task.id + screen.copy(" now belongs to ") + screen.reference(next.number))
                 }
             }
         ]
@@ -2099,7 +2129,7 @@ Item {
             agentModel = Fixtures.providerModels[agentProvider][0].name
             agentEffort = next === "reviewer" ? "High" : "Medium"
         }
-        title: "Add a member to " + (screen.team ? screen.team.name : "")
+        title: screen.copy("Add a member to ") + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
             laneName.text = ""
@@ -2110,10 +2140,10 @@ Item {
         DialogBody {
             KetFieldRow {
                 width: parent.width
-                label: "Role"
+                label: screen.copy("Role")
                 help: addMemberDialog.reviewerOpen
-                      ? "A second reviewer shortens the queue: each task in review goes to one of the two."
-                      : "The team has two reviewers, the most a team has."
+                      ? screen.copy("A second reviewer shortens the queue: each task in review goes to one of the two.")
+                      : screen.copy("The team has two reviewers, the most a team has.")
                 Row {
                     width: parent.width
                     spacing: screen.px(6)
@@ -2122,7 +2152,7 @@ Item {
                         width: (parent.width - parent.spacing) / 2
                         kind: KetTheme.ToggleKind.Radio
                         checked: !addMemberDialog.reviewer
-                        text: "Developer"
+                        text: screen.copy("Developer")
                         onToggled: if (checked) addMemberDialog.chooseRole("developer")
                     }
                     KetChoice {
@@ -2131,7 +2161,7 @@ Item {
                         kind: KetTheme.ToggleKind.Radio
                         enabled: addMemberDialog.reviewerOpen
                         checked: addMemberDialog.reviewer
-                        text: "Reviewer"
+                        text: screen.copy("Reviewer")
                         onToggled: if (checked) addMemberDialog.chooseRole("reviewer")
                     }
                 }
@@ -2139,41 +2169,41 @@ Item {
             KetFieldRow {
                 visible: !addMemberDialog.reviewer
                 width: parent.width
-                label: "Lane"
-                help: "The part of the code this developer owns."
-                error: addMemberDialog.tried && laneName.text.trim() === "" ? "Name the lane." : ""
-                KetTextField { id: laneName; width: parent.width; placeholderText: "Onboarding"; invalid: addMemberDialog.tried && text.trim() === "" }
+                label: screen.copy("Lane")
+                help: screen.copy("The part of the code this developer owns.")
+                error: addMemberDialog.tried && laneName.text.trim() === "" ? screen.copy("Name the lane.") : ""
+                KetTextField { id: laneName; width: parent.width; placeholderText: screen.copy("Onboarding"); invalid: addMemberDialog.tried && text.trim() === "" }
             }
             KetFieldRow {
                 visible: !addMemberDialog.reviewer
                 width: parent.width
-                label: "Paths"
-                help: "Folders separated by commas. An edit outside them is flagged on the task."
-                error: addMemberDialog.tried && lanePaths.text.trim() === "" ? "Give at least one folder." : ""
+                label: screen.copy("Paths")
+                help: screen.copy("Folders separated by commas. An edit outside them is flagged on the task.")
+                error: addMemberDialog.tried && lanePaths.text.trim() === "" ? screen.copy("Give at least one folder.") : ""
                 KetTextField { id: lanePaths; width: parent.width; placeholderText: "apps/desktop/src/onboarding/"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
             KetFieldRow {
                 width: parent.width
-                label: "Agent"
-                help: addMemberDialog.reviewer ? "A reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access."
-                                               : "The new conversation's provider, model and effort."
+                label: screen.copy("Agent")
+                help: addMemberDialog.reviewer ? screen.copy("A reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access.")
+                                               : screen.copy("The new conversation's provider, model and effort.")
                 KetButton {
                     width: parent.width
                     text: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel + " · " + addMemberDialog.agentEffort + "  ▾"
-                    Accessible.name: "Choose model and reasoning effort"
+                    Accessible.name: screen.copy("Choose model and reasoning effort")
                     onClicked: { memberAgentDialog.target = ""; memberAgentDialog.open() }
                 }
             }
             KetFieldRow {
                 width: parent.width
-                label: "Name"
-                help: "How the conversation shows in the team's folder. Its role is a tag beside it."
-                error: addMemberDialog.tried && !addMemberDialog.reviewer && memberName.text.trim() === "" ? "Name the conversation." : ""
+                label: screen.copy("Name")
+                help: screen.copy("How the conversation shows in the team's folder. Its role is a tag beside it.")
+                error: addMemberDialog.tried && !addMemberDialog.reviewer && memberName.text.trim() === "" ? screen.copy("Name the conversation.") : ""
                 KetTextField {
                     id: memberName
                     width: parent.width
-                    placeholderText: addMemberDialog.reviewer ? "Reviewer " + (screen.reviewers + 1)
-                                                              : laneName.text.trim() || "Onboarding"
+                    placeholderText: addMemberDialog.reviewer ? screen.copy("Reviewer ") + (screen.reviewers + 1)
+                                                              : laneName.text.trim() || screen.copy("Onboarding")
                     invalid: addMemberDialog.tried && !addMemberDialog.reviewer && text.trim() === ""
                 }
             }
@@ -2181,14 +2211,14 @@ Item {
                 visible: !addMemberDialog.reviewer && screen.developers >= 3 && screen.reviewers < Fixtures.mostReviewers
                 width: parent.width
                 tone: KetTheme.BannerTone.Info
-                title: screen.developers === 3 ? "A fourth developer" : "Reviews already queue"
-                message: "The team's one reviewer keeps up with two or three developers. Past that, reviews queue; a second reviewer shortens the queue."
+                title: screen.developers === 3 ? screen.copy("A fourth developer") : screen.copy("Reviews already queue")
+                message: screen.copy("The team's one reviewer keeps up with two or three developers. Past that, reviews queue; a second reviewer shortens the queue.")
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: addMemberDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: addMemberDialog.reject() },
             KetButton {
-                text: "Add"
+                text: screen.copy("Add")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     addMemberDialog.tried = true
@@ -2226,7 +2256,7 @@ Item {
         // Claude keeps a review read-only (ADR 0067). Codex reviews only when the team starts
         // members with Full access (ketplus#295); the mock's team does not, so Claude only.
         onlyProvider: target === "reviewer" || (target === "" && addMemberDialog.reviewer) ? "claude" : ""
-        onlyReason: "The reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access."
+        onlyReason: screen.copy("The reviewer runs on Claude, which keeps a review read-only. Codex can review only with Full access.")
         onChosen: (provider, model, effort) => {
             if (target !== "") {
                 newTeamDialog.plan = newTeamDialog.withRole(target, { provider: provider, model: model, effort: effort })
@@ -2254,17 +2284,17 @@ Item {
         // T-56 (ADR 0125): the team's language follows the goal's letters until it is picked.
         property bool languagePicked: false
         readonly property var roles: [
-            { role: "leader", label: "Leader" },
-            { role: "developer", label: "Developers" },
-            { role: "reviewer", label: "Reviewers" }]
+            { role: "leader", label: screen.copy("Leader") },
+            { role: "developer", label: screen.copy("Developers") },
+            { role: "reviewer", label: screen.copy("Reviewers") }]
         // One leader, always; the number of developers and of reviewers (T-23) is a choice.
         readonly property int mostDevelopers: 5
         readonly property int total: plan.leader.count + plan.developer.count + plan.reviewer.count
         readonly property string advice:
             plan.developer.count > 3 && plan.reviewer.count < Fixtures.mostReviewers
-                ? "One reviewer keeps up with two or three developers; with more, reviews queue. A second reviewer shortens the queue."
-            : plan.reviewer.count > 1 ? "Each task in review goes to one of the two reviewers, so two tasks are reviewed at the same time."
-            : plan.developer.provider === plan.reviewer.provider ? "Developers on another provider than the reviewer get a more independent review."
+                ? screen.copy("One reviewer keeps up with two or three developers; with more, reviews queue. A second reviewer shortens the queue.")
+            : plan.reviewer.count > 1 ? screen.copy("Each task in review goes to one of the two reviewers, so two tasks are reviewed at the same time.")
+            : plan.developer.provider === plan.reviewer.provider ? screen.copy("Developers on another provider than the reviewer get a more independent review.")
             : ""
         function withRole(role, patch) {
             const next = Object.assign({}, plan)
@@ -2275,36 +2305,36 @@ Item {
             const entry = Fixtures.providers.find(p => p.id === plan[role].provider)
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
-        title: "New team in " + repository
+        title: screen.copy("New team in ") + repository
         onOpened: { newTeamBody.followEnd = false; newTeamBody.contentY = 0; teamStart.reset(); tried = false; teamName.text = ""; teamGoal.text = ""; teamBudget.text = String(Fixtures.turnBudget); plan = defaults; merges = "leader"; leaderMerges.checked = true; teamPermission.currentIndex = 1; teamReview.rounds = 2; teamReview.place = "board" }
         DialogBody {
             id: newTeamBody
             KetFieldRow {
                 width: parent.width
-                label: "Name"
-                error: newTeamDialog.tried && teamName.text.trim() === "" ? "Name the team." : ""
-                KetTextField { id: teamName; width: parent.width; placeholderText: "Onboarding rework"; invalid: newTeamDialog.tried && text.trim() === "" }
+                label: screen.copy("Name")
+                error: newTeamDialog.tried && teamName.text.trim() === "" ? screen.copy("Name the team.") : ""
+                KetTextField { id: teamName; width: parent.width; placeholderText: screen.copy("Onboarding rework"); invalid: newTeamDialog.tried && text.trim() === "" }
             }
             TeamScheduleFields { id: teamStart; width: parent.width; goal: teamGoal.text }
             KetFieldRow {
                 width: parent.width
-                label: "Goal"
+                label: screen.copy("Goal")
                 // The leader's main input: the card's whole width.
                 stacked: true
-                help: "The leader breaks it into tasks and may ask the conversations it mentions for context."
+                help: screen.copy("The leader breaks it into tasks and may ask the conversations it mentions for context.")
                 error: teamGoal.problem
-                TeamGoalField { id: teamGoal; width: parent.width }
+                TeamGoalField { id: teamGoal; width: parent.width; language: screen.teamLanguage }
             }
             KetFieldRow {
                 width: parent.width
-                label: "Integration branch"
-                help: "Reviewed tasks merge here. Merging this branch onward always stays with you."
+                label: screen.copy("Integration branch")
+                help: screen.copy("Reviewed tasks merge here. Merging this branch onward always stays with you.")
                 KetSelect { id: teamBranch; width: parent.width; model: ["develop", "integration", "release/1.4"] }
             }
             KetFieldRow {
                 width: parent.width
-                label: "Language"
-                help: "The team page, its updates and the leader's decisions use it."
+                label: screen.copy("Language")
+                help: screen.copy("The team page, its updates and the leader's decisions use it.")
                 KetSelect {
                     id: teamLanguage
                     width: parent.width
@@ -2321,7 +2351,7 @@ Item {
             }
             KetFieldRow {
                 width: parent.width
-                label: "Merges tasks"
+                label: screen.copy("Merges tasks")
                 Row {
                     width: parent.width
                     spacing: screen.px(6)
@@ -2330,27 +2360,27 @@ Item {
                         width: (parent.width - parent.spacing) / 2
                         kind: KetTheme.ToggleKind.Radio
                         checked: true
-                        text: "The leader"
+                        text: screen.copy("The leader")
                         onToggled: if (checked) newTeamDialog.merges = "leader"
                     }
                     KetChoice {
                         width: (parent.width - parent.spacing) / 2
                         kind: KetTheme.ToggleKind.Radio
-                        text: "Me"
+                        text: screen.copy("Me")
                         onToggled: if (checked) newTeamDialog.merges = "user"
                     }
                 }
             }
-            TeamReviewFields { id: teamReview; width: parent.width }
+            TeamReviewFields { id: teamReview; width: parent.width; language: screen.teamLanguage }
             KetFieldRow {
                 width: parent.width
-                label: "Automatic turns"
-                help: "Turns members start on their own before the team asks you to continue. New teams start from Settings → Teams."
+                label: screen.copy("Automatic turns")
+                help: screen.copy("Turns members start on their own before the team asks you to continue. New teams start from Settings → Teams.")
                 error: newTeamDialog.tried ? Fixtures.turnBudgetError(teamBudget.text) : ""
                 KetTextField {
                     id: teamBudget
                     width: screen.px(96)
-                    Accessible.name: "Automatic turns"
+                    Accessible.name: screen.copy("Automatic turns")
                     invalid: newTeamDialog.tried && Fixtures.turnBudgetError(text) !== ""
                 }
             }
@@ -2358,9 +2388,9 @@ Item {
             // lists it. The reviewer is not in it: a review is always read-only.
             KetFieldRow {
                 width: parent.width
-                label: "Permissions"
+                label: screen.copy("Permissions")
                 help: Fixtures.permissionModes[teamPermission.currentIndex].description
-                      + ". The leader and the developers start with this; change it for one member in its conversation. A Claude reviewer stays read-only; a Codex reviewer needs Full access."
+                      + screen.copy(". The leader and the developers start with this; change it for one member in its conversation. A Claude reviewer stays read-only; a Codex reviewer needs Full access.")
                 KetSelect {
                     id: teamPermission
                     width: parent.width
@@ -2372,10 +2402,10 @@ Item {
             Column {
                 width: parent.width
                 spacing: screen.px(8)
-                Label { text: "Members"; font.weight: Font.Medium }
+                Label { text: screen.copy("Members"); font.weight: Font.Medium }
                 Label {
                     width: parent.width
-                    text: "A team has one leader and one or two reviewers. Create starts every member as a new conversation; the leader gives each developer its lane."
+                    text: screen.copy("A team has one leader and one or two reviewers. Create starts every member as a new conversation; the leader gives each developer its lane.")
                     color: KetTheme.t.textSecondary
                     font.pixelSize: screen.px(12)
                     wrapMode: Text.Wrap
@@ -2402,7 +2432,7 @@ Item {
                             KetSelect {
                                 visible: planRow.modelData.role === "developer"
                                 anchors.fill: parent
-                                Accessible.name: "Number of developers"
+                                Accessible.name: screen.copy("Number of developers")
                                 model: Array.from({ length: newTeamDialog.mostDevelopers }, (v, i) => String(i + 1))
                                 currentIndex: planRow.planned.count - 1
                                 onActivated: index => newTeamDialog.plan = newTeamDialog.withRole("developer", { count: index + 1 })
@@ -2411,7 +2441,7 @@ Item {
                                 objectName: "newTeamReviewers"
                                 visible: planRow.modelData.role === "reviewer"
                                 anchors.fill: parent
-                                Accessible.name: "Number of reviewers"
+                                Accessible.name: screen.copy("Number of reviewers")
                                 model: Array.from({ length: Fixtures.mostReviewers }, (v, i) => String(i + 1))
                                 currentIndex: planRow.planned.count - 1
                                 onActivated: index => newTeamDialog.plan = newTeamDialog.withRole("reviewer", { count: index + 1 })
@@ -2430,7 +2460,7 @@ Item {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             text: newTeamDialog.agentText(planRow.modelData.role) + "  ▾"
-                            Accessible.name: "Choose model and reasoning effort for " + planRow.modelData.label.toLowerCase()
+                            Accessible.name: screen.copy("Choose model and reasoning effort for ") + planRow.modelData.label.toLowerCase()
                             onClicked: { memberAgentDialog.target = planRow.modelData.role; memberAgentDialog.open() }
                         }
                     }
@@ -2448,16 +2478,16 @@ Item {
             KetChoice {
                 id: leaderWrites
                 width: parent.width
-                text: "The leader also writes the requirements"
-                description: "The team's leader puts acceptance criteria on each task before assigning it. Turn this off when a separate conversation researches the requirements."
+                text: screen.copy("The leader also writes the requirements")
+                description: screen.copy("The team's leader puts acceptance criteria on each task before assigning it. Turn this off when a separate conversation researches the requirements.")
                 checked: true
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: newTeamDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: newTeamDialog.reject() },
             KetButton {
                 id: createButton
-                text: "Create with " + newTeamDialog.total + " members"
+                text: screen.copy("Create with ") + newTeamDialog.total + screen.copy(" members")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     newTeamDialog.tried = true
@@ -2470,11 +2500,11 @@ Item {
                                       leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges, teamPermission.currentText,
                                       Number(teamBudget.text.trim()), { rounds: teamReview.rounds, place: teamReview.place })
                     if (teamStart.scheduled) screen.window.scheduleStore.save({
-                        name: "Start team " + name, prompt: teamGoal.text.trim(), kind: "team-start", target: 2,
+                        name: screen.copy("Start team ") + name, prompt: teamGoal.text.trim(), kind: "team-start", target: 2,
                         teamId: created, teamName: name, conversation: screen.team.members[0].number, rule: 0,
                         date: teamStart.date, time: teamStart.time, zone: teamStart.zone, days: [], hours: "4", busy: 0, missed: 0 })
                     if (teamStart.recurring) screen.window.scheduleStore.save(Object.assign({}, teamStart.recurringDraft, {
-                        name: "Daily website article", prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
+                        name: screen.copy("Daily website article"), prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
                         conversation: screen.team.members[0].number, date: teamStart.date, busy: 0, missed: 0 }))
                 }
             }
@@ -2484,20 +2514,21 @@ Item {
     // T-40: the team's review, changed while it runs; tasks in review keep theirs.
     KetDialog {
         id: reviewDialog
-        title: "Review for " + (screen.team ? screen.team.name : "")
+        title: screen.copy("Review for ") + (screen.team ? screen.team.name : "")
         onOpened: { reviewFields.rounds = screen.reviewRounds; reviewFields.place = screen.reviewPlace }
         DialogBody {
             TeamReviewFields {
+                language: screen.teamLanguage
                 id: reviewFields
                 width: parent.width
-                note: "Applies to tasks that enter review from now; a review in progress keeps its rounds and place."
+                note: screen.copy("Applies to tasks that enter review from now; a review in progress keeps its rounds and place.")
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: reviewDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: reviewDialog.reject() },
             KetButton {
                 objectName: "teamReviewSave"
-                text: "Save"
+                text: screen.copy("Save")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     reviewDialog.accept()
@@ -2512,28 +2543,28 @@ Item {
         id: turnBudgetDialog
         property bool tried: false
         readonly property string error: tried ? Fixtures.turnBudgetError(turnBudgetField.text) : ""
-        title: "Automatic turns for " + (screen.team ? screen.team.name : "")
+        title: screen.copy("Automatic turns for ") + (screen.team ? screen.team.name : "")
         onOpened: { tried = false; turnBudgetField.text = String(screen.turnBudget) }
         DialogBody {
             KetFieldRow {
                 width: parent.width
-                label: "Automatic turns"
-                help: "Applies from the next automatic turn. The " + screen.automaticTurns + " turns used stay counted"
+                label: screen.copy("Automatic turns")
+                help: screen.copy("Applies from the next automatic turn. The ") + screen.automaticTurns + screen.copy(" turns used stay counted")
                       + (screen.team && screen.team.pausedReason === "budget"
-                         ? "; a budget that leaves turns resumes the team." : ".")
+                         ? screen.copy("; a budget that leaves turns resumes the team.") : ".")
                 error: turnBudgetDialog.error
                 KetTextField {
                     id: turnBudgetField
                     width: screen.px(96)
-                    Accessible.name: "Automatic turns"
+                    Accessible.name: screen.copy("Automatic turns")
                     invalid: turnBudgetDialog.error !== ""
                 }
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: turnBudgetDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: turnBudgetDialog.reject() },
             KetButton {
-                text: "Save"
+                text: screen.copy("Save")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     turnBudgetDialog.tried = true
@@ -2548,13 +2579,13 @@ Item {
 
     KetDialog {
         id: disbandDialog
-        title: "Delete " + (screen.team ? screen.team.name : "") + "?"
+        title: screen.copy("Delete ") + (screen.team ? screen.team.name : "") + "?"
         // KetDialog lays its body out; a column gives the text its width.
         Column {
             width: disbandDialog.availableWidth
             Label {
                 width: parent.width
-                text: "The team, its tasks and their history are removed. Every conversation, worktree, branch and pull request stays."
+                text: screen.copy("The team, its tasks and their history are removed. Every conversation, worktree, branch and pull request stays.")
                 color: KetTheme.t.textSecondary
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
@@ -2562,9 +2593,9 @@ Item {
             }
         }
         actions: [
-            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: disbandDialog.reject() },
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: disbandDialog.reject() },
             KetButton {
-                text: "Delete team"
+                text: screen.copy("Delete team")
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
                     disbandDialog.accept()
