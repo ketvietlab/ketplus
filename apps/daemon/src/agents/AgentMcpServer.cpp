@@ -188,7 +188,37 @@ QJsonArray tools() {
              schema({{QStringLiteral("summary"),
                       property(QStringLiteral("string"),
                                QStringLiteral("What the user must decide, in one short line."))}},
-                    {QStringLiteral("summary")})}}};
+                    {QStringLiteral("summary")})}},
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("schedule_create")},
+            {QStringLiteral("description"),
+             QStringLiteral("Schedule one follow-up in this conversation, at least 1 minute and "
+                            "at most 7 days ahead. Use this instead of polling or sleeping.")},
+            {QStringLiteral("inputSchema"),
+             schema({{QStringLiteral("prompt"),
+                      property(QStringLiteral("string"), QStringLiteral("What the run should do."))},
+                     {QStringLiteral("name"),
+                      property(QStringLiteral("string"), QStringLiteral("Defaults to Follow-up."))},
+                     {QStringLiteral("at"),
+                      property(QStringLiteral("string"),
+                               QStringLiteral("ISO-8601 time with a UTC offset."))},
+                     {QStringLiteral("inMinutes"),
+                      property(QStringLiteral("integer"),
+                               QStringLiteral("Minutes from now. Send at or inMinutes."))}},
+                    {QStringLiteral("prompt")})}},
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("schedule_list")},
+            {QStringLiteral("description"),
+             QStringLiteral("List the schedules this conversation created.")},
+            {QStringLiteral("inputSchema"), schema({})}},
+        QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("schedule_cancel")},
+            {QStringLiteral("description"),
+             QStringLiteral("Delete one schedule this conversation created.")},
+            {QStringLiteral("inputSchema"),
+             schema({{QStringLiteral("id"),
+                      property(QStringLiteral("string"), QStringLiteral("Schedule id."))}},
+                    {QStringLiteral("id")})}}};
 }
 
 QString operationFor(const QString& tool) {
@@ -204,6 +234,12 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.work_report");
     if (tool == QStringLiteral("request_user_decision"))
         return QStringLiteral("agents.request_user_decision");
+    if (tool == QStringLiteral("schedule_create"))
+        return QStringLiteral("agents.schedule_create");
+    if (tool == QStringLiteral("schedule_list"))
+        return QStringLiteral("agents.schedule_list");
+    if (tool == QStringLiteral("schedule_cancel"))
+        return QStringLiteral("agents.schedule_cancel");
     return teamOperationFor(tool);
 }
 

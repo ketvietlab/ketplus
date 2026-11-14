@@ -1193,8 +1193,12 @@ disabled when a once rule has none.
 
 Schedules are created only from New conversation and New team. `created_by` is
 set by the daemon from the connection (`user`, or the agent conversation id);
-a create that sends it is `unknown_field`. Agent-created schedules wait on the
-limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
+a create that sends it is `unknown_field`. An agent creates its own through
+`schedule_create` (`at` or `inMinutes`), lists them with `schedule_list` and
+deletes them with `schedule_cancel`. D-2 limits those to a once rule on the
+calling conversation, 1 minute to 7 days ahead, and 5 active per conversation.
+Archiving the conversation disables them without `target_deleted`. Timestamps
+on the wire include `Z` or a numeric offset.
 Phone and cloud sync are out of scope for v1. `SessionHostSchedules.cpp` handles
 `schedule.list`, `schedule.get`, `schedule.create`, `schedule.update`,
 `schedule.delete`, `schedule.setEnabled` and `schedule.runs` through this parser

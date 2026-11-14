@@ -570,6 +570,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                    const QJsonObject& payload) override;
     QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                  const QJsonObject& payload) override;
+    QJsonObject agentSchedule(const QString& sessionId, const QString& operation,
+                              const QJsonObject& payload) override;
+    void disableAgentSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
     [[nodiscard]] AgentConversation agentConversationOf(const Session& session) const;
     // The ketplus_agents launch for a conversation generation, when an endpoint is set.

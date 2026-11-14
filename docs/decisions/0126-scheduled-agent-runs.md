@@ -116,7 +116,12 @@ manages; it does not create.
 7. **Who may create one.** The product creates a schedule only from New
    conversation and New team (mock pull request #681). Agent-created schedules
    are the documents whose server-assigned `created_by` is a conversation id.
-   Their limits are pending decision D-2 and are not part of this contract.
+   Decision D-2 is recorded here: the target is only the calling conversation, the
+   rule is once, the fire is at least 1 minute and at most 7 days ahead, and a
+   conversation has at most 5 active agent-created schedules. An agent cannot
+   list, change or cancel another conversation's schedule or one created by the
+   user. Archiving or deleting the conversation disables the ones it created.
+   The tools are `schedule_create`, `schedule_list` and `schedule_cancel`.
 
 8. **Journal.** A following change stores the documents above: deleting a schedule
    deletes its runs; deleting a team deletes its `team` and `team_start`
