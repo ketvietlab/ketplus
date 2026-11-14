@@ -75,6 +75,7 @@ class SettingsDialog;
 class SettingsWorkspacePage;
 class TeamDirectory;
 class TeamPage;
+class ScheduleWindows;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -98,6 +99,8 @@ class MainWindow final : public QMainWindow {
     void followConversationCheckout();
     // ADR 0119: the machines Connections registered and the one the picker selected.
     MachineComposition* machineComposition();
+    // Opens the one Schedules window, selecting `scheduleId` when it is not empty.
+    void showSchedules(const QString& scheduleId = {});
 
   signals:
     void newWindowRequested();
@@ -253,6 +256,7 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] remote::DaemonClient* accountDaemon();
     // ADR 0114 (#464): teams in the sidebar while the daemon advertises teams/1.
     void setupTeams();
+    void setupSchedules();
     // Takes the members of the repository's teams out of `conversations`, into their folders.
     [[nodiscard]] QVector<SidebarTeam>
     takeSidebarTeams(const QString& repository,
@@ -405,6 +409,7 @@ class MainWindow final : public QMainWindow {
     QAction* markdownPreviewAction_{nullptr};
     QAction* terminalAction_{nullptr};
     QAction* remoteControlAction_{nullptr};
+    QAction* schedulesAction_{nullptr};
     QAction* viewDiffAction_{nullptr};
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
@@ -480,6 +485,7 @@ class MainWindow final : public QMainWindow {
     QPointer<LinuxMachines> sharedLinuxMachines_;
     remote::DaemonClient* accountDaemon_{nullptr};
     TeamDirectory* teams_{nullptr};
+    ScheduleWindows* schedules_{nullptr};
     QPointer<TeamPage> teamPage_;
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};

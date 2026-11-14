@@ -155,6 +155,9 @@ Basic.ApplicationWindow {
         if (brand.x < 0 || brand.x + brand.width > sidebar.width || brand.height < brand.implicitHeight)
             console.warn("QML brand check failed: sidebar lockup clips")
     }
+    readonly property alias teamLanguageCheckDone: teams.languageCheckDone
+    readonly property alias teamLanguageProblems: teams.languageProblems
+    function startTeamLanguageChecks() { showScreen("teams"); teams.startLanguageChecks() }
     function teamChecks() {
         const failures = teams.selfCheck()
         if (sidebar.dragged)

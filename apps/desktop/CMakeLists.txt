@@ -80,6 +80,17 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarPinMark.h
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h
+    src/schedules/ScheduleClient.cpp
+    src/schedules/ScheduleClient.h
+    src/schedules/ScheduleRules.cpp
+    src/schedules/ScheduleRules.h
+    src/schedules/ScheduleEditor.cpp
+    src/schedules/ScheduleEditor.h
+    src/schedules/ScheduleWindow.cpp
+    src/schedules/ScheduleWindow.h
+    src/schedules/ScheduleWindowView.cpp
+    src/schedules/ScheduleWindows.cpp
+    src/schedules/ScheduleWindows.h
     src/teams/TeamMenus.cpp
     src/teams/TeamMenus.h
     src/teams/TeamAgentDialog.cpp
@@ -189,6 +200,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowConversationActions.cpp
     src/app/ConversationMenu.cpp
     src/app/MainWindowTeams.cpp
+    src/app/MainWindowSchedules.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp
     src/app/TranscriptFileType.h

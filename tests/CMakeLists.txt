@@ -316,6 +316,12 @@ target_link_libraries(ketplus_linux_relay_machines_tests PRIVATE
     ketplus_desktop_support
 )
 
+ketplus_add_gui_test(ketplus_schedule_client_tests ScheduleClientTest.cpp)
+target_link_libraries(ketplus_schedule_client_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_schedule_window_tests ScheduleWindowTest.cpp)
+target_link_libraries(ketplus_schedule_window_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
 add_subdirectory(daemon)
 
 if(APPLE)

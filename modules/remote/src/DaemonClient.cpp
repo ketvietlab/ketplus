@@ -516,6 +516,12 @@ void DaemonClient::consumeFrame(const QByteArray& frame) {
         emit teamEventReceived(type, envelope.value(QStringLiteral("payload")).toObject());
         return;
     }
+    if (const QString type = envelope.value(QStringLiteral("message_type")).toString();
+        type.startsWith(QStringLiteral("schedule.")) &&
+        !envelope.contains(QStringLiteral("correlation_id"))) {
+        emit scheduleEventReceived(type, envelope.value(QStringLiteral("payload")).toObject());
+        return;
+    }
     if (envelope.value(QStringLiteral("message_type")).toString() ==
         QStringLiteral("tags.changed")) {
         emit noticeReceived(QStringLiteral("tags.changed"),
