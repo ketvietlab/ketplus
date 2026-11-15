@@ -1,6 +1,8 @@
 #include "app/MainWindow.h"
 
 #include "DaemonClient.h"
+#include "agent/AgentWorkspaceView.h"
+#include "schedules/ComposerSchedule.h"
 #include "schedules/ScheduleClient.h"
 #include "schedules/ScheduleWindows.h"
 
@@ -47,11 +49,31 @@ void MainWindow::setupSchedules() {
             &ScheduleClient::applyEvent);
     connect(schedules_, &ScheduleWindows::conversationRequested, this, &MainWindow::openTeamMember);
     update();
+    attachComposerSchedule();
+}
+
+void MainWindow::attachComposerSchedule() {
+    if (schedules_ == nullptr || agentWorkspace_ == nullptr)
+        return;
+    if (composerSchedule_ == nullptr) {
+        composerSchedule_ = new ComposerSchedule(this);
+        composerSchedule_->setClient(schedules_->client());
+        connect(composerSchedule_, &ComposerSchedule::openRequested, this,
+                &MainWindow::showSchedules);
+        connect(composerSchedule_, &ComposerSchedule::editRequested, this,
+                &MainWindow::editSchedule);
+    }
+    agentWorkspace_->setScheduleBridge(composerSchedule_);
 }
 
 void MainWindow::showSchedules(const QString& scheduleId) {
     if (schedules_ != nullptr)
         schedules_->show(scheduleId);
+}
+
+void MainWindow::editSchedule(const QString& scheduleId) {
+    if (schedules_ != nullptr)
+        schedules_->edit(scheduleId);
 }
 
 } // namespace ketplus

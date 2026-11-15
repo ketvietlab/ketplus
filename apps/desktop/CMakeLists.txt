@@ -80,6 +80,8 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarPinMark.h
     src/teams/TeamDirectory.cpp
     src/teams/TeamDirectory.h
+    src/schedules/ComposerSchedule.cpp
+    src/schedules/ComposerSchedule.h
     src/schedules/ScheduleClient.cpp
     src/schedules/ScheduleClient.h
     src/schedules/ScheduleRules.cpp

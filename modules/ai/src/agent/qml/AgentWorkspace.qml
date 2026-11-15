@@ -724,6 +724,51 @@ Item {
         target: agentHost
         function onMermaidChanged() { imagePreview.refreshMermaid() }
     }
+    Connections {
+        target: agentHost.scheduleBridge
+        enabled: agentHost.scheduleBridge !== null
+        ignoreUnknownSignals: true
+        function onCreated() { prompt.clear() }
+        function onSendFailed(message) { workspaceToast.show(message) }
+        function onToastRequested(message, scheduleId) {
+            scheduleFailureToast.scheduleId = scheduleId
+            scheduleFailureToast.show(message)
+        }
+    }
+    Kit.KetToast {
+        id: scheduleFailureToast
+        objectName: "scheduleFailureToast"
+        property string scheduleId: ""
+        bottomAvoidance: workspaceToast.bottomAvoidance
+        contentItem: RowLayout {
+            spacing: scheduleFailureToast.recipe.spacing
+            KetIcon {
+                Layout.alignment: Qt.AlignVCenter
+                name: "error"
+                box: scheduleFailureToast.recipe.iconSize
+                color: scheduleFailureToast.recipe.text
+            }
+            Text {
+                objectName: "scheduleFailureReason"
+                Layout.maximumWidth: Math.max(KetTheme.px(180, KetTheme.zoom), Math.min(KetTheme.px(520, KetTheme.zoom), (scheduleFailureToast.parent ? scheduleFailureToast.parent.width : 900) - KetTheme.px(220, KetTheme.zoom)))
+                text: scheduleFailureToast.text
+                wrapMode: Text.Wrap
+                color: scheduleFailureToast.recipe.text
+                font.family: KetTheme.fontFamily
+                font.pixelSize: scheduleFailureToast.recipe.fontPixels
+            }
+            KetButton {
+                objectName: "scheduleFailureOpen"
+                text: "Open schedule"
+                onClicked: {
+                    const bridge = agentHost.scheduleBridge
+                    if (bridge)
+                        bridge.openSchedule(scheduleFailureToast.scheduleId)
+                    scheduleFailureToast.close()
+                }
+            }
+        }
+    }
     Kit.KetToast {
         id: workspaceToast
         objectName: "workspaceToast"
@@ -1351,9 +1396,44 @@ Item {
         revealLatestAfterSubmit()
     }
 
+    function syncScheduleContext() {
+        const bridge = agentHost.scheduleBridge
+        if (!bridge)
+            return
+        const count = agentHost.messageModel ? agentHost.messageModel.count : 0
+        let sessionId = ""
+        for (const conversation of agentHost.conversations || []) {
+            if (conversation.active)
+                sessionId = conversation.sessionId || conversation.id || ""
+        }
+        bridge.setContext(count === 0, sessionId, agentHost.activePath || "", selectedProvider,
+                          selectedModel, selectedEffort)
+    }
+    Component.onCompleted: syncScheduleContext()
+    onSelectedProviderChanged: syncScheduleContext()
+    onSelectedModelChanged: syncScheduleContext()
+    onSelectedEffortChanged: syncScheduleContext()
+    Connections {
+        target: agentHost
+        function onConversationsChanged() { root.syncScheduleContext() }
+        function onActivePathChanged() { root.syncScheduleContext() }
+        function onMessageModelChanged() { root.syncScheduleContext() }
+        function onScheduleBridgeChanged() { root.syncScheduleContext() }
+    }
+    Connections {
+        target: agentHost.messageModel
+        function onCountChanged() { root.syncScheduleContext() }
+    }
+
     function submitCurrentPrompt() {
         if (!agentHost.agentAvailable || agentHost.steeringPending || root.copilotUnavailable)
             return
+        const bridge = agentHost.scheduleBridge
+        if (bridge && bridge.scheduleSet && bridge.newConversation && !agentHost.sessionRunning) {
+            bridge.draftPrompt = prompt.text
+            if (bridge.send())
+                return
+        }
         const value = prompt.text.trim()
         if (value.length === 0 && agentHost.attachments.length === 0)
             return

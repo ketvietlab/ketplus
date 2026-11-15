@@ -208,4 +208,18 @@ bool ScheduleClient::runsHaveMore(const QString& id) const { return runs_.value(
 
 schedule::Run ScheduleClient::latestRun(const QString& id) const { return latestRun_.value(id); }
 
+std::optional<schedule::Run> ScheduleClient::run(const QString& runId) const {
+    if (runId.isEmpty())
+        return std::nullopt;
+    for (auto page = runs_.cbegin(); page != runs_.cend(); ++page) {
+        for (const schedule::Run& item : page->items)
+            if (item.id == runId)
+                return item;
+    }
+    for (auto it = latestRun_.cbegin(); it != latestRun_.cend(); ++it)
+        if (it->id == runId)
+            return *it;
+    return std::nullopt;
+}
+
 } // namespace ketplus
