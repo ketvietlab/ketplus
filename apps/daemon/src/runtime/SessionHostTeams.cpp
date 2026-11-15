@@ -212,4 +212,6 @@ void SessionHost::startTeams() {
             });
 }
 
+void SessionHost::schedulesChanged() { noteSchedulesChanged(); }
+
 } // namespace ketplus::daemon

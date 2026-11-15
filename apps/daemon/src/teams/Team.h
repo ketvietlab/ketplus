@@ -272,6 +272,13 @@ struct Team final {
     bool planApproved{false};
     // The leader has had its first turn with the goal.
     bool leaderStarted{false};
+    // The leader has not been started, and must not be started by an ordinary update.
+    // Set for a start_at and left set when that start is cancelled.
+    bool startWaiting{false};
+    // Local civil time and IANA zone, while a team_start schedule is waiting.
+    QString startAt;
+    QString startTimeZone;
+    QString startScheduleId;
     QList<Member> members;
     QList<Task> tasks;
     QList<Decision> decisions;

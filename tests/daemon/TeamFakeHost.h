@@ -17,6 +17,16 @@ using namespace ketplus::daemon::teams;
 
 class FakeHost final : public TeamHostPort {
   public:
+    std::function<void()> onSchedulesChanged;
+    std::function<void(qint64)> onScheduledTeamMayStart;
+    void schedulesChanged() override {
+        if (onSchedulesChanged)
+            onSchedulesChanged();
+    }
+    void scheduledTeamMayStart(const qint64 teamId) override {
+        if (onScheduledTeamMayStart)
+            onScheduledTeamMayStart(teamId);
+    }
     std::optional<TeamConversation> teamConversation(const QString& sessionId) const override {
         const auto it = conversations.constFind(sessionId);
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
