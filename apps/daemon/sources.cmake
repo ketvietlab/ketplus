@@ -120,6 +120,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
     src/agents/AgentMcpServer.cpp
+    src/agents/AgentSchedule.cpp
     src/agents/AgentMcpServer.h
     src/agents/AgentTeamTools.cpp
     src/agents/AgentTeamTools.h
@@ -175,6 +176,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostSchedules.cpp
+    src/runtime/SessionHostAgentSchedules.cpp
     src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp

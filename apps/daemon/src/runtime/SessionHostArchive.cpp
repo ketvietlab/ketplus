@@ -47,6 +47,8 @@ QJsonObject SessionHost::setSessionArchived(const QJsonObject& request) {
                                           archivedAt))
             return error(QStringLiteral("journal_error"), journal_->errorString());
         session->stored.archivedAt = archivedAt;
+        if (!archivedAt.isEmpty())
+            disableAgentSchedules(session->stored.id);
     }
     QJsonObject result{{QStringLiteral("accepted"), true},
                        {QStringLiteral("session_id"), session->stored.id},

@@ -47,6 +47,8 @@ struct ScheduleFilter final {
     QString targetKind;
     QString sessionId;
     QString teamId;
+    // When set, only schedules this conversation or "user" created.
+    QString createdBy;
 };
 
 // One firing of a schedule. `status` is queued, running, succeeded, failed, skipped or missed.

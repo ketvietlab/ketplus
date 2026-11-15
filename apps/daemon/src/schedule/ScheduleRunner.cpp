@@ -102,6 +102,8 @@ void QtScheduleAlarm::arm(std::chrono::milliseconds delay) {
 
 void QtScheduleAlarm::disarm() { timer_->timer.stop(); }
 
+bool QtScheduleAlarm::armed() const { return timer_ && timer_->timer.isActive(); }
+
 void QtScheduleAlarm::notify() {
     if (handler_)
         handler_();

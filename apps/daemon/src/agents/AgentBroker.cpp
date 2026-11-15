@@ -157,6 +157,9 @@ bool AgentBroker::isOperation(const QString& type) {
            type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
            type == QStringLiteral("agents.work_report") ||
            type == QStringLiteral("agents.request_user_decision") ||
+           type == QStringLiteral("agents.schedule_create") ||
+           type == QStringLiteral("agents.schedule_list") ||
+           type == QStringLiteral("agents.schedule_cancel") ||
            type.startsWith(QStringLiteral("agents.team_"));
 }
 
@@ -182,6 +185,10 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
     if (operation == QStringLiteral("agents.request_user_decision"))
         return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
+    if (operation == QStringLiteral("agents.schedule_create") ||
+        operation == QStringLiteral("agents.schedule_list") ||
+        operation == QStringLiteral("agents.schedule_cancel"))
+        return host_->agentSchedule(caller->sessionId, operation.mid(7), payload);
     if (operation.startsWith(QStringLiteral("agents.team_")))
         return host_->teamOperation(caller->sessionId, operation.mid(7), payload);
     return failure(QStringLiteral("unsupported_operation"),

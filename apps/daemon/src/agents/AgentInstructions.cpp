@@ -45,6 +45,9 @@ QString toolInstructions(const QString& ownNumber) {
                "asks the user to approve, choose or decide something before the work can go "
                "on, call request_user_decision with a one-line summary just before that answer; "
                "KetPlus then shows the conversation as Waiting for you.\n"
+               "To run later in this conversation, call schedule_create with a prompt and either "
+               "at or inMinutes. Do not poll or sleep until a time. schedule_list and "
+               "schedule_cancel see only the schedules this conversation created.\n"
                "[/KetPlus agent messaging]")
         .arg(ownNumber);
 }

@@ -291,6 +291,10 @@ std::optional<QList<ScheduleRecord>> LocalJournal::schedules(const ScheduleFilte
         clauses.append(QStringLiteral("team_id = ?"));
         values.append(filter.teamId);
     }
+    if (!filter.createdBy.isEmpty()) {
+        clauses.append(QStringLiteral("created_by = ?"));
+        values.append(filter.createdBy);
+    }
     QString sql = QStringLiteral("SELECT %1 FROM schedules").arg(scheduleColumns);
     if (!clauses.isEmpty())
         sql += QStringLiteral(" WHERE ") + clauses.join(QStringLiteral(" AND "));
@@ -500,6 +504,39 @@ bool LocalJournal::disableSchedulesForSession(const QString& sessionId, QString*
         return reject(update.lastError().text());
     setError({});
     return true;
+}
+
+QStringList LocalJournal::disableAgentSchedules(const QString& sessionId, QString* error) {
+    const auto reject = [&](const QString& message) {
+        setError(message);
+        if (error)
+            *error = message;
+        return QStringList{};
+    };
+    if (sessionId.isEmpty())
+        return reject(QStringLiteral("Schedule session id is empty."));
+    QSqlQuery listed(database_);
+    listed.prepare(QStringLiteral(
+        "SELECT id FROM schedules WHERE created_by = ? AND enabled = 1 ORDER BY id"));
+    listed.addBindValue(sessionId);
+    if (!listed.exec())
+        return reject(listed.lastError().text());
+    QStringList ids;
+    while (listed.next())
+        ids.append(listed.value(0).toString());
+    if (ids.isEmpty()) {
+        setError({});
+        return {};
+    }
+    QSqlQuery update(database_);
+    update.prepare(QStringLiteral(
+        "UPDATE schedules SET enabled = 0, updated_at = ? WHERE created_by = ? AND enabled = 1"));
+    update.addBindValue(text(now()));
+    update.addBindValue(sessionId);
+    if (!update.exec())
+        return reject(update.lastError().text());
+    setError({});
+    return ids;
 }
 
 bool LocalJournal::appendScheduleRun(const ScheduleRunRecord& run, QString* error) {
