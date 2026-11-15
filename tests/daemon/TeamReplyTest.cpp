@@ -236,22 +236,33 @@ class TeamReplyTest final : public QObject {
     // the assignments follow in their order.
     void startIsAnsweredBeforeTheAssignmentsAreSent() {
         const QString plan = openDecision("first_plan");
-        const SlowGit slow(fixture_->directory.filePath("bin"));
+        const QString gitStarted = fixture_->directory.filePath("start-git-started");
+        const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
         QVERIFY(slow.installed);
-        qint64 elapsed = -1;
-        const QJsonObject reply =
-            timed("team.decision.answer",
-                  {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}, &elapsed);
+        QJsonObject reply;
+        int assignmentsAtReply = -1;
+        bool gitStartedAtReply = true;
+        fixture_->host->handleCommandDeferred(
+            agent_test::request("team.decision.answer",
+                                {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}),
+            "desktop-test", [&](const QJsonObject& result) {
+                assignmentsAtReply = count("assignment");
+                gitStartedAtReply = QFileInfo::exists(gitStarted);
+                reply = result;
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(!reply.isEmpty(), 30000);
         QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
-        qInfo("team.decision.answer (first plan, Start): reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        // ADR 0114 promises reply-before-outbox ordering, independent of the time
+        // needed to commit the decision or schedule this process on a shared runner.
+        QCOMPARE(assignmentsAtReply, 0);
+        QVERIFY2(!gitStartedAtReply, "Deferred Git ran before the Start reply.");
         const QJsonObject team = reply.value("team").toObject();
         QVERIFY(team.value("plan_approved").toBool());
         for (const QJsonValue& value : team.value("decisions").toArray())
             if (value.toObject().value("id").toString() == plan)
                 QCOMPARE(value.toObject().value("state").toString(), QStringLiteral("answered"));
         QVERIFY(!team.contains("outbox"));
-        QCOMPARE(count("assignment"), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
         QCOMPARE(fixture_->journal->agentMessagesOf(developers_.at(0), 1, 50)
                      .first()
@@ -459,13 +470,17 @@ class TeamReplyTest final : public QObject {
                     .value("ok")
                     .toBool());
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
+        // Message delivery precedes the fake agent finishing its turn. A busy
+        // conversation can refuse the later worktree switch before Git is called.
+        for (const QString& developer : developers_)
+            QTRY_VERIFY_WITH_TIMEOUT(
+                fixture_->count(developer, QStringLiteral("turn.completed")) > 0, 30000);
         QVERIFY(
             command("team.update", {{"team_id", teamId_}, {"paused", true}}).value("ok").toBool());
         QVERIFY(command("team.task.create", {{"team_id", teamId_}, {"title", "Docs"}})
                     .value("ok")
                     .toBool());
         assignByTheLeader("T-3", developers_.at(0));
-        QTest::qWait(300);
         QCOMPARE(count("assignment"), 2);
         const QString gitStarted = fixture_->directory.filePath("resume-git-started");
         const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
