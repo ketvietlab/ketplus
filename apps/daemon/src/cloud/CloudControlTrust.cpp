@@ -17,12 +17,13 @@ QString encodedPathSegment(const QString& value) {
 } // namespace
 
 CloudControlClient::AccountFence CloudControlClient::accountFence() const {
-    return {accountEpoch_, machineId_, workspaceId_};
+    return {accountEpoch_, enrollmentRevision_, machineId_, workspaceId_};
 }
 
 bool CloudControlClient::accountCurrent(const AccountFence& fence) const {
     return !machineId_.isEmpty() && !workspaceId_.isEmpty() && fence.epoch == accountEpoch_ &&
-           fence.machine == machineId_ && fence.workspace == workspaceId_;
+           fence.enrollmentRevision == enrollmentRevision_ && fence.machine == machineId_ &&
+           fence.workspace == workspaceId_;
 }
 
 QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices,

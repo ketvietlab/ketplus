@@ -41,11 +41,16 @@ add a device row with its own keys and read every session, send commands and ope
   initialized pin set, or pins disappearing later in the process, grants no migration
   permission. Sender-key fallback lookup uses this same permission.
 - **Trust callbacks belong to one enrollment.** Device-list distribution, sender-key lookup,
-  peer admission and pairing operations capture the account epoch, machine and workspace.
-  Each asynchronous continuation checks that all three still match a nonempty enrollment
+  peer admission and pairing operations capture the account epoch, enrollment revision,
+  machine and workspace. Each asynchronous continuation checks that all four still match
+  a nonempty enrollment
   before adopting or changing pins, wrapping keys, refreshing peers or making a follow-up
   request. Sign-out invalidates the epoch before removing account state; even signing into
-  the same machine/workspace cannot authorize a reply from the previous epoch.
+  the same machine/workspace cannot authorize a reply from the previous epoch. Enrollment
+  advances the trust revision before resetting pins, also invalidating operations started
+  while sign-in was pending. This revision is separate from the sign-in epoch so its
+  completion callback still clears pending sign-in state. Partial storage failure also
+  invalidates earlier trust operations.
 - **Pairing a phone with one Mac does not grant it another Mac's sessions.** Each Mac approves its
   own devices.
 

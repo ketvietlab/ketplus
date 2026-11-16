@@ -134,6 +134,7 @@ class CloudControlClient final : public QObject {
     void noteCommandPollFailure(int status);
     struct AccountFence {
         quint64 epoch;
+        quint64 enrollmentRevision;
         QString machine;
         QString workspace;
     };
@@ -297,6 +298,7 @@ class CloudControlClient final : public QObject {
     RemoteWorktreeQuota worktreeQuota_;
     int machineKeyVersion_{1};
     quint64 accountEpoch_{0};
+    quint64 enrollmentRevision_{0};
     bool legacyPinAdoptionPending_{false};
     // Raised by revokeAtlasAccess, for the machine and for each revoked device.
     quint64 atlasMachineEpoch_{0};

@@ -108,6 +108,73 @@ class CloudTrustLifecycleTest final : public QObject {
              {"sign-out", "new-enrollment", "same-enrollment", "machine", "workspace"})
             QTest::newRow(name) << QString::fromLatin1(name);
     }
+
+    void approvalDuringSameIdentityEnrollment_data() {
+        QTest::addColumn<bool>("holdClaim");
+        QTest::addColumn<bool>("storageFailure");
+        QTest::newRow("claim-reply") << true << false;
+        QTest::newRow("approval-reply") << false << false;
+        QTest::newRow("claim-reply-storage-failure") << true << true;
+        QTest::newRow("approval-reply-storage-failure") << false << true;
+    }
+    void approvalDuringSameIdentityEnrollment() {
+        QFETCH(bool, holdClaim);
+        QFETCH(bool, storageFailure);
+        Fixture f;
+        const QString enrollmentPath = "/v2/machines:enroll";
+        f.reply("/v2/auth/device/code",
+                QJsonObject{{"device_code", "ketplus_device_" + QString(43, 'A')},
+                            {"user_code", "A1B2C3D4"},
+                            {"verification_uri_complete", "https://synthetic.invalid/approve"},
+                            {"expires_in", 600},
+                            {"interval", 5}});
+        f.reply("/v2/auth/device/token", QJsonObject{{"accessToken", "synthetic-user-token"}});
+        f.reply(enrollmentPath,
+                QJsonObject{{"id", "machine-synthetic"},
+                            {"workspaceId", "workspace-synthetic"},
+                            {"keyVersion", 1}},
+                201);
+        f.transport.heldPaths.insert(enrollmentPath);
+        bool started = false;
+        f.client->handleLocal("remote.sign_in.device", {},
+                              [&](const QJsonObject& result, const QString& error) {
+                                  started = error.isEmpty() && result.value("ok").toBool();
+                              });
+        QTRY_VERIFY(started);
+        Access::pollDevice(*f.client);
+        QTRY_COMPARE(f.transport.heldReplies.size(), 1);
+
+        // Start approval after the sign-in epoch advances, while the old identity remains.
+        f.reply(ticketPath, f.ticket());
+        f.reply(ticketPath + "/approve", QJsonObject{});
+        const auto heldPath = holdClaim ? ticketPath : ticketPath + "/approve";
+        f.transport.heldPaths.insert(heldPath);
+        int answers = 0;
+        QString failure;
+        f.client->handleLocal("remote.pairing.approve", f.approval(),
+                              [&](const QJsonObject&, const QString& error) {
+                                  ++answers;
+                                  failure = error;
+                              });
+        QTRY_COMPARE(f.transport.heldReplies.size(), 2);
+        if (storageFailure)
+            r03::failWritesTo = "account-name";
+        f.transport.release(enrollmentPath);
+        // Storage or the fake credential challenge fails; sign-in must still finish.
+        QTRY_VERIFY(!Access::status(*f.client).value("sign_in_pending").toBool());
+        r03::failWritesTo.clear();
+        QCOMPARE(Access::machineId(*f.client), "machine-synthetic");
+        QVERIFY(Access::pins(*f.client).initialized());
+        QVERIFY(!Access::pins(*f.client).trusts(f.device));
+        const auto credentials = r03::credentials;
+        const auto requests = f.transport.requests.size();
+        f.transport.release(heldPath);
+        QCOMPARE(answers, 1);
+        QVERIFY(!failure.isEmpty());
+        QCOMPARE(r03::credentials, credentials);
+        QCOMPARE(f.transport.requests.size(), requests);
+        QVERIFY(!Access::pins(*f.client).trusts(f.device));
+    }
     void delayedDistribution() {
         QFETCH(QString, transition);
         Fixture f;

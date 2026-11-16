@@ -816,7 +816,11 @@ Physical devices/TURN require a separate explicitly configured local test stack.
 
 `ketplus_cloud_trust_lifecycle_tests` holds native fake HTTP replies across sign-out and
 re-enrollment (including the same machine/workspace), and independently changes each scope
-identifier. It verifies that stale replies cannot write pins or wrapped keys, issue follow-up
+identifier. Device sign-in interleavings also hold enrollment, start approval, finish
+enrollment with the same identity and release the old claim or approval reply; pending
+sign-in must clear without restoring pins or issuing another approval request. The same
+interleaving is checked when storage fails after resetting pins.
+It verifies that stale replies cannot write pins or wrapped keys, issue follow-up
 uploads, refresh a new enrollment's pending peer, or complete pairing/revocation. It also
 checks that legitimate restored-enrollment migration works for distribution and sender-key
 fallback, while initialized empty pins and missing enrollment do not permit adoption. The
