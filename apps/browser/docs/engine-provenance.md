@@ -21,6 +21,11 @@ remains open at the time of this preparation. These observations do not prove
 that no independent identity source exists; no usable source for the complete
 pinned matrix has been established in this task.
 
+The [bounded source review and proposed enrollment route](engine-provenance-research.md)
+records exact-version metadata, platform-specific signing gaps and the separate
+responsibilities for artifact authentication, manifest signing and revocation.
+Neither that review nor its distribution fixture enrolls a production identity.
+
 | Playwright platform | Browser version / revision | Enrolled independent identity | Runtime acceptance |
 | --- | --- | --- | --- |
 | macOS ARM64 | 153.0.8010.12 / 1243 | Missing | Not run |

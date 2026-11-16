@@ -1,0 +1,17 @@
+{
+  "kind": "distribution-metadata-not-identity",
+  "observedOn": "2026-11-16",
+  "catalogUrl": "https://googlechromelabs.github.io/chrome-for-testing/153.0.8010.12.json",
+  "playwrightVersion": "1.63.0",
+  "playwrightRevision": "1243",
+  "cftRevision": "1681091",
+  "browserVersion": "153.0.8010.12",
+  "identityEnrolled": false,
+  "mappings": [
+    { "hostPlatform": "mac15-arm64", "cftPlatform": "mac-arm64", "archive": "chrome-mac-arm64.zip" },
+    { "hostPlatform": "mac15", "cftPlatform": "mac-x64", "archive": "chrome-mac-x64.zip" },
+    { "hostPlatform": "ubuntu24.04-x64", "cftPlatform": "linux64", "archive": "chrome-linux64.zip" },
+    { "hostPlatform": "ubuntu24.04-arm64", "cftPlatform": "linux-arm64", "archive": "chrome-linux-arm64.zip" },
+    { "hostPlatform": "win64", "cftPlatform": "win64", "archive": "chrome-win64.zip" }
+  ]
+}
