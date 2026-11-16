@@ -132,10 +132,19 @@ class CloudControlClient final : public QObject {
     // may have read before the command it announces was written.
     void wakeCommandPoll();
     void noteCommandPollFailure(int status);
-    // The active rows of a relay device list that are pinned here, adopting them on first use.
-    QJsonArray trustedDevices(const QJsonArray& devices);
+    struct AccountFence {
+        quint64 epoch;
+        quint64 enrollmentRevision;
+        QString machine;
+        QString workspace;
+    };
+    [[nodiscard]] AccountFence accountFence() const;
+    [[nodiscard]] bool accountCurrent(const AccountFence& fence) const;
+    // Only a restored legacy enrollment can adopt its first device list.
+    QJsonArray trustedDevices(const QJsonArray& devices, const AccountFence& fence);
+    void invalidateSenderKeys();
     using SenderKeysCallback = std::function<void(const QJsonObject&, const QString&)>;
-    // A phone's published keys, read from the relay at most once per senderKeyCacheMilliseconds.
+    // Cached published keys remain usable only within the current enrollment and local pin.
     void withSenderKeys(const QString& senderId, int version, SenderKeysCallback callback);
     void executeCommand(const QJsonObject& command);
     void executeWorkspaceFiles(const QJsonObject& command, const QJsonObject& payload);
@@ -283,13 +292,21 @@ class CloudControlClient final : public QObject {
     // session -> (what was sealed, sealed metadata); resealed only when either changes.
     QHash<QString, std::pair<QByteArray, QJsonObject>> sealedMetadata_;
     bool sessionMetadataRefused_{false};
-    // "device/version" -> (published keys, when to read them again).
-    QHash<QString, std::pair<QJsonObject, QDateTime>> senderKeys_;
+    struct SenderKeyEntry {
+        QJsonObject keys;
+        QDateTime expiresAt;
+        AccountFence account;
+    };
+    // "device/version" -> keys scoped to the enrollment that authorized them.
+    QHash<QString, SenderKeyEntry> senderKeys_;
+    quint64 senderKeysRevision_{0};
     // Command id -> when this daemon claimed it, for the result log line.
     QHash<QString, qint64> commandStartedAt_;
     RemoteWorktreeQuota worktreeQuota_;
     int machineKeyVersion_{1};
     quint64 accountEpoch_{0};
+    quint64 enrollmentRevision_{0};
+    bool legacyPinAdoptionPending_{false};
     // Raised by revokeAtlasAccess, for the machine and for each revoked device.
     quint64 atlasMachineEpoch_{0};
     QHash<QString, quint64> atlasDeviceEpochs_;

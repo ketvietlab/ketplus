@@ -53,6 +53,10 @@ Task taskFromJson(const QJsonObject& json) {
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
+    task.routingDecision = risk::fromJson(json.value(QStringLiteral("routing_decision")));
+    if (task.routingDecision && (task.routingDecision->taskId != task.id ||
+                                 task.routingDecision->route == risk::Route::LeaderDirect))
+        task.routingDecision.reset();
     task.repository = json.value(QStringLiteral("repository")).toString();
     task.integrationBranch = json.value(QStringLiteral("integration_branch")).toString();
     task.branchType = json.value(QStringLiteral("branch_type")).toString();
@@ -330,6 +334,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
                      {QStringLiteral("merge_offered"), task.mergeOffered},
                      {QStringLiteral("changed_revision"), task.changedRevision}};
+    if (task.routingDecision)
+        json.insert(QStringLiteral("routing_decision"), risk::toJson(*task.routingDecision));
     if (!task.allowedPaths.isEmpty())
         json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
     // T-90: sent only when the task does not work in the team's repository.
@@ -398,6 +404,8 @@ QJsonObject toJson(const Team& team) {
             first = &slot;
     }
     return {{QStringLiteral("id"), QString::number(team.id)},
+            {QStringLiteral("last_routing_decision"),
+             team.lastRoutingDecision ? risk::toJson(*team.lastRoutingDecision) : QJsonObject{}},
             {QStringLiteral("repository"), team.repository},
             {QStringLiteral("name"), team.name},
             {QStringLiteral("goal"), team.goal},
@@ -442,6 +450,9 @@ QJsonObject toJson(const Team& team) {
 Team teamFromJson(const QJsonObject& json) {
     Team team;
     team.id = json.value(QStringLiteral("id")).toString().toLongLong();
+    team.lastRoutingDecision = risk::fromJson(json.value(QStringLiteral("last_routing_decision")));
+    if (team.lastRoutingDecision && team.lastRoutingDecision->teamId != team.id)
+        team.lastRoutingDecision.reset();
     team.repository = json.value(QStringLiteral("repository")).toString();
     team.name = json.value(QStringLiteral("name")).toString();
     team.goal = json.value(QStringLiteral("goal")).toString();
@@ -471,6 +482,9 @@ Team teamFromJson(const QJsonObject& json) {
         team.members.append(memberFromJson(value.toObject()));
     for (const auto& value : json.value(QStringLiteral("tasks")).toArray())
         team.tasks.append(taskFromJson(value.toObject()));
+    for (Task& task : team.tasks)
+        if (task.routingDecision && task.routingDecision->teamId != team.id)
+            task.routingDecision.reset();
     for (const auto& value : json.value(QStringLiteral("decisions")).toArray())
         team.decisions.append(decisionFromJson(value.toObject()));
     team.held = json.value(QStringLiteral("held")).toArray();

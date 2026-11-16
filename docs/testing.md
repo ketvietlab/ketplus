@@ -289,6 +289,24 @@ a fresh owned runtime. These cases do not opt into a real CLI, renderer or
 provider. Header changes require the full Pro matrix; keep the existing real
 KetAtlas lane opt-in and report its skip separately.
 
+## New team dialog layout
+
+`ketplus_team_dialogs_tests` uses a fake daemon and renders the real Qt form. Its
+geometry cases cover two columns at 1280 × 900 and 1024 × 420, a single column at
+480 × 640, English and Vietnamese, visible footer buttons, compact wrapped help,
+and keyboard access through both columns. Existing cases resize and zoom the
+open dialog through 100%, 125% and 150%. `ketplus_team_goal_form_tests` covers
+mentions, multiline entry and submit shortcuts; `ketplus_team_page_language_tests`
+covers language behavior. No provider or real team is started.
+
+For local PNGs and geometry logs, run `ketplus_team_dialogs_tests
+columnsReflowAndKeepTheFooterReachable` with `QT_QPA_PLATFORM=offscreen`,
+`KETPLUS_DISABLE_DAEMON_AUTOSTART=1` and `KETPLUS_T15_CAPTURE` set to a local output
+directory. Keep generated captures out of the source tree.
+
+The [layout verification record](evidence/new-team-dialog-layout.md) retains the
+full Pro matrix results, initial failures, one isolated retry and platform skips.
+
 ## Minimum verification
 
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
@@ -774,6 +792,12 @@ registry, executor containment, SDK background blocking or completion delivery.
 The ADR names those separate implementation gates. Existing tests below remain
 legacy-behavior evidence during migration.
 
+The opt-in Linux daemon-user environment and containment probes are documented
+in [the Linux evidence record](decisions/0127-linux-containment-evidence.md).
+They run synthetic workers in an exclusively owned disposable guest, including
+expected escape controls. They are not part of the default suite and do not
+establish production registry/executor acceptance.
+
 `node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a fake
 SDK whose first turn starts a background shell. The turn must complete while the
 query stays open, the next user turn must reuse that query, stopping a turn must
@@ -822,13 +846,39 @@ running daemon.
 ### WebRTC host phase 3
 
 Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_wakeups_tests`,
-`ketplus_daemon_cloud_privacy_tests` and `ketplus_daemon_context_relay_tests` in a
+`ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
+`ketplus_sender_key_cache_tests` and
+`ketplus_daemon_context_relay_tests` in a
 Release headless tree. The peer suite uses real libdatachannel loopback with signed
 SDP, in-memory credentials, temporary SQLite and a fake provider that is never
 started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
 Physical devices/TURN require a separate explicitly configured local test stack.
+
+`ketplus_cloud_trust_lifecycle_tests` holds native fake HTTP replies across sign-out and
+re-enrollment (including the same machine/workspace), and independently changes each scope
+identifier. Device sign-in interleavings also hold enrollment, start approval, finish
+enrollment with the same identity and release the old claim or approval reply; pending
+sign-in must clear without restoring pins or issuing another approval request. The same
+interleaving is checked when storage fails after resetting pins.
+It verifies that stale replies cannot write pins or wrapped keys, issue follow-up
+uploads, refresh a new enrollment's pending peer, or complete pairing/revocation. It also
+checks that legitimate restored-enrollment migration works for distribution and sender-key
+fallback, while initialized empty pins and missing enrollment do not permit adoption. The
+standalone Release lane exposes the same suite as `r03_cloud_trust_lifecycle_tests`; it uses
+in-memory credentials, generated synthetic keys, a temporary journal and no provider turns.
+
+`ketplus_sender_key_cache_tests` (standalone: `r03_sender_key_cache_tests`) warms the
+cache before sign-out and same-workspace enrollment, verifies denial until a new local
+pairing approval, and checks authorized reuse without another HTTP request. It rechecks
+removed/replaced pins and scope, sign-in/cancellation, enrollment, device/machine revocation,
+and held key replies across those transitions, including revoke/re-pair with identical keys.
+The command regression separately delivers a signed, encrypted `session.rename` through the
+mailbox execution path: the journal stays unchanged before re-pairing and changes after it.
+This is native command-path coverage with fake transport, not a physical-device or hosted
+relay end-to-end test. Run it alongside the T-4 trust-lifecycle suite; all credentials are
+synthetic and no provider is started.
 
 ## Conversation deletion and next-turn defaults
 
@@ -1205,3 +1255,14 @@ If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
 can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
 application's scheme persistence or publication. See Qt's [disk-cache
 configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).
+
+## Evidence-gated team routing (ADR 0129)
+
+`ketplus_team_risk_policy_tests` exercises the daemon coordinator with a temporary
+journal and fake trusted receipts: low-risk acceptance, advisory calls without a
+task/worktree, mandatory/unknown domains, actor and revision fences, AC/findings,
+failed/missing checks, approval/rollback gaps and legacy serialization. No real
+provider, account or worktree is used. Run it with the team store/task/review and
+protocol targets after policy changes; shared-header/CMake changes retain the full
+Pro build/suite requirement above. The synthetic v1 JSON fixture is checked by the
+policy target; no live receipt adapter is enabled by these fixtures.

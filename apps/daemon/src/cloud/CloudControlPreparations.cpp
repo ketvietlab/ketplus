@@ -19,14 +19,13 @@ void CloudControlClient::publishPreparedSession(const QJsonObject& command,
     const auto content = command.value("content").toObject();
     const QString creator = content.value("senderDeviceId").toString();
     const int creatorVersion = content.value("senderKeyVersion").toInt();
-    const auto epoch = accountEpoch_;
+    const auto fence = accountFence();
     const auto machine = machineId_;
     const auto workspace = workspaceId_;
     const auto keyVersion = machineKeyVersion_;
     const QPointer<CloudControlClient> guard(this);
-    const auto current = [guard, epoch, machine, workspace, keyVersion] {
-        return guard && guard->accountEpoch_ == epoch && guard->machineId_ == machine &&
-               guard->workspaceId_ == workspace && guard->machineKeyVersion_ == keyVersion;
+    const auto current = [guard, fence, keyVersion] {
+        return guard && guard->accountCurrent(fence) && guard->machineKeyVersion_ == keyVersion;
     };
     const auto available = [guard, current, id, creator] {
         if (!current())
@@ -75,58 +74,58 @@ void CloudControlClient::publishPreparedSession(const QJsonObject& command,
         {"capabilities", QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1"}},
         {"worktrees", QJsonArray{}},
         {"sessions", QJsonArray{snapshot}}};
-    request("POST", "/v2/daemon/heartbeat", body, daemonToken_, {},
-            [guard, id, creator, creatorVersion, result, available, finish,
-             failed](int status, const QJsonValue& value, const QString& error) {
-                if (!available() || status != 202 || !error.isEmpty()) {
+    request(
+        "POST", "/v2/daemon/heartbeat", body, daemonToken_, {},
+        [guard, fence, id, creator, creatorVersion, result, available, finish,
+         failed](int status, const QJsonValue& value, const QString& error) {
+            if (!available() || status != 202 || !error.isEmpty()) {
+                failed();
+                return;
+            }
+            for (const auto& rejected : value.toObject().value("rejectedSessions").toArray())
+                if (rejected.toObject().value("sessionId").toString() == id) {
                     failed();
                     return;
                 }
-                for (const auto& rejected : value.toObject().value("rejectedSessions").toArray())
-                    if (rejected.toObject().value("sessionId").toString() == id) {
+            guard->request(
+                "GET", "/v2/devices", {}, guard->daemonToken_, {},
+                [guard, fence, id, creator, creatorVersion, result, available, finish,
+                 failed](int deviceStatus, const QJsonValue& devices, const QString& deviceError) {
+                    if (!available() || deviceStatus != 200 || !devices.isArray() ||
+                        !deviceError.isEmpty()) {
                         failed();
                         return;
                     }
-                guard->request(
-                    "GET", "/v2/devices", {}, guard->daemonToken_, {},
-                    [guard, id, creator, creatorVersion, result, available, finish, failed](
-                        int deviceStatus, const QJsonValue& devices, const QString& deviceError) {
-                        if (!available() || deviceStatus != 200 || !devices.isArray() ||
-                            !deviceError.isEmpty()) {
-                            failed();
-                            return;
-                        }
-                        QJsonObject recipient;
-                        for (const auto& candidate : guard->trustedDevices(devices.toArray())) {
-                            const auto device = candidate.toObject();
-                            if (device.value("id").toString() == creator &&
-                                device.value("keyVersion").toInt() == creatorVersion)
-                                recipient = device;
-                        }
-                        if (recipient.isEmpty()) {
-                            failed();
-                            return;
-                        }
-                        QString cryptoError;
-                        const auto envelope =
-                            guard->crypto_.wrapSessionKey(id, 1, 1, recipient, guard->machineId_,
-                                                          guard->machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty()) {
-                            failed();
-                            return;
-                        }
-                        guard->request(
-                            "POST", "/v2/session-keys:append",
-                            QJsonObject{{"envelopes", QJsonArray{envelope}}}, guard->daemonToken_,
-                            {},
-                            [result, available, finish, failed](int keyStatus, const QJsonValue&,
-                                                                const QString& keyError) {
-                                if (!available() || keyStatus != 202 || !keyError.isEmpty())
-                                    failed();
-                                else
-                                    finish(result);
-                            });
-                    });
-            });
+                    QJsonObject recipient;
+                    for (const auto& candidate : guard->trustedDevices(devices.toArray(), fence)) {
+                        const auto device = candidate.toObject();
+                        if (device.value("id").toString() == creator &&
+                            device.value("keyVersion").toInt() == creatorVersion)
+                            recipient = device;
+                    }
+                    if (recipient.isEmpty()) {
+                        failed();
+                        return;
+                    }
+                    QString cryptoError;
+                    const auto envelope =
+                        guard->crypto_.wrapSessionKey(id, 1, 1, recipient, guard->machineId_,
+                                                      guard->machineKeyVersion_, &cryptoError);
+                    if (envelope.isEmpty()) {
+                        failed();
+                        return;
+                    }
+                    guard->request("POST", "/v2/session-keys:append",
+                                   QJsonObject{{"envelopes", QJsonArray{envelope}}},
+                                   guard->daemonToken_, {},
+                                   [result, available, finish, failed](
+                                       int keyStatus, const QJsonValue&, const QString& keyError) {
+                                       if (!available() || keyStatus != 202 || !keyError.isEmpty())
+                                           failed();
+                                       else
+                                           finish(result);
+                                   });
+                });
+        });
 }
 } // namespace ketplus::daemon

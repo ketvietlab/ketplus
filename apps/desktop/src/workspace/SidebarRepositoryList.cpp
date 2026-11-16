@@ -103,16 +103,6 @@ ket::SidebarTreeGuide* heldOf(QWidget* group) {
 
 } // namespace
 
-qint64 sidebarRepositoryRecency(const SidebarRepository& repository) {
-    qint64 latest = 0;
-    for (const QVariant& conversation : repository.conversations)
-        latest = std::max(latest, turnStartedAt(conversation));
-    for (const SidebarTeam& team : repository.teams)
-        for (const QVariant& member : team.members)
-            latest = std::max(latest, turnStartedAt(member));
-    return latest;
-}
-
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories) {
     // A repository merges its worktrees' conversations, so each worktree's own recency order is
     // not enough: the conversation whose turn started last leads the whole group.
@@ -132,22 +122,14 @@ void sortSidebarRepositories(QVector<SidebarRepository>& repositories) {
                              rightMap.value(QStringLiteral("id")).toString();
                   });
     }
-    // T-92: a repository holding only team members dated as never active, because its
-    // members are in `teams`, not `conversations`; its own recency now reads both.
-    QHash<QString, qint64> recency;
-    for (const SidebarRepository& repository : std::as_const(repositories))
-        recency.insert(repository.path, sidebarRepositoryRecency(repository));
+    // Activity can reorder conversations within a group, never the repository groups.
     std::stable_sort(repositories.begin(), repositories.end(),
-                     [&recency](const SidebarRepository& left, const SidebarRepository& right) {
+                     [](const SidebarRepository& left, const SidebarRepository& right) {
                          const bool leftPinned = left.pinOrder >= 0;
                          if (leftPinned != (right.pinOrder >= 0))
                              return leftPinned;
                          if (leftPinned && left.pinOrder != right.pinOrder)
                              return left.pinOrder < right.pinOrder;
-                         const qint64 leftLatest = recency.value(left.path);
-                         const qint64 rightLatest = recency.value(right.path);
-                         if (leftLatest != rightLatest)
-                             return leftLatest > rightLatest;
                          if (const int names = compareNames(left.name, right.name); names != 0)
                              return names < 0;
                          return left.path < right.path;

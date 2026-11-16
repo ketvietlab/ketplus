@@ -140,7 +140,7 @@ void MainWindow::refreshSidebarRepositories() {
                 sidebarRepositoryRoots_.append(normalized);
         }
     }
-    // SidebarRepositoryList orders these by their newest conversation, as phones do.
+    // SidebarRepositoryList keeps pin/name order across conversation and team updates.
     QStringList roots;
     for (const QString& root : std::as_const(sidebarRepositoryRoots_)) {
         if (!roots.contains(root))

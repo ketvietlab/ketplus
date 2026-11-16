@@ -68,10 +68,6 @@ QJsonValue lastTurnOutcome(const StoredSession& session) {
     return QJsonValue::Null;
 }
 
-QString encodedPathSegment(const QString& value) {
-    return QString::fromUtf8(QUrl::toPercentEncoding(value, QByteArrayLiteral("-._~")));
-}
-
 QUrl compiledControlUrl() {
     const QUrl compiled(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL));
     return compiled.isValid() && !compiled.host().isEmpty()
@@ -136,6 +132,12 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         workspaceId_.clear();
         lastError_ = keysError;
     }
+    // Migration permission is established only while restoring an existing enrollment.
+    // A missing pin set later (including after sign-out) cannot recreate this permission.
+    QString pinError;
+    const auto storedPins = credentials_.read(QStringLiteral("device-pins"), &pinError);
+    legacyPinAdoptionPending_ = !machineId_.isEmpty() && !workspaceId_.isEmpty() &&
+                                pinError.isEmpty() && storedPins.isEmpty();
     if (!machineId_.isEmpty())
         registerCloudCursors();
     initializePeerTransport();
@@ -368,6 +370,8 @@ void CloudControlClient::signOut(LocalCallback callback) {
     signaling_->configure({}, {}, 1, false);
     revokeAtlasAccess();
     ++accountEpoch_;
+    invalidateSenderKeys();
+    legacyPinAdoptionPending_ = false;
     dropBrowserSignIn();
     signInError_.clear();
     QString removalError;
@@ -509,260 +513,6 @@ bool CloudControlClient::storeString(const QString& account, const QString& valu
 
 QString CloudControlClient::hostKeyFingerprint(QString* error) {
     return DevicePins::hostFingerprint(crypto_.publicKeys(error));
-}
-
-void CloudControlClient::createPairing(LocalCallback callback) {
-    ensureDaemonCredential([this, callback = std::move(callback)](const bool ready,
-                                                                  const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        // The QR code is the one channel the relay cannot touch: it names this Mac's keys, so
-        // the phone can refuse host keys the relay substitutes (#89).
-        QString keyError;
-        const QString fingerprint = DevicePins::hostFingerprint(crypto_.publicKeys(&keyError));
-        if (fingerprint.isEmpty()) {
-            callback({},
-                     keyError.isEmpty() ? QStringLiteral("This Mac has no valid keys.") : keyError);
-            return;
-        }
-        const QString host = QStringLiteral("&machine=%1&kv=%2&fp=%3")
-                                 .arg(QString::fromUtf8(QUrl::toPercentEncoding(machineId_)))
-                                 .arg(machineKeyVersion_)
-                                 .arg(fingerprint);
-        request("POST", QStringLiteral("/v2/pairing/tickets"), QJsonObject{}, daemonToken_, {},
-                [host, callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                       const QString& transportError) {
-                    const QJsonObject pairing = object(value);
-                    const QJsonObject ticket = pairing.value(QStringLiteral("ticket")).toObject();
-                    const QString secret = pairing.value(QStringLiteral("secret")).toString();
-                    if (status != 201 || ticket.isEmpty() || secret.isEmpty() ||
-                        !transportError.isEmpty()) {
-                        callback({}, transportError.isEmpty()
-                                         ? responseCode(value, QStringLiteral("pairing_failed"))
-                                         : transportError);
-                        return;
-                    }
-                    const QString qr =
-                        QStringLiteral("ketplus://pair?ticket=%1&secret=%2")
-                            .arg(QString::fromUtf8(QUrl::toPercentEncoding(
-                                     ticket.value(QStringLiteral("id")).toString())),
-                                 QString::fromUtf8(QUrl::toPercentEncoding(secret))) +
-                        host;
-                    callback({{QStringLiteral("ok"), true},
-                              {QStringLiteral("ticket"), ticket},
-                              {QStringLiteral("pairing_code"), qr}},
-                             {});
-                });
-    });
-}
-
-void CloudControlClient::pairingStatus(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        request("GET", QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId)),
-                {}, daemonToken_, {},
-                [ticketId, callback = std::move(callback)](
-                    const int status, const QJsonValue& value, const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({}, transportError.isEmpty()
-                                         ? responseCode(value, QStringLiteral("pairing_not_found"))
-                                         : transportError);
-                        return;
-                    }
-                    const QJsonObject ticket = object(value);
-                    QJsonObject result{{QStringLiteral("ok"), true},
-                                       {QStringLiteral("ticket"), ticket}};
-                    // The code to compare comes from this daemon, not the relay: a digest the
-                    // claimed keys do not reproduce gives no code (#89).
-                    const QJsonObject device =
-                        ticket.value(QStringLiteral("claimedDevice")).toObject();
-                    const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
-                    if (!device.isEmpty() || !digest.isEmpty()) {
-                        const bool verified = !device.isEmpty() && !digest.isEmpty() &&
-                                              DevicePins::claimDigest(ticketId, device) == digest &&
-                                              !DevicePins::confirmationCode(digest).isEmpty();
-                        result.insert(QStringLiteral("claim_verified"), verified);
-                        if (verified) {
-                            result.insert(QStringLiteral("claim_digest"), digest);
-                            result.insert(QStringLiteral("confirmation_code"),
-                                          DevicePins::confirmationCode(digest));
-                        }
-                    }
-                    callback(result, {});
-                });
-    });
-}
-
-void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    // The claim the user confirmed on this Mac; the ticket is read again below, and the relay
-    // must not swap keys and digest together in between.
-    const QString confirmed = payload.value(QStringLiteral("claim_digest")).toString();
-    if (ticketId.isEmpty() || confirmed.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket and its confirmed claim are required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, confirmed, callback = std::move(callback)](
-                               const bool ready, const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        const QString path =
-            QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId));
-        request(
-            "GET", path, {}, daemonToken_, {},
-            [this, path, confirmed, callback = std::move(callback)](
-                const int status, const QJsonValue& value, const QString& transportError) {
-                const QJsonObject ticket = object(value);
-                const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
-                const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
-                if (status != 200 ||
-                    ticket.value(QStringLiteral("status")).toString() !=
-                        QStringLiteral("claimed") ||
-                    device.isEmpty() || digest.isEmpty() || !transportError.isEmpty()) {
-                    callback({}, transportError.isEmpty()
-                                     ? QStringLiteral("The mobile key claim is not ready.")
-                                     : transportError);
-                    return;
-                }
-                // The code the user compared is this digest. Recomputed from the claimed keys, it
-                // proves those keys are the phone's, not ones the relay substituted (#87).
-                if (digest != confirmed ||
-                    DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
-                                            device) != digest) {
-                    callback({}, QStringLiteral("The device claim does not match its keys."));
-                    return;
-                }
-                QJsonArray envelopes;
-                QString cryptoError;
-                for (const StoredSession& session : journal_->sessions()) {
-                    // The relay refuses the whole approval for a key it would not hold.
-                    if (refusedSessions_.contains(session.id))
-                        continue;
-                    const QString account =
-                        QStringLiteral("wrapped-%1-%2-%3-%4")
-                            .arg(session.id)
-                            .arg(session.generation)
-                            .arg(device.value(QStringLiteral("id")).toString())
-                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                    QJsonObject envelope =
-                        object(QJsonDocument::fromJson(credentials_.read(account)).object());
-                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                        envelope =
-                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
-                                                   machineId_, machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty() ||
-                            !credentials_.write(
-                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                &cryptoError)) {
-                            callback({}, cryptoError);
-                            return;
-                        }
-                    }
-                    envelopes.append(envelope);
-                }
-                QJsonObject body{{QStringLiteral("claimDigest"), digest}};
-                if (!envelopes.isEmpty())
-                    body.insert(QStringLiteral("sessionKeys"), envelopes);
-                request("POST", path + QStringLiteral("/approve"), body, daemonToken_, {},
-                        [this, device, callback = std::move(callback)](
-                            const int approveStatus, const QJsonValue& approveValue,
-                            const QString& approveError) {
-                            QString pinError;
-                            if (approveStatus != 200 || !approveError.isEmpty()) {
-                                callback({}, approveError.isEmpty()
-                                                 ? responseCode(
-                                                       approveValue,
-                                                       QStringLiteral("pairing_approval_failed"))
-                                                 : approveError);
-                            } else if (!pins_.pin(device, &pinError)) {
-                                callback({}, pinError.isEmpty()
-                                                 ? QStringLiteral("Unable to remember the device.")
-                                                 : pinError);
-                            } else {
-                                callback({{QStringLiteral("ok"), true},
-                                          {QStringLiteral("ticket"), object(approveValue)}},
-                                         {});
-                            }
-                        });
-            });
-    });
-}
-
-void CloudControlClient::revokePairing(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        request("POST",
-                QStringLiteral("/v2/pairing/tickets/%1/revoke").arg(encodedPathSegment(ticketId)),
-                QJsonObject{}, daemonToken_, {},
-                [callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({},
-                                 transportError.isEmpty()
-                                     ? responseCode(value, QStringLiteral("pairing_revoke_failed"))
-                                     : transportError);
-                        return;
-                    }
-                    callback({{QStringLiteral("ok"), true}}, {});
-                });
-    });
-}
-
-void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback callback) {
-    const QString deviceId = payload.value(QStringLiteral("device_id")).toString();
-    if (deviceId.isEmpty()) {
-        callback({}, QStringLiteral("A device is required."));
-        return;
-    }
-    ensureDaemonCredential([this, deviceId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        request("POST", QStringLiteral("/v2/devices/%1/revoke").arg(encodedPathSegment(deviceId)),
-                QJsonObject{}, daemonToken_, {},
-                [this, deviceId, callback = std::move(callback)](
-                    const int status, const QJsonValue& value, const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({},
-                                 transportError.isEmpty()
-                                     ? responseCode(value, QStringLiteral("device_revoke_failed"))
-                                     : transportError);
-                        return;
-                    }
-                    signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
-                    senderKeys_.clear();
-                    QString pinError;
-                    if (!pins_.unpin(deviceId, &pinError)) {
-                        callback({}, pinError);
-                        return;
-                    }
-                    callback({{QStringLiteral("ok"), true}}, {});
-                });
-    });
 }
 
 QJsonArray CloudControlClient::sessionSnapshots(

@@ -357,6 +357,7 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
             reviewerJoined(draft, member.sessionId);
     }
     draft.tasks.clear();
+    draft.lastRoutingDecision.reset();
     draft.decisions.clear();
     draft.held = {};
     draft.automaticTurns = 0;

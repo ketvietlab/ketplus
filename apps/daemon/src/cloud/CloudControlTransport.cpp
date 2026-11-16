@@ -15,18 +15,22 @@ void CloudControlClient::initializePeerTransport() {
     signaling_ = new transport::Signaling(
         peers_,
         [this](const QString& device, int version, auto callback) {
-            const auto epoch = accountEpoch_;
+            const auto fence = accountFence();
+            if (!accountCurrent(fence)) {
+                callback({});
+                return;
+            }
             // The active device list is the pairing trust boundary; never admit a peer from
             // a historical device-key endpoint or from a key embedded in an untrusted offer.
             request("GET", "/v2/devices", {}, daemonToken_, {},
-                    [this, epoch, device, version, callback](int status, const QJsonValue& value,
+                    [this, fence, device, version, callback](int status, const QJsonValue& value,
                                                              const QString& error) {
-                        if (epoch != accountEpoch_ || status != 200 || !error.isEmpty() ||
+                        if (!accountCurrent(fence) || status != 200 || !error.isEmpty() ||
                             !value.isArray()) {
                             callback({});
                             return;
                         }
-                        const auto devices = trustedDevices(value.toArray());
+                        const auto devices = trustedDevices(value.toArray(), fence);
                         signaling_->refreshDevices(devices);
                         for (const auto& row : devices) {
                             const auto keys = row.toObject();
@@ -44,12 +48,15 @@ void CloudControlClient::initializePeerTransport() {
     connect(&wakeups_, &RelayWakeups::authorizationRevoked, this, [this] {
         signaling_->configure({}, {}, 1, false);
         daemonToken_.clear();
+        invalidateSenderKeys();
         // A revoked machine keeps no Atlas tunnel open for any device.
         revokeAtlasAccess();
     });
     // Revoking a device here or on another client closes the Atlas it was viewing.
-    connect(signaling_, &transport::Signaling::deviceRevoked, this,
-            [this](const QString& device) { revokeAtlasAccess(device); });
+    connect(signaling_, &transport::Signaling::deviceRevoked, this, [this](const QString& device) {
+        invalidateSenderKeys();
+        revokeAtlasAccess(device);
+    });
     connect(&wakeups_, &RelayWakeups::message, signaling_, &transport::Signaling::receive);
     connect(signaling_, &transport::Signaling::outgoing, this, [this](const QJsonObject& message) {
         if (!wakeups_.send(message) && message.value("type") != "signal.end")

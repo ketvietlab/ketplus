@@ -23,6 +23,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalTags.cpp
     src/cloud/CloudControlCredentials.cpp
     src/cloud/MachineChallenge.cpp
+    src/cloud/CloudControlTrust.cpp
     src/cloud/CloudControlClient.cpp
     src/cloud/CloudControlCommands.cpp
     src/cloud/CloudControlRestore.cpp
