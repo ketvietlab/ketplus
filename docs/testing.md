@@ -775,6 +775,12 @@ registry, executor containment, SDK background blocking or completion delivery.
 The ADR names those separate implementation gates. Existing tests below remain
 legacy-behavior evidence during migration.
 
+The opt-in Linux daemon-user environment and containment probes are documented
+in [the Linux evidence record](decisions/0127-linux-containment-evidence.md).
+They run synthetic workers in an exclusively owned disposable guest, including
+expected escape controls. They are not part of the default suite and do not
+establish production registry/executor acceptance.
+
 `node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a fake
 SDK whose first turn starts a background shell. The turn must complete while the
 query stays open, the next user turn must reuse that query, stopping a turn must
