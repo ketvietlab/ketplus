@@ -139,6 +139,13 @@ void SessionHost::discardMemberConversation(const QString& sessionId) {
 }
 
 QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& request) {
+    // A desktop/paired user is not an authenticated leader conversation. Never
+    // accept a payload actor/session as a replacement for an agent-token binding.
+    if (type == QStringLiteral("team.route.decide") || type == QStringLiteral("team.route.verify"))
+        return failure(
+            QStringLiteral("role_forbidden"),
+            QStringLiteral(
+                "Use the authenticated team agent tools; a client cannot impersonate the leader."));
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     const qint64 teamId = payload.value(QStringLiteral("team_id")).toString().toLongLong();
     const auto answer = [this](const teams::TeamResult& result) {

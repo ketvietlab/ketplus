@@ -122,28 +122,37 @@ QString openDecisionOf(const QJsonObject& team, const QString& taskId) {
 QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const Ids& ids) {
     const QString worktree = local.value(QStringLiteral("worktree")).toString();
     const QJsonArray outside = local.value(QStringLiteral("outside_lane")).toArray();
-    return {{QStringLiteral("id"), local.value(QStringLiteral("id"))},
-            {QStringLiteral("title"), cut(local.value(QStringLiteral("title")).toString(), 200)},
-            {QStringLiteral("state"), local.value(QStringLiteral("state"))},
-            {QStringLiteral("owner"), local.value(QStringLiteral("owner")).toString()},
-            {QStringLiteral("lane"), local.value(QStringLiteral("lane")).toString()},
-            {QStringLiteral("depends_on"), local.value(QStringLiteral("depends_on")).toArray()},
-            {QStringLiteral("criteria_total"),
-             local.value(QStringLiteral("criteria")).toArray().size()},
-            {QStringLiteral("criteria_met"), local.value(QStringLiteral("criteria_met")).toInt()},
-            {QStringLiteral("round"), local.value(QStringLiteral("round")).toInt()},
-            {QStringLiteral("pull_request"),
-             cut(local.value(QStringLiteral("pull_request")).toString(), 500)},
-            {QStringLiteral("branch"), local.value(QStringLiteral("branch")).toString()},
-            {QStringLiteral("worktree_id"),
-             worktree.isEmpty() || !ids.worktree ? QString{} : ids.worktree(worktree)},
-            {QStringLiteral("assignment_held"),
-             local.value(QStringLiteral("assignment_held")).toBool()},
-            {QStringLiteral("outside_lane_total"),
-             local.value(QStringLiteral("outside_lane_total")).toInt(int(outside.size()))},
-            {QStringLiteral("decision_id"),
-             openDecisionOf(team, local.value(QStringLiteral("id")).toString())},
-            {QStringLiteral("changed_revision"), local.value(QStringLiteral("changed_revision"))}};
+    QJsonObject result{
+        {QStringLiteral("id"), local.value(QStringLiteral("id"))},
+        {QStringLiteral("title"), cut(local.value(QStringLiteral("title")).toString(), 200)},
+        {QStringLiteral("state"), local.value(QStringLiteral("state"))},
+        {QStringLiteral("owner"), local.value(QStringLiteral("owner")).toString()},
+        {QStringLiteral("lane"), local.value(QStringLiteral("lane")).toString()},
+        {QStringLiteral("depends_on"), local.value(QStringLiteral("depends_on")).toArray()},
+        {QStringLiteral("criteria_total"),
+         local.value(QStringLiteral("criteria")).toArray().size()},
+        {QStringLiteral("criteria_met"), local.value(QStringLiteral("criteria_met")).toInt()},
+        {QStringLiteral("round"), local.value(QStringLiteral("round")).toInt()},
+        {QStringLiteral("pull_request"),
+         cut(local.value(QStringLiteral("pull_request")).toString(), 500)},
+        {QStringLiteral("branch"), local.value(QStringLiteral("branch")).toString()},
+        {QStringLiteral("worktree_id"),
+         worktree.isEmpty() || !ids.worktree ? QString{} : ids.worktree(worktree)},
+        {QStringLiteral("assignment_held"),
+         local.value(QStringLiteral("assignment_held")).toBool()},
+        {QStringLiteral("outside_lane_total"),
+         local.value(QStringLiteral("outside_lane_total")).toInt(int(outside.size()))},
+        {QStringLiteral("decision_id"),
+         openDecisionOf(team, local.value(QStringLiteral("id")).toString())},
+        {QStringLiteral("changed_revision"), local.value(QStringLiteral("changed_revision"))}};
+    // Only the versioned audit model crosses the projection. It conveys no
+    // permission and does not replace the task's actual state/reviewer history.
+    if (const auto decision = risk::fromJson(local.value(QStringLiteral("routing_decision")))) {
+        result.insert(QStringLiteral("routing_decision"), risk::toJson(*decision));
+        result.insert(QStringLiteral("conclusion_source"), QStringLiteral("leader_policy"));
+        result.insert(QStringLiteral("routing_status"), QStringLiteral("historical"));
+    }
+    return result;
 }
 
 QJsonObject phoneDecision(const QJsonObject& local, const QJsonObject& team) {

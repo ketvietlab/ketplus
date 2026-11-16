@@ -3,8 +3,82 @@
 The daemon entry point is
 `TeamCoordinator::decideRoute(teamId, taskId, request, actorSession)`.
 `actorSession` comes from the authenticated caller binding; never take it from a
-payload. This is a C++ foundation contract. No agent tool, wire method, runtime
-receipt producer or UI capability is exposed by this change.
+payload. The authenticated agent tools expose this contract; desktop and paired
+user clients cannot impersonate a leader by supplying a session/actor field.
+Existing clients keep their existing methods and reviewer behavior.
+
+## Agent tools and host evidence (version 1)
+
+`team_task_route_decide` takes the request below plus optional `task_id`. Only
+the authenticated same-team leader can decide. The result includes
+`routing_decision`, `conclusion_source: leader_policy`, `reviewer_verdict: false`
+and `authorization_granted: false`. Neither a route nor confidence completes a
+task, queues a reviewer, changes merge eligibility or grants user permission.
+Developers submit evidence once; the leader selects the route and records a
+concrete reason for requesting optional conservative review. Advice can be
+answered directly without any tool call, task, worktree or developer/reviewer turn.
+
+`team_task_route_verify` accepts **only** `task_id`, `expected_team_revision` and
+`head_commit`, from the task's developer or the same-team leader. The deferred
+MCP transport runs the host's fixed recipe on the existing Git worker. It accepts
+no check names, commands, pass booleans, risk coverage or serialized evidence.
+The synchronous internal broker entry does not execute verification as a fallback.
+At most four verifications can be queued at once.
+
+The first recipe, `prose_reflow_v1`, supports a deliberately narrow mechanical
+change: reflow of existing plain-prose Markdown files under `docs/`. The path is
+only a prefilter. Both old and new Git blobs must consist entirely of unindented
+prose paragraphs in a restricted grammar, with identical words, punctuation and
+paragraph boundaries after collapsing ordinary spaces/soft line wraps. Markdown
+constructs, code, links, directives, hard breaks, unknown syntax, additions,
+deletions, executable/symlink modes and semantic changes are unsupported. A heading
+or a general code/documentation change therefore needs a reviewer. This recipe
+does not claim a general semantic analyzer or safety from filenames alone.
+Tasks with review history are ineligible for this recipe. Finding closure needs
+separate reviewed-baseline-to-fix-head attestation; a round-zero prose receipt
+does not provide it.
+
+The daemon establishes all evidence itself:
+
+| Evidence | Independent source |
+| --- | --- |
+| Identity/freshness | Actual branch, clean Git status and full HEAD, team/task revisions and host-scoped task context |
+| Scope | Entire diff from the task's recorded base, at most eight existing regular files; each blob at most 64 KiB |
+| Semantic coverage | Restricted prose grammar and paragraph/word equivalence over both immutable blobs; any uncovered policy domain fails closed |
+| Checks | Fixed `git_clean_revision`, `prose_reflow_equivalence`, `scope_modes`, `git_diff_check` recipe results at that full commit, including final HEAD/clean recheck |
+| Rollback | Existing ancestor base and immutable before-objects; no rollback or write is performed |
+| Findings/approval | Zero findings/failures in this mechanical proof; first plan approved and assignment not held; no review history, outside-lane flag or pending team/task user decision; the recipe only reads Git |
+
+The proof concerns this exact delta, not the correctness of the repository's
+baseline. Old tasks whose recorded base includes unrelated changes fall back to
+review rather than silently narrowing the assessed diff. Git calls have bounded
+output/time and disable external diff, textconv, fsmonitor and inherited Git
+repository overrides; no repository script, build or provider is executed.
+
+Opaque receipt IDs and per-check/scope/rollback references are minted by the host.
+The host's bounded in-memory store holds at most 128 immutable receipts for ten
+minutes. Lookup binds team ID, task ID/revision, team revision, full commit, base,
+worktree, branch, repository and integration target. Restart, expiry, eviction,
+task/team edits or scope changes make evidence unavailable. The coordinator also
+rechecks the current clean head before accepting a decision. A decision itself
+advances revisions, so its receipt cannot authorize a later action. A caller's
+invented or stale ID never becomes evidence. Raw file content/command output is
+transient and is not persisted in team audit.
+
+The default port remains `nullopt` for other hosts. The real runtime positive
+regression goes through producer → host store/lookup → `decideRoute`; fake port
+injection is confined to the foundation unit tests. The agent tool contract is
+the same for local and remotely hosted agent sessions; a paired **user** is not
+that agent identity. `team.route.verify` / `team.route.decide` from local or paired
+user clients return `role_forbidden`, even with a supplied leader session ID.
+Unknown methods/fields on legacy clients grant no capability.
+
+Compact task rows and paired task projections include the validated versioned
+`routing_decision` when present, `conclusion_source: leader_policy` and
+`routing_status: historical`. Actual `state`, `round` and reviewer history retain
+their meaning. Digests name the recorded actor, route, revision, receipt reference
+and actual task status, explicitly distinguishing the leader audit from a reviewer
+verdict or user approval. Legacy tasks without a decision retain their prior shape.
 
 ## Requests
 

@@ -9,6 +9,7 @@
 #include "storage/McpMediaStore.h"
 #include "teams/TeamCoordinator.h"
 #include "teams/TeamRemoteView.h"
+#include "teams/TeamRoutingEvidence.h"
 
 #include <QDateTime>
 #include <QDeadlineTimer>
@@ -398,6 +399,16 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                               const QJsonObject& payload) override;
     QJsonObject teamDecisionOperation(const QString& sessionId, const QString& operation,
                                       const QJsonObject& payload);
+    QJsonObject teamRoutingOperation(const QString& sessionId, const QString& operation,
+                                     const QJsonObject& payload);
+    void prepareTeamRouting(const QString& sessionId, const QJsonObject& payload,
+                            std::function<void()> then);
+    [[nodiscard]] std::optional<teams::risk::VerifiedEvidence>
+    routingEvidence(const teams::Team& team, const teams::Task& task,
+                    const QString& id) const override;
+    teams::RoutingEvidence routingEvidence_;
+    QHash<QString, QJsonObject> routingReplies_;
+    int routingVerifications_{0};
     [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     void releaseTeamHeldMessages(const QStringList& sessionIds) override;

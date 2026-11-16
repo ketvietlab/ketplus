@@ -81,6 +81,28 @@ class TeamFlowTest final : public QObject {
         QCOMPARE(team().automaticTurns, 2);
     }
 
+    void routingDigestNamesTheLeaderAuditWithoutInventingAVerdict() {
+        start();
+        QVERIFY(teams_
+                    ->decideRoute(team_, {},
+                                  {{"expected_team_revision", team().revision},
+                                   {"kind", "synthesis"},
+                                   {"reason", "summarize_options"}},
+                                  "lead")
+                    .ok());
+        const QString id = task("A real task remains todo");
+        settle();
+        QTRY_VERIFY_WITH_TIMEOUT(!host_.of("digest").isEmpty(), 2000);
+        const auto digest = host_.of("digest").last().body;
+        QVERIFY(digest.contains("Leader route leader_direct"));
+        QVERIFY(digest.contains("actor lead"));
+        QVERIFY(digest.contains("evidence none"));
+        QVERIFY(digest.contains("historical audit, not reviewer verdict/approval"));
+        QVERIFY(!digest.contains("Verdict: no findings"));
+        QCOMPARE(team().task(id)->state, state::todo);
+        QCOMPARE(team().task(id)->round, 0);
+    }
+
     void aNoteOrAMetMarkAloneStartsNoTurn() {
         start();
         const QString id = task("Cart");

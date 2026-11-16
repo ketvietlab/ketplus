@@ -354,7 +354,11 @@ class TeamAgentToolsTest final : public QObject {
                                                  .role = "leader",
                                                  .mergePolicy = "leader",
                                                  .integrationBranch = "integration"});
-        QVERIFY(leader.contains("Do not write code and do not review"));
+        QVERIFY(leader.contains("Answer explanation, advice, synthesis and coordination directly"));
+        QVERIFY(leader.contains("developer_leader"));
+        QVERIFY(leader.contains("developer_reviewer"));
+        QVERIFY(leader.contains("Confidence above 90 is only supplementary"));
+        QVERIFY(!leader.contains("reviewer reviews each task"));
         QVERIFY(leader.contains("Never approve a permission request"));
         QVERIFY(leader.contains("You merge each Ready task into integration"));
         QVERIFY(
@@ -365,9 +369,31 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(developer.contains("Your lane is \"Web\": web."));
         QVERIFY(developer.contains("Report through the task"));
         QVERIFY(developer.contains("Do not merge."));
+        QVERIFY(developer.contains("submit evidence once"));
+        QVERIFY(developer.contains("chosen route requires review"));
+        QVERIFY(
+            leader.contains("Do not ask the user to approve again an action already authorized"));
         const QString reviewer = teamInstructions({.team = "Shop", .role = "reviewer"});
         QVERIFY(reviewer.contains("Verdict: no findings"));
         QVERIFY(reviewer.contains("read-only"));
+    }
+
+    void routingPromptFixturesStayConservative() {
+        QFile file(QFINDTESTDATA("fixtures/team-routing-prompts-v1.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto fixtures = QJsonDocument::fromJson(file.readAll()).array();
+        QCOMPARE(fixtures.size(), 3);
+        const QString leader = agent_messaging::teamInstructions(
+            {.team = "Fixture", .role = "leader", .integrationBranch = "integration"});
+        for (const auto& value : fixtures) {
+            const auto scenario = value.toObject();
+            QVERIFY(!scenario.value("synthetic_prompt").toString().isEmpty());
+            QVERIFY(leader.contains(scenario.value("route").toString()));
+            QVERIFY2(leader.contains(scenario.value("required_guidance").toString()),
+                     qPrintable(scenario.value("name").toString()));
+            QVERIFY(!leader.contains("reviewer reviews each task"));
+            QVERIFY(!leader.contains("quota-consuming live tests"));
+        }
     }
 
     void theLeadersFirstTurnCarriesTheGoalAndItsInstructions() {
