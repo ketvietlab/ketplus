@@ -48,6 +48,13 @@ while [[ $# -gt 0 ]]; do
     *) usage ;;
     esac
 done
+# Relative paths can change meaning after mounting/copying a DMG. Refuse them before work.
+for path in "$source_app" "$dmg" "$output"; do
+    [[ -z "$path" || "$path" == /* ]] || {
+        echo "error: --app, --dmg and --output must use absolute paths" >&2
+        exit 1
+    }
+done
 if [[ -n "$source_app" ]]; then
     [[ -d "$source_app" && -z "$dmg" ]] || usage
     [[ -n "$output" ]] || output="${source_app%.app}-signed.app"

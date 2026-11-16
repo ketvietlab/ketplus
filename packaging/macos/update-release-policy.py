@@ -76,7 +76,13 @@ def main():
             if not args.appcast:
                 raise ValueError("appcast is required")
             if args.operation == "seed-feed" and not Path(args.appcast).exists():
-                root = ET.Element("rss", version="2.0")
+                # Sparkle appends prefixed item nodes when updating this seed. Its
+                # generator adds the declarations only when creating its own RSS root.
+                root = ET.Element("rss", {
+                    "version": "2.0",
+                    "xmlns:sparkle": "http://www.andymatuschak.org/xml-namespaces/sparkle",
+                    "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+                })
                 node = ET.SubElement(root, "channel")
                 ET.SubElement(node, "title").text = "ketPlus Pro"
                 ET.SubElement(node, "{" + NAMESPACE + "}releaseChannel").text = args.channel

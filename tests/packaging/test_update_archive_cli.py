@@ -174,6 +174,26 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(feed.read_bytes(), original)
 
+    def test_new_feed_declares_namespaces_used_by_the_real_generator(self):
+        self.updates.mkdir()
+        feed = self.updates / "appcast.xml"
+        result = subprocess.run([sys.executable, str(self.script.with_name("update-release-policy.py")),
+            "seed-feed", "--channel", "production", "--arch", "arm64", "--download-prefix",
+            "https://updates.example.invalid/production/arm64/", "--appcast", str(feed)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        xml = feed.read_text()
+        self.assertIn('xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"', xml)
+        self.assertIn('xmlns:dc="http://purl.org/dc/elements/1.1/"', xml)
+        # generate_appcast appends prefixed nodes to the existing seed rather than
+        # creating a new RSS root with its own namespace declarations.
+        generated = xml.replace('</channel>', '<item><sparkle:version>2</sparkle:version>'
+            '<dc:creator>fixture</dc:creator><enclosure sparkle:edSignature="fixture" />'
+            '</item></channel>')
+        import xml.etree.ElementTree as ET
+        item = ET.fromstring(generated).find('channel/item')
+        self.assertEqual(item.find('{http://www.andymatuschak.org/xml-namespaces/sparkle}version').text, '2')
+
     def test_external_key_symlink_is_resolved_before_signer(self):
         target = self.root / "external-key"
         target.write_text("inert fixture")
