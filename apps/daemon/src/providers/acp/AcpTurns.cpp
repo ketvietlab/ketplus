@@ -47,6 +47,8 @@ QString mimeForPath(const QString& path) {
 
 namespace ketplus::daemon {
 void AcpAdapter::call(const QString& method, const QJsonObject& params, Callback callback) {
+    if (routeIsolatedCall(method, params, callback))
+        return;
     if (!isAvailable()) {
         callback({}, missingMessage());
         return;
@@ -105,11 +107,12 @@ void AcpAdapter::startTurn(const QJsonObject& params, Callback callback) {
             turn.itemId = QStringLiteral("%1-answer-%2").arg(name(), turn.turnId);
             turn.permission = permissionBySession_.value(sessionId);
             turns_.insert(sessionId, turn);
-            callback(QJsonObject{{QStringLiteral("turn"),
-                                  QJsonObject{{QStringLiteral("id"), turn.turnId}}},
-                                 {QStringLiteral("thread"),
-                                  QJsonObject{{QStringLiteral("id"), turn.acpSessionId}}}},
-                     {});
+            QJsonObject reply{
+                {QStringLiteral("turn"), QJsonObject{{QStringLiteral("id"), turn.turnId}}},
+                {QStringLiteral("thread"), QJsonObject{{QStringLiteral("id"), turn.acpSessionId}}}};
+            if (isolatedWorker_)
+                reply.insert("managedTransportEpoch", params.value("managedTransportEpoch"));
+            callback(reply, {});
             sendPrompt(turns_[sessionId], params);
         });
 }

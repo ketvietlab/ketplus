@@ -38,6 +38,9 @@ class ProviderAdapter : public QObject {
     virtual void respondError(const QJsonValue& requestId, const QString& code,
                               const QString& message) = 0;
     virtual void stop() = 0;
+    // Release only a deleted conversation's dedicated transport. Shared adapters
+    // have nothing to release; provider history cleanup remains a separate operation.
+    virtual bool releaseSessionTransport(const QString&) { return true; }
 
   signals:
     // Providers that emit normalized transcript events (Claude and ACP).

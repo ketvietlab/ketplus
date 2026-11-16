@@ -9,6 +9,8 @@ namespace ketplus::daemon::agent_mcp {
 
 // Calls one agents.* or session.task.* operation using the bound agent token.
 using DaemonCall = std::function<QJsonObject(const QString& operation, const QJsonObject& payload)>;
+// Captures one bootstrap secret once; never consults a later turn's current token.
+[[nodiscard]] DaemonCall withMutationCredential(DaemonCall call, QString credential);
 
 // Answers one MCP JSON-RPC message from a provider. Notifications return an empty object.
 [[nodiscard]] QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call);

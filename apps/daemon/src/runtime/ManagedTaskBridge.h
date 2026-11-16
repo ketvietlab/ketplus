@@ -1,5 +1,7 @@
 #pragma once
 
+#include "agents/AgentMutationOrigin.h"
+
 #include "runtime/ManagedTaskRuntime.h"
 
 #include <QTemporaryDir>
@@ -11,7 +13,8 @@ class ManagedTaskBridge final : public QObject {
     using Done = std::function<void(const QJsonObject&)>;
     explicit ManagedTaskBridge(SessionHost* host);
     bool initialize(QString* error);
-    void command(const QJsonObject& request, const QString& clientId, Done done, bool agentCaller);
+    void command(const QJsonObject& request, const QString& clientId, Done done, bool agentCaller,
+                 std::optional<AgentMutationGrant> origin = std::nullopt);
     bool permission(const QJsonValue& requestId, const QJsonObject& result);
     void hold(const BackgroundTaskOwner& owner, const QString& reason);
     void resume(const BackgroundTaskOwner& owner);
@@ -21,7 +24,8 @@ class ManagedTaskBridge final : public QObject {
     void childOutput(const QString& sessionId, qint64 generation, qint64 turn, const QString& text);
 
   private:
-    void start(const QJsonObject& request, const BackgroundTaskOwner& owner, Done done);
+    void start(const QJsonObject& request, const BackgroundTaskOwner& owner, Done done,
+               std::optional<AgentMutationGrant> origin);
     void requestPermission(const QJsonObject& task, const QJsonObject& execution);
     void changed(const QJsonObject& task);
     void createChild(const QJsonObject& task, const QJsonObject& execution);

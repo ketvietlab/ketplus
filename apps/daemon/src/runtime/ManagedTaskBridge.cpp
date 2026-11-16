@@ -68,7 +68,7 @@ bool ManagedTaskBridge::initialize(QString* error) {
 }
 
 void ManagedTaskBridge::command(const QJsonObject& request, const QString& clientId, Done done,
-                                bool agentCaller) {
+                                bool agentCaller, std::optional<AgentMutationGrant> origin) {
     const auto type = request.value("message_type").toString();
     if (type == "session.task.resolve_cleanup" && (agentCaller || clientId == "cloud-control-v2")) {
         done(
@@ -100,8 +100,21 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
                                       request.value("session_generation").toInteger(),
                                       {}};
     const auto payload = request.value("payload").toObject();
+    if (agentCaller && (type == "session.task.start" || type == "session.task.stop")) {
+        const auto authenticated =
+            session && origin ? session->mutationOrigin.authorize(origin->credential,
+                                                                  owner.sessionId, owner.generation)
+                              : std::nullopt;
+        if (!authenticated || session->stored.state != "running" || session->startingTurn ||
+            session->stopRequested || session->interruptPending ||
+            authenticated->turn != session->stored.currentTurnSequence) {
+            done(failure("stale_origin", "The invocation mutation origin expired."));
+            return;
+        }
+        origin->snapshot = *authenticated;
+    }
     if (type == "session.task.start") {
-        start(request, owner, std::move(done));
+        start(request, owner, std::move(done), std::move(origin));
         return;
     }
     if (type == "session.task.list") {
@@ -138,7 +151,7 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
 }
 
 void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOwner& owner,
-                              Done done) {
+                              Done done, std::optional<AgentMutationGrant> origin) {
     const auto payload = request.value("payload").toObject();
     BackgroundTaskIntent retryIntent;
     retryIntent.owner = owner;
@@ -159,7 +172,8 @@ void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOw
         done(failure("stale_owner", "The task owner generation changed."));
         return;
     }
-    if (payload.value("kind") == "process" && current->stored.executionPolicy == "read-only") {
+    const auto policy = origin ? origin->snapshot.executionPolicy : current->stored.executionPolicy;
+    if (payload.value("kind") == "process" && policy == "read-only") {
         done(failure("permission_denied",
                      "Native process jobs cannot enforce this owner's read-only policy."));
         return;
@@ -175,10 +189,21 @@ void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOw
                                           (candidate == cwd || candidate.startsWith(cwd + '/'));
                                },
                                {}};
-    auto submit = [this, owner, payload, context, done](const QJsonArray& catalog) mutable {
+    context.executionPolicy = policy;
+    auto submit = [this, owner, payload, context, done, origin](const QJsonArray& catalog) mutable {
         const auto current = host_->sessions_.constFind(owner.sessionId);
         if (current == host_->sessions_.cend() || current->stored.generation != owner.generation) {
             done(failure("stale_owner", "The task owner generation changed."));
+            return;
+        }
+        // Catalog lookup may finish after completion/review/new-turn/Stop. A queued
+        // request must still prove its original credential immediately before admission.
+        if (origin && (!current->mutationOrigin.authorize(origin->credential, owner.sessionId,
+                                                          owner.generation) ||
+                       current->stored.state != "running" || current->startingTurn ||
+                       current->stopRequested || current->interruptPending ||
+                       current->stored.currentTurnSequence != origin->snapshot.turn)) {
+            done(failure("stale_origin", "The originating turn ended before task acceptance."));
             return;
         }
         context.authorizeAgent = [catalog](const QString&, const QString& model,

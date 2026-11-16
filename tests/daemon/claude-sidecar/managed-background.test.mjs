@@ -83,7 +83,7 @@ const fakeSdk = `
 async function fixture(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'kp-managed-background-'));
   for (const file of ['session-usage.mjs', 'authentication.mjs', 'index.mjs', 'transcript.mjs',
-    'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs', 'review-guard.mjs', 'background-policy.mjs'])
+    'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs', 'review-guard.mjs', 'background-policy.mjs', 'process-barrier.mjs'])
     await copyFile(new URL(`../../../apps/daemon/providers/claude-sidecar/${file}`, import.meta.url), path.join(dir, file));
   const sdk = path.join(dir, 'node_modules/@anthropic-ai/claude-agent-sdk');
   await mkdir(sdk, { recursive: true });

@@ -85,6 +85,8 @@ void CopilotAdapter::configurationCatalog(Callback done) {
 }
 
 void CopilotAdapter::call(const QString& method, const QJsonObject& params, Callback done) {
+    if (routeIsolatedCall(method, params, done))
+        return;
     if (method == QStringLiteral("model/list")) {
         catalog_->get(executable(), std::move(done));
         return;
@@ -95,6 +97,8 @@ void CopilotAdapter::call(const QString& method, const QJsonObject& params, Call
     }
     AcpAdapter::call(method, params, std::move(done));
 }
+
+AcpAdapter* CopilotAdapter::createSessionWorker() { return new CopilotAdapter(executable()); }
 
 void CopilotAdapter::checkLaunch(std::function<void(const QString&)> done) {
     const auto context = copilot_cli::systemDiscoveryContext();

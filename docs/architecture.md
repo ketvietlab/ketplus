@@ -235,6 +235,24 @@ exemptions default to denied: only a concrete adapter can interpret its own
 trusted tool identity. Provider-specific client capability metadata and session
 mode identifiers are opt-in hooks.
 
+Managed background tools use the daemon registry (ADR 0127). The injected agent
+MCP read credential does not authorize start/stop: those operations require a
+separate, immutable per-turn capability bound to owner, generation, effective
+policy and transport epoch. Reviews receive no mutation grant. Accepted jobs
+retain their policy snapshot after the originating turn ends. The host revokes
+old authority before setup and grants new authority only for the exact refreshed
+epoch acknowledged by the adapter.
+
+Claude waits for the owned SDK subprocess's actual exit before recreating its
+query with the prior resume ID. Codex and ACP isolate managed conversations into
+dedicated provider processes so one conversation's refresh never restarts another.
+They confirm exit before loading the same history ID in the replacement process;
+load failure cannot fall back to new history. Deleting an idle conversation also
+releases only its owned transports, including prior provider handoffs, before
+removing the local record. The offline adapter fixtures and installed-provider
+history validation gaps are recorded in the
+[refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows

@@ -22,6 +22,7 @@ class CopilotAdapter final : public AcpAdapter {
     void call(const QString& method, const QJsonObject& params, Callback done) override;
 
   protected:
+    AcpAdapter* createSessionWorker() override;
     void configureProcess() override;
     bool strictPermissionRequests() const override { return true; }
     void checkLaunch(std::function<void(const QString&)> done) override;

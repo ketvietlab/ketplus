@@ -785,8 +785,10 @@ It checks owner-free schemas, exact request-key/spec/cursor forwarding,
 permission errors and refusal to expose local cleanup acknowledgement. The
 sidecar fixture checks native Agent/Task/Workflow and explicit background denial
 before permissive approvals, settings composition and review-hook preservation.
-All providers use the existing injected conversation-bound MCP server; no new
-provider authentication or execution grant is introduced.
+All providers use the existing injected conversation-bound MCP server. Its read
+credential is insufficient for mutation: the host supplies a separate immutable
+origin capability through MCP bootstrap, never through prompt/model arguments.
+The narrow target also tests this capability state machine and credential capture.
 
 For an explicit, no-inference check against an already installed SDK 0.3.322,
 set `KETPLUS_CLAUDE_SDK_DIRECTORY` to that SDK package directory and run:
@@ -795,12 +797,53 @@ set `KETPLUS_CLAUDE_SDK_DIRECTORY` to that SDK package directory and run:
 node --test tests/daemon/claude-sidecar/background-sdk-offline.test.mjs
 ```
 
-The test skips unless opted in. It yields no prompt and requests only startup
-and background control, verifying rejection even when project settings try to
+The tests skip unless opted in. They yield no prompt and request only startup,
+MCP refresh and background control, verifying rejection even when project settings try to
 reenable background tasks. An earlier env-only configuration failed this test;
-the host settings overlay is required. This is not a live-model Bash/subagent
+the host settings overlay is required. A synthetic MCP worker is removed and its
+actual PID exit confirmed before its replacement starts; a removal ACK alone is
+insufficient. This is not a live-model Bash/subagent
 execution or timeout test. The normal sidecar fixture suite uses fake SDKs and
 requires no installed SDK, provider account or quota.
+
+The daemon build adds focused origin and Codex-isolation tests:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_managed_task_origin_host_tests ketplus_codex_session_isolation_tests
+ctest --test-dir build/daemon-dev -R 'ketplus_(managed_task_origin_host|codex_session_isolation)_tests' --output-on-failure
+node --test tests/daemon/claude-sidecar/managed-transport.test.mjs apps/daemon/providers/claude-sidecar/test/process-barrier.test.mjs
+```
+
+These use trusted fake bootstrap acknowledgements, temporary journals and actual
+local fixture processes, never a model. They cover review read/verify fences,
+missing/spoofed/expired origins, idle/drain and queued requests, accepted child
+policy snapshots, two-conversation process isolation, stale response IDs,
+history/MCP setup failure and timeout, and SDK close failure before actual exit.
+Synthetic history proves adapter behavior; it cannot prove installed-provider
+history preservation. Control-only probes for installed CLIs are explicit opt-ins:
+
+```sh
+python3 tests/providers/codex/refresh-offline.py --executable codex
+python3 tests/providers/cursor/refresh-offline.py --executable agent
+```
+
+Neither sends a model prompt, reads existing user history or fabricates provider
+storage. Empty-session load failure is recorded as a validation gap, not proof
+that non-empty history cannot load.
+
+The dedicated ACP transport has a separate small Qt target:
+
+```sh
+cmake -S tests/daemon/acp-isolation -B build/acp-isolation -G Ninja
+cmake --build build/acp-isolation
+ctest --test-dir build/acp-isolation --output-on-failure
+```
+
+It builds the production ACP engine and concrete Cursor/Copilot adapters, then
+uses fake persisted sessions to check independent conversations, old-process
+exit before replacement, history/epoch preservation, load errors/timeouts without
+new-session fallback, and isolated worker failure. Provider runtime evidence is
+separate; see [the refresh evidence record](decisions/0127-provider-origin-refresh-evidence.md).
 
 The isolated storage/executor targets use temporary SQLite databases and no
 provider accounts. They cover transaction-abort injection, byte paging across

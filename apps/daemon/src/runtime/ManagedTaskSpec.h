@@ -22,6 +22,7 @@ struct ManagedTaskContext final {
     QString effort;
     std::function<bool(const QString&)> authorizeCwd;
     std::function<bool(const QString&, const QString&, const QString&)> authorizeAgent;
+    QString executionPolicy{"ask"};
 };
 
 ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,

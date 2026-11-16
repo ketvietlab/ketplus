@@ -1,5 +1,6 @@
 # Also read by tests/daemon/cloud-privacy, which builds these against in-memory credentials.
 set(KETPLUS_DAEMON_CORE_SOURCES
+    src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
     src/transport/FrameCodec.cpp
     src/transport/PeerLink.h
@@ -109,9 +110,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/acp/AcpTurns.cpp
     src/providers/acp/AcpPermissions.cpp
     src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpSessionIsolation.cpp
     src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
+    src/providers/CodexSessionIsolation.cpp
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h

@@ -393,7 +393,14 @@ If the pinned SDK cannot enforce this, the provider lane must report the blocker
 to the leader; migration is not complete.
 
 The shared `ketplus_agents` MCP server exposes the five tools above to Claude,
-Codex, Cursor and other ACP adapters using the already bound conversation token.
+Codex, Cursor and other ACP adapters. The bound conversation token preserves
+discovery/read scope; it must not authorize start/stop by itself. Mutation needs
+a separate origin capability bound to session, generation, turn, policy and
+transport epoch, supplied by the host through MCP bootstrap. Old invocation
+credentials are immutable, revoked at turn end, and never rebound to current
+policy. Review turns receive no mutation capability. New authority requires a
+verified old-context drain and replacement-context acknowledgement. See the
+[provider refresh evidence and remaining gaps](0127-provider-origin-refresh-evidence.md).
 The MCP layer forwards the exact execution spec/request key and opaque cursors;
 the registry owns deduplication, authorization, output and completion delivery.
 It never exposes `session.task.resolve_cleanup` as an agent tool. A new schema

@@ -95,6 +95,7 @@ class CursorAdapter final : public AcpAdapter {
     [[nodiscard]] static ProcessInvocation versionInvocation(const QString& executable);
 
   private:
+    AcpAdapter* createSessionWorker() override;
     void configureProcess() override;
     QJsonObject clientCapabilities() const override;
     bool autoApprovePermission(const QString& sessionId,

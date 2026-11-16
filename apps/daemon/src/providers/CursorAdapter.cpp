@@ -274,6 +274,8 @@ bool CursorAdapter::supports(const QString& capability) const {
 }
 
 void CursorAdapter::call(const QString& method, const QJsonObject& params, Callback callback) {
+    if (routeIsolatedCall(method, params, callback))
+        return;
     if (!isAvailable()) {
         callback({}, missingExecutableMessage());
         return;
@@ -310,6 +312,13 @@ void CursorAdapter::call(const QString& method, const QJsonObject& params, Callb
         return;
     }
     AcpAdapter::call(method, params, std::move(callback));
+}
+
+AcpAdapter* CursorAdapter::createSessionWorker() {
+    auto* worker = new CursorAdapter(executable());
+    worker->cachedCatalog_ = cachedCatalog_;
+    worker->catalogFetchedAt_ = catalogFetchedAt_;
+    return worker;
 }
 
 void CursorAdapter::configurationCatalog(Callback callback) {

@@ -5,6 +5,20 @@ import { TurnInput, userMessage } from "../input.mjs";
 const start = (parent = null) => ({ type: "stream_event", parent_tool_use_id: parent, event: { type: "message_start" } });
 const result = { type: "result" };
 
+test("origin bootstrap withholds the first model prompt until transport acknowledgement", async () => {
+  const first = userMessage("after ACK");
+  const input = new TurnInput(first, true);
+  const iterator = input[Symbol.asyncIterator]();
+  let delivered = false;
+  const next = iterator.next().then(value => { delivered = true; return value; });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(delivered, false);
+  input.send(first);
+  assert.equal((await next).value.uuid, first.uuid);
+  input.close();
+  assert.equal((await iterator.next()).done, true);
+});
+
 async function take(iterator) {
   const next = await Promise.race([iterator.next(), new Promise((r) => setTimeout(() => r("pending"), 20))]);
   return next === "pending" ? next : next.done ? "done" : next.value;

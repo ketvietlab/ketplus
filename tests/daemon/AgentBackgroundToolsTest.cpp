@@ -1,5 +1,6 @@
 #include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
+#include "agents/AgentMutationOrigin.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -120,6 +121,32 @@ class AgentBackgroundToolsTest final : public QObject {
             });
         QCOMPARE(calls, 0);
         QCOMPARE(response.value("error").toObject().value("code").toInt(), -32602);
+    }
+
+    void invocationCredentialIsImmutableAndNeverTakenFromArguments() {
+        QString bootstrap = "original-fixture-secret";
+        QJsonObject sent;
+        const auto call = agent_mcp::withMutationCredential(
+            [&](const QString&, const QJsonObject& payload) {
+                sent = payload;
+                return QJsonObject{};
+            },
+            bootstrap);
+        bootstrap = "next-turn-fixture-secret";
+        for (const auto* operation : {"session.task.start", "session.task.stop"}) {
+            call(operation, {{mutationOriginField, "spoofed"}, {"task_id", "fixture"}});
+            QCOMPARE(sent.value(mutationOriginField), "original-fixture-secret");
+        }
+        call("session.task.output", {{mutationOriginField, "spoofed"}});
+        QVERIFY(!sent.contains(mutationOriginField));
+        const auto review = agent_mcp::withMutationCredential(
+            [&](const QString&, const QJsonObject& payload) {
+                sent = payload;
+                return QJsonObject{};
+            },
+            {});
+        review("session.task.start", {{mutationOriginField, "normal-turn-secret"}});
+        QVERIFY(sent.value(mutationOriginField).toString().isEmpty());
     }
 };
 

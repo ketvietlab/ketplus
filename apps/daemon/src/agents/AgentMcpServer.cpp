@@ -1,4 +1,5 @@
 #include "agents/AgentMcpServer.h"
+#include "agents/AgentMutationOrigin.h"
 
 #include "agents/AgentBackgroundTools.h"
 #include "agents/AgentTeamTools.h"
@@ -332,6 +333,17 @@ class DaemonConnection final {
 
 } // namespace
 
+DaemonCall withMutationCredential(DaemonCall call, QString credential) {
+    return [call = std::move(call), credential = std::move(credential)](
+               const QString& operation, const QJsonObject& arguments) {
+        auto payload = arguments;
+        payload.remove(QLatin1String(mutationOriginField));
+        if (operation == "session.task.start" || operation == "session.task.stop")
+            payload.insert(QLatin1String(mutationOriginField), credential);
+        return call(operation, payload);
+    };
+}
+
 QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
     const QString method = message.value(QStringLiteral("method")).toString();
     const QJsonValue id = message.value(QStringLiteral("id"));
@@ -399,9 +411,11 @@ int run() {
         return 2;
     }
     DaemonConnection daemon(socket, token);
-    const DaemonCall call = [&daemon](const QString& operation, const QJsonObject& payload) {
-        return daemon.call(operation, payload);
-    };
+    const DaemonCall call = withMutationCredential(
+        [&daemon](const QString& operation, const QJsonObject& payload) {
+            return daemon.call(operation, payload);
+        },
+        qEnvironmentVariable(agent_tools::mutationVariable));
     std::string line;
     while (std::getline(std::cin, line)) {
         QJsonParseError parseError;

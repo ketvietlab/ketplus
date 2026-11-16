@@ -23,6 +23,18 @@ turns = 0
 lock = threading.Lock()
 sessions = {}
 
+def managed(params):
+    return any(e.get('name')=='KETPLUS_AGENT_TRANSPORT_EPOCH' and e.get('value')
+               for server in params.get('mcpServers',[]) for e in server.get('env',[]))
+
+def safe_setup(params):
+    value=json.loads(json.dumps(params))
+    for server in value.get('mcpServers',[]):
+        for env in server.get('env',[]):
+            if env.get('name') in ('KETPLUS_AGENT_MUTATION_TOKEN','KETPLUS_AGENT_TRANSPORT_EPOCH'):
+                env['value']='[redacted]'
+    return value
+
 def emit(value):
     with lock:
         print(json.dumps(value), flush=True)
@@ -145,7 +157,7 @@ for line in sys.stdin:
         emit({'jsonrpc': '2.0', 'id': message_id, 'error': {
             'code': -32600, 'message': 'authenticate should not be called'}})
     elif method == 'session/new':
-        log('browser:' + json.dumps(params))
+        log('browser:' + json.dumps(safe_setup(params)))
         cwd = params.get('cwd') or ''
         log('session/new:' + cwd)
         if os.path.basename(cwd.rstrip('/')) == 'needs-login':
@@ -154,14 +166,19 @@ for line in sys.stdin:
             continue
         turns += 1
         session_id = 'acp-session-' + str(turns)
+        if managed(params):
+            session_id = 'acp-session-' + str(os.getpid()) + '-' + str(turns)
+            with open(log_path+'.managed-'+session_id,'w') as f: f.write(cwd)
         sessions[session_id] = cwd
         emit({'jsonrpc': '2.0', 'id': message_id, 'result': {
             'sessionId': session_id, 'configOptions': config_options()}})
     elif method == 'session/load':
-        log('browser:' + json.dumps(params))
+        log('browser:' + json.dumps(safe_setup(params)))
         session_id = params.get('sessionId')
         log('session/load:' + str(session_id))
-        if session_id in sessions:
+        if session_id in sessions or (managed(params) and os.path.basename(session_id)==session_id
+                                     and os.path.exists(log_path+'.managed-'+session_id)):
+            sessions[session_id]=params.get('cwd','')
             emit({'jsonrpc': '2.0', 'id': message_id, 'result': {
                 'configOptions': config_options()}})
         else:

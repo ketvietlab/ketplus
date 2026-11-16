@@ -94,24 +94,32 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
 
     const QString existing =
         resume.isEmpty() ? acpSessionByKetplus_.value(ketplusSessionId) : resume;
+    if (requireSessionLoad_ && !supports(compat::capability::threadResume)) {
+        bind({}, "mutation_refresh_unavailable: ACP cannot load the previous session history.");
+        return;
+    }
     // An agent without loadSession starts a new ACP session; the journal keeps the transcript.
     if (!existing.isEmpty() && supports(compat::capability::threadResume)) {
-        sendCall(QStringLiteral("session/load"),
-                 {{QStringLiteral("sessionId"), existing},
-                  {QStringLiteral("cwd"), cwd},
-                  {QStringLiteral("mcpServers"), servers}},
-                 [this, cwd, servers, existing, bind](QJsonObject result, const QString& error) {
-                     if (error.isEmpty()) {
-                         // ACP load succeeds with an empty object; the requested ID survives.
-                         result.insert(QStringLiteral("sessionId"), existing);
-                         bind(result, {});
-                         return;
-                     }
-                     sendCall(
-                         QStringLiteral("session/new"),
+        sendCall(
+            QStringLiteral("session/load"),
+            {{QStringLiteral("sessionId"), existing},
+             {QStringLiteral("cwd"), cwd},
+             {QStringLiteral("mcpServers"), servers}},
+            [this, cwd, servers, existing, bind](QJsonObject result, const QString& error) {
+                if (error.isEmpty()) {
+                    // ACP load succeeds with an empty object; the requested ID survives.
+                    result.insert(QStringLiteral("sessionId"), existing);
+                    bind(result, {});
+                    return;
+                }
+                if (requireSessionLoad_) {
+                    bind({}, "mutation_refresh_unavailable: ACP history load failed: " + error);
+                    return;
+                }
+                sendCall(QStringLiteral("session/new"),
                          {{QStringLiteral("cwd"), cwd}, {QStringLiteral("mcpServers"), servers}},
                          bind);
-                 });
+            });
         return;
     }
     sendCall(QStringLiteral("session/new"),

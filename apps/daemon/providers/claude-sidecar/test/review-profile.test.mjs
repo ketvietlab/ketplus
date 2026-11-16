@@ -9,7 +9,7 @@ import { createInterface } from "node:readline";
 import test from "node:test";
 
 const sidecarFiles = ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs",
-  "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs", "background-policy.mjs"];
+  "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs", "background-policy.mjs", "process-barrier.mjs"];
 
 // Asks the hook and canUseTool about every attempt in KETPLUS_FAKE_ATTEMPTS and, like Claude
 // Code, runs what both allow, so a wrong "allow" really changes the files under test. A

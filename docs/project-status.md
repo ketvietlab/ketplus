@@ -737,7 +737,14 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   deny hooks; the legacy collector/stop/output path remains for drain. Offline MCP,
   sidecar and real-SDK control checks are implementation evidence, not live-model
   or shared desktop UI acceptance. Registry completion uses the durable owner-wake
-  path instead of a retained Claude query or a watchdog.
+  path instead of a retained Claude query or a watchdog. Start/stop require an
+  immutable per-turn mutation capability; review origins receive no grant and
+  accepted jobs retain their effective-policy snapshot. Claude waits for actual
+  SDK process exit; Codex/ACP use dedicated per-conversation processes before
+  restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
+  installed Codex/Cursor empty-history probes cannot establish non-empty history
+  restoration, and Copilot runtime verification remains unavailable. See the
+  [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
 - Async assistant-question answers use the conversation's current execution-context
   revision for both steering and follow-up turns; switched conversations no longer

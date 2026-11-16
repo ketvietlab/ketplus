@@ -25,3 +25,9 @@ else()
 endif()
 target_link_libraries(ketplus_agent_background_tools_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
 add_test(NAME ketplus_agent_background_tools_tests COMMAND ketplus_agent_background_tools_tests)
+add_executable(ketplus_agent_mutation_origin_tests ../AgentMutationOriginTest.cpp
+    "${agent_background_root}/apps/daemon/src/agents/AgentMutationOrigin.cpp")
+target_include_directories(ketplus_agent_mutation_origin_tests PRIVATE
+    "${agent_background_root}/apps/daemon/src")
+target_link_libraries(ketplus_agent_mutation_origin_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME ketplus_agent_mutation_origin_tests COMMAND ketplus_agent_mutation_origin_tests)

@@ -785,6 +785,8 @@ class AgentMessagingTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(claude, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(codex, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(cursor, "turn.completed"), 1, 8000);
+        for (const auto& session : {claude, codex, cursor})
+            QVERIFY(fixture.payloads(session, "runtime.error").isEmpty());
         const QByteArray claudeLog = logText(fixture.claudeLog);
         QVERIFY(claudeLog.contains("\"ketplus_agents\""));
         QVERIFY(claudeLog.contains(fixture.host->agentToken(claude).toUtf8()));
