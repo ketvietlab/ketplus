@@ -1,0 +1,657 @@
+#include "storage/BackgroundTaskLedger.h"
+
+#include <QSqlQuery>
+#include <QTemporaryDir>
+#include <QUuid>
+#include <QtTest>
+
+using namespace ketplus::daemon;
+
+namespace {
+bool seedOwner(QSqlDatabase database) {
+    QSqlQuery query(database);
+    return query.exec(
+               "CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,generation INTEGER)") &&
+           query.exec("INSERT OR IGNORE INTO sessions VALUES('owner',1),('other',1)");
+}
+BackgroundTaskIntent intent() {
+    return {{"owner", 1, "turn"},      "request", "process", "Build",
+            QByteArray("fingerprint"), 60000,     {}};
+}
+QString taskId(const QJsonObject& reply) {
+    return reply.value("task").toObject().value("task_id").toString();
+}
+QJsonObject failed(BackgroundTaskLedger& ledger, const QString& id) {
+    BackgroundTaskChange change;
+    change.state = "failed";
+    change.reason = "spawn_failed";
+    change.neverLaunched = true;
+    return ledger.change(id, 1, change);
+}
+} // namespace
+
+class BackgroundTaskLedgerTest final : public QObject {
+    Q_OBJECT
+
+  private slots:
+    void attentionCountsTowardNonterminalCapAndGlobalSlotsRemainBounded() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            BackgroundTaskChange approve;
+            approve.state = "queued";
+            approve.permissionApproved = true;
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.executorStopped = true;
+            for (int i = 0; i < 116; ++i) {
+                auto request = intent();
+                request.clientRequestId = QString::number(i);
+                const auto id = taskId(ledger.create(request));
+                QVERIFY(!id.isEmpty());
+                QVERIFY(ledger.change(id, 1, approve).value("ok").toBool());
+                QCOMPARE(taskId(ledger.claimNext()), id);
+                QVERIFY(ledger.change(id, 3, attention).value("ok").toBool());
+            }
+            QCOMPARE(ledger.create(intent()).value("error_code"), "resource_exhausted");
+            auto retry = intent();
+            retry.clientRequestId = "0";
+            QVERIFY(ledger.create(retry).value("reused").toBool());
+            QCOMPARE(ledger.nonterminal().value("tasks").toArray().size(), 116);
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(name);
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            QSqlQuery query(db);
+            for (int root = 0; root < 5; ++root) {
+                const auto owner = QString::number(root);
+                query.prepare("INSERT INTO sessions VALUES(?,1)");
+                query.addBindValue(owner);
+                QVERIFY(query.exec());
+                for (int i = 0; i < 4; ++i) {
+                    auto request = intent();
+                    request.owner.sessionId = owner;
+                    request.clientRequestId = QString::number(i);
+                    const auto id = taskId(ledger.create(request));
+                    BackgroundTaskChange approve;
+                    approve.state = "queued";
+                    approve.permissionApproved = true;
+                    QVERIFY(ledger.change(id, 1, approve).value("ok").toBool());
+                }
+            }
+            for (int i = 0; i < 16; ++i)
+                QVERIFY(!taskId(ledger.claimNext()).isEmpty());
+            QVERIFY(ledger.claimNext().value("task").isNull());
+            QCOMPARE(ledger.list({"4", 1, {}}).value("active_count").toInt(), 0);
+            QCOMPARE(ledger.list({"4", 1, {}}).value("tasks").toArray().size(), 4);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void nativeCleanupAttentionAndUserAuditAreDurableAndNeverWake() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            QVERIFY(ledger.change(id, 1, approval).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), id);
+            BackgroundTaskChange running;
+            running.state = "running";
+            running.handshakeCommitted = true;
+            running.executionIdentity = {{"process_birth_identity", "birth"},
+                                         {"executor_lease_identity", "lease"}};
+            QVERIFY(ledger.change(id, 3, running).value("ok").toBool());
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.exitCode = 0;
+            attention.executorStopped = false;
+            auto result = ledger.change(id, 4, attention);
+            QVERIFY(result.value("ok").toBool());
+            auto task = result.value("task").toObject();
+            QCOMPARE(task.value("cleanup_status"), "unverified");
+            QVERIFY(task.value("completion").isNull());
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 1);
+            QCOMPARE(ledger.resolveCleanup(id, 5, "local-user").value("error_code"),
+                     "invalid_transition");
+            attention.executorStopped = true;
+            QVERIFY(ledger.change(id, 5, attention).value("ok").toBool());
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 0);
+            QCOMPARE(ledger.resolveCleanup(id, 6, {}).value("error_code"), "user_action_required");
+            BackgroundTaskChange completed;
+            completed.state = "completed";
+            completed.cleanupConfirmed = true;
+            QCOMPARE(ledger.change(id, 6, completed).value("error_code"), "invalid_transition");
+            QSqlQuery query(db);
+            QVERIFY(
+                query.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON managed_job_cleanup_audit "
+                           "BEGIN SELECT RAISE(ABORT,'injected audit failure'); END"));
+            QCOMPARE(ledger.resolveCleanup(id, 6, "local-user").value("error_code"),
+                     "storage_error");
+            QCOMPARE(
+                ledger.get(id, intent().owner).value("task").toObject().value("revision").toInt(),
+                6);
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QVERIFY(query.exec("DROP TRIGGER fail_audit"));
+            result = ledger.resolveCleanup(id, 6, "local-user");
+            QVERIFY(result.value("ok").toBool());
+            task = result.value("task").toObject();
+            QCOMPARE(task.value("state"), "interrupted");
+            QCOMPARE(task.value("reason"), "cleanup_acknowledged");
+            QCOMPARE(task.value("exit_code").toInt(), 0);
+            QCOMPARE(task.value("cleanup_status"), "unverified");
+            QCOMPARE(task.value("completion").toObject().value("status"), "suppressed");
+            QVERIFY(
+                query.exec("SELECT source,user_client_id,revision FROM managed_job_cleanup_audit"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toString(), "user");
+            QCOMPARE(query.value(1).toString(), "local-user");
+            QCOMPARE(query.value(2).toInt(), 7);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void nativeNormalCompletionRetainsBestEffortAssuranceAndWakes() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            BackgroundTaskChange change;
+            change.state = "queued";
+            change.permissionApproved = true;
+            QVERIFY(ledger.change(id, 1, change).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), id);
+            change = {};
+            change.state = "running";
+            change.handshakeCommitted = true;
+            change.executionIdentity = {{"process_birth_identity", "birth"},
+                                        {"executor_lease_identity", "lease"}};
+            QVERIFY(ledger.change(id, 3, change).value("ok").toBool());
+            change = {};
+            change.state = "completed";
+            change.cleanupConfirmed = true;
+            change.cleanupStatus = "verified";
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "invalid_cleanup_evidence");
+            change.cleanupStatus = "unverified";
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "invalid_cleanup_evidence");
+            change.cleanupStatus.clear();
+            const auto task = ledger.change(id, 4, change).value("task").toObject();
+            QCOMPARE(task.value("state"), "completed");
+            QCOMPARE(task.value("cleanup_status"), "best_effort_complete");
+            QCOMPARE(task.value("completion").toObject().value("status"), "pending");
+            QVERIFY(
+                ledger
+                    .acceptCompletion(task.value("completion_event_id").toString(), intent().owner)
+                    .value("ok")
+                    .toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void paginationIncludesMoreThanSixteenAndRefetchesChangedSnapshot() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            QStringList expected;
+            for (int i = 0; i < 35; ++i) {
+                auto request = intent();
+                request.clientRequestId = QString::number(i);
+                expected.append(taskId(ledger.create(request)));
+            }
+            auto page = ledger.list(intent().owner, {}, 16);
+            QCOMPARE(page.value("tasks").toArray().size(), 16);
+            const auto cursor = page.value("next_cursor").toString();
+            QVERIFY(!cursor.isEmpty());
+            QCOMPARE(ledger.list({"other", 1, {}}, cursor, 16).value("error_code"),
+                     "invalid_cursor");
+            QStringList actual;
+            while (true) {
+                for (const auto value : page.value("tasks").toArray())
+                    actual.append(value.toObject().value("task_id").toString());
+                if (page.value("next_cursor").isNull())
+                    break;
+                page = ledger.list(intent().owner, page.value("next_cursor").toString(), 16);
+                QVERIFY(page.value("ok").toBool());
+            }
+            QCOMPARE(actual, expected);
+            QVERIFY(failed(ledger, expected.last()).value("ok").toBool());
+            QCOMPARE(ledger.list(intent().owner, cursor, 16).value("error_code"), "stale_cursor");
+            QVERIFY(ledger.list(intent().owner).value("ok").toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void retryAndOwnerFenceSurviveReopen() {
+        QTemporaryDir directory;
+        const auto name = QUuid::createUuid().toString();
+        QString id;
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("ledger.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY2(ledger.initialize(&error), qPrintable(error));
+            QVERIFY(seedOwner(db));
+            const auto first = ledger.create(intent());
+            QVERIFY(first.value("ok").toBool());
+            id = taskId(first);
+            QVERIFY(!id.isEmpty());
+            QCOMPARE(taskId(ledger.create(intent())), id);
+            auto conflicting = intent();
+            conflicting.specFingerprint = "different";
+            QCOMPARE(ledger.create(conflicting).value("error_code"), "idempotency_conflict");
+            QCOMPARE(ledger.get(id, {"owner", 2, {}}).value("error_code"), "stale_owner");
+            QCOMPARE(ledger.get(id, {"other", 1, {}}).value("error_code"), "task_not_found");
+        }
+        QSqlDatabase::removeDatabase(name);
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("ledger.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            const auto retry = ledger.create(intent());
+            QCOMPARE(taskId(retry), id);
+            QVERIFY(retry.value("reused").toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void terminalOutboxIsAtomicAndTerminalCannotBeOverwritten() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_job_update BEFORE UPDATE ON managed_jobs "
+                               "BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END"));
+            QCOMPARE(failed(ledger, id).value("error_code"), "storage_error");
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QCOMPARE(ledger.get(id, intent().owner).value("task").toObject().value("state"),
+                     "queued");
+            QVERIFY(query.exec("DROP TRIGGER fail_job_update"));
+            const auto result = failed(ledger, id);
+            QVERIFY(result.value("ok").toBool());
+            const auto record = result.value("task").toObject();
+            QCOMPARE(record.value("revision").toInteger(), 2);
+            QCOMPARE(record.value("completion").toObject().value("status"), "pending");
+            QCOMPARE(failed(ledger, id).value("error_code"), "revision_conflict");
+            BackgroundTaskChange overwrite;
+            overwrite.state = "completed";
+            overwrite.cleanupConfirmed = true;
+            QCOMPARE(ledger.change(id, 2, overwrite).value("error_code"), "terminal_immutable");
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 1);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void cancellationRequiresCleanupAndPermissionDenialSuppressesWake() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            BackgroundTaskChange change;
+            change.state = "starting";
+            QCOMPARE(ledger.change(id, 1, change).value("error_code"), "invalid_transition");
+            change.state = "stopping";
+            change.cleanupPending = true;
+            QVERIFY(ledger.change(id, 1, change).value("ok").toBool());
+            change.state = "cancelled";
+            QCOMPARE(ledger.change(id, 2, change).value("error_code"), "invalid_transition");
+            change.cleanupConfirmed = true;
+            QVERIFY(ledger.change(id, 2, change).value("ok").toBool());
+            auto denied = intent();
+            denied.clientRequestId = "denied";
+            const auto deniedId = taskId(ledger.create(denied));
+            change = {};
+            change.state = "failed";
+            change.reason = "permission_denied";
+            change.neverLaunched = true;
+            const auto record = ledger.change(deniedId, 1, change).value("task").toObject();
+            const auto completion = record.value("completion").toObject();
+            QCOMPARE(completion.value("status"), "suppressed");
+            QCOMPARE(completion.value("reason"), "permission_denied");
+            QCOMPARE(ledger.acceptCompletion(completion.value("event_id").toString(), denied.owner)
+                         .value("error_code"),
+                     "completion_suppressed");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void wakeAcceptanceRollbackDedupAndDispatchClaimSurviveRestart() {
+        QTemporaryDir directory;
+        const auto name = QUuid::createUuid().toString();
+        QString eventId;
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("ledger.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto record =
+                failed(ledger, taskId(ledger.create(intent()))).value("task").toObject();
+            eventId = record.value("completion_event_id").toString();
+            QVERIFY(!eventId.isEmpty());
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_delivery BEFORE UPDATE ON managed_job_outbox "
+                               "BEGIN SELECT RAISE(ABORT,'injected acceptance failure'); END"));
+            QCOMPARE(ledger.acceptCompletion(eventId, intent().owner).value("error_code"),
+                     "storage_error");
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_wakes"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QVERIFY(query.exec("DROP TRIGGER fail_delivery"));
+            const auto accepted = ledger.acceptCompletion(eventId, intent().owner);
+            QVERIFY(accepted.value("ok").toBool());
+            QVERIFY(!accepted.value("duplicate").toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("ledger.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QVERIFY(ledger.acceptCompletion(eventId, intent().owner).value("duplicate").toBool());
+            QCOMPARE(ledger.claimWake(eventId, {"owner", 2, {}}).value("error_code"),
+                     "wake_not_dispatchable");
+            QVERIFY(ledger.claimWake(eventId, intent().owner).value("ok").toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("ledger.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QVERIFY(ledger.acceptCompletion(eventId, intent().owner).value("duplicate").toBool());
+            QCOMPARE(ledger.claimWake(eventId, intent().owner).value("error_code"),
+                     "wake_not_dispatchable");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void generationAndUserHoldFenceAcceptanceAndDispatch() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            const auto record = failed(ledger, id).value("task").toObject();
+            const auto event = record.value("completion_event_id").toString();
+            QVERIFY(ledger.holdOwner(intent().owner, "permission_pending", &error));
+            QCOMPARE(ledger.acceptCompletion(event, intent().owner).value("error_code"),
+                     "owner_held");
+            QCOMPARE(ledger.get(id, intent().owner)
+                         .value("task")
+                         .toObject()
+                         .value("completion")
+                         .toObject()
+                         .value("status"),
+                     "pending");
+            QVERIFY(ledger.holdOwner(intent().owner, {}, &error));
+            QVERIFY(ledger.acceptCompletion(event, intent().owner).value("ok").toBool());
+            QVERIFY(ledger.holdOwner(intent().owner, "user_stopped", &error));
+            QCOMPARE(ledger.claimWake(event, intent().owner).value("error_code"),
+                     "wake_not_dispatchable");
+            QVERIFY(ledger.holdOwner(intent().owner, {}, &error));
+            QSqlQuery query(db);
+            QVERIFY(query.exec("UPDATE sessions SET generation=2 WHERE id='owner'"));
+            QCOMPARE(ledger.claimWake(event, intent().owner).value("error_code"),
+                     "wake_not_dispatchable");
+            QCOMPARE(ledger.acceptCompletion(event, intent().owner).value("error_code"),
+                     "stale_owner");
+            QCOMPARE(ledger.create(intent()).value("error_code"), "stale_owner");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void stopCompletionRaceUsesOneRevisionAndRequiresBirthLeaseIdentity() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            for (bool stopFirst : {false, true}) {
+                auto start = intent();
+                start.clientRequestId = stopFirst ? "stop-first" : "complete-first";
+                const auto id = taskId(ledger.create(start));
+                BackgroundTaskChange change;
+                change.state = "queued";
+                change.permissionApproved = true;
+                QVERIFY(ledger.change(id, 1, change).value("ok").toBool());
+                QCOMPARE(taskId(ledger.claimNext()), id);
+                change = {};
+                change.state = "running";
+                change.handshakeCommitted = true;
+                change.executionIdentity = {{"pid", 123}};
+                QCOMPARE(ledger.change(id, 3, change).value("error_code"), "invalid_transition");
+                change.executionIdentity = {{"process_birth_identity", "fake-birth"},
+                                            {"executor_lease_identity", "fake-lease"}};
+                QVERIFY(ledger.change(id, 3, change).value("ok").toBool());
+                BackgroundTaskChange stop;
+                stop.state = "stopping";
+                stop.terminalTarget = "cancelled";
+                stop.cleanupPending = true;
+                BackgroundTaskChange complete;
+                complete.state = "completed";
+                complete.cleanupConfirmed = true;
+                if (stopFirst) {
+                    QVERIFY(ledger.change(id, 4, stop).value("ok").toBool());
+                    QCOMPARE(ledger.change(id, 4, complete).value("error_code"),
+                             "revision_conflict");
+                    QCOMPARE(ledger.change(id, 5, complete).value("error_code"),
+                             "invalid_transition");
+                    stop.state = "cancelled";
+                    QVERIFY(!ledger.change(id, 5, stop).value("ok").toBool());
+                    stop.cleanupConfirmed = true;
+                    QVERIFY(ledger.change(id, 5, stop).value("ok").toBool());
+                } else {
+                    QVERIFY(ledger.change(id, 4, complete).value("ok").toBool());
+                    QCOMPARE(ledger.change(id, 4, stop).value("error_code"), "revision_conflict");
+                }
+            }
+            QSqlQuery query(db);
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 2);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void quotaClaimsFifoEligibleAndQueuesBehindFullRoot() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            QStringList firstRoot;
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            for (int i = 0; i < 5; ++i) {
+                auto start = intent();
+                start.clientRequestId = QString::number(i);
+                const auto id = taskId(ledger.create(start));
+                firstRoot.append(id);
+                QVERIFY(ledger.change(id, 1, approval).value("ok").toBool());
+            }
+            auto other = intent();
+            other.owner.sessionId = "other";
+            const auto otherId = taskId(ledger.create(other));
+            QVERIFY(ledger.change(otherId, 1, approval).value("ok").toBool());
+            for (int i = 0; i < 4; ++i)
+                QCOMPARE(taskId(ledger.claimNext()), firstRoot[i]);
+            QCOMPARE(taskId(ledger.claimNext()),
+                     otherId); // Skip the full root; no head-of-line block.
+            QVERIFY(ledger.claimNext().value("task").isNull());
+            QCOMPARE(ledger.get(firstRoot.last(), intent().owner)
+                         .value("task")
+                         .toObject()
+                         .value("state"),
+                     "queued");
+            const auto queued = ledger.create(intent());
+            QVERIFY(queued.value("ok").toBool());
+            QCOMPARE(queued.value("task").toObject().value("state"), "queued");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void queueAndNonterminalCapsDoNotRejectIdempotentRetries() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            QString first;
+            for (int i = 0; i < 100; ++i) {
+                auto start = intent();
+                start.clientRequestId = QString::number(i);
+                const auto created = ledger.create(start);
+                QVERIFY(created.value("ok").toBool());
+                if (i == 0)
+                    first = taskId(created);
+            }
+            QCOMPARE(ledger.create(intent()).value("error_code"), "resource_exhausted");
+            auto retry = intent();
+            retry.clientRequestId = "0";
+            QCOMPARE(taskId(ledger.create(retry)), first);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void parkedParentLetsChildClaimSameRootAndResumeReacquiresSlot() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            auto parentIntent = intent();
+            parentIntent.kind = "agent";
+            const auto parentId = taskId(ledger.create(parentIntent));
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            QVERIFY(ledger.change(parentId, 1, approval).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), parentId);
+            QSqlQuery query(db);
+            QVERIFY(query.exec("INSERT INTO sessions VALUES('child',1)"));
+            query.prepare("INSERT INTO managed_job_children VALUES(?,'child',1)");
+            query.addBindValue(parentId);
+            QVERIFY(query.exec());
+            BackgroundTaskChange running;
+            running.state = "running";
+            running.handshakeCommitted = true;
+            running.executionIdentity = {{"child_session_id", "child"}, {"child_generation", 1}};
+            QVERIFY(ledger.change(parentId, 3, running).value("ok").toBool());
+            for (int i = 0; i < 3; ++i) {
+                auto start = intent();
+                start.clientRequestId = QString::number(i);
+                const auto id = taskId(ledger.create(start));
+                QVERIFY(ledger.change(id, 1, approval).value("ok").toBool());
+                QCOMPARE(taskId(ledger.claimNext()), id);
+            }
+            auto childIntent = intent();
+            childIntent.owner.sessionId = "child";
+            const auto child = ledger.create(childIntent);
+            const auto childId = taskId(child);
+            QCOMPARE(child.value("task").toObject().value("root_owner_session_id"), "owner");
+            QVERIFY(ledger.change(childId, 1, approval).value("ok").toBool());
+            QVERIFY(ledger.claimNext().value("task").isNull());
+            QVERIFY(!ledger.park(parentId, 4, false).value("ok").toBool());
+            QVERIFY(ledger.park(parentId, 4, true).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), childId);
+            QVERIFY(ledger.readyToResume(parentId, 5).value("ok").toBool());
+            QVERIFY(ledger.claimNext().value("task").isNull());
+            running.executionIdentity = {{"process_birth_identity", "fake-birth"},
+                                         {"executor_lease_identity", "fake-lease"}};
+            QVERIFY(ledger.change(childId, 3, running).value("ok").toBool());
+            BackgroundTaskChange complete;
+            complete.state = "completed";
+            complete.cleanupConfirmed = true;
+            QVERIFY(ledger.change(childId, 4, complete).value("ok").toBool());
+            const auto resumed = ledger.claimNext();
+            QCOMPARE(taskId(resumed), parentId);
+            QVERIFY(resumed.value("resume").toBool());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+};
+
+QTEST_GUILESS_MAIN(BackgroundTaskLedgerTest)
+#include "BackgroundTaskLedgerTest.moc"

@@ -5,7 +5,7 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeAccountUsage.cpp src/providers/ClaudeAccountUsage.h
     src/providers/ClaudeKeychain.cpp)
 if(APPLE)
-    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit")
+    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
 endif()
 target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Concurrent
@@ -59,6 +59,10 @@ add_dependencies(ketplus_daemon ketplus_build_identity)
 target_include_directories(ketplus_daemon PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(ketplus_daemon PRIVATE ketplus_daemon_core)
 ketplus_enable_warnings(ketplus_daemon)
+
+if(APPLE)
+    add_subdirectory(src/runtime/executor)
+endif()
 
 # Claude Agent SDK sidecar: JS + production node_modules. Node itself is not
 # copied; the daemon runs this tree with ketplus-browser's bundled node

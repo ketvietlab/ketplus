@@ -26,6 +26,8 @@
 
 namespace ketplus::daemon {
 
+class BackgroundTaskLedger;
+
 struct StoredSession final {
     QString id;
     QString worktreePath;
@@ -212,6 +214,9 @@ class LocalJournal final {
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] QString errorString() const;
     [[nodiscard]] QString databasePath() const { return database_.databaseName(); }
+    // Uses the journal connection so terminal state, outbox and wake acceptance
+    // share the same durable transaction boundary.
+    [[nodiscard]] BackgroundTaskLedger backgroundTasks() const;
 
     bool upsertSession(const StoredSession& session);
     // Inactive allocations have no sessions/events row until activation.
@@ -580,6 +585,7 @@ class LocalJournal final {
     [[nodiscard]] QList<ScheduleRunRecord> unfinishedScheduleRuns() const;
 
   private:
+    bool initializeManagedTasks();
     bool initializeSchedules();
     bool removeSchedulesForTeam(const QString& teamId, QString* error);
     bool initializeAgents();

@@ -860,7 +860,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Planned
 
-- Provider-neutral, daemon-owned background jobs: proposed
+- Provider-neutral, daemon-owned background jobs: accepted contract in
   [ADR 0127](decisions/0127-daemon-background-tasks.md) records the leader-defined
   registry, executor/lease, transactional completion and owner-wake contract.
   Its design fixtures are not runtime acceptance; registry/executor, provider

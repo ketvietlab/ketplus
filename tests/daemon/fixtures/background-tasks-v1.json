@@ -17,9 +17,24 @@
     "authenticated_context": ["owner_session_id", "owner_generation", "originating_turn_id"],
     "unique_key": ["owner_session_id", "owner_generation", "client_request_id"],
     "process_spec": {"exactly_one": ["argv", "explicit_shell_command"], "also": ["cwd", "env_delta"]},
-    "agent_spec": "existing_ketplus_managed_child_turn_configuration",
+    "agent_spec": {
+      "required": {"prompt": "string"},
+      "optional": {"provider": "string", "model": "string", "effort": "string", "cwd": "string"},
+      "defaults": "resolve_and_persist_owner_configuration_at_acceptance",
+      "validation": ["provider_model_effort_catalog", "canonical_cwd_within_workspace_permissions"],
+      "reject": ["session_id", "token", "env", "permissionMode", "system_prompt_override"],
+      "execution": "separate_managed_child_session_existing_provider_pipeline",
+      "durable_unique_link": "task_id",
+      "persist": ["child_session_id", "child_generation", "parent_task_id"],
+      "authority": "intersect_current_owner_workspace_provider_policy",
+      "approval": "own_ApprovalBroker_UI_requests_no_blanket_parent_grant",
+      "terminal_requires": ["child_turn_terminal", "descendant_jobs_terminal", "no_pending_permission"],
+      "cancel": ["fence_completion", "cancel_child_requests", "reclaim_descendant_ownership_tree", "do_not_kill_shared_provider"],
+      "crash": "no_unknown_inference_replay_cleanup_then_interrupted",
+      "nested_jobs": "same_registry_quotas_and_ownership_tree"
+    },
     "accepted_requires": "intent_committed",
-    "launch_requires": ["permission_approved", "durable_supervisor_handshake", "verified_containment"]
+    "launch_requires": ["permission_approved", "durable_supervisor_handshake", "approved_platform_execution_mode"]
   },
   "record_fields": [
     "task_id", "schema_version", "owner_session_id", "owner_generation", "originating_turn_id",
@@ -36,7 +51,10 @@
     "completion_nonterminal": null,
     "completion_terminal_fields": ["event_id", "status", "reason"],
     "delivered_means": "wake_durably_accepted_or_enqueued",
-    "stop_output_authorization": "server_owner_or_grant_check_not_provider_name"
+    "stop_output_authorization": "server_owner_or_grant_check_not_provider_name",
+    "macos_process_fields": ["containment_mode", "cleanup_status", "executor_stopped"],
+    "macos_containment_mode": "native_best_effort",
+    "cleanup_statuses": ["not_required", "pending", "verified", "unverified", "best_effort_complete"]
   },
   "projection_examples": {
     "list": {
@@ -49,11 +67,14 @@
     "output": {"output": "hello", "next_cursor": "opaque-output-position", "total_bytes": 5, "truncated": false},
     "terminal_pending": {"task_id": "task-example", "state": "completed", "completion": {"event_id": "opaque-terminal-event", "status": "pending", "reason": null}},
     "terminal_delivered": {"task_id": "task-example", "state": "completed", "completion": {"event_id": "opaque-terminal-event", "status": "delivered", "reason": null}},
-    "permission_denied": {"task_id": "task-denied", "state": "failed", "reason": "permission_denied", "completion": {"event_id": "opaque-denied-event", "status": "suppressed", "reason": "permission_denied"}}
+    "permission_denied": {"task_id": "task-denied", "state": "failed", "reason": "permission_denied", "completion": {"event_id": "opaque-denied-event", "status": "suppressed", "reason": "permission_denied"}},
+    "native_complete": {"task_id": "task-native", "state": "completed", "exit_code": 0, "containment_mode": "native_best_effort", "cleanup_status": "best_effort_complete", "executor_stopped": true, "completion": {"event_id": "task-native:5", "status": "pending", "reason": null}},
+    "native_attention": {"task_id": "task-native-attention", "state": "needs_attention", "revision": 6, "exit_code": 0, "reason": "cleanup_unverified", "containment_mode": "native_best_effort", "cleanup_status": "unverified", "executor_stopped": true, "completion": null},
+    "native_acknowledged": {"task_id": "task-native-attention", "state": "interrupted", "revision": 7, "exit_code": 0, "reason": "cleanup_acknowledged", "containment_mode": "native_best_effort", "cleanup_status": "unverified", "executor_stopped": true, "completion": {"event_id": "task-native-attention:7", "status": "suppressed", "reason": "cleanup_acknowledged"}}
   },
   "forbidden_journal_or_ui_data": ["tokens", "full_inherited_environment"],
   "states": {
-    "nonterminal": ["queued", "starting", "running", "stopping"],
+    "nonterminal": ["queued", "starting", "running", "stopping", "needs_attention"],
     "terminal": ["completed", "failed", "cancelled", "timed_out", "interrupted"]
   },
   "transitions": [
@@ -66,16 +87,28 @@
     {"from": ["stopping"], "to": "failed", "requires": ["terminal_target_failed", "executor_and_descendants_reclaimed", "terminal_and_outbox_transaction"]},
     {"from": ["queued", "starting", "running"], "to": "stopping", "requires": ["stop_or_deadline"]},
     {"from": ["queued", "starting", "running", "stopping"], "to": "stopping", "requires": ["cleanup_unverified", "cleanup_pending", "continue_reconciliation_and_warning"]},
-    {"from": ["stopping"], "to": "cancelled", "requires": ["executor_and_descendants_reclaimed", "terminal_and_outbox_transaction"]},
-    {"from": ["stopping"], "to": "timed_out", "requires": ["deadline", "executor_and_descendants_reclaimed", "terminal_and_outbox_transaction"]},
+    {"from": ["stopping"], "to": "cancelled", "requires": ["cleanup_evidence_for_containment_mode", "terminal_and_outbox_transaction"]},
+    {"from": ["stopping"], "to": "timed_out", "requires": ["deadline", "cleanup_evidence_for_containment_mode", "terminal_and_outbox_transaction"]},
+    {"from": ["starting", "running", "stopping", "needs_attention"], "to": "needs_attention", "requires": ["native_best_effort", "cleanup_error_or_known_survivor_or_identity_lease_loss_or_unreconciled_restart", "preserve_record_root_result_and_manual_guidance", "no_wake", "release_slot_only_when_known_executor_stopped"]},
+    {"from": ["needs_attention"], "to": "interrupted", "requires": ["authenticated_local_user_action", "revision_cas", "durable_user_audit", "reason_cleanup_acknowledged", "terminal_and_outbox_transaction", "suppress_wake", "acknowledgement_is_not_kernel_evidence"]},
     {"from": ["queued", "starting", "running", "stopping"], "to": "interrupted", "requires": ["unsafe_to_recover", "reconciliation_and_reclamation", "confirmed_no_live_workload_in_containment", "terminal_and_outbox_transaction"]}
   ],
+  "cleanup_evidence": {
+    "strict": "executor_and_descendants_reclaimed",
+    "native_best_effort": "root_and_known_processes_reclaimed_without_cleanup_error",
+    "normal_native_terminal": "best_effort_complete_with_standard_wake_not_verified",
+    "attention_record": "nonterminal_cap_retained_no_auto_prune_even_after_owner_invalid",
+    "user_only_operation": "session.task.resolve_cleanup",
+    "user_only_inputs": ["task_id", "revision"],
+    "acknowledgement": "interrupted_cleanup_acknowledged_suppressed_completion_user_audit"
+  },
   "transition_invariants": ["revision_cas", "terminal_immutable", "stop_idempotent", "one_terminal_winner"],
   "completion": {
     "event_identity": ["task_id", "terminal_revision"],
     "payload": ["task_id", "state", "summary", "output_reference"],
     "atomic_commit": ["terminal_record", "outbox_event"],
     "atomic_accept": ["event_id_dedup", "accept_or_enqueue_owner_turn"],
+    "durable_turn_states": ["accepted", "dispatching"],
     "delivery": "at_least_once",
     "statuses": ["pending", "delivered", "suppressed"],
     "progress_wakes": false,
@@ -91,6 +124,8 @@
     {"condition": "paused", "action": "keep_pending_until_explicit_resume"},
     {"condition": "owner_invalid", "action": "suppress_with_reason"},
     {"condition": "permission_denied", "action": "suppress_with_permission_denied_reason_no_wake_or_retry"},
+    {"condition": "needs_attention", "action": "ui_notice_only_no_wake"},
+    {"condition": "cleanup_acknowledged", "action": "suppress_with_reason"},
     {"condition": "cancelled_by_stop_or_session_close", "action": "suppress_with_reason"}
   ],
   "limits": {
@@ -101,15 +136,32 @@
     "active_per_session": 4,
     "active_global": 16,
     "queued_global": 100,
+    "nonterminal_global": 116,
     "admission_error": "resource_exhausted"
+  },
+  "quota_policy": {
+    "scope": "root_owner_session_and_generation",
+    "queued_consumes_slot": false,
+    "slots_full": "accept_into_queue_if_capacity_available",
+    "slot_held_states": ["starting", "running", "stopping"],
+    "park_requires": "agent_no_inference_running_confirmed",
+    "park_retains": ["job", "ownership", "timeout", "nonterminal_capacity"],
+    "resume": "reacquire_execution_slot",
+    "claim": "atomic_fifo_eligible_skip_root_at_capacity",
+    "restart": "reconcile_reservations_without_replay"
   },
   "scenarios": [
     {"id": "retry-start", "boundary": "storage", "given": "Committed start; response lost", "when": "Retry same authenticated key and spec, also after restart", "expect": ["same_task_id", "one_intent", "at_most_one_launch"]},
     {"id": "retry-conflict", "boundary": "storage", "given": "Committed start key", "when": "Retry key with different execution-affecting input", "expect": ["error", "original_spec_immutable", "no_additional_launch"]},
     {"id": "start-commit-failure", "boundary": "storage", "given": "Intent transaction fails or rolls back", "when": "Start requested", "expect": ["not_accepted", "no_launch"]},
     {"id": "permission-fence", "boundary": "provider", "given": "Committed intent awaits existing permission system", "when": "Permission remains unanswered", "expect": ["no_launch", "no_fabricated_permission"]},
+    {"id": "managed-child", "boundary": "runtime", "given": "Agent spec with omitted defaults and owner policy", "when": "Accept child job, retry start, then nested job and cancellation", "expect": ["persist_resolved_defaults", "unique_durable_child_session_link", "no_arbitrary_session_routing", "no_permission_expansion", "own_approval_requests", "descendant_tree_reclaimed", "shared_provider_not_killed"]},
+    {"id": "child-terminal-fence", "boundary": "runtime", "given": "Child turn ended but descendant job or approval remains", "when": "Child reports result or daemon restarts with unknown inference", "expect": ["no_early_parent_terminal", "no_unknown_inference_replay", "cleanup_before_interrupted"]},
     {"id": "preaccept-refusal", "boundary": "api", "given": "Validation, authentication or quota check refuses request", "when": "Start has not been accepted", "expect": ["api_error", "no_job", "no_outbox", "no_launch"]},
     {"id": "permission-denied", "boundary": "runtime", "given": "Accepted intent; no workload launched", "when": "User denies permission", "expect": ["failed", "reason_permission_denied", "completion_suppressed_permission_denied", "no_wake", "no_permission_retry"]},
+    {"id": "native-normal-exit", "boundary": "executor", "given": "macOS native job root exits and every known process is reclaimed without cleanup error", "when": "Publish terminal result", "expect": ["terminal_according_to_exit_result", "native_best_effort", "best_effort_complete_not_verified", "standard_wake", "no_absolute_no_orphan_claim"]},
+    {"id": "native-cleanup-attention", "boundary": "executor", "given": "macOS native cleanup error, known surviving process, identity/lease loss or unreconciled restart", "when": "Root result and cleanup evidence are evaluated", "expect": ["needs_attention", "cleanup_status_unverified", "preserve_root_result_output_and_guidance", "no_wake", "release_slot_only_after_known_executor_stops", "retain_nonterminal_record_after_owner_close"]},
+    {"id": "user-cleanup-ack", "boundary": "api", "given": "Needs-attention task and authenticated user administrative action", "when": "resolve_cleanup with task_id and revision; also stale revision and agent callers", "expect": ["user_only", "revision_cas", "atomic_audit_source_user", "interrupted_cleanup_acknowledged", "unverified_assurance_preserved", "suppressed_wake", "no_command_replay"]},
     {"id": "launch-failure", "boundary": "executor", "given": "Accepted job encounters spawn_failed or handshake_failed", "when": "Workload is proven absent or cleanup completes", "expect": ["failed", "standard_terminal_outbox", "no_command_replay"]},
     {"id": "launch-failure-cleanup", "boundary": "executor", "given": "Accepted job fails before running but cleanup takes time", "when": "Cleanup is pending then confirmed", "expect": ["stopping_with_terminal_target_failed", "no_early_terminal", "failed_only_after_reclamation"]},
     {"id": "cleanup-uncertain", "boundary": "executor", "given": "Execution identity lost or PID absent; containment not proven clean", "when": "Recovery cannot verify all descendants reclaimed", "expect": ["stopping_cleanup_pending", "continue_reconciliation_and_warning", "no_interrupted_until_containment_confirmed_clean"]},

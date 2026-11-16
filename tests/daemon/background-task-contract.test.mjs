@@ -18,7 +18,7 @@ test("API, identity and admission constraints preserve the shared contract", () 
   assert.deepEqual(fixture.limits, {
     ui_projection_rows: 16, output_page_bytes: 8192, output_spool_bytes: 10 * 1024 * 1024,
     terminal_retention_days: 7, active_per_session: 4, active_global: 16,
-    queued_global: 100, admission_error: "resource_exhausted",
+    queued_global: 100, nonterminal_global: 116, admission_error: "resource_exhausted",
   });
 });
 
@@ -31,7 +31,7 @@ test("transition vectors never leave a terminal or skip reclamation for cancella
       assert.ok(transition.requires.includes("terminal_and_outbox_transaction"));
     if (["cancelled", "timed_out"].includes(transition.to)) {
       assert.deepEqual(transition.from, ["stopping"]);
-      assert.ok(transition.requires.includes("executor_and_descendants_reclaimed"));
+      assert.ok(transition.requires.includes("cleanup_evidence_for_containment_mode"));
     }
   }
   for (const state of [...nonterminal, ...terminal])
@@ -58,6 +58,22 @@ test("completion vectors preserve durable acceptance and user fences", () => {
   assert.equal(policy.get("permission_denied"), "suppress_with_permission_denied_reason_no_wake_or_retry");
 });
 
+test("native assurance distinguishes routine completion from cleanup incidents and user acknowledgement", () => {
+  const examples = fixture.projection_examples;
+  assert.equal(examples.native_complete.containment_mode, "native_best_effort");
+  assert.equal(examples.native_complete.cleanup_status, "best_effort_complete");
+  assert.equal(examples.native_complete.completion.status, "pending");
+  assert.ok(nonterminal.has(examples.native_attention.state));
+  assert.equal(examples.native_attention.cleanup_status, "unverified");
+  assert.equal(examples.native_attention.completion, null);
+  assert.equal(examples.native_acknowledged.revision, examples.native_attention.revision + 1);
+  assert.equal(examples.native_acknowledged.state, "interrupted");
+  assert.equal(examples.native_acknowledged.reason, "cleanup_acknowledged");
+  assert.equal(examples.native_acknowledged.cleanup_status, "unverified");
+  assert.equal(examples.native_acknowledged.completion.status, "suppressed");
+  assert.equal(fixture.cleanup_evidence.user_only_operation, "session.task.resolve_cleanup");
+});
+
 test("pre-launch failure and uncertain cleanup keep ownership until reclamation", () => {
   const failedBeforeRun = fixture.transitions.find((t) => t.to === "failed" && t.from.includes("queued"));
   assert.deepEqual(failedBeforeRun.from, ["queued", "starting"]);
@@ -68,8 +84,13 @@ test("pre-launch failure and uncertain cleanup keep ownership until reclamation"
   const uncertain = fixture.transitions.find((t) => t.requires.includes("cleanup_pending"));
   assert.equal(uncertain.to, "stopping");
   assert.ok(uncertain.requires.includes("continue_reconciliation_and_warning"));
-  for (const t of fixture.transitions.filter((t) => t.to === "interrupted"))
-    assert.ok(t.requires.includes("confirmed_no_live_workload_in_containment"));
+  for (const t of fixture.transitions.filter((t) => t.to === "interrupted")) {
+    if (t.from.includes("needs_attention")) {
+      assert.ok(t.requires.includes("authenticated_local_user_action"));
+      assert.ok(t.requires.includes("durable_user_audit"));
+      assert.ok(t.requires.includes("suppress_wake"));
+    } else assert.ok(t.requires.includes("confirmed_no_live_workload_in_containment"));
+  }
 });
 
 test("response projections preserve the leader-defined UI and output schema", () => {
@@ -95,6 +116,21 @@ test("response projections preserve the leader-defined UI and output schema", ()
   assert.equal(examples.permission_denied.completion.reason, "permission_denied");
 });
 
+test("managed child schema retains independent ownership, permission and dispatch boundaries", () => {
+  const spec = fixture.start.agent_spec;
+  assert.deepEqual(spec.required, { prompt: "string" });
+  assert.deepEqual(spec.optional, { provider: "string", model: "string", effort: "string", cwd: "string" });
+  assert.deepEqual(spec.reject, ["session_id", "token", "env", "permissionMode", "system_prompt_override"]);
+  assert.equal(spec.durable_unique_link, "task_id");
+  assert.deepEqual(spec.persist, ["child_session_id", "child_generation", "parent_task_id"]);
+  assert.deepEqual(spec.terminal_requires, ["child_turn_terminal", "descendant_jobs_terminal", "no_pending_permission"]);
+  assert.ok(spec.cancel.includes("do_not_kill_shared_provider"));
+  assert.deepEqual(fixture.completion.durable_turn_states, ["accepted", "dispatching"]);
+  assert.equal(fixture.quota_policy.queued_consumes_slot, false);
+  assert.equal(fixture.quota_policy.scope, "root_owner_session_and_generation");
+  assert.equal(fixture.quota_policy.resume, "reacquire_execution_slot");
+});
+
 test("fault matrix retains every mandatory implementation verification gate", () => {
   const ids = new Set();
   for (const scenario of fixture.scenarios) {
@@ -106,6 +142,7 @@ test("fault matrix retains every mandatory implementation verification gate", ()
   for (const id of [
     "retry-start", "retry-conflict", "start-commit-failure", "permission-fence", "preaccept-refusal",
     "permission-denied", "launch-failure", "launch-failure-cleanup", "cleanup-uncertain", "response-schema",
+    "managed-child", "child-terminal-fence", "native-normal-exit", "native-cleanup-attention", "user-cleanup-ack",
     "crash-before-spawn", "crash-after-spawn", "pid-reuse", "descendants", "lease-loss",
     "unsupported-containment", "timeout", "stop-complete-race",
     "restart-before-terminal-commit", "restart-after-terminal-commit",

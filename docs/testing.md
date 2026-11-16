@@ -742,10 +742,17 @@ their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks
 
-The isolated output-store target uses temporary SQLite databases, including
-transaction-abort injection, byte paging across UTF-8 boundaries, reopen,
-bounded 10 MiB retention, cursor gaps and short-write coalescing. It does not
-start a daemon, provider or executor:
+The isolated storage/executor targets use temporary SQLite databases and no
+provider accounts. They cover transaction-abort injection, byte paging across
+UTF-8 boundaries, reopen, bounded 10 MiB retention, cursor gaps, short-write
+coalescing, start retry, revision races, atomic terminal/outbox and wake acceptance,
+quota admission/park/resume, pagination above 16 jobs, and native cleanup audit.
+On macOS the executor suite starts a native supervisor and test-owned workloads;
+it exercises a durable pre-launch handshake, reconnect without replay, timeout,
+known detached descendants, supervisor crash, lease expiry and changed birth
+identities. This is best-effort cleanup evidence, not proof that all possible
+unobserved descendants are contained. It does not exercise SessionHost API,
+provider adapters or UI:
 
 ```sh
 cmake -S tests/daemon/background-output -B build/background-output -G Ninja
@@ -753,7 +760,7 @@ cmake --build build/background-output
 ctest --test-dir build/background-output --output-on-failure
 ```
 
-The proposed provider-neutral replacement is [ADR 0127](decisions/0127-daemon-background-tasks.md).
+The accepted provider-neutral contract is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:
 
 ```sh

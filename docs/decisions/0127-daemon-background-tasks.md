@@ -1,6 +1,6 @@
 # 0127: The daemon owns background tasks and their completion delivery
 
-Status: proposed (leader-defined contract; independent review pending)
+Status: accepted (contract; runtime implementation and platform verification pending)
 Date: 2026-11-16
 
 ## Context
@@ -64,6 +64,32 @@ explicit shell command, plus `cwd` and an environment delta. Shell interpretatio
 must be explicit; argv is not silently joined into shell text. An agent spec
 supplies child-turn configuration through KetPlus's managed-agent mechanism.
 
+The managed-agent `execution` object is
+`{provider?: string, model?: string, effort?: string, prompt: string, cwd?: string}`.
+`prompt` is required. Omitted settings are resolved from the owner's configuration
+and persisted at acceptance. Provider/model/effort must pass catalog validation;
+cwd is canonical and within the existing workspace/permission boundary. Reject
+`session_id`, tokens, `env`, `permissionMode` and system-prompt overrides.
+
+Each agent job owns a separate managed child session, linked uniquely and durably
+by `task_id`. Persist `child_session_id`, child generation and `parent_task_id`;
+never substitute a message to an arbitrary conversation. The child is an ordinary
+conversation with that ownership link, not an implicit team member or unowned
+side conversation. Its one work turn and tool continuations use the existing
+session/provider authorization and quota pipeline. A configured different provider
+is allowed without expanding authority: intersect the owner's current policy
+with workspace/provider policy. Child approvals and questions go through
+ApprovalBroker/UI; neither parent approval nor child creation is a blanket grant.
+
+An agent job completes only after its child turn and all descendant jobs are
+terminal and no permission remains pending. Child failure is `failed`. After
+crash, unknown inference is not replayed: reclaim the ownership tree, then mark
+`interrupted`. Stop/cancel/timeout or invalid parent generation fences completion,
+cancels child requests and reclaims every descendant job. Never kill a shared
+provider process to cancel a child. Stopping the parent's foreground turn retains
+the job under the normal wake fence. Nested jobs use the same registry and quotas
+and cannot escape the ownership tree. Tests use fake providers.
+
 The daemon derives `owner_session_id`, `owner_generation` and the originating
 turn from the authenticated caller context, not arbitrary owner fields in the
 payload. All operations validate ownership and the current generation; knowing
@@ -125,6 +151,41 @@ the winner or emit another completion event. Receiving a Stop request is not
 proof of cancellation. `cancelled` and `timed_out` require confirmation that
 the executor and all contained descendants are reclaimed. An already absent,
 never-launched executor must be proven absent through its durable launch intent.
+The user-selected macOS exception below replaces the absolute containment/cleanup
+requirements for that platform; it does not replace durable ownership or permissions.
+
+#### macOS native cleanup amendment (user decision D-2)
+
+macOS process jobs run natively with `containment_mode=native_best_effort`, not
+in a product VM. Supervisor, durable journal/handshake and lease remain mandatory.
+Reclaim the process/group and identifiable descendants using birth identities;
+never signal a PID merely because its number used to belong to the job.
+
+Expose `cleanup_status=not_required | pending | verified | unverified |
+best_effort_complete`. A normal root exit with every known process reclaimed and
+no cleanup error ends in the normal terminal state according to the exit result,
+with `best_effort_complete` and normal completion delivery. This is not `verified`
+and does not promise absence of unobserved descendants. Lack of kernel containment
+alone must not force every native job into an attention state.
+
+Cleanup errors, known surviving processes, lost identity/lease or an unreconciled
+restart instead produce nonterminal `needs_attention`,
+`cleanup_status=unverified`, `reason=cleanup_unverified`. Preserve the root result,
+exit code and output, plus manual-check guidance. Do not report clean success or
+cancellation. Release the execution slot only once the known executor has stopped;
+the retained attention record still counts against the 116 nonterminal cap and
+is never automatically pruned, including after owner close/generation change.
+Existing authenticated local administration may inspect it; do not invent a new
+grant. Cleanup retries signal only identities that can still be validated and
+never replay the command.
+
+Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
+CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
+audit whose source is `user`. Acknowledgement is a user statement, not kernel
+cleanup evidence; keep the assurance level visible. Agents cannot invoke this
+action on the user's behalf. Neither `needs_attention` nor acknowledgement wakes
+an agent; publish a UI notice only. Permission, outbox, dedup and owner fences
+remain unchanged.
 
 ### 5. Supervisor, launch and restart safety
 
@@ -139,15 +200,16 @@ Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.
 An implementation must demonstrate the platform's containment behavior,
 including escape attempts; a process group alone is not a blanket guarantee.
-If safe containment cannot be provided on a platform, start is explicitly
-refused. The platform executor and its handshake are implementation gates,
+Except for the macOS native amendment above, if safe containment cannot be
+provided on a platform, start is explicitly refused. The platform executor and its handshake are implementation gates,
 not capabilities proven by this documentation.
 
 On daemon restart, reconcile every nonterminal registry record with the
 executor identity and lease. Reconnect only to a live, verifiable executor;
 otherwise reclaim it and record `interrupted` only after confirming the
 containment is clean. If that cannot be confirmed, keep `stopping/cleanup_pending`
-and continue reconciliation and warnings. Never relaunch a command with
+and continue reconciliation and warnings. macOS follows the native amendment's
+`needs_attention` path when restart cannot be reconciled. Never relaunch a command with
 side effects to reconstruct its result, even when its last state was queued or
 starting. Provider exit does not kill a daemon-owned process job.
 
@@ -175,6 +237,12 @@ This is at-least-once event delivery with durable acceptance deduplication.
 It is not exactly-once model inference. A turn interrupted by a crash is not
 automatically replayed to simulate an unobserved result.
 
+T-2 owns the enqueue/accept API with `event_id`. Commit the deduplication entry
+and accepted-turn record together before dispatching to a provider. Persist
+`accepted` and `dispatching` so recovery never dispatches an inference whose
+outcome is unknown. The provider/agent integration lane consumes this boundary;
+message-only routing cannot replace it.
+
 ### 7. Owner wake policy
 
 | Owner condition | Completion handling |
@@ -185,6 +253,7 @@ automatically replayed to simulate an unobserved result.
 | User Stop or pause | Keep pending; only explicit Resume releases it |
 | Closed/deleted owner or replaced generation | Suppress with a recorded reason |
 | Job cancelled by Stop or session close | Suppress; cancellation must not restart the agent |
+| Native cleanup needs attention or is user-acknowledged | UI notice only; no auto-wake |
 | Permission denied after job acceptance | `failed` with `reason=permission_denied`; suppress completion with the same reason |
 
 Delivery is rechecked at acceptance and dispatch, including generation and Stop
@@ -222,11 +291,21 @@ Terminal metadata is retained for seven days. Nonterminal records and pending
 outbox events must not be pruned. Retention cannot break a pending event's
 reference or its durable acceptance deduplication.
 
-Default admission limits are four active jobs per session, sixteen active jobs
-globally and one hundred queued jobs globally. Exhaustion returns
-`resource_exhausted`. Admission checks and intent creation must be atomic so
-concurrent requests cannot overrun limits; a retry of an accepted request does
-not allocate another slot.
+Default admission limits are four execution slots per root owner session/generation
+and sixteen globally. Queued jobs do not consume slots. When slots are full,
+accept into the durable queue if its one-hundred-job capacity permits; reject
+with `resource_exhausted` when the queue is full. Independently cap all nonterminal
+jobs, including parked agents, at 116. Rejected admissions create no job/outbox.
+
+Starting/running/stopping work retains its slot until cleanup. An agent waiting
+only for children/permission may park and release its slot only after confirming
+that no inference is running. It retains its job, ownership and timeout; resuming
+inference must reacquire a slot. Descendants count against the same root owner.
+Claim slots atomically in FIFO order among eligible jobs, skipping owners at
+capacity to avoid head-of-line blocking. Reconcile reservations after crash.
+Admission checks and intent creation are atomic; accepted-request retries consume
+neither another queue entry nor a slot. Tests must cover a parent waiting on a
+child at the root quota so parked parents cannot deadlock the queue.
 
 ### 9. Provider migration and desktop contract
 
