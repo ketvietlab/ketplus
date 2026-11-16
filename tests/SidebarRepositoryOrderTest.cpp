@@ -1,7 +1,7 @@
-// T-92: the desktop sidebar's repository order. A repository dates from the newest turn start
-// of anything it shows, its teams' members included; the user pins repositories to the top; a
-// conversation stays in the group of the repository it was created in, whatever worktree it
-// runs in later. Offscreen, with settings in a temporary INI file and synthetic data only.
+// Repository order stays independent of conversation/team activity; users can pin repositories
+// to the top. A conversation stays in the group of the repository it was created in, whatever
+// worktree it runs in later. Offscreen, with settings in a temporary INI file and synthetic data
+// only.
 #include "KetAppearance.h"
 #include "KetSidebarTree.h"
 #include "KetStyle.h"
@@ -21,6 +21,7 @@
 #include <QMenu>
 #include <QProcess>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -117,27 +118,22 @@ class SidebarRepositoryOrderTest final : public QObject {
         ket::Appearance::instance().setZoom(1.0);
     }
 
-    // Criterion 2: a repository holding only team members dates from their newest turn; the
-    // root cause was that recency read `conversations`, where team members never are.
-    void aTeamOnlyRepositoryWithARecentTurnSortsAboveIdleOnes() {
+    void teamActivityDoesNotPromoteItsRepository() {
         QVector<SidebarRepository> repositories{
             {.path = "/work/alpha", .name = "alpha"},
             {.path = "/work/beta", .name = "beta"},
             {.path = "/work/zed",
              .name = "zed",
              .teams = {team({member("lead", "leader", 10), member("dev", "developer", 500)})}}};
-        QCOMPARE(ketplus::sidebarRepositoryRecency(repositories.at(2)), 500);
         ketplus::sortSidebarRepositories(repositories);
-        QCOMPARE(pathsOf(repositories), (QStringList{"/work/zed", "/work/alpha", "/work/beta"}));
+        QCOMPARE(pathsOf(repositories), (QStringList{"/work/alpha", "/work/beta", "/work/zed"}));
         // The members keep the order the team gave them.
-        const QVariantList members = repositories.first().teams.first().members;
+        const QVariantList members = repositories.last().teams.first().members;
         QCOMPARE(members.at(0).toMap().value("id").toString(), QStringLiteral("lead"));
         QCOMPARE(members.at(1).toMap().value("id").toString(), QStringLiteral("dev"));
     }
 
-    // Criterion 2: a mixed repository dates from the newer of its own and its team's turns,
-    // and its own conversations keep their newest-first order.
-    void aMixedRepositoryDatesFromItsNewestTurnOfEitherKind() {
+    void conversationsKeepTheirNewestFirstOrderWithinTheRepository() {
         QVector<SidebarRepository> repositories{
             {.path = "/work/own", .name = "own", .conversations = {conversation("own-new", 300)}},
             {.path = "/work/mixed",
@@ -148,14 +144,14 @@ class SidebarRepositoryOrderTest final : public QObject {
         QCOMPARE(pathsOf(repositories), (QStringList{"/work/mixed", "/work/own"}));
         QCOMPARE(repositories.first().conversations.first().toMap().value("id").toString(),
                  QStringLiteral("newer"));
-        // Its own conversations only: older than "own", it sorts below it.
+        // Removing a team or starting a newer turn elsewhere cannot move repository groups.
         repositories[0].teams.clear();
+        repositories[1].conversations = {conversation("own-new", 900)};
         ketplus::sortSidebarRepositories(repositories);
-        QCOMPARE(pathsOf(repositories), (QStringList{"/work/own", "/work/mixed"}));
+        QCOMPARE(pathsOf(repositories), (QStringList{"/work/mixed", "/work/own"}));
     }
 
-    // Criterion 2: idle repositories follow by name, case-insensitively, then by path.
-    void idleRepositoriesFollowByName() {
+    void repositoriesFollowByName() {
         QVector<SidebarRepository> repositories{{.path = "/b/zeta", .name = "zeta"},
                                                 {.path = "/b/Alpha", .name = "Alpha"},
                                                 {.path = "/a/alpha", .name = "alpha"},
@@ -165,8 +161,85 @@ class SidebarRepositoryOrderTest final : public QObject {
                  (QStringList{"/a/alpha", "/b/Alpha", "/b/beta", "/b/zeta"}));
     }
 
-    // Criteria 3 and 5: pinned repositories lead in the order they were pinned, then recency
-    // and name; unpinning returns one to its place; pins survive a reload.
+    void activityUpdatesKeepRenderedRepositoryOrder_data() {
+        QTest::addColumn<bool>("teamMember");
+        QTest::newRow("conversation") << false;
+        QTest::newRow("team-member") << true;
+    }
+
+    // Local and daemon projections both reach setRepositories. Render the real list before
+    // and after status, selection and structural updates; keep explicit pin/unpin behavior.
+    void activityUpdatesKeepRenderedRepositoryOrder() {
+        QFETCH(bool, teamMember);
+        const QString alpha = folder("alpha");
+        const QString beta = folder("beta");
+        const QString zed = folder("zed");
+        QVector<SidebarRepository> repositories{{.path = alpha,
+                                                 .name = "alpha",
+                                                 .active = true,
+                                                 .conversations = {conversation("a", 200)},
+                                                 .pinnable = true},
+                                                {.path = beta,
+                                                 .name = "beta",
+                                                 .conversations = {conversation("b", 100)},
+                                                 .pinnable = true},
+                                                {.path = zed, .name = "zed", .pinnable = true}};
+        if (teamMember)
+            repositories[2].teams = {team({member("z", "leader", 0)})};
+        else
+            repositories[2].conversations = {conversation("z", 0)};
+
+        ketplus::SidebarRepositoryList list;
+        list.resize(260, 600);
+        list.setRepositories(repositories);
+        list.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&list));
+        const QStringList expected{alpha, beta, zed};
+        QCOMPARE(shownOrder(list), expected);
+        const QPointer<ket::SidebarRepositoryHeader> alphaHeader = headerOf(list, alpha);
+        QVariantList& rows =
+            teamMember ? repositories[2].teams[0].members : repositories[2].conversations;
+        QVariantMap updated = rows[0].toMap();
+        updated.insert("lastTurnStartedAt", 1000);
+        updated.insert("running", true);
+        updated.insert("selected", true);
+        rows[0] = updated;
+        repositories[0].active = false;
+        repositories[2].active = true;
+        list.setRepositories(repositories);
+        QCOMPARE(shownOrder(list), expected);
+        QCOMPARE(headerOf(list, alpha), alphaHeader.data());
+
+        QSignalSpy requested(&list, &ketplus::SidebarRepositoryList::conversationRequested);
+        QAbstractButton* selected = nullptr;
+        for (auto* row : list.findChildren<QAbstractButton*>("productConversationButton"))
+            if (row->property("conversationId").toString() == QStringLiteral("z"))
+                selected = row;
+        QVERIFY(selected);
+        QVERIFY(selected->isChecked());
+        selected->click();
+        QCOMPARE(requested.size(), 1);
+        QCOMPARE(requested.first(),
+                 (QList<QVariant>{QStringLiteral("/work/z"), QStringLiteral("z")}));
+        QCOMPARE(shownOrder(list), expected);
+
+        updated.insert("title", "Updated title");
+        rows[0] = updated;
+        if (teamMember)
+            repositories[2].teams[0].name = "Updated team";
+        list.setRepositories(repositories);
+        QCOMPARE(shownOrder(list), expected);
+        list.setRepositoryPinned(zed, true);
+        list.setRepositoryPinned(alpha, true);
+        QCOMPARE(shownOrder(list), (QStringList{zed, alpha, beta}));
+        list.setRepositories(repositories);
+        QCOMPARE(shownOrder(list), (QStringList{zed, alpha, beta}));
+        list.setRepositoryPinned(zed, false);
+        QCOMPARE(shownOrder(list), expected);
+    }
+
+    // Pinned repositories lead in pin order, then name; unpinning returns one to its place.
+    // Pins survive a reload.
     void pinnedRepositoriesLeadInTheOrderTheyWerePinned() {
         const QString busy = folder("busy");
         const QString quiet = folder("quiet");

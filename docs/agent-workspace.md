@@ -602,10 +602,10 @@ current-window value.
   repository's worktrees are ordered by when their latest turn started, so
   sending a message, from the desktop or a phone, moves that conversation to
   the top; ties and conversations that never started a turn follow by title.
-  Repositories are ordered by the newest turn start of anything they show, their
-  own conversations and their teams' members alike (T-92), then by name, so
-  opening or switching one never reorders the list. Repositories the user pinned
-  (**Pin to top** in the repository header's context menu; **Unpin** to undo)
+  Repositories follow by name (case-insensitive), then path; conversation and team
+  updates never promote a repository. Opening or switching one also keeps that
+  order. Repositories the user pinned (**Pin to top** in the repository header's
+  context menu; **Unpin** to undo)
   come first, in the order they were pinned, with a small pin after the name.
   Pins are this Mac's: kept in `QSettings` (`sidebar/pinnedRepositories`) by
   canonical path, a pin whose folder is gone is dropped silently, another

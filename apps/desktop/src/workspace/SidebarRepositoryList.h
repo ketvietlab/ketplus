@@ -61,13 +61,9 @@ struct SidebarRepository final {
 };
 
 // Conversations by "lastTurnStartedAt", newest first, then title and id. Repositories: the
-// pinned ones first, in the order they were pinned (T-92); then by their newest turn start of
-// anything they show, their own conversations and their teams' members alike; then name and
-// path. The phones (the companion mobile client) order conversations and unpinned repositories
-// by recency too.
+// pinned ones first, in the order they were pinned; then name and path. Conversation and team
+// activity and the active selection never change the order of repository groups.
 void sortSidebarRepositories(QVector<SidebarRepository>& repositories);
-// The newest turn start among a repository's conversations and its teams' members; 0 for none.
-[[nodiscard]] qint64 sidebarRepositoryRecency(const SidebarRepository& repository);
 
 // The repository list of ketPlus Pro is the tree of the Qt mock (mockups/qt, "Sidebar tree"):
 // a repository is the root, its teams are branches under it, "Conversations (n)" labels the
