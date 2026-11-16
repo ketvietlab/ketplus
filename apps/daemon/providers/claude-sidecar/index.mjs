@@ -7,6 +7,7 @@ import { TurnInput, userMessage } from "./input.mjs";
 import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
 import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
+import { backgroundDecision, backgroundOptions } from "./background-policy.mjs";
 import { open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -615,8 +616,9 @@ async function startRun(messageId, params, prompt, images) {
       prompt: run.input,
       options: {
         ...authentication,
-        // A verify review's caches live in its scratch directory (ADR 0067).
-        ...(review?.env ? { env: { ...(authentication.env || process.env), ...review.env } } : {}),
+        // Keep credentials and review caches while enforcing native background
+        // blocking for every query, including full-access and resumed sessions.
+        ...backgroundOptions({ ...(authentication.env || process.env), ...review?.env }, review?.hooks, authentication.settings),
         cwd: run.cwd,
         mcpServers,
         // The daemon derives this from the same launch as mcpServers on every query,
@@ -631,7 +633,6 @@ async function startRun(messageId, params, prompt, images) {
         // A handoff transcript from another provider, readable without a permission prompt.
         ...(readable.length > 0 ? { additionalDirectories: readable } : {}),
         ...(review?.sandbox ? { sandbox: review.sandbox } : {}),
-        ...(review?.hooks ? { hooks: review.hooks } : {}),
         permissionMode: mode,
         allowDangerouslySkipPermissions: !profile && mode === "bypassPermissions",
         includePartialMessages: true,
@@ -639,6 +640,8 @@ async function startRun(messageId, params, prompt, images) {
         resume: params.resume || undefined,
         abortController,
         canUseTool: async (tool, toolInput) => {
+          const background = backgroundDecision(tool, toolInput);
+          if (background) return background;
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
           // Decided without a prompt, so nobody can grant a reviewer more than its profile.

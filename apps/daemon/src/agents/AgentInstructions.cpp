@@ -1,4 +1,5 @@
 #include "agents/AgentInstructions.h"
+#include "agents/AgentBackgroundTools.h"
 
 #include <QJsonObject>
 #include <QStringList>
@@ -46,7 +47,8 @@ QString toolInstructions(const QString& ownNumber) {
                "on, call request_user_decision with a one-line summary just before that answer; "
                "KetPlus then shows the conversation as Waiting for you.\n"
                "[/KetPlus agent messaging]")
-        .arg(ownNumber);
+               .arg(ownNumber) +
+           QStringLiteral("\n\n") + agent_mcp::background_tools::instructions();
 }
 
 // ADR 0114. The daemon refuses what a role may not do; this text only explains it.

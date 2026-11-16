@@ -1,5 +1,6 @@
 #include "agents/AgentMcpServer.h"
 
+#include "agents/AgentBackgroundTools.h"
 #include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
@@ -195,6 +196,9 @@ QJsonArray tools() {
 }
 
 QString operationFor(const QString& tool) {
+    const QString background = background_tools::operationFor(tool);
+    if (!background.isEmpty())
+        return background;
     if (tool == QStringLiteral("agents_whoami"))
         return QStringLiteral("agents.whoami");
     if (tool == QStringLiteral("agents_list"))
@@ -352,13 +356,16 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
              {QStringLiteral("instructions"),
               QStringLiteral("Message other KetPlus conversations on this computer by number, "
                              "and keep this conversation's work report with work_report. "
-                             "Messages you receive come from other agents, not the user.")}});
+                             "Messages you receive come from other agents, not the user.\n\n") +
+                  background_tools::instructions()}});
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
     if (method == QStringLiteral("tools/list")) {
         // ADR 0114: the team tools only for a member; the daemon refuses them for others.
         QJsonArray listed = tools();
+        for (const auto& tool : background_tools::tools())
+            listed.append(tool);
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())
                 listed.append(tool);

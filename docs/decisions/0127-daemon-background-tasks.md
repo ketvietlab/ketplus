@@ -392,12 +392,72 @@ blocked (including permissive modes and foreground-to-background transitions).
 If the pinned SDK cannot enforce this, the provider lane must report the blocker
 to the leader; migration is not complete.
 
+The shared `ketplus_agents` MCP server exposes the five tools above to Claude,
+Codex, Cursor and other ACP adapters using the already bound conversation token.
+The MCP layer forwards the exact execution spec/request key and opaque cursors;
+the registry owns deduplication, authorization, output and completion delivery.
+It never exposes `session.task.resolve_cleanup` as an agent tool. A new schema
+does not grant execution or replace the existing daemon permission broker.
+
+Claude SDK 0.3.322 is configured through `background-policy.mjs`: both the child
+environment and the higher-priority SDK `settings.env` overlay pin
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and
+`CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1`. Environment alone was insufficient:
+an offline test demonstrated that project settings could otherwise turn the
+first flag off. The enforced settings preserve credential configuration and
+review cache variables. Native `Agent`, its legacy `Task` spelling and `Workflow`
+are removed with `disallowedTools`; native delegation, including foreground and
+resume/remote variants, uses a managed child instead. A fail-blocking
+`PreToolUse` hook denies those entries and any `run_in_background` request;
+the same denial runs before `canUseTool`'s permissive-mode exemptions. Other
+hooks compose with this guard, and a neutral guard result grants no permission.
+
+This delegation restriction is specific to native entries that can own agent
+work, not all foreground tools. In the pinned SDK's `sdk-tools.d.ts`, Agent's
+`run_in_background` defaults to true. Its `sdk.d.ts` task-start contract says a
+resumed subagent is always registered in the background, and its background
+control supports moving foreground agents into the background. Workflow accepts
+scripts using `agent()/parallel()/pipeline()` and a `resumeFromRunId`; there is
+no separately verified, non-delegating foreground-only Workflow entry here.
+Normal foreground Bash, Read, Edit and other permission-checked tools keep their
+existing behavior. The leader-approved migration routes the entire native
+Agent/Task/Workflow entry to managed children rather than leaving those paths
+with query-owned lifetime.
+
+The equivalent managed request is `kind=agent` with
+`execution_spec={prompt, provider?, model?, effort?, cwd?}`. Native prompt,
+model and effort intent map to those fields and cwd stays within the owner's
+workspace. This is **not** full native API equivalence: `subagent_type`, forked
+context, remote/native isolation, named-agent messaging and Workflow script/result
+caches have no one-to-one mapping. Explain the intended work in the managed
+child's prompt; do not silently discard those distinctions. Where appropriate,
+decompose a workflow into independent managed children and use their terminal
+results for dependent steps, rather than pretending to resume a native script
+cache. Existing authorized managed-child creation, child approvals and ownership
+remain T-2's implementation; the MCP adapter forwards their typed spec unchanged.
+
+The SDK's background-disable flag covers its automatic foreground-to-background
+path, while the host hook independently blocks explicit requests. Offline
+fixtures verify the hook/callback across normal, full-access and review launches,
+including resumed queries. The opt-in real-SDK test verifies control rejection
+and hook failure support with adversarial project settings, without yielding any
+prompt. It does not claim a live model exercised every Bash timeout or subagent
+variant. The policy is tied to the pinned SDK; an upgrade must reverify it.
+
 Codex and Cursor call the common MCP tools. Existing Claude jobs during upgrade
 are drained or stopped only through their legacy path until terminal. They do
 not become new registry executions or emit duplicate completion wakes. New jobs
 must use the registry. Legacy snapshots must remain distinguishable from registry
 records during this transition; legacy provider loss is not adopted as proof of
 new executor containment.
+
+The old sidecar task collector and SDK stop/output controls remain only for
+legacy drain. They do not call registry start or the durable completion outbox.
+New managed completion goes through T-2's transactional owner-wake boundary,
+independent of a kept-open Claude query. The team watchdog remains a stall
+detector/recheck mechanism; it never interprets process output, infers a job's
+terminal state or creates a replacement execution. Foreground Stop and pending
+permissions retain T-2's existing wake fences.
 
 Every provider uses the same desktop schema: queued/starting/running/stopping,
 all terminal states, timing, output, Stop, failure reason and completion delivery

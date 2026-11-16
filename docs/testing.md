@@ -772,6 +772,36 @@ their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks
 
+The shared MCP/provider surface has a narrow offline Qt target:
+
+```sh
+cmake -S tests/daemon/agent-background-tools -B build/agent-background-tools -G Ninja
+cmake --build build/agent-background-tools
+ctest --test-dir build/agent-background-tools --output-on-failure
+node --test tests/daemon/claude-sidecar/managed-background.test.mjs
+```
+
+It checks owner-free schemas, exact request-key/spec/cursor forwarding,
+permission errors and refusal to expose local cleanup acknowledgement. The
+sidecar fixture checks native Agent/Task/Workflow and explicit background denial
+before permissive approvals, settings composition and review-hook preservation.
+All providers use the existing injected conversation-bound MCP server; no new
+provider authentication or execution grant is introduced.
+
+For an explicit, no-inference check against an already installed SDK 0.3.322,
+set `KETPLUS_CLAUDE_SDK_DIRECTORY` to that SDK package directory and run:
+
+```sh
+node --test tests/daemon/claude-sidecar/background-sdk-offline.test.mjs
+```
+
+The test skips unless opted in. It yields no prompt and requests only startup
+and background control, verifying rejection even when project settings try to
+reenable background tasks. An earlier env-only configuration failed this test;
+the host settings overlay is required. This is not a live-model Bash/subagent
+execution or timeout test. The normal sidecar fixture suite uses fake SDKs and
+requires no installed SDK, provider account or quota.
+
 The isolated storage/executor targets use temporary SQLite databases and no
 provider accounts. They cover transaction-abort injection, byte paging across
 UTF-8 boundaries, reopen, bounded 10 MiB retention, cursor gaps, short-write
@@ -895,8 +925,9 @@ They run synthetic workers in an exclusively owned disposable guest, including
 expected escape controls. They are not part of the default suite and do not
 establish production registry/executor acceptance.
 
-`node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a fake
-SDK whose first turn starts a background shell. The turn must complete while the
+`node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a legacy
+fake SDK that deliberately ignores the native-disable options and reports an
+existing background shell, solely to verify drain compatibility. The turn must complete while the
 query stays open, the next user turn must reuse that query, stopping a turn must
 leave the task running, and `task/stop` must end with the agent's own reply turn
 before the query closes. `apps/daemon/providers/claude-sidecar/test/tasks.test.mjs`

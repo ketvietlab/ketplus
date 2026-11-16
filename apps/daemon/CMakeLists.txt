@@ -127,6 +127,7 @@ else()
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/tasks.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/resume.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/review-guard.mjs"
+            "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/background-policy.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/session-delete.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package.json"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package-lock.json"

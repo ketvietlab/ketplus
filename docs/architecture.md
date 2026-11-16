@@ -366,7 +366,12 @@ an active turn. Claude supports selection between turns, with startup, shutdown,
 pending input and live background tasks fenced by the daemon. Its next SDK query
 resumes the same thread in the selected cwd, after copying the newest persisted
 project transcript there; returning to a former cwd must not restore stale history.
-The sidecar independently rejects a cwd change while its background tasks run.
+The sidecar independently rejects a cwd change while legacy native background
+tasks drain. New managed jobs use the daemon registry of ADR 0127 with immutable
+job cwd; the shared `ketplus_agents` MCP tools bind every provider to that API.
+Claude native background/subagent entry points are disabled through the pinned
+SDK settings, tool exclusions and deny hooks. Completion is delivered by the
+daemon's durable owner-wake boundary, not by keeping a Claude query alive.
 The existing `switch_supported` and `switch_available` fields drive both clients;
 no mobile binary or relay contract change is required. Cursor remains unsupported.
 

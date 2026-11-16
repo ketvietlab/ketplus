@@ -7,7 +7,7 @@
 
 namespace ketplus::daemon::agent_mcp {
 
-// Calls one agents.* operation on the daemon and returns its result payload.
+// Calls one agents.* or session.task.* operation using the bound agent token.
 using DaemonCall = std::function<QJsonObject(const QString& operation, const QJsonObject& payload)>;
 
 // Answers one MCP JSON-RPC message from a provider. Notifications return an empty object.

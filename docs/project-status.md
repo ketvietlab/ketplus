@@ -731,11 +731,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   The suffix stays outside user-message and steer transcript
   text. Tests verify provider delivery; model style compliance is not guaranteed.
 
-- Claude background tasks survive the end of their turn: the sidecar keeps the query
-  open while they run, the daemon journals and lists them, and desktop shows a bar
-  above the composer with output and Stop. iOS shows the same list through the relay
-  (`session.task.stop`/`session.task.output`). Not yet verified against a live
-  provider run.
+- The shared agent MCP server exposes daemon-owned background start/list/get/stop/
+  output for Claude, Codex and ACP providers (ADR 0127). Claude's pinned SDK native
+  background/subagent paths are disabled with host settings, tool exclusions and
+  deny hooks; the legacy collector/stop/output path remains for drain. Offline MCP,
+  sidecar and real-SDK control checks are implementation evidence, not live-model
+  or shared desktop UI acceptance. Registry completion uses the durable owner-wake
+  path instead of a retained Claude query or a watchdog.
 
 - Async assistant-question answers use the conversation's current execution-context
   revision for both steering and follow-up turns; switched conversations no longer
