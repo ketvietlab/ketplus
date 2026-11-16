@@ -10,7 +10,7 @@ screen captures, input control, signing or deployment were performed.
 
 ## Decision and scope
 
-Two High and three Medium findings require disposition before the applicable
+Two High and four Medium findings require disposition before the applicable
 public release. High means a significant executable-content or publication
 boundary failure under the stated conditions. Medium means a conditional code
 execution/supply-chain risk or an incomplete distribution gate. These are audit
@@ -23,7 +23,7 @@ browser, Computer, Atlas readiness and update decisions/contracts.
 
 | Surface | Source coverage and observed controls | Verification limit |
 | --- | --- | --- |
-| `apps/browser` | Origin normalization/narrowing, DNS/address classification and pinning proxy, redirects/CONNECT/WebSockets, request API, action schemas and snapshot fencing, redaction, artifact paths, engine download | Proxy unit tests ran; Chromium-dependent suites did not. No effective Chromium OS sandbox attestation. |
+| `apps/browser` | Origin normalization/narrowing, DNS/address classification and pinning proxy, redirects/CONNECT/WebSockets, request API, action schemas and snapshot fencing, redaction, artifact paths, engine download and pinned launch defaults | Proxy unit tests ran; Chromium-dependent suites did not. Offline dependency inspection confirms sandbox-disabling launch arguments (PS-06); no running browser was inspected. |
 | `modules/browser` | Settings fail closed when damaged; host launch arguments, runtime canonical-path containment, private artifacts, Node preload/download-host neutralization, routing and cleanup signals | No provider process or live adapter wiring exercised. Default host setting permits all origins; it is a separate capability from provider filesystem sandboxing. |
 | `apps/computer`, `modules/computer` | Host key/token format, environment binding, peer UID, private socket, remote markers, app tiers/grants, lease/Esc state, capture filtering, process launch | Protocol tests and real server dispatch with no-op tools; no TCC/AX/HID or permission dialogs exercised. |
 | `modules/atlas` | Manifest bounds/canonical worktree fencing, local screen paths/thumbnails, process arguments, selected-port readiness, managed renderer launch, WebView/JavaScript state handling | External KetAtlas renderer implementation was not audited or executed. WebView navigation is not covered by the browser worker's origin proxy. |
@@ -166,6 +166,38 @@ browser, Computer, Atlas readiness and update decisions/contracts.
   gate fail on missing evidence. Update the stale licensing status in a separate
   task. Do not equate fixture tests with signed-package acceptance.
 
+### PS-06 — Medium: production browser launch disables Chromium's process sandbox
+
+- **Location:** `apps/browser/src/browser-service.mjs:97–101`, `179–193`;
+  `apps/browser/src/mcp.mjs:17–22`; pinned `playwright-core` 1.63.0 from
+  `apps/browser/package-lock.json`, archive member `package/lib/coreBundle.js:43346–43347`.
+- **Condition:** the production MCP worker uses the default browser launch options
+  and loads hostile content that can exploit a browser-engine vulnerability.
+  The worker does not set `chromiumSandbox=true`; the production caller supplies
+  no override. No browser vulnerability or working exploit was demonstrated.
+- **Offline evidence:** the locally cached dependency archive was verified against
+  the lockfile's SHA-512 integrity before inspection; its SHA-256 is
+  `208593d4e1bcd8f8fe5f869cad1cc332dc7f1d70dc1d58c102dc3ac36e30f26c`.
+  The pinned Chromium argument builder adds `--no-sandbox` unless
+  `chromiumSandbox` is explicitly `true`. Both launch branches in BrowserService
+  pass through the unset option, so the production default selects that argument.
+  This confirms the launch configuration without starting a browser; effective
+  runtime behavior on supported OS/browser combinations was not separately tested.
+- **Impact:** an engine compromise lacks Chromium's process-sandbox containment
+  layer and can expose host-user resources without that layer's additional escape
+  requirement. Origin filtering, DNS pinning and temporary profiles do not restore
+  process isolation; provider filesystem sandbox settings do not establish it for
+  this separately launched worker/browser. Other OS restrictions are not assessed
+  by this finding.
+- **Remediation:** in a separate product task, explicitly enable Chromium
+  sandboxing for production launches, prevent launch overrides or arguments from
+  silently disabling it, and fail closed when the required sandbox cannot start.
+  Review supported system-browser and managed-browser paths and platform-specific
+  prerequisites before rollout. Add offline regression coverage that captures
+  launch options and exercises the pinned argument builder, asserting sandboxing
+  is enabled and no sandbox-disabling arguments are generated; separately verify
+  effective containment on supported runtime/platform combinations.
+
 ## Controls and remaining trust boundaries
 
 - Browser sessions can narrow the host ceiling but not widen it. The proxy checks
@@ -173,7 +205,8 @@ browser, Computer, Atlas readiness and update decisions/contracts.
   unit tests cover local/private/metadata and rebinding refusal. Contexts block
   service workers/downloads, use temporary profiles, and disable non-proxied
   WebRTC UDP. Node actions require fresh snapshots and verify element fingerprints.
-  These are network/action controls, not proof of an effective Chromium OS sandbox.
+  These network/action controls do not compensate for the disabled process sandbox
+  confirmed in PS-06.
 - Runtime manifest paths are canonicalized inside the runtime root
   (`modules/browser/src/BundledBrowserRuntime.cpp:19–30`); bundled launch neutralizes
   `NODE_OPTIONS` and download-host overrides (`:121–126`). Screenshot destinations
@@ -254,6 +287,7 @@ diff-oriented, not a claim of exhaustive secret scanning of every commit message
 | Temporary Git helper fixture | Status exit 0, harmless helper marker created |
 | Temporary Computer server/no-op-tools harness | Correct-token dispatch accepted; wrong conversation refused; remote marker refused; launch-only disable semantics confirmed |
 | Tracked/history Gitleaks and historical boundary scan | Results and limitations above |
+| Pinned Playwright archive inspection (review follow-up) | Version 1.63.0, lockfile SHA-512 integrity matched; default Chromium argument builder adds `--no-sandbox` (PS-06); no dependency installation or browser launch |
 
 No `core/` implementation changed, so a Lite/native C++ rebuild was not performed.
 The Chromium suite needs dependencies/runtime and the authorized browser test
@@ -262,7 +296,7 @@ No browser sessions were created. The complete native matrix, installed artifact
 third-party dependency CVEs and external/private implementations remain outside
 verified coverage.
 
-Leader follow-up: separate fixes/dispositions for PS-01 through PS-05; reviewer
+Leader follow-up: separate fixes/dispositions for PS-01 through PS-06; reviewer
 should validate their preconditions and source lines against the pinned commit.
 Publication remains gated on historical review and applicable artifact evidence,
 not on approval of this report alone.
