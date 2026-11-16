@@ -861,6 +861,8 @@ Production storage refuses access in ordinary QStandardPaths test mode; fixtures
 explicitly inject their backend. Also run the cloud trust-lifecycle, sender-cache,
 remote-control client/projection/backend and WebRTC host phase 3 suites for account
 and sign-out interactions. No provider quota or real user credentials are used.
+Desktop session discovery links the same in-memory credential fixture and resets
+it before each case so its synthetic daemon identity never accesses an OS store.
 
 The normal test configuration warns if the optional Secret Service fixture tools
 are unavailable on the build host; do not claim that coverage in that case. Fake

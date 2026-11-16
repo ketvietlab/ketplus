@@ -93,6 +93,32 @@ private D-Bus daemon and fake service, including lock/denial, prompt dismissal a
 service absence. Ordinary test mode refuses the production OS backend; other daemon
 fixtures continue linking in-memory credentials.
 
+### Full Pro validation follow-up
+
+On 2026-11-16, implementation commit
+`b4a046f13d7b1c667a592248a24f38d65e9d857c` completed a full Pro Release build
+on macOS 26.2 arm64 with Qt 6.11.2 and Apple Clang 21. Desktop and tests were
+enabled; Computer app bundling/signing was disabled. The unfiltered serial run
+(`ctest --test-dir build/credential-pro --output-on-failure -j1`) registered
+214 suites: 210 passed, three failed and one was skipped, in 1698.59 seconds.
+The skipped SSH install transaction suite requires Linux `/proc`, `fcntl` and
+`SO_PEERCRED`; this run provides no coverage for it.
+
+The failures were retained and investigated:
+
+- Desktop session discovery reproduced independently because ordinary test mode
+  disables the native credential backend, while this fixture had no fake store.
+  Linking the existing in-memory credential fixture and resetting it before each
+  case restored synthetic daemon identity creation. The complete discovery suite
+  then passed in 7.38 seconds; production credential behavior was not changed.
+- Usage retention failed while seeding large tool payloads, and storage jobs
+  failed while saving storage options after creating an 850 MB fixture. Free disk
+  space was approximately 1.1 GiB near the failures and 842 MiB after the run.
+  Both unchanged test executables passed together in 76.49 seconds after free
+  space recovered to approximately 12 GiB. This is consistent with disk pressure,
+  but does not establish the original write error conclusively. No journal code
+  or assertions were changed to obtain the passing rerun.
+
 Real Linux Secret Service implementations, Linux OS-user ACLs/backups, signed
 Desktop upgrade prompts, Windows, packaging and deployment still require platform
 verification. Passing a fake D-Bus service on macOS is not Linux native acceptance.
