@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import stat
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 
 def digest(path):
@@ -37,6 +38,18 @@ def npm_manifest(relative):
     return len(suffix) == (3 if suffix[0].startswith("@") else 2)
 
 
+def public_npm_source(repository):
+    value = repository.get("url", "") if isinstance(repository, dict) else repository
+    if not isinstance(value, str):
+        return "NOASSERTION"
+    value = value.removeprefix("git+")
+    parsed = urlsplit(value)
+    if (parsed.scheme != "https" or parsed.username or parsed.password
+            or parsed.hostname not in {"github.com", "gitlab.com", "codeberg.org", "bitbucket.org"}):
+        return "NOASSERTION"
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
 def classify(path, relative):
     kinds = []
     with path.open("rb") as stream:
@@ -59,6 +72,8 @@ def classify(path, relative):
         kinds.append("font")
     if path.suffix.lower() in (".icns", ".ico", ".svg", ".png"):
         kinds.append("icon-or-image")
+    if path.suffix.lower() in (".service", ".desktop") or relative.startswith("DEBIAN/"):
+        kinds.append("package-metadata")
     return kinds or ["resource"]
 
 
@@ -103,7 +118,9 @@ def inventory(root, source_commit, platform, epoch):
                         raise ValueError("Invalid installed npm package manifest")
                     npm[path.parent.relative_to(root).as_posix()] = {
                         "name": data["name"], "version": str(data.get("version", "NOASSERTION")),
-                        "kind": "npm"}
+                        "kind": "npm", "source": public_npm_source(data.get("repository", "")),
+                        "declaredLicense": data.get("license") if isinstance(data.get("license"), str)
+                        else "NOASSERTION"}
             else:
                 raise ValueError("Unsupported special file in staging")
     if not files:
@@ -122,6 +139,12 @@ def inventory(root, source_commit, platform, epoch):
         component = components.setdefault(key, {**metadata, "files": [], "version": metadata.get("version", "NOASSERTION")})
         component["files"].append(name)
         entry["component"] = key
+    for component in components.values():
+        if component["kind"] == "npm":
+            component["notices"] = [name for name in component["files"]
+                if re.match(r"^(LICENSE|LICENCE|COPYING|NOTICE)(\b|[._-])", Path(name).name, re.I)]
+            component["sourceMaterials"] = [name for name in component["files"]
+                if Path(name).suffix.lower() in (".js", ".mjs", ".cjs", ".ts", ".c", ".h", ".cpp")]
     return {"schemaVersion": 1, "sourceCommit": source_commit, "platform": platform,
             "created": datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "files": sorted(files, key=lambda item: item["path"]), "components": components,
@@ -171,8 +194,10 @@ def write_evidence(root, out, source_commit, platform, epoch):
     outputs["COMPONENT-REVIEW.template.json"] = {
         "schemaVersion": 1, "inventorySha256": object_digest(inv),
         "components": [{"id": key, "name": value["name"], "version": value["version"],
-                        "files": value["files"], "source": "NOASSERTION", "license": "NOASSERTION",
-                        "notices": [], "sourceMaterials": [], "embedded": False}
+                        "files": value["files"], "source": value.get("source", "NOASSERTION"),
+                        "license": value.get("declaredLicense", "NOASSERTION"),
+                        "notices": value.get("notices", []),
+                        "sourceMaterials": value.get("sourceMaterials", []), "embedded": False}
                        for key, value in sorted(inv["components"].items())],
         "embeddedInventoryComplete": False, "dependencyAuditComplete": False,
         "buildEvidence": [], "dependencyEvidence": []}
@@ -184,14 +209,17 @@ def write_evidence(root, out, source_commit, platform, epoch):
     return inv
 
 
-def bind_artifacts(out, artifacts, metadata):
+def bind_artifacts(out, artifacts, metadata, base_dir=None):
+    base_dir = (base_dir or out).resolve()
     paths = [(path, "artifact") for path in artifacts] + [
         (metadata, "build-metadata"), (out / "STAGED-INVENTORY.json", "inventory"),
         (out / "STAGED-SBOM.spdx.json", "sbom")]
-    if not artifacts or len({path.name for path, _ in paths}) != len(paths):
+    names = [path.resolve().relative_to(base_dir).as_posix() for path, _ in paths]
+    if not artifacts or len(set(names)) != len(paths):
         raise ValueError("Artifact evidence names must be unique")
     return {"schemaVersion": 1, "publicationAuthorized": False,
-            "files": [{"name": path.name, "role": role, "sha256": digest(path)} for path, role in paths]}
+            "files": [{"name": name, "role": role, "sha256": digest(path)}
+                      for name, (path, role) in zip(names, paths)]}
 
 
 def main():

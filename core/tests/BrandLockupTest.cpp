@@ -1,11 +1,19 @@
 #include "ui/BrandLockup.h"
 #include "KetAppearance.h"
+#include "KetButton.h"
 #include "KetTokens.h"
 #include "ui/AboutDialog.h"
+#include "ui/InterfaceZoom.h"
 #include "ui/KetFonts.h"
 
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
 #include <QFontInfo>
 #include <QLabel>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QTemporaryDir>
 #include <QTest>
 
 using ketplus::BrandLockup;
@@ -13,6 +21,10 @@ using ketplus::BrandLockup;
 // The approved geometry from mockups/qt/qml/parts/BrandLockup.qml.
 class BrandLockupTest : public QObject {
     Q_OBJECT
+    QList<QUrl> openedUrls_;
+
+  public slots:
+    void recordUrl(const QUrl& url) { openedUrls_.append(url); }
 
   private slots:
     void initTestCase() {
@@ -98,6 +110,139 @@ class BrandLockupTest : public QObject {
         // Reopening raises the same dialog instead of stacking another.
         ketplus::showAboutDialog(&window, BrandLockup::Edition::Pro);
         QCOMPARE(window.findChildren<QWidget*>(QStringLiteral("aboutDialog")).size(), 1);
+    }
+
+    void installedAboutLayouts() {
+        using Edition = BrandLockup::Edition;
+        struct Layout {
+            Edition edition;
+            QString application;
+            QString licenses;
+        };
+        const QList<Layout> layouts{
+            {Edition::Lite, "Lite.app/Contents/MacOS", "Lite.app/Contents/Resources/licenses"},
+            {Edition::Pro, "Pro.app/Contents/MacOS", "Pro.app/Contents/Resources/licenses"},
+            {Edition::Lite, "bin", "share/licenses/ketplus-cm"},
+            {Edition::Pro, "bin", "share/licenses/ketplus"},
+            {Edition::Lite, ".", "licenses"},
+            {Edition::Pro, ".", "licenses"}};
+        for (const auto& layout : layouts) {
+            QTemporaryDir temporary;
+            QVERIFY(temporary.isValid());
+            QDir root(temporary.path());
+            QVERIFY(root.mkpath(layout.application));
+            QVERIFY(root.mkpath(layout.licenses));
+            for (const auto& name : {"LICENSE", "THIRD_PARTY_NOTICES.md"}) {
+                QFile file(root.filePath(layout.licenses + "/" + name));
+                QVERIFY(file.open(QIODevice::WriteOnly));
+                file.write("Synthetic license fixture\n");
+            }
+            const QString revision(40, QLatin1Char('a'));
+            const auto information = ketplus::aboutInformation(
+                layout.edition, root.filePath(layout.application), revision);
+            QCOMPARE(information.revision, revision);
+            QCOMPARE(information.source.toString(),
+                     "https://github.com/ketvietlab/ketplus/tree/" + revision);
+            QCOMPARE(QDir(information.licenses.toLocalFile()).absolutePath(),
+                     QDir(root.filePath(layout.licenses)).absolutePath());
+            QVERIFY(QFileInfo::exists(information.notices.toLocalFile()));
+        }
+    }
+
+    void aboutSourceAndNoticeActionsAndMissingFiles() {
+        QWidget window;
+        window.resize(700, 640);
+        window.show();
+        const QString revision(40, QLatin1Char('a'));
+        ketplus::AboutInformation information{
+            revision, QUrl("https://github.com/ketvietlab/ketplus/tree/" + revision),
+            QUrl::fromLocalFile("/synthetic/licenses/THIRD_PARTY_NOTICES.md"),
+            QUrl::fromLocalFile("/synthetic/licenses")};
+        QDesktopServices::setUrlHandler("https", this, "recordUrl");
+        QDesktopServices::setUrlHandler("file", this, "recordUrl");
+        openedUrls_.clear();
+        ketplus::showAboutDialog(&window, BrandLockup::Edition::Pro, information);
+        auto* dialog = window.findChild<QWidget*>("aboutDialog");
+        QVERIFY(dialog);
+        for (const auto& name : {"aboutSource", "aboutNotices", "aboutLicenses"}) {
+            auto* button = dialog->findChild<ket::Button*>(name);
+            QVERIFY(button && button->isEnabled());
+            button->setFocus();
+            QTest::keyClick(button, Qt::Key_Space);
+        }
+        QCOMPARE(openedUrls_,
+                 QList<QUrl>({information.source, information.notices, information.licenses}));
+        QDesktopServices::unsetUrlHandler("https");
+        QDesktopServices::unsetUrlHandler("file");
+        delete dialog;
+        QTemporaryDir empty;
+        information =
+            ketplus::aboutInformation(BrandLockup::Edition::Lite, empty.path(), "unknown");
+        ketplus::showAboutDialog(&window, BrandLockup::Edition::Lite, information);
+        dialog = window.findChild<QWidget*>("aboutDialog");
+        QVERIFY(dialog);
+        for (const auto& name : {"aboutSource", "aboutNotices", "aboutLicenses"})
+            QVERIFY(!dialog->findChild<ket::Button*>(name)->isEnabled());
+        QVERIFY(!dialog->findChild<QLabel*>("aboutAccessStatus")->text().isEmpty());
+        information = ketplus::aboutInformation(BrandLockup::Edition::Lite, empty.path(),
+                                                revision + "-dirty");
+        QVERIFY(!information.source.isEmpty());
+        delete dialog;
+        ketplus::showAboutDialog(&window, BrandLockup::Edition::Lite, information);
+        QVERIFY(window.findChild<QLabel*>("aboutAccessStatus")->text().contains("Uncommitted"));
+    }
+
+    void aboutLayoutAndCaptures() {
+        QCoreApplication::setApplicationVersion(QStringLiteral("9.8.7"));
+        auto& appearance = ket::Appearance::instance();
+        QWidget window;
+        window.resize(680, 420);
+        window.show();
+        const QString revision(40, QLatin1Char('a'));
+        const ketplus::AboutInformation information{
+            revision, QUrl("https://github.com/ketvietlab/ketplus/tree/" + revision), {}, {}};
+        ketplus::showAboutDialog(&window, BrandLockup::Edition::Pro, information);
+        for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
+            appearance.setMode(mode);
+            for (const auto percent : ketplus::InterfaceZoomMetrics::steps()) {
+                const auto zoom = percent / 100.0;
+                appearance.setZoom(zoom);
+                QCoreApplication::processEvents();
+                auto* dialog = window.findChild<QWidget*>("aboutDialog");
+                QCOMPARE(dialog->findChild<QLabel*>("aboutRevision")
+                             ->palette()
+                             .color(QPalette::WindowText),
+                         ket::Tokens::color(u"text-main", appearance.theme()));
+                const auto buttons = dialog->findChildren<ket::Button*>();
+                auto* scroll = dialog->findChild<QScrollArea*>("aboutScrollArea");
+                for (auto* button : buttons) {
+                    if (scroll->widget()->isAncestorOf(button)) {
+                        scroll->ensureWidgetVisible(button);
+                        QCoreApplication::processEvents();
+                        QVERIFY(button->height() >= button->sizeHint().height());
+                    }
+                    QVERIFY(button->width() >= button->minimumSizeHint().width());
+                    QVERIFY(window.rect().contains(
+                        QRect(button->mapTo(&window, QPoint()), button->size())));
+                }
+                const QString output = qEnvironmentVariable("KETPLUS_ABOUT_CAPTURE_DIR");
+                if (!output.isEmpty() && (percent == 100 || percent == 125)) {
+                    window.resize(700, 720);
+                    scroll->verticalScrollBar()->setValue(0);
+                    QCoreApplication::processEvents();
+                    QVERIFY(scroll->viewport()->height() >= scroll->widget()->sizeHint().height());
+                    QVERIFY(QDir().mkpath(output));
+                    const QString name =
+                        QString("about-%1-%2.png")
+                            .arg(mode == ket::Appearance::Mode::Dark ? "dark" : "light")
+                            .arg(zoom);
+                    QVERIFY(window.grab().save(QDir(output).filePath(name)));
+                    window.resize(680, 420);
+                }
+            }
+        }
+        appearance.setZoom(1.0);
+        appearance.setMode(ket::Appearance::Mode::Light);
     }
 };
 

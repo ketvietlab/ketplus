@@ -238,8 +238,10 @@ The following gaps exist in the current tree and packaging configuration:
   by operating system, plugins, and the Qt build used for packaging.
 - Pro Windows CI is deferred until the required Qt 6.11 WebView development
   packages are available from Qt's public Windows repository.
-- License files are installed by CMake. The shared About dialog displays product
-  and version, but lacks source revision and access to installed notices.
+- CMake installs license files and shared About exposes build source revision,
+  its public source and installed notices/licenses. Missing source identity or
+  installed files are explicit unavailable states. Verify access in each final
+  platform package; a source build does not establish installed-artifact acceptance.
 - The referenced libvterm repository is archived. This does not change its MIT
   license, but upgrades and security maintenance need an explicit upstream or
   maintained fork.

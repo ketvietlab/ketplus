@@ -18,7 +18,9 @@ import uuid
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE))
 from artifact_inventory import bind_artifacts, encoded, write_evidence
+from payload_evidence import extract_payload, reconcile_recipe_sources
 
 
 def run(*args, **kwargs):
@@ -244,7 +246,6 @@ def main():
                         text=True).stdout.strip()
     if not source_commit.startswith(info["build_revision"]):
         raise ValueError("Installed build identity differs from the packaging source commit")
-    write_evidence(prefix, out, source_commit, "linux-" + arch, epoch)
     artifacts = [make_deb(prefix, work, out, args.version, deb_arch, epoch),
                  make_appimage(prefix, appdir, work, out, args.version, arch, runtime, epoch)]
     metadata = {"edition": "pro", "architecture": arch, "version": args.version,
@@ -252,12 +253,18 @@ def main():
                 "sourceDateEpoch": epoch, "sourceCommit": source_commit,
                 "signed": False, "publicationAuthorized": False}
     (out / "BUILD-METADATA.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    (out / "ARTIFACT-EVIDENCE.json").write_bytes(encoded(
-        bind_artifacts(out, artifacts, out / "BUILD-METADATA.json")))
-    files = artifacts + [out / name for name in (
-        "BUILD-METADATA.json", "SBOM.spdx.json", "STAGED-INVENTORY.json",
-        "STAGED-SBOM.spdx.json", "COMPONENT-REVIEW.template.json", "ARTIFACT-EVIDENCE.json")]
-    (out / "SHA256SUMS").write_text("".join(f"{digest(path)}  {path.name}\n" for path in sorted(files)))
+    for kind, artifact in zip(("deb", "appimage"), artifacts):
+        payload = work / (kind + "-final-payload")
+        layout = extract_payload(artifact, payload, kind, run, runtime)
+        evidence = out / (kind + "-evidence")
+        write_evidence(payload, evidence, source_commit, "linux-" + arch, epoch)
+        reconcile_recipe_sources(payload, evidence, kind, source_commit, args.version, pin)
+        binding = bind_artifacts(evidence, [artifact], out / "BUILD-METADATA.json", base_dir=out)
+        binding["payloadLayout"] = layout
+        (evidence / "ARTIFACT-EVIDENCE.json").write_bytes(encoded(binding))
+    files = sorted(path for path in out.rglob("*") if path.is_file())
+    (out / "SHA256SUMS").write_text("".join(
+        f"{digest(path)}  {path.relative_to(out).as_posix()}\n" for path in files))
     print("Engineering artifacts created; no signing, upload or publication was performed.")
 
 

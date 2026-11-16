@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import shutil
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,8 +30,9 @@ class ArtifactInventoryTest(unittest.TestCase):
             "fonts/fixture.ttf": b"synthetic-font",
             "icons/fixture.svg": b"<svg/>",
             "bin/launcher": b"#!/bin/sh\nexit 0\n",
-            "node_modules/outer/package.json": b'{"name":"outer","version":"1.0.0"}',
+            "node_modules/outer/package.json": b'{"name":"outer","version":"1.0.0","license":"MIT","repository":"https://github.com/example/outer"}',
             "node_modules/outer/index.js": b"// synthetic fixture",
+            "node_modules/outer/LICENSE": b"Synthetic package notice",
             "node_modules/outer/esm/package.json": b'{"type":"module"}',
             "node_modules/outer/node_modules/inner/package.json": b'{"name":"inner","version":"2.0.0"}',
             "node_modules/outer/node_modules/inner/addon.node": b"\x7fELFsynthetic-addon",
@@ -87,6 +89,17 @@ class ArtifactInventoryTest(unittest.TestCase):
         self.assertEqual(inventory.object_digest(reviewed), result["reviewedSbomSha256"])
         self.assertIn("Embedded fixture", [p["name"] for p in reviewed["packages"]])
         self.assertTrue(all(p["licenseConcluded"] == "MIT" for p in reviewed["packages"]))
+
+    def test_npm_source_and_notice_reconciliation_keeps_approval_separate(self):
+        template = json.loads((self.out / "COMPONENT-REVIEW.template.json").read_text())
+        component = next(c for c in template["components"] if c["id"] == "npm:node_modules/outer")
+        self.assertEqual(component["source"], "https://github.com/example/outer")
+        self.assertEqual(component["license"], "MIT")
+        self.assertEqual(component["notices"], ["node_modules/outer/LICENSE"])
+        self.assertIn("node_modules/outer/index.js", component["sourceMaterials"])
+        self.assertFalse(template["embeddedInventoryComplete"])
+        self.assertEqual(inventory.public_npm_source("https://user:secret@github.com/example/repo"), "NOASSERTION")
+        self.assertEqual(inventory.public_npm_source("https://example.invalid/repo"), "NOASSERTION")
 
     def test_template_is_not_release_ready(self):
         self.review = json.loads((self.out / "COMPONENT-REVIEW.template.json").read_text())
@@ -147,6 +160,29 @@ class ArtifactInventoryTest(unittest.TestCase):
         self.assertIn("artifact-source-identity-mismatch", self.check()["errors"])
         self.evidence["files"][0]["role"] = "sbom"
         self.assertIn("artifact-roles-incomplete", self.check()["errors"])
+
+    def test_per_artifact_evidence_directory_and_path_fencing(self):
+        nested = self.out / "deb-evidence"
+        nested.mkdir()
+        for name in ("STAGED-INVENTORY.json", "STAGED-SBOM.spdx.json"):
+            shutil.copyfile(self.out / name, nested / name)
+        self.evidence = inventory.bind_artifacts(nested, [self.out / "fixture.pkg"],
+            self.out / "BUILD-METADATA.json", base_dir=self.out)
+        self.review["artifactEvidenceSha256"] = inventory.object_digest(self.evidence)
+        self.assertTrue(self.check()["inventoryLicenseGatePassed"])
+        self.assertIn("deb-evidence/STAGED-INVENTORY.json", [f["name"] for f in self.evidence["files"]])
+        for bad in ("../fixture.pkg", "/absolute.pkg", "deb-evidence/../fixture.pkg", "bad\\file"):
+            self.evidence["files"][0]["name"] = bad
+            self.assertIn("artifact-name-invalid", self.check()["errors"])
+
+    def test_prefix_only_review_cannot_pass_for_linux_distribution(self):
+        for extension, rule in (("deb", "final-deb-payload-incomplete"),
+                                ("AppImage", "final-appimage-payload-incomplete")):
+            artifact = self.out / ("fixture." + extension)
+            artifact.write_bytes(b"synthetic distribution bytes")
+            self.evidence = inventory.bind_artifacts(self.out, [artifact], self.out / "BUILD-METADATA.json")
+            self.review["artifactEvidenceSha256"] = inventory.object_digest(self.evidence)
+            self.assertIn(rule, self.check()["errors"])
 
     @unittest.skipIf(os.name == "nt", "Symlink creation may require privileges on Windows")
     def test_symlink_coverage_and_invalid_links(self):

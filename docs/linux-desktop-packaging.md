@@ -96,8 +96,10 @@ sandbox inside the disposable container; the shipped launcher never does.
 No browser session, hosted account, provider quota or external network is used.
 
 Artifacts include both packages, `BUILD-METADATA.json`, a preliminary SPDX 2.3
-inventory and `SHA256SUMS`. The assembler also emits a detailed staged file/component
-SBOM, an unapproved component-review template and `ARTIFACT-EVIDENCE.json` binding
+inventory and `SHA256SUMS`. After assembly, offline extraction inventories the entire
+deb (control metadata and wrapper/data tree) and AppImage (actual runtime prefix plus
+SquashFS root). Each format's `deb-evidence/` or `appimage-evidence/` contains a detailed
+file/component SBOM, an unapproved review template and `ARTIFACT-EVIDENCE.json` binding
 the package, metadata, inventory and SBOM digests. See [artifact inventory](artifact-inventory.md)
 for the fail-closed review check and its limits. `publicationAuthorized` is always false; a successful
 smoke test does not satisfy the remaining licensing or release-signing gates.

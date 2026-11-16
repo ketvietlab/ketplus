@@ -31,15 +31,31 @@ The output contains:
   each component's name/version, license, source identity, installed notices and
   corresponding-source/offer materials. Notice/source paths must identify nonempty
   regular files inside the inventoried tree. Their bytes are bound by the inventory.
+  Installed npm manifests supply declared license/public repository hints and their
+  own notice/source file paths. These are declarations, not verified license or
+  source-availability conclusions. Credential-bearing and unknown-host repository
+  URLs are not copied into the hints.
 
-The Linux assembler emits these sidecars after its install and preliminary
-three-package SBOM, before building the deb/AppImage. It checks that the installed
-daemon's short revision matches the full packaging source commit. The existing
-`SBOM.spdx.json` inside the package remains preliminary; the detailed staged SBOM
-is external evidence, not a claim of completed release licensing. Final package
-metadata includes the full source identity. `ARTIFACT-EVIDENCE.json` binds the
-actual package digests, build metadata, detailed inventory and staged SBOM.
-`SHA256SUMS` covers all generated sidecars and packages. No signing/upload occurs.
+The Linux assembler first completes both packages, then extracts each final
+artifact without executing it. `dpkg-deb --raw-extract` includes control metadata,
+maintainer scripts and all data, including wrappers outside `/opt/ketplus-pro`.
+AppImage collection uses `unsquashfs` at the verified runtime offset and preserves
+the actual binary prefix as `runtime-prefix`, alongside the complete `rootfs/`
+(AppRun, desktop entries, icons and installed product). A prefix-only inventory
+cannot pass the Linux distribution gate.
+
+Each format gets its own `deb-evidence/` or `appimage-evidence/` directory containing
+inventory, candidate SPDX, review template and `ARTIFACT-EVIDENCE.json` with its
+`payloadLayout`. Bindings use fenced paths relative to the outer artifact output
+directory, allowing independent evidence for the two different payloads. Known
+recipe wrappers reference their exact public source commit and installed MPL text.
+The AppImage prefix references its verified upstream source/notice pin; its static
+dependency license/source obligations remain unresolved until reviewed.
+
+The assembler checks that the installed daemon's short revision matches the full
+packaging source commit. The older `SBOM.spdx.json` inside the package remains
+preliminary; detailed final-payload SPDX is external evidence. `SHA256SUMS` covers
+all generated sidecars and packages recursively. No signing/upload occurs.
 
 ## Review input and fail-closed check
 
@@ -66,9 +82,14 @@ Set `artifactEvidenceSha256` to the SHA-256 of the canonical
 ```sh
 python3 packaging/artifact_gate.py --stage "$STAGE" \
   --inventory "$EVIDENCE/STAGED-INVENTORY.json" --review "$REVIEW" \
-  --evidence "$EVIDENCE/ARTIFACT-EVIDENCE.json" --artifacts-dir "$EVIDENCE" \
+  --evidence "$EVIDENCE/ARTIFACT-EVIDENCE.json" --artifacts-dir "$ARTIFACTS" \
   --sbom-out "$EVIDENCE/REVIEWED-SBOM.spdx.json"
 ```
+
+For Linux, `STAGE` is the corresponding extracted complete payload,
+`EVIDENCE` is the format's evidence directory and `ARTIFACTS` is the outer output
+directory. For standalone collection they can use the original external-evidence
+layout with `ARTIFACTS=EVIDENCE`.
 
 The check rescans staging, verifies inventory/SBOM/artifact digests and source
 metadata, requires coverage of every discovered file/component, and refuses
@@ -92,13 +113,18 @@ artifact binding and review; unsigned evidence cannot authorize signed downloads
 
 ## Remaining acceptance
 
-Before release, compare each final archive's extracted payload with the reviewed
-stage (including package wrapper files and the AppImage runtime outside that
-stage), inspect native dependency closure, verify public corresponding-source
+Before release, independently reproduce the Linux final-payload extraction (or
+collect the complete distribution payload on other platforms), inspect native
+dependency closure, verify public corresponding-source
 availability, and complete platform builds/smokes, signing/notarization and legal
 review. Embedded/static inventory and Qt/Chromium transitive notices remain
-mandatory. About currently exposes product/version but still lacks source revision
-and notice access. These gaps keep PS-05 open; an inventory test or engineering
+mandatory. Shared About exposes the build-time full Git revision, corresponding
+public source and installed notices/license files. Dirty builds are labelled and
+link only the base commit; source archives without Git show an unavailable revision
+and disable that link. Missing installed files disable their actions and show a
+clear message. macOS resolves bundle Resources/licenses; Linux/Windows installs
+resolve their edition's share/licenses directory or a packaged licenses directory.
+Final source/notice and per-platform artifact gaps keep PS-05 open; a test or engineering
 package is not artifact acceptance.
 
 Offline checks: `python3 -m unittest discover -s tests/hygiene -p 'test_*.py'`

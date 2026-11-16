@@ -24,6 +24,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Shared About now exposes build-time source revision/public source and installed
+  license/notice access, with explicit missing-file and dirty/unknown-source states.
+  Offline Qt tests cover edition/platform layouts, keyboard actions and live theme/
+  zoom geometry. Final per-platform artifact and licensing acceptance remain open;
+  see `artifact-inventory.md`.
+
 - Linux Pro build-only AppImage/deb assembly uses native Ubuntu 24.04 Docker
   recipes, Qt/QML/WebEngine deployment, bundled browser/sidecar runtimes, fixed
   production build identity, checksums and an SDK-free offline smoke. Both amd64

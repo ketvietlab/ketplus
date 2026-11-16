@@ -282,6 +282,12 @@ evidence integrity/completeness; actual per-platform package, source/notice,
 signing and final release acceptance remain separate in
 [artifact inventory](artifact-inventory.md).
 
+Shared About changes run `ketplus_brand_lockup_tests` and the full Lite suite
+offscreen. The focused target checks edition/platform notice layouts, public source
+identity, keyboard URL actions, missing files and live light/dark/zoom layout at the
+Lite minimum window size. `KETPLUS_ABOUT_CAPTURE_DIR` saves representative Qt renders
+for visual review; URL actions are intercepted without opening a browser.
+
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
 the offscreen bundled-browser/Claude-adapter tests and production build-info
 checks through `packaging/linux/build-desktop.sh`. Verify both actual package

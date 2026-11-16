@@ -35,6 +35,7 @@ def reviewed_spdx(inv, review):
 
 
 def check(stage, inv, review, evidence, artifacts_dir):
+    artifacts_dir = artifacts_dir.resolve(strict=True)
     errors = set()
     epoch = int(datetime.datetime.strptime(inv["created"], "%Y-%m-%dT%H:%M:%SZ").replace(
         tzinfo=datetime.timezone.utc).timestamp())
@@ -109,8 +110,7 @@ def check(stage, inv, review, evidence, artifacts_dir):
 
     bindings = evidence.get("files", [])
     names = [entry["name"] for entry in bindings]
-    required = {"STAGED-INVENTORY.json": object_digest(inv),
-                "STAGED-SBOM.spdx.json": object_digest(spdx(inv))}
+    required = {"inventory": object_digest(inv), "sbom": object_digest(spdx(inv))}
     if evidence.get("schemaVersion") != 1 or evidence.get("publicationAuthorized") is not False:
         errors.add("artifact-evidence-invalid")
     if len(set(names)) != len(names) or len(names) < 4:
@@ -122,19 +122,50 @@ def check(stage, inv, review, evidence, artifacts_dir):
         errors.add("artifact-roles-incomplete")
     for entry in bindings:
         name = entry["name"]
-        if not isinstance(name, str) or not name or Path(name).name != name or name in (".", ".."):
+        if (not isinstance(name, str) or not name or "\\" in name or Path(name).is_absolute()
+                or any(part in ("", ".", "..") for part in name.split("/"))):
             errors.add("artifact-name-invalid")
             continue
         path = artifacts_dir / name
-        if path.is_symlink() or not path.is_file() or digest(path) != entry.get("sha256"):
+        try:
+            path.resolve(strict=True).relative_to(artifacts_dir.resolve())
+            safe = not any(parent.is_symlink() for parent in [path, *path.parents]
+                           if parent != artifacts_dir and artifacts_dir in parent.parents)
+        except (ValueError, OSError, RuntimeError):
+            safe = False
+        if not safe or not path.is_file() or digest(path) != entry.get("sha256"):
             errors.add("artifact-digest-mismatch")
-        if name in required and required[name] != entry.get("sha256"):
+        role = entry.get("role")
+        if role in required and required[role] != entry.get("sha256"):
             errors.add("artifact-inventory-or-sbom-mismatch")
-        if entry.get("role") == "build-metadata" and path.is_file() and not path.is_symlink():
+        if role == "build-metadata" and safe and path.is_file():
             metadata = json.loads(path.read_text())
             if metadata.get("sourceCommit") != inv["sourceCommit"]:
                 errors.add("artifact-source-identity-mismatch")
-    if not set(required).issubset(names):
+        if role == "artifact" and name.lower().endswith((".deb", ".appimage")):
+            layout = evidence.get("payloadLayout", {})
+            if name.lower().endswith(".deb"):
+                expected = {"DEBIAN/control", "usr/bin/KetPlus", "opt/ketplus-pro/bin/KetPlus"}
+                if layout.get("format") != "deb-raw-extract" or not expected.issubset(files):
+                    errors.add("final-deb-payload-incomplete")
+            else:
+                expected = {"runtime-prefix", "rootfs/AppRun", "rootfs/usr/bin/KetPlus"}
+                prefix = files.get("runtime-prefix", {})
+                if (layout.get("format") != "appimage-prefix-and-squashfs" or not expected.issubset(files)
+                        or layout.get("runtimePrefixBytes") != prefix.get("size")):
+                    errors.add("final-appimage-payload-incomplete")
+                elif safe and path.is_file():
+                    checksum, remaining = hashlib.sha256(), prefix["size"]
+                    with path.open("rb") as stream:
+                        while remaining:
+                            block = stream.read(min(remaining, 1024 * 1024))
+                            if not block:
+                                break
+                            checksum.update(block)
+                            remaining -= len(block)
+                    if remaining or checksum.hexdigest() != prefix.get("sha256"):
+                        errors.add("final-appimage-runtime-mismatch")
+    if not set(required).issubset(roles):
         errors.add("artifact-inventory-or-sbom-missing")
     if review.get("artifactEvidenceSha256") != object_digest(evidence):
         errors.add("review-artifact-evidence-mismatch")
