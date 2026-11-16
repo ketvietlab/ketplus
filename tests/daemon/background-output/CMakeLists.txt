@@ -27,10 +27,12 @@ add_test(NAME ketplus_background_output_tests COMMAND ketplus_background_output_
 add_executable(ketplus_background_ledger_tests
     ../BackgroundTaskLedgerTest.cpp
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskList.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskExecutors.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskChildren.cpp"
 )
 target_include_directories(ketplus_background_ledger_tests PRIVATE
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src"
@@ -41,10 +43,19 @@ if(COMMAND ketplus_enable_warnings)
 endif()
 add_test(NAME ketplus_background_ledger_tests COMMAND ketplus_background_ledger_tests)
 
+add_executable(ketplus_managed_task_spec_tests
+    ../ManagedTaskSpecTest.cpp
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskSpec.cpp")
+target_include_directories(ketplus_managed_task_spec_tests PRIVATE
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src")
+target_link_libraries(ketplus_managed_task_spec_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+add_test(NAME ketplus_managed_task_spec_tests COMMAND ketplus_managed_task_spec_tests)
+
 if(APPLE)
     add_executable(ketplus_native_job_workload ../NativeJobWorkload.cpp)
     add_executable(ketplus_native_job_executor_tests
         ../NativeJobExecutorTest.cpp
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobControlAddress.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeProcessIdentity.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobClient.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobRecovery.cpp"
@@ -57,4 +68,28 @@ if(APPLE)
         KETPLUS_JOB_WORKLOAD_PATH="$<TARGET_FILE:ketplus_native_job_workload>")
     add_dependencies(ketplus_native_job_executor_tests ketplus_job_executor ketplus_native_job_workload)
     add_test(NAME ketplus_native_job_executor_tests COMMAND ketplus_native_job_executor_tests)
+    add_executable(ketplus_managed_task_runtime_tests
+        ../ManagedTaskRuntimeTest.cpp
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobControlAddress.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskRuntime.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskProcesses.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskOutput.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobClient.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobRecovery.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeProcessIdentity.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskExecutors.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskChildren.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskList.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskOutput.cpp")
+    target_include_directories(ketplus_managed_task_runtime_tests PRIVATE
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src")
+    target_link_libraries(ketplus_managed_task_runtime_tests PRIVATE Qt6::Core Qt6::Network Qt6::Sql Qt6::Test proc)
+    target_compile_definitions(ketplus_managed_task_runtime_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_managed_task_runtime_tests ketplus_job_executor)
+    add_test(NAME ketplus_managed_task_runtime_tests COMMAND ketplus_managed_task_runtime_tests)
 endif()

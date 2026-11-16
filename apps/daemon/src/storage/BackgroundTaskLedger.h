@@ -41,6 +41,8 @@ struct BackgroundTaskChange final {
     std::optional<int> exitCode;
     QString errorCode;
     bool fullScopeVerified{false};
+    std::optional<qint64> outputSize;
+    std::optional<bool> outputTruncated;
 };
 
 // Transactional persistence and slot admission. Permission and executor evidence
@@ -50,6 +52,8 @@ class BackgroundTaskLedger final {
     explicit BackgroundTaskLedger(QSqlDatabase database);
     bool initialize(QString* error);
     QJsonObject create(const BackgroundTaskIntent& intent);
+    // Retry lookup precedes infrastructure/quota checks; it never creates a job.
+    [[nodiscard]] QJsonObject retry(const BackgroundTaskIntent& intent) const;
     [[nodiscard]] QJsonObject get(const QString& taskId, const BackgroundTaskOwner& owner) const;
     [[nodiscard]] QJsonObject list(const BackgroundTaskOwner& owner, const QString& cursor = {},
                                    int limit = 50);
@@ -61,6 +65,8 @@ class BackgroundTaskLedger final {
     // Persist the recoverable executor address before spawning its supervisor.
     QJsonObject registerExecutor(const QString& taskId, qint64 expectedRevision,
                                  const QJsonObject& identity);
+    // Reserve an immutable child address before creating its conversation/inference.
+    QJsonObject reserveChild(const QString& taskId, qint64 expectedRevision);
     // Runtime-only recovery scan; callers must apply authorization to every API projection.
     [[nodiscard]] QJsonObject nonterminal() const;
     // The IPC layer permits this only for an authenticated local user action.

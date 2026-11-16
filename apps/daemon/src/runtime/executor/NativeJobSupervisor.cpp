@@ -1,4 +1,5 @@
 #include "runtime/executor/NativeJobSupervisor.h"
+#include "runtime/executor/NativeJobControlAddress.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -54,6 +55,8 @@ bool NativeJobSupervisor::initialize(QString* error) {
                  {"cleanup_status", "not_required"},
                  {"launch_attempted", false},
                  {"root_exited", false},
+                 {"output_size", 0},
+                 {"output_truncated", false},
                  {"executor_stopped", true}};
     outputDatabase_ = QSqlDatabase::addDatabase("QSQLITE", connectionName_);
     outputDatabase_.setDatabaseName(directory_ + "/output.sqlite");
@@ -66,8 +69,12 @@ bool NativeJobSupervisor::initialize(QString* error) {
     if (!output_->initialize(error) || !persist())
         return false;
     server_.setSocketOptions(QLocalServer::UserAccessOption);
-    if (!server_.listen(directory_ + "/control.sock")) {
-        *error = server_.errorString();
+    if (!ensureControlDirectory(error) || !server_.listen(controlAddress(directory_, lease_))) {
+        if (error->isEmpty())
+            *error = server_.errorString();
+        metadata_.insert("error", "handshake_failed");
+        metadata_.insert("state", "failed");
+        persist();
         return false;
     }
     connect(&server_, &QLocalServer::newConnection, this, [this] { acceptConnection(); });
@@ -217,9 +224,16 @@ void NativeJobSupervisor::drainOutput() {
         if (bytes.isEmpty())
             break;
         QString error;
-        if (!metadata_.contains("output_error") && !output_->append(taskId_, bytes, &error)) {
-            metadata_.insert("output_error", "output_storage_failed");
-            metadata_.insert("output_truncated", true);
+        if (!metadata_.contains("output_error")) {
+            if (!output_->append(taskId_, bytes, &error)) {
+                metadata_.insert("output_error", "output_storage_failed");
+                metadata_.insert("output_truncated", true);
+            } else {
+                const auto size = metadata_.value("output_size").toInteger() + bytes.size();
+                metadata_.insert("output_size", size);
+                if (size > BackgroundTaskOutput::maximumBytes)
+                    metadata_.insert("output_truncated", true);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 add_executable(ketplus_job_executor
+    NativeJobControlAddress.cpp
     NativeJobExecutorMain.cpp
     NativeJobSupervisor.cpp
     NativeJobExecution.cpp

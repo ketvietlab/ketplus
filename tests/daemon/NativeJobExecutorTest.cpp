@@ -1,4 +1,5 @@
 #include "runtime/executor/NativeJobClient.h"
+#include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QFile>
@@ -77,7 +78,7 @@ class Executor final {
         socket.abort();
         buffer.clear();
         messages.clear();
-        socket.connectToServer(path() + "/control.sock");
+        socket.connectToServer(controlAddress(path(), lease));
         if (!socket.waitForConnected(100))
             return false;
         send({{"op", "auth"}, {"lease_id", lease}});

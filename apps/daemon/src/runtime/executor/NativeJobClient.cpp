@@ -1,4 +1,5 @@
 #include "runtime/executor/NativeJobClient.h"
+#include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QFile>
@@ -72,7 +73,7 @@ bool NativeJobClient::start(const QJsonObject& execution, qint64 remainingTimeou
     return false;
 #endif
     if (QFileInfo::exists(directory_ + "/executor.json") ||
-        QFileInfo::exists(directory_ + "/control.sock")) {
+        QFileInfo::exists(controlAddress(directory_, lease_))) {
         if (error)
             *error = "An existing executor must be reconciled, never launched again.";
         return false;
@@ -121,7 +122,7 @@ void NativeJobClient::connectSocket() {
     if (!identity || identity->birth != self.value("birth").toString() || identity->zombie)
         return;
     lastReceipt_ = record;
-    socket_.connectToServer(directory_ + "/control.sock");
+    socket_.connectToServer(controlAddress(directory_, lease_));
 }
 
 void NativeJobClient::send(const QJsonObject& message) {

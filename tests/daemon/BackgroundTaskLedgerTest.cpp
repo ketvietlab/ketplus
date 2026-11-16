@@ -34,6 +34,77 @@ class BackgroundTaskLedgerTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void managedChildReservationIsAtomicAndTerminalWaitsForDescendants() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            auto request = intent();
+            request.kind = "agent";
+            const auto parent = taskId(ledger.create(request));
+            BackgroundTaskChange approve;
+            approve.state = "queued";
+            approve.permissionApproved = true;
+            QVERIFY(ledger.change(parent, 1, approve).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), parent);
+            QSqlQuery query(db);
+            QVERIFY(query.exec(
+                "CREATE TRIGGER fail_child BEFORE UPDATE ON managed_jobs "
+                "WHEN json_extract(new.record,'$.execution_identity.child_session_id') IS NOT NULL "
+                "BEGIN SELECT RAISE(ABORT,'injected child reservation failure'); END"));
+            QCOMPARE(ledger.reserveChild(parent, 3).value("error_code"), "storage_error");
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_children"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QVERIFY(query.exec("DROP TRIGGER fail_child"));
+            const auto reserved = ledger.reserveChild(parent, 3);
+            QVERIFY(reserved.value("ok").toBool());
+            const auto identity =
+                reserved.value("task").toObject().value("execution_identity").toObject();
+            const auto childSession = identity.value("child_session_id").toString();
+            QVERIFY(!childSession.isEmpty());
+            const auto retry = ledger.reserveChild(parent, 4);
+            QVERIFY(retry.value("reused").toBool());
+            QCOMPARE(retry.value("task").toObject().value("execution_identity").toObject(),
+                     identity);
+            BackgroundTaskChange running;
+            running.state = "running";
+            running.handshakeCommitted = true;
+            running.executionIdentity = identity;
+            QCOMPARE(ledger.change(parent, 4, running).value("error_code"), "invalid_transition");
+            query.prepare("INSERT INTO sessions VALUES(?,1)");
+            query.addBindValue(childSession);
+            QVERIFY(query.exec());
+            QVERIFY(ledger.change(parent, 4, running).value("ok").toBool());
+            auto descendant = intent();
+            descendant.owner.sessionId = childSession;
+            const auto childTask = taskId(ledger.create(descendant));
+            QVERIFY(!childTask.isEmpty());
+            BackgroundTaskChange complete;
+            complete.state = "completed";
+            complete.cleanupConfirmed = true;
+            QCOMPARE(ledger.change(parent, 5, complete).value("error_code"), "execution_live");
+            BackgroundTaskChange cancelled;
+            cancelled.state = "stopping";
+            cancelled.terminalTarget = "cancelled";
+            QVERIFY(ledger.change(childTask, 1, cancelled).value("ok").toBool());
+            cancelled.state = "cancelled";
+            cancelled.cleanupConfirmed = true;
+            cancelled.neverLaunched = true;
+            QVERIFY(ledger.change(childTask, 2, cancelled).value("ok").toBool());
+            QVERIFY(ledger.change(parent, 5, complete).value("ok").toBool());
+            descendant.clientRequestId = "too-late";
+            QCOMPARE(ledger.create(descendant).value("error_code"), "stale_owner");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void attentionCountsTowardNonterminalCapAndGlobalSlotsRemainBounded() {
         const auto name = QUuid::createUuid().toString();
         {

@@ -14,6 +14,30 @@ QJsonObject failure(const QString& code, const QString& message) {
 }
 } // namespace
 
+QJsonObject BackgroundTaskLedger::retry(const BackgroundTaskIntent& intent) const {
+    QSqlQuery query(database_);
+    query.prepare("SELECT task_id,spec_fingerprint FROM managed_jobs WHERE owner_session_id=? "
+                  "AND owner_generation=? AND client_request_id=?");
+    query.addBindValue(intent.owner.sessionId);
+    query.addBindValue(intent.owner.generation);
+    query.addBindValue(intent.clientRequestId);
+    if (!query.exec())
+        return failure("storage_error", query.lastError().text());
+    if (!query.next())
+        return {{"ok", true}, {"task", QJsonValue::Null}};
+    const auto id = query.value(0).toString();
+    const auto fingerprint = query.value(1).toByteArray();
+    query.finish();
+    auto reply = get(id, intent.owner);
+    if (!reply.value("ok").toBool())
+        return reply;
+    if (fingerprint != intent.specFingerprint)
+        return failure("idempotency_conflict",
+                       "This request key was accepted with a different spec.");
+    reply.insert("reused", true);
+    return reply;
+}
+
 QJsonObject BackgroundTaskLedger::nonterminal() const {
     QSqlQuery query(database_);
     if (!query.exec(
