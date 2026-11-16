@@ -748,7 +748,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   SDK process exit; Codex/ACP use dedicated per-conversation processes before
   restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
   installed Codex/Cursor empty-history probes cannot establish non-empty history
-  restoration, and Copilot runtime verification remains unavailable. See the
+  restoration, and Copilot runtime verification remains unavailable. Cursor and
+  Copilot therefore receive no mutation credential and expose only background
+  registry read tools; direct mutation returns a capability error. Their
+  foreground behavior remains available. See the
   [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
 - Async assistant-question answers use the conversation's current execution-context

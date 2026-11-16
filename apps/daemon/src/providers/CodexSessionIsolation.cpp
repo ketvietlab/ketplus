@@ -1,3 +1,4 @@
+#include "agents/AgentToolLaunch.h"
 #include "providers/CodexAdapter.h"
 
 #include <QJsonArray>
@@ -41,7 +42,11 @@ bool CodexAdapter::routeIsolatedCall(const QString& method, const QJsonObject& p
     auto* worker = new CodexAdapter(executable(), this);
     worker->isolatedWorker_ = true;
     worker->setBrowserArgumentsProvider(browserArgumentsProvider_);
-    sessionWorkers_.insert(session, {worker, epoch, {}, {}, true});
+    const auto agentEnvironment =
+        params.value("config").toObject().value("mcp_servers.ketplus_agents.env").toObject();
+    const bool mutationExpected =
+        !agentEnvironment.value(QLatin1String(agent_tools::mutationVariable)).toString().isEmpty();
+    sessionWorkers_.insert(session, {worker, epoch, {}, {}, true, mutationExpected});
     connect(worker, &CodexAdapter::notificationReceived, this,
             [this, session, epoch](const QString& method, const QJsonObject& params) {
                 auto current = sessionWorkers_.find(session);
@@ -153,8 +158,14 @@ void CodexAdapter::confirmIsolatedMcp(const QString& session, const QString& epo
                     return;
                 }
                 const auto tools = server.value("tools").toObject();
-                if (tools.contains("agents_whoami") && tools.contains("background_task_start") &&
-                    tools.contains("background_task_stop")) {
+                const bool readReady = tools.contains("agents_whoami") &&
+                                       tools.contains("background_task_list") &&
+                                       tools.contains("background_task_get") &&
+                                       tools.contains("background_task_output");
+                const bool mutationReady =
+                    !current.mutationExpected || (tools.contains("background_task_start") &&
+                                                  tools.contains("background_task_stop"));
+                if (readReady && mutationReady) {
                     done(setup, {});
                     return;
                 }

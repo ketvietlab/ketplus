@@ -5,6 +5,20 @@ using namespace ketplus::daemon;
 class AgentMutationOriginTest final : public QObject {
     Q_OBJECT
   private slots:
+    void unsupportedTransportGetsAnEpochWithoutMutationAuthority() {
+        AgentMutationOrigin authority;
+        const auto read = authority.prepare("session", 1, 1, "full", false, false);
+        QVERIFY(!read.transportEpoch.isEmpty());
+        QVERIFY(read.credential.isEmpty());
+        QVERIFY(authority.activate(read.transportEpoch));
+        QVERIFY(!authority.authorize({}, "session", 1));
+        const auto verified = authority.prepare("session", 1, 2, "ask", false, true);
+        QVERIFY(!verified.credential.isEmpty());
+        QVERIFY(!authority.activate(read.transportEpoch));
+        QVERIFY(authority.activate(verified.transportEpoch));
+        QVERIFY(authority.authorize(verified.credential, "session", 1));
+    }
+
     void pendingSpoofedAndMissingOriginsFailClosed() {
         AgentMutationOrigin authority;
         const auto first = authority.prepare("session", 1, 8, "full", false);

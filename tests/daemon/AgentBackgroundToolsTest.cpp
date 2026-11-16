@@ -22,6 +22,20 @@ QJsonObject invoke(const QString& name, const QJsonObject& arguments,
 class AgentBackgroundToolsTest final : public QObject {
     Q_OBJECT
   private slots:
+    void readOnlyBootstrapDoesNotAdvertiseMutation() {
+        const auto response = agent_mcp::handleMessage(
+            {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/list"}},
+            [](const QString&, const QJsonObject&) { return QJsonObject{{"ok", true}}; }, false);
+        QSet<QString> names;
+        for (const auto& tool : response.value("result").toObject().value("tools").toArray())
+            names.insert(tool.toObject().value("name").toString());
+        QVERIFY(!names.contains("background_task_start"));
+        QVERIFY(!names.contains("background_task_stop"));
+        for (const auto* name :
+             {"background_task_list", "background_task_get", "background_task_output"})
+            QVERIFY(names.contains(name));
+    }
+
     void allProvidersReceiveOwnerBoundSchemas() {
         const auto response = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/list"}},

@@ -111,7 +111,9 @@ inline QString instructions() {
     return QStringLiteral(
         "[KetPlus background tasks]\n"
         "Use background_task_start/list/get/stop/output on ketplus_agents for managed "
-        "background processes and delegated agents, across every provider. Start takes "
+        "background processes and delegated agents when the tools are available. "
+        "If start/stop are absent, this transport has no mutation grant; use available "
+        "foreground tools and read-only list/get/output. Start takes "
         "client_request_id, kind, title, execution_spec and timeout_ms. A process spec uses "
         "argv or explicit_shell_command, plus cwd and env_delta ({} when none); an agent spec "
         "uses prompt and optional provider/model/effort/cwd. Reuse the same request key and "

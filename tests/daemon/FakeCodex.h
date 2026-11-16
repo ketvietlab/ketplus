@@ -106,7 +106,7 @@ for line in sys.stdin:
         emit({'id': message_id, 'result': {'thread': {'id': thread_id}}})
     elif method == 'mcpServerStatus/list':
         emit({'id':message_id,'result':{'data':[{'name':'ketplus_agents','tools':{
-            name:{'name':name} for name in ('agents_whoami','background_task_start','background_task_stop')}}], 'nextCursor':None}})
+            name:{'name':name} for name in ('agents_whoami','background_task_list','background_task_get','background_task_output','background_task_start','background_task_stop')}}], 'nextCursor':None}})
     elif method == 'thread/read':
         thread_id = message['params']['threadId']
         emit({'id': message_id, 'result': {'thread': {

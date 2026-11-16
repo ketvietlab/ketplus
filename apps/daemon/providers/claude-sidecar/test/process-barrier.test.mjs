@@ -39,3 +39,17 @@ test('a child ignoring input closure is killed and its exit confirmed before reu
 test('context refresh timeout refuses an unacknowledged operation', async () => {
   await assert.rejects(refreshWithin(new Promise(() => {}), 10), /mutation_refresh_unavailable/);
 });
+
+test('unconfirmed close stays fenced after timeout and kill request', async () => {
+  const barrier = new ProcessBarrier();
+  let finish;
+  let kills=0;
+  const record={exited:false,child:{kill(){kills++;}},
+    done:new Promise(resolve => {finish=resolve;})};
+  barrier.processes.push(record); // Synthetic unresponsive close, no live workload.
+  try {
+    assert.equal(await barrier.drain(1),false);
+    assert.equal(kills,1);
+    assert.throws(() => barrier.spawn({}),/transport already closed/);
+  } finally {record.exited=true;finish();await barrier.drain();}
+});

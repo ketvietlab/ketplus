@@ -2,6 +2,7 @@
 
 #include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ProviderAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 
 #include <QJsonArray>
@@ -70,6 +71,15 @@ void SessionHost::handleAgentCommandDeferred(const QString& token, const QString
                                       : current->mutationOrigin.authorize(
                                             credential, caller->sessionId, caller->generation);
             if (!snapshot) {
+                if (const auto* target = provider(caller->provider);
+                    target && !target->supportsManagedMutations()) {
+                    done({{"ok", false},
+                          {"error_code", "mutation_refresh_unavailable"},
+                          {"error_message", QString("Managed mutations are unavailable for %1: "
+                                                    "history and MCP refresh are not validated.")
+                                                .arg(target->name())}});
+                    return;
+                }
                 done({{"ok", false},
                       {"error_code", "stale_origin"},
                       {"error_message", "The invocation has no active mutation origin."}});

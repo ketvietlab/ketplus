@@ -42,6 +42,7 @@ class ClaudeAdapter final : public ProviderAdapter {
     void respondError(const QJsonValue& requestId, const QString& code,
                       const QString& message) override;
     void stop() override;
+    [[nodiscard]] bool supportsManagedMutations() const override { return true; }
     void setCredentials(ClaudeCredentials* credentials) { credentials_ = credentials; }
 
     [[nodiscard]] static QString missingSidecarMessage();

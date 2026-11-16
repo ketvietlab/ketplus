@@ -1,3 +1,4 @@
+#include "providers/ProviderAdapter.h"
 #include "runtime/ManagedTaskBridge.h"
 #include "runtime/SessionHost.h"
 
@@ -6,10 +7,12 @@
 namespace ketplus::daemon {
 void SessionHost::prepareManagedTaskOrigin(Session& session, const QJsonObject& options) {
     session.mutationOrigin.revoke();
+    const auto* target = provider(session.stored.adapter);
     if (!agentSocket_.isEmpty() && !agentExecutable_.isEmpty())
         session.mutationOrigin.prepare(
             session.stored.id, session.stored.generation, session.stored.currentTurnSequence,
-            options.value("execution_policy").toString(), options.value("review_guard").toBool());
+            options.value("execution_policy").toString(), options.value("review_guard").toBool(),
+            target && target->supportsManagedMutations());
 }
 
 bool SessionHost::isManagedTaskEpoch(const Session& session, const QString& epoch) const {

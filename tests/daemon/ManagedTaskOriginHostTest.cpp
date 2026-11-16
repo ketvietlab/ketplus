@@ -1,10 +1,13 @@
 #include "providers/CodexAdapter.h"
+#include "providers/CopilotAdapter.h"
+#include "providers/CursorAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QUuid>
 #include <QtTest>
 #include <utility>
@@ -19,6 +22,7 @@ class CatalogFixture final : public ProviderAdapter {
     bool isAvailable() const override { return true; }
     bool isReady() const override { return true; }
     bool supports(const QString&) const override { return true; }
+    bool supportsManagedMutations() const override { return true; } // Trusted synthetic bootstrap.
     void runtimeStatus(std::function<void(const compat::Runtime&)> done) override { done({}); }
     void configurationCatalog(Callback done) override { pending = std::move(done); }
     void releaseCatalog() {
@@ -113,6 +117,84 @@ class ManagedTaskOriginHostTest final : public QObject {
     }
 
   private slots:
+    void unverifiedConcreteAcpAdaptersNeverReceiveMutationCredentials_data() {
+        QTest::addColumn<QString>("name");
+        QTest::newRow("cursor") << "cursor";
+        QTest::newRow("copilot") << "copilot";
+    }
+    void unverifiedConcreteAcpAdaptersNeverReceiveMutationCredentials() {
+        QFETCH(QString, name);
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, directory.path(), name));
+        CodexAdapter codex(directory.filePath("missing-codex"));
+        CursorAdapter cursor(directory.filePath("missing-cursor"));
+        CopilotAdapter copilot(directory.filePath("missing-copilot"));
+        SessionHost host(&journal, &codex, QList<ProviderAdapter*>{&cursor, &copilot});
+        host.setAgentEndpoint(directory.filePath("socket"), directory.filePath("mcp-helper"));
+        auto& owner = host.sessions_["owner"];
+        owner.stored.currentTurnSequence = 1;
+        owner.stored.state = "running";
+        host.prepareManagedTaskOrigin(owner,
+                                      {{"execution_policy", "full"}, {"review_guard", false}});
+        const auto bootstrap = owner.mutationOrigin.bootstrap();
+        QVERIFY(!bootstrap.transportEpoch.isEmpty());
+        QVERIFY(bootstrap.credential.isEmpty());
+        QVERIFY(host.acknowledgeManagedTaskOrigin(
+            owner, bootstrap.transportEpoch,
+            {{"managedTransportEpoch", bootstrap.transportEpoch}}));
+        QVERIFY(!owner.mutationOrigin.authorize("spoofed", "owner", 1));
+        const auto launch = host.agentLaunch("owner", 1);
+        QVERIFY(launch && launch->mutationCredential.isEmpty());
+        const auto token = host.agentToken("owner");
+        QCOMPARE(invoke(host, token, "session.task.start", child()).value("error_code"),
+                 "mutation_refresh_unavailable");
+        QCOMPARE(
+            invoke(host, token, "session.task.stop", {{"task_id", "fixture"}}).value("error_code"),
+            "mutation_refresh_unavailable");
+        QVERIFY(invoke(host, token, "session.task.list", {}).value("ok").toBool());
+    }
+
+    void lateEpochCallbackCannotAcknowledgeReplacementOrMissingRefresh() {
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, directory.path(), "codex"));
+        CodexAdapter codex(directory.filePath("missing-codex"));
+        SessionHost host(&journal, &codex);
+        host.setAgentEndpoint(directory.filePath("socket"), directory.filePath("mcp-helper"));
+        auto& owner = host.sessions_["owner"];
+        owner.stored.currentTurnSequence = 1;
+        host.prepareManagedTaskOrigin(owner, {{"execution_policy", "full"}});
+        const auto first = owner.mutationOrigin.bootstrap();
+        QVERIFY(!first.credential.isEmpty());
+        owner.stored.currentTurnSequence = 2;
+        host.prepareManagedTaskOrigin(owner,
+                                      {{"execution_policy", "full"}, {"review_guard", true}});
+        const auto review = owner.mutationOrigin.bootstrap();
+        // The same guard runs before every provider setup callback can touch Host state.
+        QVERIFY(!host.isManagedTaskEpoch(owner, first.transportEpoch));
+        QVERIFY(host.isManagedTaskEpoch(owner, review.transportEpoch));
+        QVERIFY(!owner.mutationOrigin.authorize(first.credential, "owner", 1));
+        owner.stored.currentTurnSequence = 3;
+        host.prepareManagedTaskOrigin(owner, {{"execution_policy", "full"}});
+        const auto pending = owner.mutationOrigin.bootstrap();
+        QVERIFY(!host.isManagedTaskEpoch(owner, review.transportEpoch));
+        bool staleDelivered = false;
+        QTimer::singleShot(0, &host, [&] {
+            if (host.isManagedTaskEpoch(owner, review.transportEpoch))
+                host.acknowledgeManagedTaskOrigin(
+                    owner, review.transportEpoch,
+                    {{"managedTransportEpoch", review.transportEpoch}});
+            staleDelivered = true;
+        });
+        QTRY_VERIFY(staleDelivered);
+        QCOMPARE(owner.mutationOrigin.bootstrap().transportEpoch, pending.transportEpoch);
+        QVERIFY(!owner.mutationOrigin.authorize(pending.credential, "owner", 1));
+        QVERIFY(!host.acknowledgeManagedTaskOrigin(owner, pending.transportEpoch, {}));
+        QCOMPARE(owner.stored.state, "failed");
+        QVERIFY(!owner.mutationOrigin.authorize(pending.credential, "owner", 1));
+    }
+
     void deletionWaitsForScopedTransportRelease() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));

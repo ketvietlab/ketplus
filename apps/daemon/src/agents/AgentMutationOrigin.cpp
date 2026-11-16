@@ -5,14 +5,15 @@
 namespace ketplus::daemon {
 AgentMutationOrigin::Bootstrap
 AgentMutationOrigin::prepare(const QString& session, const qint64 generation, const qint64 turn,
-                             const QString& policy, const bool review) {
+                             const QString& policy, const bool review,
+                             const bool mutationSupported) {
     revoke();
     if (session.isEmpty() || generation <= 0 || turn <= 0 ||
         (policy != "ask" && policy != "full" && policy != "read-only"))
         return {};
     bootstrap_.transportEpoch = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    // Review still gets a fresh read/discovery transport, never a mutation secret.
-    if (!review)
+    // Review and unverified providers get a fresh read/discovery epoch, never a secret.
+    if (!review && mutationSupported)
         bootstrap_.credential = QUuid::createUuid().toString(QUuid::WithoutBraces);
     snapshot_ = {session, generation, turn, policy, bootstrap_.transportEpoch};
     return bootstrap_;

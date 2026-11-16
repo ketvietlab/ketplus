@@ -152,6 +152,14 @@ MCP implementation.
 
 ### Cursor control results and validation gap
 
+The production Cursor adapter does not advertise managed mutation support. The
+Host still provisions a fresh read/discovery epoch, but issues no mutation
+credential even after an ACP load ACK. The MCP helper omits start/stop from
+`tools/list` without a credential; direct start/stop attempts return
+`mutation_refresh_unavailable` from the daemon. Foreground behavior and authorized
+registry reads remain available. This is a temporary safety gate, not completion
+of Cursor support or evidence that its non-empty history cannot be restored.
+
 Installed CLI: `2026.11.11-043ef28`. `initialize` returns protocol 1,
 `loadSession:true`, MCP HTTP/SSE capabilities, and `sessionCapabilities:{list:{}}`;
 it does not advertise session close. A temporary empty session is created
@@ -183,6 +191,18 @@ No Copilot CLI is installed in this environment. The concrete adapter builds
 with the dedicated-process changes, and the generic ACP fixture covers the
 control sequence. Real advertised capabilities, cross-process history load and
 MCP replacement remain unverified. No quota-consuming substitute was run.
+Copilot has the same production mutation gate as Cursor; a fake ACP test cannot
+enable it. Enabling either adapter requires reviewed provider/version-specific
+history and injected-MCP evidence, rather than an environment override or a load
+ACK alone. Existing conversation history is kept when load fails; refresh returns
+a capability error without fallback `session/new` or an automatic retry loop.
+
+The independent regression suite also covers an unconfirmed Claude close after
+timeout/kill request, a late Host epoch callback after review-to-normal turnover,
+and read-only Codex MCP discovery without hidden mutation tools. A normal Codex
+bootstrap with a mutation credential still requires start/stop inventory before
+its epoch ACK. These checks preserve the distinction between an unavailable
+mutation capability and usable foreground/read transports.
 
 ## Verification checkpoint
 
@@ -211,3 +231,10 @@ fixture for installed Codex/Cursor, and an available Copilot runtime with histor
 and injected-MCP verification. Passing synthetic adapter history is insufficient
 to close that gate. The task remains blocked on this evidence rather than
 silently resetting provider history or reducing the supported-provider goal.
+
+The subsequent capability-gate regression run passes 7/7 CTest targets (59.85 s):
+Host/IPC, Host origins, Codex isolation, ACP isolation, MCP and messaging. The
+narrow MCP/origin target passes 2/2; the sidecar/background-contract suite passes
+96 tests with 3 explicit SDK opt-in skips. The newly added unconfirmed-close
+fixture uses a synthetic process record and starts no workload. No installed
+provider probe was repeated for this change, and no model was called.

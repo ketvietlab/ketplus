@@ -59,6 +59,7 @@ class CodexAdapter final : public ProviderAdapter {
     void respondError(const QJsonValue& requestId, const QString& code,
                       const QString& message) override;
     void stop() override;
+    [[nodiscard]] bool supportsManagedMutations() const override { return true; }
     bool releaseSessionTransport(const QString& sessionId) override;
 
     // Crash-restart backoff: 1 s doubling to 60 s, reset after a stable run.
@@ -113,6 +114,7 @@ class CodexAdapter final : public ProviderAdapter {
         QString threadId;
         QString turnId;
         bool preparing{true};
+        bool mutationExpected{false};
     };
     struct IsolatedRequest {
         QPointer<CodexAdapter> adapter;

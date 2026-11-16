@@ -47,7 +47,9 @@ for line in sys.stdin:
             note('new',**settings)
         reply(id,dict(thread=dict(id=thread)))
     elif method=='mcpServerStatus/list':
-        tools={name:dict(name=name) for name in ('agents_whoami','background_task_start','background_task_stop')}
+        tools={name:dict(name=name) for name in ('agents_whoami','background_task_list','background_task_get','background_task_output','background_task_start','background_task_stop')}
+        if epoch in ('read-only','no-mutation'):
+            tools.pop('background_task_start');tools.pop('background_task_stop')
         reply(id,dict(data=[] if epoch=='no-mcp' else [dict(name='ketplus_agents',tools=tools)],nextCursor=None))
     elif method=='turn/start':
         text=p['input'][0]['text'];history.append(text)
@@ -92,7 +94,9 @@ QJsonObject setup(const QString& folder, const QString& session, const QString& 
             {"model", "fixture-model"},
             {"config", QJsonObject{{"mcp_servers.ketplus_agents.command", "fixture-only"},
                                    {"mcp_servers.ketplus_agents.env",
-                                    QJsonObject{{"FIXTURE_EPOCH", epoch}}}}}};
+                                    QJsonObject{{"FIXTURE_EPOCH", epoch},
+                                                {"KETPLUS_AGENT_MUTATION_TOKEN",
+                                                 epoch == "read-only" ? "" : "fixture-secret"}}}}}};
 }
 void start(CodexAdapter& adapter, const QString& thread, const QString& text) {
     adapter.call("turn/start",
@@ -193,6 +197,36 @@ class CodexSessionIsolationTest final : public QObject {
         QTest::newRow("missing-history") << "missing" << "fresh";
         QTest::newRow("load-timeout") << "timeout" << "fresh";
         QTest::newRow("mcp-timeout") << "" << "no-mcp";
+        QTest::newRow("mutation-tools-missing") << "" << "no-mutation";
+    }
+
+    void readOnlyEpochDoesNotRequireHiddenMutationTools() {
+        QTemporaryDir folder;
+        const auto path = folder.filePath("fake-codex");
+        QVERIFY(fixture(path));
+        CodexAdapter adapter(path);
+        adapter.setBrowserArgumentsProvider([] { return QStringList{}; });
+        QString thread;
+        adapter.call("thread/start", setup(folder.path(), "A", "read-only"),
+                     [&](const QJsonObject& result, const QString& error) {
+                         QVERIFY2(error.isEmpty(), qPrintable(error));
+                         QCOMPARE(result.value("managedTransportEpoch"), "read-only");
+                         thread = result.value("thread").toObject().value("id").toString();
+                     });
+        QTRY_VERIFY(!thread.isEmpty());
+        QVERIFY(!adapter.sessionWorkers_.value("A").mutationExpected);
+        QJsonObject status;
+        adapter.call("mcpServerStatus/list", {{"threadId", thread}},
+                     [&](const QJsonObject& result, const QString& error) {
+                         QVERIFY2(error.isEmpty(), qPrintable(error));
+                         status = result;
+                     });
+        QTRY_VERIFY(!status.isEmpty());
+        const auto tools =
+            status.value("data").toArray().first().toObject().value("tools").toObject();
+        QVERIFY(tools.contains("background_task_output"));
+        QVERIFY(!tools.contains("background_task_start"));
+        adapter.stop();
     }
 
     void oldApprovalCannotAnswerReplacementOrAnotherSession() {

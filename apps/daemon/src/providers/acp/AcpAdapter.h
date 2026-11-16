@@ -34,6 +34,8 @@ class AcpAdapter : public ProviderAdapter {
     }
 
   protected:
+    // Managed mutation support remains false until a concrete provider's history
+    // and injected-MCP refresh are verified. A worker factory is not that proof.
     // A turn with a host transport epoch must never reuse another turn's MCP workers.
     virtual AcpAdapter* createSessionWorker() { return nullptr; }
     bool routeIsolatedCall(const QString& method, const QJsonObject& params, Callback& callback);

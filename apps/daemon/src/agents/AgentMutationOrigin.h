@@ -27,7 +27,7 @@ class AgentMutationOrigin final {
     // Reserves immutable bootstrap credentials, invalidating any previous turn.
     // A pending credential has no mutation authority until the adapter barrier ACK.
     Bootstrap prepare(const QString& session, qint64 generation, qint64 turn, const QString& policy,
-                      bool review);
+                      bool review, bool mutationSupported = true);
     bool activate(const QString& acknowledgedEpoch);
     void revoke();
     [[nodiscard]] std::optional<AgentMutationSnapshot>
