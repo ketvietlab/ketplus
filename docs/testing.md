@@ -272,6 +272,21 @@ a fresh owned runtime. These cases do not opt into a real CLI, renderer or
 provider. Header changes require the full Pro matrix; keep the existing real
 KetAtlas lane opt-in and report its skip separately.
 
+## New team dialog layout
+
+`ketplus_team_dialogs_tests` uses a fake daemon and renders the real Qt form. Its
+geometry cases cover two columns at 1280 × 900 and 1024 × 420, a single column at
+480 × 640, English and Vietnamese, visible footer buttons, compact wrapped help,
+and keyboard access through both columns. Existing cases resize and zoom the
+open dialog through 100%, 125% and 150%. `ketplus_team_goal_form_tests` covers
+mentions, multiline entry and submit shortcuts; `ketplus_team_page_language_tests`
+covers language behavior. No provider or real team is started.
+
+For local PNGs and geometry logs, run `ketplus_team_dialogs_tests
+columnsReflowAndKeepTheFooterReachable` with `QT_QPA_PLATFORM=offscreen`,
+`KETPLUS_DISABLE_DAEMON_AUTOSTART=1` and `KETPLUS_T15_CAPTURE` set to a local output
+directory. Keep generated captures out of the source tree.
+
 ## Minimum verification
 
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
