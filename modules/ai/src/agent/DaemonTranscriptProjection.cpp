@@ -570,7 +570,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         if (type == "turn.completed" && sentAt.isValid() && turnStarts.contains(sequence))
             turn.durationMs = turnStarts.value(sequence).msecsTo(sentAt);
         if (type == "work_report.updated") {
-            turnReports.insert(sequence, data);
+            if (data.value(QStringLiteral("scope_only")).toBool())
+                turnReports.remove(sequence);
+            else
+                turnReports.insert(sequence, data);
             continue;
         }
         // Team plumbing and the task snapshot stay in the journal, out of the transcript.

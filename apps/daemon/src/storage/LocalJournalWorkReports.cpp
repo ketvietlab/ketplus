@@ -8,8 +8,8 @@
 namespace ketplus::daemon {
 
 // ADR 0106: one row per conversation generation holds its current work report. Retention may
-// drop old events, so the ledger cannot be rebuilt from them; each work_report.updated event
-// carries the snapshot its turn ended with.
+// drop old events, so the ledger cannot be rebuilt from them. turn.completed carries
+// the snapshot its turn ended with; mid-turn calls update only this durable ledger.
 bool LocalJournal::initializeWorkReports() {
     QSqlQuery query(database_);
     if (query.exec(QStringLiteral(
@@ -47,6 +47,33 @@ QJsonObject LocalJournal::workReport(const QString& sessionId, const qint64 gene
     if (!query.exec() || !query.next())
         return {};
     return QJsonDocument::fromJson(query.value(0).toString().toUtf8()).object();
+}
+
+QJsonObject LocalJournal::publishedWorkReport(const QString& sessionId,
+                                              const qint64 generation) const {
+    // replay_events retains terminal rows after transport acknowledgement/detail trimming.
+    // A later turn without a report does not acquire an older turn's snapshot; the pane
+    // continues to read the last published report with its original turn identity.
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT payload FROM replay_events WHERE session_id = ? AND generation = ? "
+        "AND event_type = 'turn.completed' "
+        "AND json_extract(payload, '$.status') IN ('completed','failed','interrupted','stopped') "
+        "AND json_type(payload, '$.work_report') = 'object' "
+        "AND json_extract(payload, '$.work_report.turn') = turn_sequence "
+        "ORDER BY cursor DESC LIMIT 1"));
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return {};
+    }
+    if (!query.next())
+        return {};
+    const auto terminal = QJsonDocument::fromJson(query.value(0).toString().toUtf8()).object();
+    auto report = terminal.value(QStringLiteral("work_report")).toObject();
+    report.insert(QStringLiteral("terminal_status"), terminal.value(QStringLiteral("status")));
+    return report;
 }
 
 bool LocalJournal::storeWorkReport(const QString& sessionId, const qint64 generation,

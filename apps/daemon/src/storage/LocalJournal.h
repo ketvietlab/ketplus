@@ -534,6 +534,9 @@ class LocalJournal final {
     // ADR 0106: audit ledger plus the latest accepted direct-user request marker.
     // Before its first report the ledger can contain scope metadata without items.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
+    // Last report actually published by a matching terminal event, never the pending ledger.
+    [[nodiscard]] QJsonObject publishedWorkReport(const QString& sessionId,
+                                                  qint64 generation) const;
     // Stores a ledger whose version is newer than the stored one.
     bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
                          QString* error = nullptr);

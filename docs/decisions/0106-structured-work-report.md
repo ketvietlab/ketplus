@@ -67,17 +67,30 @@ cannot count it, filter it or show it anywhere else.
   - a fork copies it;
   - deletion removes it with the other per-generation state;
   - an abandoned fork's purge removes it.
-- **Event.** Each accepted call journals `work_report.updated` with the merged ledger.
-  A turn's last such event is the report that turn ended with, so earlier turns keep
-  their own snapshot while later turns change the ledger.
-  - **Cloud:** the event's text is redacted and capped again on its way to the cloud
-    (`projectEventPayloadForCloud`), and it is relayed only where the transcript is.
-  - **Turn end:** `turn.completed` carries the stored ledger as `work_report` when the
-    ledger was last changed in that turn. The end row is then complete on its own,
-    even when a history page boundary falls between the report and the turn's end.
-  - **Failure:** when the event cannot be journaled, the tool answers with an error
-    (the ledger is saved) and the agent ends the turn with the matrix, so a report
-    is never hidden behind a success.
+- **Publication (T-129).** Accepted calls save the durable ledger and return its
+  reconciliation summary to the agent; they do not publish a transcript card.
+  Further tool calls and work may follow. `turn.completed` carries the latest
+  current-request projection only if the ledger belongs to that exact turn.
+  This includes interrupted/failed terminal statuses without representing them
+  as success. Recovery of an abandoned turn records an interrupted end with its
+  same-turn snapshot. A provider stop without a terminal row leaves data pending;
+  it is never attached to a later turn. No timer infers completion.
+  - Terminal snapshots remain self-contained across history pages and redacted
+    on cloud projection. Old `work_report.updated` history is still readable at
+    its matching end row, but never creates a running card.
+  - Accepted direct input still publishes T-126's scope refresh for the Report
+    pane. Both this refresh and `session.work_report.read` use only the latest
+    matching terminal snapshot in `replay_events`, filtered by the durable current
+    request marker. Terminal rows survive transport acknowledgement and detail
+    retention, so no duplicate snapshot table is needed. Opening/reopening the
+    pane before the first published snapshot shows no report. Pending edits remain
+    internal to tool reconciliation; even a pending completion cannot remove a
+    previously published unresolved item. A no-report turn leaves the pane's last
+    published snapshot with its original turn identity, never an invented new one.
+    Legacy mid-turn `work_report.updated` events cannot refresh the pane. Terminal
+    cards and pane reads retain failed/stopped status even if all items are done.
+  - Failure to persist returns an error. Success acknowledges persistence, not
+    that a card is already visible or the turn finished.
 - **Guidance.**
   - When a session has the ketplus_agents server (Claude, Codex and Cursor), the
     response guidance replaces the matrix: the agent records the turn's work with
@@ -95,12 +108,9 @@ cannot count it, filter it or show it anywhere else.
   - The tab reads the stored ledger with `session.work_report.read` and then applies
     the conversation's `work_report.updated` events. An older ledger version never
     replaces a newer one, so a slow read cannot undo a live update.
-  - While a turn runs, its latest report closes the live transcript, as the mock's
-    `workspace/report-running`: a Running badge, and the footer shows the turn's live
-    activity and "Now" instead of the next step. The card replaces the run line until
-    the turn ends, when the end-of-turn card takes over. The desktop marks a
-    `work_report.updated` of the running turn as current; a new turn or another
-    conversation starts without it.
+  - While a turn runs, retain its ordinary activity line. Terminal snapshot
+    delivery refreshes the Report pane and end-of-turn card, even if no report
+    event preceded it. No mid-turn report replaces the activity line.
 - **Reconciling a long conversation.** The agent cannot read the stored ledger, so after
   many turns and compactions it forgot keys: it reported the same work again under new
   keys and never closed items from early turns (a team leader had 41 open items of 74 at
@@ -153,12 +163,14 @@ cannot count it, filter it or show it anywhere else.
 
 ## Request-scoped presentation (T-126)
 
-The durable ledger remains the audit and stable-key merge source. Current report
+The durable ledger remains the internal audit and stable-key merge source. Current report
 counts, tool responses, the Report pane and copied text show all outstanding items
 plus items closed during the current direct-user request, never lifetime totals.
 An outstanding item carried from an earlier request and completed now belongs to
 the current request. Rewording an already completed item does not move it into a
 new request; reopening and completing it does.
+The pane applies this filter to the last terminal snapshot, not to pending ledger
+edits; tool responses continue to reconcile the pending ledger immediately.
 
 Acceptance of a direct `user.message` or successful direct `turn.steered` stores
 its event cursor as `request_id` in the same journal transaction. Steers in the
@@ -175,7 +187,9 @@ historical rendering; new snapshots retain full audit data with request metadata
 and render only the matching scope. No journal migration or user-data rewrite is
 required.
 
-After accepted input commits, SessionHost publishes the scoped snapshot through
+After accepted input commits, SessionHost projects the last terminal snapshot into the new scope through
 `work_report.updated`, the existing live Report-pane delivery path. This refresh
-does not depend on another agent tool call. Rejected acceptance emits no scope
+does not depend on another agent tool call. Its `scope_only` marker keeps it out
+of transcript end-row fallback, so a later turn with no report cannot promote an
+old ledger. Rejected acceptance emits no scope
 refresh; the cursor marker prevents agent-origin events from refreshing scope.

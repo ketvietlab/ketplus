@@ -2,8 +2,8 @@ import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
-// ADR 0106: the details pane's Report tab (mock DetailsPane, report). The whole ledger of the
-// active conversation, every item by group, with Open and All filters.
+// ADR 0106: the details pane's Report tab. The active conversation's last terminal
+// snapshot, scoped to the current request, with Open and All filters.
 Rectangle {
     id: pane
 
@@ -40,6 +40,7 @@ Rectangle {
                 width: parent.width
                 ledger: true
                 report: pane.hasItems ? pane.report : ({})
+                terminalStatus: pane.report.terminal_status || ""
             }
             Text {
                 objectName: "workReportEmpty"
@@ -49,7 +50,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 text: reportHost.loading ? qsTr("Loading the work report…")
                     : reportHost.message.length > 0 ? reportHost.message
-                    : qsTr("No work report yet. When the agent records its work, the report appears here and updates as the conversation goes on.")
+                    : qsTr("No work report yet. A report appears after the agent's turn ends.")
                 color: KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: pane.px(13)

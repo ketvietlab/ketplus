@@ -106,12 +106,16 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
                                {{"next", QJsonObject{{"action", "Choose"}, {"owner", "user"}}}}),
                     reportItem("d", "Dropped", "cancelled", 1, 1)}}};
     const auto rows = ketplus::agent_message::daemonWindowMessages(
-        {{"events", QJsonArray{journalEvent(1, 2, "user.message", {{"text", "Finish it"}}),
-                               journalEvent(2, 2, "work_report.updated", early),
-                               journalEvent(3, 2, "work_report.updated", last),
-                               journalEvent(4, 2, "turn.completed", {{"status", "completed"}}),
-                               journalEvent(5, 3, "user.message", {{"text", "Thanks"}}),
-                               journalEvent(6, 3, "turn.completed", {{"status", "completed"}})}}});
+        {{"events",
+          QJsonArray{
+              journalEvent(1, 2, "user.message", {{"text", "Finish it"}}),
+              journalEvent(2, 2, "work_report.updated", early),
+              journalEvent(3, 2, "work_report.updated", last),
+              journalEvent(4, 2, "turn.completed", {{"status", "completed"}}),
+              journalEvent(5, 3, "user.message", {{"text", "Thanks"}}),
+              journalEvent(6, 3, "work_report.updated",
+                           {{"scope_only", true}, {"turn", 3}, {"items", last.value("items")}}),
+              journalEvent(7, 3, "turn.completed", {{"status", "completed"}})}}});
     // The report rides on its turn's end row; no row of its own.
     int ends = 0;
     for (const QVariant& value : rows) {
@@ -192,6 +196,26 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
         card->setProperty("openItem", "c");
         QTest::qWait(120);
         QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    // Done items never turn a failed/interrupted provider end into a success badge.
+    const QJsonObject doneReport{{"turn", 2},
+                                 {"items", QJsonArray{reportItem("done", "Work", "done", 2, 2)}}};
+    for (const auto& status : {QStringLiteral("failed"), QStringLiteral("interrupted"),
+                               QStringLiteral("stopped"), QStringLiteral("completed")}) {
+        view.resetMessages(
+            ketplus::agent_message::daemonWindowMessages(
+                {{"events",
+                  QJsonArray{journalEvent(1, 2, "turn.completed",
+                                          {{"status", status}, {"work_report", doneReport}})}}}),
+            "terminal-report-" + status);
+        QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+        QTRY_COMPARE(card->property("terminalStatus").toString(), status);
+        auto* badge = findVisibleItem(card, "workReportStatus");
+        QVERIFY(badge != nullptr);
+        QCOMPARE(badge->property("text").toString(),
+                 status == "failed"      ? QStringLiteral("Turn failed")
+                 : status == "completed" ? QStringLiteral("All done")
+                                         : QStringLiteral("Turn stopped"));
     }
 }
 
@@ -435,8 +459,19 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
     QVERIFY(card->property("ledger").toBool());
     QCOMPARE(card->property("finished").toInt(), 1);
+    auto* ledgerBadge = findVisibleItem(card, "workReportStatus");
+    QVERIFY(ledgerBadge != nullptr);
+    QCOMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
+    auto failed = ledger(2, "done");
+    failed.insert("terminal_status", "failed");
+    pane.acceptReport("first", failed, {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("Turn failed"));
+    pane.acceptReport("first", ledger(2, "done"), {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
     // The ledger view has no footer link back to itself.
     QVERIFY(!findVisibleItem(card, "workReportFooter")->property("opens").toBool());
+    QCOMPARE(findVisibleItem(card, "workReportFooter")->property("label").toString(),
+             QStringLiteral("No outstanding recorded items"));
     if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_PANE_CAPTURE");
         !capture.isEmpty()) {
         QTest::qWait(120);
@@ -514,62 +549,39 @@ void AgentWorkspaceViewTest::changesPaneListsTheWorktreeChanges() {
     QTRY_VERIFY(findVisibleItem(root, "conversationChangesEmpty") != nullptr);
 }
 
-// ADR 0106, mock workspace/report-running: while a turn runs, its latest report closes the
-// transcript with a Running badge and the live activity in place of the run line. The turn's
-// end hands over to the end-of-turn card, and the next turn starts without the old report.
-void AgentWorkspaceViewTest::runningTurnShowsItsWorkReport() {
+// A report tool call is not a terminal event, even from an older daemon. More
+// work keeps the ordinary run line; the final card belongs only to the end row.
+void AgentWorkspaceViewTest::runningTurnKeepsWorkReportPending() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.resize(900, 900);
     view.show();
-    view.resetMessages({QVariantMap{{"kind", "user"}, {"body", "Carry on with the dialog."}}},
-                       "running-report");
-    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
-    view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
+    view.resetMessages({QVariantMap{{"kind", "user"}, {"body", "Continue"}}}, "pending-report");
+    view.setSessionState("Work", QStringLiteral("Working…"), true);
     auto* root = view.quickView()->rootObject();
-    QQuickItem* indicator = nullptr;
-    QTRY_VERIFY((indicator = findVisibleItem(root, "workingIndicator")) != nullptr);
-    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
-    const qreal runLineX = indicator->mapToScene(QPointF{}).x();
-
-    view.setTurnWorkReport(mockReport().toVariantMap());
-    QQuickItem* card = nullptr;
-    QTRY_VERIFY((card = findVisibleItem(root, "runningWorkReport")) != nullptr);
-    QVERIFY(findVisibleItem(root, "workingIndicator") == nullptr);
-    QVERIFY(card->property("running").toBool());
-    // It starts where the run line it replaces started: at the transcript's rows (T-88).
-    QCOMPARE(card->mapToScene(QPointF{}).x(), runLineX);
-    QCOMPARE(card->property("total").toInt(), 7);
-    QCOMPARE(card->property("finished").toInt(), 3);
-    // The bar follows the counts even though the report arrived after the card was made.
-    QQuickItem* bar = nullptr;
-    const auto findBar = [&](const auto& self, QQuickItem* item) -> void {
-        if (bar == nullptr && item->inherits("QQuickProgressBar"))
-            bar = item;
-        for (auto* child : item->childItems())
-            self(self, child);
-    };
-    findBar(findBar, card);
-    QVERIFY(bar != nullptr);
-    QVERIFY(qAbs(bar->property("position").toReal() - 3.0 / 7.0) < 0.001);
-    auto* footer = findVisibleItem(card, "workReportFooter");
-    QVERIFY(footer != nullptr);
-    QVERIFY(!footer->property("opens").toBool());
-    QCOMPARE(footer->property("label").toString(),
-             QStringLiteral("Working · Editing ExecutionWorktreeDialog.cpp"));
-    QVERIFY(findVisibleItem(card, "workReportActivity") != nullptr);
-    if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_RUNNING_CAPTURE");
-        !capture.isEmpty()) {
-        card->setProperty("openItem", "picker-dialog");
-        QTest::qWait(120);
-        QVERIFY(view.quickView()->grabWindow().save(capture));
-    }
-
-    view.setSessionState("Follow up on the new UI", "Completed", false);
-    QTRY_VERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
-    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
-    QVERIFY(view.turnWorkReport().isEmpty());
     QTRY_VERIFY(findVisibleItem(root, "workingIndicator") != nullptr);
+    view.setTurnWorkReport(mockReport().toVariantMap());
+    view.setWorkingDetail("Running another tool after the report");
+    QTest::qWait(30);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    QVERIFY(findVisibleItem(root, "transcriptWorkReport") == nullptr);
+    QVERIFY(findVisibleItem(root, "workingIndicator") != nullptr);
+    auto finalReport = mockReport();
+    finalReport.insert("version", 99);
+    view.setTurnWorkReport(finalReport.toVariantMap());
+    QTest::qWait(30);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events",
+          QJsonArray{journalEvent(1, 4, "turn.completed",
+                                  {{"status", "completed"}, {"work_report", finalReport}})}}});
+    view.resetMessages(rows, "finished-report");
+    view.setSessionState("Work", "Completed", false);
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QCOMPARE(card->property("report").toMap().value("version").toInt(), 99);
+    view.setSessionState("Work", QStringLiteral("Working…"), true);
+    QVERIFY(view.turnWorkReport().isEmpty());
     QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
 }
 
@@ -625,10 +637,10 @@ void AgentWorkspaceViewTest::workReportCapturesMatchTheMock() {
                 view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
                 view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
                 view.setTurnWorkReport(report.toVariantMap());
-                QQuickItem* card = nullptr;
-                QTRY_VERIFY((card = findVisibleItem(view.quickView()->rootObject(),
-                                                    "runningWorkReport")) != nullptr);
-                card->setProperty("openItem", "picker-dialog");
+                QTRY_VERIFY(findVisibleItem(view.quickView()->rootObject(), "workingIndicator") !=
+                            nullptr);
+                QVERIFY(findVisibleItem(view.quickView()->rootObject(), "runningWorkReport") ==
+                        nullptr);
                 save(view.quickView(), "report-running");
             }
             {

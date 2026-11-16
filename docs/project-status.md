@@ -704,16 +704,17 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   turn records its work with the `work_report` tool instead of a markdown matrix:
   - the daemon merges items by key into the conversation's ledger, so unfinished work
     carries forward and implementation, verification and delivery stay separate checks;
-  - the turn closes with the mock's report card, which counts the items itself; while the
-    turn runs, the same card closes the live transcript with a Running badge and the
-    turn's activity;
+  - report calls persist pending ledger data; only the actual terminal event closes
+    the turn with its latest scoped report card. Ongoing work keeps the run line;
   - Copy conversation exports the report as a table.
 
   Without the tools, or when the call fails, the turn still ends with the localized
   task/status/evidence/next-action matrix. The header's Work report button and the
   card's footer open one Report tab in the right pane. It shows the selected
-  conversation's whole ledger (`session.work_report.read`), with Open and All filters,
-  and follows its live `work_report.updated` events. Steered questions or added tasks resume the prior
+  conversation's last terminal report (`session.work_report.read`), with Open and All filters,
+  scoped to the current request. Reads/reopens and scope refreshes never expose pending
+  ledger edits; failed or stopped terminal cards retain that status even if all items are done.
+  Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,
   absolute worktree path, branch and next task before resuming mutations.

@@ -170,7 +170,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
     void workReportShowsCurrentRequestAndOutstandingItems();
-    void runningTurnShowsItsWorkReport();
+    void runningTurnKeepsWorkReportPending();
     void workReportCapturesMatchTheMock();
     void changesPaneListsTheWorktreeChanges();
     void retryResendsTheLatestFailedPrompt();
